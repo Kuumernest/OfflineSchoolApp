@@ -1,0 +1,599 @@
+// app/admin/exams/results/[examId]/index.js
+"use strict";
+
+import React, { useEffect, useState, useCallback } from "react";
+import {
+  View,
+  Text,
+  ScrollView,
+  TouchableOpacity,
+  StyleSheet,
+  RefreshControl,
+  ActivityIndicator,
+} from "react-native";
+import { useLocalSearchParams, router } from "expo-router";
+import { Ionicons }                     from "@expo/vector-icons";
+
+import { useResultsStore }   from "../../../../../src/store/results.store";
+import ResultsProcessingCard from "../../../components/ResultsProcessingCard";
+import RankingsTable         from "../../../components/RankingsTable";
+
+// ─────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────
+
+const COLORS = {
+  primary:   "#2563EB",
+  primaryBg: "#EFF6FF",
+  success:   "#059669",
+  warning:   "#D97706",
+  error:     "#DC2626",
+  white:     "#FFFFFF",
+  gray50:    "#F9FAFB",
+  gray100:   "#F3F4F6",
+  gray200:   "#E5E7EB",
+  gray500:   "#6B7280",
+  gray700:   "#374151",
+  gray900:   "#111827",
+};
+
+const TABS = [
+  { key: "overview", label: "Overview", icon: "grid-outline"      },
+  { key: "class",    label: "Class",    icon: "people-outline"    },
+  { key: "grade",    label: "Grade",    icon: "school-outline"    },
+  { key: "school",   label: "School",   icon: "trophy-outline"    },
+  { key: "stats",    label: "Stats",    icon: "bar-chart-outline" },
+];
+
+// ─────────────────────────────────────────────────────────
+// MAIN SCREEN
+// ─────────────────────────────────────────────────────────
+
+export default function ExamResultsScreen() {
+  const { examId } = useLocalSearchParams();
+
+  // ── Zustand (no Redux) ────────────────────────────────────
+  const rankings     = useResultsStore((s) => s.rankings);
+  const stats        = useResultsStore((s) => s.stats);
+  const loading      = useResultsStore((s) => s.loading);
+  const fetchResults = useResultsStore((s) => s.fetchResults);
+  const clearResults = useResultsStore((s) => s.clearResults);
+
+  const [activeTab,  setActiveTab]  = useState("overview");
+  const [refreshing, setRefreshing] = useState(false);
+
+  // ── Fetch ─────────────────────────────────────────────────
+  const fetchData = useCallback(async () => {
+    if (!examId) return;
+    await fetchResults(examId);
+  }, [examId, fetchResults]);
+
+  useEffect(() => {
+    fetchData();
+    return () => clearResults();
+  }, [fetchData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchData();
+    setRefreshing(false);
+  }, [fetchData]);
+
+  // ── Navigate to student report card ──────────────────────
+  const handleStudentPress = useCallback(
+    (student) => {
+      const sid =
+        student?.studentId      ||
+        student?._id            ||
+        student?.id             ||
+        student?.student?._id;
+
+      if (!sid) {
+        console.warn("[ExamResults] No studentId found on:", student);
+        return;
+      }
+
+      router.push({
+        pathname: "/admin/exams/results/[examId]/student/[studentId]",
+        params:   { examId, studentId: sid },
+      });
+    },
+    [examId],
+  );
+
+  const handleProcessed = useCallback(() => fetchData(), [fetchData]);
+
+  // ─────────────────────────────────────────────────────────
+  // TAB CONTENT
+  // ─────────────────────────────────────────────────────────
+
+  const renderContent = () => {
+    switch (activeTab) {
+
+      case "overview":
+        return (
+          <View style={{ gap: 16 }}>
+            <ResultsProcessingCard
+              examId={examId}
+              onProcessed={handleProcessed}
+            />
+
+            {stats && (
+              <View style={styles.quickStats}>
+                <QuickStatCard
+                  icon="people"
+                  label="Total"
+                  value={stats.totalStudents ?? 0}
+                  color={COLORS.primary}
+                />
+                <QuickStatCard
+                  icon="checkmark-circle"
+                  label="Passed"
+                  value={stats.passed ?? 0}
+                  color={COLORS.success}
+                />
+                <QuickStatCard
+                  icon="close-circle"
+                  label="Failed"
+                  value={stats.failed ?? 0}
+                  color={COLORS.error}
+                />
+                <QuickStatCard
+                  icon="trending-up"
+                  label="Pass %"
+                  value={`${stats.passRate ?? 0}%`}
+                  color={COLORS.warning}
+                />
+              </View>
+            )}
+
+            {rankings.class?.length > 0 && (
+              <RankingsTable
+                title="Top 5 — Class"
+                rankings={rankings.class.slice(0, 5)}
+                scope="class"
+                onStudentPress={handleStudentPress}
+              />
+            )}
+          </View>
+        );
+
+      case "class":
+        return (
+          <RankingsTable
+            title="Class Rankings"
+            rankings={rankings.class ?? []}
+            scope="class"
+            onStudentPress={handleStudentPress}
+          />
+        );
+
+      case "grade":
+        return (
+          <RankingsTable
+            title="Grade Rankings"
+            rankings={rankings.grade ?? []}
+            scope="grade"
+            onStudentPress={handleStudentPress}
+          />
+        );
+
+      case "school":
+        return (
+          <RankingsTable
+            title="School Rankings"
+            rankings={rankings.school ?? []}
+            scope="school"
+            onStudentPress={handleStudentPress}
+          />
+        );
+
+      case "stats":
+        return <StatsView stats={stats} />;
+
+      default:
+        return null;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────
+
+  return (
+    <View style={styles.screen}>
+
+      {/* ── Header ── */}
+      <View style={styles.screenHeader}>
+        <TouchableOpacity
+          onPress={() => router.back()}
+          style={styles.backBtn}
+        >
+          <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
+        </TouchableOpacity>
+
+        <Text style={styles.screenTitle}>Exam Results</Text>
+
+        <TouchableOpacity
+          onPress={onRefresh}
+          style={styles.refreshBtn}
+          disabled={refreshing}
+        >
+          {refreshing ? (
+            <ActivityIndicator size="small" color={COLORS.primary} />
+          ) : (
+            <Ionicons name="refresh" size={22} color={COLORS.primary} />
+          )}
+        </TouchableOpacity>
+      </View>
+
+      {/* ── Tab Bar ── */}
+      <View style={styles.tabBarWrapper}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.tabBarContent}
+        >
+          {TABS.map((tab) => (
+            <TouchableOpacity
+              key={tab.key}
+              style={[styles.tab, activeTab === tab.key && styles.activeTab]}
+              onPress={() => setActiveTab(tab.key)}
+              activeOpacity={0.7}
+            >
+              <Ionicons
+                name={tab.icon}
+                size={16}
+                color={
+                  activeTab === tab.key ? COLORS.primary : COLORS.gray500
+                }
+              />
+              <Text
+                style={[
+                  styles.tabLabel,
+                  activeTab === tab.key && styles.activeTabLabel,
+                ]}
+              >
+                {tab.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* ── Content ── */}
+      <ScrollView
+        style={styles.content}
+        contentContainerStyle={styles.contentContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={COLORS.primary}
+            colors={[COLORS.primary]}
+          />
+        }
+      >
+        {loading && !refreshing ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color={COLORS.primary} />
+            <Text style={styles.loadingText}>Loading results…</Text>
+          </View>
+        ) : (
+          renderContent()
+        )}
+      </ScrollView>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// SUB-COMPONENTS
+// ─────────────────────────────────────────────────────────
+
+function QuickStatCard({ icon, label, value, color }) {
+  return (
+    <View style={styles.statCard}>
+      <View style={[styles.statIconBg, { backgroundColor: color + "18" }]}>
+        <Ionicons name={icon} size={18} color={color} />
+      </View>
+      <Text style={styles.statCardValue}>{value}</Text>
+      <Text style={styles.statCardLabel}>{label}</Text>
+    </View>
+  );
+}
+
+function StatsView({ stats }) {
+  if (!stats) {
+    return (
+      <View style={styles.emptyStats}>
+        <Ionicons name="analytics-outline" size={48} color={COLORS.gray200} />
+        <Text style={styles.emptyText}>No statistics available</Text>
+      </View>
+    );
+  }
+
+  return (
+    <View style={{ gap: 16 }}>
+
+      {/* Performance overview */}
+      <View style={styles.statsSection}>
+        <Text style={styles.sectionTitle}>Performance Overview</Text>
+        <View style={styles.statsGrid}>
+          <StatBox label="Students"  value={stats.totalStudents} />
+          <StatBox label="Passed"    value={stats.passed}        color={COLORS.success} />
+          <StatBox label="Failed"    value={stats.failed}        color={COLORS.error}   />
+          <StatBox
+            label="Pass Rate"
+            value={`${stats.passRate?.toFixed(1) ?? 0}%`}
+            color={stats.passRate >= 50 ? COLORS.success : COLORS.error}
+          />
+          <StatBox label="Average" value={`${stats.average?.toFixed(1) ?? 0}%`} />
+          <StatBox label="Highest" value={`${stats.highest?.toFixed(1) ?? 0}%`} color={COLORS.success} />
+          <StatBox label="Lowest"  value={`${stats.lowest?.toFixed(1)  ?? 0}%`} color={COLORS.error}   />
+          <StatBox label="Avg GPA" value={stats.averageGpa?.toFixed(2) ?? "—"}  />
+        </View>
+      </View>
+
+      {/* Grade distribution */}
+      {stats.gradeDistribution &&
+        Object.keys(stats.gradeDistribution).length > 0 && (
+          <View style={styles.statsSection}>
+            <Text style={styles.sectionTitle}>Grade Distribution</Text>
+            <View style={styles.gradeDistContainer}>
+              {Object.entries(stats.gradeDistribution)
+                .sort(([a], [b]) => a.localeCompare(b))
+                .map(([grade, count]) => (
+                  <View key={grade} style={styles.gradeDistRow}>
+                    <Text style={styles.gradeDistLabel}>{grade}</Text>
+                    <View style={styles.gradeDistBarBg}>
+                      <View
+                        style={[
+                          styles.gradeDistBar,
+                          {
+                            width: `${Math.max(
+                              (count / (stats.totalStudents || 1)) * 100,
+                              4,
+                            )}%`,
+                          },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.gradeDistCount}>{count}</Text>
+                  </View>
+                ))}
+            </View>
+          </View>
+        )}
+
+      {/* Subject performance */}
+      {stats.subjectStats?.length > 0 && (
+        <View style={styles.statsSection}>
+          <Text style={styles.sectionTitle}>Subject Performance</Text>
+          {stats.subjectStats.map((sub) => (
+            <View key={sub.subjectId} style={styles.subjectStatRow}>
+              <Text style={styles.subjectStatName} numberOfLines={1}>
+                {sub.subjectName}
+              </Text>
+              <Text style={styles.subjectStatAvg}>
+                {sub.average?.toFixed(1)}%
+              </Text>
+              <Text
+                style={[
+                  styles.subjectStatPass,
+                  {
+                    color:
+                      sub.passRate >= 50 ? COLORS.success : COLORS.error,
+                  },
+                ]}
+              >
+                {sub.passRate?.toFixed(0)}% pass
+              </Text>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+function StatBox({ label, value, color }) {
+  return (
+    <View style={styles.statBox}>
+      <Text style={[styles.statBoxValue, color ? { color } : null]}>
+        {value ?? "—"}
+      </Text>
+      <Text style={styles.statBoxLabel}>{label}</Text>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────
+
+const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: COLORS.gray50 },
+
+  // Header
+  screenHeader: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    paddingHorizontal: 16,
+    paddingTop:        56,
+    paddingBottom:     12,
+    backgroundColor:   COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  backBtn: {
+    width:          40,
+    height:         40,
+    borderRadius:   12,
+    backgroundColor: COLORS.gray100,
+    alignItems:     "center",
+    justifyContent: "center",
+    marginRight:    8,
+  },
+  screenTitle: {
+    flex:       1,
+    fontSize:   20,
+    fontWeight: "700",
+    color:      COLORS.gray900,
+  },
+  refreshBtn: { padding: 8 },
+
+  // Tab bar
+  tabBarWrapper: {
+    height:            48,
+    flexShrink:        0,
+    backgroundColor:   COLORS.white,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  tabBarContent: {
+    paddingHorizontal: 12,
+    gap:               4,
+    alignItems:        "center",
+    height:            48,
+  },
+  tab: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    paddingHorizontal: 14,
+    paddingVertical:   10,
+    borderRadius:      8,
+    gap:               6,
+  },
+  activeTab:      { backgroundColor: COLORS.primaryBg },
+  tabLabel:       { fontSize: 13, fontWeight: "500", color: COLORS.gray500 },
+  activeTabLabel: { fontSize: 13, fontWeight: "600", color: COLORS.primary },
+
+  // Content
+  content:          { flex: 1 },
+  contentContainer: { padding: 16, gap: 16, paddingBottom: 40 },
+
+  loadingContainer: { alignItems: "center", paddingTop: 60, gap: 12 },
+  loadingText:      { fontSize: 14, color: COLORS.gray500 },
+
+  // Quick stat cards (overview)
+  quickStats: {
+    flexDirection:  "row",
+    justifyContent: "space-between",
+    gap:            8,
+  },
+  statCard: {
+    flex:            1,
+    backgroundColor: COLORS.white,
+    borderRadius:    12,
+    padding:         12,
+    alignItems:      "center",
+    elevation:       1,
+    shadowColor:     "#000",
+    shadowOpacity:   0.04,
+    shadowRadius:    4,
+  },
+  statIconBg: {
+    width:          32,
+    height:         32,
+    borderRadius:   8,
+    justifyContent: "center",
+    alignItems:     "center",
+    marginBottom:   6,
+  },
+  statCardValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
+  statCardLabel: { fontSize: 11, color: COLORS.gray500, marginTop: 2 },
+
+  // Stats section
+  statsSection: {
+    backgroundColor: COLORS.white,
+    borderRadius:    16,
+    padding:         16,
+    shadowColor:     "#000",
+    shadowOpacity:   0.04,
+    shadowRadius:    6,
+    elevation:       2,
+  },
+  sectionTitle: {
+    fontSize:     16,
+    fontWeight:   "700",
+    color:        COLORS.gray900,
+    marginBottom: 12,
+  },
+  statsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+  statBox: {
+    width:           "30%",
+    backgroundColor: COLORS.gray50,
+    borderRadius:    10,
+    padding:         12,
+    alignItems:      "center",
+  },
+  statBoxValue: { fontSize: 18, fontWeight: "800", color: COLORS.gray900 },
+  statBoxLabel: {
+    fontSize:  11,
+    color:     COLORS.gray500,
+    marginTop: 4,
+    textAlign: "center",
+  },
+
+  // Grade distribution
+  gradeDistContainer: { gap: 8 },
+  gradeDistRow: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           10,
+  },
+  gradeDistLabel: {
+    width:      30,
+    fontSize:   14,
+    fontWeight: "700",
+    color:      COLORS.gray700,
+    textAlign:  "center",
+  },
+  gradeDistBarBg: {
+    flex:            1,
+    height:          24,
+    backgroundColor: COLORS.gray100,
+    borderRadius:    6,
+    overflow:        "hidden",
+  },
+  gradeDistBar: {
+    height:          "100%",
+    backgroundColor: COLORS.primary,
+    borderRadius:    6,
+    minWidth:        20,
+  },
+  gradeDistCount: {
+    width:      30,
+    fontSize:   14,
+    fontWeight: "600",
+    color:      COLORS.gray700,
+    textAlign:  "right",
+  },
+
+  // Subject performance
+  subjectStatRow: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    paddingVertical:   8,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.gray100,
+  },
+  subjectStatName: { flex: 1, fontSize: 13, color: COLORS.gray900 },
+  subjectStatAvg: {
+    fontSize:    13,
+    fontWeight:  "700",
+    color:       COLORS.gray700,
+    marginRight: 12,
+  },
+  subjectStatPass: {
+    fontSize:   12,
+    fontWeight: "600",
+    width:      60,
+    textAlign:  "right",
+  },
+
+  // Empty state
+  emptyStats: { alignItems: "center", paddingTop: 60, gap: 12 },
+  emptyText:  { fontSize: 15, color: COLORS.gray500 },
+});

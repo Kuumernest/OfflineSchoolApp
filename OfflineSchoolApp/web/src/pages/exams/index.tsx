@@ -1,0 +1,1497 @@
+// web/src/pages/exams/index.tsx
+"use client";
+
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import { Link, useNavigate }     from "react-router-dom";
+import {
+  Plus, FileText, Clock, CheckCircle, AlertCircle,
+  TrendingUp, Filter, Search, RefreshCw, Bell,
+  Calendar, BarChart2, ChevronLeft, ChevronRight,
+  Download, Copy, Archive, X, MoreVertical,
+  BookOpen, Users, AlertTriangle,
+} from "lucide-react";
+import {
+  useExams,
+  useExamDashboard,
+  useUpdateExamStatus,
+  useDeleteExam,
+} from "@/hooks/useExams";
+import { useAuthStore }       from "@/store/auth.store";
+import { EXAM_STATUS_META }   from "@/constants/exam.constants";
+import type { Exam, ExamStatus } from "@/types/exam.types";
+import api                    from "@/lib/api";
+import toast                  from "react-hot-toast";
+
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ViewMode = "table" | "calendar" | "timeline";
+
+interface ClassOption   { _id: string; name: string; section?: string }
+interface SubjectOption { _id: string; name: string }
+
+interface AlertItem {
+  type:    "conflict" | "reminder" | "warning" | "atRisk";
+  message: string;
+  action:  string;
+  examId?: string;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const EXAM_TYPE_LABELS: Record<string, string> = {
+  first_test:            "First Test",
+  second_test:           "Second Test",
+  mid_term:              "Mid-Term",
+  practical:             "Practical",
+  final_exam:            "Final Exam",
+  mock_exam:             "Mock Exam",
+  promotion_exam:        "Promotion Exam",
+  continuous_assessment: "Continuous Assessment",
+  // legacy
+  written:  "Written",
+  oral:     "Oral",
+  project:  "Project",
+};
+
+const STATUS_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
+  draft:     ["scheduled", "ongoing"],
+  scheduled: ["ongoing",   "draft"],
+  ongoing:   ["completed", "draft"],
+  completed: ["published", "archived"],
+  published: ["archived"],
+  archived:  ["draft"],
+};
+
+const SORT_OPTIONS = [
+  { value: "createdAt_desc", label: "Newest first"  },
+  { value: "createdAt_asc",  label: "Oldest first"  },
+  { value: "name_asc",       label: "Name A–Z"      },
+  { value: "name_desc",      label: "Name Z–A"      },
+  { value: "startDate_asc",  label: "Date ↑"        },
+  { value: "startDate_desc", label: "Date ↓"        },
+];
+
+const MONTHS = [
+  "January","February","March","April","May","June",
+  "July","August","September","October","November","December",
+];
+const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+
+const fmtDate = (d?: string | null) => {
+  if (!d) return "—";
+  try {
+    return new Date(d + "T00:00:00").toLocaleDateString("en-GB", {
+      day: "numeric", month: "short", year: "numeric",
+    });
+  } catch { return d; }
+};
+
+const daysUntil = (dateStr?: string | null) => {
+  if (!dateStr) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const d     = new Date(dateStr + "T00:00:00");
+  return Math.round((d.getTime() - today.getTime()) / 86_400_000);
+};
+
+const sortExams = (exams: Exam[], sortBy: string): Exam[] => {
+  const [field, dir] = sortBy.split("_");
+  return [...exams].sort((a, b) => {
+    let av = (a as Record<string, unknown>)[field] as string ?? "";
+    let bv = (b as Record<string, unknown>)[field] as string ?? "";
+    if (field === "createdAt" || field === "startDate") {
+      av = av || ""; bv = bv || "";
+    }
+    const cmp = String(av).localeCompare(String(bv));
+    return dir === "desc" ? -cmp : cmp;
+  });
+};
+
+// ─── Small shared components ──────────────────────────────────────────────────
+
+const StatusBadge = ({ status }: { status: ExamStatus }) => {
+  const cfg = EXAM_STATUS_META[status] ?? EXAM_STATUS_META.draft;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
+      text-xs font-semibold ${cfg.color} ${cfg.bg}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
+      {cfg.label}
+    </span>
+  );
+};
+
+const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
+  const s = { sm: "w-4 h-4", md: "w-6 h-6", lg: "w-10 h-10" }[size];
+  return (
+    <div className={`${s} border-4 border-primary-600
+                    border-t-transparent rounded-full animate-spin`} />
+  );
+};
+
+// ─── Stat Card ────────────────────────────────────────────────────────────────
+
+const StatCard = ({
+  label, value, sub, icon: Icon, color, onClick, highlight,
+}: {
+  label:      string;
+  value:      number | string;
+  sub?:       string;
+  icon:       React.ElementType;
+  color:      string;
+  onClick?:   () => void;
+  highlight?: boolean;
+}) => (
+  <button
+    onClick={onClick}
+    className={`bg-white rounded-xl p-5 flex items-center gap-4 shadow-sm
+      border transition-all text-left w-full
+      ${highlight
+        ? "border-primary-300 ring-2 ring-primary-100"
+        : "border-gray-100 hover:shadow-md hover:border-gray-200"
+      }`}
+  >
+    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
+      <Icon className="w-6 h-6" />
+    </div>
+    <div>
+      <p className="text-2xl font-bold text-gray-900">{value}</p>
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
+      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    </div>
+  </button>
+);
+
+// ─── Alerts Panel ─────────────────────────────────────────────────────────────
+
+const AlertsPanel = ({
+  alerts,
+  onClose,
+}: {
+  alerts:  AlertItem[];
+  onClose: () => void;
+}) => {
+  const iconMap = {
+    conflict: <AlertTriangle className="w-4 h-4 text-red-500"    />,
+    reminder: <Bell          className="w-4 h-4 text-blue-500"   />,
+    warning:  <AlertCircle  className="w-4 h-4 text-orange-500" />,
+    atRisk:   <TrendingUp   className="w-4 h-4 text-purple-500" />,
+  };
+  const bgMap = {
+    conflict: "bg-red-50 border-red-100",
+    reminder: "bg-blue-50 border-blue-100",
+    warning:  "bg-orange-50 border-orange-100",
+    atRisk:   "bg-purple-50 border-purple-100",
+  };
+
+  return (
+    <div className="fixed right-4 top-20 w-80 z-50 bg-white rounded-xl
+                    shadow-xl border border-gray-200 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-3
+                      border-b border-gray-100 bg-gray-50">
+        <div className="flex items-center gap-2">
+          <Bell className="w-4 h-4 text-gray-500" />
+          <span className="text-sm font-semibold text-gray-900">Alerts</span>
+          {alerts.length > 0 && (
+            <span className="bg-red-500 text-white text-xs rounded-full
+                             w-5 h-5 flex items-center justify-center font-bold">
+              {alerts.length}
+            </span>
+          )}
+        </div>
+        <button onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 p-1">
+          <X className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="max-h-80 overflow-y-auto">
+        {!alerts.length ? (
+          <div className="px-4 py-8 text-center">
+            <p className="text-2xl mb-2">🎉</p>
+            <p className="text-sm text-gray-400">No alerts — all clear!</p>
+          </div>
+        ) : (
+          <div className="p-3 space-y-2">
+            {alerts.map((a, i) => (
+              <div key={i}
+                className={`p-3 rounded-lg border text-xs ${bgMap[a.type]}`}>
+                <div className="flex items-start gap-2">
+                  {iconMap[a.type]}
+                  <div className="flex-1">
+                    <p className="text-gray-800 leading-snug">{a.message}</p>
+                    {a.action && (
+                      <button className="text-blue-600 font-semibold mt-1 hover:underline">
+                        {a.action} →
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─── Quick Actions Menu ───────────────────────────────────────────────────────
+
+const QuickActionsMenu = ({
+  onClose,
+  onArchiveCompleted,
+  schoolId,
+}: {
+  onClose:            () => void;
+  onArchiveCompleted: () => void;
+  schoolId:           string;
+}) => {
+  const navigate = useNavigate();
+
+  const actions = [
+    {
+      icon: "➕", label: "Schedule New Exam",
+      onClick: () => { navigate("/exams/new"); onClose(); },
+    },
+    {
+      icon: "📊", label: "Export Results (CSV)",
+      onClick: async () => {
+        try {
+          const res = await api.get("/exams/reports/results", {
+            params:       { schoolId },
+            responseType: "blob",
+          });
+          const url = URL.createObjectURL(new Blob([res.data]));
+          const a   = document.createElement("a");
+          a.href    = url;
+          a.download = `results-${new Date().toISOString().split("T")[0]}.csv`;
+          a.click();
+          URL.revokeObjectURL(url);
+        } catch {
+          toast.error("Export failed — try again");
+        }
+        onClose();
+      },
+    },
+    {
+      icon: "🖨️", label: "Print Timetable",
+      onClick: () => { window.print(); onClose(); },
+    },
+    {
+      icon: "🗑️", label: "Archive Completed Exams",
+      onClick: () => { onArchiveCompleted(); onClose(); },
+    },
+    {
+      icon: "📋", label: "View Report Cards",
+      onClick: () => { navigate("/exams/reports"); onClose(); },
+    },
+    {
+      icon: "📈", label: "Results Analytics",
+      onClick: () => { navigate("/exams/results"); onClose(); },
+    },
+  ];
+
+  return (
+    <div className="absolute right-0 top-10 w-52 bg-white rounded-xl shadow-xl
+                    border border-gray-100 z-40 py-1 overflow-hidden">
+      {actions.map((a) => (
+        <button key={a.label} onClick={a.onClick}
+          className="w-full text-left px-4 py-2.5 text-sm text-gray-700
+                     hover:bg-gray-50 flex items-center gap-2.5 transition-colors">
+          <span>{a.icon}</span>
+          <span>{a.label}</span>
+        </button>
+      ))}
+    </div>
+  );
+};
+
+// ─── Exam Row (Table View) ────────────────────────────────────────────────────
+
+const ExamRow = ({
+  exam,
+  onStatusChange,
+  onDelete,
+  canManage,
+  index,
+}: {
+  exam:           Exam;
+  onStatusChange: (id: string, status: ExamStatus) => void;
+  onDelete:       (id: string, name: string) => void;
+  canManage:      boolean;
+  index:          number;
+}) => {
+  const navigate  = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef                 = useRef<HTMLDivElement>(null);
+
+  const nextStatuses = STATUS_TRANSITIONS[exam.status] ?? [];
+  const days         = daysUntil(exam.startDate);
+
+  // Close menu on outside click
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    if (menuOpen) document.addEventListener("mousedown", handle);
+    return ()    => document.removeEventListener("mousedown", handle);
+  }, [menuOpen]);
+
+  return (
+    <tr className="hover:bg-gray-50/60 transition-colors group">
+      {/* # */}
+      <td className="px-4 py-3 text-xs text-gray-400 font-medium">
+        {index + 1}
+      </td>
+
+      {/* Exam name + type */}
+      <td className="px-4 py-3 min-w-[200px]">
+        <button
+          onClick={() => navigate(`/exams/${exam._id}`)}
+          className="font-semibold text-gray-900 text-sm hover:text-primary-600
+                     text-left transition-colors leading-snug"
+        >
+          {exam.name}
+        </button>
+        <p className="text-xs text-gray-400 mt-0.5">
+          {EXAM_TYPE_LABELS[exam.type] ?? exam.type}
+          {exam.term         ? ` · ${exam.term}`         : ""}
+          {exam.academicYear ? ` · ${exam.academicYear}` : ""}
+        </p>
+      </td>
+
+      {/* Class */}
+      <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
+        <span className="truncate block">
+          {exam.classNames || exam.className || "All Classes"}
+        </span>
+      </td>
+
+      {/* Dates */}
+      <td className="px-4 py-3">
+        <div className="text-sm text-gray-700">{fmtDate(exam.startDate)}</div>
+        {exam.endDate && exam.endDate !== exam.startDate && (
+          <div className="text-xs text-gray-400">→ {fmtDate(exam.endDate)}</div>
+        )}
+        {exam.status === "scheduled" && days !== null && days >= 0 && days <= 7 && (
+          <div className={`text-xs font-semibold mt-0.5
+            ${days === 0 ? "text-red-600" : "text-orange-500"}`}>
+            {days === 0 ? "Today!" : `In ${days} day${days === 1 ? "" : "s"}`}
+          </div>
+        )}
+      </td>
+
+      {/* Status */}
+      <td className="px-4 py-3">
+        <StatusBadge status={exam.status} />
+      </td>
+
+      {/* Marks */}
+      <td className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">
+        <span className="font-medium text-gray-700">{exam.totalMarks}</span>
+        <span className="text-gray-300 mx-1">/</span>
+        <span>{exam.passMark}</span>
+      </td>
+
+      {/* Actions */}
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100
+                        transition-opacity">
+          <Link to={`/exams/${exam._id}`}
+            className="text-xs font-semibold text-primary-600 hover:text-primary-700
+                       bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-lg
+                       transition-colors whitespace-nowrap">
+            View
+          </Link>
+
+          {canManage && (
+            <div className="relative" ref={menuRef}>
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="p-1.5 text-gray-400 hover:text-gray-600
+                           hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <MoreVertical className="w-4 h-4" />
+              </button>
+
+              {menuOpen && (
+                <div className="absolute right-0 mt-1 w-44 bg-white rounded-xl
+                                shadow-lg border border-gray-100 z-30 py-1
+                                overflow-hidden">
+                  {/* Status transitions */}
+                  {nextStatuses.map((s) => (
+                    <button key={s}
+                      onClick={() => { onStatusChange(exam._id, s); setMenuOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700
+                                 hover:bg-gray-50 flex items-center gap-2">
+                      <span className={`w-2 h-2 rounded-full ${EXAM_STATUS_META[s]?.dot}`} />
+                      → {EXAM_STATUS_META[s]?.label}
+                    </button>
+                  ))}
+
+                  {nextStatuses.length > 0 && <hr className="my-1 border-gray-100" />}
+
+                  <Link to={`/exams/${exam._id}?tab=marks`}
+                    className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
+                    onClick={() => setMenuOpen(false)}>
+                    ✏️ Enter Marks
+                  </Link>
+                  <Link to={`/exams/${exam._id}?tab=results`}
+                    className="block px-4 py-2 text-sm text-green-600 hover:bg-green-50"
+                    onClick={() => setMenuOpen(false)}>
+                    📊 View Results
+                  </Link>
+
+                  <hr className="my-1 border-gray-100" />
+                  <button
+                    onClick={() => { onDelete(exam._id, exam.name); setMenuOpen(false); }}
+                    className="w-full text-left px-4 py-2 text-sm text-red-600
+                               hover:bg-red-50">
+                    🗑️ Delete
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
+};
+
+// ─── Calendar View ────────────────────────────────────────────────────────────
+
+const CalendarView = ({
+  exams,
+  onExamClick,
+}: {
+  exams:       Exam[];
+  onExamClick: (e: Exam) => void;
+}) => {
+  const today = new Date();
+  const [cur, setCur] = useState({
+    year:  today.getFullYear(),
+    month: today.getMonth(),
+  });
+
+  const { year, month } = cur;
+  const firstDay        = new Date(year, month, 1).getDay();
+  const daysInMonth     = new Date(year, month + 1, 0).getDate();
+
+  // Map exam start dates to this month
+  const byDate = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const map: Record<string, Exam[]> = {};
+    for (const e of exams) {
+      if (!e.startDate) continue;
+      const [ey, em] = e.startDate.split("-").map(Number);
+      if (ey !== year || em - 1 !== month) continue;
+      const key = e.startDate;
+      map[key] = map[key] || [];
+      map[key].push(e);
+    }
+    return map;
+  }, [exams, year, month]);
+
+  const blanks = (firstDay + 6) % 7; // Monday start
+
+  const prevMonth = () => setCur((p) => {
+    const d = new Date(p.year, p.month - 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+  const nextMonth = () => setCur((p) => {
+    const d = new Date(p.year, p.month + 1);
+    return { year: d.getFullYear(), month: d.getMonth() };
+  });
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      {/* Nav */}
+      <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+        <button onClick={prevMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <ChevronLeft className="w-5 h-5 text-gray-500" />
+        </button>
+        <h3 className="font-semibold text-gray-900 text-lg">
+          {MONTHS[month]} {year}
+        </h3>
+        <button onClick={nextMonth}
+          className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+          <ChevronRight className="w-5 h-5 text-gray-500" />
+        </button>
+      </div>
+
+      {/* Day headers */}
+      <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
+        {DAYS_SHORT.map((d) => (
+          <div key={d}
+            className="py-2 text-center text-xs font-semibold text-gray-400 uppercase">
+            {d}
+          </div>
+        ))}
+      </div>
+
+      {/* Grid */}
+      <div className="grid grid-cols-7">
+        {/* Blank cells */}
+        {Array.from({ length: blanks }).map((_, i) => (
+          <div key={`b${i}`}
+            className="min-h-[100px] border-b border-r border-gray-50 bg-gray-50/30" />
+        ))}
+
+        {/* Day cells */}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const day      = i + 1;
+          const dateStr  = `${year}-${pad(month + 1)}-${pad(day)}`;
+          const dayExams = byDate[dateStr] || [];
+          const isToday  =
+            today.getFullYear() === year &&
+            today.getMonth()    === month &&
+            today.getDate()     === day;
+
+          return (
+            <div key={day}
+              className={`min-h-[100px] border-b border-r border-gray-50 p-1.5
+                ${isToday ? "bg-blue-50/60" : "hover:bg-gray-50/60"} transition-colors`}>
+              {/* Day number */}
+              <div className={`w-6 h-6 flex items-center justify-center
+                text-xs font-semibold mb-1 rounded-full
+                ${isToday ? "bg-primary-600 text-white" : "text-gray-600"}`}>
+                {day}
+              </div>
+
+              {/* Exam chips */}
+              <div className="space-y-0.5">
+                {dayExams.slice(0, 3).map((e) => {
+                  const cfg = EXAM_STATUS_META[e.status] ?? EXAM_STATUS_META.draft;
+                  return (
+                    <button key={e._id} onClick={() => onExamClick(e)}
+                      title={e.name}
+                      className={`w-full text-left text-xs px-1.5 py-0.5 rounded
+                        truncate font-medium transition-opacity hover:opacity-80
+                        ${cfg.bg} ${cfg.color}`}>
+                      {e.name}
+                    </button>
+                  );
+                })}
+                {dayExams.length > 3 && (
+                  <p className="text-xs text-gray-400 px-1">
+                    +{dayExams.length - 3} more
+                  </p>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Legend */}
+      <div className="px-4 py-3 border-t border-gray-100 flex flex-wrap gap-3">
+        {(Object.keys(EXAM_STATUS_META) as ExamStatus[]).map((s) => {
+          const cfg = EXAM_STATUS_META[s];
+          return (
+            <div key={s} className="flex items-center gap-1.5 text-xs text-gray-500">
+              <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
+              {cfg.label}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// ─── Timeline / Gantt View ────────────────────────────────────────────────────
+
+const TimelineView = ({
+  exams,
+  onExamClick,
+}: {
+  exams:       Exam[];
+  onExamClick: (e: Exam) => void;
+}) => {
+  // Group by subject/name prefix
+  const byType = useMemo(() => {
+    const map: Record<string, { label: string; exams: Exam[] }> = {};
+    for (const e of exams) {
+      const key = e.type || "other";
+      if (!map[key]) map[key] = { label: EXAM_TYPE_LABELS[key] ?? key, exams: [] };
+      map[key].exams.push(e);
+    }
+    return Object.values(map);
+  }, [exams]);
+
+  // Date range
+  const allDates = exams
+    .map((e) => e.startDate)
+    .filter(Boolean)
+    .sort() as string[];
+
+  if (!allDates.length) {
+    return (
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+          <BarChart2 className="w-12 h-12 mb-3 text-gray-200" />
+          <p className="font-medium text-gray-500">No exams with dates to display</p>
+          <p className="text-sm mt-1">Add start dates to your exams to see the timeline</p>
+        </div>
+      </div>
+    );
+  }
+
+  const startDate = new Date(allDates[0] + "T00:00:00");
+  const endDate   = new Date(allDates[allDates.length - 1] + "T00:00:00");
+  const totalMs   = Math.max(
+    endDate.getTime() - startDate.getTime(),
+    30 * 86_400_000   // minimum 30 days
+  );
+
+  const leftPct = (dateStr: string) => {
+    const d = new Date(dateStr + "T00:00:00");
+    return Math.max(0, Math.min(98,
+      ((d.getTime() - startDate.getTime()) / totalMs) * 100
+    ));
+  };
+
+  // Month markers
+  const monthMarkers: Array<{ label: string; pct: number }> = [];
+  const cur = new Date(startDate.getFullYear(), startDate.getMonth(), 1);
+  while (cur <= endDate) {
+    const pct = ((cur.getTime() - startDate.getTime()) / totalMs) * 100;
+    if (pct >= 0 && pct <= 100) {
+      monthMarkers.push({
+        label: cur.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+        pct,
+      });
+    }
+    cur.setMonth(cur.getMonth() + 1);
+  }
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="overflow-x-auto">
+        <div className="min-w-[640px]">
+          {/* Month header */}
+          <div className="flex border-b border-gray-100 bg-gray-50">
+            <div className="w-36 shrink-0 px-4 py-3 text-xs font-semibold
+                            text-gray-400 uppercase tracking-wide">
+              Type
+            </div>
+            <div className="flex-1 relative h-10">
+              {monthMarkers.map((m) => (
+                <div key={m.label}
+                  className="absolute top-0 h-full flex items-center"
+                  style={{ left: `${m.pct}%` }}>
+                  <div className="w-px h-full bg-gray-200" />
+                  <span className="ml-1 text-xs text-gray-400 whitespace-nowrap">
+                    {m.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Rows */}
+          {byType.map(({ label, exams: typeExams }) => (
+            <div key={label}
+              className="flex border-b border-gray-50 hover:bg-gray-50/40 group">
+              <div className="w-36 shrink-0 px-4 py-3 text-sm text-gray-700
+                              font-medium truncate">
+                {label}
+              </div>
+              <div className="flex-1 relative h-12 flex items-center">
+                {typeExams.map((e) => {
+                  if (!e.startDate) return null;
+                  const left = leftPct(e.startDate);
+                  const cfg  = EXAM_STATUS_META[e.status] ?? EXAM_STATUS_META.draft;
+
+                  return (
+                    <button key={e._id} onClick={() => onExamClick(e)}
+                      title={`${e.name} — ${fmtDate(e.startDate)}`}
+                      className={`absolute flex items-center px-2 py-1 rounded-lg
+                        text-xs font-semibold cursor-pointer
+                        hover:shadow-md transition-shadow whitespace-nowrap
+                        ${cfg.bg} ${cfg.color}`}
+                      style={{ left: `${left}%`, maxWidth: "120px" }}>
+                      <span className="truncate">{e.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
+        Timeline from {fmtDate(allDates[0])} to {fmtDate(allDates[allDates.length - 1])}
+      </div>
+    </div>
+  );
+};
+
+// ─── Exam Detail Slide-over ───────────────────────────────────────────────────
+
+const ExamDetailSlideOver = ({
+  exam,
+  onClose,
+  onStatusChange,
+  canManage,
+}: {
+  exam:           Exam;
+  onClose:        () => void;
+  onStatusChange: (id: string, status: ExamStatus) => void;
+  canManage:      boolean;
+}) => {
+  const navigate     = useNavigate();
+  const nextStatuses = STATUS_TRANSITIONS[exam.status] ?? [];
+
+  return (
+    <div className="fixed inset-0 z-40 flex">
+      {/* Backdrop */}
+      <div className="flex-1 bg-black/30" onClick={onClose} />
+
+      {/* Panel */}
+      <div className="w-full max-w-md bg-white shadow-2xl overflow-y-auto flex flex-col">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-gray-100 flex items-start
+                        justify-between sticky top-0 bg-white z-10">
+          <div>
+            <div className="flex items-center gap-2 mb-1">
+              <StatusBadge status={exam.status} />
+              <span className="text-xs text-gray-400">
+                {EXAM_TYPE_LABELS[exam.type] ?? exam.type}
+              </span>
+            </div>
+            <h2 className="text-base font-bold text-gray-900 leading-snug">
+              {exam.name}
+            </h2>
+          </div>
+          <button onClick={onClose}
+            className="text-gray-400 hover:text-gray-600 p-1 mt-1">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Details */}
+        <div className="flex-1 p-5 space-y-5">
+          {/* Grid details */}
+          <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+            {[
+              ["Term",         exam.term                                 ],
+              ["Year",         exam.academicYear                         ],
+              ["Class",        exam.classNames || exam.className || "—" ],
+              ["Start Date",   fmtDate(exam.startDate)                  ],
+              ["End Date",     fmtDate(exam.endDate)                    ],
+              ["Total Marks",  String(exam.totalMarks)                  ],
+              ["Pass Mark",    String(exam.passMark)                    ],
+            ].map(([k, v]) => (
+              <div key={k as string}>
+                <p className="text-xs text-gray-400 font-medium">{k}</p>
+                <p className="font-semibold text-gray-800 mt-0.5">{v || "—"}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Description */}
+          {exam.description && (
+            <div className="bg-gray-50 rounded-xl p-4">
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-1">
+                Description
+              </p>
+              <p className="text-sm text-gray-700 leading-relaxed">{exam.description}</p>
+            </div>
+          )}
+
+          {/* Instructions */}
+          {exam.instructions && (
+            <div className="bg-amber-50 rounded-xl p-4">
+              <p className="text-xs font-semibold text-amber-600 uppercase mb-1">
+                Instructions
+              </p>
+              <p className="text-sm text-amber-900 leading-relaxed">{exam.instructions}</p>
+            </div>
+          )}
+
+          {/* Status transitions */}
+          {canManage && nextStatuses.length > 0 && (
+            <div className="pt-2 border-t border-gray-100">
+              <p className="text-xs font-semibold text-gray-400 uppercase mb-2">
+                Move to
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {nextStatuses.map((s) => {
+                  const cfg = EXAM_STATUS_META[s];
+                  return (
+                    <button key={s}
+                      onClick={() => { onStatusChange(exam._id, s); onClose(); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold
+                        border-2 transition-colors
+                        ${cfg.color} ${cfg.bg}
+                        hover:opacity-80`}>
+                      → {cfg.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer actions */}
+        <div className="px-5 py-4 border-t border-gray-100 flex gap-2 sticky bottom-0 bg-white">
+          <button onClick={() => { navigate(`/exams/${exam._id}`); onClose(); }}
+            className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm
+                       font-semibold hover:bg-primary-700 transition-colors">
+            Open Exam
+          </button>
+          {canManage && (
+            <button
+              onClick={() => { navigate(`/exams/${exam._id}?tab=marks`); onClose(); }}
+              className="flex-1 py-2 bg-indigo-50 text-indigo-700 rounded-xl
+                         text-sm font-semibold hover:bg-indigo-100 transition-colors">
+              Enter Marks
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// MAIN PAGE
+// ═════════════════════════════════════════════════════════════════════════════
+
+const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
+
+export default function ExamsPage() {
+  const navigate  = useNavigate();
+  const user      = useAuthStore((s) => s.user);
+  const schoolId  = user?.schoolId ?? "";
+  const canManage = ADMIN_ROLES.has(user?.role ?? "");
+
+  // ── Filters ──────────────────────────────────────────────────────────────
+  const [statusFilter,  setStatusFilter]  = useState<string>("all");
+  const [search,        setSearch]        = useState("");
+  const [classFilter,   setClassFilter]   = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
+  const [termFilter,    setTermFilter]    = useState("");
+  const [typeFilter,    setTypeFilter]    = useState("");
+  const [dateFrom,      setDateFrom]      = useState("");
+  const [dateTo,        setDateTo]        = useState("");
+  const [sortBy,        setSortBy]        = useState("createdAt_desc");
+  const [view,          setView]          = useState<ViewMode>("table");
+
+  // ── UI state ─────────────────────────────────────────────────────────────
+  const [showAlerts,      setShowAlerts]      = useState(false);
+  const [showQuickMenu,   setShowQuickMenu]   = useState(false);
+  const [showFilters,     setShowFilters]     = useState(false);
+  const [selectedExam,    setSelectedExam]    = useState<Exam | null>(null);
+  const [alerts,          setAlerts]          = useState<AlertItem[]>([]);
+  const [classes,         setClasses]         = useState<ClassOption[]>([]);
+  const [subjects,        setSubjects]        = useState<SubjectOption[]>([]);
+  const [availableTerms,  setAvailableTerms]  = useState<string[]>([]);
+  const [availableTypes,  setAvailableTypes]  = useState<string[]>([]);
+
+  const quickMenuRef = useRef<HTMLDivElement>(null);
+
+  // ── Data fetching ─────────────────────────────────────────────────────────
+  const filterParams = useMemo(() => {
+    const p: Record<string, string> = {};
+    if (statusFilter !== "all") p.status       = statusFilter;
+    if (termFilter)             p.term         = termFilter;
+    if (classFilter)            p.classId      = classFilter;
+    return p;
+  }, [statusFilter, termFilter, classFilter]);
+
+  const { data: dashData,  refetch: refetchDash } = useExamDashboard();
+  const { data: examsData, isLoading, refetch     } = useExams(filterParams);
+  const updateStatus = useUpdateExamStatus();
+  const deleteExam   = useDeleteExam();
+
+  const d = dashData?.dashboard?.exams;
+
+  // ── Load support data ─────────────────────────────────────────────────────
+  useEffect(() => {
+    if (!schoolId) return;
+
+    Promise.all([
+      api.get("/admin/classes",  { params: { schoolId } }).catch(() => ({ data: {} })),
+      api.get("/admin/subjects", { params: { schoolId } }).catch(() => ({ data: {} })),
+    ]).then(([cl, su]) => {
+      setClasses(cl.data?.classes  || []);
+      setSubjects(su.data?.subjects || []);
+    });
+  }, [schoolId]);
+
+  // ── Derive filter options from loaded exams ───────────────────────────────
+  useEffect(() => {
+    const exams = examsData?.exams ?? [];
+    setAvailableTerms([...new Set(exams.map((e) => e.term).filter(Boolean))]);
+    setAvailableTypes([...new Set(exams.map((e) => e.type).filter(Boolean))]);
+  }, [examsData]);
+
+  // ── Derive alerts from dashboard data ────────────────────────────────────
+  useEffect(() => {
+    const derived: AlertItem[] = [];
+    if (!d) return;
+
+    if (d.draft > 0) {
+      derived.push({
+        type:    "reminder",
+        message: `${d.draft} exam${d.draft > 1 ? "s are" : " is"} still in draft — schedule when ready`,
+        action:  "View Drafts",
+      });
+    }
+    if (d.ongoing > 0) {
+      derived.push({
+        type:    "warning",
+        message: `${d.ongoing} exam${d.ongoing > 1 ? "s are" : " is"} currently ongoing`,
+        action:  "View Ongoing",
+      });
+    }
+    if (dashData?.dashboard?.results?.missingGrades ?? 0 > 0) {
+      const missing = dashData!.dashboard.results.missingGrades;
+      derived.push({
+        type:    "warning",
+        message: `${missing} student score${missing > 1 ? "s are" : " is"} missing grades`,
+        action:  "Enter Results",
+      });
+    }
+    if (dashData?.dashboard?.results?.pending ?? 0 > 0) {
+      const pending = dashData!.dashboard.results.pending;
+      derived.push({
+        type:    "atRisk",
+        message: `${pending} result${pending > 1 ? "s have" : " has"} not been published yet`,
+        action:  "Publish Results",
+      });
+    }
+
+    setAlerts(derived);
+  }, [d, dashData]);
+
+  // ── Close quick menu on outside click ────────────────────────────────────
+  useEffect(() => {
+    const handle = (e: MouseEvent) => {
+      if (quickMenuRef.current && !quickMenuRef.current.contains(e.target as Node)) {
+        setShowQuickMenu(false);
+      }
+    };
+    if (showQuickMenu) document.addEventListener("mousedown", handle);
+    return ()         => document.removeEventListener("mousedown", handle);
+  }, [showQuickMenu]);
+
+  // ── Client-side filter + sort ─────────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let list = examsData?.exams ?? [];
+
+    // Search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      list = list.filter((e) =>
+        e.name?.toLowerCase().includes(q)       ||
+        e.term?.toLowerCase().includes(q)       ||
+        e.academicYear?.toLowerCase().includes(q) ||
+        e.className?.toLowerCase().includes(q)  ||
+        e.classNames?.toLowerCase().includes(q)
+      );
+    }
+
+    // Subject filter (client-side — ExamSubject lookup would need backend)
+    // For now we match against name heuristic
+    if (subjectFilter) {
+      const sub = subjects.find((s) => s._id === subjectFilter);
+      if (sub) {
+        list = list.filter((e) =>
+          e.name.toLowerCase().includes(sub.name.toLowerCase())
+        );
+      }
+    }
+
+    // Type filter
+    if (typeFilter) {
+      list = list.filter((e) => e.type === typeFilter);
+    }
+
+    // Date range
+    if (dateFrom) {
+      list = list.filter((e) => e.startDate && e.startDate >= dateFrom);
+    }
+    if (dateTo) {
+      list = list.filter((e) => e.startDate && e.startDate <= dateTo);
+    }
+
+    return sortExams(list, sortBy);
+  }, [examsData, search, subjectFilter, subjects, typeFilter, dateFrom, dateTo, sortBy]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────────
+  const handleStatusChange = useCallback((examId: string, status: ExamStatus) => {
+    updateStatus.mutate({ examId, status });
+  }, [updateStatus]);
+
+  const handleDelete = useCallback((examId: string, name: string) => {
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    deleteExam.mutate(examId);
+  }, [deleteExam]);
+
+  const handleArchiveCompleted = useCallback(async () => {
+    const completed = (examsData?.exams ?? []).filter((e) => e.status === "completed");
+    if (!completed.length) { toast("No completed exams to archive"); return; }
+    if (!window.confirm(`Archive ${completed.length} completed exam(s)?`)) return;
+
+    let count = 0;
+    for (const e of completed) {
+      try {
+        await api.patch(`/exams/${e._id}/status`, { status: "archived", schoolId });
+        count++;
+      } catch { /* continue */ }
+    }
+    toast.success(`Archived ${count} exam(s)`);
+    refetch();
+    refetchDash();
+  }, [examsData, schoolId, refetch, refetchDash]);
+
+  const handleRefresh = () => { refetch(); refetchDash(); };
+
+  // ── Active filter count ───────────────────────────────────────────────────
+  const activeFilterCount = [
+    statusFilter !== "all",
+    !!search,
+    !!classFilter,
+    !!subjectFilter,
+    !!termFilter,
+    !!typeFilter,
+    !!dateFrom,
+    !!dateTo,
+  ].filter(Boolean).length;
+
+  const clearFilters = () => {
+    setSearch("");
+    setClassFilter("");
+    setSubjectFilter("");
+    setTermFilter("");
+    setTypeFilter("");
+    setDateFrom("");
+    setDateTo("");
+    setStatusFilter("all");
+    setSortBy("createdAt_desc");
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="space-y-6">
+
+      {/* ── Page Header ─────────────────────────────────────────────────── */}
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Exams & Results</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            Manage examinations, mark entry and result publishing
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Refresh */}
+          <button onClick={handleRefresh}
+            className="p-2 border border-gray-200 rounded-xl bg-white
+                       hover:bg-gray-50 transition-colors"
+            title="Refresh">
+            <RefreshCw className={`w-4 h-4 text-gray-500
+              ${isLoading ? "animate-spin" : ""}`} />
+          </button>
+
+          {/* Alerts bell */}
+          {canManage && (
+            <button onClick={() => setShowAlerts((v) => !v)}
+              className="relative p-2 border border-gray-200 rounded-xl bg-white
+                         hover:bg-gray-50 transition-colors"
+              title="Alerts">
+              <Bell className="w-4 h-4 text-gray-500" />
+              {alerts.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white
+                                 text-xs rounded-full w-4 h-4 flex items-center
+                                 justify-center font-bold">
+                  {alerts.length}
+                </span>
+              )}
+            </button>
+          )}
+
+          {/* View toggle */}
+          <div className="flex border border-gray-200 rounded-xl overflow-hidden bg-white">
+            {([
+              { key: "table",    Icon: Filter   },
+              { key: "calendar", Icon: Calendar },
+              { key: "timeline", Icon: BarChart2},
+            ] as const).map(({ key, Icon }) => (
+              <button key={key} onClick={() => setView(key)}
+                title={key.charAt(0).toUpperCase() + key.slice(1)}
+                className={`px-3 py-2 transition-colors
+                  ${view === key
+                    ? "bg-primary-600 text-white"
+                    : "text-gray-500 hover:bg-gray-50"
+                  }`}>
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+
+          {/* Quick actions */}
+          {canManage && (
+            <div className="relative" ref={quickMenuRef}>
+              <button onClick={() => setShowQuickMenu((v) => !v)}
+                className="p-2 border border-gray-200 rounded-xl bg-white
+                           hover:bg-gray-50 transition-colors"
+                title="Quick actions">
+                <MoreVertical className="w-4 h-4 text-gray-500" />
+              </button>
+              {showQuickMenu && (
+                <QuickActionsMenu
+                  onClose={() => setShowQuickMenu(false)}
+                  onArchiveCompleted={handleArchiveCompleted}
+                  schoolId={schoolId}
+                />
+              )}
+            </div>
+          )}
+
+          {/* New exam */}
+          {canManage && (
+            <Link to="/exams/new"
+              className="inline-flex items-center gap-2 bg-primary-600
+                         hover:bg-primary-700 text-white px-4 py-2.5 rounded-xl
+                         font-semibold text-sm transition-colors shadow-sm">
+              <Plus className="w-4 h-4" />
+              New Exam
+            </Link>
+          )}
+        </div>
+      </div>
+
+      {/* ── Stats Cards ─────────────────────────────────────────────────── */}
+      {d && (
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
+          <StatCard
+            label="Total"     value={d.total}
+            icon={FileText}   color="bg-gray-100 text-gray-600"
+            highlight={statusFilter === "all"}
+            onClick={() => setStatusFilter("all")}
+          />
+          <StatCard
+            label="Draft"     value={d.draft}
+            icon={FileText}   color="bg-gray-100 text-gray-400"
+            highlight={statusFilter === "draft"}
+            onClick={() => setStatusFilter("draft")}
+          />
+          <StatCard
+            label="Scheduled" value={d.scheduled}
+            icon={Clock}      color="bg-indigo-50 text-indigo-600"
+            highlight={statusFilter === "scheduled"}
+            onClick={() => setStatusFilter("scheduled")}
+          />
+          <StatCard
+            label="Ongoing"   value={d.ongoing}
+            icon={AlertCircle}color="bg-amber-50 text-amber-600"
+            highlight={statusFilter === "ongoing"}
+            onClick={() => setStatusFilter("ongoing")}
+          />
+          <StatCard
+            label="Completed" value={d.completed}
+            icon={CheckCircle}color="bg-green-50 text-green-600"
+            highlight={statusFilter === "completed"}
+            onClick={() => setStatusFilter("completed")}
+          />
+          <StatCard
+            label="Published" value={d.published}
+            icon={TrendingUp} color="bg-purple-50 text-purple-600"
+            highlight={statusFilter === "published"}
+            onClick={() => setStatusFilter("published")}
+          />
+          <StatCard
+            label="Pass Rate"
+            value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
+            icon={BookOpen}   color="bg-teal-50 text-teal-600"
+            sub="school avg"
+          />
+        </div>
+      )}
+
+      {/* Results overview strip */}
+      {dashData?.dashboard?.results && (
+        <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
+          <div className="flex items-center justify-between flex-wrap gap-4">
+            <h3 className="text-sm font-semibold text-gray-700">Results Overview</h3>
+            <div className="flex flex-wrap gap-6">
+              {[
+                { label: "Published",      value: dashData.dashboard.results.published,          color: "text-purple-600" },
+                { label: "Pending",        value: dashData.dashboard.results.pending,             color: "text-amber-600"  },
+                { label: "Missing Grades", value: dashData.dashboard.results.missingGrades,       color: "text-red-600"    },
+                { label: "Avg Score",      value: `${dashData.dashboard.results.averagePerformance}%`, color: "text-green-600" },
+                { label: "Pass Rate",      value: `${dashData.dashboard.results.passRate}%`,       color: "text-primary-600"},
+              ].map((item) => (
+                <div key={item.label} className="text-center">
+                  <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
+                  <p className="text-xs text-gray-400 font-medium">{item.label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Filters Bar ─────────────────────────────────────────────────── */}
+      <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
+        {/* Primary filter row */}
+        <div className="p-4 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+          {/* Search */}
+          <div className="relative flex-1 min-w-[180px]">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2
+                               w-4 h-4 text-gray-400" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search exams…"
+              className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg
+                         text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+
+          {/* Status quick pills */}
+          <div className="flex gap-1.5 flex-wrap">
+            {(["all","draft","scheduled","ongoing","completed","published"] as const).map((s) => (
+              <button key={s}
+                onClick={() => setStatusFilter(s)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-semibold
+                  transition-colors capitalize
+                  ${statusFilter === s
+                    ? "bg-primary-600 text-white"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                  }`}>
+                {s === "all" ? "All" : EXAM_STATUS_META[s]?.label ?? s}
+              </button>
+            ))}
+          </div>
+
+          {/* Toggle advanced filters */}
+          <button
+            onClick={() => setShowFilters((v) => !v)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm
+              border transition-colors relative
+              ${showFilters || activeFilterCount > 0
+                ? "border-primary-300 bg-primary-50 text-primary-700"
+                : "border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}>
+            <Filter className="w-4 h-4" />
+            Filters
+            {activeFilterCount > 0 && (
+              <span className="bg-primary-600 text-white text-xs rounded-full
+                               w-4 h-4 flex items-center justify-center font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </button>
+
+          {/* Sort */}
+          <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}
+            className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                       text-gray-600 focus:outline-none focus:ring-2
+                       focus:ring-primary-500 bg-white">
+            {SORT_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </div>
+
+        {/* Advanced filters panel */}
+        {showFilters && (
+          <div className="px-4 pb-4 border-t border-gray-100 pt-4
+                          grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+            {/* Class */}
+            <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">All classes</option>
+              {classes.map((c) => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+
+            {/* Subject */}
+            <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">All subjects</option>
+              {subjects.map((s) => (
+                <option key={s._id} value={s._id}>{s.name}</option>
+              ))}
+            </select>
+
+            {/* Term */}
+            <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">All terms</option>
+              {["Term 1","Term 2","Term 3","Full Year"].map((t) => (
+                <option key={t} value={t}>{t}</option>
+              ))}
+            </select>
+
+            {/* Type */}
+            <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+              <option value="">All types</option>
+              {availableTypes.map((t) => (
+                <option key={t} value={t}>{EXAM_TYPE_LABELS[t] ?? t}</option>
+              ))}
+            </select>
+
+            {/* Date from */}
+            <input type="date" value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="From date"
+            />
+
+            {/* Date to */}
+            <input type="date" value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-2 border border-gray-200 rounded-lg text-sm
+                         focus:outline-none focus:ring-2 focus:ring-primary-500"
+              placeholder="To date"
+            />
+
+            {/* Clear filters */}
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters}
+                className="col-span-full flex items-center gap-1.5 text-xs
+                           text-red-600 hover:text-red-700 font-semibold
+                           justify-center pt-1">
+                <X className="w-3 h-3" />
+                Clear all filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* ── Main Content ───────────────────────────────────────────────── */}
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <Spinner size="lg" />
+          </div>
+
+        ) : filtered.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center
+                            justify-center mx-auto mb-4">
+              <FileText className="w-8 h-8 text-gray-300" />
+            </div>
+            <p className="font-semibold text-gray-700">No exams found</p>
+            <p className="text-gray-400 text-sm mt-1">
+              {activeFilterCount > 0
+                ? "Try adjusting or clearing your filters"
+                : "Create your first exam to get started"
+              }
+            </p>
+            {activeFilterCount > 0 && (
+              <button onClick={clearFilters}
+                className="mt-3 text-sm text-primary-600 font-semibold hover:underline">
+                Clear filters
+              </button>
+            )}
+            {canManage && !activeFilterCount && (
+              <Link to="/exams/new"
+                className="inline-flex items-center gap-2 mt-4 bg-primary-600
+                           text-white px-4 py-2 rounded-xl text-sm font-semibold
+                           hover:bg-primary-700 transition-colors">
+                <Plus className="w-4 h-4" /> Create Exam
+              </Link>
+            )}
+          </div>
+
+        ) : view === "calendar" ? (
+          <div className="p-4">
+            <CalendarView
+              exams={filtered}
+              onExamClick={(e) => setSelectedExam(e)}
+            />
+          </div>
+
+        ) : view === "timeline" ? (
+          <div className="p-4">
+            <TimelineView
+              exams={filtered}
+              onExamClick={(e) => setSelectedExam(e)}
+            />
+          </div>
+
+        ) : (
+          /* ── Table View ──────────────────────────────────────────────── */
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="bg-gray-50 text-xs font-semibold text-gray-500
+                               uppercase tracking-wide border-b border-gray-100">
+                  <th className="px-4 py-3 text-left w-8">#</th>
+                  <th className="px-4 py-3 text-left">Exam</th>
+                  <th className="px-4 py-3 text-left">Class</th>
+                  <th className="px-4 py-3 text-left">Dates</th>
+                  <th className="px-4 py-3 text-left">Status</th>
+                  <th className="px-4 py-3 text-left">Marks</th>
+                  <th className="px-4 py-3 text-left">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-50">
+                {filtered.map((exam, i) => (
+                  <ExamRow
+                    key={exam._id}
+                    exam={exam}
+                    index={i}
+                    canManage={canManage}
+                    onStatusChange={handleStatusChange}
+                    onDelete={handleDelete}
+                  />
+                ))}
+              </tbody>
+            </table>
+
+            {/* Count footer */}
+            <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
+              Showing {filtered.length} exam{filtered.length !== 1 ? "s" : ""}
+              {activeFilterCount > 0 && " (filtered)"}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Alerts Panel ────────────────────────────────────────────────── */}
+      {showAlerts && (
+        <AlertsPanel
+          alerts={alerts}
+          onClose={() => setShowAlerts(false)}
+        />
+      )}
+
+      {/* ── Exam Detail Slide-over ───────────────────────────────────────── */}
+      {selectedExam && (
+        <ExamDetailSlideOver
+          exam={selectedExam}
+          onClose={() => setSelectedExam(null)}
+          onStatusChange={handleStatusChange}
+          canManage={canManage}
+        />
+      )}
+    </div>
+  );
+}

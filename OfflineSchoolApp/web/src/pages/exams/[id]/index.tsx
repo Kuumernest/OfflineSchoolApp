@@ -1,0 +1,1236 @@
+// web/src/pages/exams/[id]/index.tsx
+import { useState, useEffect, useCallback }  from "react";
+import { useParams, useNavigate,
+         useSearchParams, Link }             from "react-router-dom";
+import { useAuthStore }                      from "@/store/auth.store";
+import { useExamDetail, useSubmissions,
+         useApproveSubmission,
+         useRejectSubmission }               from "@/hooks/useExamDetail";
+import { useExamResults, useExamStats,
+         useProcessResults,
+         usePublishResults }                 from "@/hooks/useExamResults";
+import { useUpdateExamStatus }               from "@/hooks/useExams";
+import type { ExamStatus,
+              ExamSubject }                  from "@/types/exam.types";
+import * as ExamService                      from "@/services/exam.service";
+import api                                   from "@/services/api";
+import {
+  EXAM_STATUS_META,
+  EXAM_TYPE_LABELS,
+}                                            from "@/constants/exam.constants";
+
+// ─────────────────────────────────────────────────────────
+// TYPES
+// ─────────────────────────────────────────────────────────
+
+type Tab = "details" | "marks" | "results";
+
+type ExamSubjectWithTotals = ExamSubject & {
+  totalStudents?: number;
+};
+
+interface ScoreEntry {
+  score:         string;
+  isAbsent:      boolean;
+  teacherRemark: string;
+}
+
+// ─────────────────────────────────────────────────────────
+// PAGE-SPECIFIC CONSTANTS
+// ─────────────────────────────────────────────────────────
+
+const TABS: { key: Tab; label: string }[] = [
+  { key: "details", label: "Details"          },
+  { key: "marks",   label: "Marks & Approval" },
+  { key: "results", label: "Results"          },
+];
+
+const NEXT_STATUSES: Record<string, ExamStatus[]> = {
+  draft:     ["scheduled", "ongoing"  ],
+  scheduled: ["ongoing",   "draft"    ],
+  ongoing:   ["completed"             ],
+  completed: ["published", "archived" ],
+  published: ["archived"              ],
+  archived:  ["draft"                 ],
+};
+
+const SUBMISSION_META: Record<string, {
+  color: string; bg: string; label: string; icon: string;
+}> = {
+  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  label: "Not Submitted",     icon: "⏳" },
+  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", label: "Awaiting Approval", icon: "📬" },
+  approved:  { color: "text-green-600",  bg: "bg-green-50",  label: "Approved",           icon: "✅" },
+  rejected:  { color: "text-red-600",    bg: "bg-red-50",    label: "Rejected",            icon: "❌" },
+};
+
+const EMPTY_SCORE: ScoreEntry = {
+  score: "", isAbsent: false, teacherRemark: "",
+};
+
+// ─────────────────────────────────────────────────────────
+// SMALL SHARED COMPONENTS
+// ─────────────────────────────────────────────────────────
+
+const StatusBadge = ({ status }: { status: ExamStatus }) => {
+  const meta = EXAM_STATUS_META[status] ?? EXAM_STATUS_META.draft;
+  return (
+    <span className={`inline-flex items-center gap-1.5 px-3 py-1.5
+      rounded-full text-xs font-bold ${meta.color} ${meta.bg}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
+      {meta.label}
+    </span>
+  );
+};
+
+const Spinner = ({ size = "md" }: { size?: "sm" | "md" | "lg" }) => {
+  const s = { sm: "w-4 h-4", md: "w-6 h-6", lg: "w-10 h-10" }[size];
+  return (
+    <div className={`${s} border-4 border-primary-600
+                    border-t-transparent rounded-full animate-spin`} />
+  );
+};
+
+const EmptyState = ({
+  icon, title, subtitle,
+}: {
+  icon: string; title: string; subtitle?: string;
+}) => (
+  <div className="flex flex-col items-center justify-center
+                  py-16 text-center text-gray-400">
+    <span className="text-5xl mb-3">{icon}</span>
+    <p className="font-semibold text-gray-600">{title}</p>
+    {subtitle && <p className="text-sm mt-1">{subtitle}</p>}
+  </div>
+);
+
+// ─────────────────────────────────────────────────────────
+// TAB 1 — DETAILS
+// ─────────────────────────────────────────────────────────
+
+const DetailsTab = ({
+  exam,
+  submissions,
+  onStatusChange,
+  changingStatus,
+}: {
+  exam:           NonNullable<ReturnType<typeof useExamDetail>["data"]>["exam"];
+  submissions:    ExamSubjectWithTotals[];
+  onStatusChange: (s: ExamStatus) => void;
+  changingStatus: boolean;
+}) => {
+  const nextStatuses = NEXT_STATUSES[exam.status] ?? [];
+
+  const subjectProgress = submissions.map((sub) => {
+    const entered = sub.totalScoresEntered ?? 0;
+    const total   = sub.totalStudents      ?? 0;
+    const pct     = total > 0 ? Math.round((entered / total) * 100) : 0;
+    const meta    = SUBMISSION_META[sub.submissionStatus] ?? SUBMISSION_META.pending;
+    return { sub, entered, total, pct, meta };
+  });
+
+  return (
+    <div className="space-y-5">
+
+      {/* Status card */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">Exam Status</h3>
+          <StatusBadge status={exam.status} />
+        </div>
+
+        {nextStatuses.length > 0 && (
+          <div>
+            <p className="text-xs text-gray-500 mb-2 font-medium">
+              Move to next stage:
+            </p>
+            <div className="flex gap-2 flex-wrap">
+              {nextStatuses.map((s) => (
+                <button
+                  key={s}
+                  onClick={() => onStatusChange(s)}
+                  disabled={changingStatus}
+                  className="px-4 py-2 text-sm font-semibold rounded-xl
+                             border-2 border-gray-200 text-gray-700
+                             hover:border-primary-400 hover:text-primary-700
+                             hover:bg-primary-50 transition-colors
+                             disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {changingStatus ? (
+                    <span className="flex items-center gap-2">
+                      <Spinner size="sm" /> Updating…
+                    </span>
+                  ) : (
+                    `→ ${EXAM_STATUS_META[s].label}`
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Exam info */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <h3 className="font-semibold text-gray-900 mb-4">Exam Information</h3>
+        <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          {[
+            { label: "Type",          value: EXAM_TYPE_LABELS[exam.type as keyof typeof EXAM_TYPE_LABELS] ?? exam.type },
+            { label: "Academic Year", value: exam.academicYear  },
+            { label: "Term",          value: exam.term          },
+            { label: "Classes",       value: exam.classNames || exam.className || "All" },
+            { label: "Start Date",    value: exam.startDate || "—" },
+            { label: "End Date",      value: exam.endDate   || "—" },
+            { label: "Total Marks",   value: String(exam.totalMarks) },
+            { label: "Pass Mark",     value: String(exam.passMark)   },
+          ].map(({ label, value }) => (
+            <div key={label} className="flex flex-col">
+              <dt className="text-xs font-semibold text-gray-400
+                             uppercase tracking-wide">
+                {label}
+              </dt>
+              <dd className="font-semibold text-gray-900 mt-0.5">{value}</dd>
+            </div>
+          ))}
+        </dl>
+
+        {exam.description && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <p className="text-xs font-semibold text-gray-400
+                          uppercase tracking-wide mb-1">
+              Description
+            </p>
+            <p className="text-sm text-gray-600 leading-relaxed">
+              {exam.description}
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Per-subject progress */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <h3 className="font-semibold text-gray-900 mb-1">Marks Progress</h3>
+        <p className="text-xs text-gray-400 mb-4">
+          How many student scores have been entered per subject
+        </p>
+
+        {subjectProgress.length === 0 ? (
+          <p className="text-sm text-gray-400 text-center py-6">
+            No subjects assigned to this exam yet
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {subjectProgress.map(({ sub, entered, total, pct, meta }) => (
+              <div key={sub._id}>
+                <div className="flex items-center justify-between mb-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">{meta.icon}</span>
+                    <span className="text-sm font-semibold text-gray-800">
+                      {sub.subjectName}
+                    </span>
+                    {sub.teacherName && (
+                      <span className="text-xs text-gray-400">
+                        — {sub.teacherName}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-gray-500">
+                      {entered}/{total} entered
+                    </span>
+                    <span className={`text-xs font-bold px-2 py-0.5
+                      rounded-full ${meta.color} ${meta.bg}`}>
+                      {meta.label}
+                    </span>
+                  </div>
+                </div>
+                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all
+                      ${pct === 100
+                        ? "bg-green-500"
+                        : pct > 0
+                          ? "bg-primary-500"
+                          : "bg-gray-200"
+                      }`}
+                    style={{ width: `${pct}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// SCORE ENTRY PANEL
+// ─────────────────────────────────────────────────────────
+
+const ScoreEntryPanel = ({
+  sub,
+  examId,
+  schoolId,
+  onClose,
+}: {
+  sub:      ExamSubject;
+  examId:   string;
+  schoolId: string;
+  onClose:  () => void;
+}) => {
+  const [students, setStudents] = useState<any[]>([]);
+  const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
+  const [loading,  setLoading]  = useState(false);
+  const [saving,   setSaving]   = useState(false);
+  const [saved,    setSaved]    = useState(false);
+  const [search,   setSearch]   = useState("");
+
+  // Stable primitive IDs — prevents double useEffect firing
+  const subId     = sub._id;
+  const classId   = sub.classId;
+  const subjectId = sub.subjectId;
+  const maxScore  = sub.maxScore;
+  const passMark  = sub.passMark;
+
+  useEffect(() => {
+    if (!subId || !classId) return;
+
+    const load = async () => {
+      setLoading(true);
+      setStudents([]);
+      setScores({});
+      setSaved(false);
+
+      try {
+        const [stuRes, scoresRes] = await Promise.all([
+          // Uses api instance — Authorization header sent automatically
+          api.get("/admin/students", {
+            params: { schoolId, classId },
+          }).catch(() => ({ data: { students: [] } })),
+
+          ExamService.getScores({
+            examId,
+            subjectId,
+            classId,
+            schoolId,
+          }).catch(() => ({ scores: [] })),
+        ]);
+
+        const studentList: any[] =
+          stuRes.data?.students ||
+          stuRes.data?.data     ||
+          (Array.isArray(stuRes.data) ? stuRes.data : []);
+
+        setStudents(studentList);
+
+        const map: Record<string, ScoreEntry> = {};
+        for (const s of (scoresRes as any)?.scores ?? []) {
+          map[String(s.studentId)] = {
+            score:         s.score != null ? String(s.score) : "",
+            isAbsent:      s.isAbsent      ?? false,
+            teacherRemark: s.teacherRemark || "",
+          };
+        }
+        setScores(map);
+
+      } catch (err) {
+        console.warn("[ScoreEntryPanel] load failed:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    load();
+  // Primitive string deps — stable, no double-firing
+  }, [subId, classId, subjectId, examId, schoolId]);
+
+  const updateScore = useCallback((
+    studentId: string,
+    field: keyof ScoreEntry,
+    value: string | boolean
+  ) => {
+    setScores((prev) => ({
+      ...prev,
+      [studentId]: { ...(prev[studentId] ?? EMPTY_SCORE), [field]: value },
+    }));
+    setSaved(false);
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const records = students.map((s) => {
+        const sid   = String(s._id || s.id);
+        const entry = scores[sid] ?? EMPTY_SCORE;
+        const raw   = String(entry.score ?? "").trim();
+        return {
+          studentId:     sid,
+          score:         raw === "" ? null : Number(raw),
+          maxScore,
+          isAbsent:      entry.isAbsent      ?? false,
+          teacherRemark: entry.teacherRemark || null,
+        };
+      });
+
+      await ExamService.saveBulkScores({
+        examId,
+        classId,
+        subjectId,
+        examSubjectId: subId,
+        scores:        records,
+        schoolId,
+      });
+      setSaved(true);
+    } catch (err: any) {
+      alert(err.message || "Save failed. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const filtered = students.filter((s) => {
+    const q = search.toLowerCase();
+    return (
+      !q ||
+      (s.studentName || s.name || "").toLowerCase().includes(q) ||
+      (s.admissionNo || "").toLowerCase().includes(q)
+    );
+  });
+
+  const entered = Object.values(scores).filter(
+    (s) => s.isAbsent || (s.score !== "" && s.score != null)
+  ).length;
+
+  const progressPct = students.length > 0
+    ? Math.round((entered / students.length) * 100)
+    : 0;
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden mt-3">
+
+      {/* Panel header */}
+      <div className="bg-indigo-50 border-b border-indigo-100
+                      px-4 py-3 flex items-center justify-between">
+        <div>
+          <p className="font-semibold text-indigo-900 text-sm">
+            {sub.subjectName} — Score Entry
+          </p>
+          <p className="text-xs text-indigo-500 mt-0.5">
+            Max: {maxScore} · Pass: {passMark} ·
+            {" "}{entered}/{students.length} entered ({progressPct}%)
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className={`px-4 py-1.5 rounded-lg text-xs font-bold
+              transition-colors disabled:opacity-60
+              ${saved
+                ? "bg-green-100 text-green-700 border border-green-200"
+                : "bg-primary-600 text-white hover:bg-primary-700"
+              }`}
+          >
+            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Marks"}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-indigo-400 hover:text-indigo-700
+                       text-xl font-bold leading-none px-1"
+          >
+            ×
+          </button>
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      <div className="h-1 bg-gray-100">
+        <div
+          className="h-full bg-primary-500 transition-all"
+          style={{ width: `${progressPct}%` }}
+        />
+      </div>
+
+      {/* Search */}
+      <div className="px-4 py-2 bg-white border-b border-gray-100">
+        <input
+          type="text"
+          placeholder="Search student by name or admission number…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="w-full px-3 py-1.5 border border-gray-200 rounded-lg
+                     text-sm focus:outline-none focus:ring-2
+                     focus:ring-primary-400"
+        />
+      </div>
+
+      {/* Table header */}
+      <div className="grid grid-cols-[2fr_1fr_80px_100px]
+                      bg-gray-50 border-b border-gray-200 px-4 py-2">
+        {["Student", "Admission #", "Absent", "Score"].map((h) => (
+          <span
+            key={h}
+            className="text-xs font-bold text-gray-500 uppercase
+                       tracking-wide text-center first:text-left"
+          >
+            {h}
+          </span>
+        ))}
+      </div>
+
+      {/* Rows */}
+      {loading ? (
+        <div className="flex items-center justify-center py-12">
+          <Spinner />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-10 text-sm text-gray-400">
+          {search
+            ? "No students match your search"
+            : "No students found in this class"}
+        </div>
+      ) : (
+        <div className="max-h-96 overflow-y-auto">
+          {filtered.map((student, idx) => {
+            const sid    = String(student._id || student.id);
+            const entry  = scores[sid] ?? EMPTY_SCORE;
+            const absent = entry.isAbsent;
+            const raw    = String(entry.score ?? "");
+            const num    = raw !== "" ? Number(raw) : null;
+            const pct    = num != null && !absent
+              ? Math.round((num / maxScore) * 100)
+              : null;
+
+            const scoreColor =
+              absent      ? "text-gray-400" :
+              pct == null ? "text-gray-400" :
+              pct >= 70   ? "text-green-600" :
+              pct >= 50   ? "text-amber-600" :
+                            "text-red-600";
+
+            return (
+              <div
+                key={sid}
+                className={`grid grid-cols-[2fr_1fr_80px_100px]
+                  px-4 py-2.5 border-b border-gray-50 items-center
+                  ${absent
+                    ? "bg-red-50"
+                    : idx % 2 === 0 ? "bg-white" : "bg-gray-50/40"
+                  }`}
+              >
+                {/* Name */}
+                <p className="text-sm font-medium text-gray-900">
+                  {student.studentName || student.name || "Unknown"}
+                </p>
+
+                {/* Admission number */}
+                <p className="text-xs text-gray-400 text-center">
+                  {student.admissionNo ? `#${student.admissionNo}` : "—"}
+                </p>
+
+                {/* Absent toggle */}
+                <div className="flex justify-center">
+                  <button
+                    onClick={() => updateScore(sid, "isAbsent", !absent)}
+                    title={absent ? "Mark present" : "Mark absent"}
+                    className={`w-7 h-7 rounded-lg border-2 flex items-center
+                      justify-center text-xs font-bold transition-colors
+                      ${absent
+                        ? "bg-red-500 border-red-500 text-white"
+                        : "border-gray-300 text-transparent hover:border-red-300"
+                      }`}
+                  >
+                    A
+                  </button>
+                </div>
+
+                {/* Score input */}
+                <div className="flex flex-col items-center">
+                  {absent ? (
+                    <span className="text-xs font-semibold text-gray-400">
+                      ABSENT
+                    </span>
+                  ) : (
+                    <>
+                      <input
+                        type="number"
+                        value={raw}
+                        min={0}
+                        max={maxScore}
+                        onChange={(e) =>
+                          updateScore(sid, "score", e.target.value)
+                        }
+                        placeholder="—"
+                        className={`w-16 text-center px-2 py-1 border
+                          rounded-lg text-sm font-bold focus:outline-none
+                          focus:ring-2 focus:ring-primary-400 ${scoreColor}
+                          ${num != null
+                            ? "border-current"
+                            : "border-gray-200"
+                          }`}
+                      />
+                      {pct != null && (
+                        <span className={`text-xs font-medium mt-0.5
+                                         ${scoreColor}`}>
+                          {pct}%
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// TAB 2 — MARKS & APPROVAL
+// ─────────────────────────────────────────────────────────
+
+const MarksTab = ({
+  examId,
+  submissions,
+  schoolId,
+}: {
+  examId:      string;
+  submissions: ExamSubjectWithTotals[];
+  schoolId:    string;
+}) => {
+  const [openSubjectId, setOpenSubjectId] = useState<string | null>(null);
+  const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
+  const [rejectReason,  setRejectReason]  = useState("");
+
+  const approve = useApproveSubmission(examId);
+  const reject  = useRejectSubmission(examId);
+
+  const toggleSubject = (id: string) =>
+    setOpenSubjectId((prev) => (prev === id ? null : id));
+
+  const handleApprove = (sub: ExamSubject) => {
+    if (!window.confirm(`Approve marks for ${sub.subjectName}?`)) return;
+    approve.mutate(sub._id);
+  };
+
+  const handleRejectConfirm = () => {
+    if (!rejectTarget || !rejectReason.trim()) return;
+    reject.mutate(
+      { examSubjectId: rejectTarget._id, reason: rejectReason.trim() },
+      { onSuccess: () => { setRejectTarget(null); setRejectReason(""); } }
+    );
+  };
+
+  if (submissions.length === 0) {
+    return (
+      <EmptyState
+        icon="📭"
+        title="No subjects assigned yet"
+        subtitle="Add subjects from the exam settings to start entering marks"
+      />
+    );
+  }
+
+  return (
+    <>
+      {/* Reject modal */}
+      {rejectTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center
+                        bg-black/40 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
+            <h3 className="font-bold text-gray-900 text-lg mb-1">
+              Reject Submission
+            </h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {rejectTarget.subjectName}
+              {rejectTarget.teacherName ? ` — ${rejectTarget.teacherName}` : ""}
+            </p>
+            <textarea
+              autoFocus
+              rows={3}
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="Enter rejection reason (required)…"
+              className="w-full border border-gray-200 rounded-xl p-3
+                         text-sm focus:outline-none focus:ring-2
+                         focus:ring-red-400 resize-none"
+            />
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => {
+                  setRejectTarget(null);
+                  setRejectReason("");
+                }}
+                className="flex-1 py-2.5 bg-gray-100 text-gray-700
+                           rounded-xl text-sm font-semibold"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRejectConfirm}
+                disabled={!rejectReason.trim() || reject.isPending}
+                className="flex-1 py-2.5 bg-red-600 text-white rounded-xl
+                           text-sm font-semibold disabled:opacity-50"
+              >
+                {reject.isPending ? "Rejecting…" : "Reject"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Subject rows */}
+      <div className="space-y-2">
+        <p className="text-xs text-gray-400 font-medium mb-3">
+          Click a subject row to enter or review student scores inline.
+          Approve or reject teacher-submitted marks from here.
+        </p>
+
+        {submissions.map((sub) => {
+          const meta    = SUBMISSION_META[sub.submissionStatus] ?? SUBMISSION_META.pending;
+          const isOpen  = openSubjectId === sub._id;
+          const entered = sub.totalScoresEntered ?? 0;
+          const total   = sub.totalStudents      ?? 0;
+          const pct     = total > 0 ? Math.round((entered / total) * 100) : 0;
+
+          return (
+            <div key={sub._id}>
+              <div
+                className={`bg-white rounded-xl border transition-colors
+                  cursor-pointer select-none
+                  ${isOpen
+                    ? "border-indigo-300 shadow-sm"
+                    : "border-gray-100 hover:border-gray-200"
+                  }`}
+              >
+                <div
+                  className="flex items-center gap-4 p-4"
+                  onClick={() => toggleSubject(sub._id)}
+                >
+                  <span className="text-xl shrink-0">{meta.icon}</span>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900 text-sm">
+                        {sub.subjectName}
+                      </span>
+                      <span className={`text-xs font-bold px-2 py-0.5
+                        rounded-full ${meta.color} ${meta.bg}`}>
+                        {meta.label}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs text-gray-400">
+                        {sub.teacherName || "No teacher assigned"}
+                      </span>
+                      <span className="text-xs text-gray-300">·</span>
+                      <span className="text-xs text-gray-400">
+                        {entered}/{total} scores entered
+                      </span>
+                    </div>
+
+                    <div className="mt-2 h-1 bg-gray-100 rounded-full w-48">
+                      <div
+                        className={`h-full rounded-full transition-all
+                          ${pct === 100 ? "bg-green-500" : "bg-primary-400"}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  <div
+                    className="flex gap-2 shrink-0"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {sub.submissionStatus === "submitted" && (
+                      <>
+                        <button
+                          onClick={() => handleApprove(sub)}
+                          disabled={approve.isPending}
+                          className="text-xs font-semibold px-3 py-1.5
+                                     bg-green-600 text-white rounded-lg
+                                     hover:bg-green-700 disabled:opacity-50
+                                     transition-colors"
+                        >
+                          Approve
+                        </button>
+                        <button
+                          onClick={() => setRejectTarget(sub)}
+                          className="text-xs font-semibold px-3 py-1.5
+                                     bg-red-600 text-white rounded-lg
+                                     hover:bg-red-700 transition-colors"
+                        >
+                          Reject
+                        </button>
+                      </>
+                    )}
+
+                    <span className={`text-gray-400 text-lg leading-none
+                      transition-transform duration-200
+                      ${isOpen ? "rotate-90" : ""}`}>
+                      ›
+                    </span>
+                  </div>
+                </div>
+
+                {sub.submissionStatus === "rejected" && sub.rejectReason && (
+                  <div className="mx-4 mb-3 px-3 py-2 bg-red-50 rounded-lg
+                                  text-xs text-red-600 border border-red-100">
+                    ❌ Rejected: {sub.rejectReason}
+                  </div>
+                )}
+              </div>
+
+              {isOpen && (
+                <ScoreEntryPanel
+                  sub={sub}
+                  examId={examId}
+                  schoolId={schoolId}
+                  onClose={() => setOpenSubjectId(null)}
+                />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// TAB 3 — RESULTS
+// ─────────────────────────────────────────────────────────
+
+const ResultsTab = ({
+  examId,
+  schoolId,
+  examStatus,
+  submissions,
+}: {
+  examId:      string;
+  schoolId:    string;
+  examStatus:  ExamStatus;
+  submissions: ExamSubjectWithTotals[];
+}) => {
+  const { data: resultsData, isLoading } = useExamResults(examId);
+  const { data: statsData }              = useExamStats(examId);
+  const processResults                   = useProcessResults();
+  const publishResults                   = usePublishResults();
+
+  const results = resultsData?.results ?? [];
+  const stats   = statsData?.data;
+
+  const allMarksEntered = submissions.length > 0 &&
+    submissions.every(
+      (s) =>
+        s.submissionStatus === "approved" ||
+        (s.totalScoresEntered ?? 0) === (s.totalStudents ?? 0)
+    );
+  const resultsProcessed = results.length > 0;
+  const resultsPublished = examStatus === "published";
+
+  const currentStep =
+    !allMarksEntered  ? 1 :
+    !resultsProcessed ? 2 :
+    !resultsPublished ? 3 : 4;
+
+  const handleProcess = () => {
+    if (!window.confirm(
+      "Calculate results? This will compute grades, averages and rankings for all students."
+    )) return;
+    processResults.mutate({ examId });
+  };
+
+  const handlePublish = () => {
+    if (!window.confirm(
+      "Publish results? Students will be able to see their scores and rankings."
+    )) return;
+    publishResults.mutate(examId);
+  };
+
+  return (
+    <div className="space-y-5">
+
+      {/* Guided steps */}
+      <div className="bg-white rounded-xl border border-gray-100 p-5">
+        <h3 className="font-semibold text-gray-900 mb-4">Results Checklist</h3>
+
+        <div className="space-y-3">
+
+          {/* Step 1 */}
+          <div className={`flex items-start gap-3 p-3 rounded-xl
+            ${allMarksEntered ? "bg-green-50" : "bg-amber-50"}`}>
+            <span className="text-lg mt-0.5">
+              {allMarksEntered ? "✅" : "⏳"}
+            </span>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold
+                ${allMarksEntered ? "text-green-800" : "text-amber-800"}`}>
+                Step 1 — All marks entered and approved
+              </p>
+              <p className={`text-xs mt-0.5
+                ${allMarksEntered ? "text-green-600" : "text-amber-600"}`}>
+                {allMarksEntered
+                  ? "All subjects have scores entered."
+                  : "Some subjects are still missing scores or waiting for approval."}
+              </p>
+              {!allMarksEntered && (
+                <Link
+                  to={`/exams/${examId}?tab=marks`}
+                  className="inline-block mt-2 text-xs font-semibold
+                             text-amber-700 underline"
+                >
+                  → Go to Marks & Approval tab
+                </Link>
+              )}
+            </div>
+          </div>
+
+          {/* Step 2 */}
+          <div className={`flex items-start gap-3 p-3 rounded-xl
+            ${resultsProcessed
+              ? "bg-green-50"
+              : currentStep === 2
+                ? "bg-indigo-50"
+                : "bg-gray-50 opacity-60"
+            }`}>
+            <span className="text-lg mt-0.5">
+              {resultsProcessed ? "✅" : "🧮"}
+            </span>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold
+                ${resultsProcessed ? "text-green-800" : "text-indigo-800"}`}>
+                Step 2 — Calculate results
+              </p>
+              <p className={`text-xs mt-0.5
+                ${resultsProcessed ? "text-green-600" : "text-indigo-500"}`}>
+                {resultsProcessed
+                  ? "Grades, averages and rankings have been calculated."
+                  : "Computes grades, averages and class rankings for every student."}
+              </p>
+              {!resultsProcessed && currentStep === 2 && (
+                <button
+                  onClick={handleProcess}
+                  disabled={processResults.isPending}
+                  className="mt-2 px-4 py-1.5 bg-indigo-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-indigo-700
+                             disabled:opacity-60 transition-colors"
+                >
+                  {processResults.isPending ? "Calculating…" : "Calculate Results"}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Step 3 */}
+          <div className={`flex items-start gap-3 p-3 rounded-xl
+            ${resultsPublished
+              ? "bg-green-50"
+              : currentStep === 3
+                ? "bg-purple-50"
+                : "bg-gray-50 opacity-60"
+            }`}>
+            <span className="text-lg mt-0.5">
+              {resultsPublished ? "✅" : "📢"}
+            </span>
+            <div className="flex-1">
+              <p className={`text-sm font-semibold
+                ${resultsPublished ? "text-green-800" : "text-purple-800"}`}>
+                Step 3 — Publish to students
+              </p>
+              <p className={`text-xs mt-0.5
+                ${resultsPublished ? "text-green-600" : "text-purple-500"}`}>
+                {resultsPublished
+                  ? "Results are live. Students can view their scores."
+                  : "Students cannot see results until you publish them."}
+              </p>
+              {!resultsPublished && currentStep === 3 && (
+                <button
+                  onClick={handlePublish}
+                  disabled={publishResults.isPending}
+                  className="mt-2 px-4 py-1.5 bg-purple-600 text-white
+                             text-xs font-bold rounded-lg hover:bg-purple-700
+                             disabled:opacity-60 transition-colors"
+                >
+                  {publishResults.isPending ? "Publishing…" : "Publish Results"}
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      {stats && (
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[
+            { label: "Students", value: stats.totalStudents, color: "text-primary-600" },
+            { label: "Passed",   value: stats.passed,        color: "text-green-600"   },
+            { label: "Failed",   value: stats.failed,        color: "text-red-600"     },
+            { label: "Pass Rate",value: `${stats.passRate}%`,color: "text-amber-600"   },
+          ].map((s) => (
+            <div key={s.label}
+                 className="bg-white rounded-xl border border-gray-100
+                            p-4 text-center">
+              <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
+              <p className="text-xs text-gray-500 font-medium mt-1">
+                {s.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Rankings table */}
+      {isLoading ? (
+        <div className="flex justify-center py-16">
+          <Spinner size="lg" />
+        </div>
+      ) : results.length === 0 ? (
+        <div className="bg-white rounded-xl border border-gray-100">
+          <EmptyState
+            icon="📊"
+            title="No results yet"
+            subtitle={
+              currentStep === 1
+                ? "Enter and approve all subject marks first"
+                : "Click Calculate Results above to generate rankings"
+            }
+          />
+        </div>
+      ) : (
+        <div className="bg-white rounded-xl border border-gray-100
+                        overflow-hidden">
+          <div className="px-4 py-3 border-b border-gray-100 flex
+                          items-center justify-between">
+            <h3 className="font-semibold text-gray-900">
+              Rankings — {results.length} student{results.length !== 1 ? "s" : ""}
+            </h3>
+            <Link
+              to={`/exams/results?examId=${examId}`}
+              className="text-xs font-semibold text-primary-600
+                         hover:text-primary-700"
+            >
+              Full Dashboard →
+            </Link>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-gray-50 text-xs font-bold text-gray-500
+                                uppercase tracking-wide">
+                <tr>
+                  {["Pos", "Student", "Class", "Score",
+                    "Average", "Grade", "Result"].map((h) => (
+                    <th key={h}
+                        className="px-4 py-3 text-left last:text-center">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {results.map((r, idx) => {
+                  const pos     = r.classPosition ?? idx + 1;
+                  const passing = r.isPassing;
+                  const color   = passing ? "text-green-600" : "text-red-600";
+                  return (
+                    <tr key={r._id || r.studentId}
+                        className="hover:bg-gray-50 transition-colors">
+                      <td className="px-4 py-3">
+                        <span className={`font-bold text-base
+                          ${pos === 1 ? "text-yellow-500" :
+                            pos === 2 ? "text-gray-400"   :
+                            pos === 3 ? "text-amber-600"  :
+                                        "text-gray-700"}`}>
+                          #{pos}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-gray-900">
+                          {r.studentName || "Unknown"}
+                        </p>
+                        {r.admissionNo && (
+                          <p className="text-xs text-gray-400">
+                            #{r.admissionNo}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-gray-500 text-xs">
+                        {r.className || "—"}
+                      </td>
+                      <td className="px-4 py-3 font-semibold">
+                        {r.totalScore}/{r.maxTotalScore}
+                      </td>
+                      <td className={`px-4 py-3 font-bold ${color}`}>
+                        {r.percentage?.toFixed(1)}%
+                      </td>
+                      <td className={`px-4 py-3 font-bold ${color}`}>
+                        {r.overallGrade || "—"}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`inline-flex px-2 py-0.5
+                          rounded-full text-xs font-bold
+                          ${passing
+                            ? "bg-green-100 text-green-700"
+                            : "bg-red-100 text-red-700"
+                          }`}>
+                          {passing ? "Pass" : "Fail"}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
+// MAIN PAGE
+// ─────────────────────────────────────────────────────────
+
+export default function ExamDetailPage() {
+  const { id }         = useParams<{ id: string }>();
+  const [searchParams] = useSearchParams();
+  const navigate       = useNavigate();
+  const schoolId       = useAuthStore((s) => s.user?.schoolId ?? "");
+
+  const initialTab                = (searchParams.get("tab") as Tab) ?? "details";
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  const { data, isLoading, error } = useExamDetail(id ?? "");
+  const { data: subData }          = useSubmissions(id ?? "");
+  const updateStatus               = useUpdateExamStatus();
+
+  const exam        = data?.exam;
+  const submissions = (subData?.submissions ?? []) as ExamSubjectWithTotals[];
+
+  // Keep tab in sync with ?tab= URL param
+  useEffect(() => {
+    const tab = searchParams.get("tab") as Tab;
+    if (tab && TABS.find((t) => t.key === tab)) setActiveTab(tab);
+  }, [searchParams]);
+
+  const handleStatusChange = (status: ExamStatus) => {
+    if (!id) return;
+    if (!window.confirm(
+      `Change exam status to "${EXAM_STATUS_META[status].label}"?`
+    )) return;
+    updateStatus.mutate({ examId: id, status });
+  };
+
+  const awaitingApproval = submissions.filter(
+    (s) => s.submissionStatus === "submitted"
+  ).length;
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <Spinner size="lg" />
+      </div>
+    );
+  }
+
+  if (error || !exam) {
+    return (
+      <div className="text-center py-16">
+        <p className="text-5xl mb-4">😕</p>
+        <p className="font-semibold text-gray-700">Exam not found</p>
+        <button
+          onClick={() => navigate("/exams")}
+          className="mt-4 px-6 py-2 bg-primary-600 text-white
+                     rounded-xl text-sm font-semibold"
+        >
+          Back to Exams
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+
+      {/* Page header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <button
+            onClick={() => navigate("/exams")}
+            className="text-sm text-gray-400 hover:text-gray-600 mb-1 block"
+          >
+            ← Back to Exams
+          </button>
+          <h1 className="text-2xl font-bold text-gray-900">{exam.name}</h1>
+          <p className="text-gray-500 text-sm mt-1">
+            {EXAM_TYPE_LABELS[exam.type as keyof typeof EXAM_TYPE_LABELS] ?? exam.type}
+            {exam.academicYear ? ` · ${exam.academicYear}` : ""}
+            {exam.term         ? ` · ${exam.term}`         : ""}
+          </p>
+        </div>
+        <StatusBadge status={exam.status} />
+      </div>
+
+      {/* Tab bar */}
+      <div className="flex border-b border-gray-200">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            onClick={() => setActiveTab(tab.key)}
+            className={`relative px-5 py-3 text-sm font-semibold
+              transition-colors
+              ${activeTab === tab.key
+                ? "text-primary-600 border-b-2 border-primary-600"
+                : "text-gray-500 hover:text-gray-700"
+              }`}
+          >
+            {tab.label}
+
+            {tab.key === "marks" && awaitingApproval > 0 && (
+              <span className="ml-1.5 bg-red-500 text-white text-xs
+                               font-bold px-1.5 py-0.5 rounded-full">
+                {awaitingApproval}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      <div>
+        {activeTab === "details" && (
+          <DetailsTab
+            exam={exam}
+            submissions={submissions}
+            onStatusChange={handleStatusChange}
+            changingStatus={updateStatus.isPending}
+          />
+        )}
+
+        {activeTab === "marks" && (
+          <MarksTab
+            examId={id ?? ""}
+            submissions={submissions}
+            schoolId={schoolId}
+          />
+        )}
+
+        {activeTab === "results" && (
+          <ResultsTab
+            examId={id ?? ""}
+            schoolId={schoolId}
+            examStatus={exam.status}
+            submissions={submissions}
+          />
+        )}
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,1223 @@
+// app/teacher/profile/setup.js
+"use strict";
+
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  TextInput,
+  ActivityIndicator,
+  Alert,
+  KeyboardAvoidingView,
+  Platform,
+  StatusBar,
+  Modal,
+} from "react-native";
+import DateTimePicker           from "@react-native-community/datetimepicker";
+import { router }               from "expo-router";
+import { Ionicons }             from "@expo/vector-icons";
+import { useAuthStore }         from "../../../src/store/auth.store";
+import { getDatabase }          from "../../../src/db/database";
+import api                      from "../../../src/services/api";
+
+// ─────────────────────────────────────────────────────────
+// COLORS
+// ─────────────────────────────────────────────────────────
+const C = {
+  primary:   "#4F46E5",
+  primaryBg: "#EEF2FF",
+  success:   "#059669",
+  successBg: "#ECFDF5",
+  warning:   "#D97706",
+  warningBg: "#FEF3C7",
+  error:     "#DC2626",
+  errorBg:   "#FEF2F2",
+  info:      "#2563EB",
+  white:     "#FFFFFF",
+  gray50:    "#F9FAFB",
+  gray100:   "#F3F4F6",
+  gray200:   "#E5E7EB",
+  gray300:   "#D1D5DB",
+  gray400:   "#9CA3AF",
+  gray500:   "#6B7280",
+  gray700:   "#374151",
+  gray900:   "#111827",
+};
+
+// ─────────────────────────────────────────────────────────
+// DATE HELPERS
+// ─────────────────────────────────────────────────────────
+
+const toYMD = (date) => {
+  if (!date) return "";
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const toDisplay = (date) => {
+  if (!date) return "";
+  return date.toLocaleDateString("en-GB", {
+    day:   "2-digit",
+    month: "short",
+    year:  "numeric",
+  });
+};
+
+const parseYMD = (str) => {
+  if (!str || !/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date();
+  const [y, m, d] = str.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+// ─────────────────────────────────────────────────────────
+// DATE FIELD
+// ─────────────────────────────────────────────────────────
+
+function DateField({
+  label, value, onChange, required, error,
+  maximumDate, minimumDate, hint,
+}) {
+  const [show,     setShow]     = useState(false);
+  const [tempDate, setTempDate] = useState(() => value ? parseYMD(value) : new Date());
+
+  useEffect(() => {
+    setTempDate(value ? parseYMD(value) : new Date());
+  }, [value]);
+
+  const pickerDate  = value ? parseYMD(value) : new Date();
+  const displayText = value ? toDisplay(parseYMD(value)) : null;
+
+  const openPicker = () => { setTempDate(pickerDate); setShow(true); };
+  const dismiss    = () => setShow(false);
+
+  const onAndroidChange = (event, selectedDate) => {
+    setShow(false);
+    if (event.type === "dismissed") return;
+    if (event.type === "set" && selectedDate) onChange(toYMD(selectedDate));
+  };
+
+  const onIOSChange = (event, selectedDate) => {
+    if (selectedDate) setTempDate(selectedDate);
+  };
+
+  const confirmIOS = () => { onChange(toYMD(tempDate)); setShow(false); };
+
+  const TriggerButton = (
+    <TouchableOpacity
+      style={[dp.inputWrap, !!error && dp.inputError]}
+      onPress={openPicker}
+      activeOpacity={0.7}
+    >
+      <Ionicons name="calendar-outline" size={18} color={displayText ? C.primary : C.gray400} />
+      <View style={dp.textBlock}>
+        <Text style={[dp.inputText, !displayText && dp.placeholder]}>
+          {displayText || "Select date"}
+        </Text>
+        {!!displayText && <Text style={dp.rawDate}>{value}</Text>}
+      </View>
+      <Ionicons name="chevron-down" size={16} color={C.gray400} />
+    </TouchableOpacity>
+  );
+
+  if (Platform.OS === "android") {
+    return (
+      <View style={dp.wrap}>
+        <Text style={dp.label}>
+          {label}{required && <Text style={{ color: C.error }}> *</Text>}
+        </Text>
+        {TriggerButton}
+        {!!hint  && !error && <Text style={dp.hint}>{hint}</Text>}
+        {!!error            && <Text style={dp.errorText}>{error}</Text>}
+        {show && (
+          <DateTimePicker
+            value={pickerDate}
+            mode="date"
+            display="default"
+            maximumDate={maximumDate}
+            minimumDate={minimumDate}
+            onChange={onAndroidChange}
+          />
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={dp.wrap}>
+      <Text style={dp.label}>
+        {label}{required && <Text style={{ color: C.error }}> *</Text>}
+      </Text>
+      {TriggerButton}
+      {!!hint  && !error && <Text style={dp.hint}>{hint}</Text>}
+      {!!error            && <Text style={dp.errorText}>{error}</Text>}
+      <Modal
+        visible={show}
+        transparent
+        animationType="slide"
+        onRequestClose={dismiss}
+      >
+        <TouchableOpacity
+          style={dp.modalOverlay}
+          activeOpacity={1}
+          onPress={dismiss}
+        />
+        <View style={dp.modalSheet}>
+          <View style={dp.sheetHeader}>
+            <TouchableOpacity onPress={dismiss} hitSlop={8}>
+              <Text style={dp.cancelText}>Cancel</Text>
+            </TouchableOpacity>
+            <Text style={dp.sheetTitle}>{label}</Text>
+            <TouchableOpacity onPress={confirmIOS} hitSlop={8}>
+              <Text style={dp.doneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+          <DateTimePicker
+            value={tempDate}
+            mode="date"
+            display="spinner"
+            maximumDate={maximumDate}
+            minimumDate={minimumDate}
+            onChange={onIOSChange}
+            style={dp.picker}
+          />
+          <View style={dp.previewRow}>
+            <Ionicons name="calendar-outline" size={15} color={C.primary} />
+            <Text style={dp.previewText}>
+              {toDisplay(tempDate)}
+              <Text style={dp.previewRaw}>{"  "}({toYMD(tempDate)})</Text>
+            </Text>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
+}
+
+const dp = StyleSheet.create({
+  wrap:         { marginBottom: 16 },
+  label:        { fontSize: 13, fontWeight: "600", color: C.gray700, marginBottom: 6 },
+  inputWrap:    { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, paddingHorizontal: 12, paddingVertical: 12, gap: 8 },
+  inputError:   { borderColor: C.error },
+  textBlock:    { flex: 1, flexDirection: "column", justifyContent: "center" },
+  inputText:    { fontSize: 14, color: C.gray900, fontWeight: "500" },
+  placeholder:  { color: C.gray400, fontWeight: "400" },
+  rawDate:      { fontSize: 11, color: C.gray400, marginTop: 1 },
+  hint:         { fontSize: 11, color: C.gray400, marginTop: 4 },
+  errorText:    { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
+  modalOverlay: { flex: 1, backgroundColor: "rgba(0,0,0,0.4)" },
+  modalSheet:   { backgroundColor: C.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, paddingBottom: 34 },
+  sheetHeader:  { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray100 },
+  sheetTitle:   { fontSize: 15, fontWeight: "700", color: C.gray900 },
+  cancelText:   { fontSize: 15, color: C.gray500 },
+  doneText:     { fontSize: 15, color: C.primary, fontWeight: "700" },
+  picker:       { width: "100%", backgroundColor: C.white },
+  previewRow:   { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8, paddingTop: 4, paddingBottom: 8 },
+  previewText:  { fontSize: 14, color: C.gray700, fontWeight: "600" },
+  previewRaw:   { fontSize: 12, color: C.gray400, fontWeight: "400" },
+});
+
+// ─────────────────────────────────────────────────────────
+// STEPS
+// ─────────────────────────────────────────────────────────
+const STEPS = [
+  { id: "personal",     title: "Personal Info", icon: "person-outline",    desc: "Basic personal details"     },
+  { id: "professional", title: "Professional",  icon: "briefcase-outline", desc: "Employment & qualification"  },
+  { id: "contact",      title: "Contact",       icon: "call-outline",      desc: "How to reach you"            },
+  { id: "emergency",    title: "Emergency",     icon: "medical-outline",   desc: "Emergency contact info"     },
+];
+
+// ─────────────────────────────────────────────────────────
+// FIELD
+// ─────────────────────────────────────────────────────────
+function Field({
+  label, value, onChangeText, placeholder,
+  keyboardType = "default", multiline = false,
+  required = false, error, icon, editable = true, hint,
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={f.wrap}>
+      <Text style={f.label}>
+        {label}{required && <Text style={f.required}> *</Text>}
+      </Text>
+      <View style={[
+        f.inputWrap,
+        focused   && f.inputFocused,
+        !!error   && f.inputError,
+        !editable && f.inputDisabled,
+      ]}>
+        {!!icon && (
+          <Ionicons
+            name={icon}
+            size={18}
+            color={focused ? C.primary : C.gray400}
+            style={f.icon}
+          />
+        )}
+        <TextInput
+          style={[f.input, multiline && f.inputMulti]}
+          value={value}
+          onChangeText={onChangeText}
+          placeholder={placeholder}
+          placeholderTextColor={C.gray400}
+          keyboardType={keyboardType}
+          multiline={multiline}
+          numberOfLines={multiline ? 3 : 1}
+          editable={editable}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          autoCorrect={false}
+        />
+      </View>
+      {!!hint  && !error && <Text style={f.hint}>{hint}</Text>}
+      {!!error            && <Text style={f.errorText}>{error}</Text>}
+    </View>
+  );
+}
+
+const f = StyleSheet.create({
+  wrap:          { marginBottom: 16 },
+  label:         { fontSize: 13, fontWeight: "600", color: C.gray700, marginBottom: 6 },
+  required:      { color: C.error },
+  inputWrap:     { flexDirection: "row", alignItems: "center", borderWidth: 1.5, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, paddingHorizontal: 12 },
+  inputFocused:  { borderColor: C.primary },
+  inputError:    { borderColor: C.error },
+  inputDisabled: { backgroundColor: C.gray50, opacity: 0.7 },
+  icon:          { marginRight: 8 },
+  input:         { flex: 1, fontSize: 14, color: C.gray900, paddingVertical: 12 },
+  inputMulti:    { height: 80, textAlignVertical: "top", paddingTop: 12 },
+  hint:          { fontSize: 11, color: C.gray400, marginTop: 4 },
+  errorText:     { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
+});
+
+// ─────────────────────────────────────────────────────────
+// SELECT
+// ─────────────────────────────────────────────────────────
+function SelectField({ label, value, options, onSelect, required, error }) {
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  return (
+    <View style={sf.wrap}>
+      <Text style={sf.label}>
+        {label}{required && <Text style={{ color: C.error }}> *</Text>}
+      </Text>
+      <TouchableOpacity
+        style={[sf.selector, !!error && sf.selectorError]}
+        onPress={() => setOpen((p) => !p)}
+        activeOpacity={0.7}
+      >
+        <Text style={[sf.selectorText, !selected && sf.placeholder]}>
+          {selected?.label || `Select ${label}`}
+        </Text>
+        <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={C.gray400} />
+      </TouchableOpacity>
+      {open && (
+        <View style={sf.dropdown}>
+          {options.map((opt) => (
+            <TouchableOpacity
+              key={opt.value}
+              style={[sf.option, opt.value === value && sf.optionActive]}
+              onPress={() => { onSelect(opt.value); setOpen(false); }}
+              activeOpacity={0.7}
+            >
+              <Text style={[sf.optionText, opt.value === value && sf.optionTextActive]}>
+                {opt.label}
+              </Text>
+              {opt.value === value && (
+                <Ionicons name="checkmark" size={16} color={C.primary} />
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
+      )}
+      {!!error && <Text style={sf.errorText}>{error}</Text>}
+    </View>
+  );
+}
+
+const sf = StyleSheet.create({
+  wrap:             { marginBottom: 16 },
+  label:            { fontSize: 13, fontWeight: "600", color: C.gray700, marginBottom: 6 },
+  selector:         { flexDirection: "row", alignItems: "center", justifyContent: "space-between", borderWidth: 1.5, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, paddingHorizontal: 12, paddingVertical: 12 },
+  selectorError:    { borderColor: C.error },
+  selectorText:     { fontSize: 14, color: C.gray900, flex: 1 },
+  placeholder:      { color: C.gray400 },
+  dropdown:         { borderWidth: 1, borderColor: C.gray200, borderRadius: 12, backgroundColor: C.white, marginTop: 4, shadowColor: "#000", shadowOpacity: 0.08, shadowRadius: 8, elevation: 4, zIndex: 999 },
+  option:           { flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 14, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.gray100 },
+  optionActive:     { backgroundColor: C.primaryBg },
+  optionText:       { fontSize: 14, color: C.gray700 },
+  optionTextActive: { color: C.primary, fontWeight: "600" },
+  errorText:        { fontSize: 11, color: C.error, marginTop: 4, fontWeight: "500" },
+});
+
+// ─────────────────────────────────────────────────────────
+// OPTION LISTS
+// ─────────────────────────────────────────────────────────
+
+const GENDERS = [
+  { value: "male",   label: "Male"   },
+  { value: "female", label: "Female" },
+  { value: "other",  label: "Other / Prefer not to say" },
+];
+
+const EMPLOYMENT_TYPES = [
+  { value: "full_time",  label: "Full-Time"  },
+  { value: "part_time",  label: "Part-Time"  },
+  { value: "contract",   label: "Contract"   },
+  { value: "substitute", label: "Substitute" },
+  { value: "volunteer",  label: "Volunteer"  },
+];
+
+const QUALIFICATION_LEVELS = [
+  { value: "diploma",   label: "Diploma / Certificate" },
+  { value: "bachelors", label: "Bachelor's Degree"      },
+  { value: "pgde",      label: "PGDE / PGCE"            },
+  { value: "masters",   label: "Master's Degree"        },
+  { value: "phd",       label: "PhD / Doctorate"        },
+  { value: "other",     label: "Other"                  },
+];
+
+const BLOOD_GROUPS = [
+  { value: "A+",  label: "A+"  }, { value: "A-",  label: "A-"  },
+  { value: "B+",  label: "B+"  }, { value: "B-",  label: "B-"  },
+  { value: "AB+", label: "AB+" }, { value: "AB-", label: "AB-" },
+  { value: "O+",  label: "O+"  }, { value: "O-",  label: "O-"  },
+];
+
+// ─────────────────────────────────────────────────────────
+// VALIDATION
+// ─────────────────────────────────────────────────────────
+
+const validateStep = (step, form) => {
+  const errors = {};
+  if (step === 0) {
+    if (!form.firstName?.trim())   errors.firstName   = "First name is required";
+    if (!form.lastName?.trim())    errors.lastName    = "Last name is required";
+    if (!form.gender)              errors.gender      = "Please select your gender";
+    if (!form.dateOfBirth?.trim()) errors.dateOfBirth = "Date of birth is required";
+    if (!form.nationalId?.trim())  errors.nationalId  = "National ID is required";
+  }
+  if (step === 1) {
+    if (!form.staffId?.trim())   errors.staffId        = "Staff ID is required";
+    if (!form.qualification)     errors.qualification  = "Please select your qualification";
+    if (!form.employmentType)    errors.employmentType = "Please select employment type";
+    if (!form.joinDate?.trim())  errors.joinDate       = "Join date is required";
+  }
+  if (step === 2) {
+    if (!form.phone?.trim())   errors.phone   = "Phone number is required";
+    if (!form.address?.trim()) errors.address = "Address is required";
+    if (
+      form.email?.trim() &&
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
+    ) errors.email = "Invalid email address";
+  }
+  if (step === 3) {
+    if (!form.emergencyName?.trim())     errors.emergencyName     = "Emergency contact name is required";
+    if (!form.emergencyPhone?.trim())    errors.emergencyPhone    = "Emergency contact phone is required";
+    if (!form.emergencyRelation?.trim()) errors.emergencyRelation = "Relationship is required";
+  }
+  return errors;
+};
+
+// ─────────────────────────────────────────────────────────
+// SAVE PROFILE
+// Table is guaranteed valid by migrate.js v21.
+// ─────────────────────────────────────────────────────────
+
+const saveProfile = async (form, userId) => {
+  const fullName = `${form.firstName?.trim() || ""} ${form.lastName?.trim() || ""}`.trim();
+
+  const payload = {
+    name:              fullName,
+    firstName:         form.firstName?.trim(),
+    lastName:          form.lastName?.trim(),
+    gender:            form.gender,
+    dateOfBirth:       form.dateOfBirth?.trim(),
+    nationalId:        form.nationalId?.trim(),
+    staffId:           form.staffId?.trim(),
+    qualification:     form.qualification,
+    employmentType:    form.employmentType,
+    joinDate:          form.joinDate?.trim(),
+    yearsOfExperience: form.yearsOfExperience?.trim(),
+    previousSchool:    form.previousSchool?.trim(),
+    phone:             form.phone?.trim(),
+    alternatePhone:    form.alternatePhone?.trim(),
+    address:           form.address?.trim(),
+    city:              form.city?.trim(),
+    state:             form.state?.trim(),
+    emergencyName:     form.emergencyName?.trim(),
+    emergencyPhone:    form.emergencyPhone?.trim(),
+    emergencyRelation: form.emergencyRelation?.trim(),
+    bloodGroup:        form.bloodGroup,
+    medicalConditions: form.medicalConditions?.trim(),
+    bio:               form.bio?.trim(),
+    profileCompleted:  true,
+  };
+
+  // ── API save ─────────────────────────────────────────
+  try {
+    await api.put("/teacher/profile", payload, { timeout: 10000 });
+  } catch (err) {
+    console.warn("[profile/setup] API save failed:", err.message);
+  }
+
+  // ── SQLite save ───────────────────────────────────────
+  try {
+    const db = await getDatabase();
+
+    await db.runAsync(
+      `INSERT INTO teacher_profiles (
+         teacher_id, first_name, last_name, gender, date_of_birth,
+         national_id, staff_id, qualification, employment_type,
+         join_date, years_experience, previous_school,
+         phone, alternate_phone, address, city, state,
+         emergency_name, emergency_phone, emergency_relation,
+         blood_group, medical_conditions, bio,
+         profile_completed, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(teacher_id) DO UPDATE SET
+         first_name         = excluded.first_name,
+         last_name          = excluded.last_name,
+         gender             = excluded.gender,
+         date_of_birth      = excluded.date_of_birth,
+         national_id        = excluded.national_id,
+         staff_id           = excluded.staff_id,
+         qualification      = excluded.qualification,
+         employment_type    = excluded.employment_type,
+         join_date          = excluded.join_date,
+         years_experience   = excluded.years_experience,
+         previous_school    = excluded.previous_school,
+         phone              = excluded.phone,
+         alternate_phone    = excluded.alternate_phone,
+         address            = excluded.address,
+         city               = excluded.city,
+         state              = excluded.state,
+         emergency_name     = excluded.emergency_name,
+         emergency_phone    = excluded.emergency_phone,
+         emergency_relation = excluded.emergency_relation,
+         blood_group        = excluded.blood_group,
+         medical_conditions = excluded.medical_conditions,
+         bio                = excluded.bio,
+         profile_completed  = 1,
+         updated_at         = excluded.updated_at`,
+      [
+        userId,
+        payload.firstName         ?? null,
+        payload.lastName          ?? null,
+        payload.gender            ?? null,
+        payload.dateOfBirth       ?? null,
+        payload.nationalId        ?? null,
+        payload.staffId           ?? null,
+        payload.qualification     ?? null,
+        payload.employmentType    ?? null,
+        payload.joinDate          ?? null,
+        payload.yearsOfExperience ?? null,
+        payload.previousSchool    ?? null,
+        payload.phone             ?? null,
+        payload.alternatePhone    ?? null,
+        payload.address           ?? null,
+        payload.city              ?? null,
+        payload.state             ?? null,
+        payload.emergencyName     ?? null,
+        payload.emergencyPhone    ?? null,
+        payload.emergencyRelation ?? null,
+        payload.bloodGroup        ?? null,
+        payload.medicalConditions ?? null,
+        payload.bio               ?? null,
+        new Date().toISOString(),
+      ]
+    );
+
+    console.log("✅ teacher_profiles upsert complete");
+
+    // Update display name in users table
+    await db.runAsync(
+      `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`,
+      [fullName, new Date().toISOString(), userId]
+    ).catch(() => {});
+
+    // Mark complete in settings_profile if that table exists
+    const spExists = await db.getFirstAsync(
+      `SELECT name FROM sqlite_master
+       WHERE type='table' AND name='settings_profile'
+       LIMIT 1`
+    ).catch(() => null);
+
+    if (spExists) {
+      await db.runAsync(
+        `INSERT INTO settings_profile (user_id, profile_completed, updated_at)
+         VALUES (?, 1, ?)
+         ON CONFLICT(user_id) DO UPDATE SET
+           profile_completed = 1,
+           updated_at        = excluded.updated_at`,
+        [userId, new Date().toISOString()]
+      ).catch(() => {});
+    }
+
+  } catch (err) {
+    console.warn("[profile/setup] SQLite save error:", err.message);
+    throw err;
+  }
+};
+
+// ─────────────────────────────────────────────────────────
+// CHECK IF TEACHER PROFILE IS COMPLETE
+// Exported — used by the teacher dashboard guard.
+// ─────────────────────────────────────────────────────────
+
+export const isTeacherProfileComplete = async (userId) => {
+  if (!userId) return false;
+
+  // ── Check store first — fastest path ─────────────────
+  const storeComplete = useAuthStore.getState().profileCompleted;
+  if (storeComplete) return true;
+
+  // ── API check (only if token exists) ─────────────────
+  try {
+    const { token } = useAuthStore.getState();
+    if (token) {
+      const res = await api.get("/teacher/profile", { timeout: 5000 });
+      if (res.data?.data?.profileCompleted || res.data?.profileCompleted) return true;
+    }
+  } catch { /* fall through */ }
+
+  // ── SQLite fallback ───────────────────────────────────
+  try {
+    const db = await getDatabase();
+
+    const tpRow = await db.getFirstAsync(
+      `SELECT profile_completed FROM teacher_profiles WHERE teacher_id = ? LIMIT 1`,
+      [userId]
+    ).catch(() => null);
+    if (tpRow?.profile_completed) return true;
+
+    const spRow = await db.getFirstAsync(
+      `SELECT profile_completed FROM settings_profile WHERE user_id = ? LIMIT 1`,
+      [userId]
+    ).catch(() => null);
+    if (spRow?.profile_completed) return true;
+
+  } catch { /* ignore */ }
+
+  return false;
+};
+
+// ─────────────────────────────────────────────────────────
+// MAIN COMPONENT
+// ─────────────────────────────────────────────────────────
+
+export default function TeacherProfileSetup() {
+  const user                = useAuthStore((s) => s.user);
+  const setUser             = useAuthStore((s) => s.setUser);
+  const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
+
+  const userId = String(user?._id || user?.id || "");
+
+  const [step,   setStep]   = useState(0);
+  const [saving, setSaving] = useState(false);
+  const [errors, setErrors] = useState({});
+
+  const [form, setForm] = useState({
+    firstName:         user?.name?.split(" ")[0]                 || "",
+    lastName:          user?.name?.split(" ").slice(1).join(" ") || "",
+    gender:            "",
+    dateOfBirth:       "",
+    nationalId:        "",
+    staffId:           "",
+    qualification:     "",
+    employmentType:    "full_time",
+    joinDate:          "",
+    yearsOfExperience: "",
+    previousSchool:    "",
+    phone:             user?.phone || "",
+    alternatePhone:    "",
+    email:             user?.email || "",
+    address:           "",
+    city:              "",
+    state:             "",
+    emergencyName:     "",
+    emergencyPhone:    "",
+    emergencyRelation: "",
+    bloodGroup:        "",
+    medicalConditions: "",
+    bio:               "",
+  });
+
+  const set = (key, val) => setForm((p) => ({ ...p, [key]: val }));
+
+  // ── Load existing profile ─────────────────────────────
+  useEffect(() => {
+    const loadExisting = async () => {
+      // Try API first
+      try {
+        const res = await api.get("/teacher/profile", { timeout: 5000 });
+        const p   = res.data?.data || res.data;
+        if (p && typeof p === "object") {
+          setForm((prev) => ({
+            ...prev,
+            firstName:         p.firstName         || prev.firstName,
+            lastName:          p.lastName          || prev.lastName,
+            gender:            p.gender            || prev.gender,
+            dateOfBirth:       p.dateOfBirth       || "",
+            nationalId:        p.nationalId        || "",
+            staffId:           p.staffId           || "",
+            qualification:     p.qualification     || "",
+            employmentType:    p.employmentType    || "full_time",
+            joinDate:          p.joinDate          || "",
+            yearsOfExperience: p.yearsOfExperience || "",
+            previousSchool:    p.previousSchool    || "",
+            phone:             p.phone             || prev.phone,
+            alternatePhone:    p.alternatePhone    || "",
+            address:           p.address           || "",
+            city:              p.city              || "",
+            state:             p.state             || "",
+            emergencyName:     p.emergencyName     || "",
+            emergencyPhone:    p.emergencyPhone    || "",
+            emergencyRelation: p.emergencyRelation || "",
+            bloodGroup:        p.bloodGroup        || "",
+            medicalConditions: p.medicalConditions || "",
+            bio:               p.bio               || "",
+          }));
+        }
+      } catch { /* fall through to SQLite */ }
+
+      // Fall back to local cache
+      try {
+        const db  = await getDatabase();
+        const row = await db.getFirstAsync(
+          `SELECT * FROM teacher_profiles WHERE teacher_id = ? LIMIT 1`,
+          [userId]
+        ).catch(() => null);
+
+        if (row) {
+          setForm((prev) => ({
+            ...prev,
+            firstName:         row.first_name         || prev.firstName,
+            lastName:          row.last_name          || prev.lastName,
+            gender:            row.gender             || prev.gender,
+            dateOfBirth:       row.date_of_birth      || prev.dateOfBirth,
+            nationalId:        row.national_id        || prev.nationalId,
+            staffId:           row.staff_id           || prev.staffId,
+            qualification:     row.qualification      || prev.qualification,
+            employmentType:    row.employment_type    || prev.employmentType,
+            joinDate:          row.join_date          || prev.joinDate,
+            yearsOfExperience: String(row.years_experience || ""),
+            previousSchool:    row.previous_school    || prev.previousSchool,
+            phone:             row.phone              || prev.phone,
+            alternatePhone:    row.alternate_phone    || prev.alternatePhone,
+            address:           row.address            || prev.address,
+            city:              row.city               || prev.city,
+            state:             row.state              || prev.state,
+            emergencyName:     row.emergency_name     || prev.emergencyName,
+            emergencyPhone:    row.emergency_phone    || prev.emergencyPhone,
+            emergencyRelation: row.emergency_relation || prev.emergencyRelation,
+            bloodGroup:        row.blood_group        || prev.bloodGroup,
+            medicalConditions: row.medical_conditions || prev.medicalConditions,
+            bio:               row.bio                || prev.bio,
+          }));
+        }
+      } catch { /* ignore */ }
+    };
+
+    if (userId) loadExisting();
+  }, [userId]);
+
+  // ── Skip ──────────────────────────────────────────────
+  const handleSkip = useCallback(() => {
+    Alert.alert(
+      "Skip for Now?",
+      "You can complete your profile later from Settings.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Skip for Now",
+          style: "destructive",
+          onPress: () => {
+            try {
+              router.replace("/teacher/dashboard");
+            } catch { router.replace("/teacher/dashboard"); }
+          },
+        },
+      ]
+    );
+  }, []);
+
+  // ── Navigation ────────────────────────────────────────
+  const goNext = () => {
+    const errs = validateStep(step, form);
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    setErrors({});
+    if (step < STEPS.length - 1) setStep((p) => p + 1);
+    else handleSubmit();
+  };
+
+  const goBack = () => {
+    setErrors({});
+    if (step > 0) { setStep((p) => p - 1); return; }
+    try {
+      router.replace("/teacher/dashboard");
+    } catch { router.replace("/teacher/dashboard"); }
+  };
+
+  // ── Submit ────────────────────────────────────────────
+  const handleSubmit = async () => {
+    const errs = validateStep(step, form);
+    if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+    try {
+      setSaving(true);
+      await saveProfile(form, userId);
+
+      const fullName = `${form.firstName} ${form.lastName}`.trim();
+
+      // ✅ Update auth store — prevents dashboard guard from
+      //    re-running the check and redirecting back here
+      setProfileCompleted(true);
+      if (user) setUser?.({ ...user, name: fullName, profileCompleted: true });
+
+      Alert.alert(
+        "Profile Saved! 🎉",
+        "Your profile has been updated successfully.",
+        [{
+          text: "Continue",
+          onPress: () => {
+            router.replace("/teacher/dashboard");
+          },
+        }]
+      );
+    } catch (err) {
+      Alert.alert("Error", err.message || "Failed to save profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // ── Date boundaries ───────────────────────────────────
+  const today       = new Date();
+  const minBirthday = new Date(today.getFullYear() - 80, 0, 1);
+  const maxBirthday = new Date(today.getFullYear() - 18, 11, 31);
+
+  // ─────────────────────────────────────────────────────
+  // STEP CONTENT
+  // ─────────────────────────────────────────────────────
+  const renderStep = () => {
+    switch (step) {
+
+      case 0:
+        return (
+          <>
+            <View style={ss.row}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="First Name" required
+                  value={form.firstName}
+                  onChangeText={(v) => set("firstName", v)}
+                  placeholder="e.g. John"
+                  icon="person-outline"
+                  error={errors.firstName}
+                />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="Last Name" required
+                  value={form.lastName}
+                  onChangeText={(v) => set("lastName", v)}
+                  placeholder="e.g. Doe"
+                  error={errors.lastName}
+                />
+              </View>
+            </View>
+
+            <SelectField
+              label="Gender" required
+              value={form.gender}
+              options={GENDERS}
+              onSelect={(v) => set("gender", v)}
+              error={errors.gender}
+            />
+
+            <DateField
+              label="Date of Birth" required
+              value={form.dateOfBirth}
+              onChange={(ymd) => set("dateOfBirth", ymd)}
+              maximumDate={maxBirthday}
+              minimumDate={minBirthday}
+              error={errors.dateOfBirth}
+            />
+
+            <Field
+              label="National ID / Passport Number" required
+              value={form.nationalId}
+              onChangeText={(v) => set("nationalId", v)}
+              placeholder="e.g. A1234567"
+              icon="card-outline"
+              error={errors.nationalId}
+            />
+
+            <SelectField
+              label="Blood Group"
+              value={form.bloodGroup}
+              options={BLOOD_GROUPS}
+              onSelect={(v) => set("bloodGroup", v)}
+            />
+
+            <Field
+              label="Brief Bio"
+              value={form.bio}
+              onChangeText={(v) => set("bio", v)}
+              placeholder="A short introduction about yourself…"
+              multiline
+              icon="document-text-outline"
+            />
+          </>
+        );
+
+      case 1:
+        return (
+          <>
+            <View style={ss.infoBox}>
+              <Ionicons name="information-circle-outline" size={20} color={C.info} />
+              <Text style={ss.infoText}>
+                Subject assignments are managed by your school administrator.
+                Fill in your employment and qualification details below.
+              </Text>
+            </View>
+
+            <Field
+              label="Staff ID / Employee Number" required
+              value={form.staffId}
+              onChangeText={(v) => set("staffId", v)}
+              placeholder="e.g. TCH-2024-001"
+              icon="id-card-outline"
+              error={errors.staffId}
+            />
+
+            <SelectField
+              label="Highest Qualification" required
+              value={form.qualification}
+              options={QUALIFICATION_LEVELS}
+              onSelect={(v) => set("qualification", v)}
+              error={errors.qualification}
+            />
+
+            <SelectField
+              label="Employment Type" required
+              value={form.employmentType}
+              options={EMPLOYMENT_TYPES}
+              onSelect={(v) => set("employmentType", v)}
+              error={errors.employmentType}
+            />
+
+            <DateField
+              label="Join Date" required
+              value={form.joinDate}
+              onChange={(ymd) => set("joinDate", ymd)}
+              maximumDate={today}
+              minimumDate={new Date(1980, 0, 1)}
+              hint="Date you joined this school"
+              error={errors.joinDate}
+            />
+
+            <Field
+              label="Years of Teaching Experience"
+              value={form.yearsOfExperience}
+              onChangeText={(v) => set("yearsOfExperience", v)}
+              placeholder="e.g. 5"
+              keyboardType="numeric"
+              icon="time-outline"
+            />
+
+            <Field
+              label="Previous School / Institution"
+              value={form.previousSchool}
+              onChangeText={(v) => set("previousSchool", v)}
+              placeholder="Where you taught before (optional)"
+              icon="business-outline"
+            />
+
+            <Field
+              label="Medical Conditions / Disabilities (optional)"
+              value={form.medicalConditions}
+              onChangeText={(v) => set("medicalConditions", v)}
+              placeholder="Helps the school support you"
+              multiline
+              icon="medical-outline"
+            />
+          </>
+        );
+
+      case 2:
+        return (
+          <>
+            <Field
+              label="Primary Phone" required
+              value={form.phone}
+              onChangeText={(v) => set("phone", v)}
+              placeholder="e.g. +233 20 000 0000"
+              keyboardType="phone-pad"
+              icon="call-outline"
+              error={errors.phone}
+            />
+
+            <Field
+              label="Alternate Phone"
+              value={form.alternatePhone}
+              onChangeText={(v) => set("alternatePhone", v)}
+              placeholder="Optional"
+              keyboardType="phone-pad"
+              icon="call-outline"
+            />
+
+            <Field
+              label="Email Address"
+              value={form.email || user?.email || ""}
+              onChangeText={(v) => set("email", v)}
+              placeholder="your@email.com"
+              keyboardType="email-address"
+              icon="mail-outline"
+              hint="Used for notifications and login"
+              error={errors.email}
+              editable={!user?.email}
+            />
+
+            <Field
+              label="Residential Address" required
+              value={form.address}
+              onChangeText={(v) => set("address", v)}
+              placeholder="House / Street address"
+              icon="home-outline"
+              multiline
+              error={errors.address}
+            />
+
+            <View style={ss.row}>
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="City / Town"
+                  value={form.city}
+                  onChangeText={(v) => set("city", v)}
+                  placeholder="e.g. Accra"
+                />
+              </View>
+              <View style={{ width: 12 }} />
+              <View style={{ flex: 1 }}>
+                <Field
+                  label="State / Region"
+                  value={form.state}
+                  onChangeText={(v) => set("state", v)}
+                  placeholder="e.g. Greater Accra"
+                />
+              </View>
+            </View>
+          </>
+        );
+
+      case 3:
+        return (
+          <>
+            <View style={ss.infoBox}>
+              <Ionicons name="information-circle-outline" size={20} color={C.info} />
+              <Text style={ss.infoText}>
+                This information is only used in case of emergency at school.
+              </Text>
+            </View>
+
+            <Field
+              label="Emergency Contact Name" required
+              value={form.emergencyName}
+              onChangeText={(v) => set("emergencyName", v)}
+              placeholder="Full name"
+              icon="person-outline"
+              error={errors.emergencyName}
+            />
+
+            <Field
+              label="Emergency Contact Phone" required
+              value={form.emergencyPhone}
+              onChangeText={(v) => set("emergencyPhone", v)}
+              placeholder="e.g. +233 20 000 0000"
+              keyboardType="phone-pad"
+              icon="call-outline"
+              error={errors.emergencyPhone}
+            />
+
+            <Field
+              label="Relationship to You" required
+              value={form.emergencyRelation}
+              onChangeText={(v) => set("emergencyRelation", v)}
+              placeholder="e.g. Spouse, Parent, Sibling"
+              icon="heart-outline"
+              error={errors.emergencyRelation}
+            />
+          </>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  // ─────────────────────────────────────────────────────
+  // RENDER
+  // ─────────────────────────────────────────────────────
+  const progress = ((step + 1) / STEPS.length) * 100;
+
+  return (
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+    >
+      <StatusBar barStyle="dark-content" backgroundColor={C.white} />
+      <View style={ss.screen}>
+
+        {/* Top bar */}
+        <View style={ss.topBar}>
+          <TouchableOpacity onPress={goBack} style={ss.backBtn} hitSlop={8}>
+            <Ionicons name="arrow-back" size={22} color={C.gray700} />
+          </TouchableOpacity>
+          <View style={{ flex: 1 }}>
+            <Text style={ss.topTitle}>Profile Setup</Text>
+            <Text style={ss.topSub}>Step {step + 1} of {STEPS.length}</Text>
+          </View>
+          <TouchableOpacity
+            style={ss.skipBtn}
+            onPress={handleSkip}
+            hitSlop={8}
+            activeOpacity={0.7}
+          >
+            <Text style={ss.skipBtnText}>Skip</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Progress bar */}
+        <View style={ss.progressTrack}>
+          <View style={[ss.progressFill, { width: `${progress}%` }]} />
+        </View>
+
+        {/* Step indicators */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={ss.stepRow}
+          contentContainerStyle={ss.stepRowContent}
+        >
+          {STEPS.map((s, i) => {
+            const isDone    = i < step;
+            const isCurrent = i === step;
+            return (
+              <View key={s.id} style={ss.stepItem}>
+                <View style={[
+                  ss.stepCircle,
+                  isDone    && ss.stepCircleDone,
+                  isCurrent && ss.stepCircleActive,
+                ]}>
+                  {isDone
+                    ? <Ionicons name="checkmark" size={14} color={C.white} />
+                    : <Ionicons name={s.icon}    size={14} color={isCurrent ? C.white : C.gray400} />
+                  }
+                </View>
+                <Text style={[
+                  ss.stepLabel,
+                  isCurrent && ss.stepLabelActive,
+                  isDone    && ss.stepLabelDone,
+                ]}>
+                  {s.title}
+                </Text>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Step header */}
+        <View style={ss.stepHeader}>
+          <Text style={ss.stepTitle}>{STEPS[step].title}</Text>
+          <Text style={ss.stepDesc}>{STEPS[step].desc}</Text>
+        </View>
+
+        {/* Form */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={ss.formContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+        >
+          {renderStep()}
+          <View style={{ height: 120 }} />
+        </ScrollView>
+
+        {/* Bottom bar */}
+        <View style={ss.bottomBar}>
+          {step > 0 && (
+            <TouchableOpacity style={ss.backAction} onPress={goBack}>
+              <Ionicons name="arrow-back" size={18} color={C.primary} />
+              <Text style={ss.backActionText}>Back</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[ss.nextBtn, saving && ss.nextBtnDisabled]}
+            onPress={goNext}
+            disabled={saving}
+            activeOpacity={0.8}
+          >
+            {saving
+              ? <ActivityIndicator size="small" color={C.white} />
+              : <>
+                  <Text style={ss.nextBtnText}>
+                    {step === STEPS.length - 1 ? "Save Profile" : "Next"}
+                  </Text>
+                  <Ionicons
+                    name={step === STEPS.length - 1 ? "checkmark-circle" : "arrow-forward"}
+                    size={18}
+                    color={C.white}
+                  />
+                </>
+            }
+          </TouchableOpacity>
+        </View>
+
+      </View>
+    </KeyboardAvoidingView>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────
+const ss = StyleSheet.create({
+  screen:           { flex: 1, backgroundColor: C.white },
+  topBar:           { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingTop: 56, paddingBottom: 12, backgroundColor: C.white, gap: 10 },
+  backBtn:          { width: 36, height: 36, borderRadius: 10, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  topTitle:         { fontSize: 17, fontWeight: "700", color: C.gray900 },
+  topSub:           { fontSize: 12, color: C.gray400, marginTop: 1 },
+  skipBtn:          { paddingHorizontal: 12, paddingVertical: 7, borderRadius: 10, borderWidth: 1.5, borderColor: C.gray200, backgroundColor: C.gray50 },
+  skipBtnText:      { fontSize: 13, fontWeight: "600", color: C.gray500 },
+  progressTrack:    { height: 4, backgroundColor: C.gray100, marginHorizontal: 16 },
+  progressFill:     { height: "100%", backgroundColor: C.primary, borderRadius: 2 },
+  stepRow:          { maxHeight: 80, backgroundColor: C.white },
+  stepRowContent:   { paddingHorizontal: 16, paddingVertical: 12, gap: 24, alignItems: "center" },
+  stepItem:         { alignItems: "center", gap: 4 },
+  stepCircle:       { width: 32, height: 32, borderRadius: 16, backgroundColor: C.gray100, alignItems: "center", justifyContent: "center" },
+  stepCircleActive: { backgroundColor: C.primary },
+  stepCircleDone:   { backgroundColor: C.success },
+  stepLabel:        { fontSize: 10, color: C.gray400, fontWeight: "500" },
+  stepLabelActive:  { color: C.primary, fontWeight: "700" },
+  stepLabelDone:    { color: C.success },
+  stepHeader:       { paddingHorizontal: 20, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: C.gray100, backgroundColor: C.gray50 },
+  stepTitle:        { fontSize: 18, fontWeight: "700", color: C.gray900 },
+  stepDesc:         { fontSize: 13, color: C.gray500, marginTop: 2 },
+  formContent:      { paddingHorizontal: 20, paddingTop: 20 },
+  row:              { flexDirection: "row", alignItems: "flex-start" },
+  infoBox:          { flexDirection: "row", alignItems: "flex-start", gap: 10, backgroundColor: "#DBEAFE", borderRadius: 12, padding: 12, marginBottom: 16 },
+  infoText:         { flex: 1, fontSize: 13, color: "#1E40AF", lineHeight: 18 },
+  bottomBar:        { flexDirection: "row", alignItems: "center", justifyContent: "flex-end", paddingHorizontal: 20, paddingVertical: 16, backgroundColor: C.white, gap: 12, borderTopWidth: 1, borderTopColor: C.gray100 },
+  backAction:       { flexDirection: "row", alignItems: "center", gap: 6, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, borderWidth: 1.5, borderColor: C.primary },
+  backActionText:   { fontSize: 14, fontWeight: "700", color: C.primary },
+  nextBtn:          { flexDirection: "row", alignItems: "center", gap: 8, backgroundColor: C.primary, paddingHorizontal: 24, paddingVertical: 13, borderRadius: 12, flex: 1, justifyContent: "center" },
+  nextBtnDisabled:  { opacity: 0.6 },
+  nextBtnText:      { fontSize: 15, fontWeight: "700", color: C.white },
+});
