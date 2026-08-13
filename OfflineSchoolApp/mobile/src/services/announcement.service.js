@@ -1,9 +1,9 @@
 // src/services/announcement.service.js
 "use strict";
 
-import api              from "./api";
-import { getDatabase }  from "../db/database";
-import NetInfo          from "@react-native-community/netinfo";
+import api             from "./api";
+import { getDatabase } from "../db/database";
+import NetInfo         from "@react-native-community/netinfo";
 import * as SecureStore from "expo-secure-store";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -60,12 +60,13 @@ const ensureTable = async (db) => {
       ON announcements(is_read);
   `);
 
+  // ✅ Safe migrations — silently ignored if column already exists
   const migrations = [
     `ALTER TABLE announcements ADD COLUMN _read_pending INTEGER DEFAULT 0`,
     `ALTER TABLE announcements ADD COLUMN _ack_pending  INTEGER DEFAULT 0`,
   ];
   for (const sql of migrations) {
-    try { await db.execAsync(sql); } catch { /* already exists */ }
+    try { await db.execAsync(sql); } catch { /* already exists — safe to ignore */ }
   }
 
   tableReady = true;
@@ -79,7 +80,9 @@ const isOnline = async () => {
   try {
     const net = await NetInfo.fetch();
     return net.isConnected === true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 const generateId = () => {
@@ -96,14 +99,18 @@ const hasValidToken = async () => {
     if (token && token !== "offline_mode") return true;
     const stored = await SecureStore.getItemAsync("auth_token");
     return !!(stored && stored !== "offline_mode");
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 };
 
 const getCurrentUser = () => {
   try {
     const { useAuthStore } = require("../store/auth.store");
     return useAuthStore.getState()?.user || null;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 };
 
 const canSync = async () =>
@@ -119,7 +126,10 @@ const safeJsonParse = (str, fallback = []) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const isAdmin   = (u) =>
-  u?.role === "super_admin" || u?.role === "school_admin" || u?.role === "admin";
+  u?.role === "super_admin" ||
+  u?.role === "school_admin" ||
+  u?.role === "admin";
+
 const isTeacher = (u) => u?.role === "teacher";
 const isStudent = (u) => u?.role === "student";
 
@@ -140,9 +150,6 @@ const getPushEndpoint = (user) => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT CLASS ID — local-only fast resolver
-// Used by pullAnnouncements to send classId to the server so the server
-// returns class-targeted announcements for this student.
-// Does NOT import resolveStudentClassId to avoid circular deps.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const resolveStudentClassIdLocal = async (userId) => {
@@ -212,30 +219,31 @@ const getTeacherClassIds = async (teacherId, schoolId) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const getStudentClassIds = async (student) => {
-  if (__DEV__) {
-    console.log(
-      `[getStudentClassIds] ▶️ ENTERED studentId=${
-        student?._id || student?.id || student?.userId || "NONE"
-      }`
-    );
-  }
-
   if (!student) return [];
 
-  const studentId = String(student._id || student.id || student.userId || "");
+  const studentId = String(
+    student._id || student.id || student.userId || ""
+  );
 
   // ── Strategy 1: direct fields on the user object ──────────────────────────
   const directIds = [
-    student.classId,       student.class_id,
-    student.currentClass?.id, student.currentClass?._id,
-    student.class?.id,    student.class?._id,
-    student.studentClass?.id, student.studentClass?._id,
+    student.classId,
+    student.class_id,
+    student.currentClass?.id,
+    student.currentClass?._id,
+    student.class?.id,
+    student.class?._id,
+    student.studentClass?.id,
+    student.studentClass?._id,
   ].filter(Boolean).map(String);
 
   if (Array.isArray(student.classes)) {
     for (const c of student.classes) {
-      if (typeof c === "string" || typeof c === "number") directIds.push(String(c));
-      else if (c?.id || c?._id) directIds.push(String(c.id || c._id));
+      if (typeof c === "string" || typeof c === "number") {
+        directIds.push(String(c));
+      } else if (c?.id || c?._id) {
+        directIds.push(String(c.id || c._id));
+      }
     }
   }
   if (Array.isArray(student.classIds)) {
@@ -243,9 +251,7 @@ const getStudentClassIds = async (student) => {
   }
 
   if (directIds.length > 0) {
-    const unique = [...new Set(directIds.filter(Boolean))];
-    if (__DEV__) console.log(`[getStudentClassIds] ✅ Strategy 1: [${unique.join(", ")}]`);
-    return unique;
+    return [...new Set(directIds.filter(Boolean))];
   }
 
   if (!studentId) return [];
@@ -253,19 +259,10 @@ const getStudentClassIds = async (student) => {
   try {
     const db = await getDatabase();
 
-    // ── Strategy 2: students table — match on BOTH id AND user_id ────────────
-    // ✅ THE FIX: old code queried WHERE id = ? but the student's auth UUID
-    //    lives in user_id column. resolveStudentClassId already proves this
-    //    works — we replicate the same pattern here.
+    // ── Strategy 2: students table ────────────────────────────────────────
     const studentCols = await db
       .getAllAsync(`PRAGMA table_info(students)`, [])
       .catch(() => []);
-
-    if (__DEV__) {
-      console.log(
-        `[getStudentClassIds] students cols: [${studentCols.map((c) => c.name).join(", ")}]`
-      );
-    }
 
     if (studentCols.length > 0) {
       const sColNames = new Set(studentCols.map((c) => c.name));
@@ -275,19 +272,15 @@ const getStudentClassIds = async (student) => {
         sColNames.has("userId")  ? "userId"  : null;
 
       const classColCandidates = [
-        "classId", "class_id", "class", "currentClassId", "current_class_id",
+        "classId", "class_id", "class",
+        "currentClassId", "current_class_id",
       ].filter((col) => sColNames.has(col));
-
-      if (__DEV__) {
-        console.log(
-          `[getStudentClassIds] userIdCol=${userIdCol} ` +
-          `classColCandidates=[${classColCandidates.join(", ")}]`
-        );
-      }
 
       if (classColCandidates.length > 0) {
         const whereExtra = userIdCol ? `OR ${userIdCol} = ?` : "";
-        const rowParams  = userIdCol ? [studentId, studentId] : [studentId];
+        const rowParams  = userIdCol
+          ? [studentId, studentId]
+          : [studentId];
 
         const rawRow = await db
           .getFirstAsync(
@@ -296,57 +289,21 @@ const getStudentClassIds = async (student) => {
           )
           .catch(() => null);
 
-        if (__DEV__) {
-          console.log(`[getStudentClassIds] raw row:`, JSON.stringify(rawRow));
-        }
-
         if (rawRow) {
           for (const col of classColCandidates) {
             const val = rawRow[col];
             if (val != null && String(val).trim() !== "") {
-              const ids = [String(val)];
-              if (__DEV__) {
-                console.log(
-                  `[getStudentClassIds] ✅ Strategy 2 col=${col}: [${ids.join(", ")}]`
-                );
-              }
-              return ids;
+              return [String(val)];
             }
           }
-          if (__DEV__) {
-            console.warn(
-              `[getStudentClassIds] row found but all class cols empty: ` +
-              JSON.stringify(rawRow)
-            );
-          }
-        } else {
-          if (__DEV__) {
-            console.warn(
-              `[getStudentClassIds] no row found for studentId=${studentId}`
-            );
-          }
-        }
-      } else {
-        if (__DEV__) {
-          console.warn(
-            `[getStudentClassIds] ⛔ no class column in students table. ` +
-            `cols: [${studentCols.map((c) => c.name).join(", ")}]`
-          );
         }
       }
     }
 
-    // ── Strategy 3: student_classes junction table ────────────────────────────
+    // ── Strategy 3: student_classes junction table ────────────────────────
     const junctionCols = await db
       .getAllAsync(`PRAGMA table_info(student_classes)`, [])
       .catch(() => []);
-
-    if (__DEV__) {
-      console.log(
-        `[getStudentClassIds] student_classes cols: [${junctionCols
-          .map((c) => c.name).join(", ")}]`
-      );
-    }
 
     if (junctionCols.length > 0) {
       const jColNames = new Set(junctionCols.map((c) => c.name));
@@ -363,35 +320,24 @@ const getStudentClassIds = async (student) => {
         const hasDeleted = jColNames.has("deleted_at");
         const rows = await db
           .getAllAsync(
-            `SELECT ${cidJCol} AS classId FROM student_classes
-             WHERE ${sidJCol} = ?
-             ${hasDeleted ? "AND (deleted_at IS NULL OR deleted_at = '')" : ""}`,
+            `SELECT ${cidJCol} AS classId
+             FROM   student_classes
+             WHERE  ${sidJCol} = ?
+             ${hasDeleted
+               ? "AND (deleted_at IS NULL OR deleted_at = '')"
+               : ""}`,
             [studentId]
           )
           .catch(() => []);
 
-        if (__DEV__) {
-          console.log(`[getStudentClassIds] junction rows:`, JSON.stringify(rows));
-        }
-
         const ids = rows.map((r) => String(r.classId)).filter(Boolean);
-        if (ids.length > 0) {
-          if (__DEV__) {
-            console.log(`[getStudentClassIds] ✅ Strategy 3: [${ids.join(", ")}]`);
-          }
-          return [...new Set(ids)];
-        }
+        if (ids.length > 0) return [...new Set(ids)];
       }
     }
   } catch (err) {
     console.warn("[getStudentClassIds] DB error:", err.message);
   }
 
-  if (__DEV__) {
-    console.warn(
-      `[getStudentClassIds] ❌ all strategies exhausted for studentId=${studentId}`
-    );
-  }
   return [];
 };
 
@@ -434,10 +380,10 @@ const cleanupStaleAnnouncements = async (db, serverIds) => {
   try {
     const localRows = await db.getAllAsync(
       `SELECT id FROM announcements
-       WHERE _synced = 1
-         AND (_operation IS NULL OR _operation = '')
-         AND _read_pending = 0
-         AND _ack_pending  = 0`
+       WHERE  _synced       = 1
+         AND  (_operation IS NULL OR _operation = '')
+         AND  _read_pending = 0
+         AND  _ack_pending  = 0`
     );
     const serverIdSet = new Set(serverIds);
     const stale       = localRows.filter((r) => !serverIdSet.has(r.id));
@@ -459,15 +405,21 @@ const upsertLocal = async (db, announcement) => {
 
   const existing = await db.getFirstAsync(
     `SELECT _synced, is_read, is_acknowledged, _read_pending, _ack_pending
-     FROM announcements WHERE id = ?`,
+     FROM   announcements WHERE id = ?`,
     [id]
   );
+
+  // ✅ Never overwrite a locally-dirty record with server data
   if (existing && existing._synced === 0) return;
 
   const serverIsRead = (announcement.isRead || announcement.is_read) ? 1 : 0;
   const serverIsAck  = (announcement.isAcknowledged || announcement.is_acknowledged) ? 1 : 0;
-  const finalIsRead  = Math.max(existing?.is_read ?? 0, serverIsRead);
-  const finalIsAck   = Math.max(existing?.is_acknowledged ?? 0, serverIsAck);
+
+  // ✅ Always keep the higher value — if locally marked read, don't revert
+  const finalIsRead = Math.max(existing?.is_read ?? 0, serverIsRead);
+  const finalIsAck  = Math.max(existing?.is_acknowledged ?? 0, serverIsAck);
+
+  // ✅ Preserve any pending sync flags
   const keepReadPending = existing?._read_pending ?? 0;
   const keepAckPending  = existing?._ack_pending  ?? 0;
 
@@ -480,75 +432,56 @@ const upsertLocal = async (db, announcement) => {
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
     [
       id,
-      announcement.title                                                              || "",
-      announcement.body         || announcement.content                               || "",
-      announcement.author?._id  || announcement.authorId    || announcement.author_id || "",
-      announcement.authorName   || announcement.author_name || announcement.author?.name || "",
-      announcement.authorRole   || announcement.author_role || announcement.author?.role || "",
-      announcement.schoolId     || announcement.school_id                             || "",
-      announcement.audience                                                           || "all",
-      JSON.stringify(announcement.targetClasses || announcement.target_classes        || []),
-      announcement.priority                                                           || "normal",
-      (announcement.isPinned    || announcement.is_pinned)                            ? 1 : 0,
-      announcement.isActive     !== false                                             ? 1 : 0,
-      announcement.version                                                            || 1,
-      announcement.publishAt    || announcement.publish_at                            || null,
-      announcement.expiresAt    || announcement.expires_at                            || null,
-      finalIsRead, finalIsAck, keepReadPending, keepAckPending,
-      announcement.createdAt    || announcement.created_at  || new Date().toISOString(),
-      announcement.updatedAt    || announcement.updated_at  || new Date().toISOString(),
+      announcement.title                                                                 || "",
+      announcement.body           || announcement.content                                || "",
+      announcement.author?._id   || announcement.authorId    || announcement.author_id   || "",
+      announcement.authorName    || announcement.author_name || announcement.author?.name || "",
+      announcement.authorRole    || announcement.author_role || announcement.author?.role || "",
+      announcement.schoolId      || announcement.school_id                               || "",
+      announcement.audience                                                              || "all",
+      JSON.stringify(announcement.targetClasses || announcement.target_classes           || []),
+      announcement.priority                                                              || "normal",
+      (announcement.isPinned     || announcement.is_pinned)                              ? 1 : 0,
+      announcement.isActive      !== false                                               ? 1 : 0,
+      announcement.version                                                               || 1,
+      announcement.publishAt     || announcement.publish_at                              || null,
+      announcement.expiresAt     || announcement.expires_at                              || null,
+      finalIsRead,
+      finalIsAck,
+      keepReadPending,
+      keepAckPending,
+      announcement.createdAt     || announcement.created_at  || new Date().toISOString(),
+      announcement.updatedAt     || announcement.updated_at  || new Date().toISOString(),
     ]
   );
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// BUILD STUDENT WHERE CLAUSE
+// BUILD WHERE CLAUSES
 // ─────────────────────────────────────────────────────────────────────────────
 
 const buildStudentWhereClause = async (user) => {
   const studentClassIds = await getStudentClassIds(user);
-
-  if (__DEV__) {
-    console.log(
-      `[buildStudentWhereClause] studentClassIds: [${studentClassIds.join(", ")}]`
-    );
-  }
-
   const params = [];
 
-  // ✅ audience='students' included — teachers send with this audience value
   let clause = `AND (
     audience = 'all'
     OR audience = 'students'`;
 
   if (studentClassIds.length > 0) {
-    const likeConditions = studentClassIds
-      .map(() => `target_classes LIKE ?`)
-      .join(" OR ");
-    clause += ` OR (audience = 'class' AND (${likeConditions}))`;
+    const likes = studentClassIds.map(() => `target_classes LIKE ?`).join(" OR ");
+    clause += ` OR (audience = 'class' AND (${likes}))`;
     studentClassIds.forEach((cid) => params.push(`%"${cid}"%`));
   }
 
   clause += `\n  )`;
-
   return { clause, params };
 };
-
-// ─────────────────────────────────────────────────────────────────────────────
-// BUILD TEACHER WHERE CLAUSE
-// ─────────────────────────────────────────────────────────────────────────────
 
 const buildTeacherWhereClause = async (user) => {
   const teacherId       = user?._id || user?.id;
   const teacherClassIds = await getTeacherClassIds(teacherId, user?.schoolId);
-
-  if (__DEV__) {
-    console.log(
-      `[buildTeacherWhereClause] teacherClassIds: [${teacherClassIds.join(", ")}]`
-    );
-  }
-
-  const params = [teacherId];
+  const params          = [teacherId];
 
   let clause = `AND (
     audience = 'all'
@@ -556,15 +489,12 @@ const buildTeacherWhereClause = async (user) => {
     OR author_id = ?`;
 
   if (teacherClassIds.length > 0) {
-    const likeConditions = teacherClassIds
-      .map(() => `target_classes LIKE ?`)
-      .join(" OR ");
-    clause += ` OR (audience = 'class' AND (${likeConditions}))`;
+    const likes = teacherClassIds.map(() => `target_classes LIKE ?`).join(" OR ");
+    clause += ` OR (audience = 'class' AND (${likes}))`;
     teacherClassIds.forEach((cid) => params.push(`%"${cid}"%`));
   }
 
   clause += `\n  )`;
-
   return { clause, params };
 };
 
@@ -618,12 +548,7 @@ export const getAnnouncements = async (filters = {}) => {
 
     const local = (rows || []).map(mapRowToAnnouncement);
 
-    if (__DEV__) {
-      console.log(
-        `[getAnnouncements] role=${user?.role} local=${local.length} where="${where}"`
-      );
-    }
-
+    // ✅ Kick off a background refresh without blocking the return
     if (await canSync()) {
       _backgroundRefresh(db, user, filters).catch((err) =>
         console.warn("[getAnnouncements] Background refresh failed:", err.message)
@@ -635,11 +560,13 @@ export const getAnnouncements = async (filters = {}) => {
       return local;
     }
 
+    // ── Cold start — nothing local, fetch from server ─────────────────────
     if (!(await canSync())) return [];
 
     try {
       const endpoint = getPullEndpoint(user);
       if (!endpoint) return [];
+
       const response = await api.get(endpoint, {
         params: { audience: filters.audience, limit },
       });
@@ -647,6 +574,7 @@ export const getAnnouncements = async (filters = {}) => {
         response.data?.announcements ||
         response.data?.data          ||
         (Array.isArray(response.data) ? response.data : []);
+
       for (const a of data) await upsertLocal(db, a);
       console.log(`📡 Announcements from API (cold start): ${data.length}`);
       return data.map(mapRowToAnnouncement);
@@ -667,16 +595,22 @@ export const getAnnouncements = async (filters = {}) => {
 const _backgroundRefresh = async (db, user, filters = {}) => {
   const endpoint = getPullEndpoint(user);
   if (!endpoint) return;
+
   try {
     const response = await api.get(endpoint, {
-      params: { audience: filters.audience, limit: filters.limit || 100 },
+      params: {
+        audience: filters.audience,
+        limit:    filters.limit || 100,
+      },
     });
     const data =
       response.data?.announcements ||
       response.data?.data          ||
       (Array.isArray(response.data) ? response.data : []);
+
     const serverIds = data.map((a) => a._id || a.id).filter(Boolean);
     if (serverIds.length > 0) await cleanupStaleAnnouncements(db, serverIds);
+
     for (const a of data) await upsertLocal(db, a);
     console.log(`🔄 Background refresh: ${data.length} announcements updated`);
   } catch (err) {
@@ -692,16 +626,25 @@ export const getAnnouncementById = async (id) => {
   const db   = await getDatabase();
   await ensureTable(db);
   const user = getCurrentUser();
+
   try {
     const row = await db.getFirstAsync(
-      "SELECT * FROM announcements WHERE id = ?", [id]
+      "SELECT * FROM announcements WHERE id = ?",
+      [id]
     );
     if (row) return mapRowToAnnouncement(row);
+
     if (!(await canSync())) return null;
+
     const endpoint = getPullEndpoint(user);
     if (!endpoint) return null;
+
     const response = await api.get(`${endpoint}/${id}`);
-    const data = response.data?.announcement || response.data?.data || response.data;
+    const data =
+      response.data?.announcement ||
+      response.data?.data         ||
+      response.data;
+
     if (data) {
       await upsertLocal(db, data);
       return mapRowToAnnouncement({ ...data, _synced: 1 });
@@ -718,8 +661,14 @@ export const getAnnouncementById = async (id) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const createAnnouncement = async ({
-  title, body, audience = "all", targetClasses = [],
-  priority = "normal", isPinned = false, publishAt = null, expiresAt = null,
+  title,
+  body,
+  audience      = "all",
+  targetClasses = [],
+  priority      = "normal",
+  isPinned      = false,
+  publishAt     = null,
+  expiresAt     = null,
 }) => {
   if (!title?.trim()) throw new Error("Title is required");
   if (!body?.trim())  throw new Error("Body is required");
@@ -728,9 +677,11 @@ export const createAnnouncement = async ({
   await ensureTable(db);
   const user = getCurrentUser();
 
-  if (!user || isStudent(user)) throw new Error("Students cannot create announcements");
+  if (!user || isStudent(user)) {
+    throw new Error("Students cannot create announcements");
+  }
   const endpoint = getPushEndpoint(user);
-  if (!endpoint)   throw new Error("You do not have permission to create announcements");
+  if (!endpoint) throw new Error("You do not have permission to create announcements");
 
   let finalAudience      = audience;
   let finalTargetClasses = targetClasses;
@@ -751,7 +702,9 @@ export const createAnnouncement = async ({
         teacherClassIds.includes(cid)
       );
       if (!finalTargetClasses.length) {
-        throw new Error("You can only send to classes you are assigned to teach.");
+        throw new Error(
+          "You can only send to classes you are assigned to teach."
+        );
       }
     }
     isPinned = false;
@@ -768,15 +721,21 @@ export const createAnnouncement = async ({
         created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?, 0, 'create', 0, 0, ?, ?)`,
     [
-      id, title.trim(), body.trim(),
-      user?.id || user?._id || "unknown",
-      user?.name || "Unknown",
-      user?.role || "teacher",
-      user?.schoolId || "",
+      id,
+      title.trim(),
+      body.trim(),
+      user?.id    || user?._id   || "unknown",
+      user?.name  || "Unknown",
+      user?.role  || "teacher",
+      user?.schoolId             || "",
       finalAudience,
       JSON.stringify(finalTargetClasses),
-      priority, isPinned ? 1 : 0,
-      publishAt, expiresAt, now, now,
+      priority,
+      isPinned ? 1 : 0,
+      publishAt,
+      expiresAt,
+      now,
+      now,
     ]
   );
 
@@ -785,35 +744,61 @@ export const createAnnouncement = async ({
   if (await canSync()) {
     try {
       const response = await api.post(endpoint, {
-        id, title: title.trim(), body: body.trim(),
-        audience: finalAudience, targetClasses: finalTargetClasses,
-        priority, isPinned, publishAt, expiresAt,
+        id,
+        title:         title.trim(),
+        body:          body.trim(),
+        audience:      finalAudience,
+        targetClasses: finalTargetClasses,
+        priority,
+        isPinned,
+        publishAt,
+        expiresAt,
       });
-      if (response.data?.success || response.data?.announcement || response.data?.data) {
+
+      if (
+        response.data?.success ||
+        response.data?.announcement ||
+        response.data?.data
+      ) {
         await db.runAsync(
-          `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
+          `UPDATE announcements
+           SET _synced = 1, _synced_at = ?, _operation = NULL
+           WHERE id = ?`,
           [now, id]
         );
         console.log("📡 Announcement synced to server");
       }
     } catch (apiErr) {
       if (apiErr?.response?.status === 409) {
-        await db.runAsync("UPDATE announcements SET _synced = 1 WHERE id = ?", [id]);
+        // Already exists on server — mark synced
+        await db.runAsync(
+          "UPDATE announcements SET _synced = 1 WHERE id = ?",
+          [id]
+        );
       } else {
-        console.warn("API sync failed — queued for later:", apiErr.message);
+        console.warn(
+          "API sync failed — queued for later:",
+          apiErr.message
+        );
       }
     }
   }
 
   return {
-    id, _id: id,
-    title: title.trim(), body: body.trim(),
-    audience: finalAudience, targetClasses: finalTargetClasses,
-    priority, isPinned,
-    isRead: false, isAcknowledged: false,
-    authorName: user?.name || "Unknown",
-    authorRole: user?.role || "teacher",
-    createdAt: now, updatedAt: now,
+    id,
+    _id:           id,
+    title:         title.trim(),
+    body:          body.trim(),
+    audience:      finalAudience,
+    targetClasses: finalTargetClasses,
+    priority,
+    isPinned,
+    isRead:         false,
+    isAcknowledged: false,
+    authorName:    user?.name  || "Unknown",
+    authorRole:    user?.role  || "teacher",
+    createdAt:     now,
+    updatedAt:     now,
   };
 };
 
@@ -827,13 +812,22 @@ export const updateAnnouncement = async (id, updates) => {
   const user = getCurrentUser();
 
   if (isTeacher(user)) {
-    const row    = await db.getFirstAsync("SELECT author_id FROM announcements WHERE id = ?", [id]);
+    const row    = await db.getFirstAsync(
+      "SELECT author_id FROM announcements WHERE id = ?",
+      [id]
+    );
     const userId = user._id || user.id;
-    if (row && row.author_id !== userId) throw new Error("You can only edit your own announcements");
-    if (updates.audience && updates.audience !== "students") throw new Error("Teachers can only send to students");
+    if (row && row.author_id !== userId) {
+      throw new Error("You can only edit your own announcements");
+    }
+    if (updates.audience && updates.audience !== "students") {
+      throw new Error("Teachers can only send to students");
+    }
     if (updates.targetClasses?.length) {
       const teacherClassIds = await getTeacherClassIds(userId, user.schoolId);
-      updates.targetClasses = updates.targetClasses.filter((cid) => teacherClassIds.includes(cid));
+      updates.targetClasses = updates.targetClasses.filter((cid) =>
+        teacherClassIds.includes(cid)
+      );
     }
     if (updates.isPinned !== undefined) delete updates.isPinned;
   }
@@ -843,16 +837,19 @@ export const updateAnnouncement = async (id, updates) => {
   const params   = [now];
 
   if (updates.title         !== undefined) { setParts.push("title = ?");          params.push(updates.title.trim()); }
-  if (updates.body          !== undefined) { setParts.push("body = ?");           params.push(updates.body.trim()); }
-  if (updates.audience      !== undefined) { setParts.push("audience = ?");       params.push(updates.audience); }
+  if (updates.body          !== undefined) { setParts.push("body = ?");            params.push(updates.body.trim()); }
+  if (updates.audience      !== undefined) { setParts.push("audience = ?");        params.push(updates.audience); }
   if (updates.targetClasses !== undefined) { setParts.push("target_classes = ?"); params.push(JSON.stringify(updates.targetClasses)); }
-  if (updates.priority      !== undefined) { setParts.push("priority = ?");       params.push(updates.priority); }
-  if (updates.isPinned      !== undefined) { setParts.push("is_pinned = ?");      params.push(updates.isPinned ? 1 : 0); }
-  if (updates.isActive      !== undefined) { setParts.push("is_active = ?");      params.push(updates.isActive ? 1 : 0); }
-  if (updates.expiresAt     !== undefined) { setParts.push("expires_at = ?");     params.push(updates.expiresAt); }
+  if (updates.priority      !== undefined) { setParts.push("priority = ?");        params.push(updates.priority); }
+  if (updates.isPinned      !== undefined) { setParts.push("is_pinned = ?");       params.push(updates.isPinned ? 1 : 0); }
+  if (updates.isActive      !== undefined) { setParts.push("is_active = ?");       params.push(updates.isActive ? 1 : 0); }
+  if (updates.expiresAt     !== undefined) { setParts.push("expires_at = ?");      params.push(updates.expiresAt); }
 
   params.push(id);
-  await db.runAsync(`UPDATE announcements SET ${setParts.join(", ")} WHERE id = ?`, params);
+  await db.runAsync(
+    `UPDATE announcements SET ${setParts.join(", ")} WHERE id = ?`,
+    params
+  );
 
   if (await canSync()) {
     try {
@@ -860,7 +857,9 @@ export const updateAnnouncement = async (id, updates) => {
       if (endpoint) {
         await api.put(`${endpoint}/${id}`, updates);
         await db.runAsync(
-          `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
+          `UPDATE announcements
+           SET _synced = 1, _synced_at = ?, _operation = NULL
+           WHERE id = ?`,
           [now, id]
         );
       }
@@ -881,15 +880,22 @@ export const deleteAnnouncement = async (id) => {
   const user = getCurrentUser();
 
   if (isTeacher(user)) {
-    const row    = await db.getFirstAsync("SELECT author_id FROM announcements WHERE id = ?", [id]);
+    const row    = await db.getFirstAsync(
+      "SELECT author_id FROM announcements WHERE id = ?",
+      [id]
+    );
     const userId = user._id || user.id;
-    if (row && row.author_id !== userId) throw new Error("You can only delete your own announcements");
+    if (row && row.author_id !== userId) {
+      throw new Error("You can only delete your own announcements");
+    }
   }
 
   const now = new Date().toISOString();
   await db.runAsync(
-    `UPDATE announcements SET deleted_at = ?, is_active = 0, _synced = 0,
-     _operation = 'delete', updated_at = ? WHERE id = ?`,
+    `UPDATE announcements
+     SET deleted_at = ?, is_active = 0, _synced = 0,
+         _operation = 'delete', updated_at = ?
+     WHERE id = ?`,
     [now, now, id]
   );
 
@@ -905,7 +911,11 @@ export const deleteAnnouncement = async (id) => {
       }
     } catch (err) {
       if (err?.response?.status === 404) {
-        await db.runAsync("UPDATE announcements SET _synced = 1 WHERE id = ?", [id]);
+        // Already gone on server — mark synced
+        await db.runAsync(
+          "UPDATE announcements SET _synced = 1 WHERE id = ?",
+          [id]
+        );
       } else {
         console.warn("[deleteAnnouncement] sync failed:", err.message);
       }
@@ -924,32 +934,58 @@ export const markAsRead = async (id) => {
   const user = getCurrentUser();
 
   const existing = await db.getFirstAsync(
-    "SELECT is_read FROM announcements WHERE id = ?", [id]
+    "SELECT is_read, _read_pending FROM announcements WHERE id = ?",
+    [id]
   );
-  if (existing?.is_read === 1) return;
+
+  // ✅ FIX: skip only when BOTH read AND no pending sync — not just is_read.
+  //    If _read_pending=1 and is_read=1 we still need to attempt the API call.
+  if (existing?.is_read === 1 && existing?._read_pending === 0) return;
 
   const now = new Date().toISOString();
+
+  // ✅ Optimistic local update first — UI stays responsive
   await db.runAsync(
-    `UPDATE announcements SET is_read = 1, _read_pending = 1, updated_at = ? WHERE id = ?`,
+    `UPDATE announcements
+     SET is_read = 1, _read_pending = 1, updated_at = ?
+     WHERE id = ?`,
     [now, id]
   );
 
-  if (!(await canSync())) return;
+  if (!(await canSync())) return; // queued — pushUnsyncedAnnouncements will retry
 
+  // ✅ FIX: role-aware endpoint
   const endpoint = isStudent(user)
     ? `/students/announcements/${id}/read`
     : `/announcements/${id}/read`;
 
   try {
     await api.post(endpoint);
-    await db.runAsync("UPDATE announcements SET _read_pending = 0 WHERE id = ?", [id]);
+    await db.runAsync(
+      "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
+      [id]
+    );
   } catch (err) {
     const status = err?.response?.status;
+
     if (status === 404) {
+      // Deleted on server — remove locally
       await db.runAsync("DELETE FROM announcements WHERE id = ?", [id]);
-    } else {
-      console.warn("[markAsRead] API call failed — queued:", err.message);
+      return;
     }
+
+    if (status === 401 || status === 403) {
+      // Auth error — don't keep retrying, clear pending
+      console.warn("[markAsRead] auth error — clearing pending:", status);
+      await db.runAsync(
+        "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
+        [id]
+      );
+      return;
+    }
+
+    // 5xx / network error — leave _read_pending = 1 so retry picks it up
+    console.warn("[markAsRead] API call failed — queued for retry:", err.message);
   }
 };
 
@@ -963,15 +999,23 @@ export const acknowledgeAnnouncement = async (id) => {
   const user = getCurrentUser();
 
   const existing = await db.getFirstAsync(
-    "SELECT is_acknowledged FROM announcements WHERE id = ?", [id]
+    "SELECT is_acknowledged, _ack_pending FROM announcements WHERE id = ?",
+    [id]
   );
-  if (existing?.is_acknowledged === 1) return;
+
+  // ✅ FIX: skip only when BOTH acked AND no pending sync
+  if (existing?.is_acknowledged === 1 && existing?._ack_pending === 0) return;
 
   const now = new Date().toISOString();
+
   await db.runAsync(
     `UPDATE announcements
-     SET is_acknowledged = 1, is_read = 1, _ack_pending = 1, _read_pending = 0,
-         updated_at = ? WHERE id = ?`,
+     SET is_acknowledged = 1,
+         is_read         = 1,
+         _ack_pending    = 1,
+         _read_pending   = 0,
+         updated_at      = ?
+     WHERE id = ?`,
     [now, id]
   );
 
@@ -983,16 +1027,38 @@ export const acknowledgeAnnouncement = async (id) => {
 
   try {
     await api.post(endpoint);
-    await db.runAsync("UPDATE announcements SET _ack_pending = 0 WHERE id = ?", [id]);
+    await db.runAsync(
+      "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+      [id]
+    );
   } catch (err) {
     const status = err?.response?.status;
+
     if (status === 404) {
       await db.runAsync("DELETE FROM announcements WHERE id = ?", [id]);
-    } else if (status === 409) {
-      await db.runAsync("UPDATE announcements SET _ack_pending = 0 WHERE id = ?", [id]);
-    } else {
-      console.warn("[acknowledge] API failed — queued:", err.message);
+      return;
     }
+
+    if (status === 409) {
+      // Server already has it — we're in sync
+      await db.runAsync(
+        "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+        [id]
+      );
+      return;
+    }
+
+    if (status === 401 || status === 403) {
+      console.warn("[acknowledge] auth error — clearing pending:", status);
+      await db.runAsync(
+        "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+        [id]
+      );
+      return;
+    }
+
+    // 5xx / network — leave _ack_pending = 1 for retry
+    console.warn("[acknowledge] API failed — queued for retry:", err.message);
   }
 };
 
@@ -1004,15 +1070,22 @@ export const togglePin = async (id) => {
   const db   = await getDatabase();
   await ensureTable(db);
   const user = getCurrentUser();
-  if (!isAdmin(user)) throw new Error("Only administrators can pin announcements");
 
-  const row    = await db.getFirstAsync("SELECT is_pinned FROM announcements WHERE id = ?", [id]);
+  if (!isAdmin(user)) {
+    throw new Error("Only administrators can pin announcements");
+  }
+
+  const row    = await db.getFirstAsync(
+    "SELECT is_pinned FROM announcements WHERE id = ?",
+    [id]
+  );
   const newVal = row?.is_pinned ? 0 : 1;
   const now    = new Date().toISOString();
 
   await db.runAsync(
-    `UPDATE announcements SET is_pinned = ?, _synced = 0, _operation = 'update',
-     updated_at = ? WHERE id = ?`,
+    `UPDATE announcements
+     SET is_pinned = ?, _synced = 0, _operation = 'update', updated_at = ?
+     WHERE id = ?`,
     [newVal, now, id]
   );
 
@@ -1021,12 +1094,14 @@ export const togglePin = async (id) => {
       console.warn("[togglePin] sync failed:", err.message)
     );
   }
+
   return newVal === 1;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET STATS — excludes teacher's own announcements so they don't
-// appear as unread notifications in the teacher's own dashboard
+// GET STATS
+// Excludes teacher's own announcements so they don't appear as unread
+// notifications in the teacher's own dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const getAnnouncementStats = async (filters = {}) => {
@@ -1040,7 +1115,9 @@ export const getAnnouncementStats = async (filters = {}) => {
 
     if (user && isTeacher(user)) {
       // ✅ Exclude own authored announcements — matches fetchInbox filter
-      const userId = String(user?._id || user?.id || user?.userId || "").trim();
+      const userId = String(
+        user?._id || user?.id || user?.userId || ""
+      ).trim();
       if (userId) {
         where  += ` AND (author_id IS NULL OR TRIM(LOWER(author_id)) != ?)`;
         params.push(userId.toLowerCase());
@@ -1056,12 +1133,12 @@ export const getAnnouncementStats = async (filters = {}) => {
 
     const stats = await db.getFirstAsync(
       `SELECT
-         COUNT(*)                                                       AS total,
-         SUM(CASE WHEN is_read = 0        THEN 1 ELSE 0 END)          AS unread,
+         COUNT(*)                                                            AS total,
+         SUM(CASE WHEN is_read        = 0 THEN 1 ELSE 0 END)               AS unread,
          SUM(CASE WHEN priority IN ('urgent','high')
-                   AND is_acknowledged = 0 THEN 1 ELSE 0 END)         AS urgentUnack,
-         SUM(CASE WHEN is_pinned = 1      THEN 1 ELSE 0 END)          AS pinned,
-         SUM(CASE WHEN author_role = 'teacher' THEN 1 ELSE 0 END)     AS fromTeachers
+                   AND is_acknowledged = 0 THEN 1 ELSE 0 END)              AS urgentUnack,
+         SUM(CASE WHEN is_pinned      = 1 THEN 1 ELSE 0 END)               AS pinned,
+         SUM(CASE WHEN author_role    = 'teacher' THEN 1 ELSE 0 END)       AS fromTeachers
        FROM announcements ${where}`,
       params
     );
@@ -1097,16 +1174,21 @@ export const getTeacherAnnouncementClasses = async () => {
       .catch(() => []);
     const colNames = new Set(cols.map((c) => c.name));
 
-    const tidCol = colNames.has("teacherId")  ? "teacherId"  : colNames.has("teacher_id") ? "teacher_id" : null;
-    const sidCol = colNames.has("schoolId")   ? "schoolId"   : colNames.has("school_id")  ? "school_id"  : null;
-    const clsCol = colNames.has("classId")    ? "classId"    : colNames.has("class_id")   ? "class_id"   : null;
+    const tidCol = colNames.has("teacherId")  ? "teacherId"  :
+                   colNames.has("teacher_id") ? "teacher_id" : null;
+    const sidCol = colNames.has("schoolId")   ? "schoolId"   :
+                   colNames.has("school_id")  ? "school_id"  : null;
+    const clsCol = colNames.has("classId")    ? "classId"    :
+                   colNames.has("class_id")   ? "class_id"   : null;
     const delCol = colNames.has("deleted_at");
 
     if (!tidCol || !clsCol) return [];
 
     const sidFilter = sidCol ? `AND ta.${sidCol} = ?` : "";
-    const delFilter = delCol ? `AND (ta.deleted_at IS NULL OR ta.deleted_at = '')` : "";
-    const params    = sidCol ? [teacherId, schoolId] : [teacherId];
+    const delFilter = delCol
+      ? `AND (ta.deleted_at IS NULL OR ta.deleted_at = '')`
+      : "";
+    const params = sidCol ? [teacherId, schoolId] : [teacherId];
 
     return await db
       .getAllAsync(
@@ -1127,91 +1209,168 @@ export const getTeacherAnnouncementClasses = async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUSH UNSYNCED
+// Retries pending reads, acks, and create/update/delete operations.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const pushUnsyncedAnnouncements = async () => {
+  if (!(await canSync())) return;
+
   const db   = await getDatabase();
   await ensureTable(db);
   const user = getCurrentUser();
 
-  // Retry pending reads
+  // ── Retry pending reads ───────────────────────────────────────────────────
   try {
     const pendingReads = await db.getAllAsync(
-      "SELECT id FROM announcements WHERE _read_pending = 1"
+      "SELECT id, updated_at FROM announcements WHERE _read_pending = 1"
     );
+
     for (const row of pendingReads || []) {
+      // ✅ Drop items older than 24 h — they are stale and will never self-heal
+      const age = Date.now() - new Date(row.updated_at || 0).getTime();
+      if (age > 24 * 60 * 60 * 1000) {
+        await db.runAsync(
+          "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
+          [row.id]
+        );
+        continue;
+      }
+
       const endpoint = isStudent(user)
         ? `/students/announcements/${row.id}/read`
         : `/announcements/${row.id}/read`;
+
       try {
         await api.post(endpoint);
-        await db.runAsync("UPDATE announcements SET _read_pending = 0 WHERE id = ?", [row.id]);
+        await db.runAsync(
+          "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
+          [row.id]
+        );
       } catch (err) {
         const status = err?.response?.status;
-        if (status === 404) await db.runAsync("DELETE FROM announcements WHERE id = ?", [row.id]);
-        else if (status === 409) await db.runAsync("UPDATE announcements SET _read_pending = 0 WHERE id = ?", [row.id]);
-        else console.warn(`[pushReads] retry failed for ${row.id}:`, err.message);
+        if (status === 404) {
+          await db.runAsync(
+            "DELETE FROM announcements WHERE id = ?",
+            [row.id]
+          );
+        } else if (status === 409) {
+          await db.runAsync(
+            "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
+            [row.id]
+          );
+        } else if (status === 401 || status === 403) {
+          // Auth broken — stop retrying all reads this session
+          console.warn("[pushReads] auth error — stopping read flush");
+          break;
+        } else {
+          console.warn(`[pushReads] retry failed for ${row.id}:`, err.message);
+        }
       }
     }
   } catch (err) {
     console.warn("[pushUnsyncedAnnouncements] pendingReads failed:", err.message);
   }
 
-  // Retry pending acks
+  // ── Retry pending acknowledges ────────────────────────────────────────────
   try {
     const pendingAcks = await db.getAllAsync(
-      "SELECT id FROM announcements WHERE _ack_pending = 1"
+      "SELECT id, updated_at FROM announcements WHERE _ack_pending = 1"
     );
+
     for (const row of pendingAcks || []) {
+      const age = Date.now() - new Date(row.updated_at || 0).getTime();
+      if (age > 24 * 60 * 60 * 1000) {
+        await db.runAsync(
+          "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+          [row.id]
+        );
+        continue;
+      }
+
       const endpoint = isStudent(user)
         ? `/students/announcements/${row.id}/acknowledge`
         : `/announcements/${row.id}/acknowledge`;
+
       try {
         await api.post(endpoint);
-        await db.runAsync("UPDATE announcements SET _ack_pending = 0 WHERE id = ?", [row.id]);
+        await db.runAsync(
+          "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+          [row.id]
+        );
       } catch (err) {
         const status = err?.response?.status;
-        if (status === 404) await db.runAsync("DELETE FROM announcements WHERE id = ?", [row.id]);
-        else if (status === 409) await db.runAsync("UPDATE announcements SET _ack_pending = 0 WHERE id = ?", [row.id]);
-        else console.warn(`[pushAcks] retry failed for ${row.id}:`, err.message);
+        if (status === 404) {
+          await db.runAsync(
+            "DELETE FROM announcements WHERE id = ?",
+            [row.id]
+          );
+        } else if (status === 409) {
+          await db.runAsync(
+            "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
+            [row.id]
+          );
+        } else if (status === 401 || status === 403) {
+          console.warn("[pushAcks] auth error — stopping ack flush");
+          break;
+        } else {
+          console.warn(`[pushAcks] retry failed for ${row.id}:`, err.message);
+        }
       }
     }
   } catch (err) {
     console.warn("[pushUnsyncedAnnouncements] pendingAcks failed:", err.message);
   }
 
+  // ── Push unsynced create / update / delete ────────────────────────────────
   if (!isAdmin(user) && !isTeacher(user)) return;
 
   const endpoint = getPushEndpoint(user);
   if (!endpoint) return;
 
-  const dirty = await db.getAllAsync(
-    "SELECT * FROM announcements WHERE _synced = 0 AND _operation IS NOT NULL"
-  );
-  if (!dirty?.length) return;
+  let dirty = [];
+  try {
+    dirty = await db.getAllAsync(
+      "SELECT * FROM announcements WHERE _synced = 0 AND _operation IS NOT NULL"
+    );
+  } catch (err) {
+    console.warn("[pushUnsyncedAnnouncements] dirty query failed:", err.message);
+    return;
+  }
 
   for (const row of dirty) {
     try {
       const op  = row._operation;
       const now = new Date().toISOString();
+
       if (op === "create") {
         await api.post(endpoint, {
-          id: row.id, title: row.title, body: row.body,
-          audience: row.audience, targetClasses: safeJsonParse(row.target_classes, []),
-          priority: row.priority, isPinned: row.is_pinned === 1,
-          publishAt: row.publish_at, expiresAt: row.expires_at,
+          id:            row.id,
+          title:         row.title,
+          body:          row.body,
+          audience:      row.audience,
+          targetClasses: safeJsonParse(row.target_classes, []),
+          priority:      row.priority,
+          isPinned:      row.is_pinned === 1,
+          publishAt:     row.publish_at,
+          expiresAt:     row.expires_at,
         });
       } else if (op === "update") {
         await api.put(`${endpoint}/${row.id}`, {
-          title: row.title, body: row.body,
-          audience: row.audience, targetClasses: safeJsonParse(row.target_classes, []),
-          priority: row.priority, isPinned: row.is_pinned === 1,
+          title:         row.title,
+          body:          row.body,
+          audience:      row.audience,
+          targetClasses: safeJsonParse(row.target_classes, []),
+          priority:      row.priority,
+          isPinned:      row.is_pinned === 1,
         });
       } else if (op === "delete") {
         await api.delete(`${endpoint}/${row.id}`);
       }
+
       await db.runAsync(
-        `UPDATE announcements SET _synced = 1, _synced_at = ?, _operation = NULL WHERE id = ?`,
+        `UPDATE announcements
+         SET _synced = 1, _synced_at = ?, _operation = NULL
+         WHERE id = ?`,
         [now, row.id]
       );
     } catch (err) {
@@ -1222,7 +1381,10 @@ export const pushUnsyncedAnnouncements = async () => {
           [row.id]
         );
       } else {
-        console.warn(`[pushUnsyncedAnnouncements] failed for ${row.id}:`, err.message);
+        console.warn(
+          `[pushUnsyncedAnnouncements] failed for ${row.id}:`,
+          err.message
+        );
       }
     }
   }
@@ -1230,9 +1392,6 @@ export const pushUnsyncedAnnouncements = async () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PULL FROM SERVER
-// ✅ Sends classId so server returns class-targeted announcements.
-//    Without classId the server only returns audience='all' and misses
-//    audience='students' and audience='class' announcements.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const pullAnnouncements = async (lastSync) => {
@@ -1242,18 +1401,18 @@ export const pullAnnouncements = async (lastSync) => {
 
   const endpoint = getPullEndpoint(user);
   if (!endpoint) {
-    console.log(`[pullAnnouncements] no endpoint for role "${user?.role}" — skipping`);
+    console.log(
+      `[pullAnnouncements] no endpoint for role "${user?.role}" — skipping`
+    );
     return 0;
   }
 
-  // ✅ Resolve classId locally and include in request params
+  // ✅ Resolve classId locally and include in request params so the server
+  //    returns class-targeted announcements for this student.
   let studentClassId = null;
   if (isStudent(user)) {
     const userId = user?._id || user?.id || user?.userId;
     studentClassId = await resolveStudentClassIdLocal(userId);
-    if (__DEV__) {
-      console.log(`[pullAnnouncements] student classId resolved: ${studentClassId}`);
-    }
   }
 
   const params = {
@@ -1261,10 +1420,7 @@ export const pullAnnouncements = async (lastSync) => {
     limit:    500,
     schoolId: user?.schoolId || undefined,
   };
-
-  if (studentClassId) {
-    params.classId = studentClassId;
-  }
+  if (studentClassId) params.classId = studentClassId;
 
   let announcements = [];
 
@@ -1274,11 +1430,19 @@ export const pullAnnouncements = async (lastSync) => {
       response.data?.announcements ||
       response.data?.data          ||
       (Array.isArray(response.data) ? response.data : []);
-    console.log(`📥 Announcements pulled from ${endpoint}: ${announcements.length}`);
+    console.log(
+      `📥 Announcements pulled from ${endpoint}: ${announcements.length}`
+    );
   } catch (err) {
     const status = err?.response?.status;
-    if (status === 404) { console.log(`[pullAnnouncements] ${endpoint} → 404`); return 0; }
-    if (status === 403) { console.log(`[pullAnnouncements] ${endpoint} → 403`); return 0; }
+    if (status === 404) {
+      console.log(`[pullAnnouncements] ${endpoint} → 404`);
+      return 0;
+    }
+    if (status === 403) {
+      console.log(`[pullAnnouncements] ${endpoint} → 403`);
+      return 0;
+    }
     console.warn(`[pullAnnouncements] ${endpoint} failed — ${err.message}`);
     return 0;
   }
@@ -1295,9 +1459,12 @@ export const pullAnnouncements = async (lastSync) => {
       const id = a._id || a.id;
       if (!id) continue;
 
+      // Soft-deleted on server
       if (a.deletedAt || a.deleted_at) {
         await db.runAsync(
-          `UPDATE announcements SET is_active = 0, deleted_at = ?, _synced = 1 WHERE id = ?`,
+          `UPDATE announcements
+           SET is_active = 0, deleted_at = ?, _synced = 1
+           WHERE id = ?`,
           [a.deletedAt || a.deleted_at, String(id)]
         );
         continue;
@@ -1305,13 +1472,13 @@ export const pullAnnouncements = async (lastSync) => {
 
       const existing = await db.getFirstAsync(
         `SELECT is_read, is_acknowledged, _read_pending, _ack_pending
-         FROM announcements WHERE id = ?`,
+         FROM   announcements WHERE id = ?`,
         [String(id)]
       );
 
       const serverIsRead = (a.isRead || a.is_read) ? 1 : 0;
       const serverIsAck  = (a.isAcknowledged || a.is_acknowledged) ? 1 : 0;
-      const finalIsRead  = Math.max(existing?.is_read ?? 0, serverIsRead);
+      const finalIsRead  = Math.max(existing?.is_read         ?? 0, serverIsRead);
       const finalIsAck   = Math.max(existing?.is_acknowledged ?? 0, serverIsAck);
       const keepReadPending = existing?._read_pending ?? 0;
       const keepAckPending  = existing?._ack_pending  ?? 0;
@@ -1357,18 +1524,23 @@ export const pullAnnouncements = async (lastSync) => {
           a.priority    || "normal",
           (a.is_pinned  || a.isPinned)   ? 1 : 0,
           a.version     || 1,
-          finalIsRead, finalIsAck,
+          finalIsRead,
+          finalIsAck,
           a.publish_at  || a.publishAt   || null,
           a.expires_at  || a.expiresAt   || null,
           now,
-          keepReadPending, keepAckPending,
+          keepReadPending,
+          keepAckPending,
           a.createdAt   || a.created_at  || now,
           a.updatedAt   || a.updated_at  || now,
         ]
       );
       count++;
     } catch (err) {
-      console.warn(`[pullAnnouncements] failed to upsert ${a._id || a.id}:`, err.message);
+      console.warn(
+        `[pullAnnouncements] failed to upsert ${a._id || a.id}:`,
+        err.message
+      );
     }
   }
 

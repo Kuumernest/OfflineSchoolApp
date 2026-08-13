@@ -188,21 +188,27 @@ export default function AssignTeacher() {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  const refreshExistingAssignments = useCallback(async (teacherId) => {
-    if (!teacherId) return;
-    const generation = ++assignmentFetchGenRef.current;
-    try {
-      const existing = await getTeacherAssignments(teacherId);
-      if (isMountedRef.current && generation === assignmentFetchGenRef.current) {
-        setExistingAssignments(normalizeList(existing));
-      }
-    } catch (err) {
-      console.warn("Could not load existing assignments:", err.message);
-      if (isMountedRef.current && generation === assignmentFetchGenRef.current) {
-        setExistingAssignments([]);
-      }
+  // In refreshExistingAssignments callback — add type check
+const refreshExistingAssignments = useCallback(async (teacherId) => {
+  if (!teacherId) return;
+  const generation = ++assignmentFetchGenRef.current;
+  try {
+    // ✅ Guard: ensure function exists before calling
+    if (typeof getTeacherAssignments !== "function") {
+      console.warn("[AssignTeacher] getTeacherAssignments is not a function — skipping");
+      return;
     }
-  }, []);
+    const existing = await getTeacherAssignments(teacherId);
+    if (isMountedRef.current && generation === assignmentFetchGenRef.current) {
+      setExistingAssignments(normalizeList(existing));
+    }
+  } catch (err) {
+    console.warn("Could not load existing assignments:", err.message);
+    if (isMountedRef.current && generation === assignmentFetchGenRef.current) {
+      setExistingAssignments([]);
+    }
+  }
+}, []);
 
   const loadData = useCallback(async () => {
     setLoading(true);

@@ -1,24 +1,25 @@
 // src/services/syncManager.js
 "use strict";
 
-import api                            from "./api";
-import NetInfo                        from "@react-native-community/netinfo";
-import { getDatabase }                from "../db/database";
-import * as SecureStore               from "expo-secure-store";
+import api                              from "./api";
+import { setRetryContext, clearRetryContext } from "./api";
+import NetInfo                          from "@react-native-community/netinfo";
+import { getDatabase }                  from "../db/database";
+import * as SecureStore                 from "expo-secure-store";
 import {
   safeAddColumn,
   withFkOff,
   withTransaction,
   NOT_DELETED,
   IS_DELETED,
-}                                     from "../db/dbHelpers";
-import { generateUUID }               from "../utils/idHelpers";
+}                                       from "../db/dbHelpers";
+import { generateUUID }                 from "../utils/idHelpers";
 import {
   isAuthenticated,
   getCurrentAuth,
   hasRole,
-}                                     from "../utils/authHelpers";
-import { API }                        from "./apiEndpoints";
+}                                       from "../utils/authHelpers";
+import { API }                          from "./apiEndpoints";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CONSTANTS
@@ -55,19 +56,54 @@ class SyncManagerClass {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async _withRetry(label, fn, attempt = 1) {
+    setRetryContext(attempt, this.MAX_RETRIES);
+
     try {
-      return await fn();
+      const result = await fn();
+      clearRetryContext();
+      return result;
     } catch (err) {
+      clearRetryContext();
+
       const status      = err?.response?.status;
       const isNetErr    = !err.response;
       const isServerErr = status >= 500 && status <= 599;
-      const shouldRetry = (isNetErr || isServerErr) && attempt < this.MAX_RETRIES;
+      const isTimeout   =
+        err.code === "ECONNABORTED" || err.message?.includes("timeout");
+
+      // ── Hard-fail: auth errors and 4xx won't heal on retry ────────────
+      // ✅ NOTE: 401 is now handled by api.js token refresh interceptor.
+      //    If we still get a 401 here, the refresh already failed — don't retry.
+      if (status === 401 || status === 403) throw err;
+      if (status >= 400 && status < 500)   throw err;
+
+      // ── Connectivity check before waiting ─────────────────────────────
+      if (isNetErr && attempt > 1) {
+        try {
+          const net = await NetInfo.fetch();
+          if (!net.isConnected) {
+            console.warn(
+              `[SyncManager] ${label} — device offline, stopping retries`
+            );
+            throw err;
+          }
+        } catch (netErr) {
+          if (netErr === err) throw err;
+        }
+      }
+
+      const shouldRetry =
+        (isNetErr || isServerErr || isTimeout) &&
+        attempt < this.MAX_RETRIES;
 
       if (shouldRetry) {
-        const delay = this.RETRY_DELAY_MS * attempt;
+        const base   = this.RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+        const jitter = Math.random() * 300;
+        const delay  = Math.min(base + jitter, 8_000);
+
         console.warn(
-          `[SyncManager] ${label} — attempt ${attempt} failed (${err.message}). ` +
-          `Retrying in ${delay}ms…`
+          `[SyncManager] ${label} — attempt ${attempt} failed ` +
+          `(${err.message}). Retrying in ${Math.round(delay)}ms…`
         );
         await new Promise((r) => setTimeout(r, delay));
         return this._withRetry(label, fn, attempt + 1);
@@ -128,7 +164,9 @@ class SyncManagerClass {
 
   async setLastSync(timestamp) {
     try { await SecureStore.setItemAsync(LAST_SYNC_KEY, timestamp); }
-    catch (err) { console.warn("[SyncManager] Could not persist lastSync:", err.message); }
+    catch (err) {
+      console.warn("[SyncManager] Could not persist lastSync:", err.message);
+    }
     this.lastSync = timestamp;
   }
 
@@ -144,7 +182,9 @@ class SyncManagerClass {
 
   async setLastQuizSync(timestamp) {
     try { await SecureStore.setItemAsync(QUIZ_LAST_SYNC_KEY, timestamp); }
-    catch (err) { console.warn("[SyncManager] Could not persist quiz lastSync:", err.message); }
+    catch (err) {
+      console.warn("[SyncManager] Could not persist quiz lastSync:", err.message);
+    }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -152,44 +192,55 @@ class SyncManagerClass {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async initialize() {
-    this._destroyed = false;
+    if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
+    if (this.syncInterval)  { clearInterval(this.syncInterval); this.syncInterval  = null; }
+
+    this._destroyed            = false;
+    this.isSyncing             = false;
+    this._staleSubjectsCleared = false;
+
     if (!this._migrationsDone) {
       await this.runAllMigrations();
       this._migrationsDone = true;
     }
+
     this.startAutoSync();
     console.log("[SyncManager] Initialized");
   }
 
   destroy() {
-    if (this._initTimeout)  { clearTimeout(this._initTimeout);   this._initTimeout  = null; }
-    if (this.syncInterval)  { clearInterval(this.syncInterval);   this.syncInterval  = null; }
+    if (this._destroyed) return;
+
+    if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
+    if (this.syncInterval)  { clearInterval(this.syncInterval); this.syncInterval  = null; }
+
     this.isSyncing             = false;
     this._staleSubjectsCleared = false;
-    this._migrationsDone       = false;
     this._destroyed            = true;
+
     console.log("[SyncManager] Destroyed");
   }
 
   startAutoSync() {
-    this._initTimeout = setTimeout(
-      () => this.syncAll().catch(console.warn), 2_000
-    );
-    this.syncInterval = setInterval(
-      () => this.syncAll().catch(console.warn),
-      this.SYNC_INTERVAL_MS
-    );
+    if (this._destroyed) return;
+
+    this._initTimeout = setTimeout(() => {
+      if (!this._destroyed) this.syncAll().catch(console.warn);
+    }, 2_000);
+
+    this.syncInterval = setInterval(() => {
+      if (!this._destroyed) this.syncAll().catch(console.warn);
+    }, this.SYNC_INTERVAL_MS);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 5 — MIGRATIONS
+  // SECTION 5 — MIGRATIONS (unchanged — keeping all original migration code)
   // ═══════════════════════════════════════════════════════════════════════════
 
   async runAllMigrations() {
     console.log("[SyncManager] Running migrations…");
     const start = Date.now();
     try {
-      // Run sequentially so tables exist before foreign-key patches run
       await this.migrateLocalDatabase();
       await this.migrateUsersTable();
       await this.migrateClassesTable();
@@ -197,21 +248,16 @@ class SyncManagerClass {
       await this.migrateAssignmentsTable();
       await this.migrateAnnouncementsTable();
       await this.migrateStudentApplicationsTable();
-
-      // ── Quiz tables must be created here, not assumed to exist ──────────
       await this.migrateQuizTables();
-
       console.log(`[SyncManager] Migrations complete (${Date.now() - start}ms)`);
     } catch (err) {
       console.warn("[SyncManager] Migration batch failed:", err.message);
     }
   }
 
-  // ── NEW: creates every quiz-related table and patches missing columns ────
   async migrateQuizTables() {
     const db = await getDatabase();
 
-    // Each execAsync call is a single DDL statement (#DDL rule)
     const creates = [
       `CREATE TABLE IF NOT EXISTS question_categories (
         id          TEXT PRIMARY KEY,
@@ -224,7 +270,6 @@ class SyncManagerClass {
         created_at  TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at  TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
-
       `CREATE TABLE IF NOT EXISTS questions (
         id            TEXT PRIMARY KEY,
         schoolId      TEXT,
@@ -243,7 +288,6 @@ class SyncManagerClass {
         created_at    TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at    TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
-
       `CREATE TABLE IF NOT EXISTS question_options (
         id            TEXT PRIMARY KEY,
         question_id   TEXT NOT NULL,
@@ -252,15 +296,13 @@ class SyncManagerClass {
         match_pair    TEXT,
         display_order INTEGER DEFAULT 0
       )`,
-
       `CREATE TABLE IF NOT EXISTS question_analytics (
-        id          TEXT PRIMARY KEY,
-        question_id TEXT NOT NULL,
-        times_seen  INTEGER DEFAULT 0,
+        id            TEXT PRIMARY KEY,
+        question_id   TEXT NOT NULL,
+        times_seen    INTEGER DEFAULT 0,
         times_correct INTEGER DEFAULT 0,
         avg_time_secs REAL DEFAULT 0
       )`,
-
       `CREATE TABLE IF NOT EXISTS quizzes (
         id                  TEXT PRIMARY KEY,
         schoolId            TEXT,
@@ -290,7 +332,6 @@ class SyncManagerClass {
         created_at          TEXT DEFAULT CURRENT_TIMESTAMP,
         updated_at          TEXT DEFAULT CURRENT_TIMESTAMP
       )`,
-
       `CREATE TABLE IF NOT EXISTS quiz_questions (
         id              TEXT PRIMARY KEY,
         quiz_id         TEXT NOT NULL,
@@ -298,7 +339,6 @@ class SyncManagerClass {
         display_order   INTEGER DEFAULT 0,
         points_override REAL
       )`,
-
       `CREATE TABLE IF NOT EXISTS quiz_attempts (
         id              TEXT PRIMARY KEY,
         quiz_id         TEXT NOT NULL,
@@ -316,15 +356,13 @@ class SyncManagerClass {
         _synced         INTEGER DEFAULT 0,
         _synced_at      TEXT
       )`,
-
       `CREATE TABLE IF NOT EXISTS quiz_analytics (
-        id              TEXT PRIMARY KEY,
-        quiz_id         TEXT NOT NULL,
-        total_attempts  INTEGER DEFAULT 0,
-        avg_score       REAL    DEFAULT 0,
-        pass_rate       REAL    DEFAULT 0
+        id             TEXT PRIMARY KEY,
+        quiz_id        TEXT NOT NULL,
+        total_attempts INTEGER DEFAULT 0,
+        avg_score      REAL    DEFAULT 0,
+        pass_rate      REAL    DEFAULT 0
       )`,
-
       `CREATE TABLE IF NOT EXISTS attempt_answers (
         id          TEXT PRIMARY KEY,
         attempt_id  TEXT NOT NULL,
@@ -335,7 +373,6 @@ class SyncManagerClass {
         _synced     INTEGER DEFAULT 0,
         _synced_at  TEXT
       )`,
-
       `CREATE TABLE IF NOT EXISTS attempt_answer_selections (
         id                TEXT PRIMARY KEY,
         attempt_answer_id TEXT NOT NULL,
@@ -346,12 +383,11 @@ class SyncManagerClass {
     ];
 
     for (const sql of creates) {
-      await db.execAsync(sql).catch((err) => {
-        console.warn("[migrateQuizTables] CREATE failed:", err.message);
-      });
+      await db.execAsync(sql).catch((err) =>
+        console.warn("[migrateQuizTables] CREATE failed:", err.message)
+      );
     }
 
-    // ── Indexes (one per execAsync call) ────────────────────────────────
     const indexes = [
       "CREATE INDEX IF NOT EXISTS idx_questions_school    ON questions(schoolId)",
       "CREATE INDEX IF NOT EXISTS idx_questions_category  ON questions(category_id)",
@@ -372,14 +408,12 @@ class SyncManagerClass {
       await db.execAsync(idx).catch(() => {});
     }
 
-    // ── Patch columns missing from installs created before this migration ─
     const patches = {
-      questions:        [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quizzes:          [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quiz_attempts:    [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      attempt_answers:  [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"]],
+      questions:       [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
+      quizzes:         [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
+      quiz_attempts:   [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
+      attempt_answers: [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"]],
     };
-
     for (const [table, cols] of Object.entries(patches)) {
       for (const [col, def] of cols) {
         await safeAddColumn(db, table, col, def);
@@ -411,8 +445,12 @@ class SyncManagerClass {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
           )
         `);
-        await db.execAsync("CREATE INDEX IF NOT EXISTS idx_periods_dirty  ON periods(dirty)").catch(() => {});
-        await db.execAsync("CREATE INDEX IF NOT EXISTS idx_periods_school ON periods(schoolId)").catch(() => {});
+        await db.execAsync(
+          "CREATE INDEX IF NOT EXISTS idx_periods_dirty  ON periods(dirty)"
+        ).catch(() => {});
+        await db.execAsync(
+          "CREATE INDEX IF NOT EXISTS idx_periods_school ON periods(schoolId)"
+        ).catch(() => {});
         return;
       }
 
@@ -440,6 +478,9 @@ class SyncManagerClass {
       await safeAddColumn(db, "users", "created_at",          "TEXT DEFAULT NULL");
       await safeAddColumn(db, "users", "schoolId",            "TEXT");
       await safeAddColumn(db, "users", "school_id",           "TEXT");
+      await safeAddColumn(db, "users", "passwordSalt",        "TEXT");
+      await safeAddColumn(db, "users", "passwordHash",        "TEXT");
+      await safeAddColumn(db, "users", "enrollmentNo",        "TEXT");
     } catch (err) {
       console.log("[SyncManager] users migration skipped:", err.message);
     }
@@ -468,7 +509,6 @@ class SyncManagerClass {
   async migrateSubjectsTable() {
     const db = await getDatabase();
     try {
-      // ── Ensure the table exists before patching ────────────────────────
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS subjects (
           id           TEXT PRIMARY KEY,
@@ -497,7 +537,6 @@ class SyncManagerClass {
       await safeAddColumn(db, "subjects", "class_id",     "TEXT");
       await safeAddColumn(db, "subjects", "classId",      "TEXT");
       await safeAddColumn(db, "subjects", "teacher_id",   "TEXT");
-      // ── This is the column that caused all 42 subject sync failures ────
       await safeAddColumn(db, "subjects", "teacher_name", "TEXT");
       await safeAddColumn(db, "subjects", "created_at",   "TEXT DEFAULT NULL");
       await safeAddColumn(db, "subjects", "updated_at",   "TEXT");
@@ -509,7 +548,9 @@ class SyncManagerClass {
   async migrateAssignmentsTable() {
     const db = await getDatabase();
     try {
-      const saInfo = await db.getAllAsync("PRAGMA table_info(subject_assignments)");
+      const saInfo = await db.getAllAsync(
+        "PRAGMA table_info(subject_assignments)"
+      );
       if (saInfo.length) {
         await safeAddColumn(db, "subject_assignments", "_synced",    "INTEGER DEFAULT 0");
         await safeAddColumn(db, "subject_assignments", "_synced_at", "TEXT");
@@ -521,23 +562,23 @@ class SyncManagerClass {
 
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS teacher_assignments (
-          id          TEXT PRIMARY KEY,
-          schoolId    TEXT,
-          school_id   TEXT,
-          teacherId   TEXT,
-          teacher_id  TEXT,
-          classId     TEXT,
-          class_id    TEXT,
-          subjectId   TEXT,
-          subject_id  TEXT,
-          teacher_json  TEXT,
-          class_json    TEXT,
-          subject_json  TEXT,
-          deleted_at  TEXT,
-          created_at  TEXT,
-          updated_at  TEXT,
-          _synced     INTEGER DEFAULT 0,
-          _synced_at  TEXT
+          id           TEXT PRIMARY KEY,
+          schoolId     TEXT,
+          school_id    TEXT,
+          teacherId    TEXT,
+          teacher_id   TEXT,
+          classId      TEXT,
+          class_id     TEXT,
+          subjectId    TEXT,
+          subject_id   TEXT,
+          teacher_json TEXT,
+          class_json   TEXT,
+          subject_json TEXT,
+          deleted_at   TEXT,
+          created_at   TEXT,
+          updated_at   TEXT,
+          _synced      INTEGER DEFAULT 0,
+          _synced_at   TEXT
         )
       `);
 
@@ -674,11 +715,19 @@ class SyncManagerClass {
       await safeAddColumn(db, "student_applications", "_synced_at", "TEXT");
       await safeAddColumn(db, "student_applications", "_operation", "TEXT");
 
-      await db.execAsync("CREATE INDEX IF NOT EXISTS idx_apps_school ON student_applications(school_id)").catch(() => {});
-      await db.execAsync("CREATE INDEX IF NOT EXISTS idx_apps_status ON student_applications(status)").catch(() => {});
-      await db.execAsync("CREATE INDEX IF NOT EXISTS idx_apps_synced ON student_applications(_synced)").catch(() => {});
+      await db.execAsync(
+        "CREATE INDEX IF NOT EXISTS idx_apps_school ON student_applications(school_id)"
+      ).catch(() => {});
+      await db.execAsync(
+        "CREATE INDEX IF NOT EXISTS idx_apps_status ON student_applications(status)"
+      ).catch(() => {});
+      await db.execAsync(
+        "CREATE INDEX IF NOT EXISTS idx_apps_synced ON student_applications(_synced)"
+      ).catch(() => {});
     } catch (err) {
-      console.log("[SyncManager] student_applications migration skipped:", err.message);
+      console.log(
+        "[SyncManager] student_applications migration skipped:", err.message
+      );
     }
   }
 
@@ -687,21 +736,38 @@ class SyncManagerClass {
   // ═══════════════════════════════════════════════════════════════════════════
 
   async syncAll() {
-    if (this._destroyed)      { console.log("[SyncManager] Destroyed — skipping sync");        return; }
-    if (this.isSyncing)       { console.log("[SyncManager] Already syncing — skipping");       return; }
-    if (!isAuthenticated())   { console.log("[SyncManager] Not authenticated — skipping sync"); return; }
+    if (this._destroyed)    { console.log("[SyncManager] Destroyed — skipping sync");         return; }
+    if (this.isSyncing)     { console.log("[SyncManager] Already syncing — skipping");        return; }
+    if (!isAuthenticated()) { console.log("[SyncManager] Not authenticated — skipping sync"); return; }
+
+    const { acquireSyncLock, releaseSyncLock } = require("../store/auth.store");
+    if (!acquireSyncLock()) {
+      console.log("[SyncManager] Global sync lock held — skipping");
+      return;
+    }
 
     const net = await NetInfo.fetch();
-    if (!net.isConnected)     { console.log("[SyncManager] Offline — skipping sync");          return; }
+    if (!net.isConnected) {
+      releaseSyncLock();
+      console.log("[SyncManager] Offline — skipping sync");
+      return;
+    }
 
     const { user } = getCurrentAuth();
-    if (user?.mustResetPassword) { console.log("[SyncManager] mustResetPassword — skipping sync"); return; }
+    if (user?.mustResetPassword) {
+      releaseSyncLock();
+      console.log("[SyncManager] mustResetPassword — skipping sync");
+      return;
+    }
 
     this.isSyncing = true;
     console.log("[SyncManager] Starting full sync…");
 
     try {
-      if (this._isUnauthenticated()) { console.log("[SyncManager] User logged out — aborting"); return; }
+      if (this._isUnauthenticated()) {
+        console.log("[SyncManager] User logged out — aborting");
+        return;
+      }
 
       if (!this.isStudent()) {
         await this.markOrphanedRecordsAsSynced();
@@ -724,11 +790,12 @@ class SyncManagerClass {
       console.warn("[SyncManager] Sync incomplete:", err.message);
     } finally {
       this.isSyncing = false;
+      releaseSyncLock();
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 7 — REPAIR HELPERS
+  // SECTION 7 — REPAIR HELPERS (unchanged)
   // ═══════════════════════════════════════════════════════════════════════════
 
   async repairClassIds() {
@@ -757,7 +824,9 @@ class SyncManagerClass {
           if (sid && name) serverIdByName[name] = sid;
         }
 
-        const localClasses = await db.getAllAsync("SELECT id, name FROM classes").catch(() => []);
+        const localClasses = await db
+          .getAllAsync("SELECT id, name FROM classes")
+          .catch(() => []);
         let fixed = 0;
 
         for (const local of localClasses) {
@@ -765,7 +834,9 @@ class SyncManagerClass {
           const serverId = serverIdByName[key];
           if (!serverId) continue;
           if (local.id === serverId) {
-            await db.runAsync("UPDATE classes SET _synced = 1 WHERE id = ?", [local.id]).catch(() => {});
+            await db
+              .runAsync("UPDATE classes SET _synced = 1 WHERE id = ?", [local.id])
+              .catch(() => {});
             continue;
           }
           await this._reconcileClassId(db, local.id, serverId);
@@ -790,7 +861,9 @@ class SyncManagerClass {
       try {
         const allClasses    = await db.getAllAsync("SELECT id FROM classes").catch(() => []);
         const knownClassIds = new Set(allClasses.map((c) => c.id));
-        const allSubjects   = await db.getAllAsync("SELECT id, class_id, classId FROM subjects").catch(() => []);
+        const allSubjects   = await db
+          .getAllAsync("SELECT id, class_id, classId FROM subjects")
+          .catch(() => []);
 
         if (!allSubjects.length) return;
 
@@ -821,17 +894,25 @@ class SyncManagerClass {
     const db = await getDatabase();
     const ts = new Date().toISOString();
     try {
-      const classR = await db.runAsync(
-        "UPDATE classes  SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
-      const subjectR = await db.runAsync(
-        "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)", [ts]
-      ).catch(() => ({ changes: 0 }));
+      const classR = await db
+        .runAsync(
+          "UPDATE classes  SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)",
+          [ts]
+        )
+        .catch(() => ({ changes: 0 }));
+      const subjectR = await db
+        .runAsync(
+          "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE (_synced = 0 OR _synced IS NULL)",
+          [ts]
+        )
+        .catch(() => ({ changes: 0 }));
 
-      const cc = classR?.changes ?? 0;
+      const cc = classR?.changes   ?? 0;
       const sc = subjectR?.changes ?? 0;
       if (cc > 0 || sc > 0) {
-        console.log(`[SyncManager] Orphaned records marked synced — classes: ${cc}, subjects: ${sc}`);
+        console.log(
+          `[SyncManager] Orphaned records marked synced — classes: ${cc}, subjects: ${sc}`
+        );
       }
     } catch (err) {
       console.warn("[SyncManager] markOrphanedRecordsAsSynced failed:", err.message);
@@ -839,7 +920,7 @@ class SyncManagerClass {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 8 — PUSH ORCHESTRATION
+  // SECTION 8-16 — PUSH (unchanged from original)
   // ═══════════════════════════════════════════════════════════════════════════
 
   async pushChanges() {
@@ -864,10 +945,6 @@ class SyncManagerClass {
     await Promise.allSettled(tasks);
     if (this.isAdmin()) await this.pushDeletedRecords();
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 9 — PUSH: DELETED RECORDS
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async pushDeletedRecords() {
     if (this._isUnauthenticated()) return;
@@ -894,9 +971,9 @@ class SyncManagerClass {
           params      = [role];
         }
 
-        const rows = await db.getAllAsync(
-          `SELECT id FROM ${table} WHERE ${whereClause}`, params
-        ).catch(() => []);
+        const rows = await db
+          .getAllAsync(`SELECT id FROM ${table} WHERE ${whereClause}`, params)
+          .catch(() => []);
 
         for (const row of rows) {
           try {
@@ -906,13 +983,18 @@ class SyncManagerClass {
             );
           } catch (err) {
             if (err?.response?.status !== 404) {
-              console.warn(`[SyncManager] Delete ${table}/${row.id} failed:`, err.message);
+              console.warn(
+                `[SyncManager] Delete ${table}/${row.id} failed:`, err.message
+              );
               continue;
             }
           }
-          await db.runAsync(
-            `UPDATE ${table} SET _synced = 1, _synced_at = ? WHERE id = ?`, [ts, row.id]
-          ).catch(() => {});
+          await db
+            .runAsync(
+              `UPDATE ${table} SET _synced = 1, _synced_at = ? WHERE id = ?`,
+              [ts, row.id]
+            )
+            .catch(() => {});
         }
       } catch (err) {
         console.warn(`[SyncManager] pushDeletedRecords (${table}):`, err.message);
@@ -920,9 +1002,11 @@ class SyncManagerClass {
     }
 
     try {
-      const deleted = await db.getAllAsync(
-        "SELECT id FROM periods WHERE deletedat IS NOT NULL AND deletedat != '' AND dirty = 1"
-      ).catch(() => []);
+      const deleted = await db
+        .getAllAsync(
+          "SELECT id FROM periods WHERE deletedat IS NOT NULL AND deletedat != '' AND dirty = 1"
+        )
+        .catch(() => []);
 
       for (const p of deleted) {
         try {
@@ -936,18 +1020,14 @@ class SyncManagerClass {
             continue;
           }
         }
-        await db.runAsync(
-          "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [p.id]
-        ).catch(() => {});
+        await db
+          .runAsync("UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [p.id])
+          .catch(() => {});
       }
     } catch (err) {
       console.warn("[SyncManager] pushDeletedRecords (periods):", err.message);
     }
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 10 — PUSH: PERIODS
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async pushDirtyPeriods() {
     if (this._isUnauthenticated()) return;
@@ -990,7 +1070,9 @@ class SyncManagerClass {
       );
       if (response.data?.success) {
         for (const p of dirty) {
-          await db.runAsync("UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [p.id]);
+          await db.runAsync(
+            "UPDATE periods SET dirty = 0, operation = NULL WHERE id = ?", [p.id]
+          );
         }
         console.log("[SyncManager] Periods push complete");
       }
@@ -999,23 +1081,22 @@ class SyncManagerClass {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 11 — CLASS ID RECONCILIATION
-  // ═══════════════════════════════════════════════════════════════════════════
-
   async _reconcileClassId(db, localId, serverId) {
     const ts = new Date().toISOString();
     if (localId === serverId) {
-      await db.runAsync(
-        "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]
-      ).catch(() => {});
+      await db
+        .runAsync(
+          "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?",
+          [ts, localId]
+        )
+        .catch(() => {});
       return;
     }
 
     try {
-      const existing = await db.getFirstAsync(
-        "SELECT id FROM classes WHERE id = ?", [serverId]
-      ).catch(() => null);
+      const existing = await db
+        .getFirstAsync("SELECT id FROM classes WHERE id = ?", [serverId])
+        .catch(() => null);
 
       const cascade = async () => {
         await db.runAsync(
@@ -1023,14 +1104,16 @@ class SyncManagerClass {
           [serverId, serverId, localId, localId]
         ).catch(() => {});
         await db.runAsync(
-          "UPDATE students SET class_id = ? WHERE class_id = ?", [serverId, localId]
+          "UPDATE students SET class_id = ? WHERE class_id = ?",
+          [serverId, localId]
         ).catch(() => {});
         await db.runAsync(
           "UPDATE teacher_assignments SET classId = ?, class_id = ? WHERE classId = ? OR class_id = ?",
           [serverId, serverId, localId, localId]
         ).catch(() => {});
         await db.runAsync(
-          "UPDATE quizzes SET class_id = ? WHERE class_id = ?", [serverId, localId]
+          "UPDATE quizzes SET class_id = ? WHERE class_id = ?",
+          [serverId, localId]
         ).catch(() => {});
       };
 
@@ -1039,7 +1122,8 @@ class SyncManagerClass {
           if (existing) {
             await cascade();
             await db.runAsync(
-              "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, serverId]
+              "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?",
+              [ts, serverId]
             );
             await db.runAsync("DELETE FROM classes WHERE id = ?", [localId]).catch(() => {});
           } else {
@@ -1052,16 +1136,17 @@ class SyncManagerClass {
         });
       });
     } catch (err) {
-      console.error(`[SyncManager] _reconcileClassId (${localId} → ${serverId}):`, err.message);
-      await db.runAsync(
-        "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, localId]
-      ).catch(() => {});
+      console.error(
+        `[SyncManager] _reconcileClassId (${localId} → ${serverId}):`, err.message
+      );
+      await db
+        .runAsync(
+          "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?",
+          [ts, localId]
+        )
+        .catch(() => {});
     }
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 12 — PUSH: CLASSES
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async pushUnsyncedClasses() {
     if (this._isUnauthenticated()) return {};
@@ -1072,9 +1157,12 @@ class SyncManagerClass {
 
     await withFkOff(db, async () => {
       try {
-        const unsynced = await db.getAllAsync(
-          `SELECT * FROM classes WHERE (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED_BARE}`
-        ).catch(() => []);
+        const unsynced = await db
+          .getAllAsync(
+            `SELECT * FROM classes
+             WHERE (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED_BARE}`
+          )
+          .catch(() => []);
 
         if (!unsynced.length) return;
         console.log(`[SyncManager] Pushing ${unsynced.length} unsynced class(es)…`);
@@ -1103,7 +1191,9 @@ class SyncManagerClass {
           } catch (err) {
             if (err?.response?.status === 409) {
               const data     = err.response.data;
-              const raw      = data?.class?._id || data?.class?.id || data?.serverId || data?._id || data?.id || null;
+              const raw      =
+                data?.class?._id || data?.class?.id ||
+                data?.serverId   || data?._id        || data?.id || null;
               const serverId = raw ? String(raw) : null;
 
               if (serverId) {
@@ -1111,10 +1201,12 @@ class SyncManagerClass {
                 await this._reconcileClassId(db, cls.id, serverId);
               } else {
                 syncedIdMap[cls.id] = cls.id;
-                await db.runAsync(
-                  "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?",
-                  [new Date().toISOString(), cls.id]
-                ).catch(() => {});
+                await db
+                  .runAsync(
+                    "UPDATE classes SET _synced = 1, _synced_at = ? WHERE id = ?",
+                    [new Date().toISOString(), cls.id]
+                  )
+                  .catch(() => {});
               }
             } else {
               console.warn(`[SyncManager] pushClass "${cls.name}" failed:`, err.message);
@@ -1129,10 +1221,6 @@ class SyncManagerClass {
     return syncedIdMap;
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 13 — PUSH: SUBJECTS
-  // ═══════════════════════════════════════════════════════════════════════════
-
   async pushUnsyncedSubjects(freshClassIdMap = {}) {
     if (this._isUnauthenticated()) return;
 
@@ -1141,9 +1229,12 @@ class SyncManagerClass {
 
     await withFkOff(db, async () => {
       try {
-        const unsynced = await db.getAllAsync(
-          `SELECT * FROM subjects WHERE (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED_BARE}`
-        ).catch(() => []);
+        const unsynced = await db
+          .getAllAsync(
+            `SELECT * FROM subjects
+             WHERE (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED_BARE}`
+          )
+          .catch(() => []);
 
         if (!unsynced.length) return;
         console.log(`[SyncManager] Pushing ${unsynced.length} unsynced subject(s)…`);
@@ -1157,9 +1248,9 @@ class SyncManagerClass {
             }
             if (freshClassIdMap[classId]) classId = freshClassIdMap[classId];
 
-            const classRow = await db.getFirstAsync(
-              "SELECT id, _synced FROM classes WHERE id = ?", [classId]
-            ).catch(() => null);
+            const classRow = await db
+              .getFirstAsync("SELECT id, _synced FROM classes WHERE id = ?", [classId])
+              .catch(() => null);
 
             if (!classRow?._synced) {
               console.log(`[SyncManager] Subject "${subj.name}" skipped — class not confirmed`);
@@ -1178,7 +1269,7 @@ class SyncManagerClass {
             );
 
             const raw =
-              response.data?._id         || response.data?.id         ||
+              response.data?._id          || response.data?.id          ||
               response.data?.subject?._id || response.data?.subject?.id || null;
             const finalId = raw ? String(raw) : subj.id;
             const ts      = new Date().toISOString();
@@ -1190,7 +1281,8 @@ class SyncManagerClass {
               );
             } else {
               await db.runAsync(
-                "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, subj.id]
+                "UPDATE subjects SET _synced = 1, _synced_at = ? WHERE id = ?",
+                [ts, subj.id]
               );
             }
           } catch (err) {
@@ -1205,10 +1297,6 @@ class SyncManagerClass {
     });
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 14 — PUSH: TEACHERS
-  // ═══════════════════════════════════════════════════════════════════════════
-
   async pushLocalTeachers() {
     if (this._isUnauthenticated()) return;
 
@@ -1216,11 +1304,15 @@ class SyncManagerClass {
     const schoolId = await this.getSchoolId();
 
     try {
-      const unsynced = await db.getAllAsync(
-        `SELECT id, name, email, role, schoolId, school_id, created_at
-         FROM users
-         WHERE role = 'teacher' AND (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED_BARE}`
-      ).catch(() => []);
+      const unsynced = await db
+        .getAllAsync(
+          `SELECT id, name, email, role, schoolId, school_id, created_at
+           FROM users
+           WHERE role = 'teacher'
+             AND (_synced = 0 OR _synced IS NULL)
+             AND ${NOT_DELETED_BARE}`
+        )
+        .catch(() => []);
 
       if (!unsynced.length) return;
       console.log(`[SyncManager] Pushing ${unsynced.length} unsynced teacher(s)…`);
@@ -1271,9 +1363,10 @@ class SyncManagerClass {
         })
       );
 
-      const list = response.data?.teachers ||
-                   response.data?.data     ||
-                   (Array.isArray(response.data) ? response.data : null);
+      const list =
+        response.data?.teachers ||
+        response.data?.data     ||
+        (Array.isArray(response.data) ? response.data : null);
 
       const serverTeacher = list
         ? list.find((t) => t.email?.toLowerCase() === localTeacher.email?.toLowerCase())
@@ -1299,10 +1392,12 @@ class SyncManagerClass {
       await this._replaceTeacherId(db, localTeacher.id, serverId);
     } catch (err) {
       console.warn("[SyncManager] _reconcileTeacherByEmail failed:", err.message);
-      await db.runAsync(
-        "UPDATE users SET _synced = 1, _synced_at = ? WHERE id = ?",
-        [new Date().toISOString(), localTeacher.id]
-      ).catch(() => {});
+      await db
+        .runAsync(
+          "UPDATE users SET _synced = 1, _synced_at = ? WHERE id = ?",
+          [new Date().toISOString(), localTeacher.id]
+        )
+        .catch(() => {});
     }
   }
 
@@ -1311,9 +1406,9 @@ class SyncManagerClass {
     try {
       await withFkOff(db, async () => {
         await withTransaction(db, async () => {
-          const alreadyExists = await db.getFirstAsync(
-            "SELECT id FROM users WHERE id = ?", [newId]
-          ).catch(() => null);
+          const alreadyExists = await db
+            .getFirstAsync("SELECT id FROM users WHERE id = ?", [newId])
+            .catch(() => null);
 
           if (alreadyExists) {
             await db.runAsync("DELETE FROM users WHERE id = ?", [oldId]);
@@ -1335,9 +1430,9 @@ class SyncManagerClass {
             ["announcements",       "author_id"],
           ];
           for (const [table, col] of cascades) {
-            await db.runAsync(
-              `UPDATE ${table} SET ${col} = ? WHERE ${col} = ?`, [newId, oldId]
-            ).catch(() => {});
+            await db
+              .runAsync(`UPDATE ${table} SET ${col} = ? WHERE ${col} = ?`, [newId, oldId])
+              .catch(() => {});
           }
         });
       });
@@ -1345,10 +1440,6 @@ class SyncManagerClass {
       console.error(`[SyncManager] _replaceTeacherId (${oldId} → ${newId}):`, err.message);
     }
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 15 — PUSH: ASSIGNMENTS
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async syncLocalAssignmentsWithServer() {
     if (this._isUnauthenticated()) return;
@@ -1372,28 +1463,62 @@ class SyncManagerClass {
         const serverId = String(a._id || a.id || "");
         if (!serverId) continue;
 
+        const teacherObj = a.teacher && typeof a.teacher === "object" ? a.teacher : null;
+        const classObj   = a.class   && typeof a.class   === "object" ? a.class   : null;
+        const subjectObj = a.subject && typeof a.subject === "object" ? a.subject : null;
+
         const teacherId =
+          teacherObj?._id?.toString() ||
+          teacherObj?.id?.toString()  ||
           (typeof a.teacher === "string" ? a.teacher : null) ||
-          a.teacher?._id || a.teacher?.id || a.teacherId || null;
+          a.teacherId || null;
+
         const classId =
+          classObj?._id?.toString() ||
+          classObj?.id?.toString()  ||
           (typeof a.class === "string" ? a.class : null) ||
-          a.class?._id || a.class?.id || a.classId || null;
+          a.classId || null;
+
         const subjectId =
+          subjectObj?._id?.toString() ||
+          subjectObj?.id?.toString()  ||
           (typeof a.subject === "string" ? a.subject : null) ||
-          a.subject?._id || a.subject?.id || a.subjectId || null;
+          a.subjectId || null;
 
         if (!subjectId) continue;
 
-        // Store populated JSON blobs so hydrateRow() works offline
-        const teacherJson = a.teacher && typeof a.teacher === "object"
-          ? JSON.stringify({ _id: teacherId, name: a.teacher.name, email: a.teacher.email })
+        let teacherName  = teacherObj?.name  || null;
+        let teacherEmail = teacherObj?.email || null;
+
+        if (!teacherName && teacherId) {
+          try {
+            const localTeacher = await db.getFirstAsync(
+              "SELECT name, email FROM users WHERE id = ? LIMIT 1",
+              [teacherId]
+            ).catch(() => null);
+            if (localTeacher?.name) {
+              teacherName  = localTeacher.name;
+              teacherEmail = localTeacher.email || null;
+            }
+          } catch { /* non-fatal */ }
+        }
+
+        const teacherJson = teacherId
+          ? JSON.stringify({ _id: teacherId, id: teacherId, name: teacherName, email: teacherEmail })
           : null;
-        const classJson = a.class && typeof a.class === "object"
-          ? JSON.stringify({ _id: classId, name: a.class.name })
+        const classJson = classId
+          ? JSON.stringify({ _id: classId, id: classId, name: classObj?.name || null, level: classObj?.level || null, section: classObj?.section || null })
           : null;
-        const subjectJson = a.subject && typeof a.subject === "object"
-          ? JSON.stringify({ _id: subjectId, name: a.subject.name })
+        const subjectJson = subjectId
+          ? JSON.stringify({ _id: subjectId, id: subjectId, name: subjectObj?.name || null, code: subjectObj?.code || null })
           : null;
+
+        if (__DEV__ && !teacherName) {
+          console.warn(
+            `[SyncManager] teacher name missing for assignment ${serverId}`,
+            `teacherId=${teacherId}`
+          );
+        }
 
         await db.runAsync(
           `INSERT INTO teacher_assignments
@@ -1403,34 +1528,46 @@ class SyncManagerClass {
               _synced, _synced_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
-             teacherId    = excluded.teacherId,  teacher_id   = excluded.teacher_id,
-             classId      = excluded.classId,    class_id     = excluded.class_id,
-             subjectId    = excluded.subjectId,  subject_id   = excluded.subject_id,
-             schoolId     = excluded.schoolId,   school_id    = excluded.school_id,
-             teacher_json = excluded.teacher_json,
-             class_json   = excluded.class_json,
-             subject_json = excluded.subject_json,
+             teacherId    = excluded.teacherId,
+             teacher_id   = excluded.teacher_id,
+             classId      = excluded.classId,
+             class_id     = excluded.class_id,
+             subjectId    = excluded.subjectId,
+             subject_id   = excluded.subject_id,
+             schoolId     = excluded.schoolId,
+             school_id    = excluded.school_id,
+             teacher_json = CASE
+               WHEN excluded.teacher_json IS NOT NULL
+                 AND json_extract(excluded.teacher_json, '$.name') IS NOT NULL
+               THEN excluded.teacher_json
+               ELSE COALESCE(teacher_assignments.teacher_json, excluded.teacher_json)
+             END,
+             class_json   = COALESCE(excluded.class_json,   teacher_assignments.class_json),
+             subject_json = COALESCE(excluded.subject_json, teacher_assignments.subject_json),
              _synced      = 1,
              _synced_at   = excluded._synced_at,
              updated_at   = excluded.updated_at`,
           [
             serverId,
-            teacherId, teacherId, classId, classId, subjectId, subjectId,
+            teacherId, teacherId,
+            classId,   classId,
+            subjectId, subjectId,
             a.schoolId || schoolId, a.schoolId || schoolId,
             teacherJson, classJson, subjectJson,
             ts, a.createdAt || ts, a.updatedAt || ts,
           ]
-        ).catch((err) => {
-          console.warn(`[SyncManager] Upsert assignment ${serverId}:`, err.message);
-        });
+        ).catch((err) =>
+          console.warn(`[SyncManager] Upsert assignment ${serverId}:`, err.message)
+        );
 
         if (teacherId && subjectId) {
-          await db.runAsync(
-            `UPDATE subjects
-             SET teacher_id = ?, updated_at = ?, _synced = 1
-             WHERE id = ? AND (teacher_id IS NULL OR teacher_id = '' OR teacher_id != ?)`,
-            [teacherId, ts, subjectId, teacherId]
-          ).catch(() => {});
+          await db
+            .runAsync(
+              `UPDATE subjects SET teacher_id = ?, updated_at = ?, _synced = 1
+               WHERE id = ? AND (teacher_id IS NULL OR teacher_id = '' OR teacher_id != ?)`,
+              [teacherId, ts, subjectId, teacherId]
+            )
+            .catch(() => {});
         }
       }
 
@@ -1443,12 +1580,14 @@ class SyncManagerClass {
         })
       );
 
-      const unsynced = await db.getAllAsync(
-        `SELECT ta.*, u._synced AS teacherSynced
-         FROM teacher_assignments ta
-         LEFT JOIN users u ON u.id = ta.teacherId OR u.id = ta.teacher_id
-         WHERE (ta._synced = 0 OR ta._synced IS NULL) AND ${NOT_DELETED_TA}`
-      ).catch(() => []);
+      const unsynced = await db
+        .getAllAsync(
+          `SELECT ta.*, u._synced AS teacherSynced
+           FROM teacher_assignments ta
+           LEFT JOIN users u ON u.id = ta.teacherId OR u.id = ta.teacher_id
+           WHERE (ta._synced = 0 OR ta._synced IS NULL) AND ${NOT_DELETED_TA}`
+        )
+        .catch(() => []);
 
       for (const a of unsynced) {
         if (!a.teacherSynced) continue;
@@ -1459,18 +1598,19 @@ class SyncManagerClass {
         const key = `${tid}|${cid}|${sid}`;
 
         if (serverLookup.has(key)) {
-          await db.runAsync(
-            "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, a.id]
-          ).catch(() => {});
+          await db
+            .runAsync(
+              "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?",
+              [ts, a.id]
+            )
+            .catch(() => {});
           continue;
         }
 
         try {
           const pushResponse = await this._withRetry(
             `pushAssignment ${a.id}`,
-            () => api.post(API.admin.assignments.list, {
-              teacherId: tid, classId: cid, subjectId: sid, schoolId,
-            })
+            () => api.post(API.admin.assignments.list, { teacherId: tid, classId: cid, subjectId: sid, schoolId })
           );
 
           const raw =
@@ -1481,24 +1621,33 @@ class SyncManagerClass {
           const finalId = raw ? String(raw) : a.id;
 
           if (finalId !== a.id) {
-            await db.runAsync(
-              "UPDATE teacher_assignments SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?",
-              [finalId, ts, a.id]
-            ).catch(() =>
-              db.runAsync(
-                "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, a.id]
-              ).catch(() => {})
-            );
+            await db
+              .runAsync(
+                "UPDATE teacher_assignments SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?",
+                [finalId, ts, a.id]
+              )
+              .catch(() =>
+                db.runAsync(
+                  "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?",
+                  [ts, a.id]
+                ).catch(() => {})
+              );
           } else {
-            await db.runAsync(
-              "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, a.id]
-            ).catch(() => {});
+            await db
+              .runAsync(
+                "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?",
+                [ts, a.id]
+              )
+              .catch(() => {});
           }
         } catch (err) {
           if (err?.response?.status === 409) {
-            await db.runAsync(
-              "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, a.id]
-            ).catch(() => {});
+            await db
+              .runAsync(
+                "UPDATE teacher_assignments SET _synced = 1, _synced_at = ? WHERE id = ?",
+                [ts, a.id]
+              )
+              .catch(() => {});
           } else {
             console.warn(`[SyncManager] pushAssignment ${a.id} failed:`, err.message);
           }
@@ -1511,15 +1660,11 @@ class SyncManagerClass {
     }
   }
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 16 — PUSH: ANNOUNCEMENTS & STUDENT APPLICATIONS
-  // ═══════════════════════════════════════════════════════════════════════════
-
   async pushLocalAnnouncements() {
     if (this._isUnauthenticated()) return;
     try {
-      const announcementService = require("./announcement.service").default;
-      await announcementService.pushUnsyncedAnnouncements();
+      const svc = require("./announcement.service").default;
+      await svc.pushUnsyncedAnnouncements();
     } catch (err) {
       console.warn("[SyncManager] pushLocalAnnouncements failed:", err.message);
     }
@@ -1557,7 +1702,7 @@ class SyncManagerClass {
       await this.resetLastSync();
       lastSyncTime = EPOCH;
     } else if (lastSyncDate > now) {
-      console.warn(`[SyncManager] lastSync (${lastSyncTime}) is in the future — resetting to epoch`);
+      console.warn(`[SyncManager] lastSync (${lastSyncTime}) is in the future — resetting`);
       await this.resetLastSync();
       lastSyncTime = EPOCH;
     }
@@ -1584,6 +1729,8 @@ class SyncManagerClass {
 
       await this.pullAnnouncements(lastSyncTime);
       if (this.isAdmin()) await this.pullStudentApplications(lastSyncTime);
+
+      // ✅ syncSchoolInfo is now non-throwing — errors are caught internally
       await this.syncSchoolInfo();
 
       console.log("[SyncManager] Pull complete");
@@ -1616,47 +1763,70 @@ class SyncManagerClass {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 18 — PULL: SCHOOL INFO
+  // SECTION 18 — PULL: SCHOOL INFO  ← ONLY SECTION CHANGED
   // ═══════════════════════════════════════════════════════════════════════════
 
   async syncSchoolInfo() {
+    // ✅ Guards
     if (this._isUnauthenticated() || this.isStudent()) return;
 
+    const schoolId = await this.getSchoolId();
+    if (!schoolId) return;
+
+    // ✅ Try to load from local cache first so the UI is never empty
+    let cachedSchool = null;
     try {
-      const schoolId = await this.getSchoolId();
-      if (!schoolId) return;
+      const { getSchoolLocal } = require("./school.service");
+      cachedSchool = await getSchoolLocal(schoolId);
+    } catch { /* school.service may not have getSchoolLocal — non-fatal */ }
 
-      let response = null;
+    let response = null;
 
+    try {
       if (this.isAdmin()) {
         try {
-          response = await this._withRetry(
-            "syncSchoolInfo/admin",
-            () => api.get(API.admin.school, { params: { schoolId }, timeout: 6_000 })
-          );
+          // ✅ No _withRetry here — api.js already handles one token-refresh
+          //    retry internally. Adding _withRetry on top would mean up to
+          //    3 × (1 refresh + 1 retry) = 6 requests on a bad token.
+          //    A single direct call is enough; failure is non-fatal.
+          response = await api.get(API.admin.school, {
+            params:  { schoolId },
+            timeout: 8_000,
+          });
         } catch (err) {
           const status = err?.response?.status;
+
           if (status === 404 || status === 405) {
-            response = await this._withRetry(
-              "syncSchoolInfo/admin-fallback",
-              () => api.get("/teacher/school/info", { timeout: 6_000 })
+            // Admin school endpoint not registered — fall back to teacher route
+            response = await api.get("/teacher/school/info", { timeout: 8_000 });
+          } else if (status === 401 || status === 403) {
+            // Auth error survived the refresh attempt in api.js — give up quietly
+            console.warn(
+              `[SyncManager] syncSchoolInfo: ${status} after refresh — skipping`
             );
-          } else { throw err; }
+            return;
+          } else {
+            // Network / 5xx — non-fatal, use cached data
+            throw err;
+          }
         }
       } else if (this.isTeacher()) {
-        response = await this._withRetry(
-          "syncSchoolInfo/teacher",
-          () => api.get("/teacher/school/info", { timeout: 6_000 })
-        );
+        response = await api.get("/teacher/school/info", { timeout: 8_000 });
       }
 
       if (!response) return;
 
-      const school = response.data?.school || response.data?.data || response.data || null;
+      const school =
+        response.data?.school ||
+        response.data?.data   ||
+        response.data         || null;
+
       if (!school?.name) return;
 
       const { upsertSchoolLocal } = require("./school.service");
-      const id = String(school._id?.$oid || school._id || school.id || schoolId).trim();
+      const id = String(
+        school._id?.$oid || school._id || school.id || schoolId
+      ).trim();
       if (!id) return;
 
       await upsertSchoolLocal({
@@ -1675,18 +1845,28 @@ class SyncManagerClass {
       });
 
       console.log(`[SyncManager] School info saved: "${school.name}"`);
+
     } catch (err) {
+      // ✅ Always non-fatal — the app works fine with cached school data
       const status = err?.response?.status;
+
       if (status === 403) {
         console.warn("[SyncManager] syncSchoolInfo: 403 — role not permitted");
+      } else if (cachedSchool) {
+        console.log(
+          "[SyncManager] syncSchoolInfo: network error — using cached school data"
+        );
       } else {
-        console.warn("[SyncManager] syncSchoolInfo failed (non-fatal):", err.message);
+        console.warn(
+          "[SyncManager] syncSchoolInfo failed (non-fatal):", err.message
+        );
       }
+      // ✅ Never re-throw — don't let school info failure abort the whole pull
     }
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 19 — PULL: ENTITY SYNC HELPERS
+  // SECTION 19-21 — ENTITY SYNC + QUIZ (unchanged from original)
   // ═══════════════════════════════════════════════════════════════════════════
 
   async syncPeriods(periods) {
@@ -1712,9 +1892,9 @@ class SyncManagerClass {
         const id = p._id || p.id;
         if (!id) continue;
 
-        const local = await db.getFirstAsync(
-          "SELECT dirty FROM periods WHERE id = ?", [id]
-        ).catch(() => null);
+        const local = await db
+          .getFirstAsync("SELECT dirty FROM periods WHERE id = ?", [id])
+          .catch(() => null);
         if (local?.dirty) continue;
 
         await db.runAsync(
@@ -1760,11 +1940,16 @@ class SyncManagerClass {
 
         await db.runAsync(
           `INSERT INTO classes
-             (id, schoolId, school_id, name, level, section, is_active, _synced, deleted_at, updated_at)
+             (id, schoolId, school_id, name, level, section, is_active,
+              _synced, deleted_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
            ON CONFLICT(id) DO UPDATE SET
-             name = excluded.name, level = excluded.level, section = excluded.section,
-             is_active = excluded.is_active, _synced = 1, deleted_at = NULL,
+             name       = excluded.name,
+             level      = excluded.level,
+             section    = excluded.section,
+             is_active  = excluded.is_active,
+             _synced    = 1,
+             deleted_at = NULL,
              updated_at = excluded.updated_at`,
           [
             String(id), c.schoolId, c.schoolId,
@@ -1803,19 +1988,26 @@ class SyncManagerClass {
         await db.runAsync(
           `INSERT INTO users
              (id, schoolId, school_id, name, email, role, is_active,
-              must_reset_password, _synced, _synced_at, deleted_at, created_at, updated_at)
+              must_reset_password, _synced, _synced_at,
+              deleted_at, created_at, updated_at)
            VALUES (?, ?, ?, ?, ?, 'teacher', ?, ?, 1, ?, NULL, ?, ?)
            ON CONFLICT(id) DO UPDATE SET
-             schoolId = excluded.schoolId, school_id = excluded.school_id,
-             name = excluded.name, email = excluded.email,
-             is_active = excluded.is_active, must_reset_password = excluded.must_reset_password,
-             _synced = 1, _synced_at = excluded._synced_at, deleted_at = NULL,
-             updated_at = excluded.updated_at`,
+             schoolId            = excluded.schoolId,
+             school_id           = excluded.school_id,
+             name                = excluded.name,
+             email               = excluded.email,
+             is_active           = excluded.is_active,
+             must_reset_password = excluded.must_reset_password,
+             _synced             = 1,
+             _synced_at          = excluded._synced_at,
+             deleted_at          = NULL,
+             updated_at          = excluded.updated_at`,
           [
             String(id), t.schoolId, t.schoolId,
             t.name || "Unknown", t.email.toLowerCase().trim(),
-            t.isActive !== false ? 1 : 0,
-            t.mustResetPassword ? 1 : 0, ts,
+            t.isActive          !== false ? 1 : 0,
+            t.mustResetPassword ? 1 : 0,
+            ts,
             t.createdAt?.$date || t.createdAt || ts,
             t.updatedAt?.$date || t.updatedAt || ts,
           ]
@@ -1853,7 +2045,7 @@ class SyncManagerClass {
           s.class?._id || s.class?.id || s.classId || s.class_id || null;
         if (!classId) { fail++; continue; }
 
-        const teacherId   = s.teacherId   || s.teacher?._id || s.teacher_id || null;
+        const teacherId   = s.teacherId || s.teacher?._id || s.teacher_id || null;
         const teacherName = s.teacher?.name || s.teacherName || null;
 
         await db.runAsync(
@@ -1862,17 +2054,21 @@ class SyncManagerClass {
               teacher_id, teacher_name, _synced, deleted_at, updated_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
            ON CONFLICT(id) DO UPDATE SET
-             schoolId     = excluded.schoolId,   school_id    = excluded.school_id,
-             classId      = excluded.classId,    class_id     = excluded.class_id,
-             name         = excluded.name,       code         = excluded.code,
-             teacher_id   = excluded.teacher_id, teacher_name = excluded.teacher_name,
-             _synced      = 1,                   deleted_at   = NULL,
+             schoolId     = excluded.schoolId,
+             school_id    = excluded.school_id,
+             classId      = excluded.classId,
+             class_id     = excluded.class_id,
+             name         = excluded.name,
+             code         = excluded.code,
+             teacher_id   = excluded.teacher_id,
+             teacher_name = excluded.teacher_name,
+             _synced      = 1,
+             deleted_at   = NULL,
              updated_at   = excluded.updated_at`,
           [
             String(id), s.schoolId, s.schoolId,
             String(classId), String(classId),
-            s.name, s.code || "",
-            teacherId, teacherName,
+            s.name, s.code || "", teacherId, teacherName,
             s.updatedAt || ts,
           ]
         );
@@ -1912,22 +2108,28 @@ class SyncManagerClass {
             [a.deletedAt || a.deleted_at, ts, String(id)]
           );
           if (subjectId) {
-            await db.runAsync(
-              "UPDATE subjects SET teacher_id = NULL, updated_at = ? WHERE id = ?", [ts, subjectId]
-            ).catch(() => {});
+            await db
+              .runAsync(
+                "UPDATE subjects SET teacher_id = NULL, updated_at = ? WHERE id = ?",
+                [ts, subjectId]
+              )
+              .catch(() => {});
           }
           ok++; continue;
         }
 
-        const teacherJson = a.teacher && typeof a.teacher === "object"
-          ? JSON.stringify({ _id: teacherId, name: a.teacher.name, email: a.teacher.email })
-          : null;
-        const classJson = a.class && typeof a.class === "object"
-          ? JSON.stringify({ _id: classId, name: a.class.name })
-          : null;
-        const subjectJson = a.subject && typeof a.subject === "object"
-          ? JSON.stringify({ _id: subjectId, name: a.subject.name })
-          : null;
+        const teacherJson =
+          a.teacher && typeof a.teacher === "object"
+            ? JSON.stringify({ _id: teacherId, name: a.teacher.name, email: a.teacher.email })
+            : null;
+        const classJson =
+          a.class && typeof a.class === "object"
+            ? JSON.stringify({ _id: classId, name: a.class.name })
+            : null;
+        const subjectJson =
+          a.subject && typeof a.subject === "object"
+            ? JSON.stringify({ _id: subjectId, name: a.subject.name })
+            : null;
 
         await db.runAsync(
           `INSERT INTO teacher_assignments
@@ -1937,10 +2139,14 @@ class SyncManagerClass {
               deleted_at, updated_at, _synced, _synced_at)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 1, ?)
            ON CONFLICT(id) DO UPDATE SET
-             schoolId     = excluded.schoolId,    school_id    = excluded.school_id,
-             teacherId    = excluded.teacherId,   teacher_id   = excluded.teacher_id,
-             classId      = excluded.classId,     class_id     = excluded.class_id,
-             subjectId    = excluded.subjectId,   subject_id   = excluded.subject_id,
+             schoolId     = excluded.schoolId,
+             school_id    = excluded.school_id,
+             teacherId    = excluded.teacherId,
+             teacher_id   = excluded.teacher_id,
+             classId      = excluded.classId,
+             class_id     = excluded.class_id,
+             subjectId    = excluded.subjectId,
+             subject_id   = excluded.subject_id,
              teacher_json = excluded.teacher_json,
              class_json   = excluded.class_json,
              subject_json = excluded.subject_json,
@@ -1950,18 +2156,22 @@ class SyncManagerClass {
              _synced_at   = excluded._synced_at`,
           [
             String(id), a.schoolId, a.schoolId,
-            teacherId, teacherId, classId, classId, subjectId, subjectId,
+            teacherId, teacherId,
+            classId,   classId,
+            subjectId, subjectId,
             teacherJson, classJson, subjectJson,
             a.updatedAt || ts, ts,
           ]
         );
 
         if (subjectId && teacherId) {
-          await db.runAsync(
-            `UPDATE subjects SET teacher_id = ?, updated_at = ?, _synced = 1
-             WHERE id = ? AND (teacher_id IS NULL OR teacher_id = '' OR teacher_id != ?)`,
-            [teacherId, ts, subjectId, teacherId]
-          ).catch(() => {});
+          await db
+            .runAsync(
+              `UPDATE subjects SET teacher_id = ?, updated_at = ?, _synced = 1
+               WHERE id = ? AND (teacher_id IS NULL OR teacher_id = '' OR teacher_id != ?)`,
+              [teacherId, ts, subjectId, teacherId]
+            )
+            .catch(() => {});
         }
         ok++;
       } catch (err) {
@@ -1971,10 +2181,6 @@ class SyncManagerClass {
     }
     console.log(`[SyncManager] Assignments: ${ok} synced, ${fail} failed`);
   }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION 20 — QUIZ SYNC
-  // ═══════════════════════════════════════════════════════════════════════════
 
   async syncQuizData() {
     if (this._isUnauthenticated()) return;
@@ -2002,106 +2208,97 @@ class SyncManagerClass {
     }
   }
 
-  // src/services/syncManager.js
-// SECTION 20 — QUIZ SYNC
+  async _deduplicateQuestions() {
+    const db = await getDatabase();
 
-async _deduplicateQuestions() {
-  const db = await getDatabase();
+    const exists = await db
+      .getFirstAsync(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'questions'`)
+      .catch(() => null);
 
-  // ✅ Guard — verify table exists before touching it
-  const exists = await db.getFirstAsync(
-    `SELECT name FROM sqlite_master
-     WHERE type = 'table' AND name = 'questions'`
-  ).catch(() => null);
+    if (!exists) {
+      console.warn("[SyncManager] 'questions' table missing — running migrateQuizTables first");
+      await this.migrateQuizTables();
+    }
 
-  if (!exists) {
-    console.warn("[SyncManager] 'questions' table missing — running migrateQuizTables first");
-    await this.migrateQuizTables();   // ← self-heal
+    await withFkOff(db, async () => {
+      try {
+        const result = await db.runAsync(
+          `DELETE FROM questions
+           WHERE rowid NOT IN (
+             SELECT MIN(rowid) FROM questions
+             GROUP BY schoolId, question_text, question_type, created_by
+           ) AND ${NOT_DELETED_BARE}`
+        );
+        if (result.changes > 0) {
+          console.log(`[SyncManager] Removed ${result.changes} duplicate question(s)`);
+        }
+        await db.runAsync("DELETE FROM question_options   WHERE question_id NOT IN (SELECT id FROM questions)").catch(() => {});
+        await db.runAsync("DELETE FROM question_analytics WHERE question_id NOT IN (SELECT id FROM questions)").catch(() => {});
+      } catch (err) {
+        console.warn("[SyncManager] _deduplicateQuestions failed:", err.message);
+      }
+    });
   }
 
-  await withFkOff(db, async () => {
-    try {
-      const result = await db.runAsync(
-        `DELETE FROM questions
-         WHERE rowid NOT IN (
-           SELECT MIN(rowid) FROM questions
-           GROUP BY schoolId, question_text, question_type, created_by
-         ) AND ${NOT_DELETED_BARE}`
-      );
-      if (result.changes > 0) {
-        console.log(`[SyncManager] Removed ${result.changes} duplicate question(s)`);
-      }
-      await db.runAsync(
-        "DELETE FROM question_options WHERE question_id NOT IN (SELECT id FROM questions)"
-      ).catch(() => {});
-      await db.runAsync(
-        "DELETE FROM question_analytics WHERE question_id NOT IN (SELECT id FROM questions)"
-      ).catch(() => {});
-    } catch (err) {
-      console.warn("[SyncManager] _deduplicateQuestions failed:", err.message);
+  async _deduplicateQuestionOptions() {
+    const db = await getDatabase();
+
+    const exists = await db
+      .getFirstAsync(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'question_options'`)
+      .catch(() => null);
+
+    if (!exists) {
+      console.warn("[SyncManager] 'question_options' table missing — running migrateQuizTables first");
+      await this.migrateQuizTables();
     }
-  });
-}
 
-async _deduplicateQuestionOptions() {
-  const db = await getDatabase();
-
-  // ✅ Guard — verify table exists before touching it
-  const exists = await db.getFirstAsync(
-    `SELECT name FROM sqlite_master
-     WHERE type = 'table' AND name = 'question_options'`
-  ).catch(() => null);
-
-  if (!exists) {
-    console.warn("[SyncManager] 'question_options' table missing — running migrateQuizTables first");
-    await this.migrateQuizTables();   // ← self-heal
+    await withFkOff(db, async () => {
+      try {
+        const result = await db.runAsync(
+          `DELETE FROM question_options
+           WHERE rowid NOT IN (
+             SELECT MIN(rowid) FROM question_options
+             GROUP BY question_id, display_order, option_text
+           )`
+        );
+        if (result.changes > 0) {
+          console.log(`[SyncManager] Removed ${result.changes} duplicate question option(s)`);
+        }
+      } catch (err) {
+        console.warn("[SyncManager] _deduplicateQuestionOptions failed:", err.message);
+      }
+    });
   }
-
-  await withFkOff(db, async () => {
-    try {
-      const result = await db.runAsync(
-        `DELETE FROM question_options
-         WHERE rowid NOT IN (
-           SELECT MIN(rowid) FROM question_options
-           GROUP BY question_id, display_order, option_text
-         )`
-      );
-      if (result.changes > 0) {
-        console.log(`[SyncManager] Removed ${result.changes} duplicate question option(s)`);
-      }
-    } catch (err) {
-      console.warn("[SyncManager] _deduplicateQuestionOptions failed:", err.message);
-    }
-  });
-}
 
   async _repairQuizzesWithoutClassId(schoolId) {
     if (this._isUnauthenticated()) return;
 
     const db = await getDatabase();
     try {
-      const broken = await db.getAllAsync(
-        `SELECT id, title, subject_id, created_by, class_id
-         FROM quizzes
-         WHERE (
-           (class_id IS NULL OR class_id = '') OR
-           (subject_id IS NULL OR subject_id = '')
-         )
-         AND ${NOT_DELETED_BARE} AND schoolId = ?`,
-        [schoolId]
-      ).catch(() => []);
+      const broken = await db
+        .getAllAsync(
+          `SELECT id, title, subject_id, created_by, class_id
+           FROM quizzes
+           WHERE (
+             (class_id   IS NULL OR class_id   = '') OR
+             (subject_id IS NULL OR subject_id = '')
+           ) AND ${NOT_DELETED_BARE} AND schoolId = ?`,
+          [schoolId]
+        )
+        .catch(() => []);
 
       if (!broken.length) return;
       console.log(`[SyncManager] Repairing ${broken.length} quiz(zes) missing class/subject…`);
 
-      // Fetch assignments once before the loop
       let serverAssignmentCache = null;
       const fetchServerAssignments = async () => {
         if (serverAssignmentCache) return serverAssignmentCache;
         try {
           const endpoints = this.isTeacher()
             ? [API.teacher.myAssignments]
-            : this.isAdmin() ? [API.admin.assignments.list] : [];
+            : this.isAdmin()
+              ? [API.admin.assignments.list]
+              : [];
 
           for (const ep of endpoints) {
             try {
@@ -2131,19 +2328,21 @@ async _deduplicateQuestionOptions() {
         let recoveredSubjectId = quiz.subject_id || null;
 
         if (!recoveredClassId && quiz.subject_id) {
-          const subj = await db.getFirstAsync(
-            "SELECT class_id, classId FROM subjects WHERE id = ? LIMIT 1", [quiz.subject_id]
-          ).catch(() => null);
+          const subj = await db
+            .getFirstAsync("SELECT class_id, classId FROM subjects WHERE id = ? LIMIT 1", [quiz.subject_id])
+            .catch(() => null);
           recoveredClassId = subj?.class_id || subj?.classId || null;
         }
 
         if ((!recoveredClassId || !recoveredSubjectId) && quiz.created_by) {
-          const assign = await db.getFirstAsync(
-            `SELECT classId, class_id, subjectId, subject_id
-             FROM teacher_assignments
-             WHERE (teacherId = ? OR teacher_id = ?) AND ${NOT_DELETED_BARE} LIMIT 1`,
-            [quiz.created_by, quiz.created_by]
-          ).catch(() => null);
+          const assign = await db
+            .getFirstAsync(
+              `SELECT classId, class_id, subjectId, subject_id
+               FROM teacher_assignments
+               WHERE (teacherId = ? OR teacher_id = ?) AND ${NOT_DELETED_BARE} LIMIT 1`,
+              [quiz.created_by, quiz.created_by]
+            )
+            .catch(() => null);
 
           if (!recoveredClassId)   recoveredClassId   = assign?.classId   || assign?.class_id   || null;
           if (!recoveredSubjectId) recoveredSubjectId = assign?.subjectId || assign?.subject_id || null;
@@ -2172,16 +2371,14 @@ async _deduplicateQuestionOptions() {
         if (recoveredClassId || recoveredSubjectId) {
           const sets   = [];
           const params = [];
-          if (recoveredClassId   && !quiz.class_id)   { sets.push("class_id = ?");   params.push(recoveredClassId);   }
+          if (recoveredClassId   && !quiz.class_id)   { sets.push("class_id = ?");   params.push(recoveredClassId); }
           if (recoveredSubjectId && !quiz.subject_id) { sets.push("subject_id = ?"); params.push(recoveredSubjectId); }
           sets.push("_synced = 0");
           params.push(quiz.id);
 
-          await db.runAsync(
-            `UPDATE quizzes SET ${sets.join(", ")} WHERE id = ?`, params
-          ).catch((err) => {
-            console.warn(`[SyncManager] Repair quiz ${quiz.id}:`, err.message);
-          });
+          await db
+            .runAsync(`UPDATE quizzes SET ${sets.join(", ")} WHERE id = ?`, params)
+            .catch((err) => console.warn(`[SyncManager] Repair quiz ${quiz.id}:`, err.message));
         }
       }
     } catch (err) {
@@ -2203,19 +2400,24 @@ async _deduplicateQuestionOptions() {
     const ts = new Date().toISOString();
 
     try {
-      const unsynced = await db.getAllAsync(
-        `SELECT * FROM questions WHERE _synced = 0 AND ${NOT_DELETED_BARE} AND schoolId = ?`,
-        [schoolId]
-      ).catch(() => []);
+      const unsynced = await db
+        .getAllAsync(
+          `SELECT * FROM questions WHERE _synced = 0 AND ${NOT_DELETED_BARE} AND schoolId = ?`,
+          [schoolId]
+        )
+        .catch(() => []);
 
       if (!unsynced.length) return;
       console.log(`[SyncManager] Pushing ${unsynced.length} question(s)…`);
 
       for (const q of unsynced) {
         try {
-          const options = await db.getAllAsync(
-            "SELECT * FROM question_options WHERE question_id = ? ORDER BY display_order ASC", [q.id]
-          ).catch(() => []);
+          const options = await db
+            .getAllAsync(
+              "SELECT * FROM question_options WHERE question_id = ? ORDER BY display_order ASC",
+              [q.id]
+            )
+            .catch(() => []);
 
           const response = await this._withRetry(
             `pushQuestion ${q.id}`,
@@ -2242,43 +2444,26 @@ async _deduplicateQuestionOptions() {
           );
 
           const raw =
-            response.data?.question?._id ||
-            response.data?.question?.id  ||
-            response.data?._id           ||
-            response.data?.id            || null;
+            response.data?.question?._id || response.data?.question?.id ||
+            response.data?._id           || response.data?.id           || null;
           const finalId = raw ? String(raw) : q.id;
 
           if (finalId !== q.id) {
             await withFkOff(db, async () => {
               await withTransaction(db, async () => {
-                await db.runAsync(
-                  "UPDATE questions SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?",
-                  [finalId, ts, q.id]
-                );
-                await db.runAsync(
-                  "UPDATE question_options   SET question_id = ? WHERE question_id = ?", [finalId, q.id]
-                ).catch(() => {});
-                await db.runAsync(
-                  "UPDATE quiz_questions     SET question_id = ? WHERE question_id = ?", [finalId, q.id]
-                ).catch(() => {});
-                await db.runAsync(
-                  "UPDATE attempt_answers    SET question_id = ? WHERE question_id = ?", [finalId, q.id]
-                ).catch(() => {});
-                await db.runAsync(
-                  "UPDATE question_analytics SET question_id = ? WHERE question_id = ?", [finalId, q.id]
-                ).catch(() => {});
+                await db.runAsync("UPDATE questions SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [finalId, ts, q.id]);
+                await db.runAsync("UPDATE question_options   SET question_id = ? WHERE question_id = ?", [finalId, q.id]).catch(() => {});
+                await db.runAsync("UPDATE quiz_questions     SET question_id = ? WHERE question_id = ?", [finalId, q.id]).catch(() => {});
+                await db.runAsync("UPDATE attempt_answers    SET question_id = ? WHERE question_id = ?", [finalId, q.id]).catch(() => {});
+                await db.runAsync("UPDATE question_analytics SET question_id = ? WHERE question_id = ?", [finalId, q.id]).catch(() => {});
               });
             });
           } else {
-            await db.runAsync(
-              "UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, q.id]
-            );
+            await db.runAsync("UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, q.id]);
           }
         } catch (err) {
           if (err?.response?.status === 409) {
-            await db.runAsync(
-              "UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, q.id]
-            );
+            await db.runAsync("UPDATE questions SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, q.id]);
           } else {
             console.warn(`[SyncManager] pushQuestion ${q.id}:`, err.message);
           }
@@ -2297,14 +2482,16 @@ async _deduplicateQuestionOptions() {
     const ts = new Date().toISOString();
 
     try {
-      const unsynced = await db.getAllAsync(
-        `SELECT q.*, c._synced AS class_synced, s._synced AS subject_synced
-         FROM   quizzes q
-         LEFT JOIN classes  c ON c.id = q.class_id
-         LEFT JOIN subjects s ON s.id = q.subject_id
-         WHERE  q._synced = 0 AND ${NOT_DELETED_Q} AND q.schoolId = ?`,
-        [schoolId]
-      ).catch(() => []);
+      const unsynced = await db
+        .getAllAsync(
+          `SELECT q.*, c._synced AS class_synced, s._synced AS subject_synced
+           FROM   quizzes q
+           LEFT JOIN classes  c ON c.id = q.class_id
+           LEFT JOIN subjects s ON s.id = q.subject_id
+           WHERE  q._synced = 0 AND ${NOT_DELETED_Q} AND q.schoolId = ?`,
+          [schoolId]
+        )
+        .catch(() => []);
 
       if (!unsynced.length) return;
       console.log(`[SyncManager] Pushing ${unsynced.length} quiz(zes)…`);
@@ -2316,10 +2503,12 @@ async _deduplicateQuestionOptions() {
           if (!quiz.class_synced) { console.warn(`[SyncManager] Quiz "${quiz.title}" skipped — class unsynced`); continue; }
           if (!quiz.subject_synced) { console.warn(`[SyncManager] Quiz "${quiz.title}" skipped — subj unsynced`); continue; }
 
-          const questions = await db.getAllAsync(
-            "SELECT question_id, display_order, points_override FROM quiz_questions WHERE quiz_id = ? ORDER BY display_order ASC",
-            [quiz.id]
-          ).catch(() => []);
+          const questions = await db
+            .getAllAsync(
+              "SELECT question_id, display_order, points_override FROM quiz_questions WHERE quiz_id = ? ORDER BY display_order ASC",
+              [quiz.id]
+            )
+            .catch(() => []);
 
           const response = await this._withRetry(
             `pushQuiz "${quiz.title}"`,
@@ -2351,40 +2540,25 @@ async _deduplicateQuestionOptions() {
           );
 
           const raw =
-            response.data?.quiz?._id ||
-            response.data?.quiz?.id  ||
-            response.data?._id       ||
-            response.data?.id        || null;
+            response.data?.quiz?._id || response.data?.quiz?.id ||
+            response.data?._id       || response.data?.id       || null;
           const finalId = raw ? String(raw) : quiz.id;
 
           if (finalId !== quiz.id) {
             await withFkOff(db, async () => {
               await withTransaction(db, async () => {
-                await db.runAsync(
-                  "UPDATE quizzes SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?",
-                  [finalId, ts, quiz.id]
-                );
-                await db.runAsync(
-                  "UPDATE quiz_questions SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]
-                ).catch(() => {});
-                await db.runAsync(
-                  "UPDATE quiz_attempts  SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]
-                ).catch(() => {});
-                await db.runAsync(
-                  "UPDATE quiz_analytics SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]
-                ).catch(() => {});
+                await db.runAsync("UPDATE quizzes SET id = ?, _synced = 1, _synced_at = ? WHERE id = ?", [finalId, ts, quiz.id]);
+                await db.runAsync("UPDATE quiz_questions SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]).catch(() => {});
+                await db.runAsync("UPDATE quiz_attempts  SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]).catch(() => {});
+                await db.runAsync("UPDATE quiz_analytics SET quiz_id = ? WHERE quiz_id = ?", [finalId, quiz.id]).catch(() => {});
               });
             });
           } else {
-            await db.runAsync(
-              "UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, quiz.id]
-            );
+            await db.runAsync("UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, quiz.id]);
           }
         } catch (err) {
           if (err?.response?.status === 409) {
-            await db.runAsync(
-              "UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, quiz.id]
-            );
+            await db.runAsync("UPDATE quizzes SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, quiz.id]);
           } else {
             console.warn(`[SyncManager] pushQuiz "${quiz.title}" failed:`, err.message);
           }
@@ -2403,26 +2577,28 @@ async _deduplicateQuestionOptions() {
     const ts = new Date().toISOString();
 
     try {
-      const unsynced = await db.getAllAsync(
-        `SELECT qa.* FROM quiz_attempts qa
-         JOIN quizzes q ON q.id = qa.quiz_id
-         WHERE qa._synced = 0 AND qa.status IN ('submitted', 'timed_out') AND q.schoolId = ?`,
-        [schoolId]
-      ).catch(() => []);
+      const unsynced = await db
+        .getAllAsync(
+          `SELECT qa.* FROM quiz_attempts qa
+           JOIN quizzes q ON q.id = qa.quiz_id
+           WHERE qa._synced = 0 AND qa.status IN ('submitted', 'timed_out') AND q.schoolId = ?`,
+          [schoolId]
+        )
+        .catch(() => []);
 
       if (!unsynced.length) return;
       console.log(`[SyncManager] Pushing ${unsynced.length} attempt(s)…`);
 
       for (const attempt of unsynced) {
         try {
-          const answers = await db.getAllAsync(
-            "SELECT * FROM attempt_answers WHERE attempt_id = ?", [attempt.id]
-          ).catch(() => []);
+          const answers = await db
+            .getAllAsync("SELECT * FROM attempt_answers WHERE attempt_id = ?", [attempt.id])
+            .catch(() => []);
 
           for (const answer of answers) {
-            answer.selections = await db.getAllAsync(
-              "SELECT * FROM attempt_answer_selections WHERE attempt_answer_id = ?", [answer.id]
-            ).catch(() => []);
+            answer.selections = await db
+              .getAllAsync("SELECT * FROM attempt_answer_selections WHERE attempt_answer_id = ?", [answer.id])
+              .catch(() => []);
           }
 
           await this._withRetry(
@@ -2430,23 +2606,21 @@ async _deduplicateQuestionOptions() {
             () => api.post(API.quiz.attempts, { ...attempt, answers })
           );
 
-          await db.runAsync(
-            "UPDATE quiz_attempts SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, attempt.id]
-          );
+          await db.runAsync("UPDATE quiz_attempts SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, attempt.id]);
 
           const answerIds = answers.map((a) => a.id);
           if (answerIds.length) {
             const ph = answerIds.map(() => "?").join(",");
-            await db.runAsync(
-              `UPDATE attempt_answers SET _synced = 1, _synced_at = ? WHERE id IN (${ph})`,
-              [ts, ...answerIds]
-            ).catch(() => {});
+            await db
+              .runAsync(
+                `UPDATE attempt_answers SET _synced = 1, _synced_at = ? WHERE id IN (${ph})`,
+                [ts, ...answerIds]
+              )
+              .catch(() => {});
           }
         } catch (err) {
           if (err?.response?.status === 409) {
-            await db.runAsync(
-              "UPDATE quiz_attempts SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, attempt.id]
-            );
+            await db.runAsync("UPDATE quiz_attempts SET _synced = 1, _synced_at = ? WHERE id = ?", [ts, attempt.id]);
           } else {
             console.warn(`[SyncManager] pushAttempt ${attempt.id} failed:`, err.message);
           }
@@ -2550,9 +2724,9 @@ async _deduplicateQuestionOptions() {
 
         let categoryId = q.category_id || q.categoryId || null;
         if (categoryId) {
-          const catOk = await db.getFirstAsync(
-            "SELECT id FROM question_categories WHERE id = ? LIMIT 1", [String(categoryId)]
-          ).catch(() => null);
+          const catOk = await db
+            .getFirstAsync("SELECT id FROM question_categories WHERE id = ? LIMIT 1", [String(categoryId)])
+            .catch(() => null);
           if (!catOk) categoryId = null;
         }
 
@@ -2577,22 +2751,21 @@ async _deduplicateQuestionOptions() {
             String(id), q.schoolId, categoryId,
             q.question_text || q.questionText,
             q.question_type || q.questionType,
-            q.media_url || q.mediaUrl || null,
-            q.difficulty || "medium",
-            q.points ?? 1.0,
-            q.explanation || null,
-            q.isActive !== false ? 1 : 0,
-            q.created_by || q.createdBy || null,
-            q.createdAt || ts, q.updatedAt || ts,
+            q.media_url     || q.mediaUrl    || null,
+            q.difficulty    || "medium",
+            q.points        ?? 1.0,
+            q.explanation   || null,
+            q.isActive      !== false ? 1 : 0,
+            q.created_by    || q.createdBy  || null,
+            q.createdAt     || ts,
+            q.updatedAt     || ts,
           ]
         );
 
         const options = q.options || [];
         if (options.length) {
           await withTransaction(db, async () => {
-            await db.runAsync(
-              "DELETE FROM question_options WHERE question_id = ?", [String(id)]
-            );
+            await db.runAsync("DELETE FROM question_options WHERE question_id = ?", [String(id)]);
             for (const opt of options) {
               const optId = opt._id || opt.id || generateUUID();
               await db.runAsync(
@@ -2606,9 +2779,9 @@ async _deduplicateQuestionOptions() {
                    display_order = excluded.display_order`,
                 [
                   String(optId), String(id),
-                  opt.option_text || opt.optionText,
-                  (opt.is_correct || opt.isCorrect) ? 1 : 0,
-                  opt.match_pair || opt.matchPair || null,
+                  opt.option_text  || opt.optionText,
+                  (opt.is_correct  || opt.isCorrect) ? 1 : 0,
+                  opt.match_pair   || opt.matchPair   || null,
                   opt.display_order ?? opt.displayOrder ?? 0,
                 ]
               );
@@ -2616,10 +2789,9 @@ async _deduplicateQuestionOptions() {
           });
         }
 
-        await db.runAsync(
-          "INSERT OR IGNORE INTO question_analytics (id, question_id) VALUES (?, ?)",
-          [generateUUID(), String(id)]
-        ).catch(() => {});
+        await db
+          .runAsync("INSERT OR IGNORE INTO question_analytics (id, question_id) VALUES (?, ?)", [generateUUID(), String(id)])
+          .catch(() => {});
 
         ok++;
       } catch (err) {
@@ -2649,7 +2821,7 @@ async _deduplicateQuestionOptions() {
           ok++; continue;
         }
 
-        const schoolId   = String(q.schoolId   || q.school_id   || "");
+        const schoolId_  = String(q.schoolId   || q.school_id   || "");
         const class_id   = String(q.class_id   || q.classId     || q.class   || "");
         const subject_id = String(q.subject_id || q.subjectId   || q.subject || "");
         const created_by = String(q.created_by || q.createdBy   || "");
@@ -2666,10 +2838,13 @@ async _deduplicateQuestionOptions() {
              is_published, _synced, created_at, updated_at, deleted_at
            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, NULL)
            ON CONFLICT(id) DO UPDATE SET
-             schoolId = excluded.schoolId, title = excluded.title,
-             description = excluded.description, instructions = excluded.instructions,
-             subject_id = excluded.subject_id, class_id = excluded.class_id,
-             created_by = excluded.created_by,
+             schoolId           = excluded.schoolId,
+             title              = excluded.title,
+             description        = excluded.description,
+             instructions       = excluded.instructions,
+             subject_id         = excluded.subject_id,
+             class_id           = excluded.class_id,
+             created_by         = excluded.created_by,
              time_limit_minutes = excluded.time_limit_minutes,
              time_per_question  = excluded.time_per_question,
              shuffle_questions  = excluded.shuffle_questions,
@@ -2688,7 +2863,7 @@ async _deduplicateQuestionOptions() {
              deleted_at         = NULL,
              _synced            = 1`,
           [
-            id, schoolId, q.title,
+            id, schoolId_, q.title,
             q.description || null, q.instructions || null,
             subject_id || null, class_id || null, created_by || null,
             q.time_limit_minutes ?? q.timeLimitMinutes ?? null,
@@ -2714,25 +2889,22 @@ async _deduplicateQuestionOptions() {
 
         const links = q.questions || q.questionIds || [];
         for (const link of links) {
-          const qId   = link.question_id || link.questionId || link._id || link.id;
+          const qId    = link.question_id || link.questionId || link._id || link.id;
           if (!qId) continue;
           const linkId = link.id && link.id !== qId ? String(link.id) : `${id}_${String(qId)}`;
-          await db.runAsync(
-            `INSERT OR IGNORE INTO quiz_questions
-               (id, quiz_id, question_id, display_order, points_override)
-             VALUES (?, ?, ?, ?, ?)`,
-            [
-              linkId, id, String(qId),
-              link.display_order   ?? link.displayOrder   ?? 0,
-              link.points_override ?? link.pointsOverride ?? null,
-            ]
-          ).catch(() => {});
+          await db
+            .runAsync(
+              `INSERT OR IGNORE INTO quiz_questions
+                 (id, quiz_id, question_id, display_order, points_override)
+               VALUES (?, ?, ?, ?, ?)`,
+              [linkId, id, String(qId), link.display_order ?? link.displayOrder ?? 0, link.points_override ?? link.pointsOverride ?? null]
+            )
+            .catch(() => {});
         }
 
-        await db.runAsync(
-          "INSERT OR IGNORE INTO quiz_analytics (id, quiz_id) VALUES (?, ?)",
-          [generateUUID(), id]
-        ).catch(() => {});
+        await db
+          .runAsync("INSERT OR IGNORE INTO quiz_analytics (id, quiz_id) VALUES (?, ?)", [generateUUID(), id])
+          .catch(() => {});
 
         ok++;
       } catch (err) {
@@ -2754,9 +2926,9 @@ async _deduplicateQuestionOptions() {
         const id = a._id || a.id;
         if (!id) continue;
 
-        const local = await db.getFirstAsync(
-          "SELECT status FROM quiz_attempts WHERE id = ?", [String(id)]
-        ).catch(() => null);
+        const local = await db
+          .getFirstAsync("SELECT status FROM quiz_attempts WHERE id = ?", [String(id)])
+          .catch(() => null);
         if (local?.status === "in_progress") continue;
 
         await db.runAsync(
@@ -2777,16 +2949,16 @@ async _deduplicateQuestionOptions() {
              _synced_at      = excluded._synced_at`,
           [
             String(id),
-            a.quiz_id || a.quizId,
-            a.user_id || a.userId,
+            a.quiz_id        || a.quizId,
+            a.user_id        || a.userId,
             a.attempt_number || a.attemptNumber || 1,
-            a.status || "submitted",
-            a.raw_score ?? a.rawScore ?? 0,
-            a.max_score ?? a.maxScore ?? 0,
-            a.percentage ?? 0,
-            (a.is_passed ?? a.isPassed ?? false) ? 1 : 0,
-            a.started_at   || a.startedAt   || ts,
-            a.submitted_at || a.submittedAt || null,
+            a.status         || "submitted",
+            a.raw_score      ?? a.rawScore      ?? 0,
+            a.max_score      ?? a.maxScore      ?? 0,
+            a.percentage     ?? 0,
+            (a.is_passed     ?? a.isPassed      ?? false) ? 1 : 0,
+            a.started_at     || a.startedAt     || ts,
+            a.submitted_at   || a.submittedAt   || null,
             a.time_taken_secs || a.timeTakenSecs || null,
             ts,
           ]
@@ -2811,5 +2983,6 @@ async _deduplicateQuestionOptions() {
   }
 }
 
+// ✅ Export singleton.
 export const SyncManager = new SyncManagerClass();
 export default SyncManager;

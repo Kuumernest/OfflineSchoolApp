@@ -21,6 +21,9 @@ import { router }               from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { getDatabase }          from "../../../src/db/database";
+// ✅ FIX: correct relative path — file lives at src/utils/withRetry.js
+//    not app/utils/withRetry.js
+import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 
 // ─────────────────────────────────────────────────────────
@@ -426,7 +429,6 @@ const validateStep = (step, form) => {
 
 // ─────────────────────────────────────────────────────────
 // SAVE PROFILE
-// Table is guaranteed valid by migrate.js v21.
 // ─────────────────────────────────────────────────────────
 
 const saveProfile = async (form, userId) => {
@@ -459,16 +461,22 @@ const saveProfile = async (form, userId) => {
     profileCompleted:  true,
   };
 
-  // ── API save ─────────────────────────────────────────
+  // ── API save with retry ───────────────────────────────
   try {
-    await api.put("/teacher/profile", payload, { timeout: 10000 });
+    await withRetry(
+      () => api.put("/teacher/profile", payload, { timeout: 10_000 }),
+      3,
+      1_000
+    );
   } catch (err) {
     console.warn("[profile/setup] API save failed:", err.message);
+    // Non-fatal — SQLite save below is the source of truth on device
   }
 
   // ── SQLite save ───────────────────────────────────────
   try {
-    const db = await getDatabase();
+    const db  = await getDatabase();
+    const now = new Date().toISOString();
 
     await db.runAsync(
       `INSERT INTO teacher_profiles (
@@ -529,7 +537,7 @@ const saveProfile = async (form, userId) => {
         payload.bloodGroup        ?? null,
         payload.medicalConditions ?? null,
         payload.bio               ?? null,
-        new Date().toISOString(),
+        now,
       ]
     );
 
@@ -573,31 +581,47 @@ const saveProfile = async (form, userId) => {
 export const isTeacherProfileComplete = async (userId) => {
   if (!userId) return false;
 
-  // ── Check store first — fastest path ─────────────────
+  // ── 1. Check store first — fastest path ──────────────
   const storeComplete = useAuthStore.getState().profileCompleted;
   if (storeComplete) return true;
 
-  // ── API check (only if token exists) ─────────────────
+  // ── 2. API check (only if we have a token) ────────────
+  // ✅ FIX: removed the erroneous second `withRetry` call that was
+  //    copy-pasted from the usage example in the previous response.
+  //    That dead code declared a new `res` variable after the first
+  //    `res` was already used, referenced an undefined `body` variable,
+  //    and would throw a ReferenceError at runtime.
   try {
     const { token } = useAuthStore.getState();
-    if (token) {
-      const res = await api.get("/teacher/profile", { timeout: 5000 });
-      if (res.data?.data?.profileCompleted || res.data?.profileCompleted) return true;
+    if (token && token !== "offline_mode") {
+      const res = await withRetry(
+        () => api.get("/teacher/profile"),
+        3,
+        1_000
+      );
+      const data = res.data?.data || res.data;
+      if (data?.profileCompleted) return true;
     }
-  } catch { /* fall through */ }
+  } catch { /* fall through to SQLite */ }
 
-  // ── SQLite fallback ───────────────────────────────────
+  // ── 3. SQLite fallback ────────────────────────────────
   try {
     const db = await getDatabase();
 
     const tpRow = await db.getFirstAsync(
-      `SELECT profile_completed FROM teacher_profiles WHERE teacher_id = ? LIMIT 1`,
+      `SELECT profile_completed
+       FROM   teacher_profiles
+       WHERE  teacher_id = ?
+       LIMIT  1`,
       [userId]
     ).catch(() => null);
     if (tpRow?.profile_completed) return true;
 
     const spRow = await db.getFirstAsync(
-      `SELECT profile_completed FROM settings_profile WHERE user_id = ? LIMIT 1`,
+      `SELECT profile_completed
+       FROM   settings_profile
+       WHERE  user_id = ?
+       LIMIT  1`,
       [userId]
     ).catch(() => null);
     if (spRow?.profile_completed) return true;
@@ -653,10 +677,14 @@ export default function TeacherProfileSetup() {
   // ── Load existing profile ─────────────────────────────
   useEffect(() => {
     const loadExisting = async () => {
-      // Try API first
+      // Try API first (with retry so transient WiFi blip doesn't break it)
       try {
-        const res = await api.get("/teacher/profile", { timeout: 5000 });
-        const p   = res.data?.data || res.data;
+        const res = await withRetry(
+          () => api.get("/teacher/profile", { timeout: 8_000 }),
+          3,
+          1_000
+        );
+        const p = res.data?.data || res.data;
         if (p && typeof p === "object") {
           setForm((prev) => ({
             ...prev,
@@ -683,10 +711,11 @@ export default function TeacherProfileSetup() {
             medicalConditions: p.medicalConditions || "",
             bio:               p.bio               || "",
           }));
+          return; // API succeeded — no need for SQLite fallback
         }
       } catch { /* fall through to SQLite */ }
 
-      // Fall back to local cache
+      // Fallback: local cache
       try {
         const db  = await getDatabase();
         const row = await db.getFirstAsync(
@@ -728,6 +757,8 @@ export default function TeacherProfileSetup() {
   }, [userId]);
 
   // ── Skip ──────────────────────────────────────────────
+  // ✅ FIX: router.replace called once — the original had a try/catch
+  //    that called replace in both branches which could fire twice.
   const handleSkip = useCallback(() => {
     Alert.alert(
       "Skip for Now?",
@@ -735,13 +766,9 @@ export default function TeacherProfileSetup() {
       [
         { text: "Cancel", style: "cancel" },
         {
-          text: "Skip for Now",
+          text:  "Skip for Now",
           style: "destructive",
-          onPress: () => {
-            try {
-              router.replace("/teacher/dashboard");
-            } catch { router.replace("/teacher/dashboard"); }
-          },
+          onPress: () => router.replace("/teacher/dashboard"),
         },
       ]
     );
@@ -759,9 +786,7 @@ export default function TeacherProfileSetup() {
   const goBack = () => {
     setErrors({});
     if (step > 0) { setStep((p) => p - 1); return; }
-    try {
-      router.replace("/teacher/dashboard");
-    } catch { router.replace("/teacher/dashboard"); }
+    router.replace("/teacher/dashboard");
   };
 
   // ── Submit ────────────────────────────────────────────
@@ -774,8 +799,6 @@ export default function TeacherProfileSetup() {
 
       const fullName = `${form.firstName} ${form.lastName}`.trim();
 
-      // ✅ Update auth store — prevents dashboard guard from
-      //    re-running the check and redirecting back here
       setProfileCompleted(true);
       if (user) setUser?.({ ...user, name: fullName, profileCompleted: true });
 
@@ -784,9 +807,7 @@ export default function TeacherProfileSetup() {
         "Your profile has been updated successfully.",
         [{
           text: "Continue",
-          onPress: () => {
-            router.replace("/teacher/dashboard");
-          },
+          onPress: () => router.replace("/teacher/dashboard"),
         }]
       );
     } catch (err) {

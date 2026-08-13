@@ -33,22 +33,61 @@ const schoolFilter = (schoolId, req) => {
   return school ? { schoolId: school } : {};
 };
 
-const normaliseAssignment = (a) => ({
-  _id:        a._id,
-  id:         a._id,
-  schoolId:   a.schoolId,
-  isActive:   a.isActive,
-  validFrom:  a.validFrom,
-  validUntil: a.validUntil,
-  createdAt:  a.createdAt,
-  updatedAt:  a.updatedAt,
-  teacher:    a.teacher   || null,
-  class:      a.class     || null,
-  subject:    a.subject   || null,
-  teacherId:  a.teacher?._id  ?? a.teacher  ?? null,
-  classId:    a.class?._id    ?? a.class    ?? null,
-  subjectId:  a.subject?._id  ?? a.subject  ?? null,
-});
+const normaliseAssignment = (a) => {
+  // ✅ FIX: preserve the full populated teacher/class/subject objects
+  //    so the mobile sync can extract name/email etc from them.
+  //    The old version only passed the top-level ref which lost the
+  //    populated fields after Mongoose lean() conversion.
+  const teacher = a.teacher && typeof a.teacher === "object"
+    ? {
+        _id:   String(a.teacher._id || a.teacher.id || ""),
+        id:    String(a.teacher._id || a.teacher.id || ""),
+        name:  a.teacher.name  || null,
+        email: a.teacher.email || null,
+        role:  a.teacher.role  || null,
+      }
+    : (a.teacher ? { _id: String(a.teacher), id: String(a.teacher) } : null);
+
+  const cls = a.class && typeof a.class === "object"
+    ? {
+        _id:     String(a.class._id || a.class.id || ""),
+        id:      String(a.class._id || a.class.id || ""),
+        name:    a.class.name    || null,
+        level:   a.class.level   || null,
+        section: a.class.section || null,
+      }
+    : (a.class ? { _id: String(a.class), id: String(a.class) } : null);
+
+  const subject = a.subject && typeof a.subject === "object"
+    ? {
+        _id:  String(a.subject._id || a.subject.id || ""),
+        id:   String(a.subject._id || a.subject.id || ""),
+        name: a.subject.name || null,
+        code: a.subject.code || null,
+      }
+    : (a.subject ? { _id: String(a.subject), id: String(a.subject) } : null);
+
+  return {
+    _id:        String(a._id || ""),
+    id:         String(a._id || ""),
+    schoolId:   a.schoolId   || null,
+    isActive:   a.isActive   ?? true,
+    validFrom:  a.validFrom  || null,
+    validUntil: a.validUntil || null,
+    createdAt:  a.createdAt  || null,
+    updatedAt:  a.updatedAt  || null,
+
+    // ✅ Full populated objects — mobile sync reads .name from these
+    teacher,
+    class:   cls,
+    subject,
+
+    // ✅ Flat ID fields for convenience
+    teacherId: teacher?._id || null,
+    classId:   cls?._id     || null,
+    subjectId: subject?._id || null,
+  };
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET ALL ASSIGNMENTS

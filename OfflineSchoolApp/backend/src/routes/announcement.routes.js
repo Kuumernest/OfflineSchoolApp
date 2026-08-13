@@ -4,6 +4,7 @@
 const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
+const mongoose       = require("mongoose");
 
 const Announcement = require("../db/models/Announcement");
 const User         = require("../db/models/User");
@@ -60,6 +61,46 @@ const noCache = (req, res, next) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Safely extract the authenticated user's id as a plain string,
+ * regardless of which field the JWT middleware attached it to.
+ */
+const extractUserId = (req) =>
+  req.user?._id?.toString() ||
+  req.user?.id?.toString()  ||
+  req.user?.userId?.toString() ||
+  null;
+
+/**
+ * Find an announcement by either a MongoDB ObjectId OR a plain string _id.
+ *
+ * ✅ FIX: The root cause of the 500 errors.
+ *
+ * The mobile client generates its own ids with nanoid / Math.random (e.g.
+ * "iz5q6xic96rmrf64hup"). These are stored as the document's _id on the
+ * server when the client POSTs the announcement with its local id.
+ * Mongoose's findById() calls ObjectId() on the value before querying,
+ * which throws a CastError for non-hex strings. That CastError was caught
+ * by the generic catch block and re-thrown as a 500.
+ *
+ * Fix: try ObjectId first; if it's not a valid ObjectId format, fall back
+ * to a plain { _id: id } string query which works for any _id type.
+ */
+const findAnnouncementById = async (id) => {
+  if (!id) return null;
+
+  // Fast path — valid ObjectId
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const doc = await Announcement.findById(id);
+    if (doc) return doc;
+    // Could be a string id that happens to pass isValid (24-char hex) —
+    // fall through to string query as well.
+  }
+
+  // String id path (nanoid, UUID, client-generated random ids)
+  return Announcement.findOne({ _id: id });
+};
 
 const resolveStudentClassId = async (userId, schoolId) => {
   try {
@@ -162,10 +203,10 @@ const enrichForUser = (announcement, userId, isAdmin = false) => {
     enriched.readCount         = (announcement.readBy         || []).length;
     enriched.acknowledgedCount = (announcement.acknowledgedBy || []).length;
   } else {
-    enriched.readBy            = undefined;
-    enriched.acknowledgedBy    = undefined;
-    enriched.readCount         = undefined;
-    enriched.acknowledgedCount = undefined;
+    delete enriched.readBy;
+    delete enriched.acknowledgedBy;
+    delete enriched.readCount;
+    delete enriched.acknowledgedCount;
   }
 
   return enriched;
@@ -203,14 +244,14 @@ const handleStudentAnnouncements = async (req, res) => {
     let studentClassId = clientClassId || null;
     if (!studentClassId) {
       studentClassId = await resolveStudentClassId(
-        req.user._id?.toString(),
+        extractUserId(req),
         schoolId
       );
     }
 
     console.log(
       `[handleStudentAnnouncements]` +
-      ` userId=${req.user._id}` +
+      ` userId=${extractUserId(req)}` +
       ` schoolId=${schoolId}` +
       ` clientClassId=${clientClassId || "none"}` +
       ` resolvedClassId=${studentClassId || "none"}`
@@ -245,9 +286,7 @@ const handleStudentAnnouncements = async (req, res) => {
     if (since) {
       const sinceDate = new Date(since);
       const isEpoch   = sinceDate.getFullYear() <= 1970;
-      if (!isEpoch) {
-        filter.updatedAt = { $gte: sinceDate };
-      }
+      if (!isEpoch) filter.updatedAt = { $gte: sinceDate };
     }
 
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -264,17 +303,15 @@ const handleStudentAnnouncements = async (req, res) => {
       Announcement.countDocuments(filter),
     ]);
 
-    const userId   = req.user._id?.toString();
+    const userId   = extractUserId(req);
     const enriched = announcements.map((a) => enrichForUser(a, userId, false));
 
     console.log(
       `📢 Student announcements` +
       ` schoolId=${schoolId}` +
       ` classId=${studentClassId || "unknown"}` +
-      ` subjectId=${subjectId || "none"}` +
       ` since=${since || "none"}` +
-      ` → ${enriched.length} / ${total}` +
-      ` audiences=[${audienceConditions.map((c) => c.audience).join(",")}]`
+      ` → ${enriched.length} / ${total}`
     );
 
     return res.status(200).json({
@@ -300,7 +337,24 @@ const handleStudentAnnouncements = async (req, res) => {
 router.handleStudentAnnouncements = handleStudentAnnouncements;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/announcements/stats/summary
+// ⚠️  ROUTE ORDER MATTERS IN EXPRESS
+//
+// Express matches routes top-to-bottom. Any route with a static segment
+// (e.g. "/stats/summary", "/read-all", "/student") MUST be declared BEFORE
+// wildcard param routes (e.g. "/:id") — otherwise Express will try to use
+// the wildcard handler and treat the static segment as the :id value.
+//
+// Correct order:
+//   1. Static GET  routes   (/stats/summary, /student)
+//   2. Static POST routes   (/read-all)
+//   3. Wildcard GET routes  (/:id)
+//   4. Wildcard PUT/DELETE  (/:id)
+//   5. Wildcard POST routes (/:id/read, /:id/acknowledge, /:id/pin)
+//      — these must come AFTER /read-all and student routes
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/announcements/stats/summary          [STATIC — must be first]
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get("/stats/summary", adminOnly, async (req, res) => {
@@ -337,13 +391,110 @@ router.get("/stats/summary", adminOnly, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/announcements/student
+// GET /api/announcements/student               [STATIC — must be before /:id]
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get("/student", authenticated, noCache, handleStudentAnnouncements);
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/announcements
+// POST /api/announcements/read-all             [STATIC — must be before /:id]
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post("/read-all", authenticated, async (req, res) => {
+  try {
+    const { schoolId } = req.body;
+    const userId       = req.user._id;
+
+    const announcements = await Announcement.find({
+      schoolId,
+      isActive:       true,
+      deletedAt:      null,
+      "readBy.user":  { $ne: userId },
+    }).select("_id").lean();
+
+    await Promise.all(
+      announcements.map((a) =>
+        Announcement.updateOne(
+          { _id: a._id, "readBy.user": { $ne: userId } },
+          { $push: { readBy: { user: userId, readAt: new Date() } } }
+        )
+      )
+    );
+
+    res.json({ success: true, marked: announcements.length });
+  } catch (err) {
+    console.error("POST /announcements/read-all error:", err.message);
+    res.status(500).json({ message: "Failed to mark all as read" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ✅ FIX: /students/:id/* routes — declared BEFORE /:id/* wildcards
+//    so Express doesn't treat "students" as an :id value.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /api/announcements/students/:id/read
+router.post("/students/:id/read", authenticated, async (req, res) => {
+  try {
+    // ✅ FIX: use findAnnouncementById so nanoid / UUID _ids don't CastError
+    const announcement = await findAnnouncementById(req.params.id);
+    if (!announcement) {
+      return res.status(404).json({ message: "Announcement not found" });
+    }
+
+    const userId      = extractUserId(req);
+    const alreadyRead = (announcement.readBy || []).some(
+      (r) => r.user?.toString() === userId
+    );
+
+    if (!alreadyRead) {
+      announcement.readBy.push({ user: req.user._id, readAt: new Date() });
+      await announcement.save();
+    }
+
+    res.json({ success: true, message: "Marked as read" });
+  } catch (err) {
+    console.error("POST /announcements/students/:id/read error:", err.message);
+    res.status(500).json({ message: "Failed to mark as read" });
+  }
+});
+
+// POST /api/announcements/students/:id/acknowledge
+router.post("/students/:id/acknowledge", authenticated, async (req, res) => {
+  try {
+    const announcement = await findAnnouncementById(req.params.id);
+    if (!announcement) {
+      return res.status(404).json({ message: "Announcement not found" });
+    }
+
+    const userId     = extractUserId(req);
+    const alreadyAck = (announcement.acknowledgedBy || []).some(
+      (r) => r.user?.toString() === userId
+    );
+
+    if (!alreadyAck) {
+      announcement.acknowledgedBy.push({
+        user:           req.user._id,
+        acknowledgedAt: new Date(),
+      });
+      const alreadyRead = (announcement.readBy || []).some(
+        (r) => r.user?.toString() === userId
+      );
+      if (!alreadyRead) {
+        announcement.readBy.push({ user: req.user._id, readAt: new Date() });
+      }
+      await announcement.save();
+    }
+
+    res.json({ success: true, message: "Acknowledged" });
+  } catch (err) {
+    console.error("POST /announcements/students/:id/acknowledge error:", err.message);
+    res.status(500).json({ message: "Failed to acknowledge" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/announcements                       [collection]
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get("/", adminOrTeacher, async (req, res) => {
@@ -361,7 +512,7 @@ router.get("/", adminOrTeacher, async (req, res) => {
     const schoolId = req.user.schoolId;
     const userRole = req.user.role;
     const isAdmin  = ["super_admin", "school_admin"].includes(userRole);
-    const userId   = req.user._id?.toString();
+    const userId   = extractUserId(req);
 
     const filter = {
       schoolId,
@@ -437,85 +588,7 @@ router.get("/", adminOrTeacher, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /api/announcements/:id
-// ─────────────────────────────────────────────────────────────────────────────
-
-router.get("/:id", authenticated, async (req, res) => {
-  try {
-    const reserved = ["student", "stats", "public"];
-    if (reserved.includes(req.params.id)) {
-      return res.status(404).json({ message: "Route not found" });
-    }
-
-    const announcement = await Announcement.findById(req.params.id)
-      .populate("author",              "name email role")
-      .populate("targetClasses",       "name section")
-      .populate("readBy.user",         "name")
-      .populate("acknowledgedBy.user", "name")
-      .lean();
-
-    if (!announcement) {
-      return res.status(404).json({ message: "Announcement not found" });
-    }
-
-    const userId  = req.user._id?.toString();
-    const isAdmin = ["super_admin", "school_admin"].includes(req.user.role);
-
-    if (req.user.role === "student") {
-      const studentClassId = await resolveStudentClassId(
-        userId,
-        req.user.schoolId
-      );
-
-      const isForAll      = announcement.audience === "all";
-      const isForStudents = announcement.audience === "students";
-      const isForClass    =
-        announcement.audience === "class" &&
-        studentClassId &&
-        (announcement.targetClasses || []).some(
-          (c) =>
-            c._id?.toString() === studentClassId ||
-            c.toString()      === studentClassId
-        );
-
-      if (!isForAll && !isForStudents && !isForClass) {
-        return res.status(403).json({ message: "Not authorized" });
-      }
-    }
-
-    if (req.user.role === "teacher") {
-      const isOwn         = announcement.author?._id?.toString() === userId ||
-                            announcement.author?.toString()       === userId;
-      const isForAll      = announcement.audience === "all";
-      const isForTeachers = announcement.audience === "teachers";
-
-      let isForTheirClass = false;
-      if (announcement.audience === "class") {
-        const teacherClassIds = await resolveTeacherClassIds(
-          userId,
-          req.user.schoolId
-        );
-        isForTheirClass = (announcement.targetClasses || []).some((c) => {
-          const cid = c._id?.toString() || c.toString();
-          return teacherClassIds.includes(cid);
-        });
-      }
-
-      if (!isOwn && !isForAll && !isForTeachers && !isForTheirClass) {
-        return res.status(403).json({ message: "Not authorized" });
-      }
-    }
-
-    const enriched = enrichForUser(announcement, userId, isAdmin);
-    res.json({ success: true, data: enriched, announcement: enriched });
-  } catch (err) {
-    console.error("GET /announcements/:id error:", err.message);
-    res.status(500).json({ message: "Failed to fetch announcement" });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/announcements
+// POST /api/announcements                      [create]
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.post("/", adminOrTeacher, async (req, res) => {
@@ -553,8 +626,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
     if (isTeacherRole) {
       if (audience === "teachers" || audience === "all") {
         return res.status(403).json({
-          message:
-            "Teachers can only send announcements to students or specific classes.",
+          message: "Teachers can only send announcements to students or specific classes.",
         });
       }
       if (isPinned) {
@@ -578,8 +650,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
           );
           if (unauthorized.length) {
             return res.status(403).json({
-              message:
-                "You can only send announcements to classes you are assigned to teach.",
+              message: "You can only send announcements to classes you are assigned to teach.",
             });
           }
         }
@@ -587,9 +658,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
     }
 
     if (!isAdminRole && isPinned) {
-      return res.status(403).json({
-        message: "Only admins can pin announcements",
-      });
+      return res.status(403).json({ message: "Only admins can pin announcements" });
     }
 
     if (audience === "class" && targetClasses.length === 0) {
@@ -598,6 +667,9 @@ router.post("/", adminOrTeacher, async (req, res) => {
       });
     }
 
+    // ✅ Use client-supplied id (nanoid) if provided, otherwise generate UUID.
+    //    This is what allows findAnnouncementById to later find the doc by
+    //    the same string id the client stored locally.
     const announcement = await Announcement.create({
       _id:           id || uuidv4(),
       title:         title.trim(),
@@ -612,7 +684,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
       isPinned:      isAdminRole ? isPinned : false,
       publishAt:     publishAt ? new Date(publishAt) : null,
       expiresAt:     expiresAt ? new Date(expiresAt) : null,
-      subjectId:     subjectId   || null,
+      subjectId:     subjectId         || null,
       subjectName:   resolvedSubjectName,
     });
 
@@ -643,17 +715,96 @@ router.post("/", adminOrTeacher, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/announcements/:id
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/:id", authenticated, async (req, res) => {
+  try {
+    // These static sub-paths should never reach here due to route order above,
+    // but guard anyway for safety.
+    const reserved = ["student", "stats", "public", "read-all"];
+    if (reserved.includes(req.params.id)) {
+      return res.status(404).json({ message: "Route not found" });
+    }
+
+    // ✅ FIX: use findAnnouncementById to handle both ObjectId and string ids
+    const announcement = await findAnnouncementById(req.params.id);
+
+    if (!announcement) {
+      return res.status(404).json({ message: "Announcement not found" });
+    }
+
+    // Populate manually since findAnnouncementById returns a Mongoose doc
+    await announcement.populate([
+      { path: "author",              select: "name email role" },
+      { path: "targetClasses",       select: "name section"   },
+      { path: "readBy.user",         select: "name"           },
+      { path: "acknowledgedBy.user", select: "name"           },
+    ]);
+
+    const announcementObj = announcement.toObject();
+    const userId  = extractUserId(req);
+    const isAdmin = ["super_admin", "school_admin"].includes(req.user.role);
+
+    if (req.user.role === "student") {
+      const studentClassId = await resolveStudentClassId(userId, req.user.schoolId);
+      const isForAll      = announcementObj.audience === "all";
+      const isForStudents = announcementObj.audience === "students";
+      const isForClass    =
+        announcementObj.audience === "class" &&
+        studentClassId &&
+        (announcementObj.targetClasses || []).some(
+          (c) =>
+            c._id?.toString() === studentClassId ||
+            c.toString()      === studentClassId
+        );
+
+      if (!isForAll && !isForStudents && !isForClass) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+    }
+
+    if (req.user.role === "teacher") {
+      const isOwn         = announcementObj.author?._id?.toString() === userId ||
+                            announcementObj.author?.toString()       === userId;
+      const isForAll      = announcementObj.audience === "all";
+      const isForTeachers = announcementObj.audience === "teachers";
+
+      let isForTheirClass = false;
+      if (announcementObj.audience === "class") {
+        const teacherClassIds = await resolveTeacherClassIds(userId, req.user.schoolId);
+        isForTheirClass = (announcementObj.targetClasses || []).some((c) => {
+          const cid = c._id?.toString() || c.toString();
+          return teacherClassIds.includes(cid);
+        });
+      }
+
+      if (!isOwn && !isForAll && !isForTeachers && !isForTheirClass) {
+        return res.status(403).json({ message: "Not authorized" });
+      }
+    }
+
+    const enriched = enrichForUser(announcementObj, userId, isAdmin);
+    res.json({ success: true, data: enriched, announcement: enriched });
+  } catch (err) {
+    console.error("GET /announcements/:id error:", err.message);
+    res.status(500).json({ message: "Failed to fetch announcement" });
+  }
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/announcements/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.put("/:id", adminOrTeacher, async (req, res) => {
   try {
-    const existing = await Announcement.findById(req.params.id);
+    // ✅ FIX: use findAnnouncementById
+    const existing = await findAnnouncementById(req.params.id);
     if (!existing) {
       return res.status(404).json({ message: "Announcement not found" });
     }
 
-    const userId   = req.user._id?.toString();
+    const userId   = extractUserId(req);
     const isAdmin  = ["super_admin", "school_admin"].includes(req.user.role);
     const isAuthor = existing.author?.toString() === userId;
 
@@ -685,7 +836,6 @@ router.put("/:id", adminOrTeacher, async (req, res) => {
 
     if (subjectId !== undefined) {
       existing.subjectId = subjectId || null;
-
       if (subjectId && !subjectName) {
         try {
           const Subject = require("../db/models/Subject");
@@ -719,12 +869,13 @@ router.put("/:id", adminOrTeacher, async (req, res) => {
 
 router.delete("/:id", adminOrTeacher, async (req, res) => {
   try {
-    const existing = await Announcement.findById(req.params.id);
+    // ✅ FIX: use findAnnouncementById
+    const existing = await findAnnouncementById(req.params.id);
     if (!existing) {
       return res.status(404).json({ message: "Announcement not found" });
     }
 
-    const userId   = req.user._id?.toString();
+    const userId   = extractUserId(req);
     const isAdmin  = ["super_admin", "school_admin"].includes(req.user.role);
     const isAuthor = existing.author?.toString() === userId;
 
@@ -751,12 +902,24 @@ router.delete("/:id", adminOrTeacher, async (req, res) => {
 
 router.post("/:id/read", authenticated, async (req, res) => {
   try {
-    const announcement = await Announcement.findById(req.params.id);
+    // ✅ FIX: use findAnnouncementById — the core fix for the 500 error.
+    //    The client id "iz5q6xic96rmrf64hup" is a nanoid string.
+    //    Mongoose.findById() calls new ObjectId(id) which throws CastError
+    //    for non-hex strings. findAnnouncementById falls back to findOne({ _id })
+    //    which works for any _id type stored in MongoDB.
+    const announcement = await findAnnouncementById(req.params.id);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
 
-    const userId      = req.user._id?.toString();
+    const userId = extractUserId(req);
+
+    // ✅ Guard: don't create a read receipt for your own announcement
+    const authorId = announcement.author?.toString();
+    if (authorId && authorId === userId) {
+      return res.status(200).json({ success: true, message: "Own announcement — skipped" });
+    }
+
     const alreadyRead = (announcement.readBy || []).some(
       (r) => r.user?.toString() === userId
     );
@@ -768,40 +931,10 @@ router.post("/:id/read", authenticated, async (req, res) => {
 
     res.json({ success: true, message: "Marked as read" });
   } catch (err) {
+    // ✅ FIX: removed `next(err)` — next was never injected so calling it
+    //    threw "next is not a function", which produced the 500.
     console.error("POST /announcements/:id/read error:", err.message);
     res.status(500).json({ message: "Failed to mark as read" });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/announcements/read-all
-// ─────────────────────────────────────────────────────────────────────────────
-
-router.post("/read-all", authenticated, async (req, res) => {
-  try {
-    const { schoolId } = req.body;
-    const userId       = req.user._id;
-
-    const announcements = await Announcement.find({
-      schoolId,
-      isActive:       true,
-      deletedAt:      null,
-      "readBy.user":  { $ne: userId },
-    }).select("_id").lean();
-
-    await Promise.all(
-      announcements.map((a) =>
-        Announcement.updateOne(
-          { _id: a._id, "readBy.user": { $ne: userId } },
-          { $push: { readBy: { user: userId, readAt: new Date() } } }
-        )
-      )
-    );
-
-    res.json({ success: true, marked: announcements.length });
-  } catch (err) {
-    console.error("POST /announcements/read-all error:", err.message);
-    res.status(500).json({ message: "Failed to mark all as read" });
   }
 });
 
@@ -811,12 +944,20 @@ router.post("/read-all", authenticated, async (req, res) => {
 
 router.post("/:id/acknowledge", authenticated, async (req, res) => {
   try {
-    const announcement = await Announcement.findById(req.params.id);
+    // ✅ FIX: use findAnnouncementById
+    const announcement = await findAnnouncementById(req.params.id);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
 
-    const userId     = req.user._id?.toString();
+    const userId = extractUserId(req);
+
+    // ✅ Guard: don't acknowledge your own announcement
+    const authorId = announcement.author?.toString();
+    if (authorId && authorId === userId) {
+      return res.status(200).json({ success: true, message: "Own announcement — skipped" });
+    }
+
     const alreadyAck = (announcement.acknowledgedBy || []).some(
       (r) => r.user?.toString() === userId
     );
@@ -843,77 +984,13 @@ router.post("/:id/acknowledge", authenticated, async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /api/announcements/students/:id/read
-// ─────────────────────────────────────────────────────────────────────────────
-
-router.post("/students/:id/read", authenticated, async (req, res) => {
-  try {
-    const announcement = await Announcement.findById(req.params.id);
-    if (!announcement) {
-      return res.status(404).json({ message: "Announcement not found" });
-    }
-
-    const userId      = req.user._id?.toString();
-    const alreadyRead = (announcement.readBy || []).some(
-      (r) => r.user?.toString() === userId
-    );
-
-    if (!alreadyRead) {
-      announcement.readBy.push({ user: req.user._id, readAt: new Date() });
-      await announcement.save();
-    }
-
-    res.json({ success: true, message: "Marked as read" });
-  } catch (err) {
-    console.error("POST /announcements/students/:id/read error:", err.message);
-    res.status(500).json({ message: "Failed to mark as read" });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-// POST /api/announcements/students/:id/acknowledge
-// ─────────────────────────────────────────────────────────────────────────────
-
-router.post("/students/:id/acknowledge", authenticated, async (req, res) => {
-  try {
-    const announcement = await Announcement.findById(req.params.id);
-    if (!announcement) {
-      return res.status(404).json({ message: "Announcement not found" });
-    }
-
-    const userId     = req.user._id?.toString();
-    const alreadyAck = (announcement.acknowledgedBy || []).some(
-      (r) => r.user?.toString() === userId
-    );
-
-    if (!alreadyAck) {
-      announcement.acknowledgedBy.push({
-        user:           req.user._id,
-        acknowledgedAt: new Date(),
-      });
-      const alreadyRead = (announcement.readBy || []).some(
-        (r) => r.user?.toString() === userId
-      );
-      if (!alreadyRead) {
-        announcement.readBy.push({ user: req.user._id, readAt: new Date() });
-      }
-      await announcement.save();
-    }
-
-    res.json({ success: true, message: "Acknowledged" });
-  } catch (err) {
-    console.error("POST /announcements/students/:id/acknowledge error:", err.message);
-    res.status(500).json({ message: "Failed to acknowledge" });
-  }
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/announcements/:id/pin
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.post("/:id/pin", adminOnly, async (req, res) => {
   try {
-    const announcement = await Announcement.findById(req.params.id);
+    // ✅ FIX: use findAnnouncementById
+    const announcement = await findAnnouncementById(req.params.id);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }

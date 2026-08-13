@@ -49,6 +49,12 @@ const tableExists = async (db, name) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────
+// NORMALISE ROW
+// ✅ Extracts name blobs for teacher / class / subject
+//    from the server-populated nested objects
+// ─────────────────────────────────────────────────────────────
+
 const normaliseRow = (raw) => {
   if (!raw) return null;
 
@@ -66,12 +72,57 @@ const normaliseRow = (raw) => {
 
   if (!teacherId || !classId || !subjectId) return null;
 
+  // ── Extract nested objects sent by the server ─────────────
+  const teacherObj = raw.teacher && typeof raw.teacher === "object"
+    ? raw.teacher : null;
+  const classObj   = raw.class   && typeof raw.class   === "object"
+    ? raw.class   : null;
+  const subjectObj = raw.subject && typeof raw.subject === "object"
+    ? raw.subject : null;
+
+  // ── Build JSON blobs (null when no name available yet) ────
+  const teacherJson = teacherObj
+    ? JSON.stringify({
+        _id:   teacherId,
+        id:    teacherId,
+        name:  teacherObj.name  || null,
+        email: teacherObj.email || null,
+        role:  teacherObj.role  || null,
+      })
+    : null;
+
+  const classJson = classObj
+    ? JSON.stringify({
+        _id:     classId,
+        id:      classId,
+        name:    classObj.name    || null,
+        level:   classObj.level   || null,
+        section: classObj.section || null,
+      })
+    : null;
+
+  const subjectJson = subjectObj
+    ? JSON.stringify({
+        _id:  subjectId,
+        id:   subjectId,
+        name: subjectObj.name || null,
+        code: subjectObj.code || null,
+      })
+    : null;
+
   return {
-    id:        String(id),
-    teacherId: String(teacherId),
-    classId:   String(classId),
-    subjectId: String(subjectId),
-    schoolId:  schoolId ? String(schoolId) : null,
+    id:           String(id),
+    teacherId:    String(teacherId),
+    classId:      String(classId),
+    subjectId:    String(subjectId),
+    schoolId:     schoolId ? String(schoolId) : null,
+    teacherJson,
+    classJson,
+    subjectJson,
+    // ── Helpers used by upsert for local-DB name fallback ──
+    _teacherName: teacherObj?.name  || null,
+    _className:   classObj?.name    || null,
+    _subjectName: subjectObj?.name  || null,
   };
 };
 
@@ -102,7 +153,90 @@ const deduplicateServerRows = (rows) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// RESOLVE JSON BLOBS FROM LOCAL DB
+// Falls back to local classes / subjects / users tables when
+// the server did not populate the nested objects.
+// ─────────────────────────────────────────────────────────────
+
+const resolveJsonBlobs = async (db, row) => {
+  // ── teacher_json ──────────────────────────────────────────
+  let teacherJson = row.teacherJson;
+
+  if (!row._teacherName && row.teacherId) {
+    try {
+      const u = await db
+        .getFirstAsync(
+          "SELECT name, email FROM users WHERE id = ? LIMIT 1",
+          [row.teacherId]
+        )
+        .catch(() => null);
+
+      if (u?.name) {
+        teacherJson = JSON.stringify({
+          _id:   row.teacherId,
+          id:    row.teacherId,
+          name:  u.name,
+          email: u.email || null,
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  // ── class_json ────────────────────────────────────────────
+  let classJson = row.classJson;
+
+  if (!row._className && row.classId) {
+    try {
+      const c = await db
+        .getFirstAsync(
+          "SELECT name, level, section FROM classes WHERE id = ? LIMIT 1",
+          [row.classId]
+        )
+        .catch(() => null);
+
+      if (c?.name) {
+        classJson = JSON.stringify({
+          _id:     row.classId,
+          id:      row.classId,
+          name:    c.name,
+          level:   c.level   || null,
+          section: c.section || null,
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  // ── subject_json ──────────────────────────────────────────
+  let subjectJson = row.subjectJson;
+
+  if (!row._subjectName && row.subjectId) {
+    try {
+      const s = await db
+        .getFirstAsync(
+          "SELECT name, code FROM subjects WHERE id = ? LIMIT 1",
+          [row.subjectId]
+        )
+        .catch(() => null);
+
+      if (s?.name) {
+        subjectJson = JSON.stringify({
+          _id:  row.subjectId,
+          id:   row.subjectId,
+          name: s.name,
+          code: s.code || null,
+        });
+      }
+    } catch { /* non-fatal */ }
+  }
+
+  return { teacherJson, classJson, subjectJson };
+};
+
+// ─────────────────────────────────────────────────────────────
 // UPSERT
+// ✅ Persists teacher_json / class_json / subject_json
+//    Uses CASE guards so a null-named blob never overwrites
+//    a previously stored name.
 // ─────────────────────────────────────────────────────────────
 
 const upsertAssignmentRows = async (db, rows) => {
@@ -111,49 +245,121 @@ const upsertAssignmentRows = async (db, rows) => {
   const now    = new Date().toISOString();
   let inserted = 0;
 
+  // ── Ensure JSON columns exist ─────────────────────────────
+  const cols    = await db.getAllAsync("PRAGMA table_info(teacher_assignments)");
+  const colNames = new Set(cols.map((c) => c.name));
+
+  const requiredCols = [
+    "teacher_json",
+    "class_json",
+    "subject_json",
+    "teacher_id",
+    "class_id",
+    "subject_id",
+  ];
+
+  for (const col of requiredCols) {
+    if (!colNames.has(col)) {
+      await db
+        .execAsync(`ALTER TABLE teacher_assignments ADD COLUMN ${col} TEXT`)
+        .catch(() => {});
+    }
+  }
+
   try {
     await db.execAsync("PRAGMA foreign_keys = OFF;");
 
     for (const row of rows) {
       try {
+        // ── Resolve blobs (server obj → local DB fallback) ──
+        const { teacherJson, classJson, subjectJson } =
+          await resolveJsonBlobs(db, row);
+
+        // ── Check for existing row ───────────────────────────
         const existing = await db.getFirstAsync(
-          `SELECT id FROM teacher_assignments
-           WHERE teacherId = ? AND classId = ? AND subjectId = ?
-           LIMIT 1`,
+          `SELECT id, teacher_json, class_json, subject_json
+           FROM   teacher_assignments
+           WHERE  teacherId = ? AND classId = ? AND subjectId = ?
+           LIMIT  1`,
           [row.teacherId, row.classId, row.subjectId]
-        );
+        ).catch(() => null);
 
         if (existing) {
+          // ── Preserve stored name when new blob has no name ─
+          const resolvedTeacherJson =
+            teacherJson && JSON.parse(teacherJson)?.name != null
+              ? teacherJson
+              : existing.teacher_json ?? teacherJson;
+
+          const resolvedClassJson =
+            classJson && JSON.parse(classJson)?.name != null
+              ? classJson
+              : existing.class_json ?? classJson;
+
+          const resolvedSubjectJson =
+            subjectJson && JSON.parse(subjectJson)?.name != null
+              ? subjectJson
+              : existing.subject_json ?? subjectJson;
+
           const result = await db.runAsync(
             `UPDATE teacher_assignments
-             SET id         = ?,
-                 schoolId   = COALESCE(?, schoolId),
-                 deleted_at = NULL,
-                 _synced    = 1,
-                 _synced_at = ?,
-                 updated_at = ?
+             SET id           = ?,
+                 teacher_id   = ?,
+                 class_id     = ?,
+                 subject_id   = ?,
+                 schoolId     = COALESCE(?, schoolId),
+                 school_id    = COALESCE(?, school_id),
+                 teacher_json = ?,
+                 class_json   = ?,
+                 subject_json = ?,
+                 deleted_at   = NULL,
+                 _synced      = 1,
+                 _synced_at   = ?,
+                 updated_at   = ?
              WHERE teacherId = ? AND classId = ? AND subjectId = ?`,
             [
-              row.id, row.schoolId,
-              now, now,
-              row.teacherId, row.classId, row.subjectId,
+              row.id,
+              row.teacherId,
+              row.classId,
+              row.subjectId,
+              row.schoolId,
+              row.schoolId,
+              resolvedTeacherJson,
+              resolvedClassJson,
+              resolvedSubjectJson,
+              now,
+              now,
+              row.teacherId,
+              row.classId,
+              row.subjectId,
             ]
           );
           if (result?.changes > 0) inserted++;
+
         } else {
+          // ── Fresh insert ─────────────────────────────────────
           const result = await db.runAsync(
             `INSERT INTO teacher_assignments
-               (id, teacherId, classId, subjectId, schoolId,
+               (id, teacherId, teacher_id, classId, class_id,
+                subjectId, subject_id, schoolId, school_id,
+                teacher_json, class_json, subject_json,
                 deleted_at, _synced, _synced_at, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, NULL, 1, ?, ?, ?)`,
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 1, ?, ?, ?)`,
             [
-              row.id, row.teacherId, row.classId,
-              row.subjectId, row.schoolId,
+              row.id,
+              row.teacherId, row.teacherId,
+              row.classId,   row.classId,
+              row.subjectId, row.subjectId,
+              row.schoolId,  row.schoolId,
+              teacherJson,
+              classJson,
+              subjectJson,
               now, now, now,
             ]
           );
           if (result?.changes > 0) inserted++;
         }
+
       } catch (err) {
         console.warn(
           `[syncAssignments] upsertRow failed [${row.id}]:`, err.message
@@ -180,7 +386,9 @@ const deduplicateLocally = async (db) => {
          AND _synced = 1`
     );
     if (ghostResult?.changes > 0) {
-      console.log(`[syncAssignments] removed ${ghostResult.changes} ghost rows`);
+      console.log(
+        `[syncAssignments] removed ${ghostResult.changes} ghost rows`
+      );
     }
 
     const before = await db.getFirstAsync(
@@ -282,6 +490,181 @@ const syncSubjectTeacherIds = async (db) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// BACKFILL MISSING JSON NAMES
+// ✅ After upsert, any rows still missing teacher / class /
+//    subject names are filled from the local SQLite tables.
+// ─────────────────────────────────────────────────────────────
+
+const backfillMissingJsonNames = async (db) => {
+  const now = new Date().toISOString();
+
+  // ── teacher_json ──────────────────────────────────────────
+  try {
+    const missing = await db.getAllAsync(
+      `SELECT id, teacherId
+       FROM   teacher_assignments
+       WHERE  (deleted_at IS NULL OR deleted_at = '')
+         AND  (
+           teacher_json IS NULL
+           OR json_extract(teacher_json, '$.name') IS NULL
+         )
+         AND  teacherId IS NOT NULL AND teacherId != ''`
+    ).catch(() => []);
+
+    if (missing.length) {
+      console.log(
+        `[syncAssignments] Backfilling ${missing.length} teacher_json name(s)…`
+      );
+      let fixed = 0;
+      for (const row of missing) {
+        const u = await db
+          .getFirstAsync(
+            "SELECT name, email FROM users WHERE id = ? LIMIT 1",
+            [row.teacherId]
+          )
+          .catch(() => null);
+        if (!u?.name) continue;
+
+        await db.runAsync(
+          `UPDATE teacher_assignments
+           SET teacher_json = ?, updated_at = ?
+           WHERE id = ?`,
+          [
+            JSON.stringify({
+              _id:   row.teacherId,
+              id:    row.teacherId,
+              name:  u.name,
+              email: u.email || null,
+            }),
+            now,
+            row.id,
+          ]
+        ).catch(() => {});
+        fixed++;
+      }
+      if (fixed > 0) {
+        console.log(
+          `[syncAssignments] ✅ teacher_json backfill complete (${fixed} fixed)`
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[syncAssignments] backfill teacher_json failed:", err.message);
+  }
+
+  // ── class_json ────────────────────────────────────────────
+  try {
+    const missing = await db.getAllAsync(
+      `SELECT id, classId
+       FROM   teacher_assignments
+       WHERE  (deleted_at IS NULL OR deleted_at = '')
+         AND  (
+           class_json IS NULL
+           OR json_extract(class_json, '$.name') IS NULL
+         )
+         AND  classId IS NOT NULL AND classId != ''`
+    ).catch(() => []);
+
+    if (missing.length) {
+      console.log(
+        `[syncAssignments] Backfilling ${missing.length} class_json name(s)…`
+      );
+      let fixed = 0;
+      for (const row of missing) {
+        const c = await db
+          .getFirstAsync(
+            "SELECT name, level, section FROM classes WHERE id = ? LIMIT 1",
+            [row.classId]
+          )
+          .catch(() => null);
+        if (!c?.name) continue;
+
+        await db.runAsync(
+          `UPDATE teacher_assignments
+           SET class_json = ?, updated_at = ?
+           WHERE id = ?`,
+          [
+            JSON.stringify({
+              _id:     row.classId,
+              id:      row.classId,
+              name:    c.name,
+              level:   c.level   || null,
+              section: c.section || null,
+            }),
+            now,
+            row.id,
+          ]
+        ).catch(() => {});
+        fixed++;
+      }
+      if (fixed > 0) {
+        console.log(
+          `[syncAssignments] ✅ class_json backfill complete (${fixed} fixed)`
+        );
+      }
+    }
+  } catch (err) {
+    console.warn("[syncAssignments] backfill class_json failed:", err.message);
+  }
+
+  // ── subject_json ──────────────────────────────────────────
+  try {
+    const missing = await db.getAllAsync(
+      `SELECT id, subjectId
+       FROM   teacher_assignments
+       WHERE  (deleted_at IS NULL OR deleted_at = '')
+         AND  (
+           subject_json IS NULL
+           OR json_extract(subject_json, '$.name') IS NULL
+         )
+         AND  subjectId IS NOT NULL AND subjectId != ''`
+    ).catch(() => []);
+
+    if (missing.length) {
+      console.log(
+        `[syncAssignments] Backfilling ${missing.length} subject_json name(s)…`
+      );
+      let fixed = 0;
+      for (const row of missing) {
+        const s = await db
+          .getFirstAsync(
+            "SELECT name, code FROM subjects WHERE id = ? LIMIT 1",
+            [row.subjectId]
+          )
+          .catch(() => null);
+        if (!s?.name) continue;
+
+        await db.runAsync(
+          `UPDATE teacher_assignments
+           SET subject_json = ?, updated_at = ?
+           WHERE id = ?`,
+          [
+            JSON.stringify({
+              _id:  row.subjectId,
+              id:   row.subjectId,
+              name: s.name,
+              code: s.code || null,
+            }),
+            now,
+            row.id,
+          ]
+        ).catch(() => {});
+        fixed++;
+      }
+      if (fixed > 0) {
+        console.log(
+          `[syncAssignments] ✅ subject_json backfill complete (${fixed} fixed)`
+        );
+      }
+    }
+  } catch (err) {
+    console.warn(
+      "[syncAssignments] backfill subject_json failed:", err.message
+    );
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // MAIN SYNC
 // ─────────────────────────────────────────────────────────────
 
@@ -309,7 +692,7 @@ export const syncTeacherAssignments = async (force = false) => {
       `🔄 syncTeacherAssignments: role="${role}" → endpoint="${endpoint}"`
     );
 
-    // ── 1. Fetch ──────────────────────────────────────────
+    // ── 1. Fetch from server ──────────────────────────────
     let raw = [];
     try {
       const response = await api.get(endpoint, {
@@ -333,7 +716,7 @@ export const syncTeacherAssignments = async (force = false) => {
 
     console.log(`📋 Server has ${raw.length} assignments`);
 
-    // ── 2. Normalise ──────────────────────────────────────
+    // ── 2. Normalise (extract IDs + server-populated blobs) ──
     const normalised = raw.map(normaliseRow).filter(Boolean);
     console.log(
       `[syncAssignments] ${normalised.length} valid rows (of ${raw.length} from server)`
@@ -345,19 +728,23 @@ export const syncTeacherAssignments = async (force = false) => {
     const db = await getDatabase();
     await ensureAssignmentSchema(db);
 
-    // ── 4. Dedup FIRST (before unique index creation) ─────
+    // ── 4. Dedup local DB BEFORE unique index creation ────
     await deduplicateLocally(db);
 
     // ── 5. Ensure unique index ────────────────────────────
     await ensureUniqueIndex(db);
 
-    // ── 6. Upsert ─────────────────────────────────────────
+    // ── 6. Upsert (resolves local-DB names inside) ────────
     const inserted = await upsertAssignmentRows(db, rows);
 
-    // ── 7. Final dedup pass ───────────────────────────────
+    // ── 7. Final local dedup pass ─────────────────────────
     await deduplicateLocally(db);
 
-    // ── 8. Sync subjects.teacher_id ───────────────────────
+    // ── 8. Backfill any still-missing JSON names ──────────
+    //    (runs for all three: teacher / class / subject)
+    await backfillMissingJsonNames(db);
+
+    // ── 9. Sync subjects.teacher_id foreign key ───────────
     await syncSubjectTeacherIds(db);
 
     _lastSyncAt = Date.now();

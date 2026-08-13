@@ -1,4 +1,5 @@
-// src/store/auth.store.js
+// src/store/auth.store.js — complete fixed file
+
 import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
@@ -60,12 +61,36 @@ const normalizeUser = (user) => {
   return user;
 };
 
+// ── Module-level sync guard ────────────────────────────────────────────────
+let _syncLock        = false;
+let _lastSyncAt      = 0;
+const MIN_SYNC_GAP_MS = 15_000;
+
+export const acquireSyncLock = () => {
+  const now = Date.now();
+  if (_syncLock)                            return false;
+  if (now - _lastSyncAt < MIN_SYNC_GAP_MS) return false;
+  _syncLock   = true;
+  _lastSyncAt = now;
+  return true;
+};
+
+export const releaseSyncLock = () => { _syncLock = false; };
+
+export const resetSyncLock = () => {
+  _syncLock   = false;
+  _lastSyncAt = 0;
+};
+
 // ── Store ──────────────────────────────────────────────────────────────────
 export const useAuthStore = create((set, get) => ({
   user:             null,
   token:            null,
   error:            null,
   isLoading:        false,
+  hydrated:         false,
+  // ✅ Keep hasInitialized as an alias so any code still reading the old
+  //    name also works without needing a find-and-replace across the app.
   hasInitialized:   false,
   profileCompleted: false,
 
@@ -79,7 +104,13 @@ export const useAuthStore = create((set, get) => ({
         SecureStore.setItemAsync(USER_KEY,  JSON.stringify(normalized)),
         SecureStore.setItemAsync(TOKEN_KEY, token || ""),
       ]);
-      set({ user: normalized, token: token || null, hasInitialized: true });
+      // ✅ Single atomic set — both flag names updated together
+      set({
+        user:           normalized,
+        token:          token || null,
+        hydrated:       true,
+        hasInitialized: true,
+      });
       return true;
     } catch (err) {
       console.error("setUser failed:", err.message);
@@ -89,52 +120,92 @@ export const useAuthStore = create((set, get) => ({
 
   // ── INIT AUTH ─────────────────────────────────────────────────────────────
   initAuth: async () => {
-    if (get().hasInitialized) return true;
-    try {
-      set({ isLoading: true });
+    // Already hydrated — nothing to do
+    if (get().hydrated || get().hasInitialized) return !!get().token;
 
+    // Another call is already in flight — wait for it
+    if (get().isLoading) {
+      for (let i = 0; i < 30; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        if (get().hydrated || get().hasInitialized) return !!get().token;
+      }
+      // Timed out waiting — force-unblock so the splash doesn't hang
+      set({ hydrated: true, hasInitialized: true, isLoading: false });
+      return false;
+    }
+
+    // Mark loading synchronously before any await so concurrent callers
+    // hit the isLoading guard above instead of starting a second read.
+    set({ isLoading: true });
+
+    try {
       const [token, userJson] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         SecureStore.getItemAsync(USER_KEY),
       ]);
 
-      // ✅ Debug logs — remove after confirming it works
-      console.log("🔑 token from SecureStore:", token);
-      console.log("👤 userJson from SecureStore:", userJson);
+      console.log("🔑 token from SecureStore:", token ? "found" : "null");
+      console.log("👤 userJson from SecureStore:", userJson ? "found" : "null");
 
-      // ✅ Fixed — removed unnecessary _clearStorage call
       if (!token || !userJson) {
-        set({ user: null, token: null, hasInitialized: true });
+        // ✅ FIX: single set() call — hydrated, hasInitialized, AND
+        //    isLoading:false all committed in the same render cycle.
+        //    The old code set hydrated:true in the try block and
+        //    isLoading:false in finally — two separate set() calls
+        //    produced two renders. Between render 1 (hydrated=true,
+        //    isLoading=true) and render 2 (isLoading=false) the layout's
+        //    authReady formula evaluated to `true && !true = false`,
+        //    keeping the spinner visible indefinitely if render 2 was
+        //    never scheduled (e.g. the component unmounted in between).
+        set({
+          user:           null,
+          token:          null,
+          hydrated:       true,
+          hasInitialized: true,
+          isLoading:      false,   // ← combined into one set()
+          error:          null,
+        });
         return false;
       }
 
       const user = normalizeUser(JSON.parse(userJson));
-      set({ user, token, hasInitialized: true });
+
+      // ✅ Single atomic set — all fields in one render
+      set({
+        user,
+        token,
+        hydrated:       true,
+        hasInitialized: true,
+        isLoading:      false,   // ← combined into one set()
+        error:          null,
+      });
       return true;
 
     } catch (error) {
       console.error("initAuth error:", error.message);
-      set({ user: null, token: null, hasInitialized: true, error: error.message });
+      // ✅ Single atomic set even on error
+      set({
+        user:           null,
+        token:          null,
+        hydrated:       true,
+        hasInitialized: true,
+        isLoading:      false,   // ← combined into one set()
+        error:          error.message,
+      });
       return false;
-    } finally {
-      set({ isLoading: false });
     }
+    // ✅ No finally block — every code path above calls set() with
+    //    isLoading:false already included, so no double-set needed.
   },
 
   // ── LOGIN ─────────────────────────────────────────────────────────────────
-  //
-  // Accepts three call signatures:
-  //   login({ email, password })           — staff
-  //   login({ enrollmentNo, password })    — student
-  //   login(identifierString, password)    — legacy positional args
-  //
   login: async (payloadOrIdentifier, legacyPassword) => {
     if (get().isLoading) return false;
 
-    try {
-      set({ isLoading: true, error: null });
+    // Mark loading synchronously before any await
+    set({ isLoading: true, error: null });
 
-      // ── Normalise call signature ───────────────────────────────────────
+    try {
       let email        = null;
       let enrollmentNo = null;
       let password     = null;
@@ -164,7 +235,7 @@ export const useAuthStore = create((set, get) => ({
         }
       }
 
-      if (!password) throw new Error("Password is required");
+      if (!password)               throw new Error("Password is required");
       if (!email && !enrollmentNo) throw new Error("Email or enrollment number is required");
 
       const isEnrollment = !!enrollmentNo;
@@ -172,7 +243,6 @@ export const useAuthStore = create((set, get) => ({
         ? { enrollmentNo, password }
         : { email,        password };
 
-      // ── Network check ──────────────────────────────────────────────────
       let isOnline = true;
       if (NetInfo) {
         const net = await NetInfo.fetch();
@@ -183,7 +253,7 @@ export const useAuthStore = create((set, get) => ({
       let token        = null;
       let refreshToken = null;
 
-      // ── Online ─────────────────────────────────────────────────────────
+      // ── Online path ────────────────────────────────────────────────────
       if (isOnline) {
         const res = await fetch(`${API_URL}/auth/login`, {
           method:  "POST",
@@ -192,7 +262,6 @@ export const useAuthStore = create((set, get) => ({
         });
 
         const data = await res.json().catch(() => ({}));
-
         if (!res.ok) throw new Error(data.message || "Login failed");
 
         user         = normalizeUser(data.user);
@@ -201,7 +270,6 @@ export const useAuthStore = create((set, get) => ({
 
         if (!token || !user?.role) throw new Error("Invalid server response");
 
-        // ✅ Save to SecureStore first
         await Promise.all([
           SecureStore.setItemAsync(TOKEN_KEY,         token),
           SecureStore.setItemAsync(REFRESH_TOKEN_KEY, refreshToken || ""),
@@ -210,8 +278,8 @@ export const useAuthStore = create((set, get) => ({
 
         console.log("✅ Session saved to SecureStore");
 
-        // ✅ Cache to SQLite for offline use
-        if (DB) {
+        // Cache to SQLite for offline use
+        if (DB && typeof DB.upsert === "function") {
           try {
             const salt = generateSalt();
             await DB.upsert("users", {
@@ -227,20 +295,60 @@ export const useAuthStore = create((set, get) => ({
             });
             console.log("✅ User cached to SQLite");
           } catch (e) {
-            console.warn("Offline cache failed:", e.message);
+            console.warn("Offline cache failed:", e?.message || String(e));
+          }
+        } else if (DB) {
+          try {
+            const { getDatabase } = require("../db/database");
+            const db   = await getDatabase();
+            const salt = generateSalt();
+            const now  = new Date().toISOString();
+
+            await db.runAsync(
+              `INSERT INTO users
+                 (id, name, email, enrollmentNo, role, schoolId,
+                  passwordSalt, passwordHash, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 name         = excluded.name,
+                 email        = excluded.email,
+                 enrollmentNo = excluded.enrollmentNo,
+                 role         = excluded.role,
+                 schoolId     = excluded.schoolId,
+                 passwordSalt = excluded.passwordSalt,
+                 passwordHash = excluded.passwordHash,
+                 updated_at   = excluded.updated_at`,
+              [
+                user.id, user.name, user.email || null,
+                user.enrollmentNo || null, user.role,
+                user.schoolId || null, salt,
+                hashPassword(password, salt), now,
+              ]
+            );
+            console.log("✅ User cached to SQLite (direct)");
+          } catch (e) {
+            console.warn("Offline cache failed (direct):", e?.message || String(e));
           }
         }
       }
 
-      // ── Offline ────────────────────────────────────────────────────────
+      // ── Offline path ───────────────────────────────────────────────────
       else {
         if (!DB) throw new Error("Offline mode not available");
+
+        const queryFn = typeof DB.query === "function"
+          ? (sql, params) => DB.query(sql, params)
+          : async (sql, params) => {
+              const { getDatabase } = require("../db/database");
+              const db = await getDatabase();
+              return db.getAllAsync(sql, params);
+            };
 
         const [column, value] = isEnrollment
           ? ["enrollmentNo", enrollmentNo]
           : ["email",        email];
 
-        const rows = await DB.query(
+        const rows = await queryFn(
           `SELECT * FROM users WHERE ${column} = ? LIMIT 1`,
           [value]
         );
@@ -272,20 +380,40 @@ export const useAuthStore = create((set, get) => ({
 
         await SecureStore.setItemAsync(TOKEN_KEY, token);
         await SecureStore.setItemAsync(USER_KEY,  JSON.stringify(user));
-
         console.log("✅ Offline session saved to SecureStore");
       }
 
-      set({ user, token, hasInitialized: true, profileCompleted: false });
+      resetSyncLock();
+
+      // ✅ Single atomic set — isLoading:false included so the component
+      //    only re-renders once after login completes.
+      set({
+        user,
+        token,
+        hydrated:         true,
+        hasInitialized:   true,
+        isLoading:        false,   // ← no separate finally needed
+        profileCompleted: false,
+        error:            null,
+      });
       return true;
 
     } catch (error) {
       console.error("login error:", error.message);
-      set({ error: error.message, user: null, token: null });
+      // ✅ Single atomic set on error too
+      set({
+        error:          error.message,
+        user:           null,
+        token:          null,
+        isLoading:      false,   // ← combined
+        // ✅ Keep hydrated:true on login failure so the splash doesn't
+        //    re-appear — the login screen is already visible.
+        hydrated:       true,
+        hasInitialized: true,
+      });
       return false;
-    } finally {
-      set({ isLoading: false });
     }
+    // ✅ No finally block needed — every path sets isLoading:false above.
   },
 
   // ── UPDATE USER ───────────────────────────────────────────────────────────
@@ -305,13 +433,13 @@ export const useAuthStore = create((set, get) => ({
   },
 
   // ── REFRESH TOKEN ─────────────────────────────────────────────────────────
-  refreshToken: async (refreshToken) => {
+  refreshToken: async (currentRefreshToken) => {
     try {
-      if (!refreshToken) return false;
+      if (!currentRefreshToken) return false;
       const res = await fetch(`${API_URL}/auth/refresh`, {
         method:  "POST",
         headers: { "Content-Type": "application/json" },
-        body:    JSON.stringify({ refreshToken }),
+        body:    JSON.stringify({ refreshToken: currentRefreshToken }),
       });
       if (res.status === 401 || res.status === 403) {
         await get().logout();
@@ -337,18 +465,29 @@ export const useAuthStore = create((set, get) => ({
     } catch (err) {
       console.warn("SyncManager destroy failed:", err.message);
     }
+
     try {
       const { clearSchoolCache } = require("../services/school.service");
       clearSchoolCache();
     } catch { /* non-critical */ }
 
+    resetSyncLock();
+
     await get()._clearStorage();
+
+    // ✅ Single atomic set — hydrated stays true so the splash doesn't
+    //    re-appear; the navigation guard sees token:null and redirects
+    //    to /auth/login immediately.
     set({
       user:             null,
       token:            null,
-      hasInitialized:   false,
+      hydrated:         true,
+      hasInitialized:   true,
+      isLoading:        false,
       profileCompleted: false,
+      error:            null,
     });
+
     return true;
   },
 
@@ -364,7 +503,7 @@ export const useAuthStore = create((set, get) => ({
   // ── SELECTORS ─────────────────────────────────────────────────────────────
   getUser:         () => get().user,
   getToken:        () => get().token,
-  isAuthenticated: () => !!get().user,
+  isAuthenticated: () => !!get().user && !!get().token,
   isOnlineMode:    () => get().token !== OFFLINE_TOKEN,
   isStudent:       () => get().user?.role === "student",
 }));

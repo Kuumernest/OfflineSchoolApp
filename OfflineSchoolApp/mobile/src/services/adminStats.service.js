@@ -120,8 +120,6 @@ const getSchoolId = () => {
   }
 };
 
-// ✅ Check whether the user is still authenticated
-// Used as a guard before any API call or heavy local work
 const isAuthenticated = () => {
   try {
     const { useAuthStore } = require("../store/auth.store");
@@ -160,7 +158,6 @@ const resolveAssignmentTable = async (db) => {
 // ─────────────────────────────────────────────────────────
 
 const fetchAdminStatsFromServer = async () => {
-  // ✅ Guard — don't attempt if logged out
   if (!isAuthenticated()) {
     console.log("⏭️ fetchAdminStatsFromServer: not authenticated — skipping");
     return { ...EMPTY_STATS };
@@ -169,7 +166,6 @@ const fetchAdminStatsFromServer = async () => {
   const schoolId = getSchoolId();
 
   for (let attempt = 1; attempt <= 2; attempt++) {
-    // ✅ Re-check before each attempt — logout may fire between retries
     if (!isAuthenticated()) {
       console.log("⏭️ fetchAdminStatsFromServer: logged out mid-retry — aborting");
       return { ...EMPTY_STATS };
@@ -201,8 +197,8 @@ const fetchAdminStatsFromServer = async () => {
           unassignedTeachers:       raw.unassignedTeachers       ?? 0,
           totalClasses:             raw.totalClasses             ?? 0,
           totalSubjects:            raw.totalSubjects            ?? 0,
-          assignedSubjects:         raw.assignedSubjects         ??
-                                    raw.totalAssignments         ?? 0,
+          assignedSubjects:
+            raw.assignedSubjects ?? raw.totalAssignments         ?? 0,
           incompleteTimetableSlots: raw.incompleteTimetableSlots ?? 0,
           activeAnnouncements:      raw.activeAnnouncements      ?? 0,
           classesWithoutSubjects:   raw.classesWithoutSubjects   ?? 0,
@@ -211,7 +207,7 @@ const fetchAdminStatsFromServer = async () => {
           totalPeriods:             raw.totalPeriods             ?? 0,
         };
 
-        // Consistency guard
+        // ── Consistency guard: server vs local teacher counts ──
         try {
           const localCounts = await TeacherService.getCounts();
           const serverIsBlind =
@@ -248,9 +244,10 @@ const fetchAdminStatsFromServer = async () => {
     }
   }
 
-  // ✅ Guard before falling back — user may have logged out during retries
   if (!isAuthenticated()) {
-    console.log("⏭️ fetchAdminStatsFromServer: logged out — skipping local fallback");
+    console.log(
+      "⏭️ fetchAdminStatsFromServer: logged out — skipping local fallback"
+    );
     return { ...EMPTY_STATS };
   }
 
@@ -263,7 +260,6 @@ const fetchAdminStatsFromServer = async () => {
 // ─────────────────────────────────────────────────────────
 
 const getAdminStatsLocal = async () => {
-  // ✅ Guard — don't run local stats if user is gone
   if (!isAuthenticated()) {
     console.log("⏭️ getAdminStatsLocal: not authenticated — skipping");
     return { ...EMPTY_STATS };
@@ -278,16 +274,17 @@ const getAdminStatsLocal = async () => {
       schoolId ?? "⚠️  none (counts may be inflated)"
     );
 
-    // ✅ syncTeacherAssignments has its own guard now —
-    //    it will bail immediately if no user/token
+    // Sync assignments so local counts are fresh
     await syncTeacherAssignments(true);
 
-    // ✅ Re-check after sync — it takes time and user may log out
     if (!isAuthenticated()) {
-      console.log("⏭️ getAdminStatsLocal: logged out after sync — aborting");
+      console.log(
+        "⏭️ getAdminStatsLocal: logged out after sync — aborting"
+      );
       return { ...EMPTY_STATS };
     }
 
+    // ── Resolve table presence ────────────────────────────
     const assign            = await resolveAssignmentTable(db);
     const hasStudents       = await tableExists(db, "students");
     const hasStudentApps    = await tableExists(db, "student_applications");
@@ -307,15 +304,15 @@ const getAdminStatsLocal = async () => {
       console.log(`📊 ${assign.table} live rows: ${rawCount}`);
     }
 
-    const classCols  = hasClasses  ? await getColumns(db, "classes")  : [];
-    const subjCols   = hasSubjects ? await getColumns(db, "subjects") : [];
+    // ── Column introspection ──────────────────────────────
+    const classCols = hasClasses  ? await getColumns(db, "classes")  : [];
+    const subjCols  = hasSubjects ? await getColumns(db, "subjects") : [];
 
-    const classesDeletedCol  = pickColumn(classCols, ["deleted_at",  "deletedAt"]);
-    const classesActiveCol   = pickColumn(classCols, ["is_active",   "isActive"]);
+    const classesDeletedCol = pickColumn(classCols, ["deleted_at",  "deletedAt"]);
+    const classesActiveCol  = pickColumn(classCols, ["is_active",   "isActive"]);
 
-    // ✅ Only pick columns that actually exist in the subjects table.
-    //    Never include "class" — that's a MongoDB field name, not SQLite.
-    const subjectsClassCol   = pickColumn(subjCols, ["class_id", "classId"]);
+    // Only use columns that actually exist in SQLite subjects table
+    const subjectsClassCol   = pickColumn(subjCols, ["class_id",   "classId"]);
     const subjectsTeacherCol = pickColumn(subjCols, ["teacher_id", "teacherId"]);
     const subjDeletedCol     = pickColumn(subjCols, ["deleted_at", "deletedAt"]);
 
@@ -324,7 +321,7 @@ const getAdminStatsLocal = async () => {
 
     const queries = [];
 
-    // ── [0] Pending applications ─────────────────────────
+    // ── [0] Pending applications ──────────────────────────
     if (hasStudentApps) {
       const appCols    = await getColumns(db, "student_applications");
       const statusCol  = pickColumn(appCols, ["status"]);
@@ -355,7 +352,7 @@ const getAdminStatsLocal = async () => {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [1] Approved students ────────────────────────────
+    // ── [1] Approved students ─────────────────────────────
     if (hasStudents) {
       const stuCols     = await getColumns(db, "students");
       const statusCol   = pickColumn(stuCols, ["status"]);
@@ -386,7 +383,7 @@ const getAdminStatsLocal = async () => {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [2] + [3] Teacher counts ─────────────────────────
+    // ── [2] + [3] Teacher counts ──────────────────────────
     const teacherCounts = await TeacherService.getCounts().catch(() => ({
       total:      0,
       unassigned: 0,
@@ -394,17 +391,19 @@ const getAdminStatsLocal = async () => {
     queries.push(Promise.resolve(teacherCounts.total));
     queries.push(Promise.resolve(teacherCounts.unassigned));
 
-    // ── [4] Total active classes ─────────────────────────
+    // ── [4] Total active classes ──────────────────────────
     if (hasClasses) {
       let q   = `SELECT COUNT(*) AS count FROM classes WHERE 1=1`;
       const p = [...sfClass.params];
-      q += sfClass.clause + notDeletedClause(classesDeletedCol) + activeClause(classesActiveCol);
+      q += sfClass.clause
+        + notDeletedClause(classesDeletedCol)
+        + activeClause(classesActiveCol);
       queries.push(safeCount(db, q, p));
     } else {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [5] Total subjects ───────────────────────────────
+    // ── [5] Total subjects ────────────────────────────────
     if (hasSubjects) {
       let q   = `SELECT COUNT(*) AS count FROM subjects WHERE 1=1`;
       const p = [...sfSubj.params];
@@ -414,9 +413,11 @@ const getAdminStatsLocal = async () => {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [6] Assigned subjects ────────────────────────────
+    // ── [6] Assigned subjects ─────────────────────────────
     if (assign.table) {
-      const assignDeletedCol = pickColumn(assign.columns, ["deleted_at", "deletedAt"]);
+      const assignDeletedCol = pickColumn(
+        assign.columns, ["deleted_at", "deletedAt"]
+      );
       const sfA = schoolFilter(assign.columns, schoolId, "ta");
       const q = `
         SELECT COUNT(DISTINCT ta.${assign.subjectCol}) AS count
@@ -440,16 +441,19 @@ const getAdminStatsLocal = async () => {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [7] Classes without timetable ────────────────────
+    // ── [7] Classes without timetable ─────────────────────
     if (hasClasses) {
       const sfCA = schoolFilter(classCols, schoolId, "c");
-      let q   = `SELECT COUNT(DISTINCT c.id) AS count FROM classes c WHERE 1=1`;
-      let p   = [...sfCA.params];
-      q += sfCA.clause + notDeletedClause(classesDeletedCol, "c") + activeClause(classesActiveCol, "c");
+      let q = `SELECT COUNT(DISTINCT c.id) AS count FROM classes c WHERE 1=1`;
+      let p = [...sfCA.params];
+      q += sfCA.clause
+        + notDeletedClause(classesDeletedCol, "c")
+        + activeClause(classesActiveCol, "c");
 
       if (hasTimetable) {
         const ttCols       = await getColumns(db, "timetable");
-        const ttClassCol   = pickColumn(ttCols, ["class_id", "classId"]) || "class_id";
+        const ttClassCol   =
+          pickColumn(ttCols, ["class_id", "classId"]) || "class_id";
         const ttDeletedCol = pickColumn(ttCols, ["deleted_at", "deletedAt"]);
         q += `
           AND NOT EXISTS (
@@ -460,8 +464,10 @@ const getAdminStatsLocal = async () => {
         queries.push(safeCount(db, q, p));
       } else if (hasTimetableSlots) {
         const ttsCols       = await getColumns(db, "timetable_slots");
-        const ttsClassCol   = pickColumn(ttsCols, ["class_id", "classId"]) || "classId";
-        const ttsDeletedCol = pickColumn(ttsCols, ["deleted_at", "deletedAt", "deletedat"]);
+        const ttsClassCol   =
+          pickColumn(ttsCols, ["class_id", "classId"]) || "classId";
+        const ttsDeletedCol =
+          pickColumn(ttsCols, ["deleted_at", "deletedAt", "deletedat"]);
         q += `
           AND NOT EXISTS (
             SELECT 1 FROM timetable_slots ts
@@ -470,16 +476,19 @@ const getAdminStatsLocal = async () => {
           )`;
         queries.push(safeCount(db, q, p));
       } else {
+        // No timetable at all — every class is "without timetable"
         let cq = `SELECT COUNT(*) AS count FROM classes WHERE 1=1`;
         const cp = [...sfClass.params];
-        cq += sfClass.clause + notDeletedClause(classesDeletedCol) + activeClause(classesActiveCol);
+        cq += sfClass.clause
+          + notDeletedClause(classesDeletedCol)
+          + activeClause(classesActiveCol);
         queries.push(safeCount(db, cq, cp));
       }
     } else {
       queries.push(Promise.resolve(0));
     }
 
-    // ── [8] Active announcements ─────────────────────────
+    // ── [8] Active announcements ──────────────────────────
     if (hasAnnouncements) {
       const annCols       = await getColumns(db, "announcements");
       const annActiveCol  = pickColumn(annCols, ["is_active",  "isActive"]);
@@ -501,27 +510,35 @@ const getAdminStatsLocal = async () => {
     }
 
     // ── [9] Classes without subjects ─────────────────────
-    // ✅ FIXED: removed `OR s.class = c.id` — that column does not exist
-    //    in SQLite. Only class_id and classId are valid column names.
+    // Only use real SQLite column names — never MongoDB field names
     if (hasClasses && hasSubjects && subjectsClassCol) {
       const sfCA = schoolFilter(classCols, schoolId, "c");
       const sfSA = schoolFilter(subjCols,  schoolId, "s");
-      let q   = `SELECT COUNT(*) AS count FROM classes c WHERE 1=1`;
-      let p   = [...sfCA.params];
+      let q = `SELECT COUNT(*) AS count FROM classes c WHERE 1=1`;
+      let p = [...sfCA.params];
       q += sfCA.clause
         + notDeletedClause(classesDeletedCol, "c")
         + activeClause(classesActiveCol, "c");
 
-      // Build class-match clause dynamically from real columns only
-      const subjClassCols = subjCols.filter((c) =>
-        ["class_id", "classId"].includes(typeof c === "string" ? c : c.name)
-      ).map((c) => typeof c === "string" ? c : c.name);
+      // Build class-match clause from only verified columns
+      const subjClassCols = subjCols
+        .filter((c) =>
+          ["class_id", "classId"].includes(
+            typeof c === "string" ? c : c.name
+          )
+        )
+        .map((c) => (typeof c === "string" ? c : c.name));
 
       const classMatchParts = subjClassCols.map((col) => `s.${col} = c.id`);
-      // Ensure the primary picked column is always included
-      if (!classMatchParts.some((part) => part.includes(subjectsClassCol))) {
+
+      // Ensure the primary picked column is always represented
+      if (
+        classMatchParts.length === 0 ||
+        !classMatchParts.some((part) => part.includes(subjectsClassCol))
+      ) {
         classMatchParts.unshift(`s.${subjectsClassCol} = c.id`);
       }
+
       const classMatchClause = classMatchParts.join("\n                  OR ");
 
       q += `
@@ -606,9 +623,13 @@ const getAdminStatsLocal = async () => {
     // ── [12] Total active periods ─────────────────────────
     if (hasPeriods) {
       const periodCols  = await getColumns(db, "periods");
-      const isActiveCol = pickColumn(periodCols, ["isactive", "is_active", "isActive"]);
-      const deletedCol  = pickColumn(periodCols, ["deletedat", "deleted_at", "deletedAt"]);
-      const sfPeriod    = schoolFilter(periodCols, schoolId);
+      const isActiveCol = pickColumn(
+        periodCols, ["isactive", "is_active", "isActive"]
+      );
+      const deletedCol  = pickColumn(
+        periodCols, ["deletedat", "deleted_at", "deletedAt"]
+      );
+      const sfPeriod = schoolFilter(periodCols, schoolId);
       let q   = `SELECT COUNT(*) AS count FROM periods WHERE 1=1`;
       const p = [...sfPeriod.params];
       q += sfPeriod.clause;
@@ -619,7 +640,7 @@ const getAdminStatsLocal = async () => {
       queries.push(Promise.resolve(0));
     }
 
-    // ── Resolve all queries ───────────────────────────────
+    // ── Resolve all 13 queries in parallel ───────────────
     const [
       pendingApplications,
       approvedStudents,
@@ -666,7 +687,6 @@ const getAdminStatsLocal = async () => {
 // ─────────────────────────────────────────────────────────
 
 export const getAdminStats = async () => {
-  // ✅ Top-level guard — called from dashboard on mount/focus
   if (!isAuthenticated()) {
     console.log("⏭️ getAdminStats: not authenticated — skipping");
     return { ...EMPTY_STATS };
@@ -696,10 +716,17 @@ export const debugDatabaseSchema = async () => {
     console.log("📋 All tables:", tables.map((t) => t.name));
 
     const important = [
-      "users", "classes", "subjects",
-      "teacher_assignments", "subject_assignments",
-      "timetable", "timetable_slots", "periods",
-      "announcements", "students", "student_applications",
+      "users",
+      "classes",
+      "subjects",
+      "teacher_assignments",
+      "subject_assignments",
+      "timetable",
+      "timetable_slots",
+      "periods",
+      "announcements",
+      "students",
+      "student_applications",
     ];
 
     for (const tableName of important) {
@@ -709,19 +736,20 @@ export const debugDatabaseSchema = async () => {
         continue;
       }
 
-      const cols     = await db.getAllAsync(`PRAGMA table_info(${tableName})`);
-      const count    = await db.getFirstAsync(
+      const cols  = await db.getAllAsync(`PRAGMA table_info(${tableName})`);
+      const count = await db.getFirstAsync(
         `SELECT COUNT(*) AS count FROM ${tableName}`
       );
       const colNames = cols.map((c) => c.name);
       const sf       = schoolFilter(colNames, schoolId);
 
-      const filteredRow = schoolId && sf.clause
-        ? await db.getFirstAsync(
-            `SELECT COUNT(*) AS count FROM ${tableName} WHERE 1=1${sf.clause}`,
-            sf.params
-          )
-        : null;
+      const filteredRow =
+        schoolId && sf.clause
+          ? await db.getFirstAsync(
+              `SELECT COUNT(*) AS count FROM ${tableName} WHERE 1=1${sf.clause}`,
+              sf.params
+            )
+          : null;
 
       console.log(`\n✅ Table: ${tableName}`);
       console.log(`   Columns  : ${colNames.join(", ")}`);
@@ -730,11 +758,17 @@ export const debugDatabaseSchema = async () => {
         console.log(`   My school: ${filteredRow?.count ?? 0}`);
       }
 
-      if ([
-        "users", "classes", "subjects",
-        "teacher_assignments", "subject_assignments",
-        "student_applications", "students",
-      ].includes(tableName)) {
+      if (
+        [
+          "users",
+          "classes",
+          "subjects",
+          "teacher_assignments",
+          "subject_assignments",
+          "student_applications",
+          "students",
+        ].includes(tableName)
+      ) {
         const sample = await db.getAllAsync(
           `SELECT * FROM ${tableName} LIMIT 3`
         );

@@ -16,7 +16,6 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { StudentService } from "../../../src/services/student.service";
-import { ClassService }   from "../../../src/services/class.service";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -61,25 +60,16 @@ const getStatusConfig = (status) => {
 };
 
 /**
- * 🆕 Backend `/students/approved` is now paginated (default limit: 50, max: 200).
- * This screen renders a single "group by class" SectionList with no built-in
- * pager, so it needs the COMPLETE approved list. We fetch page-by-page and
- * merge, defensively supporting either return shape:
- *
- *   - Legacy: StudentService.getApprovedStudents() → Student[]
- *   - Current: StudentService.getApprovedStudents(params) →
- *              { students, data, total, pagination }
- *
- * A hard cap (20 pages × 200 = 4000 students) prevents a runaway loop if the
- * backend ever returns a malformed `total`.
+ * Fetches ALL approved students across paginated pages.
+ * Supports both legacy array shape and paginated object shape.
  */
 const fetchAllApprovedStudents = async () => {
-  const PAGE_LIMIT  = 200;
-  const MAX_PAGES   = 20;
+  const PAGE_LIMIT = 200;
+  const MAX_PAGES  = 20;
 
-  let page      = 1;
-  let combined  = [];
-  let total     = Infinity;
+  let page     = 1;
+  let combined = [];
+  let total    = Infinity;
 
   while (page <= MAX_PAGES) {
     // eslint-disable-next-line no-await-in-loop
@@ -92,7 +82,7 @@ const fetchAllApprovedStudents = async () => {
     combined = combined.concat(list);
 
     total = Array.isArray(res)
-      ? combined.length                 // legacy shape has no total — stop after one page
+      ? combined.length
       : res?.total ?? res?.pagination?.total ?? combined.length;
 
     const gotFullPage = list.length === PAGE_LIMIT;
@@ -106,19 +96,24 @@ const fetchAllApprovedStudents = async () => {
 };
 
 // ─────────────────────────────────────────────────────────
-// STUDENT CARD
+// STUDENT CARD  ← actions removed; tap opens detail screen
 // ─────────────────────────────────────────────────────────
 
-const StudentCard = React.memo(({ student, onMove, onSuspend, onDelete }) => {
+const StudentCard = React.memo(({ student, onPress }) => {
   const displayName  = getDisplayName(student);
   const firstLetter  = displayName.charAt(0).toUpperCase() || "?";
   const statusConfig = getStatusConfig(student.status);
   const isSuspended  = student.status === "suspended";
 
   return (
-    <View style={[styles.card, isSuspended && styles.cardSuspended]}>
-      {/* ── Top row: avatar + info + status ── */}
-      <View style={styles.cardTop}>
+    <TouchableOpacity
+      style={[styles.card, isSuspended && styles.cardSuspended]}
+      onPress={onPress}
+      activeOpacity={0.72}
+    >
+      <View style={styles.cardInner}>
+
+        {/* ── Avatar ── */}
         <View style={[
           styles.avatar,
           { backgroundColor: isSuspended ? C.errorBg : C.primaryBg },
@@ -131,85 +126,64 @@ const StudentCard = React.memo(({ student, onMove, onSuspend, onDelete }) => {
           </Text>
         </View>
 
+        {/* ── Info ── */}
         <View style={styles.studentInfo}>
           <Text style={styles.studentName} numberOfLines={1}>
             {displayName}
           </Text>
 
+          {/* Sub-line: email › phone › admission no */}
           {student.email ? (
             <View style={styles.metaRow}>
               <Ionicons name="mail-outline" size={12} color={C.gray400} />
-              <Text style={styles.studentMeta} numberOfLines={1}>{student.email}</Text>
+              <Text style={styles.studentMeta} numberOfLines={1}>
+                {student.email}
+              </Text>
             </View>
           ) : student.phone ? (
             <View style={styles.metaRow}>
               <Ionicons name="call-outline" size={12} color={C.gray400} />
-              <Text style={styles.studentMeta} numberOfLines={1}>{student.phone}</Text>
+              <Text style={styles.studentMeta} numberOfLines={1}>
+                {student.phone}
+              </Text>
             </View>
           ) : student.admissionNo ? (
             <View style={styles.metaRow}>
               <Ionicons name="card-outline" size={12} color={C.gray400} />
-              <Text style={styles.studentMeta} numberOfLines={1}>{student.admissionNo}</Text>
+              <Text style={styles.studentMeta} numberOfLines={1}>
+                {student.admissionNo}
+              </Text>
             </View>
           ) : null}
+
+          {/* Class name pill */}
+          {student.className && student.className !== "Unassigned" && (
+            <View style={styles.classPill}>
+              <Ionicons name="school-outline" size={10} color={C.primary} />
+              <Text style={styles.classPillText} numberOfLines={1}>
+                {student.className}
+              </Text>
+            </View>
+          )}
         </View>
 
-        {/* Status badge */}
-        <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
-          <Text style={[styles.statusText, { color: statusConfig.color }]}>
-            {statusConfig.label}
-          </Text>
-        </View>
-      </View>
-
-      {/* ── Divider ── */}
-      <View style={styles.cardDivider} />
-
-      {/* ── Action row ── */}
-      <View style={styles.actionRow}>
-        {/* Move */}
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnMove]}
-          onPress={onMove}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="swap-horizontal-outline" size={14} color={C.primary} />
-          <Text style={[styles.actionBtnText, { color: C.primary }]}>Move</Text>
-        </TouchableOpacity>
-
-        {/* Suspend / Restore */}
-        <TouchableOpacity
-          style={[
-            styles.actionBtn,
-            isSuspended ? styles.actionBtnRestore : styles.actionBtnSuspend,
-          ]}
-          onPress={onSuspend}
-          activeOpacity={0.7}
-        >
+        {/* ── Right side: status badge + chevron ── */}
+        <View style={styles.cardRight}>
+          <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
+            <Text style={[styles.statusText, { color: statusConfig.color }]}>
+              {statusConfig.label}
+            </Text>
+          </View>
           <Ionicons
-            name={isSuspended ? "refresh-outline" : "ban-outline"}
-            size={14}
-            color={isSuspended ? C.success : C.warning}
+            name="chevron-forward"
+            size={16}
+            color={C.gray400}
+            style={styles.chevron}
           />
-          <Text style={[
-            styles.actionBtnText,
-            { color: isSuspended ? C.success : C.warning },
-          ]}>
-            {isSuspended ? "Restore" : "Suspend"}
-          </Text>
-        </TouchableOpacity>
+        </View>
 
-        {/* Delete */}
-        <TouchableOpacity
-          style={[styles.actionBtn, styles.actionBtnDelete]}
-          onPress={onDelete}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="trash-outline" size={14} color={C.error} />
-          <Text style={[styles.actionBtnText, { color: C.error }]}>Delete</Text>
-        </TouchableOpacity>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 });
 
@@ -271,14 +245,13 @@ export default function ApprovedStudents() {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // ── Load ──────────────────────────────────────────────────
+  // ── Load ─────────────────────────────────────────────────
+
   const loadData = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else           setLoading(true);
 
-      // 🔧 Was: StudentService.getApprovedStudents() — truncated at 50
-      // now that the backend paginates. This fetches every page.
       const students = await fetchAllApprovedStudents();
       if (isMountedRef.current) setAllStudents(students || []);
     } catch (err) {
@@ -294,162 +267,22 @@ export default function ApprovedStudents() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Actions ───────────────────────────────────────────────
+  // ── Navigate to detail ────────────────────────────────────
 
-  // ── DELETE ────────────────────────────────────────────────
-  const handleDelete = useCallback((student) => {
-    const studentId   = student.id || student._id;
-    const displayName = getDisplayName(student);
-
+  const handleStudentPress = useCallback((student) => {
+    const studentId = String(student._id || student.id || "");
     if (!studentId) {
-      Alert.alert("Error", "Student ID not found — cannot delete.");
+      Alert.alert("Error", "Cannot open student — ID missing.");
       return;
     }
+    router.push({
+      pathname: "/admin/students/detail",
+      params:   { studentId },
+    });
+  }, [router]);
 
-    Alert.alert(
-      "Delete Student",
-      `Permanently delete "${displayName}"?\n\nThis action cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text:  "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await StudentService.delete(studentId);
+  // ── Sections (filtered + grouped by class) ────────────────
 
-              if (isMountedRef.current) {
-                setAllStudents((prev) =>
-                  prev.filter(
-                    (s) => String(s.id || s._id) !== String(studentId)
-                  )
-                );
-              }
-
-              Alert.alert("Deleted", `"${displayName}" has been removed.`);
-            } catch (err) {
-              console.error("Delete student error:", err);
-              Alert.alert("Error", err.message || "Delete failed. Please try again.");
-            }
-          },
-        },
-      ]
-    );
-  }, []);
-
-  // ── SUSPEND / RESTORE ─────────────────────────────────────
-  const handleSuspend = useCallback((student) => {
-    const studentId   = student.id || student._id;
-    const displayName = getDisplayName(student);
-    const isSuspended = student.status === "suspended";
-
-    if (!studentId) {
-      Alert.alert("Error", "Student ID not found — cannot update status.");
-      return;
-    }
-
-    Alert.alert(
-      isSuspended ? "Restore Student" : "Suspend Student",
-      `Are you sure you want to ${isSuspended ? "restore" : "suspend"} "${displayName}"?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text:  isSuspended ? "Restore" : "Suspend",
-          style: isSuspended ? "default" : "destructive",
-          onPress: async () => {
-            try {
-              if (isSuspended) {
-                await StudentService.restore(studentId);
-              } else {
-                await StudentService.suspend(studentId);
-              }
-
-              if (isMountedRef.current) {
-                setAllStudents((prev) =>
-                  prev.map((s) =>
-                    String(s.id || s._id) === String(studentId)
-                      ? { ...s, status: isSuspended ? "approved" : "suspended" }
-                      : s
-                  )
-                );
-              }
-
-              Alert.alert(
-                "Success",
-                `"${displayName}" has been ${isSuspended ? "restored" : "suspended"}.`
-              );
-            } catch (err) {
-              console.error("Suspend/Restore error:", err);
-              Alert.alert("Error", err.message || "Operation failed. Please try again.");
-            }
-          },
-        },
-      ]
-    );
-  }, []);
-
-  // ── MOVE ──────────────────────────────────────────────────
-  const handleMove = useCallback(async (student) => {
-    const studentId   = student.id || student._id;
-    const displayName = getDisplayName(student);
-
-    if (!studentId) {
-      Alert.alert("Error", "Student ID not found — cannot move.");
-      return;
-    }
-
-    try {
-      const classes      = await ClassService.getAll(false);
-      const otherClasses = (classes || []).filter(
-        (c) =>
-          String(c.id) !== String(student.classId || student.class_id)
-      );
-
-      if (otherClasses.length === 0) {
-        Alert.alert(
-          "No Other Classes",
-          "Create more classes before moving students."
-        );
-        return;
-      }
-
-      Alert.alert(
-        "Move Student",
-        `Select a class to move "${displayName}" to:`,
-        [
-          { text: "Cancel", style: "cancel" },
-          ...otherClasses.slice(0, 8).map((cls) => ({
-            text: cls.name,
-            onPress: async () => {
-              try {
-                await StudentService.moveToClass(studentId, cls.id);
-
-                if (isMountedRef.current) {
-                  setAllStudents((prev) =>
-                    prev.map((s) =>
-                      String(s.id || s._id) === String(studentId)
-                        ? { ...s, classId: cls.id, className: cls.name }
-                        : s
-                    )
-                  );
-                }
-
-                Alert.alert("Success ✓", `"${displayName}" moved to ${cls.name}.`);
-              } catch (err) {
-                console.error("Move student error:", err);
-                Alert.alert("Error", err.message || "Move failed. Please try again.");
-              }
-            },
-          })),
-        ]
-      );
-    } catch (err) {
-      console.error("Load classes error:", err);
-      Alert.alert("Error", "Failed to load classes. Please try again.");
-    }
-  }, []);
-
-  // ── Sections (filtered + grouped) ─────────────────────────
   const sections = useMemo(() => {
     const query    = searchQuery.trim().toLowerCase();
     const filtered = query
@@ -487,7 +320,8 @@ export default function ApprovedStudents() {
       }));
   }, [allStudents, searchQuery]);
 
-  // ── Stats ──────────────────────────────────────────────────
+  // ── Stats ─────────────────────────────────────────────────
+
   const totalStudents  = allStudents.length;
   const totalClasses   = new Set(
     allStudents.map((s) => s.className || "Unassigned")
@@ -496,7 +330,8 @@ export default function ApprovedStudents() {
     (s) => s.status === "suspended"
   ).length;
 
-  // ── Loading ────────────────────────────────────────────────
+  // ── Loading ───────────────────────────────────────────────
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -506,9 +341,9 @@ export default function ApprovedStudents() {
     );
   }
 
-  // ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
   // RENDER
-  // ───────────────────────────────────────────────────────────
+  // ─────────────────────────────────────────────────────────
 
   return (
     <View style={styles.container}>
@@ -524,6 +359,7 @@ export default function ApprovedStudents() {
         >
           <Ionicons name="arrow-back" size={22} color={C.gray900} />
         </TouchableOpacity>
+
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>Approved Students</Text>
           <Text style={styles.headerSubtitle}>
@@ -541,12 +377,14 @@ export default function ApprovedStudents() {
             {totalStudents} Students
           </Text>
         </View>
+
         <View style={[styles.statChip, { backgroundColor: C.successBg }]}>
           <Ionicons name="school-outline" size={14} color={C.success} />
           <Text style={[styles.statChipText, { color: C.success }]}>
             {totalClasses} Classes
           </Text>
         </View>
+
         {totalSuspended > 0 && (
           <View style={[styles.statChip, { backgroundColor: C.errorBg }]}>
             <Ionicons name="ban-outline" size={14} color={C.error} />
@@ -587,13 +425,11 @@ export default function ApprovedStudents() {
       {/* ── LIST ────────────────────────────────────────── */}
       <SectionList
         sections={sections}
-        keyExtractor={(item) => String(item.id || item._id)}
+        keyExtractor={(item) => String(item._id || item.id)}
         renderItem={({ item }) => (
           <StudentCard
             student={item}
-            onMove={() => handleMove(item)}
-            onSuspend={() => handleSuspend(item)}
-            onDelete={() => handleDelete(item)}
+            onPress={() => handleStudentPress(item)}
           />
         )}
         renderSectionHeader={({ section }) => (
@@ -626,6 +462,7 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, fontSize: 14, color: C.gray500, fontWeight: "500" },
   listContent: { paddingBottom: 40 },
 
+  // ── Header ───────────────────────────────────────────────
   header: {
     flexDirection: "row", alignItems: "center",
     paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
@@ -641,6 +478,7 @@ const styles = StyleSheet.create({
   headerTitle:    { fontSize: 20, fontWeight: "700", color: C.gray900 },
   headerSubtitle: { fontSize: 13, color: C.gray500, marginTop: 2 },
 
+  // ── Stat chips ────────────────────────────────────────────
   statRow: {
     flexDirection: "row", flexWrap: "wrap", gap: 8,
     paddingHorizontal: 20, paddingVertical: 12,
@@ -653,6 +491,7 @@ const styles = StyleSheet.create({
   },
   statChipText: { fontSize: 12, fontWeight: "700" },
 
+  // ── Search ────────────────────────────────────────────────
   searchContainer: {
     paddingHorizontal: 20, paddingVertical: 12,
     backgroundColor: C.white,
@@ -666,6 +505,7 @@ const styles = StyleSheet.create({
   searchIcon:  { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: C.gray900 },
 
+  // ── Section header ────────────────────────────────────────
   sectionHeader: {
     flexDirection: "row", alignItems: "center", justifyContent: "space-between",
     paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
@@ -682,50 +522,50 @@ const styles = StyleSheet.create({
   },
   countText: { fontSize: 12, fontWeight: "700", color: C.gray700 },
 
+  // ── Student card ──────────────────────────────────────────
   card: {
     backgroundColor: C.white,
-    marginHorizontal: 20, marginBottom: 10,
+    marginHorizontal: 20, marginBottom: 8,
     borderRadius: 14, borderWidth: 1, borderColor: C.gray200,
     overflow: "hidden",
   },
   cardSuspended: { borderColor: "#FECACA", backgroundColor: "#FFFAFA" },
-
-  cardTop: {
+  cardInner: {
     flexDirection: "row", alignItems: "center",
-    padding: 14, gap: 12,
+    paddingHorizontal: 14, paddingVertical: 13,
+    gap: 12,
   },
 
   avatar: {
     width: 44, height: 44, borderRadius: 22,
     alignItems: "center", justifyContent: "center",
+    flexShrink: 0,
   },
   avatarText: { fontSize: 17, fontWeight: "700" },
 
-  studentInfo: { flex: 1, minWidth: 0 },
-  studentName: { fontSize: 15, fontWeight: "600", color: C.gray900, marginBottom: 3 },
-  metaRow:     { flexDirection: "row", alignItems: "center", gap: 4 },
-  studentMeta: { fontSize: 12, color: C.gray500, flex: 1 },
+  studentInfo:  { flex: 1, minWidth: 0, gap: 3 },
+  studentName:  { fontSize: 15, fontWeight: "600", color: C.gray900 },
+  metaRow:      { flexDirection: "row", alignItems: "center", gap: 4 },
+  studentMeta:  { fontSize: 12, color: C.gray500, flex: 1 },
 
+  classPill: {
+    alignSelf: "flex-start",
+    flexDirection: "row", alignItems: "center", gap: 4,
+    backgroundColor: C.primaryBg, borderRadius: 8,
+    paddingHorizontal: 7, paddingVertical: 3, marginTop: 2,
+  },
+  classPillText: { fontSize: 11, fontWeight: "700", color: C.primary },
+
+  // ── Right side (status + chevron) ─────────────────────────
+  cardRight: {
+    alignItems: "flex-end", justifyContent: "center",
+    gap: 6, flexShrink: 0,
+  },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   statusText:  { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
+  chevron:     { marginTop: 2 },
 
-  cardDivider: { height: 1, backgroundColor: C.gray100, marginHorizontal: 14 },
-
-  actionRow: {
-    flexDirection: "row", paddingHorizontal: 14,
-    paddingVertical: 10, gap: 8,
-  },
-  actionBtn: {
-    flex: 1, flexDirection: "row", alignItems: "center",
-    justifyContent: "center", gap: 5,
-    paddingVertical: 8, borderRadius: 10, borderWidth: 1.5,
-  },
-  actionBtnText:    { fontSize: 12, fontWeight: "700" },
-  actionBtnMove:    { borderColor: C.primary, backgroundColor: C.primaryBg  },
-  actionBtnSuspend: { borderColor: C.warning, backgroundColor: C.warningBg  },
-  actionBtnRestore: { borderColor: C.success, backgroundColor: C.successBg  },
-  actionBtnDelete:  { borderColor: C.error,   backgroundColor: C.errorBg    },
-
+  // ── Empty state ───────────────────────────────────────────
   emptyState: {
     alignItems: "center", justifyContent: "center",
     paddingVertical: 80, paddingHorizontal: 40,
@@ -737,5 +577,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   emptyTitle:    { fontSize: 18, fontWeight: "700", color: C.gray700, textAlign: "center" },
-  emptySubtitle: { fontSize: 14, color: C.gray500, marginTop: 8, textAlign: "center", lineHeight: 20 },
+  emptySubtitle: {
+    fontSize: 14, color: C.gray500,
+    marginTop: 8, textAlign: "center", lineHeight: 20,
+  },
 });

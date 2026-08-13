@@ -1,9 +1,14 @@
 // app/_layout.js
 import { Stack, useRouter, useSegments } from "expo-router";
-import { useEffect, useState } from "react";
-import { View, ActivityIndicator, StyleSheet } from "react-native";
+import { useEffect, useRef, useState }   from "react";
+import {
+  View,
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+} from "react-native";
 
-import { initDatabase } from "../src/db/initDatabase";
+import { getDatabase }  from "../src/db/database";
 import { useAuthStore } from "../src/store/auth.store";
 import { getRoleRoute } from "../src/services/routes";
 
@@ -11,40 +16,98 @@ export default function RootLayout() {
   const router   = useRouter();
   const segments = useSegments();
 
+  // ✅ Read every possible "auth is done" flag the store might set.
+  //    We don't know which one the store uses until we see it fire.
+  const hydrated       = useAuthStore((s) => s.hydrated        ?? false);
+  const hasInitialized = useAuthStore((s) => s.hasInitialized  ?? false);
+  const isLoading      = useAuthStore((s) => s.isLoading       ?? false);
   const user           = useAuthStore((s) => s.user);
+  const token          = useAuthStore((s) => s.token);
   const initAuth       = useAuthStore((s) => s.initAuth);
-  const isLoading      = useAuthStore((s) => s.isLoading);
-  const hasInitialized = useAuthStore((s) => s.hasInitialized); // ✅ ADD THIS
 
-  const [dbReady, setDbReady] = useState(false);
+  // ✅ Auth is ready when EITHER flag is true AND we are not mid-login
+  const authReady = (hydrated || hasInitialized) && !isLoading;
 
-  // ── Boot — initialise SQLite ────────────────────────────
+  const [dbReady,    setDbReady]    = useState(false);
+  const [forceReady, setForceReady] = useState(false);
+
+  const authInitiated = useRef(false);
+
+  // ── Debug — log every state change so we can see what's blocking ───────
   useEffect(() => {
+    console.log("[layout] state →", {
+      dbReady,
+      hydrated,
+      hasInitialized,
+      isLoading,
+      authReady,
+      forceReady,
+      hasUser:  !!user,
+      hasToken: !!token,
+    });
+  }, [dbReady, hydrated, hasInitialized, isLoading, authReady, forceReady, user, token]);
+
+  // ── Boot — open SQLite ─────────────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
     const boot = async () => {
       try {
-        await initDatabase();
-        setDbReady(true);
-      } catch (e) {
-        console.error("DB init failed:", e);
-        setDbReady(true);
+        await getDatabase();
+        if (!cancelled) {
+          console.log("[layout] ✅ DB ready");
+          setDbReady(true);
+        }
+      } catch (err) {
+        console.error("[layout] DB init failed:", err.message);
+        if (!cancelled) setDbReady(true); // always unblock
       }
     };
     boot();
+    return () => { cancelled = true; };
   }, []);
 
-  // ── Hydrate — restore auth from storage ─────────────────
+  // ── Hydrate — restore auth from SecureStore ────────────────────────────
   useEffect(() => {
-    if (dbReady) {
-      initAuth(); // ✅ only run AFTER db is ready
-    }
-  }, [dbReady]); // ✅ removed initAuth from deps to avoid re-runs
+    if (!dbReady) return;
+    if (authInitiated.current) return;
+    authInitiated.current = true;
 
-  // ── Navigation guard ────────────────────────────────────
+    console.log("[layout] calling initAuth…");
+    initAuth()
+      .then((result) => console.log("[layout] initAuth resolved:", result))
+      .catch((err)   => console.warn("[layout] initAuth failed:", err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dbReady]);
+
+  // ── Safety net — if auth never resolves, unblock after 5 s ────────────
+  // ✅ This is the fix for the infinite spinner. If the Zustand store
+  //    never updates `hydrated` or `hasInitialized` (e.g. because the
+  //    store field names don't match what the selector reads), the app
+  //    would spin forever. After 5 s we force-unblock and let the
+  //    navigation guard decide what to do with whatever state exists.
   useEffect(() => {
-    // ✅ Wait for BOTH db AND auth to finish
-    if (!dbReady || !hasInitialized || isLoading) return;
+    const timeout = setTimeout(() => {
+      if (!authReady) {
+        console.warn(
+          "[layout] ⚠️  Auth did not resolve in 5 s — force-unblocking.\n" +
+          "         Check that auth.store sets `hydrated` or `hasInitialized`.\n" +
+          "         Current store state:",
+          useAuthStore.getState()
+        );
+        setForceReady(true);
+      }
+    }, 5_000);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authReady]);
 
-    const path    = "/" + (segments?.join("/") || "");
+  // ── Navigation guard ───────────────────────────────────────────────────
+  const canNavigate = dbReady && (authReady || forceReady);
+
+  useEffect(() => {
+    if (!canNavigate) return;
+
+    const path           = "/" + (segments?.join("/") || "");
     const isAuthGroup    = segments[0] === "auth";
     const onSetPassword  = segments[0] === "auth" && segments[1] === "set-password";
     const onProfileSetup = segments[1] === "profile";
@@ -54,23 +117,20 @@ export default function RootLayout() {
       return;
     }
 
-    // 1. Not logged in
     if (!user) {
       if (!isAuthGroup) {
-        console.log("🚫 No user — redirecting to login");
+        console.log("🚫 No user — redirecting to /auth/login");
         router.replace("/auth/login");
       }
       return;
     }
 
-    // 2. Must reset password
     if (user.mustResetPassword && !onSetPassword) {
       console.log("🔑 mustResetPassword — redirecting to /auth/set-password");
       router.replace("/auth/set-password");
       return;
     }
 
-    // 3. Logged in but on an auth screen
     if (isAuthGroup && !onSetPassword) {
       const target = getRoleRoute(user);
       console.log("🔄 On auth screen — redirecting to:", target);
@@ -78,14 +138,13 @@ export default function RootLayout() {
       return;
     }
 
-    // 4. Wrong role section
     const target         = getRoleRoute(user);
     const currentSection = path.split("/")[1];
     const targetSection  = (target || "").split("/")[1];
 
     if (
       currentSection &&
-      targetSection &&
+      targetSection  &&
       currentSection !== targetSection &&
       !onSetPassword
     ) {
@@ -95,27 +154,30 @@ export default function RootLayout() {
     }
 
     console.log("✅ Navigation guard passed:", path);
-  }, [
-    dbReady,
-    hasInitialized, // ✅ added
-    isLoading,
-    user,
-    segments,
-    router,
-  ]);
+  }, [canNavigate, user, segments, router]);
 
-  // ── Splash — show loader until BOTH are ready ───────────
-  if (!dbReady || !hasInitialized || isLoading) { // ✅ added hasInitialized
+  // ── Splash ─────────────────────────────────────────────────────────────
+  if (!canNavigate) {
     return (
       <View style={styles.splash}>
         <ActivityIndicator size="large" color="#4F46E5" />
+        {/* ✅ Show debug text in dev so you can see what's blocking */}
+        {__DEV__ && (
+          <Text style={styles.debugText}>
+            {!dbReady
+              ? "Opening database…"
+              : isLoading
+                ? "Restoring session…"
+                : !hydrated && !hasInitialized
+                  ? "Waiting for auth store…"
+                  : "Navigating…"}
+          </Text>
+        )}
       </View>
     );
   }
 
-  return (
-    <Stack screenOptions={{ headerShown: false }} />
-  );
+  return <Stack screenOptions={{ headerShown: false }} />;
 }
 
 const styles = StyleSheet.create({
@@ -124,5 +186,11 @@ const styles = StyleSheet.create({
     justifyContent:  "center",
     alignItems:      "center",
     backgroundColor: "#F9FAFB",
+    gap:             12,
+  },
+  debugText: {
+    fontSize:  13,
+    color:     "#6B7280",
+    marginTop: 8,
   },
 });

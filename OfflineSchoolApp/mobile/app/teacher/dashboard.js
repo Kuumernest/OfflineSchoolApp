@@ -191,7 +191,7 @@ export default function TeacherDashboard() {
   const fetchAllAnnouncements = useAnnouncementStore((s) => s.fetchAll);
   const announcementStats     = useAnnouncementStore((s) => s.stats);
 
-  // ✅ Reactive unread count — derives from inbox which excludes teacher's own posts
+  // ✅ Reactive unread count
   const announcementUnread = useAnnouncementStore((s) => s.unreadCount);
   const urgentUnack        = announcementStats?.urgentUnack ?? 0;
 
@@ -200,11 +200,23 @@ export default function TeacherDashboard() {
   const [loading,         setLoading]         = useState(true);
   const [error,           setError]           = useState(null);
   const [refreshing,      setRefreshing]      = useState(false);
+
+  // ✅ FIX: Initialise to `null` (unknown) so we don't flash incomplete
+  //    state before the async check resolves. Only show the banner/redirect
+  //    once we know for certain the profile is incomplete.
   const [profileComplete, setProfileComplete] = useState(
-    storeProfileCompleted ?? true
+    storeProfileCompleted === true ? true : null
   );
 
-  const profileCheckRan = useRef(false);
+  // ✅ FIX: Key the ref by teacherId so it resets when the user changes
+  //    but does NOT reset on every re-render (unlike putting the flag in state).
+  //    We store the last-checked teacherId so we can detect identity changes.
+  const profileCheckedForId = useRef(null);
+
+  // ✅ FIX: Stable ref for the `user` object so fetchAllAnnouncements
+  //    always receives the latest user without being listed as a dep.
+  const userRef = useRef(user);
+  useEffect(() => { userRef.current = user; }, [user]);
 
   // ── Load teacher stats + school info ──────────────────────────────────────
   const loadStats = useCallback(async (isRefresh = false) => {
@@ -243,67 +255,93 @@ export default function TeacherDashboard() {
   }, [loadStats]);
 
   // ── Load announcements on mount ───────────────────────────────────────────
-  // ✅ teacherId string dep — only fires when teacher identity changes,
-  //    NOT on every render. Prevents infinite fetchAll loop.
+  // ✅ FIX: Use userRef.current so this effect only fires when teacherId
+  //    changes, never because the user object reference changed.
   useEffect(() => {
     if (!teacherId) return;
-    fetchAllAnnouncements(user).catch((err) =>
+    fetchAllAnnouncements(userRef.current).catch((err) =>
       console.warn("Announcement fetch failed:", err.message)
     );
-    // user intentionally omitted — captured from outer scope
-    // fetchAllAnnouncements is a stable Zustand action
+    // fetchAllAnnouncements is a stable Zustand action — safe to omit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherId]);
 
   // ── Profile completion check ──────────────────────────────────────────────
+  // ✅ FIX: Gate on profileCheckedForId so the check runs once per unique
+  //    teacherId. If the store already says complete we short-circuit.
+  //    Crucially we do NOT auto-redirect — we only set state so the banner
+  //    shows and the teacher can choose to navigate themselves.  This breaks
+  //    the mount → redirect → remount → redirect loop caused by "Skip".
   useEffect(() => {
     if (!teacherId) return;
-    if (profileCheckRan.current) return;
-    profileCheckRan.current = true;
 
-    if (storeProfileCompleted) {
+    // Store flipped to true (e.g. after setup completed) — trust it.
+    if (storeProfileCompleted === true) {
       setProfileComplete(true);
+      profileCheckedForId.current = teacherId;
       return;
     }
+
+    // Already ran the async check for this exact teacher — don't repeat.
+    if (profileCheckedForId.current === teacherId) return;
+    profileCheckedForId.current = teacherId;
 
     const checkProfile = async () => {
       try {
         const complete = await isTeacherProfileComplete(teacherId);
         setProfileComplete(complete);
+
         if (complete) {
           useAuthStore.getState().setProfileCompleted?.(true);
-        } else {
-          setTimeout(() => router.push("/teacher/profile/setup"), 800);
         }
+        // ✅ FIX: Removed the auto-redirect (`router.push`) entirely.
+        //    The in-dashboard banner + header warning icon are sufficient
+        //    prompts. Auto-redirecting after "Skip" caused an infinite
+        //    remount loop:
+        //      dashboard mounts → redirect to setup → teacher skips →
+        //      setup navigates back → dashboard remounts → redirect again…
+        //
+        //    If you still want a one-time redirect on first-ever login you
+        //    should gate it on a persistent flag (AsyncStorage / auth store)
+        //    that survives navigation, NOT on component mount.
       } catch (err) {
         console.warn("Profile check failed:", err.message);
+        // ✅ FIX: Default to `true` (complete) on error so we never get
+        //    stuck in an incomplete-profile redirect loop due to a network
+        //    hiccup.
         setProfileComplete(true);
       }
     };
 
     checkProfile();
-  }, [teacherId, storeProfileCompleted, router]);
+    // router intentionally omitted — we no longer redirect from here
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherId, storeProfileCompleted]);
 
   // ── Alerts ────────────────────────────────────────────────────────────────
+  // ✅ FIX: Treat `null` (unknown) as complete so no spurious alert flashes
+  //    during the async profile check.
+  const isProfileIncomplete = profileComplete === false;
+
   const alerts = useMemo(() => {
     const list = [];
 
     if (stats) {
-      if (stats.pendingMarksEntry > 0)    list.push({ id: "pending-marks",      type: "danger",  icon: "create-outline",           message: `${stats.pendingMarksEntry} subject${stats.pendingMarksEntry > 1 ? "s" : ""} need marks entered`,                route: "/teacher/exams?filter=pending-marks" });
-      if (stats.rejectedSubmissions > 0)  list.push({ id: "rejected-marks",     type: "danger",  icon: "alert-circle-outline",     message: `${stats.rejectedSubmissions} submission${stats.rejectedSubmissions > 1 ? "s" : ""} rejected — re-enter marks`,  route: "/teacher/exams?filter=rejected"      });
-      if (stats.pendingGrading > 0)       list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: `${stats.pendingGrading} submissions pending grading`,                                                             route: "/teacher/results"                    });
-      if (stats.upcomingDeadlines > 0)    list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: `${stats.upcomingDeadlines} homework deadlines this week`,                                                         route: "/teacher/homework"                   });
-      if (stats.upcomingExams > 0)        list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: `${stats.upcomingExams} exams scheduled this week`,                                                                route: "/teacher/exams"                      });
-      if (stats.todayAttendanceMissing>0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: `Attendance not marked for ${stats.todayAttendanceMissing} classes today`,                                         route: "/teacher/attendance/mark"            });
-      if (stats.newSubmissions > 0)       list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: `${stats.newSubmissions} new homework submission${stats.newSubmissions > 1 ? "s" : ""} awaiting grading`,           route: "/teacher/homework"                   });
+      if (stats.pendingMarksEntry > 0)     list.push({ id: "pending-marks",      type: "danger",  icon: "create-outline",           message: `${stats.pendingMarksEntry} subject${stats.pendingMarksEntry > 1 ? "s" : ""} need marks entered`,                route: "/teacher/exams?filter=pending-marks" });
+      if (stats.rejectedSubmissions > 0)   list.push({ id: "rejected-marks",     type: "danger",  icon: "alert-circle-outline",     message: `${stats.rejectedSubmissions} submission${stats.rejectedSubmissions > 1 ? "s" : ""} rejected — re-enter marks`,  route: "/teacher/exams?filter=rejected"      });
+      if (stats.pendingGrading > 0)        list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: `${stats.pendingGrading} submissions pending grading`,                                                             route: "/teacher/results"                    });
+      if (stats.upcomingDeadlines > 0)     list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: `${stats.upcomingDeadlines} homework deadlines this week`,                                                         route: "/teacher/homework"                   });
+      if (stats.upcomingExams > 0)         list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: `${stats.upcomingExams} exams scheduled this week`,                                                                route: "/teacher/exams"                      });
+      if (stats.todayAttendanceMissing > 0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: `Attendance not marked for ${stats.todayAttendanceMissing} classes today`,                                         route: "/teacher/attendance/mark"            });
+      if (stats.newSubmissions > 0)        list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: `${stats.newSubmissions} new homework submission${stats.newSubmissions > 1 ? "s" : ""} awaiting grading`,           route: "/teacher/homework"                   });
     }
 
-    if (!profileComplete)       list.push({ id: "profile-incomplete",   type: "warning", icon: "person-outline",    message: "Your profile is incomplete — tap to complete setup",                                                                       route: "/teacher/profile/setup" });
+    if (isProfileIncomplete)    list.push({ id: "profile-incomplete",   type: "warning", icon: "person-outline",    message: "Your profile is incomplete — tap to complete setup",                                                                       route: "/teacher/profile/setup" });
     if (urgentUnack > 0)        list.push({ id: "urgent-announcements", type: "danger",  icon: "megaphone-outline", message: `${urgentUnack} urgent announcement${urgentUnack > 1 ? "s" : ""} need${urgentUnack === 1 ? "s" : ""} acknowledgement`,     route: "/teacher/announcements" });
     if (announcementUnread > 0) list.push({ id: "unread-announcements", type: "info",    icon: "megaphone-outline", message: `${announcementUnread} unread announcement${announcementUnread > 1 ? "s" : ""}`,                                            route: "/teacher/announcements" });
 
     return list;
-  }, [stats, profileComplete, announcementUnread, urgentUnack]);
+  }, [stats, isProfileIncomplete, announcementUnread, urgentUnack]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const handleNav = useCallback((route) => {
@@ -316,10 +354,11 @@ export default function TeacherDashboard() {
     catch { router.replace("/auth/login"); }
   }, [logout, router]);
 
+  // ✅ FIX: Use userRef so onRefresh is stable and does NOT re-create when
+  //    the user object reference changes — which was causing extra renders.
   const onRefresh = useCallback(() => {
     loadStats(true);
-    fetchAllAnnouncements(user).catch(() => {});
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    fetchAllAnnouncements(userRef.current).catch(() => {});
   }, [loadStats, fetchAllAnnouncements]);
 
   if (!teacherId) return null;
@@ -354,7 +393,9 @@ export default function TeacherDashboard() {
         </View>
 
         <View style={styles.headerActions}>
-          {!profileComplete && (
+          {/* ✅ FIX: Only show warning icon when we know for certain
+               the profile is incomplete (not during the null/loading phase) */}
+          {isProfileIncomplete && (
             <TouchableOpacity
               style={styles.profileIncompleteBtn}
               onPress={() => handleNav("/teacher/profile/setup")}
@@ -397,7 +438,8 @@ export default function TeacherDashboard() {
                 {(user?.name || "T").trim().split(/\s+/).filter(Boolean)
                   .map((w) => w[0].toUpperCase()).slice(0, 2).join("")}
               </Text>
-              {profileComplete && <View style={styles.avatarDot} />}
+              {/* ✅ FIX: Only show green dot when definitively complete */}
+              {profileComplete === true && <View style={styles.avatarDot} />}
             </View>
           </TouchableOpacity>
         </View>
@@ -427,7 +469,8 @@ export default function TeacherDashboard() {
           </View>
         )}
 
-        {!profileComplete && (
+        {/* ✅ FIX: Only render when definitively incomplete */}
+        {isProfileIncomplete && (
           <TouchableOpacity
             style={styles.profileSetupBanner}
             onPress={() => handleNav("/teacher/profile/setup")}
@@ -446,9 +489,6 @@ export default function TeacherDashboard() {
           </TouchableOpacity>
         )}
 
-        {/* ✅ Only shows for announcements received by teacher (inbox),
-             not their own sent items — teacher's own posts are excluded
-             from inbox by fetchInbox in the store */}
         {(announcementUnread > 0 || urgentUnack > 0) && (
           <TouchableOpacity
             style={[
@@ -694,7 +734,7 @@ export default function TeacherDashboard() {
               const isCurrent = status === "current";
               return (
                 <TouchableOpacity
-                  key={index}
+                  key={cls._id || cls.id || index}
                   style={[
                     styles.scheduleCard,
                     isPast    && styles.scheduleCardPast,
