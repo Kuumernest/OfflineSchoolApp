@@ -8,7 +8,7 @@ import {
 import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth.store";
-import { getDB }        from "@/db/client";
+import { getDatabase }    from "@/db/database";
 import api              from "@/services/api";
 
 // ─────────────────────────────────────────────────────────

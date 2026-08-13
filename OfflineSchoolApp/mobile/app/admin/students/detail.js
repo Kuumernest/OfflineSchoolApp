@@ -3,16 +3,15 @@ import { useEffect, useState, useCallback } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, StyleSheet,
-  Clipboard, Platform,
+  Clipboard, Platform, Modal,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons }                        from "@expo/vector-icons";
 import * as Haptics                        from "expo-haptics";
 
-import { getDB }          from "@/db/client";
+import { getDatabase }    from "@/db/database";
 import { useAuthStore }   from "@/store/auth.store";
-import { enqueueMutation} from "@/sync/syncQueue";
-import { fetchStudentById } from "@/services/student.service";
+import api                from "@/services/api";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -153,7 +152,6 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
 // ─────────────────────────────────────────────────────────
 
 function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel }) {
-  const { Modal } = require("react-native");
   const others = (classes || []).filter(
     (c) => String(c._id ?? c.id) !== String(currentClassId ?? "")
   );
@@ -231,18 +229,30 @@ export default function StudentDetailScreen() {
       setLoading(true);
       setError(null);
 
-      const db   = await getDB();
+      console.log("[detail] 🔍 studentId param:", studentId, "type:", typeof studentId);
+
+      const db = await getDatabase();
+
+      // See what fields exist and what a real student looks like
+      const sample = await db.getAllAsync("SELECT * FROM students LIMIT 1");
+      if (sample.length > 0) {
+        console.log("[detail] 📋 Sample student fields:", Object.keys(sample[0]));
+        console.log("[detail] 📋 Sample student data:", JSON.stringify(sample[0], null, 2));
+      } else {
+        console.log("[detail] ⚠️ Students table is empty!");
+      }
+
       const rows = await db.getAllAsync(
-        "SELECT * FROM students WHERE _id = ? LIMIT 1",
+        "SELECT * FROM students WHERE id = ? LIMIT 1",
         [studentId]
       );
+
+      console.log("[detail] 🔎 Query with _id returned:", rows.length, "rows");
 
       if (rows.length > 0) {
         setStudent(rows[0]);
       } else {
-        // Fallback to API
-        const data = await fetchStudentById(studentId);
-        setStudent(data);
+        setError("Student not found.");
       }
 
       // Load classes for move picker
@@ -282,20 +292,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await enqueueMutation({
-        type:    "SUSPEND_STUDENT",
-        payload: { studentId, schoolId },
-        endpoint: `/students/${studentId}/suspend`,
-        method:   "PATCH",
-      });
+      await api.patch(`/students/${studentId}/suspend`);
       setStudent((s) => ({ ...s, status: "suspended" }));
       Alert.alert("Suspended", `${student?.name} has been suspended.`);
     } catch (err) {
-      Alert.alert("Error", err?.message || "Failed to suspend.");
+      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to suspend.");
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, schoolId, withConfirm]);
+  }, [student, studentId, withConfirm]);
 
   const handleRestore = useCallback(async () => {
     const yes = await withConfirm(
@@ -307,20 +312,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await enqueueMutation({
-        type:     "RESTORE_STUDENT",
-        payload:  { studentId, schoolId },
-        endpoint: `/students/${studentId}/restore`,
-        method:   "PATCH",
-      });
+      await api.patch(`/students/${studentId}/restore`);
       setStudent((s) => ({ ...s, status: "active" }));
       Alert.alert("Restored", `${student?.name} has been restored.`);
     } catch (err) {
-      Alert.alert("Error", err?.message || "Failed to restore.");
+      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to restore.");
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, schoolId, withConfirm]);
+  }, [student, studentId, withConfirm]);
 
   const handleDelete = useCallback(async () => {
     const yes = await withConfirm(
@@ -332,20 +332,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      await enqueueMutation({
-        type:     "DELETE_STUDENT",
-        payload:  { studentId, schoolId },
-        endpoint: `/students/${studentId}`,
-        method:   "DELETE",
-      });
+      await api.delete(`/students/${studentId}`);
       Alert.alert("Deleted", `${student?.name} has been removed.`, [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (err) {
       setIsBusy(false);
-      Alert.alert("Error", err?.message || "Failed to delete.");
+      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to delete.");
     }
-  }, [student, studentId, schoolId, router, withConfirm]);
+  }, [student, studentId, router, withConfirm]);
 
   const handleMoveSelect = useCallback(async (cls) => {
     const classId = String(cls._id ?? cls.id);
@@ -358,30 +353,24 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     setShowMovePicker(false);
     try {
-      await enqueueMutation({
-        type:     "MOVE_STUDENT",
-        payload:  { studentId, classId, schoolId },
-        endpoint: `/students/${studentId}/move`,
-        method:   "PATCH",
-        body:     { classId },
-      });
+      await api.patch(`/students/${studentId}/move`, { classId });
       setStudent((s) => ({ ...s, className: cls.name, classId }));
       Alert.alert("Moved", `${student?.name} moved to ${cls.name}.`);
     } catch (err) {
-      Alert.alert("Error", err?.message || "Failed to move.");
+      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to move.");
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, schoolId, withConfirm]);
+  }, [student, studentId, withConfirm]);
 
   // ── Derived ─────────────────────────────────────────────
 
   const isSuspended      = student?.status?.toLowerCase() === "suspended";
   const statusConfig     = getStatusConfig(student?.status);
-  const classNameDisplay = student?.className || student?.class?.name;
-  const classIdForMove   = student?.classId   || student?.class?._id;
-  const enrollmentNo     = student?.enrollmentNo ?? null;
-  const mustReset        = student?.mustResetPassword ?? false;
+ const classNameDisplay = student?.className || student?.class_name || student?.class?.name;
+const classIdForMove   = student?.classId   || student?.class_id   || student?.class?._id;
+const enrollmentNo     = student?.enrollmentNo ?? student?.enrollment_no ?? null;
+const mustReset        = student?.mustResetPassword ?? student?.must_reset_password ?? false;
   const firstLetter      = (student?.name || "?").charAt(0).toUpperCase();
 
   // ── Loading ─────────────────────────────────────────────
@@ -500,25 +489,25 @@ export default function StudentDetailScreen() {
 
         {/* Personal info */}
         <Section title="Personal Information">
-          <InfoRow icon="person-outline"   label="Full Name"     value={student.name} />
-          <InfoRow icon="mail-outline"     label="Email"         value={student.email} />
-          <InfoRow icon="call-outline"     label="Phone"         value={student.phone} />
-          <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDate(student.dateOfBirth)} />
-          <InfoRow icon="card-outline"     label="Enrollment No" value={enrollmentNo} mono />
-          <InfoRow icon="pricetag-outline" label="Admission No"  value={student.admissionNumber} />
-          <InfoRow icon="person-outline"   label="Gender"        value={student.gender} />
-          <InfoRow icon="location-outline" label="Address"       value={student.address} />
-        </Section>
+  <InfoRow icon="person-outline"   label="Full Name"     value={student.name || student.studentName} />
+  <InfoRow icon="mail-outline"     label="Email"         value={student.email} />
+  <InfoRow icon="call-outline"     label="Phone"         value={student.phone} />
+  <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDate(student.dateOfBirth || student.date_of_birth)} />
+  <InfoRow icon="card-outline"     label="Enrollment No" value={enrollmentNo} mono />
+  <InfoRow icon="pricetag-outline" label="Admission No"  value={student.admissionNumber || student.admissionNo} />
+  <InfoRow icon="person-outline"   label="Gender"        value={student.gender} />
+  <InfoRow icon="location-outline" label="Address"       value={student.address} />
+</Section>
 
         {/* School info */}
-        <Section title="School Information">
-          <InfoRow icon="school-outline"   label="Class"          value={classNameDisplay} />
-          <InfoRow icon="people-outline"   label="Guardian Name"  value={student.guardianName} />
-          <InfoRow icon="call-outline"     label="Guardian Phone" value={student.guardianPhone} />
-          <InfoRow icon="calendar-outline" label="Enrolled On"    value={formatDate(student.enrolledAt)} />
-          <InfoRow icon="calendar-outline" label="Created"        value={formatDate(student.createdAt)} />
-          <InfoRow icon="calendar-outline" label="Last Updated"   value={formatDate(student.updatedAt)} />
-        </Section>
+<Section title="School Information">
+  <InfoRow icon="school-outline"   label="Class"          value={classNameDisplay} />
+  <InfoRow icon="people-outline"   label="Guardian Name"  value={student.guardianName || student.guardian_name} />
+  <InfoRow icon="call-outline"     label="Guardian Phone" value={student.guardianPhone || student.guardian_phone} />
+  <InfoRow icon="calendar-outline" label="Enrolled On"    value={formatDate(student.enrolledAt || student.enrolled_at || student.approved_at)} />
+  <InfoRow icon="calendar-outline" label="Created"        value={formatDate(student.createdAt || student.created_at)} />
+  <InfoRow icon="calendar-outline" label="Last Updated"   value={formatDate(student.updatedAt || student.updated_at)} />
+</Section>
 
         {/* Actions */}
         <View style={styles.actionsSection}>
@@ -592,7 +581,6 @@ const styles = StyleSheet.create({
                      paddingHorizontal: 20, paddingVertical: 10 },
   errorBtnText:    { color: "#fff", fontWeight: "700", fontSize: 14 },
 
-  // Header
   header:          { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 4 },
   backBtn:         { width: 40, height: 40, borderRadius: 12, backgroundColor: "#F3F4F6",
                      alignItems: "center", justifyContent: "center" },
@@ -601,7 +589,6 @@ const styles = StyleSheet.create({
   headerTitle:     { fontSize: 20, fontWeight: "800", color: "#111827" },
   headerSub:       { fontSize: 13, color: "#6B7280", marginTop: 1 },
 
-  // Profile card
   profileCard:     { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
                      borderColor: "#E5E7EB", padding: 16, flexDirection: "row",
                      alignItems: "flex-start", gap: 12, shadowColor: "#000",
@@ -629,7 +616,6 @@ const styles = StyleSheet.create({
                      borderColor: "#FDE68A", paddingHorizontal: 10, paddingVertical: 4 },
   badgeAmberText:  { fontSize: 11, fontWeight: "700", color: "#92400E" },
 
-  // Enrollment card
   enrollCard:      { backgroundColor: "#EEF2FF", borderRadius: 16, borderWidth: 1,
                      borderColor: "#C7D2FE", padding: 16 },
   enrollHeader:    { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 8 },
@@ -650,13 +636,11 @@ const styles = StyleSheet.create({
                      borderColor: "#FDE68A", padding: 10, marginTop: 10 },
   resetWarningText:{ fontSize: 12, color: "#92400E", flex: 1, lineHeight: 17 },
 
-  // Section
   section:         { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
                      borderColor: "#E5E7EB", padding: 16, shadowColor: "#000",
                      shadowOpacity: 0.03, shadowRadius: 4, elevation: 1 },
   sectionTitle:    { fontSize: 13, fontWeight: "800", color: "#111827", marginBottom: 14 },
 
-  // InfoRow
   infoRow:         { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 12 },
   infoIcon:        { marginTop: 2 },
   infoText:        { flex: 1 },
@@ -666,7 +650,6 @@ const styles = StyleSheet.create({
   mono:            { fontFamily: Platform.OS === "ios" ? "Courier" : "monospace",
                      letterSpacing: 2 },
 
-  // Actions
   actionsSection:  { gap: 10 },
   actionBtn:       { flexDirection: "row", alignItems: "center", gap: 12,
                      borderRadius: 14, borderWidth: 1, padding: 14 },
@@ -679,7 +662,6 @@ const styles = StyleSheet.create({
   actionDesc:      { fontSize: 12, color: "#6B7280", marginTop: 2 },
   disabled:        { opacity: 0.5 },
 
-  // Modal
   modalOverlay:    { flex: 1, backgroundColor: "rgba(0,0,0,0.45)",
                      justifyContent: "center", alignItems: "center", padding: 24 },
   modalSheet:      { backgroundColor: "#fff", borderRadius: 20, padding: 20,

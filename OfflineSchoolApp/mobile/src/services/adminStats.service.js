@@ -189,6 +189,7 @@ const fetchAdminStatsFromServer = async () => {
       if (response?.data?.success && response?.data?.stats) {
         console.log("✅ Server stats received");
         const raw = response.data.stats;
+        console.log("🔍 RAW SERVER STATS:", JSON.stringify(raw, null, 2));
 
         const serverStats = {
           pendingApplications:      raw.pendingApplications      ?? 0,
@@ -198,7 +199,7 @@ const fetchAdminStatsFromServer = async () => {
           totalClasses:             raw.totalClasses             ?? 0,
           totalSubjects:            raw.totalSubjects            ?? 0,
           assignedSubjects:
-            raw.assignedSubjects ?? raw.totalAssignments         ?? 0,
+          raw.totalAssignments           ?? raw.assignedSubjects ?? 0,
           incompleteTimetableSlots: raw.incompleteTimetableSlots ?? 0,
           activeAnnouncements:      raw.activeAnnouncements      ?? 0,
           classesWithoutSubjects:   raw.classesWithoutSubjects   ?? 0,
@@ -414,32 +415,40 @@ const getAdminStatsLocal = async () => {
     }
 
     // ── [6] Assigned subjects ─────────────────────────────
-    if (assign.table) {
-      const assignDeletedCol = pickColumn(
-        assign.columns, ["deleted_at", "deletedAt"]
-      );
-      const sfA = schoolFilter(assign.columns, schoolId, "ta");
-      const q = `
-        SELECT COUNT(DISTINCT ta.${assign.subjectCol}) AS count
-        FROM   ${assign.table} ta
-        WHERE  ta.${assign.subjectCol} IS NOT NULL
-          AND  ta.${assign.subjectCol} != ''
-          AND  ta.${assign.teacherCol} IS NOT NULL
-          AND  ta.${assign.teacherCol} != ''
-          ${sfA.clause}
-          ${notDeletedClause(assignDeletedCol, "ta")}`;
-      queries.push(safeCount(db, q, sfA.params));
-    } else if (hasSubjects && subjectsTeacherCol) {
-      let q   = `
-        SELECT COUNT(*) AS count FROM subjects
-        WHERE  ${subjectsTeacherCol} IS NOT NULL
-          AND  ${subjectsTeacherCol} != ''`;
-      const p = [...sfSubj.params];
-      q += sfSubj.clause + notDeletedClause(subjDeletedCol);
-      queries.push(safeCount(db, q, p));
-    } else {
-      queries.push(Promise.resolve(0));
-    }
+if (assign.table) {
+  const assignDeletedCol = pickColumn(
+    assign.columns, ["deleted_at", "deletedAt"]
+  );
+  const sfA = schoolFilter(assign.columns, schoolId, "ta");
+  const q = `
+    SELECT COUNT(DISTINCT ta.${assign.subjectCol}) AS count
+    FROM   ${assign.table} ta
+    WHERE  ta.${assign.subjectCol} IS NOT NULL
+      AND  ta.${assign.subjectCol} != ''
+      AND  ta.${assign.teacherCol} IS NOT NULL
+      AND  ta.${assign.teacherCol} != ''
+      ${sfA.clause}
+      ${notDeletedClause(assignDeletedCol, "ta")}`;
+
+  // 🔍 DEBUG
+  console.log("[assignedSubjects] Using table:", assign.table);
+  console.log("[assignedSubjects] Query:", q);
+  console.log("[assignedSubjects] Params:", sfA.params);
+
+  queries.push(safeCount(db, q, sfA.params));
+} else if (hasSubjects && subjectsTeacherCol) {
+  console.log("[assignedSubjects] ⚠️ Falling back to subjects table");
+  let q   = `
+    SELECT COUNT(*) AS count FROM subjects
+    WHERE  ${subjectsTeacherCol} IS NOT NULL
+      AND  ${subjectsTeacherCol} != ''`;
+  const p = [...sfSubj.params];
+  q += sfSubj.clause + notDeletedClause(subjDeletedCol);
+  queries.push(safeCount(db, q, p));
+} else {
+  console.log("[assignedSubjects] ⚠️ No table found — returning 0");
+  queries.push(Promise.resolve(0));
+}
 
     // ── [7] Classes without timetable ─────────────────────
     if (hasClasses) {

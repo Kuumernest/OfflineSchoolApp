@@ -83,7 +83,7 @@ const SYNC_TABLES = [
  * Call this on save, on submit, or on a timer.
  */
 export const pushQuizData = async (schoolId) => {
-  const db = await getDb();
+  const db = await getDatabase();
   const results = {
     pushed: 0,
     failed: 0,
@@ -209,7 +209,7 @@ const _markSynced = async (db, table, idField, ids) => {
  * Uses last sync timestamp to only get changes.
  */
 export const pullQuizData = async (schoolId) => {
-  const db = await getDb();
+  const db = await getDatabase();
   const results = {
     pulled: 0,
     failed: 0,
@@ -325,7 +325,7 @@ const _upsertRecord = async (db, table, idField, record) => {
  * Strategy: Server wins for quiz config, Local wins for in-progress attempts.
  */
 export const resolveConflicts = async (schoolId) => {
-  const db = await getDb();
+  const db = await getDatabase();
 
   // Find records that were modified both locally and on server
   const conflicts = await db.getAllAsync(
@@ -396,7 +396,7 @@ export const syncQuizData = async (schoolId) => {
  * Useful: call after submitAttempt() for immediate sync.
  */
 export const syncAttempt = async (attemptId) => {
-  const db = await getDb();
+  const db = await getDatabase();
 
   const attempt = await db.getFirstAsync(
     `SELECT * FROM quiz_attempts WHERE id = ?`,
@@ -471,7 +471,7 @@ export const syncAttempt = async (attemptId) => {
  * Call this when connectivity is restored.
  */
 export const processQuizSyncQueue = async () => {
-  const db = await getDb();
+  const db = await getDatabase();
 
   const queued = await db.getAllAsync(
     `SELECT * FROM sync_queue
@@ -562,7 +562,7 @@ const _setLastSyncTime = async (db, key) => {
  * Useful for showing a badge or indicator in the UI.
  */
 export const getQuizSyncStatus = async () => {
-  const db = await getDb();
+  const db = await getDatabase();
 
   const unsyncedQuizzes = await db.getFirstAsync(
     `SELECT COUNT(*) AS count FROM quizzes WHERE _synced = 0 AND deleted_at IS NULL`
