@@ -100,8 +100,6 @@ const composeName = (r) => {
 
 // ─────────────────────────────────────────────────────────────
 // CHECK FOR UNIQUE user_id CONSTRAINT IN TABLE SCHEMA
-// SQLite bakes constraints into the CREATE TABLE sql —
-// dropping indexes alone does NOT remove them.
 // ─────────────────────────────────────────────────────────────
 
 const hasUniqueUserIdConstraint = async (db) => {
@@ -113,11 +111,7 @@ const hasUniqueUserIdConstraint = async (db) => {
     if (!result?.sql) return false;
 
     const sql = result.sql.toUpperCase();
-
-    // Inline UNIQUE: "user_id TEXT UNIQUE" or "user_id TEXT NOT NULL UNIQUE"
     const hasInlineUnique = /USER_ID\s+\w+[^,)]*\bUNIQUE\b/.test(sql);
-
-    // Table-level UNIQUE: "UNIQUE(user_id)" or "UNIQUE (`user_id`)"
     const hasTableUnique =
       /UNIQUE\s*\(\s*[`"']?USER_ID[`"']?\s*\)/.test(sql);
 
@@ -128,6 +122,26 @@ const hasUniqueUserIdConstraint = async (db) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// VALID STATUS VALUES
+// ─────────────────────────────────────────────────────────────
+
+const VALID_STATUSES = new Set([
+  "approved",
+  "pending",
+  "suspended",
+  "rejected",
+]);
+
+/**
+ * Normalise the status value coming from the server or local DB.
+ * Falls back to "approved" only when the value is genuinely absent.
+ */
+const normaliseStatus = (raw) => {
+  const s = (raw ?? "").toString().toLowerCase().trim();
+  return VALID_STATUSES.has(s) ? s : "approved";
+};
+
+// ─────────────────────────────────────────────────────────────
 // FIX STUDENT INDEXES
 // ─────────────────────────────────────────────────────────────
 
@@ -135,23 +149,19 @@ export const fixStudentIndexes = async () => {
   try {
     const db = await getDatabase();
 
-    // ✅ Check if the UNIQUE constraint lives inside the table schema itself.
-    // SQLite cannot ALTER TABLE to remove constraints — only a full rebuild works.
     const needsRebuild = await hasUniqueUserIdConstraint(db);
 
     if (needsRebuild) {
       console.warn(
-        "[fixStudentIndexes] ⚠️ UNIQUE constraint on user_id found in table schema — triggering full rebuild"
+        "[fixStudentIndexes] ⚠️ UNIQUE constraint on user_id found — triggering full rebuild"
       );
       const result = await dropAndRecreateStudentTable();
       if (!result.success) {
         console.error("[fixStudentIndexes] Table rebuild failed:", result.error);
       }
-      // dropAndRecreateStudentTable already recreates all indexes correctly
       return;
     }
 
-    // ── Index-level cleanup only (no schema-level UNIQUE found) ──────────
     const indexes = await db
       .getAllAsync(
         `SELECT name, sql FROM sqlite_master
@@ -214,7 +224,7 @@ export const dropAndRecreateStudentTable = async () => {
   console.log("[dropAndRecreateStudentTable] Starting table recreation...");
 
   try {
-    // ── Step 1: Backup existing data ──────────────────────────────────────
+    // Step 1: Backup existing data
     let backupData = [];
     try {
       const hasTable = await tableExists(db, "students");
@@ -233,18 +243,18 @@ export const dropAndRecreateStudentTable = async () => {
       );
     }
 
-    // ── Step 2: Drop old table ────────────────────────────────────────────
+    // Step 2: Drop old table
     await db.execAsync(`DROP TABLE IF EXISTS students;`).catch(() => {});
     console.log("[dropAndRecreateStudentTable] ✅ Old table dropped");
 
-    // ── Step 3: Reset verification flag ──────────────────────────────────
+    // Step 3: Reset verification flag
     studentSchemaVerified = false;
 
-    // ── Step 4: Recreate schema clean ────────────────────────────────────
+    // Step 4: Recreate schema clean
     await ensureStudentSchema(db);
     console.log("[dropAndRecreateStudentTable] ✅ Schema recreated");
 
-    // ── Step 5: Restore data ──────────────────────────────────────────────
+    // Step 5: Restore data — preserve real status from backup
     if (backupData.length > 0) {
       let restored = 0;
       let failed   = 0;
@@ -283,7 +293,8 @@ export const dropAndRecreateStudentTable = async () => {
               row.grade,
               row.admissionNo,
               row.admissionNumber,
-              row.status || "approved",
+              // ✅ Preserve real status from backup — do NOT hardcode 'approved'
+              normaliseStatus(row.status),
               row.is_active ?? 1,
               0,
               row.updated_at,
@@ -329,9 +340,6 @@ const ensureStudentSchema = async (db) => {
   if (studentSchemaVerified) return;
 
   try {
-    // ✅ If the table already exists but carries a UNIQUE constraint on
-    //    user_id, we must rebuild it — CREATE TABLE IF NOT EXISTS won't
-    //    fix an already-existing table.
     const exists = await tableExists(db, "students");
     if (exists) {
       const needsRebuild = await hasUniqueUserIdConstraint(db);
@@ -408,7 +416,6 @@ const ensureStudentSchema = async (db) => {
       }
     }
 
-    // Drop any legacy unique index on user_id and recreate as non-unique
     await db
       .execAsync(`DROP INDEX IF EXISTS idx_students_user_id;`)
       .catch(() => {});
@@ -502,18 +509,23 @@ const normaliseStudent = (r) => {
     email:         r.email         || r.guardian_email || null,
     grade:         r.grade         || r.class_grade    || r.className    || null,
     admissionNo,
+    // ✅ admissionNumber alias — mirrors web StudentRow which reads admissionNumber
+    admissionNumber: admissionNo,
     isActive:      r.isActive      ?? r.is_active      ?? true,
     schoolId:      r.schoolId      || null,
     classId,
     className,
+    // ✅ Nested class object — mirrors web resolveClassName() which reads class.name
+    class:         className ? { name: className, _id: classId } : null,
     studentId:     r.studentId     || null,
-    status:        r.status        || "approved",
+    // ✅ Preserve real status — web page depends on this for tab counts
+    status:        normaliseStatus(r.status),
     notes:         r.notes         || null,
   };
 };
 
 // ─────────────────────────────────────────────────────────────
-// ACTIVE CHECK
+// ACTIVE CHECK (used only by legacy getApprovedStudents)
 // ─────────────────────────────────────────────────────────────
 
 const isApproved = (r) => {
@@ -528,10 +540,23 @@ const isApproved = (r) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// CACHE WRITE
+// CACHE WRITE  ← status now preserved from server value
 // ─────────────────────────────────────────────────────────────
 
-const cacheStudentsLocally = async (db, students, schoolId) => {
+/**
+ * @param {object[]} students   - Already-normalised student objects
+ * @param {string}   schoolId
+ * @param {boolean}  [forceApproved=false]
+ *   Pass true only when writing the legacy approved-only response
+ *   (getApprovedStudents). For the new getStudents() path leave false
+ *   so suspended/pending/rejected rows keep their real status.
+ */
+const cacheStudentsLocally = async (
+  db,
+  students,
+  schoolId,
+  forceApproved = false
+) => {
   if (!students?.length) return;
 
   await ensureStudentSchema(db);
@@ -546,6 +571,7 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
     for (const s of students) {
       if (!s.id) continue;
 
+      // ── Resolve display name ─────────────────────────────────────────
       const fromParts = [s.firstName, s.lastName]
         .filter(Boolean)
         .join(" ")
@@ -605,6 +631,17 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
         s.admNo            ||
         null;
 
+      // ✅ Determine the status to persist
+      //    forceApproved=true  → legacy path, always write 'approved'
+      //    forceApproved=false → new path, preserve the real status
+      const statusToWrite = forceApproved
+        ? "approved"
+        : normaliseStatus(s.status);
+
+      // is_active mirrors the status: approved=1, everything else=0
+      const isActiveToWrite =
+        forceApproved || statusToWrite === "approved" ? 1 : 0;
+
       try {
         await db.runAsync(
           `INSERT INTO students (
@@ -623,7 +660,7 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
              ?, ?, ?,
              ?, ?, ?,
              ?, ?,
-             'approved', 1, 1, ?
+             ?, ?, 1, ?
            )
            ON CONFLICT(id) DO UPDATE SET
              user_id         = excluded.user_id,
@@ -643,8 +680,8 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
              grade           = excluded.grade,
              admissionNo     = excluded.admissionNo,
              admissionNumber = excluded.admissionNumber,
-             status          = 'approved',
-             is_active       = 1,
+             status          = excluded.status,
+             is_active       = excluded.is_active,
              _synced         = 1,
              updated_at      = excluded.updated_at`,
           [
@@ -666,6 +703,8 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
             s.grade         || s.className || null,
             admNo,
             admNo,
+            statusToWrite,
+            isActiveToWrite,
             now,
           ]
         );
@@ -684,7 +723,7 @@ const cacheStudentsLocally = async (db, students, schoolId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// ONE-TIME REPAIR
+// ONE-TIME REPAIR  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const repairStudentNames = async () => {
@@ -698,7 +737,6 @@ export const repairStudentNames = async () => {
 
   let totalFixed = 0;
 
-  // ── Strategy 0: use studentName if name is missing ────────────────────
   if (hasStudentName) {
     const fromStudentName = await db
       .getAllAsync(
@@ -729,7 +767,6 @@ export const repairStudentNames = async () => {
     }
   }
 
-  // ── Strategy 1: compose from firstName + lastName ─────────────────────
   if (hasFirst && hasLast) {
     const firstCol = cols.includes("firstName") ? "firstName" : "first_name";
     const lastCol  = cols.includes("lastName")  ? "lastName"  : "last_name";
@@ -763,7 +800,6 @@ export const repairStudentNames = async () => {
     }
   }
 
-  // ── Strategy 2: look up from users table via user_id ──────────────────
   const stillBroken = await db
     .getAllAsync(
       `SELECT s.id, s.user_id, s.name
@@ -799,7 +835,6 @@ export const repairStudentNames = async () => {
     }
   }
 
-  // ── Strategy 3: sync class_id ↔ classId ──────────────────────────────
   if (cols.includes("class_id") && cols.includes("classId")) {
     await db
       .execAsync(
@@ -820,7 +855,6 @@ export const repairStudentNames = async () => {
     console.log("[repairStudentNames] ✅ class_id ↔ classId synced");
   }
 
-  // ── Strategy 4: sync admissionNo ↔ admissionNumber ───────────────────
   if (cols.includes("admissionNo") && cols.includes("admissionNumber")) {
     await db
       .execAsync(
@@ -846,7 +880,7 @@ export const repairStudentNames = async () => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT SELF-LOOKUP
+// STUDENT SELF-LOOKUP  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentProfileByUserId = async (userId) => {
@@ -888,7 +922,7 @@ export const getStudentProfileByUserId = async (userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT CLASS RESOLVER
+// STUDENT CLASS RESOLVER  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const resolveStudentClassId = async (userId) => {
@@ -899,7 +933,6 @@ export const resolveStudentClassId = async (userId) => {
   try {
     await ensureStudentSchema(db);
 
-    // Strategy 1: local students table
     const row = await db
       .getFirstAsync(
         `SELECT COALESCE(class_id, classId) AS resolved_class_id
@@ -917,7 +950,6 @@ export const resolveStudentClassId = async (userId) => {
       return row.resolved_class_id;
     }
 
-    // Strategy 2: users table
     try {
       const userCols     = await db
         .getAllAsync(`PRAGMA table_info(users)`, [])
@@ -951,7 +983,6 @@ export const resolveStudentClassId = async (userId) => {
       // Non-fatal
     }
 
-    // Strategy 3: server
     try {
       const res  = await api.get("/students/me");
       const data = res.data?.data || res.data;
@@ -1026,7 +1057,7 @@ export const resolveStudentClassId = async (userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT ATTENDANCE
+// STUDENT ATTENDANCE  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentAttendance = async (userId, limit = 30) => {
@@ -1076,7 +1107,7 @@ export const getStudentAttendance = async (userId, limit = 30) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT TIMETABLE
+// STUDENT TIMETABLE  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentTimetable = async (classId) => {
@@ -1126,7 +1157,7 @@ export const getStudentTimetable = async (classId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT QUIZZES
+// STUDENT QUIZZES  (unchanged)
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentAvailableQuizzes = async (userId, classId) => {
@@ -1203,12 +1234,190 @@ export const getStudentQuizHistory = async (userId, limit = 20) => {
 
 export const StudentService = {
 
-  // ── GET APPROVED STUDENTS ──────────────────────────────────────────────
+  // ── GET ALL STUDENTS (any status)  ← NEW, called by updated mobile screen
+  // ─────────────────────────────────────────────────────────────────────────
+  /**
+   * Mirrors web fetchStudents({ schoolId, status, page, limit }).
+   *
+   * @param {object} opts
+   * @param {number}  [opts.page=1]
+   * @param {number}  [opts.limit=200]
+   * @param {string}  [opts.status="all"]  "all"|"approved"|"pending"|"suspended"|"rejected"
+   * @param {string}  [opts.classId]       Optional class filter
+   * @param {string}  [opts.search]        Optional search term
+   *
+   * @returns {Promise<object[]>}  Normalised student array
+   */
+  async getStudents({
+    page    = 1,
+    limit   = 200,
+    status  = "all",
+    classId = "",
+    search  = "",
+  } = {}) {
+    const schoolId = getSchoolId();
+
+    // ── Build query params — mirrors web fetchStudents() params ────────
+    const params = { page, limit, schoolId };
+
+    // "all" → omit status param so the backend returns everything,
+    // identical to web toQueryStatus() behaviour
+    if (status && status !== "all") {
+      params.status = status;
+    }
+    if (classId) params.classId = classId;
+    if (search)  params.search  = search;
+
+    try {
+      await fixStudentIndexes();
+
+      const response = await api.get("/admin/students", {
+        params,
+        timeout: 15_000,
+      });
+
+      console.log(
+        `[getStudents] status=${status} page=${page} → HTTP ${response.status}`
+      );
+
+      const raw =
+        response.data?.students ||
+        response.data?.data     ||
+        (Array.isArray(response.data) ? response.data : null);
+
+      const serverTotal =
+        response.data?.total            ??
+        response.data?.pagination?.total ??
+        null;
+
+      console.log(
+        `[getStudents] raw=${raw?.length ?? "null"} serverTotal=${serverTotal}`
+      );
+
+      if (raw && raw.length > 0) {
+        // ✅ Normalise and preserve each student's real status
+        const normalised = raw.map(normaliseStudent).filter(Boolean);
+
+        console.log(`[getStudents] ${normalised.length} students from server`);
+
+        const db = await getDatabase();
+        // ✅ forceApproved=false → real statuses (pending, suspended, etc.) saved
+        await cacheStudentsLocally(db, normalised, schoolId, false);
+        await repairStudentNames();
+
+        return normalised;
+      }
+
+      if (raw && raw.length === 0) {
+        console.warn("[getStudents] Server returned 0 — falling back to local");
+        return this.getStudentsLocal({ status });
+      }
+
+    } catch (err) {
+      console.warn("[getStudents] server failed:", err.message);
+
+      if (err.message?.includes("UNIQUE constraint")) {
+        console.warn("[getStudents] ⚠️ UNIQUE constraint — triggering rebuild");
+        await dropAndRecreateStudentTable();
+      }
+    }
+
+    // Network error → serve from local cache
+    return this.getStudentsLocal({ status });
+  },
+
+  // ── LOCAL FALLBACK (any status)  ← NEW
+  // ─────────────────────────────────────────────────────────────────────────
+  /**
+   * Reads from the local SQLite cache.
+   * Filters by status when status !== "all" / "".
+   *
+   * @param {object} opts
+   * @param {string} [opts.status="all"]
+   * @param {string} [opts.classId]
+   * @returns {Promise<object[]>}
+   */
+  async getStudentsLocal({ status = "all", classId = "" } = {}) {
+    const db       = await getDatabase();
+    const schoolId = getSchoolId();
+
+    try {
+      if (!(await tableExists(db, "students"))) {
+        console.log("[getStudentsLocal] No local students table yet");
+        return [];
+      }
+
+      await ensureStudentSchema(db);
+
+      const stuCols    = await getColumns(db, "students");
+      const hasClasses = await tableExists(db, "classes");
+
+      const deletedCol      = pickColumn(stuCols, ["deleted_at", "deletedAt"]);
+      const classCol        = pickColumn(stuCols, ["class_id",   "classId"]);
+      const schoolCol       = pickColumn(stuCols, ["schoolId",   "school_id"]);
+      const hasClassNameCol = stuCols.includes("class_name");
+
+      let q = `SELECT s.*`;
+      if (hasClasses && classCol && !hasClassNameCol) {
+        q += `, c.name AS _joinedClassName`;
+      }
+      q += ` FROM students s`;
+      if (hasClasses && classCol && !hasClassNameCol) {
+        q += ` LEFT JOIN classes c ON c.id = s.${classCol}`;
+      }
+
+      const where  = [];
+      const params = [];
+
+      // ── Status filter ────────────────────────────────────────────────
+      if (status && status !== "all" && VALID_STATUSES.has(status)) {
+        where.push(`s.status = ?`);
+        params.push(status);
+      }
+      // "all" → no status WHERE clause, returns every student
+
+      // ── Soft-delete guard ────────────────────────────────────────────
+      if (deletedCol) {
+        where.push(
+          `(s.${deletedCol} IS NULL OR s.${deletedCol} = '')`
+        );
+      }
+
+      // ── School filter ─────────────────────────────────────────────────
+      if (schoolId && schoolCol) {
+        where.push(
+          `(s.${schoolCol} = ? OR s.${schoolCol} IS NULL OR s.${schoolCol} = '')`
+        );
+        params.push(schoolId);
+      }
+
+      // ── Class filter ──────────────────────────────────────────────────
+      if (classId && classCol) {
+        where.push(`s.${classCol} = ?`);
+        params.push(classId);
+      }
+
+      if (where.length > 0) q += ` WHERE ${where.join(" AND ")}`;
+
+      q += ` ORDER BY COALESCE(s.studentName, s.name, '') ASC`;
+
+      const rows = await db.getAllAsync(q, params);
+      console.log(
+        `[getStudentsLocal] status=${status} → ${rows.length} rows from local DB`
+      );
+      return rows.map(normaliseStudent).filter(Boolean);
+    } catch (err) {
+      console.error("[getStudentsLocal] error:", err.message);
+      return [];
+    }
+  },
+
+  // ── GET APPROVED STUDENTS  (legacy — unchanged, kept for backward compat)
+  // ─────────────────────────────────────────────────────────────────────────
   async getApprovedStudents() {
     const schoolId = getSchoolId();
 
     try {
-      // ✅ Fix indexes / rebuild table if UNIQUE constraint is present
       await fixStudentIndexes();
 
       const response = await api.get("/admin/students/approved", {
@@ -1238,7 +1447,8 @@ export const StudentService = {
         console.log(`📋 ${approved.length} approved students from server`);
 
         const db = await getDatabase();
-        await cacheStudentsLocally(db, approved, schoolId);
+        // ✅ forceApproved=true → legacy path, keep writing 'approved' status
+        await cacheStudentsLocally(db, approved, schoolId, true);
         await repairStudentNames();
 
         return approved;
@@ -1268,72 +1478,13 @@ export const StudentService = {
     return this.getApprovedStudentsLocal();
   },
 
-  // ── GET LOCAL ──────────────────────────────────────────────────────────
+  // ── GET LOCAL (approved only — legacy)  ───────────────────────────────
   async getApprovedStudentsLocal() {
-    const db       = await getDatabase();
-    const schoolId = getSchoolId();
-
-    try {
-      if (!(await tableExists(db, "students"))) {
-        console.log("📋 No local students table yet");
-        return [];
-      }
-
-      await ensureStudentSchema(db);
-
-      const stuCols    = await getColumns(db, "students");
-      const hasClasses = await tableExists(db, "classes");
-
-      const activeCol       = pickColumn(stuCols, ["is_active",  "isActive"]);
-      const deletedCol      = pickColumn(stuCols, ["deleted_at", "deletedAt"]);
-      const classCol        = pickColumn(stuCols, ["class_id",   "classId"]);
-      const schoolCol       = pickColumn(stuCols, ["schoolId",   "school_id"]);
-      const hasClassNameCol = stuCols.includes("class_name");
-
-      let q = `SELECT s.*`;
-      if (hasClasses && classCol && !hasClassNameCol) {
-        q += `, c.name AS _joinedClassName`;
-      }
-      q += ` FROM students s`;
-      if (hasClasses && classCol && !hasClassNameCol) {
-        q += ` LEFT JOIN classes c ON c.id = s.${classCol}`;
-      }
-
-      const where  = [];
-      const params = [];
-
-      where.push(`(s.status = 'approved' OR s.status IS NULL)`);
-
-      if (activeCol) {
-        where.push(`(s.${activeCol} = 1 OR s.${activeCol} IS NULL)`);
-      }
-      if (deletedCol) {
-        where.push(`(s.${deletedCol} IS NULL OR s.${deletedCol} = '')`);
-      }
-      if (schoolId && schoolCol) {
-        where.push(
-          `(s.${schoolCol} = ? OR s.${schoolCol} IS NULL OR s.${schoolCol} = '')`
-        );
-        params.push(schoolId);
-      }
-
-      if (where.length > 0) q += ` WHERE ${where.join(" AND ")}`;
-
-      q += ` ORDER BY COALESCE(s.studentName, s.name, '') ASC`;
-
-      const rows = await db.getAllAsync(q, params);
-      console.log(`📋 ${rows.length} students from local DB`);
-      return rows.map(normaliseStudent).filter(Boolean);
-    } catch (err) {
-      console.error(
-        "StudentService.getApprovedStudentsLocal error:",
-        err.message
-      );
-      return [];
-    }
+    // Delegate to the new generic local method with status="approved"
+    return this.getStudentsLocal({ status: "approved" });
   },
 
-  // ── GROUPED BY CLASS ───────────────────────────────────────────────────
+  // ── GROUPED BY CLASS  (unchanged)  ────────────────────────────────────
   async getApprovedStudentsByClass() {
     const students = await this.getApprovedStudents();
     const grouped  = {};
@@ -1375,7 +1526,7 @@ export const StudentService = {
     return students.length;
   },
 
-  // ── APPROVE ────────────────────────────────────────────────────────────
+  // ── APPROVE  (unchanged)  ─────────────────────────────────────────────
   async approve(studentId) {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
@@ -1393,7 +1544,7 @@ export const StudentService = {
     return { success: true };
   },
 
-  // ── REJECT ─────────────────────────────────────────────────────────────
+  // ── REJECT  (unchanged)  ──────────────────────────────────────────────
   async reject(studentId, reason = "") {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
@@ -1411,7 +1562,7 @@ export const StudentService = {
     return { success: true };
   },
 
-  // ── DELETE ─────────────────────────────────────────────────────────────
+  // ── DELETE  (unchanged)  ──────────────────────────────────────────────
   async delete(studentId) {
     if (!studentId) throw new Error("studentId is required");
     const db = await getDatabase();
@@ -1427,7 +1578,7 @@ export const StudentService = {
     return { success: true };
   },
 
-  // ── SUSPEND ────────────────────────────────────────────────────────────
+  // ── SUSPEND  (unchanged)  ─────────────────────────────────────────────
   async suspend(studentId) {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
@@ -1445,7 +1596,7 @@ export const StudentService = {
     return { success: true };
   },
 
-  // ── RESTORE ────────────────────────────────────────────────────────────
+  // ── RESTORE  (unchanged)  ─────────────────────────────────────────────
   async restore(studentId) {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
@@ -1463,7 +1614,7 @@ export const StudentService = {
     return { success: true };
   },
 
-  // ── MOVE TO CLASS ──────────────────────────────────────────────────────
+  // ── MOVE TO CLASS  (unchanged)  ───────────────────────────────────────
   async moveToClass(studentId, classId) {
     if (!studentId) throw new Error("studentId is required");
     if (!classId)   throw new Error("classId is required");

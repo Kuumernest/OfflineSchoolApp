@@ -1,6 +1,14 @@
 // app/admin/students/approved.js
+// Renamed conceptually to "All Students" but kept at same path for routing compat.
+// Now mirrors the web StudentsPage: status tabs, class filter, honest count label.
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -12,13 +20,14 @@ import {
   TextInput,
   RefreshControl,
   Alert,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { Ionicons }  from "@expo/vector-icons";
 import { StudentService } from "../../../src/services/student.service";
 
 // ─────────────────────────────────────────────────────────
-// COLORS
+// COLORS  (unchanged)
 // ─────────────────────────────────────────────────────────
 
 const C = {
@@ -30,6 +39,10 @@ const C = {
   warningBg: "#FEF3C7",
   error:     "#DC2626",
   errorBg:   "#FEE2E2",
+  info:      "#0284C7",
+  infoBg:    "#E0F2FE",
+  purple:    "#7C3AED",
+  purpleBg:  "#EDE9FE",
   white:     "#FFFFFF",
   gray50:    "#F9FAFB",
   gray100:   "#F3F4F6",
@@ -41,6 +54,51 @@ const C = {
 };
 
 // ─────────────────────────────────────────────────────────
+// CONSTANTS  — mirrors web STATUS_OPTIONS exactly
+// ─────────────────────────────────────────────────────────
+
+const STATUS_FILTERS = [
+  {
+    key:   "all",
+    label: "All",
+    icon:  "people-outline",
+    color: C.primary,
+    bg:    C.primaryBg,
+  },
+  {
+    key:   "approved",
+    label: "Active",
+    icon:  "checkmark-circle-outline",
+    color: C.success,
+    bg:    C.successBg,
+  },
+  {
+    key:   "pending",
+    label: "Pending",
+    icon:  "time-outline",
+    color: C.warning,
+    bg:    C.warningBg,
+  },
+  {
+    key:   "suspended",
+    label: "Suspended",
+    icon:  "ban-outline",
+    color: C.error,
+    bg:    C.errorBg,
+  },
+  {
+    key:   "rejected",
+    label: "Rejected",
+    icon:  "close-circle-outline",
+    color: C.purple,
+    bg:    C.purpleBg,
+  },
+];
+
+const PAGE_LIMIT = 200; // large page → fetch all in one shot for client-side UX
+const MAX_PAGES  = 20;
+
+// ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
@@ -49,35 +107,69 @@ const getDisplayName = (student) =>
   [student.firstName, student.lastName].filter(Boolean).join(" ") ||
   "Unknown Student";
 
+/**
+ * Maps a status value → { label, color, bg }
+ * Mirrors web statusLabel() + statusVariant() combined.
+ */
 const getStatusConfig = (status) => {
-  switch (status) {
-    case "suspended":
-      return { label: "Suspended", color: C.error,   bg: C.errorBg   };
+  switch ((status ?? "").toLowerCase()) {
     case "approved":
+      return { label: "Active",     color: C.success, bg: C.successBg };
+    case "pending":
+      return { label: "Pending",    color: C.warning, bg: C.warningBg };
+    case "suspended":
+      return { label: "Suspended",  color: C.error,   bg: C.errorBg   };
+    case "rejected":
+      return { label: "Rejected",   color: C.purple,  bg: C.purpleBg  };
     default:
-      return { label: "Approved",  color: C.success, bg: C.successBg };
+      return { label: status || "Unknown", color: C.gray500, bg: C.gray100 };
   }
 };
 
 /**
- * Fetches ALL approved students across paginated pages.
- * Supports both legacy array shape and paginated object shape.
+ * Mirrors web resolveClassName():
+ * prefers nested `class.name`, falls back to flat `className`.
  */
-const fetchAllApprovedStudents = async () => {
-  const PAGE_LIMIT = 200;
-  const MAX_PAGES  = 20;
+const resolveClassName = (student) =>
+  student?.class?.name ?? student?.className ?? "Unassigned";
 
+/**
+ * Mirrors web countLabel(): honest, filter-aware count string.
+ */
+const buildCountLabel = (total, statusKey) => {
+  const noun = total !== 1 ? "students" : "student";
+  switch (statusKey) {
+    case "all":       return `${total} ${noun} registered`;
+    case "approved":  return `${total} active ${noun}`;
+    case "pending":   return `${total} pending ${noun}`;
+    case "suspended": return `${total} suspended ${noun}`;
+    case "rejected":  return `${total} rejected ${noun}`;
+    default:          return `${total} ${noun}`;
+  }
+};
+
+/**
+ * Fetches ALL students (any status) across paginated API pages.
+ * Passes `status` through so the backend can pre-filter when possible;
+ * "all" → backend returns everything (matching web toQueryStatus logic).
+ */
+const fetchAllStudents = async (statusKey = "all") => {
   let page     = 1;
   let combined = [];
   let total    = Infinity;
 
   while (page <= MAX_PAGES) {
     // eslint-disable-next-line no-await-in-loop
-    const res = await StudentService.getApprovedStudents({ page, limit: PAGE_LIMIT });
+    const res = await StudentService.getStudents({
+      page,
+      limit:  PAGE_LIMIT,
+      status: statusKey,          // "all" | "approved" | "pending" | …
+    });
 
+    // Support both legacy array shape and paginated object shape
     const list = Array.isArray(res)
       ? res
-      : res?.students || res?.data || [];
+      : res?.students ?? res?.data ?? [];
 
     combined = combined.concat(list);
 
@@ -92,41 +184,173 @@ const fetchAllApprovedStudents = async () => {
     page += 1;
   }
 
-  return combined;
+  return { students: combined, total: combined.length };
 };
 
 // ─────────────────────────────────────────────────────────
-// STUDENT CARD  ← actions removed; tap opens detail screen
+// STATUS FILTER TABS  — mirrors web <Select> for status
+// ─────────────────────────────────────────────────────────
+
+const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => (
+  <ScrollView
+    horizontal
+    showsHorizontalScrollIndicator={false}
+    style={styles.tabsScroll}
+    contentContainerStyle={styles.tabsContent}
+  >
+    {STATUS_FILTERS.map((filter) => {
+      const isActive = activeKey === filter.key;
+      const count    = counts[filter.key] ?? 0;
+
+      return (
+        <TouchableOpacity
+          key={filter.key}
+          style={[
+            styles.tab,
+            isActive && { backgroundColor: filter.color, borderColor: filter.color },
+          ]}
+          onPress={() => onChange(filter.key)}
+          activeOpacity={0.75}
+        >
+          <Ionicons
+            name={filter.icon}
+            size={13}
+            color={isActive ? C.white : filter.color}
+          />
+          <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
+            {filter.label}
+          </Text>
+          {/* Count badge — only show when > 0 */}
+          {count > 0 && (
+            <View
+              style={[
+                styles.tabBadge,
+                { backgroundColor: isActive ? "rgba(255,255,255,0.30)" : filter.bg },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.tabBadgeText,
+                  { color: isActive ? C.white : filter.color },
+                ]}
+              >
+                {count}
+              </Text>
+            </View>
+          )}
+        </TouchableOpacity>
+      );
+    })}
+  </ScrollView>
+));
+
+// ─────────────────────────────────────────────────────────
+// CLASS FILTER PILLS  — mirrors web <Select> for classId
+// ─────────────────────────────────────────────────────────
+
+const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
+  if (classes.length === 0) return null;
+
+  return (
+    <ScrollView
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={styles.pillsScroll}
+      contentContainerStyle={styles.pillsContent}
+    >
+      {/* "All Classes" reset pill */}
+      <TouchableOpacity
+        style={[
+          styles.classPillBtn,
+          !activeClass && styles.classPillBtnActive,
+        ]}
+        onPress={() => onChange("")}
+        activeOpacity={0.75}
+      >
+        <Text
+          style={[
+            styles.classPillBtnText,
+            !activeClass && styles.classPillBtnTextActive,
+          ]}
+        >
+          All Classes
+        </Text>
+      </TouchableOpacity>
+
+      {classes.map((cls) => (
+        <TouchableOpacity
+          key={cls}
+          style={[
+            styles.classPillBtn,
+            activeClass === cls && styles.classPillBtnActive,
+          ]}
+          onPress={() => onChange(cls)}
+          activeOpacity={0.75}
+        >
+          <Text
+            style={[
+              styles.classPillBtnText,
+              activeClass === cls && styles.classPillBtnTextActive,
+            ]}
+          >
+            {cls}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </ScrollView>
+  );
+});
+
+// ─────────────────────────────────────────────────────────
+// STUDENT CARD  (expanded status palette)
 // ─────────────────────────────────────────────────────────
 
 const StudentCard = React.memo(({ student, onPress }) => {
   const displayName  = getDisplayName(student);
   const firstLetter  = displayName.charAt(0).toUpperCase() || "?";
   const statusConfig = getStatusConfig(student.status);
+  const className    = resolveClassName(student);
   const isSuspended  = student.status === "suspended";
+  const isRejected   = student.status === "rejected";
+  const isPending    = student.status === "pending";
+
+  // Card border tint by status
+  const cardStyle = [
+    styles.card,
+    isSuspended && styles.cardSuspended,
+    isRejected  && styles.cardRejected,
+    isPending   && styles.cardPending,
+  ];
+
+  // Avatar background by status
+  const avatarBg = isSuspended
+    ? C.errorBg
+    : isRejected
+    ? C.purpleBg
+    : isPending
+    ? C.warningBg
+    : C.primaryBg;
+
+  const avatarFg = isSuspended
+    ? C.error
+    : isRejected
+    ? C.purple
+    : isPending
+    ? C.warning
+    : C.primary;
 
   return (
-    <TouchableOpacity
-      style={[styles.card, isSuspended && styles.cardSuspended]}
-      onPress={onPress}
-      activeOpacity={0.72}
-    >
+    <TouchableOpacity style={cardStyle} onPress={onPress} activeOpacity={0.72}>
       <View style={styles.cardInner}>
 
-        {/* ── Avatar ── */}
-        <View style={[
-          styles.avatar,
-          { backgroundColor: isSuspended ? C.errorBg : C.primaryBg },
-        ]}>
-          <Text style={[
-            styles.avatarText,
-            { color: isSuspended ? C.error : C.primary },
-          ]}>
+        {/* Avatar */}
+        <View style={[styles.avatar, { backgroundColor: avatarBg }]}>
+          <Text style={[styles.avatarText, { color: avatarFg }]}>
             {firstLetter}
           </Text>
         </View>
 
-        {/* ── Info ── */}
+        {/* Info */}
         <View style={styles.studentInfo}>
           <Text style={styles.studentName} numberOfLines={1}>
             {displayName}
@@ -147,27 +371,27 @@ const StudentCard = React.memo(({ student, onPress }) => {
                 {student.phone}
               </Text>
             </View>
-          ) : student.admissionNo ? (
+          ) : (student.admissionNumber || student.admissionNo) ? (
             <View style={styles.metaRow}>
               <Ionicons name="card-outline" size={12} color={C.gray400} />
               <Text style={styles.studentMeta} numberOfLines={1}>
-                {student.admissionNo}
+                {student.admissionNumber || student.admissionNo}
               </Text>
             </View>
           ) : null}
 
-          {/* Class name pill */}
-          {student.className && student.className !== "Unassigned" && (
+          {/* Class pill (only when a real class is assigned) */}
+          {className !== "Unassigned" && (
             <View style={styles.classPill}>
               <Ionicons name="school-outline" size={10} color={C.primary} />
               <Text style={styles.classPillText} numberOfLines={1}>
-                {student.className}
+                {className}
               </Text>
             </View>
           )}
         </View>
 
-        {/* ── Right side: status badge + chevron ── */}
+        {/* Right: status badge + chevron */}
         <View style={styles.cardRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
             <Text style={[styles.statusText, { color: statusConfig.color }]}>
@@ -188,7 +412,7 @@ const StudentCard = React.memo(({ student, onPress }) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// SECTION HEADER
+// SECTION HEADER  (unchanged)
 // ─────────────────────────────────────────────────────────
 
 const SectionHeader = React.memo(({ title, count }) => (
@@ -204,7 +428,7 @@ const SectionHeader = React.memo(({ title, count }) => (
 ));
 
 // ─────────────────────────────────────────────────────────
-// EMPTY STATE
+// EMPTY STATE  (unchanged)
 // ─────────────────────────────────────────────────────────
 
 const EmptyState = React.memo(({ searchQuery }) => (
@@ -217,12 +441,12 @@ const EmptyState = React.memo(({ searchQuery }) => (
       />
     </View>
     <Text style={styles.emptyTitle}>
-      {searchQuery ? "No matches found" : "No approved students yet"}
+      {searchQuery ? "No matches found" : "No students found"}
     </Text>
     <Text style={styles.emptySubtitle}>
       {searchQuery
-        ? "Try adjusting your search term"
-        : "Students will appear here once their applications are approved."}
+        ? "Try adjusting your search or filter"
+        : "Students will appear here once added."}
     </Text>
   </View>
 ));
@@ -235,28 +459,38 @@ export default function ApprovedStudents() {
   const router       = useRouter();
   const isMountedRef = useRef(true);
 
-  const [allStudents, setAllStudents] = useState([]);
-  const [loading,     setLoading]     = useState(true);
-  const [refreshing,  setRefreshing]  = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // Raw data fetched once (status="all") — client-side filtering keeps UX snappy
+  const [allStudents,  setAllStudents]  = useState([]);
+  const [loading,      setLoading]      = useState(true);
+  const [refreshing,   setRefreshing]   = useState(false);
+
+  // Filter state — mirrors web page state
+  const [searchQuery,  setSearchQuery]  = useState("");
+  const [activeStatus, setActiveStatus] = useState("all");  // mirrors web default
+  const [activeClass,  setActiveClass]  = useState("");     // "" = All Classes
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // ── Load ─────────────────────────────────────────────────
+  // ── Fetch ────────────────────────────────────────────────────────────────
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else           setLoading(true);
 
-      const students = await fetchAllApprovedStudents();
-      if (isMountedRef.current) setAllStudents(students || []);
+      // Always fetch ALL statuses once so tab switches are instant (no refetch).
+      // This mirrors the web page's behaviour of re-querying per status change,
+      // but on mobile we optimise for offline-friendliness.
+      const { students } = await fetchAllStudents("all");
+
+      if (isMountedRef.current) setAllStudents(students);
     } catch (err) {
-      console.error("Failed to load approved students:", err);
-      if (isMountedRef.current) Alert.alert("Error", "Failed to load students");
+      console.error("Failed to load students:", err);
+      if (isMountedRef.current)
+        Alert.alert("Error", "Failed to load students. Please try again.");
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -267,7 +501,7 @@ export default function ApprovedStudents() {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // ── Navigate to detail ────────────────────────────────────
+  // ── Navigate to detail  (unchanged) ─────────────────────────────────────
 
   const handleStudentPress = useCallback((student) => {
     const studentId = String(student._id || student.id || "");
@@ -281,29 +515,64 @@ export default function ApprovedStudents() {
     });
   }, [router]);
 
-  // ── Sections (filtered + grouped by class) ────────────────
+  // ── Derived: per-status counts  (mirrors web countLabel logic) ────────────
+
+  const statusCounts = useMemo(() => {
+    const counts = { all: allStudents.length };
+    STATUS_FILTERS.slice(1).forEach(({ key }) => {
+      counts[key] = allStudents.filter((s) => s.status === key).length;
+    });
+    return counts;
+  }, [allStudents]);
+
+  // ── Derived: unique class names for the class filter pills ───────────────
+
+  const availableClasses = useMemo(() => {
+    const set = new Set(
+      allStudents
+        .map(resolveClassName)
+        .filter((n) => n !== "Unassigned")
+    );
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [allStudents]);
+
+  // ── Derived: filtered + grouped sections ─────────────────────────────────
 
   const sections = useMemo(() => {
-    const query    = searchQuery.trim().toLowerCase();
-    const filtered = query
-      ? allStudents.filter((s) => {
-          const name      = getDisplayName(s).toLowerCase();
-          const email     = (s.email       || "").toLowerCase();
-          const cls       = (s.className   || "").toLowerCase();
-          const admission = (s.admissionNo || "").toLowerCase();
-          return (
-            name.includes(query)      ||
-            email.includes(query)     ||
-            cls.includes(query)       ||
-            admission.includes(query)
-          );
-        })
-      : allStudents;
+    const query = searchQuery.trim().toLowerCase();
 
-    // Group by class
+    const filtered = allStudents.filter((s) => {
+      // 1. Status tab filter  — "all" passes everything (mirrors web toQueryStatus)
+      const statusMatch =
+        activeStatus === "all" || s.status === activeStatus;
+
+      // 2. Class filter pill
+      const classMatch =
+        !activeClass || resolveClassName(s) === activeClass;
+
+      // 3. Search  — mirrors web search fields: name, email, class, admissionNo
+      const searchMatch = !query || (() => {
+        const name  = getDisplayName(s).toLowerCase();
+        const email = (s.email ?? "").toLowerCase();
+        const cls   = resolveClassName(s).toLowerCase();
+        const admNo = (
+          s.admissionNumber ?? s.admissionNo ?? ""
+        ).toLowerCase();
+        return (
+          name.includes(query)  ||
+          email.includes(query) ||
+          cls.includes(query)   ||
+          admNo.includes(query)
+        );
+      })();
+
+      return statusMatch && classMatch && searchMatch;
+    });
+
+    // Group by class name (matches web resolveClassName grouping)
     const grouped = {};
     filtered.forEach((student) => {
-      const key = student.className || "Unassigned";
+      const key = resolveClassName(student);
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(student);
     });
@@ -318,19 +587,18 @@ export default function ApprovedStudents() {
         title: className,
         data:  grouped[className],
       }));
-  }, [allStudents, searchQuery]);
+  }, [allStudents, searchQuery, activeStatus, activeClass]);
 
-  // ── Stats ─────────────────────────────────────────────────
+  // ── Derived: visible student count for header ─────────────────────────────
 
-  const totalStudents  = allStudents.length;
-  const totalClasses   = new Set(
-    allStudents.map((s) => s.className || "Unassigned")
-  ).size;
-  const totalSuspended = allStudents.filter(
-    (s) => s.status === "suspended"
-  ).length;
+  const visibleCount = sections.reduce((sum, s) => sum + s.data.length, 0);
+  const countLabel   = buildCountLabel(visibleCount, activeStatus);
 
-  // ── Loading ───────────────────────────────────────────────
+  // ── Total classes visible ─────────────────────────────────────────────────
+
+  const visibleClasses = sections.length;
+
+  // ── Loading ───────────────────────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -349,7 +617,7 @@ export default function ApprovedStudents() {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
 
-      {/* ── HEADER ──────────────────────────────────────── */}
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <View style={styles.header}>
         <TouchableOpacity
           onPress={() => router.back()}
@@ -361,41 +629,41 @@ export default function ApprovedStudents() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Approved Students</Text>
+          <Text style={styles.headerTitle}>Students</Text>
+          {/* Mirrors web countLabel() under the page heading */}
           <Text style={styles.headerSubtitle}>
-            {totalStudents} students · {totalClasses} classes
-            {totalSuspended > 0 ? ` · ${totalSuspended} suspended` : ""}
+            {countLabel}
+            {visibleClasses > 0
+              ? ` · ${visibleClasses} class${visibleClasses !== 1 ? "es" : ""}`
+              : ""}
           </Text>
         </View>
       </View>
 
-      {/* ── STAT CHIPS ──────────────────────────────────── */}
-      <View style={styles.statRow}>
-        <View style={[styles.statChip, { backgroundColor: C.primaryBg }]}>
-          <Ionicons name="people-outline" size={14} color={C.primary} />
-          <Text style={[styles.statChipText, { color: C.primary }]}>
-            {totalStudents} Students
-          </Text>
-        </View>
-
-        <View style={[styles.statChip, { backgroundColor: C.successBg }]}>
-          <Ionicons name="school-outline" size={14} color={C.success} />
-          <Text style={[styles.statChipText, { color: C.success }]}>
-            {totalClasses} Classes
-          </Text>
-        </View>
-
-        {totalSuspended > 0 && (
-          <View style={[styles.statChip, { backgroundColor: C.errorBg }]}>
-            <Ionicons name="ban-outline" size={14} color={C.error} />
-            <Text style={[styles.statChipText, { color: C.error }]}>
-              {totalSuspended} Suspended
-            </Text>
-          </View>
-        )}
+      {/* ── STATUS FILTER TABS  (mirrors web status <Select>) ───────────── */}
+      <View style={styles.tabsWrapper}>
+        <StatusFilterTabs
+          activeKey={activeStatus}
+          counts={statusCounts}
+          onChange={(key) => {
+            setActiveStatus(key);
+            setActiveClass("");    // reset class filter on status change
+          }}
+        />
       </View>
 
-      {/* ── SEARCH ──────────────────────────────────────── */}
+      {/* ── CLASS FILTER PILLS  (mirrors web class <Select>) ────────────── */}
+      {availableClasses.length > 0 && (
+        <View style={styles.pillsWrapper}>
+          <ClassFilterPills
+            classes={availableClasses}
+            activeClass={activeClass}
+            onChange={setActiveClass}
+          />
+        </View>
+      )}
+
+      {/* ── SEARCH  (unchanged) ─────────────────────────────────────────── */}
       <View style={styles.searchContainer}>
         <View style={styles.searchWrapper}>
           <Ionicons
@@ -422,7 +690,7 @@ export default function ApprovedStudents() {
         </View>
       </View>
 
-      {/* ── LIST ────────────────────────────────────────── */}
+      {/* ── LIST ────────────────────────────────────────────────────────── */}
       <SectionList
         sections={sections}
         keyExtractor={(item) => String(item._id || item.id)}
@@ -462,83 +730,175 @@ const styles = StyleSheet.create({
   loadingText: { marginTop: 12, fontSize: 14, color: C.gray500, fontWeight: "500" },
   listContent: { paddingBottom: 40 },
 
-  // ── Header ───────────────────────────────────────────────
+  // ── Header ──────────────────────────────────────────────────────────────
   header: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 20, paddingTop: 60, paddingBottom: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 16,
     backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1,
+    borderBottomColor: C.gray100,
   },
   backButton: {
-    width: 40, height: 40, borderRadius: 12,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: C.gray100,
-    alignItems: "center", justifyContent: "center",
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerCenter:   { flex: 1, marginLeft: 12 },
   headerTitle:    { fontSize: 20, fontWeight: "700", color: C.gray900 },
   headerSubtitle: { fontSize: 13, color: C.gray500, marginTop: 2 },
 
-  // ── Stat chips ────────────────────────────────────────────
-  statRow: {
-    flexDirection: "row", flexWrap: "wrap", gap: 8,
-    paddingHorizontal: 20, paddingVertical: 12,
+  // ── Status filter tabs ───────────────────────────────────────────────────
+  tabsWrapper: {
     backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+    borderBottomWidth: 1,
+    borderBottomColor: C.gray100,
+    paddingVertical: 10,
   },
-  statChip: {
-    flexDirection: "row", alignItems: "center", gap: 5,
-    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20,
-  },
-  statChipText: { fontSize: 12, fontWeight: "700" },
+  tabsScroll:   { flexGrow: 0 },
+  tabsContent:  { paddingHorizontal: 16, gap: 8 },
 
-  // ── Search ────────────────────────────────────────────────
-  searchContainer: {
-    paddingHorizontal: 20, paddingVertical: 12,
+  tab: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 20,
+    borderWidth: 1.5,
+    borderColor: C.gray200,
     backgroundColor: C.white,
-    borderBottomWidth: 1, borderBottomColor: C.gray100,
+  },
+  tabLabel: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: C.gray700,
+  },
+  tabLabelActive: {
+    color: C.white,
+  },
+  tabBadge: {
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    minWidth: 20,
+    alignItems: "center",
+  },
+  tabBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  // ── Class filter pills ───────────────────────────────────────────────────
+  pillsWrapper: {
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.gray100,
+    paddingVertical: 8,
+  },
+  pillsScroll:   { flexGrow: 0 },
+  pillsContent:  { paddingHorizontal: 16, gap: 8 },
+
+  classPillBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.gray200,
+    backgroundColor: C.white,
+  },
+  classPillBtnActive: {
+    backgroundColor: C.primaryBg,
+    borderColor: C.primary,
+  },
+  classPillBtnText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: C.gray500,
+  },
+  classPillBtnTextActive: {
+    color: C.primary,
+  },
+
+  // ── Search ───────────────────────────────────────────────────────────────
+  searchContainer: {
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: C.white,
+    borderBottomWidth: 1,
+    borderBottomColor: C.gray100,
   },
   searchWrapper: {
-    flexDirection: "row", alignItems: "center",
-    backgroundColor: C.gray100, borderRadius: 12,
-    paddingHorizontal: 12, height: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: C.gray100,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    height: 44,
   },
   searchIcon:  { marginRight: 8 },
   searchInput: { flex: 1, fontSize: 15, color: C.gray900 },
 
-  // ── Section header ────────────────────────────────────────
+  // ── Section header ───────────────────────────────────────────────────────
   sectionHeader: {
-    flexDirection: "row", alignItems: "center", justifyContent: "space-between",
-    paddingHorizontal: 20, paddingTop: 20, paddingBottom: 8,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 8,
     backgroundColor: C.gray50,
   },
   sectionLeft:  { flexDirection: "row", alignItems: "center", gap: 6 },
   sectionTitle: {
-    fontSize: 13, fontWeight: "700", color: C.gray700,
-    textTransform: "uppercase", letterSpacing: 0.5,
+    fontSize: 13,
+    fontWeight: "700",
+    color: C.gray700,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
   },
   countBadge: {
-    backgroundColor: C.gray200, borderRadius: 10,
-    paddingHorizontal: 8, paddingVertical: 2,
+    backgroundColor: C.gray200,
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   countText: { fontSize: 12, fontWeight: "700", color: C.gray700 },
 
-  // ── Student card ──────────────────────────────────────────
+  // ── Student card ─────────────────────────────────────────────────────────
   card: {
     backgroundColor: C.white,
-    marginHorizontal: 20, marginBottom: 8,
-    borderRadius: 14, borderWidth: 1, borderColor: C.gray200,
+    marginHorizontal: 20,
+    marginBottom: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.gray200,
     overflow: "hidden",
   },
+  // Status-specific card tints (mirrors web row highlight logic)
   cardSuspended: { borderColor: "#FECACA", backgroundColor: "#FFFAFA" },
+  cardRejected:  { borderColor: "#DDD6FE", backgroundColor: "#FDFCFF" },
+  cardPending:   { borderColor: "#FDE68A", backgroundColor: "#FFFDF5" },
+
   cardInner: {
-    flexDirection: "row", alignItems: "center",
-    paddingHorizontal: 14, paddingVertical: 13,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 13,
     gap: 12,
   },
 
   avatar: {
-    width: 44, height: 44, borderRadius: 22,
-    alignItems: "center", justifyContent: "center",
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
   avatarText: { fontSize: 17, fontWeight: "700" },
@@ -550,35 +910,50 @@ const styles = StyleSheet.create({
 
   classPill: {
     alignSelf: "flex-start",
-    flexDirection: "row", alignItems: "center", gap: 4,
-    backgroundColor: C.primaryBg, borderRadius: 8,
-    paddingHorizontal: 7, paddingVertical: 3, marginTop: 2,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    backgroundColor: C.primaryBg,
+    borderRadius: 8,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    marginTop: 2,
   },
   classPillText: { fontSize: 11, fontWeight: "700", color: C.primary },
 
-  // ── Right side (status + chevron) ─────────────────────────
+  // ── Right: status badge + chevron ────────────────────────────────────────
   cardRight: {
-    alignItems: "flex-end", justifyContent: "center",
-    gap: 6, flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    gap: 6,
+    flexShrink: 0,
   },
   statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8 },
   statusText:  { fontSize: 11, fontWeight: "700", textTransform: "uppercase" },
   chevron:     { marginTop: 2 },
 
-  // ── Empty state ───────────────────────────────────────────
+  // ── Empty state ───────────────────────────────────────────────────────────
   emptyState: {
-    alignItems: "center", justifyContent: "center",
-    paddingVertical: 80, paddingHorizontal: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 80,
+    paddingHorizontal: 40,
   },
   emptyIconWrap: {
-    width: 80, height: 80, borderRadius: 40,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: C.gray100,
-    alignItems: "center", justifyContent: "center",
+    alignItems: "center",
+    justifyContent: "center",
     marginBottom: 16,
   },
   emptyTitle:    { fontSize: 18, fontWeight: "700", color: C.gray700, textAlign: "center" },
   emptySubtitle: {
-    fontSize: 14, color: C.gray500,
-    marginTop: 8, textAlign: "center", lineHeight: 20,
+    fontSize: 14,
+    color: C.gray500,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 20,
   },
 });

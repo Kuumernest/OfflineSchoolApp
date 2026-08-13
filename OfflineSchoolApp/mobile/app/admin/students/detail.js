@@ -292,7 +292,7 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await api.patch(`/students/${studentId}/suspend`);
+      await api.patch(`/admin/students/${studentId}/suspend`);
       setStudent((s) => ({ ...s, status: "suspended" }));
       Alert.alert("Suspended", `${student?.name} has been suspended.`);
     } catch (err) {
@@ -312,7 +312,7 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await api.patch(`/students/${studentId}/restore`);
+      await api.patch(`/admin/students/${studentId}/restore`);;
       setStudent((s) => ({ ...s, status: "active" }));
       Alert.alert("Restored", `${student?.name} has been restored.`);
     } catch (err) {
@@ -332,7 +332,7 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      await api.delete(`/students/${studentId}`);
+      await api.delete(`/admin/students/${studentId}`);
       Alert.alert("Deleted", `${student?.name} has been removed.`, [
         { text: "OK", onPress: () => router.back() },
       ]);
@@ -353,7 +353,7 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     setShowMovePicker(false);
     try {
-      await api.patch(`/students/${studentId}/move`, { classId });
+      await api.patch(`/admin/students/${studentId}/move`, { classId });
       setStudent((s) => ({ ...s, className: cls.name, classId }));
       Alert.alert("Moved", `${student?.name} moved to ${cls.name}.`);
     } catch (err) {

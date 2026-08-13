@@ -119,8 +119,19 @@ const studentSchema = new mongoose.Schema(
     bio:               { type: String, trim: true, default: null },
     profileCompleted:  { type: Boolean,            default: false },
 
-    // ── Admin Notes ───────────────────────────────────────────────────────
-    notes: { type: String, default: null },
+    // ── Audit — who made the last edit ────────────────────────────────────
+    updatedBy: {
+      type:    String,
+      ref:     "User",
+      default: null,
+    },
+    updatedByName: {
+      type:    String,
+      default: null,
+    },
+  },
+  {
+    timestamps: true,
   },
   {
     timestamps: true,

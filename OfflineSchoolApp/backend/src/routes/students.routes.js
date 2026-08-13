@@ -1344,7 +1344,7 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
 
   student.userId      = userAccount._id;
   student.admissionNo = enrollmentNo;
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   let emailResult = { success: false };
   if (emailClean) {
@@ -1432,7 +1432,7 @@ const handleApprove = asyncHandler(async (req, res) => {
   student.approvedAt  = now;
   student.enrolledAt  = student.enrolledAt || now;
   student.admissionNo = enrollmentNo;
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   let emailResult = { success: false };
   if (emailRaw) {
@@ -1520,7 +1520,7 @@ const handleReject = asyncHandler(async (req, res) => {
   student.reviewedAt      = new Date();
   student.rejectedAt      = new Date();
   student.isActive        = false;
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   const email = resolveEmail(student);
   let emailResult = { success: false };
@@ -1586,7 +1586,7 @@ router.patch("/:id/suspend", authenticate, adminOnly, asyncHandler(async (req, r
   student.status    = "suspended";
   student.isActive  = false;
   student.updatedAt = new Date();
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   if (student.userId) {
     await User.findByIdAndUpdate(
@@ -1615,7 +1615,7 @@ router.patch("/:id/restore", authenticate, adminOnly, asyncHandler(async (req, r
   student.status    = "approved";
   student.isActive  = true;
   student.updatedAt = new Date();
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   if (student.userId) {
     await User.findByIdAndUpdate(
@@ -1655,7 +1655,7 @@ router.patch("/:id/move", authenticate, adminOnly, asyncHandler(async (req, res)
   student.className = targetClass.name || null;
   student.grade     = targetClass.name || student.grade || null;
   student.updatedAt = new Date();
-  await student.save();
+  await student.save({ validateModifiedOnly: true });
 
   const className = [targetClass.name, targetClass.section].filter(Boolean).join(" ");
 

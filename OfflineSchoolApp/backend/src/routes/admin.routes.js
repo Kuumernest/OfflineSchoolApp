@@ -11,6 +11,7 @@ const Class             = require("../db/models/Class");
 const Subject           = require("../db/models/Subject");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const School            = require("../db/models/School");
+const SyncOverwrite     = require("../db/models/SyncOverwrite");
 
 // ─── Services ────────────────────────────────────────────────────────────────
 const { sendEmail } = require("../services/email.service");
@@ -250,6 +251,81 @@ const sendEmailSafe = async ({ to, template, data, context = "" }) => {
   } catch (err) {
     console.warn(`sendEmail failed${context ? ` [${context}]` : ""}:`, err.message);
     return { success: false };
+  }
+};
+// ─────────────────────────────────────────────────────────────────────────────
+// SYNC OVERWRITE HELPER — logs when one admin overwrites another admin's edit
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Detects and records overwrite events for LWW sync.
+ *
+ * @param {object} params
+ * @param {string} params.entityType     - e.g. "student"
+ * @param {object} params.student        - the current DB document (pre-save)
+ * @param {string} params.baseUpdatedAt  - client's baseline updatedAt (ISO string)
+ * @param {object} params.currentUser    - req.user
+ * @param {string} params.action         - e.g. "suspend", "restore", "move", "delete"
+ *
+ * @returns {Promise<object|null>} overwrite record if logged, else null
+ */
+async function logOverwriteIfNeeded({
+  entityType,
+  student,
+  baseUpdatedAt,
+  currentUser,
+  action,
+}) {
+  // Skip if client didn't send a baseline (legacy client — accept silently)
+  if (!baseUpdatedAt) return null;
+
+  const clientBaseline = new Date(baseUpdatedAt);
+  if (isNaN(clientBaseline.getTime())) return null;
+
+  const serverTime = new Date(student.updatedAt);
+
+  // No conflict — server's version matches what client had
+  if (serverTime.getTime() <= clientBaseline.getTime()) return null;
+
+  // Someone else edited after this client loaded the record.
+  // Only log if the previous editor is a DIFFERENT admin.
+  const prevEditorId = student.updatedBy ? String(student.updatedBy) : null;
+  const thisEditorId = currentUser?._id  ? String(currentUser._id)  : null;
+
+  if (prevEditorId && thisEditorId && prevEditorId === thisEditorId) {
+    // Same admin overwriting their own earlier edit — not interesting
+    return null;
+  }
+
+  try {
+    const record = await SyncOverwrite.create({
+      entityType,
+      entityId:          String(student._id),
+      entityName:        student.studentName || student.name || null,
+      schoolId:          student.schoolId,
+      overwrittenBy:     thisEditorId,
+      overwrittenByName: currentUser?.name || null,
+      overwrittenAt:     new Date(),
+      newAction:         action,
+      lostEditBy:        prevEditorId,
+      lostEditByName:    student.updatedByName || null,
+      lostEditAt:        student.updatedAt,
+      lostVersion:       student.toObject ? student.toObject() : student,
+    });
+
+    console.log(
+      `[sync-overwrite] ${entityType}/${student._id} overwritten by ` +
+      `${currentUser?.name || thisEditorId} (action: ${action})`
+    );
+
+    return {
+      id:          String(record._id),
+      lostEditAt:  record.lostEditAt,
+      lostEditBy:  record.lostEditByName,
+    };
+  } catch (err) {
+    console.warn("[sync-overwrite] Failed to log:", err.message);
+    return null;
   }
 };
 
@@ -1317,18 +1393,31 @@ router.get("/students/:id", asyncHandler(async (req, res) => {
 router.delete("/students/:id", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { id }   = req.params;
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
   let deleted = false, linkedUserId = null;
+  let overwrote = null;
 
   const S   = getStudent();
   const App = getStudentApplication();
 
   // Prefer Student collection first
   if (S) {
-    const sRecord = await S.findById(id).lean().catch(() => null);
+    const sRecord = await S.findById(id).catch(() => null);
     if (sRecord) {
       if (schoolId && sRecord.schoolId && String(sRecord.schoolId) !== String(schoolId)) {
         return sendError(res, 403, "Access denied");
       }
+
+      // ── Detect overwrite BEFORE deletion ────────────────────────────────
+      overwrote = await logOverwriteIfNeeded({
+        entityType:    "student",
+        student:       sRecord,
+        baseUpdatedAt,
+        currentUser:   req.user,
+        action:        "delete",
+      });
+
       linkedUserId = sRecord.userId || null;
       if (sRecord.applicationId && App) {
         await App.findByIdAndDelete(sRecord.applicationId).catch(() => {});
@@ -1339,11 +1428,20 @@ router.delete("/students/:id", asyncHandler(async (req, res) => {
   }
 
   if (!deleted && App) {
-    const appRecord = await App.findById(id).lean().catch(() => null);
+    const appRecord = await App.findById(id).catch(() => null);
     if (appRecord) {
       if (schoolId && appRecord.schoolId && String(appRecord.schoolId) !== String(schoolId)) {
         return sendError(res, 403, "Access denied — student does not belong to your school");
       }
+
+      overwrote = await logOverwriteIfNeeded({
+        entityType:    "student",
+        student:       appRecord,
+        baseUpdatedAt,
+        currentUser:   req.user,
+        action:        "delete",
+      });
+
       linkedUserId = appRecord.userId || null;
       if (appRecord.studentId && S) {
         await S.findByIdAndDelete(appRecord.studentId).catch(() => {});
@@ -1360,14 +1458,17 @@ router.delete("/students/:id", asyncHandler(async (req, res) => {
   }
 
   return sendSuccess(res, {
-    message: "Student deleted successfully",
-    data:    { studentId: id },
+    message:   "Student deleted successfully",
+    data:      { studentId: id },
+    overwrote,
   });
 }));
 
 router.patch("/students/:id/suspend", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { id }   = req.params;
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
   let student = null, model = null;
   const S   = getStudent();
   const App = getStudentApplication();
@@ -1382,8 +1483,21 @@ router.patch("/students/:id/suspend", asyncHandler(async (req, res) => {
     return sendError(res, 409, "Student is already suspended");
   }
 
-  student.status = "suspended"; student.isActive = false; student.updatedAt = new Date();
-  await student.save();
+  // ── Detect overwrite BEFORE saving ────────────────────────────────────
+  const overwrote = await logOverwriteIfNeeded({
+    entityType:    "student",
+    student,
+    baseUpdatedAt,
+    currentUser:   req.user,
+    action:        "suspend",
+  });
+
+  student.status        = "suspended";
+  student.isActive      = false;
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
+  await student.save({ validateModifiedOnly: true });
 
   if (model === App && student.studentId && S) {
     await S.findByIdAndUpdate(student.studentId, { status: "suspended", isActive: false }).catch(() => {});
@@ -1397,14 +1511,17 @@ router.patch("/students/:id/suspend", asyncHandler(async (req, res) => {
 
   const name = student.studentName || student.name || "Student";
   return sendSuccess(res, {
-    message: `"${name}" has been suspended`,
-    data:    normaliseStudentDoc(student.toObject()),
+    message:  `"${name}" has been suspended`,
+    data:     normaliseStudentDoc(student.toObject()),
+    overwrote,
   });
 }));
 
 router.patch("/students/:id/restore", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { id }   = req.params;
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
   let student = null, model = null;
   const S   = getStudent();
   const App = getStudentApplication();
@@ -1419,8 +1536,20 @@ router.patch("/students/:id/restore", asyncHandler(async (req, res) => {
     return sendError(res, 409, "Student is already active");
   }
 
-  student.status = "approved"; student.isActive = true; student.updatedAt = new Date();
-  await student.save();
+  const overwrote = await logOverwriteIfNeeded({
+    entityType:    "student",
+    student,
+    baseUpdatedAt,
+    currentUser:   req.user,
+    action:        "restore",
+  });
+
+  student.status        = "approved";
+  student.isActive      = true;
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
+  await student.save({ validateModifiedOnly: true });
 
   if (model === App && student.studentId && S) {
     await S.findByIdAndUpdate(student.studentId, { status: "approved", isActive: true }).catch(() => {});
@@ -1434,8 +1563,9 @@ router.patch("/students/:id/restore", asyncHandler(async (req, res) => {
 
   const name = student.studentName || student.name || "Student";
   return sendSuccess(res, {
-    message: `"${name}" has been restored`,
-    data:    normaliseStudentDoc(student.toObject()),
+    message:  `"${name}" has been restored`,
+    data:     normaliseStudentDoc(student.toObject()),
+    overwrote,
   });
 }));
 
@@ -1445,6 +1575,8 @@ router.patch("/students/:id/move", asyncHandler(async (req, res) => {
 
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { id }   = req.params;
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
   let student = null, model = null;
   const S   = getStudent();
   const App = getStudentApplication();
@@ -1462,11 +1594,21 @@ router.patch("/students/:id/move", asyncHandler(async (req, res) => {
     return sendError(res, 403, "Target class does not belong to your school");
   }
 
+  const overwrote = await logOverwriteIfNeeded({
+    entityType:    "student",
+    student,
+    baseUpdatedAt,
+    currentUser:   req.user,
+    action:        "move",
+  });
+
   const previousClassId = student.classId;
   student.classId       = classId;
   student.className     = targetClass.name || null;
   student.updatedAt     = new Date();
-  await student.save();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
+  await student.save({ validateModifiedOnly: true });
 
   if (model === App && student.studentId && S) {
     await S.findByIdAndUpdate(student.studentId, {
@@ -1483,8 +1625,9 @@ router.patch("/students/:id/move", asyncHandler(async (req, res) => {
   const name      = student.studentName || student.name || "Student";
   console.log(`[PATCH /students/${id}/move] "${name}" ${previousClassId} → ${classId}`);
   return sendSuccess(res, {
-    message: `"${name}" moved to ${className}`,
-    data:    { ...normaliseStudentDoc(student.toObject()), className },
+    message:   `"${name}" moved to ${className}`,
+    data:      { ...normaliseStudentDoc(student.toObject()), className },
+    overwrote,
   });
 }));
 
