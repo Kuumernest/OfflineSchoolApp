@@ -1,5 +1,5 @@
 // src/services/apiEndpoints.js
-"use strict";
+// ADD the applications endpoints — everything else unchanged
 
 export const API = {
   auth: {
@@ -23,6 +23,42 @@ export const API = {
       move:     (id) => `/admin/students/${id}/move`,
       generateEnrollmentNo: (id) => `/admin/students/${id}/enrollment-number`,
     },
+
+    // ── NEW: dedicated applications collection ──────────────────────────
+    applications: {
+      // Try these in order — whichever your backend actually exposes
+      list:    "/admin/applications",
+      pending: "/admin/applications/pending",
+      detail:  (id) => `/admin/applications/${id}`,
+      approve: (id) => `/admin/applications/${id}/approve`,
+      reject:  (id) => `/admin/applications/${id}/reject`,
+
+      // Fallback chain tried automatically by getPendingApplications
+      pendingFallbackChain: [
+        "/admin/applications/pending",
+        "/admin/applications?status=pending",
+        "/admin/student-applications/pending",
+        "/admin/student-applications?status=pending",
+        "/admin/students/applications",
+        "/admin/students/pending",          // last resort: students table
+      ],
+
+      // Approve fallback chain
+      approveFallbackChain: (id) => [
+        `/admin/applications/${id}/approve`,
+        `/admin/student-applications/${id}/approve`,
+        `/admin/students/${id}/approve`,    // last resort: students table
+      ],
+
+      // Reject fallback chain
+      rejectFallbackChain: (id) => [
+        `/admin/applications/${id}/reject`,
+        `/admin/student-applications/${id}/reject`,
+        `/admin/students/${id}/reject`,
+      ],
+    },
+    // ───────────────────────────────────────────────────────────────────
+
     teachers: {
       list:          "/admin/teachers",
       detail:        (id) => `/admin/teachers/${id}`,

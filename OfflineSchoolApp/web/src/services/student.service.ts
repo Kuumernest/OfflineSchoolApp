@@ -478,7 +478,7 @@ export async function rejectStudent(
 // ═════════════════════════════════════════════════════════════════════════════
 
 export async function deleteStudent(studentId: string): Promise<unknown> {
-  const { data } = await api.delete(`/admin/students/${studentId}`); // FIXED
+  const { data } = await api.delete(`/students/${studentId}`); // FIXED
   return data;
 }
 
@@ -491,7 +491,7 @@ export async function deleteStudent(studentId: string): Promise<unknown> {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export async function suspendStudent(studentId: string): Promise<unknown> {
-  const { data } = await api.patch(`/admin/students/${studentId}/suspend`); // FIXED
+  const { data } = await api.patch(`/students/${studentId}/suspend`); // FIXED
   return data;
 }
 
@@ -503,7 +503,7 @@ export async function suspendStudent(studentId: string): Promise<unknown> {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export async function restoreStudent(studentId: string): Promise<unknown> {
-  const { data } = await api.patch(`/admin/students/${studentId}/restore`); // FIXED
+  const { data } = await api.patch(`/students/${studentId}/restore`); // FIXED
   return data;
 }
 

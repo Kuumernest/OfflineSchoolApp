@@ -1,5 +1,5 @@
 // mobile/app/admin/students/detail.js
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   View, Text, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, StyleSheet,
@@ -11,7 +11,7 @@ import * as Haptics                        from "expo-haptics";
 
 import { getDatabase }    from "@/db/database";
 import { useAuthStore }   from "@/store/auth.store";
-import api                from "@/services/api";
+import StudentService     from "@/services/student.service";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -221,6 +221,7 @@ export default function StudentDetailScreen() {
   const [error,          setError]          = useState(null);
   const [isBusy,         setIsBusy]         = useState(false);
   const [showMovePicker, setShowMovePicker] = useState(false);
+  const baseUpdatedAtRef = useRef(null);
 
   // ── Load student ────────────────────────────────────────
 
@@ -229,33 +230,23 @@ export default function StudentDetailScreen() {
       setLoading(true);
       setError(null);
 
-      console.log("[detail] 🔍 studentId param:", studentId, "type:", typeof studentId);
-
       const db = await getDatabase();
-
-      // See what fields exist and what a real student looks like
-      const sample = await db.getAllAsync("SELECT * FROM students LIMIT 1");
-      if (sample.length > 0) {
-        console.log("[detail] 📋 Sample student fields:", Object.keys(sample[0]));
-        console.log("[detail] 📋 Sample student data:", JSON.stringify(sample[0], null, 2));
-      } else {
-        console.log("[detail] ⚠️ Students table is empty!");
-      }
 
       const rows = await db.getAllAsync(
         "SELECT * FROM students WHERE id = ? LIMIT 1",
         [studentId]
       );
 
-      console.log("[detail] 🔎 Query with _id returned:", rows.length, "rows");
-
       if (rows.length > 0) {
-        setStudent(rows[0]);
+        const loaded = rows[0];
+        setStudent(loaded);
+        // Capture the version we started editing from — for LWW conflict detection
+        baseUpdatedAtRef.current = loaded.updatedAt || loaded.updated_at || null;
+        console.log("[detail] 📌 base_updated_at captured:", baseUpdatedAtRef.current);
       } else {
         setError("Student not found.");
       }
 
-      // Load classes for move picker
       const cls = await db.getAllAsync(
         "SELECT * FROM classes WHERE schoolId = ? ORDER BY name ASC",
         [schoolId]
@@ -292,8 +283,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await api.patch(`/admin/students/${studentId}/suspend`);
-      setStudent((s) => ({ ...s, status: "suspended" }));
+      const result = await StudentService.suspend(studentId, {
+        baseUpdatedAt: baseUpdatedAtRef.current,
+      });
+      if (result?.overwrote) {
+        console.log("[detail] ⚠️ Overwrite detected:", result.overwrote);
+      }
+      const now = new Date().toISOString();
+      setStudent((s) => ({ ...s, status: "suspended", updatedAt: now }));
+      baseUpdatedAtRef.current = now;
       Alert.alert("Suspended", `${student?.name} has been suspended.`);
     } catch (err) {
       Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to suspend.");
@@ -312,8 +310,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      await api.patch(`/admin/students/${studentId}/restore`);;
-      setStudent((s) => ({ ...s, status: "active" }));
+      const result = await StudentService.restore(studentId, {
+        baseUpdatedAt: baseUpdatedAtRef.current,
+      });
+      if (result?.overwrote) {
+        console.log("[detail] ⚠️ Overwrite detected:", result.overwrote);
+      }
+      const now = new Date().toISOString();
+      setStudent((s) => ({ ...s, status: "approved", updatedAt: now }));
+      baseUpdatedAtRef.current = now;
       Alert.alert("Restored", `${student?.name} has been restored.`);
     } catch (err) {
       Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to restore.");
@@ -332,7 +337,12 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
-      await api.delete(`/admin/students/${studentId}`);
+      const result = await StudentService.delete(studentId, {
+        baseUpdatedAt: baseUpdatedAtRef.current,
+      });
+      if (result?.overwrote) {
+        console.log("[detail] ⚠️ Overwrite detected:", result.overwrote);
+      }
       Alert.alert("Deleted", `${student?.name} has been removed.`, [
         { text: "OK", onPress: () => router.back() },
       ]);
@@ -353,8 +363,15 @@ export default function StudentDetailScreen() {
     setIsBusy(true);
     setShowMovePicker(false);
     try {
-      await api.patch(`/admin/students/${studentId}/move`, { classId });
-      setStudent((s) => ({ ...s, className: cls.name, classId }));
+      const result = await StudentService.moveToClass(studentId, classId, {
+        baseUpdatedAt: baseUpdatedAtRef.current,
+      });
+      if (result?.overwrote) {
+        console.log("[detail] ⚠️ Overwrite detected:", result.overwrote);
+      }
+      const now = new Date().toISOString();
+      setStudent((s) => ({ ...s, className: cls.name, classId, updatedAt: now }));
+      baseUpdatedAtRef.current = now;
       Alert.alert("Moved", `${student?.name} moved to ${cls.name}.`);
     } catch (err) {
       Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to move.");
@@ -367,10 +384,10 @@ export default function StudentDetailScreen() {
 
   const isSuspended      = student?.status?.toLowerCase() === "suspended";
   const statusConfig     = getStatusConfig(student?.status);
- const classNameDisplay = student?.className || student?.class_name || student?.class?.name;
-const classIdForMove   = student?.classId   || student?.class_id   || student?.class?._id;
-const enrollmentNo     = student?.enrollmentNo ?? student?.enrollment_no ?? null;
-const mustReset        = student?.mustResetPassword ?? student?.must_reset_password ?? false;
+  const classNameDisplay = student?.className || student?.class_name || student?.class?.name;
+  const classIdForMove   = student?.classId   || student?.class_id   || student?.class?._id;
+  const enrollmentNo     = student?.enrollmentNo ?? student?.enrollment_no ?? null;
+  const mustReset        = student?.mustResetPassword ?? student?.must_reset_password ?? false;
   const firstLetter      = (student?.name || "?").charAt(0).toUpperCase();
 
   // ── Loading ─────────────────────────────────────────────
@@ -489,25 +506,25 @@ const mustReset        = student?.mustResetPassword ?? student?.must_reset_passw
 
         {/* Personal info */}
         <Section title="Personal Information">
-  <InfoRow icon="person-outline"   label="Full Name"     value={student.name || student.studentName} />
-  <InfoRow icon="mail-outline"     label="Email"         value={student.email} />
-  <InfoRow icon="call-outline"     label="Phone"         value={student.phone} />
-  <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDate(student.dateOfBirth || student.date_of_birth)} />
-  <InfoRow icon="card-outline"     label="Enrollment No" value={enrollmentNo} mono />
-  <InfoRow icon="pricetag-outline" label="Admission No"  value={student.admissionNumber || student.admissionNo} />
-  <InfoRow icon="person-outline"   label="Gender"        value={student.gender} />
-  <InfoRow icon="location-outline" label="Address"       value={student.address} />
-</Section>
+          <InfoRow icon="person-outline"   label="Full Name"     value={student.name || student.studentName} />
+          <InfoRow icon="mail-outline"     label="Email"         value={student.email} />
+          <InfoRow icon="call-outline"     label="Phone"         value={student.phone} />
+          <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDate(student.dateOfBirth || student.date_of_birth)} />
+          <InfoRow icon="card-outline"     label="Enrollment No" value={enrollmentNo} mono />
+          <InfoRow icon="pricetag-outline" label="Admission No"  value={student.admissionNumber || student.admissionNo} />
+          <InfoRow icon="person-outline"   label="Gender"        value={student.gender} />
+          <InfoRow icon="location-outline" label="Address"       value={student.address} />
+        </Section>
 
         {/* School info */}
-<Section title="School Information">
-  <InfoRow icon="school-outline"   label="Class"          value={classNameDisplay} />
-  <InfoRow icon="people-outline"   label="Guardian Name"  value={student.guardianName || student.guardian_name} />
-  <InfoRow icon="call-outline"     label="Guardian Phone" value={student.guardianPhone || student.guardian_phone} />
-  <InfoRow icon="calendar-outline" label="Enrolled On"    value={formatDate(student.enrolledAt || student.enrolled_at || student.approved_at)} />
-  <InfoRow icon="calendar-outline" label="Created"        value={formatDate(student.createdAt || student.created_at)} />
-  <InfoRow icon="calendar-outline" label="Last Updated"   value={formatDate(student.updatedAt || student.updated_at)} />
-</Section>
+        <Section title="School Information">
+          <InfoRow icon="school-outline"   label="Class"          value={classNameDisplay} />
+          <InfoRow icon="people-outline"   label="Guardian Name"  value={student.guardianName || student.guardian_name} />
+          <InfoRow icon="call-outline"     label="Guardian Phone" value={student.guardianPhone || student.guardian_phone} />
+          <InfoRow icon="calendar-outline" label="Enrolled On"    value={formatDate(student.enrolledAt || student.enrolled_at || student.approved_at)} />
+          <InfoRow icon="calendar-outline" label="Created"        value={formatDate(student.createdAt || student.created_at)} />
+          <InfoRow icon="calendar-outline" label="Last Updated"   value={formatDate(student.updatedAt || student.updated_at)} />
+        </Section>
 
         {/* Actions */}
         <View style={styles.actionsSection}>

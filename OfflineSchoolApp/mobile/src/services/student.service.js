@@ -2,6 +2,7 @@
 
 import { getDatabase } from "../db/database";
 import api from "./api";
+import SyncOverwriteService from "./sync-overwrite.service";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -52,6 +53,16 @@ const safeAddColumn = async (db, table, col, def) => {
       console.warn(`safeAddColumn ${col} on ${table}:`, err.message);
     }
   }
+};
+
+// ─────────────────────────────────────────────────────────────
+// LWW HELPER — appends baseUpdatedAt query param safely
+// ─────────────────────────────────────────────────────────────
+
+const appendBaseTimestamp = (url, baseTs) => {
+  if (!baseTs) return url;
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}baseUpdatedAt=${encodeURIComponent(baseTs)}`;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -132,10 +143,6 @@ const VALID_STATUSES = new Set([
   "rejected",
 ]);
 
-/**
- * Normalise the status value coming from the server or local DB.
- * Falls back to "approved" only when the value is genuinely absent.
- */
 const normaliseStatus = (raw) => {
   const s = (raw ?? "").toString().toLowerCase().trim();
   return VALID_STATUSES.has(s) ? s : "approved";
@@ -224,7 +231,6 @@ export const dropAndRecreateStudentTable = async () => {
   console.log("[dropAndRecreateStudentTable] Starting table recreation...");
 
   try {
-    // Step 1: Backup existing data
     let backupData = [];
     try {
       const hasTable = await tableExists(db, "students");
@@ -243,18 +249,14 @@ export const dropAndRecreateStudentTable = async () => {
       );
     }
 
-    // Step 2: Drop old table
     await db.execAsync(`DROP TABLE IF EXISTS students;`).catch(() => {});
     console.log("[dropAndRecreateStudentTable] ✅ Old table dropped");
 
-    // Step 3: Reset verification flag
     studentSchemaVerified = false;
 
-    // Step 4: Recreate schema clean
     await ensureStudentSchema(db);
     console.log("[dropAndRecreateStudentTable] ✅ Schema recreated");
 
-    // Step 5: Restore data — preserve real status from backup
     if (backupData.length > 0) {
       let restored = 0;
       let failed   = 0;
@@ -293,7 +295,6 @@ export const dropAndRecreateStudentTable = async () => {
               row.grade,
               row.admissionNo,
               row.admissionNumber,
-              // ✅ Preserve real status from backup — do NOT hardcode 'approved'
               normaliseStatus(row.status),
               row.is_active ?? 1,
               0,
@@ -509,18 +510,17 @@ const normaliseStudent = (r) => {
     email:         r.email         || r.guardian_email || null,
     grade:         r.grade         || r.class_grade    || r.className    || null,
     admissionNo,
-    // ✅ admissionNumber alias — mirrors web StudentRow which reads admissionNumber
     admissionNumber: admissionNo,
     isActive:      r.isActive      ?? r.is_active      ?? true,
     schoolId:      r.schoolId      || null,
     classId,
     className,
-    // ✅ Nested class object — mirrors web resolveClassName() which reads class.name
     class:         className ? { name: className, _id: classId } : null,
     studentId:     r.studentId     || null,
-    // ✅ Preserve real status — web page depends on this for tab counts
     status:        normaliseStatus(r.status),
     notes:         r.notes         || null,
+    updatedAt:     r.updatedAt     || r.updated_at || null,
+    createdAt:     r.createdAt     || r.created_at || null,
   };
 };
 
@@ -540,17 +540,9 @@ const isApproved = (r) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// CACHE WRITE  ← status now preserved from server value
+// CACHE WRITE
 // ─────────────────────────────────────────────────────────────
 
-/**
- * @param {object[]} students   - Already-normalised student objects
- * @param {string}   schoolId
- * @param {boolean}  [forceApproved=false]
- *   Pass true only when writing the legacy approved-only response
- *   (getApprovedStudents). For the new getStudents() path leave false
- *   so suspended/pending/rejected rows keep their real status.
- */
 const cacheStudentsLocally = async (
   db,
   students,
@@ -571,7 +563,6 @@ const cacheStudentsLocally = async (
     for (const s of students) {
       if (!s.id) continue;
 
-      // ── Resolve display name ─────────────────────────────────────────
       const fromParts = [s.firstName, s.lastName]
         .filter(Boolean)
         .join(" ")
@@ -631,14 +622,10 @@ const cacheStudentsLocally = async (
         s.admNo            ||
         null;
 
-      // ✅ Determine the status to persist
-      //    forceApproved=true  → legacy path, always write 'approved'
-      //    forceApproved=false → new path, preserve the real status
       const statusToWrite = forceApproved
         ? "approved"
         : normaliseStatus(s.status);
 
-      // is_active mirrors the status: approved=1, everything else=0
       const isActiveToWrite =
         forceApproved || statusToWrite === "approved" ? 1 : 0;
 
@@ -723,7 +710,7 @@ const cacheStudentsLocally = async (
 };
 
 // ─────────────────────────────────────────────────────────────
-// ONE-TIME REPAIR  (unchanged)
+// ONE-TIME REPAIR
 // ─────────────────────────────────────────────────────────────
 
 export const repairStudentNames = async () => {
@@ -880,7 +867,7 @@ export const repairStudentNames = async () => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT SELF-LOOKUP  (unchanged)
+// STUDENT SELF-LOOKUP
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentProfileByUserId = async (userId) => {
@@ -922,7 +909,7 @@ export const getStudentProfileByUserId = async (userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT CLASS RESOLVER  (unchanged)
+// STUDENT CLASS RESOLVER
 // ─────────────────────────────────────────────────────────────
 
 export const resolveStudentClassId = async (userId) => {
@@ -979,9 +966,7 @@ export const resolveStudentClassId = async (userId) => {
           return cid;
         }
       }
-    } catch {
-      // Non-fatal
-    }
+    } catch { /* Non-fatal */ }
 
     try {
       const res  = await api.get("/students/me");
@@ -1057,7 +1042,7 @@ export const resolveStudentClassId = async (userId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT ATTENDANCE  (unchanged)
+// STUDENT ATTENDANCE
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentAttendance = async (userId, limit = 30) => {
@@ -1107,7 +1092,7 @@ export const getStudentAttendance = async (userId, limit = 30) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT TIMETABLE  (unchanged)
+// STUDENT TIMETABLE
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentTimetable = async (classId) => {
@@ -1157,7 +1142,7 @@ export const getStudentTimetable = async (classId) => {
 };
 
 // ─────────────────────────────────────────────────────────────
-// STUDENT QUIZZES  (unchanged)
+// STUDENT QUIZZES
 // ─────────────────────────────────────────────────────────────
 
 export const getStudentAvailableQuizzes = async (userId, classId) => {
@@ -1229,25 +1214,38 @@ export const getStudentQuizHistory = async (userId, limit = 20) => {
 };
 
 // ─────────────────────────────────────────────────────────────
+// LOOKUP BY ID — new helper used by detail screens
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Looks up a single student by their primary id in the local DB.
+ * Returns a normalised student object with updatedAt preserved,
+ * or null if not found.
+ */
+export const getStudentById = async (studentId) => {
+  if (!studentId) return null;
+  const db = await getDatabase();
+  await ensureStudentSchema(db);
+
+  try {
+    const row = await db.getFirstAsync(
+      `SELECT * FROM students WHERE id = ? LIMIT 1`,
+      [studentId]
+    );
+    return row ? normaliseStudent(row) : null;
+  } catch (err) {
+    console.warn("getStudentById failed:", err.message);
+    return null;
+  }
+};
+
+// ─────────────────────────────────────────────────────────────
 // SERVICE (admin-facing)
 // ─────────────────────────────────────────────────────────────
 
 export const StudentService = {
 
-  // ── GET ALL STUDENTS (any status)  ← NEW, called by updated mobile screen
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Mirrors web fetchStudents({ schoolId, status, page, limit }).
-   *
-   * @param {object} opts
-   * @param {number}  [opts.page=1]
-   * @param {number}  [opts.limit=200]
-   * @param {string}  [opts.status="all"]  "all"|"approved"|"pending"|"suspended"|"rejected"
-   * @param {string}  [opts.classId]       Optional class filter
-   * @param {string}  [opts.search]        Optional search term
-   *
-   * @returns {Promise<object[]>}  Normalised student array
-   */
+  // ── GET ALL STUDENTS (any status) ──────────────────────────────────────
   async getStudents({
     page    = 1,
     limit   = 200,
@@ -1257,11 +1255,8 @@ export const StudentService = {
   } = {}) {
     const schoolId = getSchoolId();
 
-    // ── Build query params — mirrors web fetchStudents() params ────────
     const params = { page, limit, schoolId };
 
-    // "all" → omit status param so the backend returns everything,
-    // identical to web toQueryStatus() behaviour
     if (status && status !== "all") {
       params.status = status;
     }
@@ -1295,13 +1290,11 @@ export const StudentService = {
       );
 
       if (raw && raw.length > 0) {
-        // ✅ Normalise and preserve each student's real status
         const normalised = raw.map(normaliseStudent).filter(Boolean);
 
         console.log(`[getStudents] ${normalised.length} students from server`);
 
         const db = await getDatabase();
-        // ✅ forceApproved=false → real statuses (pending, suspended, etc.) saved
         await cacheStudentsLocally(db, normalised, schoolId, false);
         await repairStudentNames();
 
@@ -1322,21 +1315,10 @@ export const StudentService = {
       }
     }
 
-    // Network error → serve from local cache
     return this.getStudentsLocal({ status });
   },
 
-  // ── LOCAL FALLBACK (any status)  ← NEW
-  // ─────────────────────────────────────────────────────────────────────────
-  /**
-   * Reads from the local SQLite cache.
-   * Filters by status when status !== "all" / "".
-   *
-   * @param {object} opts
-   * @param {string} [opts.status="all"]
-   * @param {string} [opts.classId]
-   * @returns {Promise<object[]>}
-   */
+  // ── LOCAL FALLBACK (any status) ──────────────────────────────────────────
   async getStudentsLocal({ status = "all", classId = "" } = {}) {
     const db       = await getDatabase();
     const schoolId = getSchoolId();
@@ -1369,21 +1351,17 @@ export const StudentService = {
       const where  = [];
       const params = [];
 
-      // ── Status filter ────────────────────────────────────────────────
       if (status && status !== "all" && VALID_STATUSES.has(status)) {
         where.push(`s.status = ?`);
         params.push(status);
       }
-      // "all" → no status WHERE clause, returns every student
 
-      // ── Soft-delete guard ────────────────────────────────────────────
       if (deletedCol) {
         where.push(
           `(s.${deletedCol} IS NULL OR s.${deletedCol} = '')`
         );
       }
 
-      // ── School filter ─────────────────────────────────────────────────
       if (schoolId && schoolCol) {
         where.push(
           `(s.${schoolCol} = ? OR s.${schoolCol} IS NULL OR s.${schoolCol} = '')`
@@ -1391,7 +1369,6 @@ export const StudentService = {
         params.push(schoolId);
       }
 
-      // ── Class filter ──────────────────────────────────────────────────
       if (classId && classCol) {
         where.push(`s.${classCol} = ?`);
         params.push(classId);
@@ -1412,8 +1389,7 @@ export const StudentService = {
     }
   },
 
-  // ── GET APPROVED STUDENTS  (legacy — unchanged, kept for backward compat)
-  // ─────────────────────────────────────────────────────────────────────────
+  // ── GET APPROVED STUDENTS (legacy) ───────────────────────────────────────
   async getApprovedStudents() {
     const schoolId = getSchoolId();
 
@@ -1447,7 +1423,6 @@ export const StudentService = {
         console.log(`📋 ${approved.length} approved students from server`);
 
         const db = await getDatabase();
-        // ✅ forceApproved=true → legacy path, keep writing 'approved' status
         await cacheStudentsLocally(db, approved, schoolId, true);
         await repairStudentNames();
 
@@ -1478,13 +1453,10 @@ export const StudentService = {
     return this.getApprovedStudentsLocal();
   },
 
-  // ── GET LOCAL (approved only — legacy)  ───────────────────────────────
   async getApprovedStudentsLocal() {
-    // Delegate to the new generic local method with status="approved"
     return this.getStudentsLocal({ status: "approved" });
   },
 
-  // ── GROUPED BY CLASS  (unchanged)  ────────────────────────────────────
   async getApprovedStudentsByClass() {
     const students = await this.getApprovedStudents();
     const grouped  = {};
@@ -1526,12 +1498,12 @@ export const StudentService = {
     return students.length;
   },
 
-  // ── APPROVE  (unchanged)  ─────────────────────────────────────────────
+  // ── APPROVE ─────────────────────────────────────────────────────────────
   async approve(studentId) {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
     await ensureStudentSchema(db);
-    await api.patch(`/admin/students/${studentId}/approve`);
+    const response = await api.patch(`/admin/students/${studentId}/approve`);
     const now = new Date().toISOString();
     await db
       .runAsync(
@@ -1541,15 +1513,15 @@ export const StudentService = {
         [now, studentId]
       )
       .catch(() => {});
-    return { success: true };
+    return response.data;
   },
 
-  // ── REJECT  (unchanged)  ──────────────────────────────────────────────
+  // ── REJECT ──────────────────────────────────────────────────────────────
   async reject(studentId, reason = "") {
     if (!studentId) throw new Error("studentId is required");
     const db  = await getDatabase();
     await ensureStudentSchema(db);
-    await api.patch(`/admin/students/${studentId}/reject`, { reason });
+    const response = await api.patch(`/admin/students/${studentId}/reject`, { reason });
     const now = new Date().toISOString();
     await db
       .runAsync(
@@ -1559,31 +1531,40 @@ export const StudentService = {
         [now, studentId]
       )
       .catch(() => {});
-    return { success: true };
+    return response.data;
   },
 
-  // ── DELETE  (unchanged)  ──────────────────────────────────────────────
-  async delete(studentId) {
+  // ── SUSPEND (LWW-aware) ─────────────────────────────────────────────────
+  /**
+   * @param {string} studentId
+   * @param {object} [opts]
+   * @param {string} [opts.baseUpdatedAt] - ISO timestamp of the version the client
+   *   loaded, used by the server for LWW overwrite detection.
+   * @returns {Promise<object>} Server response (may include `overwrote` field).
+   */
+    async suspend(studentId, { baseUpdatedAt } = {}) {
     if (!studentId) throw new Error("studentId is required");
     const db = await getDatabase();
     await ensureStudentSchema(db);
-    try {
-      await api.delete(`/admin/students/${studentId}`);
-    } catch (err) {
-      if (err?.response?.status !== 404) throw err;
-    }
-    await db
-      .runAsync(`DELETE FROM students WHERE id = ?`, [studentId])
-      .catch(() => {});
-    return { success: true };
-  },
 
-  // ── SUSPEND  (unchanged)  ─────────────────────────────────────────────
-  async suspend(studentId) {
-    if (!studentId) throw new Error("studentId is required");
-    const db  = await getDatabase();
-    await ensureStudentSchema(db);
-    await api.patch(`/admin/students/${studentId}/suspend`);
+    const url = appendBaseTimestamp(
+      `/students/${studentId}/suspend`,
+      baseUpdatedAt
+    );
+    const response = await api.patch(url);
+    const data     = response.data || {};
+
+    // Persist LWW overwrite record if the server reported one
+    if (data.overwrote) {
+      await SyncOverwriteService.saveOverwrite(data.overwrote, {
+        entityType: "student",
+        entityId:   studentId,
+        entityName: data.data?.name || data.data?.studentName || null,
+        schoolId:   getSchoolId(),
+        action:     "suspend",
+      });
+    }
+
     const now = new Date().toISOString();
     await db
       .runAsync(
@@ -1593,15 +1574,33 @@ export const StudentService = {
         [now, studentId]
       )
       .catch(() => {});
-    return { success: true };
+
+    return data;
   },
 
-  // ── RESTORE  (unchanged)  ─────────────────────────────────────────────
-  async restore(studentId) {
+  // ── RESTORE (LWW-aware) ─────────────────────────────────────────────────
+    async restore(studentId, { baseUpdatedAt } = {}) {
     if (!studentId) throw new Error("studentId is required");
-    const db  = await getDatabase();
+    const db = await getDatabase();
     await ensureStudentSchema(db);
-    await api.patch(`/admin/students/${studentId}/restore`);
+
+    const url = appendBaseTimestamp(
+      `/students/${studentId}/restore`,
+      baseUpdatedAt
+    );
+    const response = await api.patch(url);
+    const data     = response.data || {};
+
+    if (data.overwrote) {
+      await SyncOverwriteService.saveOverwrite(data.overwrote, {
+        entityType: "student",
+        entityId:   studentId,
+        entityName: data.data?.name || data.data?.studentName || null,
+        schoolId:   getSchoolId(),
+        action:     "restore",
+      });
+    }
+
     const now = new Date().toISOString();
     await db
       .runAsync(
@@ -1611,16 +1610,67 @@ export const StudentService = {
         [now, studentId]
       )
       .catch(() => {});
-    return { success: true };
+
+    return data;
   },
 
-  // ── MOVE TO CLASS  (unchanged)  ───────────────────────────────────────
-  async moveToClass(studentId, classId) {
+  // ── DELETE (LWW-aware) ──────────────────────────────────────────────────
+    async delete(studentId, { baseUpdatedAt } = {}) {
+    if (!studentId) throw new Error("studentId is required");
+    const db = await getDatabase();
+    await ensureStudentSchema(db);
+
+    const url = appendBaseTimestamp(`/students/${studentId}`, baseUpdatedAt);
+
+    let data = {};
+    try {
+      const response = await api.delete(url);
+      data = response.data || {};
+    } catch (err) {
+      if (err?.response?.status !== 404) throw err;
+    }
+
+    if (data.overwrote) {
+      await SyncOverwriteService.saveOverwrite(data.overwrote, {
+        entityType: "student",
+        entityId:   studentId,
+        entityName: null,   // record is gone, can't look up name
+        schoolId:   getSchoolId(),
+        action:     "delete",
+      });
+    }
+
+    await db
+      .runAsync(`DELETE FROM students WHERE id = ?`, [studentId])
+      .catch(() => {});
+
+    return data;
+  },
+
+  // ── MOVE TO CLASS (LWW-aware) ───────────────────────────────────────────
+    async moveToClass(studentId, classId, { baseUpdatedAt } = {}) {
     if (!studentId) throw new Error("studentId is required");
     if (!classId)   throw new Error("classId is required");
     const db = await getDatabase();
     await ensureStudentSchema(db);
-    await api.patch(`/admin/students/${studentId}/move`, { classId });
+
+    const url = appendBaseTimestamp(
+      `/students/${studentId}/move`,
+      baseUpdatedAt
+    );
+    const response = await api.patch(url, { classId });
+    const data     = response.data || {};
+
+    if (data.overwrote) {
+      await SyncOverwriteService.saveOverwrite(data.overwrote, {
+        entityType: "student",
+        entityId:   studentId,
+        entityName: data.data?.name || data.data?.studentName || null,
+        schoolId:   getSchoolId(),
+        action:     "move",
+      });
+    }
+
     const now = new Date().toISOString();
     await db
       .runAsync(
@@ -1630,7 +1680,8 @@ export const StudentService = {
         [classId, classId, now, studentId]
       )
       .catch(() => {});
-    return { success: true };
+
+    return data;
   },
 };
 

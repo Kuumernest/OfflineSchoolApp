@@ -8,12 +8,10 @@ const DB_NAME = "schoolapp.db";
 /** @type {import('expo-sqlite').SQLiteDatabase | null} */
 let _db = null;
 
-// ✅ FIX: Promise-based ready queue.
+// Promise-based ready queue.
 // If getDatabase() is called before _db is initialised (e.g. from a service
 // that imports at module load time), the call is queued and resolved once
-// openDatabaseAsync completes. Without this, services that called
-// getDatabase() concurrently during boot all raced to open the DB,
-// causing "database is locked" / "undefined is not a function" errors.
+// openDatabaseAsync completes.
 let _initPromise = null;
 
 /**
@@ -23,11 +21,7 @@ let _initPromise = null;
  * @returns {Promise<import('expo-sqlite').SQLiteDatabase>}
  */
 export const getDatabase = async () => {
-  // Fast path — already open
-  if (_db) return _db;
-
-  // If init is already in flight, wait for it instead of opening a second
-  // connection. This is the key fix for the race condition.
+  if (_db)          return _db;
   if (_initPromise) return _initPromise;
 
   _initPromise = _openDatabase();
@@ -39,16 +33,10 @@ const _openDatabase = async () => {
     const db = await SQLite.openDatabaseAsync(DB_NAME);
 
     // ── Performance + safety pragmas ──────────────────────────────────
-    // Each pragma is a separate execAsync call — bundling them into one
-    // string works in older expo-sqlite but fails silently in v2.
     await db.execAsync("PRAGMA journal_mode = WAL;").catch(() => {});
     await db.execAsync("PRAGMA foreign_keys = ON;").catch(() => {});
 
     // ── Core schema ───────────────────────────────────────────────────
-    // Tables that every role needs. Role-specific tables (quiz, announcements
-    // etc.) are created by SyncManager.runAllMigrations() after login.
-    // Each CREATE TABLE is a separate execAsync call — the v2 API does not
-    // reliably execute multiple DDL statements in one string.
 
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS exams (
@@ -189,22 +177,24 @@ const _openDatabase = async () => {
 
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS students (
-        id          TEXT PRIMARY KEY,
-        schoolId    TEXT,
-        school_id   TEXT,
-        classId     TEXT,
-        class_id    TEXT,
-        user_id     TEXT,
-        name        TEXT,
-        studentName TEXT,
-        admissionNo TEXT,
-        email       TEXT,
-        gender      TEXT,
-        is_active   INTEGER DEFAULT 1,
-        status      TEXT DEFAULT 'active',
-        deleted_at  TEXT,
-        created_at  TEXT,
-        updated_at  TEXT
+        id              TEXT PRIMARY KEY,
+        schoolId        TEXT,
+        school_id       TEXT,
+        classId         TEXT,
+        class_id        TEXT,
+        user_id         TEXT,
+        name            TEXT,
+        studentName     TEXT,
+        admissionNo     TEXT,
+        admissionNumber TEXT,
+        enrollmentNo    TEXT,
+        email           TEXT,
+        gender          TEXT,
+        is_active       INTEGER DEFAULT 1,
+        status          TEXT DEFAULT 'approved',
+        deleted_at      TEXT,
+        created_at      TEXT,
+        updated_at      TEXT
       )
     `).catch((err) => console.warn("[database] students:", err.message));
 
@@ -248,21 +238,21 @@ const _openDatabase = async () => {
 
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS subjects (
-        id          TEXT PRIMARY KEY,
-        schoolId    TEXT,
-        school_id   TEXT,
-        classId     TEXT,
-        class_id    TEXT,
-        name        TEXT,
-        code        TEXT,
-        teacher_id  TEXT,
+        id           TEXT PRIMARY KEY,
+        schoolId     TEXT,
+        school_id    TEXT,
+        classId      TEXT,
+        class_id     TEXT,
+        name         TEXT,
+        code         TEXT,
+        teacher_id   TEXT,
         teacher_name TEXT,
-        is_active   INTEGER DEFAULT 1,
-        deleted_at  TEXT,
-        created_at  TEXT,
-        updated_at  TEXT,
-        _synced     INTEGER DEFAULT 0,
-        _synced_at  TEXT
+        is_active    INTEGER DEFAULT 1,
+        deleted_at   TEXT,
+        created_at   TEXT,
+        updated_at   TEXT,
+        _synced      INTEGER DEFAULT 0,
+        _synced_at   TEXT
       )
     `).catch((err) => console.warn("[database] subjects:", err.message));
 
@@ -280,16 +270,9 @@ const _openDatabase = async () => {
       )
     `).catch((err) => console.warn("[database] teachers:", err.message));
 
-    // ── Users table — needed for offline auth ─────────────────────────
-    // ✅ FIX: this was missing from the original database.js.
-    //    The login() offline path and SyncManager.syncTeachers() both
-    //    INSERT into `users`, but the table was only created by
-    //    SyncManager.migrateUsersTable() which runs AFTER login.
-    //    On a fresh install the offline-cache INSERT threw
-    //    "no such table: users" which surfaced as
-    //    "Offline cache failed: undefined is not a function" because
-    //    expo-sqlite wraps the underlying SQLite error in a way that
-    //    loses the original message.
+    // ── Users table ───────────────────────────────────────────────────
+    // Must be created BEFORE login runs — auth.store.js writes
+    // passwordSalt/passwordHash here during the online login cache step.
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS users (
         id                  TEXT PRIMARY KEY,
@@ -311,12 +294,40 @@ const _openDatabase = async () => {
       )
     `).catch((err) => console.warn("[database] users:", err.message));
 
-    // ── Teacher assignments — needed before SyncManager migrations ────
-    // ✅ FIX: SyncManager.syncLocalAssignmentsWithServer() queries this
-    //    table during the first sync. If it doesn't exist yet the query
-    //    throws and the whole sync aborts. Creating it here with IF NOT
-    //    EXISTS is safe — SyncManager.migrateAssignmentsTable() will
-    //    just add the missing columns via safeAddColumn.
+    // ── CRITICAL: Guarantee auth columns exist on OLD installs ────────
+    //
+    // Problem: devices that installed the app before passwordSalt /
+    // passwordHash were added to the CREATE TABLE statement above have
+    // an existing schoolapp.db without those columns.
+    // CREATE TABLE IF NOT EXISTS is a no-op when the table already
+    // exists, so the new columns are never added to old installs.
+    // auth.store.js then tries to INSERT passwordSalt and throws:
+    //   "table users has no column named passwordSalt"
+    //
+    // Fix: ALTER TABLE ADD COLUMN runs after every open.
+    // SQLite ignores "duplicate column" errors so this is idempotent.
+    // Running it here (before SyncManager migrations) means it fires
+    // before the very first login attempt on any device.
+    const _userAuthCols = [
+      ["passwordSalt",        "TEXT"],
+      ["passwordHash",        "TEXT"],
+      ["enrollmentNo",        "TEXT"],
+      ["must_reset_password", "INTEGER DEFAULT 0"],
+      ["_synced",             "INTEGER DEFAULT 0"],
+      ["_synced_at",          "TEXT"],
+    ];
+    for (const [col, def] of _userAuthCols) {
+      await db.execAsync(
+        `ALTER TABLE users ADD COLUMN ${col} ${def};`
+      ).catch((err) => {
+        // "duplicate column name" is expected on fresh installs — ignore
+        if (!err.message?.includes("duplicate column")) {
+          console.warn(`[database] users.${col}:`, err.message);
+        }
+      });
+    }
+
+    // ── Teacher assignments ───────────────────────────────────────────
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS teacher_assignments (
         id           TEXT PRIMARY KEY,
@@ -373,11 +384,13 @@ const _openDatabase = async () => {
       "CREATE INDEX IF NOT EXISTS idx_students_class       ON students(classId)",
       "CREATE INDEX IF NOT EXISTS idx_students_school      ON students(schoolId)",
       "CREATE INDEX IF NOT EXISTS idx_students_user        ON students(user_id)",
+      "CREATE INDEX IF NOT EXISTS idx_students_status      ON students(status)",
       "CREATE INDEX IF NOT EXISTS idx_subjects_class       ON subjects(classId)",
       "CREATE INDEX IF NOT EXISTS idx_subjects_school      ON subjects(schoolId)",
       "CREATE INDEX IF NOT EXISTS idx_users_role           ON users(role)",
       "CREATE INDEX IF NOT EXISTS idx_users_school         ON users(schoolId)",
       "CREATE INDEX IF NOT EXISTS idx_users_email          ON users(email)",
+      "CREATE INDEX IF NOT EXISTS idx_users_enrollment     ON users(enrollmentNo)",
       "CREATE INDEX IF NOT EXISTS idx_ta_teacher           ON teacher_assignments(teacherId)",
       "CREATE INDEX IF NOT EXISTS idx_ta_class             ON teacher_assignments(classId)",
       "CREATE INDEX IF NOT EXISTS idx_ta_subject           ON teacher_assignments(subjectId)",
@@ -392,8 +405,7 @@ const _openDatabase = async () => {
     return _db;
 
   } catch (err) {
-    // ✅ FIX: clear _initPromise on failure so the next call retries
-    //    rather than returning a rejected promise forever.
+    // Clear _initPromise on failure so the next call retries
     _initPromise = null;
     console.error("[database] Failed to open database:", err.message);
     throw err;
@@ -407,8 +419,8 @@ const _openDatabase = async () => {
 export const closeDatabase = async () => {
   if (_db) {
     await _db.closeAsync().catch(() => {});
-    _db           = null;
-    _initPromise  = null;
+    _db          = null;
+    _initPromise = null;
     console.log("[database] SQLite closed");
   }
 };

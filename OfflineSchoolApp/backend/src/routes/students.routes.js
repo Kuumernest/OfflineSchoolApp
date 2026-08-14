@@ -8,12 +8,8 @@
  * │ CANONICAL SOURCE OF TRUTH                                                 │
  * │                                                                           │
  * │ The `Student` collection is the ONLY canonical store for enrolled         │
- * │ students. `StudentApplication` (if present) is a legacy/optional          │
- * │ intake table and is consulted ONLY as a read fallback in GET /:id.        │
- * │                                                                           │
- * │ Do NOT reintroduce a `resolveReadModel()`-style helper that prefers       │
- * │ StudentApplication over Student — that hides every student created via    │
- * │ direct enrollment (AddStudentPage → POST /apply → PUT /:id/approve).      │
+ * │ students. `StudentApplication` (public form) is consulted as a            │
+ * │ secondary source in GET /pending, PUT /:id/approve, PUT /:id/reject.      │
  * └───────────────────────────────────────────────────────────────────────────┘
  */
 
@@ -23,11 +19,12 @@ const { v4: uuidv4 } = require("uuid");
 
 const { authenticate } = require("../../middleware/auth");
 
-const Student      = require("../db/models/Student");
-const User         = require("../db/models/User");
-const Class        = require("../db/models/Class");
-const Announcement = require("../db/models/Announcement");
-const Content      = require("../db/models/Content");
+const Student       = require("../db/models/Student");
+const User          = require("../db/models/User");
+const Class         = require("../db/models/Class");
+const Announcement  = require("../db/models/Announcement");
+const Content       = require("../db/models/Content");
+const SyncOverwrite = require("../db/models/SyncOverwrite");
 
 const { sendEmail } = require("../services/email.service");
 
@@ -83,11 +80,6 @@ const getStudentApp        = lazyModel("../db/models/StudentApplication", "Stude
 
 // ─── Shared query clauses ─────────────────────────────────────────────────────
 
-/**
- * FIXED: Widened to catch all falsy deletedAt values.
- * Previously students with deletedAt: undefined (stored as field),
- * deletedAt: 0, or deletedAt: false were excluded from results.
- */
 const NOT_DELETED = {
   $or: [
     { deletedAt: { $exists: false } },
@@ -100,10 +92,10 @@ const NOT_DELETED = {
 
 const APPROVED_STATUS = {
   $or: [
-    { status: "approved"          },
-    { status: "active"            },
-    { status: { $exists: false }  },
-    { status: null                },
+    { status: "approved"         },
+    { status: "active"           },
+    { status: { $exists: false } },
+    { status: null               },
   ],
 };
 
@@ -113,9 +105,8 @@ const buildStudentFilter = ({ schoolId, status, classId, since, search } = {}) =
   if (schoolId) and.push({ schoolId: String(schoolId) });
 
   const s = status ? String(status).trim() : "approved";
-  if (s === "approved")      and.push(APPROVED_STATUS);
-  else if (s !== "all")      and.push({ status: s });
-  // "all" → no status clause → every student returned
+  if (s === "approved")  and.push(APPROVED_STATUS);
+  else if (s !== "all")  and.push({ status: s });
 
   if (classId) and.push({ classId: String(classId).trim() });
 
@@ -170,11 +161,11 @@ const getSchoolName = async (schoolId) => {
 
 const generateTempPassword = () => {
   const words = [
-    "Apple","Mango","Cedar","Delta","Eagle","Flame",
-    "Grace","Haven","Ivory","Jewel","Karma","Lemon",
-    "Maple","Noble","Ocean","Pearl","Queen","River",
-    "Stone","Tiger","Unity","Vivid","Witty","Xenon",
-    "Yield","Zesty",
+    "Apple", "Mango", "Cedar", "Delta", "Eagle", "Flame",
+    "Grace", "Haven", "Ivory", "Jewel", "Karma", "Lemon",
+    "Maple", "Noble", "Ocean", "Pearl", "Queen", "River",
+    "Stone", "Tiger", "Unity", "Vivid", "Witty", "Xenon",
+    "Yield", "Zesty",
   ];
   const word   = words[Math.floor(Math.random() * words.length)];
   const digits = String(Math.floor(1000 + Math.random() * 9000));
@@ -241,15 +232,15 @@ const saveUserWithUniqueEnrollment = async (userAccount, seedNo, schoolId) => {
       await userAccount.save();
       return enrollmentNo;
     } catch (err) {
-      const dupKeys  = JSON.stringify(err?.keyPattern || err?.keyValue || {});
-      const isDupNo  = err?.code === 11000 && dupKeys.includes("enrollmentNo");
+      const dupKeys = JSON.stringify(err?.keyPattern || err?.keyValue || {});
+      const isDupNo = err?.code === 11000 && dupKeys.includes("enrollmentNo");
       if (!isDupNo || attempt === 3) throw err;
 
       console.warn(
         `[enrollment] "${enrollmentNo}" collided — regenerating (attempt ${attempt + 1})`
       );
       const schoolCode = await resolveSchoolCode(schoolId);
-      enrollmentNo = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
+      enrollmentNo     = await buildEnrollmentNo(schoolCode, new Date().getFullYear());
     }
   }
 
@@ -430,11 +421,7 @@ const teacherOrAdmin = (req, res, next) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const findDuplicateStudent = async ({
-  schoolId,
-  emailClean,
-  nameCandidates,
-  dateOfBirth,
-  guardianName,
+  schoolId, emailClean, nameCandidates, dateOfBirth, guardianName,
 }) => {
   if (!nameCandidates.length) return null;
 
@@ -447,48 +434,33 @@ const findDuplicateStudent = async ({
 
   if (!nameConditions.length) return null;
 
-  // Strategy 1: email + name (strongest)
   if (emailClean) {
     return Student.findOne({
-      schoolId,
-      email:  emailClean,
-      status: { $ne: "rejected" },
-      $or:    nameConditions,
+      schoolId, email: emailClean, status: { $ne: "rejected" }, $or: nameConditions,
     }).lean();
   }
 
-  // Strategy 2: name + dateOfBirth
   if (dateOfBirth) {
     const dob = new Date(dateOfBirth);
     if (!Number.isNaN(dob.getTime())) {
       const hit = await Student.findOne({
-        schoolId,
-        status:      { $ne: "rejected" },
-        dateOfBirth: dob,
-        $or:         nameConditions,
+        schoolId, status: { $ne: "rejected" }, dateOfBirth: dob, $or: nameConditions,
       }).lean();
       if (hit) return hit;
     }
   }
 
-  // Strategy 3: name + guardianName
   if (guardianName?.trim()) {
     const gRx = { $regex: `^${escapeRegex(guardianName.trim())}$`, $options: "i" };
-    const hit = await Student.findOne({
-      schoolId,
-      status:       { $ne: "rejected" },
-      guardianName: gRx,
-      $or:          nameConditions,
+    const hit  = await Student.findOne({
+      schoolId, status: { $ne: "rejected" }, guardianName: gRx, $or: nameConditions,
     }).lean();
     if (hit) return hit;
   }
 
-  // Strategy 4: name alone, no-email students only (last resort)
   return Student.findOne({
-    schoolId,
-    email:  { $in: [null, "", undefined] },
-    status: { $ne: "rejected" },
-    $or:    nameConditions,
+    schoolId, email: { $in: [null, "", undefined] },
+    status: { $ne: "rejected" }, $or: nameConditions,
   }).lean();
 };
 
@@ -517,36 +489,27 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
         existing.mustResetPassword = true;
         userAccount   = existing;
         emailAttached = true;
-
       } else if (existing.role === "student") {
         const sibling = await Student.findOne({ userId: existing._id })
           .select("name firstName lastName studentName").lean().catch(() => null);
-
         const siblingName = sibling
           ? resolveDisplayName(sibling)
           : existing.name || "another student";
-
         notice =
           `The application email (${emailRaw}) is already used by ` +
-          `${siblingName} (a sibling or another student). ` +
-          `A separate account has been created for ${displayName} — ` +
-          `they will log in using their enrollment number. ` +
-          `Login credentials have been sent to ${emailRaw} for the parent to share.`;
-
+          `${siblingName}. A separate account has been created for ${displayName} — ` +
+          `they will log in using their enrollment number.`;
       } else {
         notice =
-          `The application email (${emailRaw}) belongs to a ` +
-          `${existing.role} account (${existing.name}). ` +
+          `The application email (${emailRaw}) belongs to a ${existing.role} account. ` +
           `A separate student account has been created — ${displayName} ` +
-          `will log in using their enrollment number. ` +
-          `Login credentials have been sent to ${emailRaw} for the parent to share.`;
+          `will log in using their enrollment number.`;
       }
     }
   }
 
   if (!userAccount) {
     const canAttachEmail = Boolean(emailRaw) && !notice;
-
     const userFields = {
       _id:               uuidv4(),
       name:              displayName,
@@ -557,7 +520,6 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
       mustResetPassword: true,
       enrollmentNo:      seedNo,
     };
-
     if (canAttachEmail) userFields.email = emailRaw;
 
     userAccount   = new User(userFields);
@@ -570,6 +532,55 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
 
   return { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser };
 };
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 4.5 — SYNC OVERWRITE HELPER
+// ═════════════════════════════════════════════════════════════════════════════
+
+async function logOverwriteIfNeeded({
+  entityType, student, baseUpdatedAt, currentUser, action,
+}) {
+  if (!baseUpdatedAt) return null;
+
+  const clientBaseline = new Date(baseUpdatedAt);
+  if (isNaN(clientBaseline.getTime())) return null;
+
+  const serverTime = new Date(student.updatedAt);
+  if (serverTime.getTime() <= clientBaseline.getTime()) return null;
+
+  const prevEditorId = student.updatedBy ? String(student.updatedBy) : null;
+  const thisEditorId = currentUser?._id  ? String(currentUser._id)   : null;
+
+  if (prevEditorId && thisEditorId && prevEditorId === thisEditorId) return null;
+
+  try {
+    const snapshot = student.toObject ? student.toObject() : student;
+    const record   = await SyncOverwrite.create({
+      entityType,
+      entityId:          String(student._id),
+      entityName:        resolveDisplayName(student),
+      schoolId:          student.schoolId,
+      overwrittenBy:     thisEditorId,
+      overwrittenByName: currentUser?.name || null,
+      overwrittenAt:     new Date(),
+      newAction:         action,
+      lostEditBy:        prevEditorId,
+      lostEditByName:    student.updatedByName || null,
+      lostEditAt:        student.updatedAt,
+      lostVersion:       snapshot,
+    });
+
+    console.log(
+      `[sync-overwrite] ${entityType}/${student._id} overwritten by ` +
+      `${currentUser?.name || thisEditorId} (action: ${action})`
+    );
+
+    return { id: String(record._id), lostEditAt: record.lostEditAt, lostEditBy: record.lostEditByName };
+  } catch (err) {
+    console.warn("[sync-overwrite] Failed to log:", err.message);
+    return null;
+  }
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 5 — PUBLIC ROUTES
@@ -597,11 +608,8 @@ router.post("/apply", asyncHandler(async (req, res) => {
     ].filter(Boolean);
 
     const duplicate = await findDuplicateStudent({
-      schoolId,
-      emailClean,
-      nameCandidates,
-      dateOfBirth:  dateOfBirth  || null,
-      guardianName: guardianName || null,
+      schoolId, emailClean, nameCandidates,
+      dateOfBirth: dateOfBirth || null, guardianName: guardianName || null,
     });
 
     if (duplicate) {
@@ -676,7 +684,6 @@ router.get("/application-status/:id", asyncHandler(async (req, res) => {
 const resolveAssignedClassIds = async (req, schoolId) => {
   const TeacherAssignment = getTeacherAssignment();
   if (!TeacherAssignment) return [];
-
   try {
     const assignments = await TeacherAssignment.find({
       $or: [{ teacherId: req.user._id }, { teacher: req.user._id }],
@@ -686,9 +693,7 @@ const resolveAssignedClassIds = async (req, schoolId) => {
 
     return [
       ...new Set(
-        assignments
-          .map((a) => String(a.classId || a.class || ""))
-          .filter(Boolean)
+        assignments.map((a) => String(a.classId || a.class || "")).filter(Boolean)
       ),
     ];
   } catch (err) {
@@ -701,7 +706,7 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
   if (!schoolId) return sendError(res, 400, "schoolId required");
 
-  const { classId } = req.query;
+  const { classId }      = req.query;
   const assignedClassIds = await resolveAssignedClassIds(req, schoolId);
 
   const and = [NOT_DELETED, { schoolId: String(schoolId) }, APPROVED_STATUS];
@@ -714,14 +719,10 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
     return sendSuccess(res, { count: 0, students: [], data: [] });
   }
 
-  const students   = await Student.find({ $and: and })
-    .sort({ name: 1, firstName: 1 })
-    .lean();
+  const students   = await Student.find({ $and: and }).sort({ name: 1, firstName: 1 }).lean();
   const normalised = await enrichWithClassNames(students);
 
-  return sendSuccess(res, {
-    count: normalised.length, students: normalised, data: normalised,
-  });
+  return sendSuccess(res, { count: normalised.length, students: normalised, data: normalised });
 });
 
 router.get("/teacher/students",    authenticate, teacherOrAdmin, handleTeacherStudents);
@@ -742,19 +743,14 @@ router.get(
     if (!student) {
       return sendSuccess(res, {
         data: {
-          id:               userId,
-          userId,
+          id: userId, userId,
           firstName:        req.user.name?.split(" ")[0]                 || null,
           lastName:         req.user.name?.split(" ").slice(1).join(" ") || null,
           name:             req.user.name  || "",
           email:            req.user.email || "",
           enrollmentNo:     req.user.enrollmentNo || null,
-          schoolId,
-          classId:          null,
-          class_id:         null,
-          className:        null,
-          admissionNo:      null,
-          profileCompleted: false,
+          schoolId, classId: null, class_id: null, className: null,
+          admissionNo: null, profileCompleted: false,
         },
       });
     }
@@ -794,7 +790,7 @@ router.get(
         guardianRelation:  student.guardianRelation || null,
         guardianEmail:     student.guardianEmail    || null,
         bloodGroup:        student.bloodGroup       || null,
-        medicalConditions: student.medicalConditions|| null,
+        medicalConditions: student.medicalConditions || null,
         bio:               student.bio              || null,
         profileCompleted:  student.profileCompleted || false,
         status:            student.status,
@@ -857,8 +853,7 @@ router.put(
     }
 
     const updated = await Student.findByIdAndUpdate(
-      current._id,
-      { $set: allowedUpdate },
+      current._id, { $set: allowedUpdate },
       { returnDocument: "after", runValidators: false }
     ).lean();
 
@@ -866,10 +861,7 @@ router.put(
       await User.findByIdAndUpdate(userId, { $set: { name: allowedUpdate.name } }).catch(() => {});
     }
 
-    return sendSuccess(res, {
-      message: "Profile updated successfully",
-      data:    normaliseStudent(updated),
-    });
+    return sendSuccess(res, { message: "Profile updated successfully", data: normaliseStudent(updated) });
   })
 );
 
@@ -888,16 +880,9 @@ router.get(
     if (!student) {
       return sendSuccess(res, {
         data: {
-          id:           userId,
-          userId,
-          name:         req.user.name,
-          email:        req.user.email,
-          enrollmentNo: req.user.enrollmentNo || null,
-          schoolId,
-          classId:      null,
-          class_id:     null,
-          className:    null,
-          status:       "approved",
+          id: userId, userId, name: req.user.name, email: req.user.email,
+          enrollmentNo: req.user.enrollmentNo || null, schoolId,
+          classId: null, class_id: null, className: null, status: "approved",
         },
       });
     }
@@ -952,9 +937,9 @@ router.get(
     }
 
     const filter = { subjectId, status: "active" };
-    if (classId)                filter.classId = classId;
-    else if (student?.classId)  filter.classId = student.classId;
-    if (type && type !== "all") filter.type    = type.toLowerCase();
+    if (classId)               filter.classId = classId;
+    else if (student?.classId) filter.classId = student.classId;
+    if (type && type !== "all") filter.type   = type.toLowerCase();
 
     let items = await Content.find(filter)
       .populate("subjectId", "name code")
@@ -974,11 +959,7 @@ router.get(
     }
 
     const normalised = items.map(normaliseContentItem).filter(Boolean);
-    const summary    = {
-      total: normalised.length,
-      syllabus: 0, notes: 0, video: 0,
-      audio: 0, document: 0, image: 0,
-    };
+    const summary    = { total: normalised.length, syllabus: 0, notes: 0, video: 0, audio: 0, document: 0, image: 0 };
     normalised.forEach((i) => {
       const t = i.type?.toLowerCase();
       if (t && Object.hasOwn(summary, t)) summary[t]++;
@@ -1009,10 +990,8 @@ router.get(
 
     const now    = new Date();
     const filter = {
-      schoolId,
-      isActive:  true,
-      deletedAt: null,
-      $or:       audienceConditions,
+      schoolId, isActive: true, deletedAt: null,
+      $or:  audienceConditions,
       $and: [
         { $or: [{ publishAt: null }, { publishAt: { $lte: now } }] },
         { $or: [{ expiresAt: null }, { expiresAt: { $gte: now } }] },
@@ -1021,26 +1000,20 @@ router.get(
 
     if (subjectId) filter.subjectId = subjectId;
     const sinceDate = parseDate(since);
-    if (sinceDate) filter.updatedAt = { $gte: sinceDate };
+    if (sinceDate)  filter.updatedAt = { $gte: sinceDate };
 
     const [announcements, total] = await Promise.all([
       Announcement.find(filter)
         .sort({ isPinned: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit)
+        .skip(skip).limit(limit)
         .populate("author",        "name role")
         .populate("targetClasses", "name section")
         .select("-readBy -acknowledgedBy")
-        .lean()
-        .maxTimeMS(5000),
+        .lean().maxTimeMS(5000),
       Announcement.countDocuments(filter),
     ]);
 
-    const enriched = announcements.map((a) => ({
-      ...a,
-      isRead:         false,
-      isAcknowledged: false,
-    }));
+    const enriched = announcements.map((a) => ({ ...a, isRead: false, isAcknowledged: false }));
 
     return sendSuccess(res, {
       announcements: enriched,
@@ -1105,6 +1078,17 @@ router.get("/stats/summary", authenticate, adminOnly, asyncHandler(async (req, r
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
 
+  // Include StudentApplication counts in the pending total
+  const StudentApp     = getStudentApp();
+  const appPendingCount = StudentApp
+    ? await StudentApp.countDocuments({
+        schoolId: String(schoolId),
+        status:   "pending",
+        isActive: { $ne: false },
+        $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }],
+      }).catch(() => 0)
+    : 0;
+
   const [pending, approved, rejected, suspended, total, thisMonth] = await Promise.all([
     Student.countDocuments({ $and: [...scope.$and, { status: "pending"   }] }),
     Student.countDocuments({ $and: [...scope.$and, APPROVED_STATUS         ] }),
@@ -1114,110 +1098,176 @@ router.get("/stats/summary", authenticate, adminOnly, asyncHandler(async (req, r
     Student.countDocuments({ $and: [...scope.$and, { createdAt: { $gte: startOfMonth } }] }),
   ]);
 
-  const data = { pending, approved, rejected, suspended, total, thisMonth };
+  const data = {
+    pending:  pending + appPendingCount,   // combined pending count
+    approved, rejected, suspended, total, thisMonth,
+  };
+
   return sendSuccess(res, { data, stats: data });
 }));
+
+// ─── GET /pending ─────────────────────────────────────────────────────────────
+// Reads from BOTH StudentApplication (public form) and Student (direct enroll)
 
 router.get("/pending", authenticate, adminOnly, asyncHandler(async (req, res) => {
   const { since, classId, search } = req.query;
   const { page, limit, skip }      = getPagination(req);
   const schoolId                   = resolveSchoolId(req);
 
-  const filter = buildStudentFilter({
-    schoolId, status: "pending", classId, since, search,
-  });
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
 
-  const [applications, total] = await Promise.all([
-    Student.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit).lean(),
-    Student.countDocuments(filter),
+  console.log(`📡 GET /pending — schoolId: ${schoolId}`);
+
+  // ── 1. StudentApplication collection (public form submissions) ────────────
+  const StudentApp = getStudentApp();
+  let appResults   = [];
+  let appTotal     = 0;
+
+  if (StudentApp) {
+    // Build filter carefully — avoid $or key collision
+    const appAndClauses = [
+      { schoolId: String(schoolId) },
+      { status:   "pending"        },
+      { isActive: { $ne: false }   },
+      { $or: [{ deletedAt: { $exists: false } }, { deletedAt: null }] },
+    ];
+
+    if (classId) appAndClauses.push({ classId: String(classId).trim() });
+
+    if (search?.trim()) {
+      const rx = new RegExp(escapeRegex(String(search).trim()), "i");
+      appAndClauses.push({
+        $or: [
+          { studentName: rx },
+          { email:       rx },
+          { guardianName: rx },
+        ],
+      });
+    }
+
+    [appResults, appTotal] = await Promise.all([
+      StudentApp.find({ $and: appAndClauses })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      StudentApp.countDocuments({ $and: appAndClauses }),
+    ]);
+
+    console.log(`📡 StudentApplication pending: ${appResults.length} (total: ${appTotal})`);
+  }
+
+  // ── 2. Student collection (direct enrollments pending approval) ───────────
+  const studentFilter   = buildStudentFilter({ schoolId, status: "pending", classId, since, search });
+  const [studentResults, studentTotal] = await Promise.all([
+    Student.find(studentFilter).sort({ createdAt: -1 }).lean(),
+    Student.countDocuments(studentFilter),
   ]);
 
-  const normalised = await enrichWithClassNames(applications);
+  console.log(`📡 Student collection pending: ${studentResults.length} (total: ${studentTotal})`);
+
+  // ── 3. Normalise StudentApplication records to the same shape ─────────────
+  const normaliseApp = (app) => ({
+    id:           String(app._id),
+    _id:          String(app._id),
+    name:         app.studentName || "Unknown Student",
+    studentName:  app.studentName || null,
+    firstName:    app.firstName   || null,
+    lastName:     app.lastName    || null,
+    email:        app.email       || null,
+    phone:        app.phone       || null,
+    guardianName: app.guardianName  || null,
+    guardianPhone: app.guardianPhone || null,
+    className:    app.className   || null,
+    classId:      app.classId     || null,
+    class_id:     app.classId     || null,
+    schoolId:     app.schoolId,
+    status:       "pending",
+    isActive:     true,
+    notes:        app.notes       || null,
+    address:      app.address     || null,
+    documents:    Array.isArray(app.documents) ? app.documents : [],
+    createdAt:    app.createdAt   || null,
+    updatedAt:    app.updatedAt   || null,
+    _source:      "StudentApplication",   // used by approve/reject to route correctly
+  });
+
+  const normalisedApps     = appResults.map(normaliseApp);
+  const normalisedStudents = await enrichWithClassNames(studentResults);
+
+  // ── 4. Merge and deduplicate ───────────────────────────────────────────────
+  const seen   = new Set();
+  const merged = [];
+
+  for (const item of [...normalisedApps, ...normalisedStudents]) {
+    const id = String(item._id || item.id);
+    if (!seen.has(id)) {
+      seen.add(id);
+      merged.push(item);
+    }
+  }
+
+  merged.sort((a, b) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  const total = appTotal + studentTotal;
 
   return sendSuccess(res, {
-    count:      normalised.length,
+    count:      merged.length,
     total,
-    students:   normalised,
-    data:       normalised,
+    students:   merged,
+    data:       merged,
     pagination: { page, limit, total, pages: Math.ceil(total / limit) },
   });
 }));
 
-router.get("/approved", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const { classId, since, search } = req.query;
-  const { page, limit, skip }      = getPagination(req);
-  const schoolId                   = resolveSchoolId(req);
-
-  const filter = buildStudentFilter({
-    schoolId, status: "approved", classId, since, search,
-  });
-
-  const [students, total] = await Promise.all([
-    Student.find(filter)
-      .sort({ name: 1, studentName: 1, firstName: 1 })
-      .skip(skip)
-      .limit(limit)
-      .lean(),
-    Student.countDocuments(filter),
-  ]);
-
-  const normalised = await enrichWithClassNames(students);
-
-  return sendSuccess(res, {
-    count:      normalised.length,
-    total,
-    students:   normalised,
-    data:       normalised,
-    pagination: { page, limit, total, pages: Math.ceil(total / limit) },
-  });
-}));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DEBUG ROUTE — remove after confirming counts match
-// GET /api/students/debug-count
-// ─────────────────────────────────────────────────────────────────────────────
+// ─── DEBUG ROUTE — remove after confirming counts match ───────────────────────
 router.get("/debug-count", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const schoolId = resolveSchoolId(req);
+  const schoolId   = resolveSchoolId(req);
+  const StudentApp = getStudentApp();
 
   const [
-    rawTotal,
+    rawStudentTotal,
     withSchoolId,
     notDeleted,
     statusBreakdown,
-    deletedAtBreakdown,
+    appCount,
+    appStatusBreakdown,
   ] = await Promise.all([
     Student.countDocuments({}),
     Student.countDocuments({ schoolId: String(schoolId) }),
     Student.countDocuments({
       schoolId: String(schoolId),
       $or: [
-        { deletedAt: { $exists: false } },
-        { deletedAt: null  },
-        { deletedAt: ""    },
-        { deletedAt: 0     },
-        { deletedAt: false },
+        { deletedAt: { $exists: false } }, { deletedAt: null },
+        { deletedAt: "" }, { deletedAt: 0 }, { deletedAt: false },
       ],
     }),
     Student.aggregate([
       { $match: { schoolId: String(schoolId) } },
       { $group: { _id: "$status", count: { $sum: 1 } } },
     ]),
-    Student.aggregate([
-      { $match: { schoolId: String(schoolId) } },
-      { $group: { _id: "$deletedAt", count: { $sum: 1 } } },
-    ]),
+    StudentApp
+      ? StudentApp.countDocuments({ schoolId: String(schoolId) })
+      : Promise.resolve(0),
+    StudentApp
+      ? StudentApp.aggregate([
+          { $match: { schoolId: String(schoolId) } },
+          { $group: { _id: "$status", count: { $sum: 1 } } },
+        ])
+      : Promise.resolve([]),
   ]);
 
   return res.json({
-    rawTotal,
-    withSchoolId,
-    notDeleted,
-    statusBreakdown,
-    deletedAtBreakdown,
+    student: { rawStudentTotal, withSchoolId, notDeleted, statusBreakdown },
+    studentApplication: { appCount, appStatusBreakdown },
   });
 }));
 
-// GET /  — generic admin list (status=approved by default, status=all supported)
+// GET / — generic admin list
 router.get("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   const { classId, since, search, status = "approved" } = req.query;
   const { page, limit, skip }                           = getPagination(req);
@@ -1245,6 +1295,7 @@ router.get("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
 // SECTION 10 — ADMIN LIFECYCLE ACTIONS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// POST / — direct enrollment by admin
 router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
@@ -1278,11 +1329,8 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
     ].filter(Boolean);
 
     const duplicate = await findDuplicateStudent({
-      schoolId,
-      emailClean,
-      nameCandidates,
-      dateOfBirth:  dateOfBirth  || null,
-      guardianName: guardianName || null,
+      schoolId, emailClean, nameCandidates,
+      dateOfBirth: dateOfBirth || null, guardianName: guardianName || null,
     });
     if (duplicate) {
       return sendError(
@@ -1336,11 +1384,8 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
     enrolledAt:    now,
   });
 
-  const {
-    userAccount, enrollmentNo, tempPassword, notice, emailAttached,
-  } = await provisionStudentAccount({
-    student, schoolId, displayName, emailRaw: emailClean,
-  });
+  const { userAccount, enrollmentNo, tempPassword, notice, emailAttached } =
+    await provisionStudentAccount({ student, schoolId, displayName, emailRaw: emailClean });
 
   student.userId      = userAccount._id;
   student.admissionNo = enrollmentNo;
@@ -1350,25 +1395,13 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   if (emailClean) {
     const schoolName = await getSchoolName(schoolId);
     emailResult = await sendEmailSafe({
-      to:       emailClean,
-      template: "studentApproved",
-      data: {
-        studentName:   displayName,
-        enrollmentNo,
-        tempPassword,
-        className:     targetClass.name,
-        schoolName,
-        loginUrl:      process.env.APP_LOGIN_URL || null,
-        parentIsStaff: !!notice,
-      },
+      to: emailClean, template: "studentApproved",
+      data: { studentName: displayName, enrollmentNo, tempPassword, className: targetClass.name, schoolName, loginUrl: process.env.APP_LOGIN_URL || null, parentIsStaff: !!notice },
       context: "studentEnrolled",
     });
   }
 
-  console.log(
-    `✅ Direct enroll: "${displayName}" → ${className} | ${enrollmentNo} ` +
-    `| emailAttached: ${emailAttached} | notice: ${notice ? "yes" : "no"}`
-  );
+  console.log(`✅ Direct enroll: "${displayName}" → ${className} | ${enrollmentNo}`);
 
   return sendSuccess(res, {
     emailSent: emailResult.success,
@@ -1386,26 +1419,136 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
 }));
 
 // ── Approve ───────────────────────────────────────────────────────────────────
+
 const handleApprove = asyncHandler(async (req, res) => {
   const { classId } = req.body;
   if (!classId) return sendError(res, 400, "classId is required to approve");
 
-  const student = await Student.findById(req.params.id);
-  if (!student)  return sendError(res, 404, "Student application not found");
-
   const schoolId = resolveSchoolId(req);
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
+  const { id }   = req.params;
+
+  // ── 1. Check StudentApplication first (public form submissions) ───────────
+  const StudentApp = getStudentApp();
+  let   appRecord  = null;
+
+  if (StudentApp) {
+    appRecord = await StudentApp.findById(id).lean().catch(() => null);
   }
+
+  if (appRecord) {
+    // Found in StudentApplication
+    if (!canAccess(req, appRecord, schoolId)) {
+      return sendError(res, 403, "Access denied");
+    }
+    if (appRecord.status !== "pending") {
+      return sendError(res, 409, `Application is already ${appRecord.status}`);
+    }
+
+    const targetClass = await Class.findById(String(classId).trim()).lean();
+    if (!targetClass)                  return sendError(res, 404, "Class not found");
+    if (targetClass.isActive === false) return sendError(res, 400, "Cannot assign student to an inactive class");
+    if (!canAccess(req, targetClass, schoolId)) {
+      return sendError(res, 403, "Class does not belong to your school");
+    }
+
+    const displayName = appRecord.studentName || "Student";
+    const emailRaw    = (appRecord.email || "").toLowerCase().trim();
+    const now         = new Date();
+
+    // Create canonical Student record
+    const student = await Student.create({
+      _id:           uuidv4(),
+      firstName:     appRecord.firstName     || null,
+      lastName:      appRecord.lastName      || null,
+      name:          displayName,
+      studentName:   displayName,
+      email:         emailRaw                || undefined,
+      phone:         appRecord.phone         || null,
+      dateOfBirth:   appRecord.dateOfBirth   || null,
+      gender:        appRecord.gender        || null,
+      address:       appRecord.address       || null,
+      guardianName:  appRecord.guardianName  || null,
+      guardianPhone: appRecord.guardianPhone || null,
+      notes:         appRecord.notes         || null,
+      schoolId:      appRecord.schoolId,
+      classId:       String(targetClass._id),
+      className:     targetClass.name || null,
+      grade:         targetClass.name || null,
+      documents:     appRecord.documents || [],
+      status:        "approved",
+      isActive:      true,
+      reviewedBy:    req.user._id,
+      reviewedAt:    now,
+      approvedAt:    now,
+      enrolledAt:    now,
+    });
+
+    const { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser } =
+      await provisionStudentAccount({
+        student, schoolId: appRecord.schoolId || schoolId, displayName, emailRaw,
+      });
+
+    student.userId      = userAccount._id;
+    student.admissionNo = enrollmentNo;
+    await student.save({ validateModifiedOnly: true });
+
+    // Mark StudentApplication as approved and link the new Student record
+    await StudentApp.findByIdAndUpdate(id, {
+      $set: {
+        status:     "approved",
+        studentId:  String(student._id),
+        userId:     String(userAccount._id),
+        reviewedAt: now,
+        approvedAt: now,
+      },
+    });
+
+    const schoolName = await getSchoolName(schoolId);
+    let emailResult  = { success: false };
+    if (emailRaw) {
+      emailResult = await sendEmailSafe({
+        to: emailRaw, template: "studentApproved",
+        data: { studentName: displayName, enrollmentNo, tempPassword, className: targetClass.name, schoolName, loginUrl: process.env.APP_LOGIN_URL || null },
+        context: "applicationApproved",
+      });
+    }
+
+    console.log(`✅ Application approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
+
+    return sendSuccess(res, {
+      emailSent:    emailResult.success,
+      warning:      notice,
+      message:      notice
+        ? `${displayName} approved. ${notice}`
+        : emailResult.success
+          ? `${displayName} approved. Login details sent to ${emailRaw}.`
+          : `${displayName} approved. Share enrollment number and password manually.`,
+      enrollmentNo,
+      tempPassword,
+      student: normaliseStudent(student.toObject()),
+      data: {
+        studentId:    String(student._id),
+        userId:       String(userAccount._id),
+        classId:      String(targetClass._id),
+        className:    targetClass.name,
+        status:       "approved",
+        enrollmentNo,
+        emailAttached,
+      },
+    });
+  }
+
+  // ── 2. Fall through to Student collection (direct enrollments) ────────────
+  const student = await Student.findById(id);
+  if (!student)  return sendError(res, 404, "Student application not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status !== "pending") {
     return sendError(res, 409, `Application is already ${student.status}`);
   }
 
   const targetClass = await Class.findById(String(classId).trim()).lean();
-  if (!targetClass) return sendError(res, 404, "Class not found");
-  if (targetClass.isActive === false) {
-    return sendError(res, 400, "Cannot assign student to an inactive class");
-  }
+  if (!targetClass)                  return sendError(res, 404, "Class not found");
+  if (targetClass.isActive === false) return sendError(res, 400, "Cannot assign student to an inactive class");
   if (!canAccess(req, targetClass, schoolId)) {
     return sendError(res, 403, "Class does not belong to your school");
   }
@@ -1414,11 +1557,8 @@ const handleApprove = asyncHandler(async (req, res) => {
   const emailRaw    = resolveEmail(student);
   const schoolName  = await getSchoolName(schoolId);
 
-  const {
-    userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser,
-  } = await provisionStudentAccount({
-    student, schoolId: student.schoolId || schoolId, displayName, emailRaw,
-  });
+  const { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser } =
+    await provisionStudentAccount({ student, schoolId: student.schoolId || schoolId, displayName, emailRaw });
 
   const now           = new Date();
   student.status      = "approved";
@@ -1437,79 +1577,97 @@ const handleApprove = asyncHandler(async (req, res) => {
   let emailResult = { success: false };
   if (emailRaw) {
     emailResult = await sendEmailSafe({
-      to:       emailRaw,
-      template: "studentApproved",
-      data: {
-        studentName:   displayName,
-        enrollmentNo,
-        tempPassword,
-        className:     targetClass.name,
-        schoolName,
-        loginUrl:      process.env.APP_LOGIN_URL || null,
-        parentIsStaff: !!notice,
-      },
+      to: emailRaw, template: "studentApproved",
+      data: { studentName: displayName, enrollmentNo, tempPassword, className: targetClass.name, schoolName, loginUrl: process.env.APP_LOGIN_URL || null },
       context: "studentApproved",
     });
   }
 
-  console.log(
-    `✅ Approved: "${displayName}" → ${targetClass.name} ` +
-    `| enrollmentNo: ${enrollmentNo} ` +
-    `| newUser: ${isNewUser} ` +
-    `| emailAttached: ${emailAttached} ` +
-    `| notice: ${notice ? "yes" : "no"}`
-  );
-
-  let message;
-  if (notice) {
-    message = `${displayName} approved and assigned to ${targetClass.name}. ${notice}`;
-  } else if (emailResult.success) {
-    message =
-      `${displayName} approved and assigned to ${targetClass.name}. ` +
-      `Login details sent to ${emailRaw}.`;
-  } else if (emailRaw) {
-    message =
-      `${displayName} approved and assigned to ${targetClass.name}. ` +
-      `Email to ${emailRaw} failed — share credentials manually.`;
-  } else {
-    message =
-      `${displayName} approved. No email on application — ` +
-      `share the enrollment number and password with the student directly.`;
-  }
+  console.log(`✅ Student approved: "${displayName}" → ${targetClass.name} | ${enrollmentNo} | newUser: ${isNewUser}`);
 
   return sendSuccess(res, {
-    emailSent: emailResult.success,
-    warning:   notice,
-    message,
+    emailSent:    emailResult.success,
+    warning:      notice,
+    message:      notice
+      ? `${displayName} approved and assigned to ${targetClass.name}. ${notice}`
+      : emailResult.success
+        ? `${displayName} approved. Login details sent to ${emailRaw}.`
+        : `${displayName} approved. Share credentials manually.`,
     enrollmentNo,
     tempPassword,
     student: normaliseStudent(student.toObject()),
     data: {
-      studentId:  student._id,
-      userId:     userAccount._id,
-      classId:    String(targetClass._id),
-      className:  targetClass.name,
-      status:     "approved",
+      studentId:   String(student._id),
+      userId:      String(userAccount._id),
+      classId:     String(targetClass._id),
+      className:   targetClass.name,
+      status:      "approved",
       enrollmentNo,
       emailAttached,
     },
   });
 });
 
+// ── FIXED: approve route registrations were missing ───────────────────────────
 router.post("/:id/approve", authenticate, adminOnly, handleApprove);
 router.put( "/:id/approve", authenticate, adminOnly, handleApprove);
 
 // ── Reject ────────────────────────────────────────────────────────────────────
+// FIXED: handleReject was defined in the previous session but never included
+// in this file — added in full here.
+
 const handleReject = asyncHandler(async (req, res) => {
   const { reason = "" } = req.body;
+  const schoolId        = resolveSchoolId(req);
+  const { id }          = req.params;
 
-  const student = await Student.findById(req.params.id);
-  if (!student)  return sendError(res, 404, "Student application not found");
+  // ── 1. Check StudentApplication first ─────────────────────────────────────
+  const StudentApp = getStudentApp();
+  if (StudentApp) {
+    const appRecord = await StudentApp.findById(id).lean().catch(() => null);
+    if (appRecord) {
+      if (!canAccess(req, appRecord, schoolId)) {
+        return sendError(res, 403, "Access denied");
+      }
+      if (appRecord.status !== "pending") {
+        return sendError(res, 409, `Application is already ${appRecord.status}`);
+      }
 
-  const schoolId = resolveSchoolId(req);
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
+      const now = new Date();
+      await StudentApp.findByIdAndUpdate(id, {
+        $set: {
+          status:       "rejected",
+          rejectReason: String(reason).trim() || null,
+          reviewedAt:   now,
+          rejectedAt:   now,
+        },
+      });
+
+      const email = (appRecord.email || "").toLowerCase().trim();
+      let emailResult = { success: false };
+      if (email) {
+        const schoolName = await getSchoolName(appRecord.schoolId || schoolId);
+        emailResult = await sendEmailSafe({
+          to: email, template: "studentRejected",
+          data: { studentName: appRecord.studentName || "Applicant", reason: String(reason).trim() || null, schoolName },
+          context: "applicationRejected",
+        });
+      }
+
+      console.log(`❌ Application rejected: ${id} (${appRecord.studentName})`);
+
+      return sendSuccess(res, {
+        emailSent: emailResult.success,
+        message:   "Application rejected successfully.",
+        data:      { studentId: id, status: "rejected" },
+      });
+    }
   }
+
+  // ── 2. Fall through to Student collection ─────────────────────────────────
+  const student = await Student.findById(id);
+  if (!student)  return sendError(res, 404, "Student application not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status !== "pending") {
     return sendError(res, 409, `Application is already ${student.status}`);
   }
@@ -1524,20 +1682,16 @@ const handleReject = asyncHandler(async (req, res) => {
 
   const email = resolveEmail(student);
   let emailResult = { success: false };
-
   if (email) {
     const schoolName = await getSchoolName(student.schoolId || schoolId);
     emailResult = await sendEmailSafe({
-      to:       email,
-      template: "studentRejected",
-      data: {
-        studentName: resolveDisplayName(student),
-        reason:      student.rejectionReason,
-        schoolName,
-      },
+      to: email, template: "studentRejected",
+      data: { studentName: resolveDisplayName(student), reason: student.rejectionReason, schoolName },
       context: "studentRejected",
     });
   }
+
+  console.log(`❌ Student rejected: ${student._id} (${resolveDisplayName(student)})`);
 
   return sendSuccess(res, {
     emailSent: emailResult.success,
@@ -1549,14 +1703,18 @@ const handleReject = asyncHandler(async (req, res) => {
 router.post("/:id/reject", authenticate, adminOnly, handleReject);
 router.put( "/:id/reject", authenticate, adminOnly, handleReject);
 
-// ── Delete ────────────────────────────────────────────────────────────────────
+// ─── Delete ────────────────────────────────────────────────────────────────────
 router.delete("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const schoolId = resolveSchoolId(req);
-  const student  = await Student.findById(req.params.id).lean();
+  const schoolId      = resolveSchoolId(req);
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
+  const student = await Student.findById(req.params.id);
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
-  }
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "delete",
+  });
 
   await Student.findByIdAndDelete(student._id);
   if (student.userId) {
@@ -1565,81 +1723,84 @@ router.delete("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => 
 
   console.log(`🗑️  Student deleted: ${student._id} (${resolveDisplayName(student)})`);
 
-  return sendSuccess(res, {
-    message: "Student deleted successfully",
-    data:    { studentId: req.params.id },
-  });
+  return sendSuccess(res, { message: "Student deleted successfully", data: { studentId: req.params.id }, overwrote });
 }));
 
-// ── Suspend ───────────────────────────────────────────────────────────────────
+// ─── Suspend ───────────────────────────────────────────────────────────────────
 router.patch("/:id/suspend", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const schoolId = resolveSchoolId(req);
-  const student  = await Student.findById(req.params.id);
-  if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
-  }
-  if (student.status === "suspended") {
-    return sendError(res, 409, "Student is already suspended");
-  }
+  const schoolId      = resolveSchoolId(req);
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  student.status    = "suspended";
-  student.isActive  = false;
-  student.updatedAt = new Date();
+  const student = await Student.findById(req.params.id);
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+  if (student.status === "suspended") return sendError(res, 409, "Student is already suspended");
+
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "suspend",
+  });
+
+  student.status        = "suspended";
+  student.isActive      = false;
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
   await student.save({ validateModifiedOnly: true });
 
   if (student.userId) {
-    await User.findByIdAndUpdate(
-      student.userId, { $set: { isActive: false } }
-    ).catch(() => {});
+    await User.findByIdAndUpdate(student.userId, { $set: { isActive: false } }).catch(() => {});
   }
 
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" has been suspended`,
     data:    normaliseStudent(student.toObject()),
+    overwrote,
   });
 }));
 
-// ── Restore ───────────────────────────────────────────────────────────────────
+// ─── Restore ───────────────────────────────────────────────────────────────────
 router.patch("/:id/restore", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const schoolId = resolveSchoolId(req);
-  const student  = await Student.findById(req.params.id);
-  if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
-  }
-  if (student.status === "approved") {
-    return sendError(res, 409, "Student is already active");
-  }
+  const schoolId      = resolveSchoolId(req);
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  student.status    = "approved";
-  student.isActive  = true;
-  student.updatedAt = new Date();
+  const student = await Student.findById(req.params.id);
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+  if (student.status === "approved") return sendError(res, 409, "Student is already active");
+
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "restore",
+  });
+
+  student.status        = "approved";
+  student.isActive      = true;
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
   await student.save({ validateModifiedOnly: true });
 
   if (student.userId) {
-    await User.findByIdAndUpdate(
-      student.userId, { $set: { isActive: true } }
-    ).catch(() => {});
+    await User.findByIdAndUpdate(student.userId, { $set: { isActive: true } }).catch(() => {});
   }
 
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" has been restored`,
     data:    normaliseStudent(student.toObject()),
+    overwrote,
   });
 }));
 
-// ── Move class ────────────────────────────────────────────────────────────────
+// ─── Move class ────────────────────────────────────────────────────────────────
 router.patch("/:id/move", authenticate, adminOnly, asyncHandler(async (req, res) => {
-  const { classId } = req.body;
+  const { classId }   = req.body;
   if (!classId) return sendError(res, 400, "classId is required");
 
-  const schoolId = resolveSchoolId(req);
-  const student  = await Student.findById(req.params.id);
+  const schoolId      = resolveSchoolId(req);
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
+  const student = await Student.findById(req.params.id);
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) {
-    return sendError(res, 403, "Access denied");
-  }
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   const targetClass = await Class.findById(String(classId).trim()).lean();
   if (!targetClass) return sendError(res, 404, "Target class not found");
@@ -1650,24 +1811,30 @@ router.patch("/:id/move", authenticate, adminOnly, asyncHandler(async (req, res)
     return sendError(res, 400, "Cannot move student to an inactive class");
   }
 
-  const prev        = student.classId;
-  student.classId   = String(targetClass._id);
-  student.className = targetClass.name || null;
-  student.grade     = targetClass.name || student.grade || null;
-  student.updatedAt = new Date();
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "move",
+  });
+
+  const prev            = student.classId;
+  student.classId       = String(targetClass._id);
+  student.className     = targetClass.name || null;
+  student.grade         = targetClass.name || student.grade || null;
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
   await student.save({ validateModifiedOnly: true });
 
   const className = [targetClass.name, targetClass.section].filter(Boolean).join(" ");
-
   console.log(`[move] "${resolveDisplayName(student)}" ${prev} → ${student.classId}`);
 
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" moved to ${className}`,
     data:    { ...normaliseStudent(student.toObject()), className },
+    overwrote,
   });
 }));
 
-// ── GET /:id — MUST be the last route registered ──────────────────────────────
+// ── GET /:id — MUST be last ────────────────────────────────────────────────────
 router.get("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
   const { id }   = req.params;
@@ -1680,9 +1847,7 @@ router.get("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
   }
 
   if (!record) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, record, schoolId)) {
-    return sendError(res, 404, "Student not found");
-  }
+  if (!canAccess(req, record, schoolId)) return sendError(res, 404, "Student not found");
 
   let className = record.className || record.class_name || null;
   if (!className && record.classId) {
@@ -1695,14 +1860,9 @@ router.get("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
   let mustResetPassword = false;
   if (record.userId) {
     const u = await User.findById(record.userId)
-      .select("mustResetPassword enrollmentNo")
-      .lean()
-      .catch(() => null);
-
+      .select("mustResetPassword enrollmentNo").lean().catch(() => null);
     if (u) {
-      if (!normalised.enrollmentNo && u.enrollmentNo) {
-        normalised.enrollmentNo = u.enrollmentNo;
-      }
+      if (!normalised.enrollmentNo && u.enrollmentNo) normalised.enrollmentNo = u.enrollmentNo;
       mustResetPassword = !!u.mustResetPassword;
     }
   }

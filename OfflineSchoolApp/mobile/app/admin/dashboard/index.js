@@ -14,6 +14,7 @@ import { useAuthStore }           from "../../../src/store/auth.store";
 import { getAdminStats }          from "../../../src/services/adminStats.service";
 import { syncTeacherAssignments } from "../../../src/services/syncAssignments.service";
 import { getSchoolInfo }          from "../../../src/services/school.service";
+import SyncOverwriteService       from "../../../src/services/sync-overwrite.service";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -359,9 +360,11 @@ export default function AdminDashboard() {
   const [error,          setError]          = useState(null);
   const [showAllModules, setShowAllModules] = useState(false);
   const [greeting,       setGreeting]       = useState(getGreeting);
+  const [overwriteCount, setOverwriteCount] = useState(0);
 
   const mountedRef         = useRef(true);
   const initialLoadDoneRef = useRef(false);
+  
 
   // Track mounted state so stale async callbacks never update
   // unmounted component state
@@ -372,45 +375,46 @@ export default function AdminDashboard() {
 
   // ── Core data loader ──────────────────────────────────
   const loadStats = useCallback(
-    async (isRefresh = false, forceSync = false) => {
-      try {
-        setError(null);
-        if (isRefresh) setRefreshing(true);
-        else           setLoading(true);
+  async (isRefresh = false, forceSync = false) => {
+    try {
+      setError(null);
+      if (isRefresh) setRefreshing(true);
+      else           setLoading(true);
 
-        // Run assignment sync + stats fetch + school info in parallel
-        const [data, schoolData] = await Promise.all([
-          (async () => {
-            await syncTeacherAssignments(forceSync);
-            return getAdminStats();
-          })(),
-          getSchoolInfo(schoolId),
-        ]);
+      // Run assignment sync + stats fetch + school info + overwrite count in parallel
+      const [data, schoolData, owCount] = await Promise.all([
+        (async () => {
+          await syncTeacherAssignments(forceSync);
+          return getAdminStats();
+        })(),
+        getSchoolInfo(schoolId),
+        SyncOverwriteService.getUnseenCount(schoolId),
+      ]);
 
-        if (!mountedRef.current) return;
+      if (!mountedRef.current) return;
 
-        setStats({
-          ...data,
-          // Normalise field name difference between server versions
-          assignedSubjects:
-            data?.assignedSubjects ?? data?.totalAssignments ?? 0,
-        });
+      setStats({
+        ...data,
+        assignedSubjects:
+          data?.assignedSubjects ?? data?.totalAssignments ?? 0,
+      });
 
-        if (schoolData) setSchool(schoolData);
+      if (schoolData) setSchool(schoolData);
+      setOverwriteCount(owCount);
 
-      } catch (err) {
-        console.error("Dashboard stats error:", err);
-        if (!mountedRef.current) return;
-        setError("Failed to load dashboard data. Pull down to retry.");
-      } finally {
-        if (!mountedRef.current) return;
-        setLoading(false);
-        setRefreshing(false);
-        initialLoadDoneRef.current = true;
-      }
-    },
-    [schoolId]
-  );
+    } catch (err) {
+      console.error("Dashboard stats error:", err);
+      if (!mountedRef.current) return;
+      setError("Failed to load dashboard data. Pull down to retry.");
+    } finally {
+      if (!mountedRef.current) return;
+      setLoading(false);
+      setRefreshing(false);
+      initialLoadDoneRef.current = true;
+    }
+  },
+  [schoolId]
+);
 
   // Initial load on mount
   useEffect(() => {
@@ -539,9 +543,21 @@ export default function AdminDashboard() {
         route:   "/admin/assignments",
       });
     }
+        // ── LWW sync overwrites ─────────────────────────
+    if (overwriteCount > 0) {
+      list.push({
+        id:      "sync-overwrites",
+        type:    "warning",
+        icon:    "sync-outline",
+        message: `${overwriteCount} sync overwrite${
+          overwriteCount > 1 ? "s" : ""
+        } — your edits were replaced`,
+        route:   "/admin/sync-overwrites",
+      });
+    }
 
     return list;
-  }, [stats]);
+    }, [stats, overwriteCount]);
 
   const statValue = useCallback(
     (key) => stats?.[key] ?? 0,

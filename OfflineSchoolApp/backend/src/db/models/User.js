@@ -2,13 +2,13 @@
 "use strict";
 
 const mongoose = require("mongoose");
-const bcrypt = require("bcryptjs");
+const bcrypt   = require("bcryptjs");
 const { generateUUID } = require("../../utils/uuid");
 
 const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
 
 const uuidSchema = {
-  type: String,
+  type:    String,
   default: generateUUID,
 };
 
@@ -16,98 +16,137 @@ const userSchema = new mongoose.Schema(
   {
     _id: uuidSchema,
 
-    // ── Identity ────────────────────────────────────────────────────────────
+    // ── Identity ──────────────────────────────────────────────────────────────
     name: {
-      type: String,
-      required: [true, "Name is required"],
-      trim: true,
+      type:      String,
+      required:  [true, "Name is required"],
+      trim:      true,
       maxlength: [100, "Name cannot exceed 100 characters"],
     },
 
-    // ── Email ───────────────────────────────────────────────────────────────
-    // Required for staff (admin / teacher / super_admin).
-    // Optional for students — families share one email, so uniqueness
-    // is NOT enforced. unique + sparse allows multiple nulls.
+    // ── Email ─────────────────────────────────────────────────────────────────
+    // NOT unique at the DB level.
+    //
+    // Why: siblings share a parent/guardian email address.
+    //   - Staff (admin/teacher) → uniqueness enforced in pre("save") hook below
+    //   - Students              → multiple accounts may share the same email
+    //
+    // Students log in with enrollmentNo, NOT email, so email uniqueness
+    // is irrelevant for auth. Staff log in with email — enforced at app level.
     email: {
-      type: String,
+      type:      String,
       lowercase: true,
-      trim: true,
-      match: [emailRegex, "Please provide a valid email"],
-      unique: true,
-      sparse: true,
-      default: null,
+      trim:      true,
+      match:     [emailRegex, "Please provide a valid email"],
+      default:   null,
     },
 
-    // ── Authentication ──────────────────────────────────────────────────────
+    // ── Authentication ────────────────────────────────────────────────────────
     password: {
-      type: String,
-      required: [true, "Password is required"],
+      type:      String,
+      required:  [true, "Password is required"],
       minlength: [8, "Password must be at least 8 characters"],
-      select: false,
+      select:    false,
     },
 
-    // ── Authorization ──────────────────────────────────────────────────────
+    // ── Enrollment Number (student login username) ─────────────────────────────
+    // Each student gets a unique enrollmentNo — this is their login ID.
+    // Null for staff. Unique + sparse enforced by DB index "enrollmentNo_1".
+    enrollmentNo: {
+      type:    String,
+      default: null,
+      trim:    true,
+    },
+
+    // ── Authorization ─────────────────────────────────────────────────────────
     role: {
       type: String,
       enum: {
-        values: ["super_admin", "school_admin", "teacher", "student"],
+        values:  ["super_admin", "school_admin", "teacher", "student"],
         message: "Role must be super_admin, school_admin, teacher, or student",
       },
       default: "teacher",
-      index: true,
     },
 
-    // ── School & Class ──────────────────────────────────────────────────────
+    // ── School & Class ────────────────────────────────────────────────────────
     schoolId: {
       type: String,
-      index: true,
-      ref: "School",
+      ref:  "School",
     },
 
     classId: {
       type: String,
-      ref: "Class",
-      index: true,
+      ref:  "Class",
     },
 
-    // ── Account Status ─────────────────────────────────────────────────────
+    // ── Account Status ────────────────────────────────────────────────────────
     isActive: {
-      type: Boolean,
+      type:    Boolean,
       default: true,
-      index: true,
     },
 
     mustResetPassword: {
-      type: Boolean,
+      type:    Boolean,
       default: false,
     },
 
-    // ── Password History ────────────────────────────────────────────────────
+    // ── Password History ──────────────────────────────────────────────────────
     passwordChangedAt: Date,
-    lastLoginAt: Date,
+    lastLoginAt:       Date,
 
-    // ── Audit ───────────────────────────────────────────────────────────────
+    // ── Audit ─────────────────────────────────────────────────────────────────
     createdBy: {
       type: String,
-      ref: "User",
+      ref:  "User",
     },
   },
   {
     timestamps: true,
-    _id: false,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true },
+    _id:        false,
+    toJSON:     { virtuals: true },
+    toObject:   { virtuals: true },
   }
 );
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INDEXES
+// Names match exactly what is already in MongoDB to prevent
+// "already exists with different name" errors on restart.
+//
+// Current DB indexes (from db.users.getIndexes()):
+//   _id_                      { _id: 1 }
+//   schoolId_1                { schoolId: 1 }
+//   role_1                    { role: 1 }
+//   isActive_1                { isActive: 1 }
+//   schoolId_1_role_1         { schoolId: 1, role: 1 }
+//   isActive_1_schoolId_1     { isActive: 1, schoolId: 1 }
+//   enrollmentNo_1            { enrollmentNo: 1 } unique sparse
+//   classId_1                 { classId: 1 }
+//   schoolId_1_classId_1      { schoolId: 1, classId: 1 }
+//   email_1_isActive_1        { email: 1, isActive: 1 }
+//   email_lookup_sparse       { email: 1 } sparse
 // ─────────────────────────────────────────────────────────────────────────────
 
-userSchema.index({ schoolId: 1, role: 1 });
-userSchema.index({ isActive: 1, schoolId: 1 });
-userSchema.index({ schoolId: 1, classId: 1 });
-userSchema.index({ email: 1, isActive: 1 });
+userSchema.index({ schoolId: 1 },              { name: "schoolId_1"            });
+userSchema.index({ role:     1 },              { name: "role_1"                });
+userSchema.index({ isActive: 1 },              { name: "isActive_1"            });
+userSchema.index({ schoolId: 1, role:    1 },  { name: "schoolId_1_role_1"     });
+userSchema.index({ isActive: 1, schoolId: 1 }, { name: "isActive_1_schoolId_1" });
+userSchema.index({ classId:  1 },              { name: "classId_1"             });
+userSchema.index({ schoolId: 1, classId: 1 },  { name: "schoolId_1_classId_1"  });
+userSchema.index({ email:    1, isActive: 1 }, { name: "email_1_isActive_1"    });
+
+// enrollmentNo — unique sparse (matches "enrollmentNo_1" already in DB)
+userSchema.index(
+  { enrollmentNo: 1 },
+  { unique: true, sparse: true, name: "enrollmentNo_1" }
+);
+
+// email lookup — non-unique sparse (matches "email_lookup_sparse" in DB)
+userSchema.index(
+  { email: 1 },
+  { sparse: true, name: "email_lookup_sparse" }
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // VALIDATION — Cross-field rules
@@ -117,25 +156,52 @@ userSchema.pre("validate", function () {
   // Only enforce on new documents
   if (!this.isNew) return;
 
-  if (this.role === "student") {
-    // Students can have null email (they log in via enrollment number)
-    // No validation required here
-  } else {
-    // super_admin, school_admin, teacher
-    if (!this.email) {
-      this.invalidate("email", "Email is required for staff accounts");
-    }
+  // Staff must have an email — students may omit it (siblings share emails)
+  if (this.role !== "student" && !this.email) {
+    this.invalidate("email", "Email is required for staff accounts");
   }
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// MIDDLEWARE — Password hashing
+// MIDDLEWARE — Password hashing + staff email uniqueness
+//
+// IMPORTANT: async pre hooks must NOT declare `next` as a parameter.
+// Mongoose awaits the returned promise from async hooks.
+// Use `throw` to signal errors — do NOT call next(err) or next().
+// Calling next() in an async hook causes "next is not a function" error.
 // ─────────────────────────────────────────────────────────────────────────────
 
 userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return;
-  this.password = await bcrypt.hash(this.password, 12);
-  this.passwordChangedAt = new Date();
+  // ── Hash password ──────────────────────────────────────────────────────────
+  if (this.isModified("password")) {
+    this.password          = await bcrypt.hash(this.password, 12);
+    this.passwordChangedAt = new Date();
+  }
+
+  // ── Staff email uniqueness ─────────────────────────────────────────────────
+  // Students can share emails (siblings) — only enforce for non-student roles.
+  // This replaces the removed unique:true DB constraint on the email field.
+  if (
+    this.isModified("email") &&
+    this.email                &&
+    this.role !== "student"
+  ) {
+    const conflict = await this.constructor.findOne({
+      email: this.email,
+      role:  { $ne: "student" },  // only conflict with other staff
+      _id:   { $ne: this._id  },  // not self
+    });
+
+    if (conflict) {
+      const err      = new Error(
+        `Email "${this.email}" is already registered to another staff account`
+      );
+      err.code       = 11000;
+      err.statusCode = 409;
+      throw err;  // throw — do NOT call next(err)
+    }
+  }
+  // No next() call — async function return resolves the hook automatically
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -157,16 +223,17 @@ userSchema.methods.passwordChangedAfter = function (jwtTimestamp) {
 
 userSchema.methods.toSafeObject = function () {
   return {
-    id: this._id,
-    name: this.name,
-    email: this.email ?? null,
-    role: this.role,
-    schoolId: this.schoolId ?? null,
-    classId: this.classId ?? null,
-    isActive: this.isActive,
+    id:                this._id,
+    name:              this.name,
+    email:             this.email        ?? null,
+    enrollmentNo:      this.enrollmentNo ?? null,
+    role:              this.role,
+    schoolId:          this.schoolId     ?? null,
+    classId:           this.classId      ?? null,
+    isActive:          this.isActive,
     mustResetPassword: this.mustResetPassword ?? false,
-    createdAt: this.createdAt,
-    updatedAt: this.updatedAt,
+    createdAt:         this.createdAt,
+    updatedAt:         this.updatedAt,
   };
 };
 
@@ -174,25 +241,49 @@ userSchema.methods.toSafeObject = function () {
 // STATIC METHODS
 // ─────────────────────────────────────────────────────────────────────────────
 
-// Find an active staff member by email (includes password for auth)
+/**
+ * Find an active STAFF member by email.
+ * Students are excluded — they log in via enrollmentNo, not email.
+ */
 userSchema.statics.findByEmail = function (email, includePassword = false) {
   const query = this.findOne({
-    email: email.toLowerCase().trim(),
+    email:    email.toLowerCase().trim(),
     isActive: true,
+    role:     { $ne: "student" },
   });
   return includePassword ? query.select("+password") : query;
 };
 
-// Return all staff in a school (excludes students)
+/**
+ * Find an active STUDENT by enrollment number.
+ * This is the primary student login lookup.
+ */
+userSchema.statics.findByEnrollmentNo = function (
+  enrollmentNo,
+  includePassword = false
+) {
+  const query = this.findOne({
+    enrollmentNo: enrollmentNo.trim().toUpperCase(),
+    isActive:     true,
+    role:         "student",
+  });
+  return includePassword ? query.select("+password") : query;
+};
+
+/**
+ * Return all active staff in a school (excludes students).
+ */
 userSchema.statics.findStaffBySchool = function (schoolId) {
   return this.find({
     schoolId,
     isActive: true,
-    role: { $in: ["school_admin", "teacher"] },
+    role:     { $in: ["school_admin", "teacher"] },
   }).sort({ name: 1 });
 };
 
-// Return all active users in a school by role
+/**
+ * Return all active users in a school filtered by role.
+ */
 userSchema.statics.findBySchoolAndRole = function (schoolId, role) {
   return this.find({
     schoolId,

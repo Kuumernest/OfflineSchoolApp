@@ -1,6 +1,6 @@
 // app/auth/apply.js
 
-import React, { useState } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker    from "expo-image-picker";
-import { File }            from "expo-file-system";     // ✅ SDK 56 new File API
+import * as FileSystem     from "expo-file-system";
 import { Ionicons }        from "@expo/vector-icons";
 import { API_URL }         from "../../src/services/api";
 
@@ -25,15 +25,27 @@ import { API_URL }         from "../../src/services/api";
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MAX_DOCUMENTS  = 5;
-const MAX_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB per file
+const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 const DOCUMENT_TYPES = [
-  { label: "Birth Certificate",      value: "birth_certificate"    },
-  { label: "Previous School Report", value: "school_report"        },
-  { label: "Medical Certificate",    value: "medical_certificate"  },
-  { label: "Passport Photo",         value: "passport_photo"       },
-  { label: "Other",                  value: "other"                },
+  { label: "Birth Certificate",      value: "birth_certificate"   },
+  { label: "Previous School Report", value: "school_report"       },
+  { label: "Medical Certificate",    value: "medical_certificate" },
+  { label: "Passport Photo",         value: "passport_photo"      },
+  { label: "Other",                  value: "other"               },
 ];
+
+const ALLOWED_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -46,7 +58,6 @@ const formatBytes = (bytes) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-// Derive a proper MIME type from a file name
 const getMimeTypeFromName = (name = "") => {
   const ext = name.split(".").pop()?.toLowerCase();
   const map = {
@@ -62,7 +73,6 @@ const getMimeTypeFromName = (name = "") => {
   return map[ext] || "application/octet-stream";
 };
 
-// Derive a file extension from a MIME type
 const getExtensionFromMime = (mime = "") => {
   const map = {
     "application/pdf": "pdf",
@@ -75,71 +85,79 @@ const getExtensionFromMime = (mime = "") => {
   return map[mime] || "bin";
 };
 
-// Ensure a URI has the file:// prefix (Android sometimes returns bare paths)
-const normalizeFileUri = (uri) => {
-  if (!uri) return uri;
-  if (
-    Platform.OS === "android" &&
-    !uri.startsWith("file://") &&
-    !uri.startsWith("content://")
-  ) {
-    return `file://${uri}`;
+const isAllowedMime = (mime) =>
+  ALLOWED_MIME_TYPES.has(mime) || Boolean(mime?.startsWith("image/"));
+
+/**
+ * Reads a file URI and returns its base64-encoded content.
+ * Works with both file:// and content:// URIs via expo-file-system.
+ *
+ * This is the ONLY reliable way to read files in Expo Go on Android —
+ * the fetch bridge's FormData file-object support is broken in Expo Go.
+ */
+const readFileAsBase64 = async (uri) => {
+  try {
+    // expo-file-system handles both file:// and content:// URIs
+    const base64 = await FileSystem.readAsStringAsync(uri, {
+      encoding: FileSystem.EncodingType.Base64,
+    });
+    return base64;
+  } catch (err) {
+    console.warn("readFileAsBase64 failed:", err.message);
+    throw new Error(`Could not read file: ${err.message}`);
   }
-  return uri;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// SUB-COMPONENT — single document row
+// FIELD ERROR
+// ─────────────────────────────────────────────────────────────────────────────
+
+const FieldError = ({ message }) =>
+  message ? <Text style={styles.fieldError}>{message}</Text> : null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DOCUMENT ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DocumentRow = ({ doc, index, onRemove, onChangeType }) => (
   <View style={docStyles.row}>
-    {/* Icon */}
     <View style={docStyles.iconBox}>
       <Ionicons
-        name={
-          doc.mimeType?.startsWith("image/")
-            ? "image-outline"
-            : "document-outline"
-        }
+        name={doc.mimeType?.startsWith("image/") ? "image-outline" : "document-outline"}
         size={22}
         color="#4F46E5"
       />
     </View>
 
-    {/* Info */}
     <View style={docStyles.info}>
-      <Text style={docStyles.fileName} numberOfLines={1}>
-        {doc.name}
-      </Text>
+      <Text style={docStyles.fileName} numberOfLines={1}>{doc.name}</Text>
       <Text style={docStyles.fileSize}>{formatBytes(doc.size)}</Text>
 
-      {/* Document type picker — simple tap-cycle */}
       <TouchableOpacity
         onPress={() => {
-          const currentIndex = DOCUMENT_TYPES.findIndex(
-            (t) => t.value === doc.docType
-          );
-          const next =
-            DOCUMENT_TYPES[(currentIndex + 1) % DOCUMENT_TYPES.length];
+          const cur  = DOCUMENT_TYPES.findIndex((t) => t.value === doc.docType);
+          const next = DOCUMENT_TYPES[(cur + 1) % DOCUMENT_TYPES.length];
           onChangeType(index, next.value);
         }}
         style={docStyles.typeChip}
         activeOpacity={0.7}
+        accessibilityRole="button"
+        accessibilityLabel={`Change document type, currently ${
+          DOCUMENT_TYPES.find((t) => t.value === doc.docType)?.label ?? "Other"
+        }`}
       >
         <Text style={docStyles.typeChipText}>
-          {DOCUMENT_TYPES.find((t) => t.value === doc.docType)?.label ??
-            "Other"}{" "}
-          ↺
+          {DOCUMENT_TYPES.find((t) => t.value === doc.docType)?.label ?? "Other"} ↺
         </Text>
       </TouchableOpacity>
     </View>
 
-    {/* Remove */}
     <TouchableOpacity
       onPress={() => onRemove(index)}
       style={docStyles.removeBtn}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      accessibilityRole="button"
+      accessibilityLabel={`Remove ${doc.name}`}
     >
       <Ionicons name="close-circle" size={22} color="#DC2626" />
     </TouchableOpacity>
@@ -166,9 +184,9 @@ const docStyles = StyleSheet.create({
     alignItems:      "center",
     justifyContent:  "center",
   },
-  info:      { flex: 1 },
-  fileName:  { fontSize: 13, fontWeight: "600", color: "#111827" },
-  fileSize:  { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
+  info:         { flex: 1 },
+  fileName:     { fontSize: 13, fontWeight: "600", color: "#111827" },
+  fileSize:     { fontSize: 11, color: "#9CA3AF", marginTop: 1 },
   typeChip: {
     marginTop:         4,
     alignSelf:         "flex-start",
@@ -194,23 +212,20 @@ export default function ApplyScreen() {
     classes: classesParam,
   } = useLocalSearchParams();
 
-  // ── Parse classes ──────────────────────────────────────────────────────────
-  const availableClasses = (() => {
+  const availableClasses = useMemo(() => {
     try {
       const parsed = classesParam ? JSON.parse(classesParam) : [];
-      return parsed.map((c) => ({
-        ...c,
-        id: String(c.id || c._id || ""),
-      }));
+      return parsed.map((c) => ({ ...c, id: String(c.id || c._id || "") }));
     } catch {
       return [];
     }
-  })();
+  }, [classesParam]);
 
-  // ── State ──────────────────────────────────────────────────────────────────
   const [step,          setStep]          = useState(1);
   const [loading,       setLoading]       = useState(false);
+  const [uploadStage,   setUploadStage]   = useState("");
   const [error,         setError]         = useState(null);
+  const [fieldErrors,   setFieldErrors]   = useState({});
   const [selectedClass, setSelectedClass] = useState(null);
   const [documents,     setDocuments]     = useState([]);
 
@@ -222,42 +237,61 @@ export default function ApplyScreen() {
     notes:        "",
   });
 
-  const updateField = (key, value) =>
+  const updateField = useCallback((key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    if (fieldErrors[key]) {
+      setFieldErrors((prev) => ({ ...prev, [key]: null }));
+    }
+  }, [fieldErrors]);
+
+  // ── Validation ─────────────────────────────────────────────────────────────
+
+  const validate = useCallback(() => {
+    const errs = {};
+    if (!schoolId?.toString().trim()) errs.school       = "No school selected.";
+    if (!form.studentName.trim())     errs.studentName  = "Student name is required";
+    if (!form.guardianName.trim())    errs.guardianName = "Guardian / parent name is required";
+    if (!form.email.trim())           errs.email        = "Email address is required";
+    else if (!EMAIL_REGEX.test(form.email.trim())) errs.email = "Enter a valid email address";
+    if (!form.phone.trim())           errs.phone        = "Phone number is required";
+    if (!selectedClass)               errs.class        = "Please select a class";
+    setFieldErrors(errs);
+    return Object.keys(errs).length === 0;
+  }, [form, selectedClass, schoolId]);
 
   // ── Document helpers ───────────────────────────────────────────────────────
 
-  const addDocument = (file) => {
+  const addDocument = useCallback((file) => {
     if (documents.length >= MAX_DOCUMENTS) {
-      Alert.alert(
-        "Limit Reached",
-        `You can attach up to ${MAX_DOCUMENTS} documents.`
-      );
+      Alert.alert("Limit Reached", `You can attach up to ${MAX_DOCUMENTS} documents.`);
       return;
     }
-
     if (file.size && file.size > MAX_SIZE_BYTES) {
       Alert.alert(
         "File Too Large",
-        `"${file.name}" is ${formatBytes(file.size)}. Maximum allowed size is ${formatBytes(MAX_SIZE_BYTES)}.`
+        `"${file.name}" is ${formatBytes(file.size)}.\nMax allowed: ${formatBytes(MAX_SIZE_BYTES)}.`
       );
       return;
     }
-
-    // Prevent duplicates
+    const mime = file.mimeType || getMimeTypeFromName(file.name);
+    if (!isAllowedMime(mime)) {
+      Alert.alert(
+        "Unsupported File",
+        `"${file.name}" is not supported.\nAllowed: PDF, JPG, PNG, WEBP, GIF, HEIC`
+      );
+      return;
+    }
     const alreadyAdded = documents.some(
-      (d) => d.uri === file.uri || d.name === file.name
+      (d) =>
+        (d.uri && file.uri && d.uri === file.uri) ||
+        (d.name === file.name && d.size === file.size)
     );
     if (alreadyAdded) {
       Alert.alert("Already Added", `"${file.name}" is already in the list.`);
       return;
     }
-
-    setDocuments((prev) => [
-      ...prev,
-      { ...file, docType: "other" },
-    ]);
-  };
+    setDocuments((prev) => [...prev, { ...file, mimeType: mime, docType: "other" }]);
+  }, [documents]);
 
   const handlePickDocument = async () => {
     try {
@@ -266,17 +300,13 @@ export default function ApplyScreen() {
         copyToCacheDirectory: true,
         multiple:             false,
       });
-
       if (result.canceled) return;
-
-      const asset = result.assets?.[0];
+      const asset    = result.assets?.[0];
       if (!asset) return;
-
       const mimeType =
         asset.mimeType && asset.mimeType !== "application/octet-stream"
           ? asset.mimeType
           : getMimeTypeFromName(asset.name);
-
       addDocument({
         name:     asset.name || `document_${Date.now()}.${getExtensionFromMime(mimeType)}`,
         uri:      asset.uri,
@@ -291,40 +321,27 @@ export default function ApplyScreen() {
 
   const handlePickImage = async () => {
     try {
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert(
-          "Permission Required",
-          "Please allow access to your photo library to attach images."
-        );
+        Alert.alert("Permission Required", "Please allow access to your photo library.");
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes:              ImagePicker.MediaTypeOptions.Images,
         allowsEditing:           false,
         quality:                 0.8,
         allowsMultipleSelection: false,
       });
-
       if (result.canceled) return;
-
       const asset = result.assets?.[0];
       if (!asset) return;
-
-      // Derive a proper file name with extension
       const uriParts = asset.uri.split("/");
       let   fileName = uriParts[uriParts.length - 1] || `photo_${Date.now()}.jpg`;
-
       if (!fileName.includes(".")) {
         const ext = asset.mimeType?.split("/")[1] || "jpg";
-        fileName = `${fileName}.${ext}`;
+        fileName  = `${fileName}.${ext}`;
       }
-
       const mimeType = asset.mimeType || getMimeTypeFromName(fileName);
-
       addDocument({
         name:     fileName,
         uri:      asset.uri,
@@ -342,64 +359,39 @@ export default function ApplyScreen() {
       "Attach Document",
       "Choose a source",
       [
-        {
-          text:    "📄 Files (PDF)",
-          onPress: handlePickDocument,
-        },
-        {
-          text:    "🖼️ Photo Library",
-          onPress: handlePickImage,
-        },
-        { text: "Cancel", style: "cancel" },
+        { text: "📄 Files (PDF)",    onPress: handlePickDocument },
+        { text: "🖼️ Photo Library", onPress: handlePickImage    },
+        { text: "Cancel",            style:   "cancel"           },
       ]
     );
   };
 
-  const removeDocument = (index) => {
+  const removeDocument = useCallback((index) => {
     setDocuments((prev) => prev.filter((_, i) => i !== index));
-  };
+  }, []);
 
-  const changeDocumentType = (index, newType) => {
+  const changeDocumentType = useCallback((index, newType) => {
     setDocuments((prev) =>
       prev.map((d, i) => (i === index ? { ...d, docType: newType } : d))
     );
-  };
+  }, []);
 
-  // ── Validation ─────────────────────────────────────────────────────────────
-
-  const validate = () => {
-    if (!schoolId?.toString().trim())
-      return "No school selected. Go back and select a school.";
-    if (!form.studentName.trim())
-      return "Student name is required";
-    if (!form.guardianName.trim())
-      return "Guardian / parent name is required";
-    if (!form.email.trim())
-      return "Email address is required";
-    if (!/^\S+@\S+\.\S+$/.test(form.email.trim()))
-      return "Enter a valid email address";
-    if (!form.phone.trim())
-      return "Phone number is required";
-    if (!selectedClass)
-      return "Please select a class";
-    return null;
-  };
-
-  // ── Submit ──────────────────────────────────────────────────────────────────
+  // ── Submit ─────────────────────────────────────────────────────────────────
 
   const handleSubmit = async () => {
-    const validationError = validate();
-    if (validationError) {
-      setError(validationError);
+    if (!validate()) {
+      setError("Please fix the errors highlighted below.");
       return;
     }
 
     setLoading(true);
     setError(null);
+    setUploadStage(documents.length > 0 ? "Reading files…" : "Submitting…");
 
     try {
-      // ── Build the text fields ────────────────────────────────────────────
-      const parameters = {
+      const uploadUrl = `${API_URL}/public/students/apply`;
+
+      const payload = {
         studentName:  form.studentName.trim(),
         guardianName: form.guardianName.trim(),
         email:        form.email.trim().toLowerCase(),
@@ -408,143 +400,80 @@ export default function ApplyScreen() {
         className:    selectedClass.name,
         schoolId:     String(schoolId),
       };
+      if (form.notes.trim()) payload.notes = form.notes.trim();
 
-      if (form.notes.trim()) {
-        parameters.notes = form.notes.trim();
-      }
-
-      documents.forEach((doc, index) => {
-        parameters[`documentTypes[${index}]`] = doc.docType || "other";
-      });
-
-      const uploadUrl = `${API_URL}/public/students/apply`;
-
-      // ─── CASE 1: No documents → simple JSON POST ────────────────────────
+      // ── No documents → plain JSON POST ────────────────────────────────────
       if (documents.length === 0) {
-        console.log("📤 Submitting application (no documents)");
+        console.log("📤 Submitting (no documents)");
+        setUploadStage("Submitting…");
 
-        const res = await fetch(uploadUrl, {
+        const res  = await fetch(uploadUrl, {
           method:  "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept:         "application/json",
-          },
-          body: JSON.stringify(parameters),
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body:    JSON.stringify(payload),
         });
 
-        const data = await res.json().catch(() => ({}));
+        const text = await res.text();
+        let   data;
+        try   { data = JSON.parse(text); }
+        catch { data = { message: text || "Unexpected server response" }; }
 
         if (!res.ok) {
-          console.error("❌ Server response:", res.status, data);
-          throw new Error(
-            data.detail || data.message || `Submission failed (${res.status})`
-          );
+          throw new Error(data.detail || data.message || `Submission failed (${res.status})`);
         }
 
-        console.log("✅ Application submitted (no docs)");
+        console.log("✅ Submitted (no documents)");
         setStep(2);
         return;
       }
 
-      // ─── CASE 2: With documents → use SDK 56 File API + FormData ─────────
+      // ── With documents ─────────────────────────────────────────────────────
       //
-      // The new File class in expo-file-system creates a native file handle
-      // that has proper read permissions granted via Expo's native module
-      // bridge — bypassing Expo Go's Android sandbox restrictions.
+      // Expo Go's fetch bridge on Android does NOT support the
+      // { uri, name, type } FormData file-object pattern — it throws
+      // "Unsupported FormDataPart implementation".
+      //
+      // Solution: read each file as base64 via expo-file-system and send
+      // everything as a JSON payload. The server decodes and saves the files.
+      //
+      console.log(`📤 Submitting with ${documents.length} document(s) via base64`);
 
-      const firstDoc  = documents[0];
-      const firstMime =
-        firstDoc.mimeType && firstDoc.mimeType !== "application/octet-stream"
-          ? firstDoc.mimeType
-          : getMimeTypeFromName(firstDoc.name);
+      const files = [];
+      for (let i = 0; i < documents.length; i++) {
+        const doc = documents[i];
+        setUploadStage(`Reading file ${i + 1} of ${documents.length}…`);
 
-      console.log(
-        `📤 Uploading file 1/${documents.length}:`,
-        firstDoc.name,
-        `(${firstMime})`
-      );
+        console.log(`  ↳ reading: ${doc.name} (${doc.mimeType})`);
 
-      const formData = new FormData();
+        const base64 = await readFileAsBase64(doc.uri);
 
-      // Text fields
-      Object.entries(parameters).forEach(([key, value]) => {
-        formData.append(key, String(value));
-      });
+        files.push({
+          name:     doc.name,
+          mimeType: doc.mimeType,
+          docType:  doc.docType || "other",
+          size:     doc.size    || 0,
+          base64,                          // server decodes this to a Buffer
+        });
+      }
 
-      // ✅ SDK 56 File API — resolves URI in native code
-      const file1 = new File(normalizeFileUri(firstDoc.uri));
-      formData.append("documents", file1, firstDoc.name);
+      setUploadStage("Uploading…");
 
-      const firstRes = await fetch(uploadUrl, {
+      const res = await fetch(uploadUrl, {
         method:  "POST",
-        headers: { Accept: "application/json" },
-        body:    formData,
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body:    JSON.stringify({ ...payload, files }),
       });
 
-      const firstBodyText = await firstRes.text();
-      console.log("📥 First upload status:", firstRes.status);
-      console.log("📥 First upload body:",   firstBodyText);
+      const text = await res.text();
+      console.log("📥 Status:", res.status);
+      console.log("📥 Body:",   text.slice(0, 300));
 
-      let firstData;
-      try {
-        firstData = JSON.parse(firstBodyText || "{}");
-      } catch {
-        firstData = { message: firstBodyText || "Unexpected server response" };
-      }
+      let data;
+      try   { data = JSON.parse(text); }
+      catch { data = { message: text || "Unexpected server response" }; }
 
-      if (!firstRes.ok) {
-        throw new Error(
-          firstData.detail || firstData.message ||
-          `Submission failed (${firstRes.status})`
-        );
-      }
-
-      const applicationId = firstData.applicationId;
-
-      // ─── Upload additional files (if any) ───────────────────────────────
-      if (documents.length > 1 && applicationId) {
-        for (let i = 1; i < documents.length; i++) {
-          const doc  = documents[i];
-          const mime =
-            doc.mimeType && doc.mimeType !== "application/octet-stream"
-              ? doc.mimeType
-              : getMimeTypeFromName(doc.name);
-
-          console.log(
-            `📤 Uploading file ${i + 1}/${documents.length}:`,
-            doc.name,
-            `(${mime})`
-          );
-
-          try {
-            const fd = new FormData();
-            fd.append("docType", doc.docType || "other");
-
-            const file = new File(normalizeFileUri(doc.uri));
-            fd.append("documents", file, doc.name);
-
-            const res = await fetch(
-              `${API_URL}/public/students/apply/${applicationId}/documents`,
-              {
-                method:  "POST",
-                headers: { Accept: "application/json" },
-                body:    fd,
-              }
-            );
-
-            console.log(`📥 File ${i + 1} status:`, res.status);
-
-            if (!res.ok) {
-              const body = await res.text();
-              console.warn(`⚠️ File ${i + 1} (${doc.name}) failed:`, body);
-            }
-          } catch (uploadErr) {
-            console.warn(
-              `⚠️ File ${i + 1} (${doc.name}) error:`,
-              uploadErr.message
-            );
-          }
-        }
+      if (!res.ok) {
+        throw new Error(data.detail || data.message || `Submission failed (${res.status})`);
       }
 
       console.log("✅ Application submitted successfully");
@@ -554,10 +483,11 @@ export default function ApplyScreen() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setUploadStage("");
     }
   };
 
-  // ── Success screen ──────────────────────────────────────────────────────────
+  // ── Success screen ─────────────────────────────────────────────────────────
 
   if (step === 2) {
     return (
@@ -570,17 +500,12 @@ export default function ApplyScreen() {
             <Text style={{ fontWeight: "700" }}>{form.studentName}</Text>!
             {"\n\n"}
             Your application to{" "}
-            <Text style={{ fontWeight: "700" }}>
-              {schoolName || "the school"}
-            </Text>{" "}
+            <Text style={{ fontWeight: "700" }}>{schoolName || "the school"}</Text>{" "}
             for{" "}
-            <Text style={{ fontWeight: "700" }}>
-              {selectedClass?.name}
-            </Text>{" "}
+            <Text style={{ fontWeight: "700" }}>{selectedClass?.name}</Text>{" "}
             has been received.
             {"\n\n"}
-            Login credentials will be sent to:
-            {"\n"}
+            Login credentials will be sent to:{"\n"}
             <Text style={styles.successEmail}>{form.email}</Text>
             {"\n\n"}
             Please check your inbox and spam folder after approval.
@@ -589,6 +514,8 @@ export default function ApplyScreen() {
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => router.replace("/auth/login")}
+            accessibilityRole="button"
+            accessibilityLabel="Back to Login"
           >
             <Text style={styles.backBtnText}>Back to Login</Text>
           </TouchableOpacity>
@@ -597,7 +524,7 @@ export default function ApplyScreen() {
     );
   }
 
-  // ── Application form ────────────────────────────────────────────────────────
+  // ── Application form ───────────────────────────────────────────────────────
 
   return (
     <KeyboardAvoidingView
@@ -609,69 +536,72 @@ export default function ApplyScreen() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Back */}
         <TouchableOpacity
           style={styles.backArrow}
           onPress={() => router.back()}
+          accessibilityRole="button"
+          accessibilityLabel="Go back"
         >
           <Text style={styles.backArrowText}>← Back</Text>
         </TouchableOpacity>
 
-        {/* Header */}
         <View style={styles.header}>
           <Text style={styles.emoji}>📋</Text>
           <Text style={styles.title}>Student Application</Text>
-
           {schoolName ? (
             <View style={styles.schoolBadge}>
               <Text style={styles.schoolBadgeText}>🏫 {schoolName}</Text>
             </View>
           ) : null}
-
           <Text style={styles.subtitle}>
             Fill in the details below. You will receive login credentials
             by email once your application is approved.
           </Text>
         </View>
 
-        {/* Error */}
         {error ? (
           <View style={styles.errorBox}>
             <Text style={styles.errorText}>⚠️  {error}</Text>
           </View>
         ) : null}
 
-        {/* ── Form ── */}
+        {fieldErrors.school ? (
+          <View style={styles.errorBox}>
+            <Text style={styles.errorText}>⚠️  {fieldErrors.school}</Text>
+          </View>
+        ) : null}
+
         <View style={styles.card}>
 
-          {/* Student name */}
           <Text style={styles.label}>Student Full Name *</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, fieldErrors.studentName && styles.inputError]}
             value={form.studentName}
             onChangeText={(v) => updateField("studentName", v)}
             placeholder="e.g. John Doe"
             placeholderTextColor="#9CA3AF"
             autoCapitalize="words"
             returnKeyType="next"
+            accessibilityLabel="Student full name"
           />
+          <FieldError message={fieldErrors.studentName} />
 
-          {/* Guardian */}
           <Text style={styles.label}>Parent / Guardian Name *</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, fieldErrors.guardianName && styles.inputError]}
             value={form.guardianName}
             onChangeText={(v) => updateField("guardianName", v)}
             placeholder="e.g. Jane Doe"
             placeholderTextColor="#9CA3AF"
             autoCapitalize="words"
             returnKeyType="next"
+            accessibilityLabel="Parent or guardian name"
           />
+          <FieldError message={fieldErrors.guardianName} />
 
-          {/* Email */}
           <Text style={styles.label}>Email Address *</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, fieldErrors.email && styles.inputError]}
             value={form.email}
             onChangeText={(v) => updateField("email", v)}
             placeholder="student@example.com"
@@ -680,25 +610,30 @@ export default function ApplyScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
+            accessibilityLabel="Email address"
           />
-          <Text style={styles.hint}>
-            Login credentials will be sent to this address after approval
-          </Text>
+          <FieldError message={fieldErrors.email} />
+          {!fieldErrors.email && (
+            <Text style={styles.hint}>
+              Login credentials will be sent to this address after approval
+            </Text>
+          )}
 
-          {/* Phone */}
           <Text style={styles.label}>Phone Number *</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, fieldErrors.phone && styles.inputError]}
             value={form.phone}
             onChangeText={(v) => updateField("phone", v)}
             placeholder="e.g. 08012345678"
             placeholderTextColor="#9CA3AF"
             keyboardType="phone-pad"
             returnKeyType="next"
+            accessibilityLabel="Phone number"
           />
+          <FieldError message={fieldErrors.phone} />
 
-          {/* ── Class selection ── */}
           <Text style={styles.label}>Class Applying For *</Text>
+          <FieldError message={fieldErrors.class} />
 
           {availableClasses.length > 0 ? (
             <>
@@ -711,24 +646,24 @@ export default function ApplyScreen() {
                       style={[
                         styles.classChip,
                         isSelected && styles.classChipSelected,
+                        fieldErrors.class && styles.classChipError,
                       ]}
                       onPress={() => {
                         setSelectedClass(cls);
-                        if (error?.includes("class")) setError(null);
+                        if (fieldErrors.class) {
+                          setFieldErrors((prev) => ({ ...prev, class: null }));
+                        }
+                        if (error) setError(null);
                       }}
                       activeOpacity={0.7}
+                      accessibilityRole="radio"
+                      accessibilityState={{ checked: isSelected }}
+                      accessibilityLabel={`Select class ${cls.name}`}
                     >
-                      <Text
-                        style={[
-                          styles.classChipText,
-                          isSelected && styles.classChipTextSelected,
-                        ]}
-                      >
+                      <Text style={[styles.classChipText, isSelected && styles.classChipTextSelected]}>
                         {cls.name}
                       </Text>
-                      {isSelected && (
-                        <Text style={styles.checkmark}> ✓</Text>
-                      )}
+                      {isSelected && <Text style={styles.checkmark}> ✓</Text>}
                     </TouchableOpacity>
                   );
                 })}
@@ -738,12 +673,8 @@ export default function ApplyScreen() {
                 <View style={styles.selectedConfirm}>
                   <Text style={styles.selectedConfirmText}>
                     ✅ Applying for:{" "}
-                    <Text style={{ fontWeight: "700" }}>
-                      {selectedClass.name}
-                    </Text>
-                    {selectedClass.level
-                      ? `  ·  ${selectedClass.level}`
-                      : ""}
+                    <Text style={{ fontWeight: "700" }}>{selectedClass.name}</Text>
+                    {selectedClass.level ? `  ·  ${selectedClass.level}` : ""}
                   </Text>
                 </View>
               ) : null}
@@ -758,31 +689,26 @@ export default function ApplyScreen() {
               <TouchableOpacity
                 style={styles.goBackBtn}
                 onPress={() => router.back()}
+                accessibilityRole="button"
+                accessibilityLabel="Select another school"
               >
-                <Text style={styles.goBackBtnText}>
-                  ← Select Another School
-                </Text>
+                <Text style={styles.goBackBtnText}>← Select Another School</Text>
               </TouchableOpacity>
             </View>
           )}
 
-          {/* ── Documents ── */}
           <View style={styles.sectionDivider} />
 
           <View style={styles.documentHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.label}>Supporting Documents</Text>
               <Text style={styles.hint2}>
-                PDF or image · max {formatBytes(MAX_SIZE_BYTES)} each ·
-                up to {MAX_DOCUMENTS} files
+                PDF or image · max {formatBytes(MAX_SIZE_BYTES)} each · up to {MAX_DOCUMENTS} files
               </Text>
             </View>
-            <Text style={styles.docCount}>
-              {documents.length}/{MAX_DOCUMENTS}
-            </Text>
+            <Text style={styles.docCount}>{documents.length}/{MAX_DOCUMENTS}</Text>
           </View>
 
-          {/* Uploaded files */}
           {documents.map((doc, index) => (
             <DocumentRow
               key={`${doc.uri}-${index}`}
@@ -793,12 +719,15 @@ export default function ApplyScreen() {
             />
           ))}
 
-          {/* Add file button */}
           {documents.length < MAX_DOCUMENTS && (
             <TouchableOpacity
               style={styles.addDocBtn}
               onPress={handlePickSource}
               activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={
+                documents.length === 0 ? "Attach documents" : "Attach another document"
+              }
             >
               <Ionicons name="attach-outline" size={20} color="#4F46E5" />
               <Text style={styles.addDocBtnText}>
@@ -809,7 +738,6 @@ export default function ApplyScreen() {
             </TouchableOpacity>
           )}
 
-          {/* Document type legend */}
           {documents.length > 0 && (
             <View style={styles.legendBox}>
               <Text style={styles.legendText}>
@@ -819,11 +747,8 @@ export default function ApplyScreen() {
             </View>
           )}
 
-          {/* Notes */}
           <View style={styles.sectionDivider} />
-          <Text style={[styles.label, { marginTop: 4 }]}>
-            Additional Notes (optional)
-          </Text>
+          <Text style={[styles.label, { marginTop: 4 }]}>Additional Notes (optional)</Text>
           <TextInput
             style={[styles.input, styles.textarea]}
             value={form.notes}
@@ -833,27 +758,30 @@ export default function ApplyScreen() {
             multiline
             numberOfLines={4}
             textAlignVertical="top"
+            accessibilityLabel="Additional notes"
           />
         </View>
 
-        {/* Submit */}
         {availableClasses.length > 0 && (
           <>
             <TouchableOpacity
-              style={[
-                styles.submitBtn,
-                loading && styles.submitBtnDisabled,
-              ]}
+              style={[styles.submitBtn, loading && styles.submitBtnDisabled]}
               onPress={handleSubmit}
               disabled={loading}
               activeOpacity={0.8}
+              accessibilityRole="button"
+              accessibilityState={{ disabled: loading, busy: loading }}
+              accessibilityLabel="Submit application"
             >
               {loading ? (
-                <ActivityIndicator color="#FFF" />
+                <View style={styles.loadingRow}>
+                  <ActivityIndicator color="#FFF" />
+                  {uploadStage ? (
+                    <Text style={styles.uploadStageText}>{uploadStage}</Text>
+                  ) : null}
+                </View>
               ) : (
-                <Text style={styles.submitBtnText}>
-                  Submit Application →
-                </Text>
+                <Text style={styles.submitBtnText}>Submit Application →</Text>
               )}
             </TouchableOpacity>
 
@@ -883,19 +811,8 @@ const styles = StyleSheet.create({
 
   header:   { alignItems: "center", marginBottom: 24 },
   emoji:    { fontSize: 40, marginBottom: 8 },
-  title:    {
-    fontSize:   26,
-    fontWeight: "800",
-    color:      "#111827",
-    textAlign:  "center",
-  },
-  subtitle: {
-    fontSize:   13,
-    color:      "#6B7280",
-    textAlign:  "center",
-    lineHeight: 20,
-    marginTop:  8,
-  },
+  title:    { fontSize: 26, fontWeight: "800", color: "#111827", textAlign: "center" },
+  subtitle: { fontSize: 13, color: "#6B7280", textAlign: "center", lineHeight: 20, marginTop: 8 },
 
   schoolBadge: {
     backgroundColor:   "#EEF2FF",
@@ -929,24 +846,11 @@ const styles = StyleSheet.create({
     marginBottom:    20,
   },
 
-  label: {
-    fontSize:     13,
-    fontWeight:   "600",
-    color:        "#374151",
-    marginBottom: 6,
-    marginTop:    4,
-  },
-  hint: {
-    fontSize:     11,
-    color:        "#9CA3AF",
-    marginTop:    -10,
-    marginBottom: 14,
-  },
-  hint2: {
-    fontSize:  11,
-    color:     "#9CA3AF",
-    marginTop: 2,
-  },
+  label:      { fontSize: 13, fontWeight: "600", color: "#374151", marginBottom: 6, marginTop: 4 },
+  hint:       { fontSize: 11, color: "#9CA3AF", marginTop: -2, marginBottom: 14 },
+  hint2:      { fontSize: 11, color: "#9CA3AF", marginTop: 2 },
+  fieldError: { color: "#DC2626", fontSize: 11, marginTop: 0, marginBottom: 12 },
+
   input: {
     borderWidth:     1,
     borderColor:     "#E5E7EB",
@@ -955,16 +859,17 @@ const styles = StyleSheet.create({
     fontSize:        15,
     color:           "#111827",
     backgroundColor: "#F9FAFB",
-    marginBottom:    16,
+    marginBottom:    6,
   },
-  textarea: { height: 100 },
+  inputError: { borderColor: "#FCA5A5", backgroundColor: "#FFF5F5" },
+  textarea:   { height: 100, marginBottom: 6 },
 
-  // Class chips
   classGrid: {
     flexDirection: "row",
     flexWrap:      "wrap",
     gap:           10,
     marginBottom:  12,
+    marginTop:     4,
   },
   classChip: {
     flexDirection:     "row",
@@ -976,10 +881,8 @@ const styles = StyleSheet.create({
     borderColor:       "#D1D5DB",
     backgroundColor:   "#FFF",
   },
-  classChipSelected: {
-    backgroundColor: "#4F46E5",
-    borderColor:     "#4F46E5",
-  },
+  classChipSelected:     { backgroundColor: "#4F46E5", borderColor: "#4F46E5" },
+  classChipError:        { borderColor: "#FCA5A5" },
   classChipText:         { fontSize: 14, color: "#374151", fontWeight: "500" },
   classChipTextSelected: { color: "#FFF", fontWeight: "700" },
   checkmark:             { color: "#FFF", fontSize: 14, fontWeight: "800" },
@@ -1019,24 +922,14 @@ const styles = StyleSheet.create({
   },
   goBackBtnText: { color: "#FFF", fontWeight: "700", fontSize: 13 },
 
-  // Documents
-  sectionDivider: {
-    height:          1,
-    backgroundColor: "#F3F4F6",
-    marginVertical:  16,
-  },
+  sectionDivider: { height: 1, backgroundColor: "#F3F4F6", marginVertical: 16 },
   documentHeader: {
     flexDirection:  "row",
     justifyContent: "space-between",
     alignItems:     "flex-start",
     marginBottom:   12,
   },
-  docCount: {
-    fontSize:   12,
-    color:      "#6B7280",
-    fontWeight: "600",
-    marginTop:  4,
-  },
+  docCount:   { fontSize: 12, color: "#6B7280", fontWeight: "600", marginTop: 4 },
   addDocBtn: {
     flexDirection:   "row",
     alignItems:      "center",
@@ -1062,7 +955,6 @@ const styles = StyleSheet.create({
   },
   legendText: { fontSize: 11, color: "#92400E", lineHeight: 16 },
 
-  // Submit
   submitBtn: {
     backgroundColor: "#4F46E5",
     borderRadius:    14,
@@ -1076,15 +968,11 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { opacity: 0.6 },
   submitBtnText:     { color: "#FFF", fontSize: 16, fontWeight: "700" },
+  loadingRow:        { flexDirection: "row", alignItems: "center", gap: 10 },
+  uploadStageText:   { color: "#FFF", fontSize: 13, fontWeight: "600" },
 
-  disclaimer: {
-    fontSize:   12,
-    color:      "#9CA3AF",
-    textAlign:  "center",
-    lineHeight: 18,
-  },
+  disclaimer: { fontSize: 12, color: "#9CA3AF", textAlign: "center", lineHeight: 18 },
 
-  // Success
   successContainer: {
     flex:            1,
     backgroundColor: "#F9FAFB",
@@ -1101,22 +989,10 @@ const styles = StyleSheet.create({
     shadowRadius:    16,
     elevation:       4,
   },
-  successEmoji: { fontSize: 64, marginBottom: 16 },
-  successTitle: {
-    fontSize:     24,
-    fontWeight:   "800",
-    color:        "#111827",
-    marginBottom: 16,
-    textAlign:    "center",
-  },
-  successMessage: {
-    fontSize:     15,
-    color:        "#374151",
-    textAlign:    "center",
-    lineHeight:   24,
-    marginBottom: 24,
-  },
-  successEmail: { color: "#4F46E5", fontWeight: "700" },
+  successEmoji:   { fontSize: 64, marginBottom: 16 },
+  successTitle:   { fontSize: 24, fontWeight: "800", color: "#111827", marginBottom: 16, textAlign: "center" },
+  successMessage: { fontSize: 15, color: "#374151", textAlign: "center", lineHeight: 24, marginBottom: 24 },
+  successEmail:   { color: "#4F46E5", fontWeight: "700" },
   backBtn: {
     backgroundColor:   "#4F46E5",
     borderRadius:      12,

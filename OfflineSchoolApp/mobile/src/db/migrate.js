@@ -1883,9 +1883,32 @@ const migrations = [
     console.log("✅ [v28] questions + question_options guaranteed");
   },
 },
+
+// src/db/migrate.js
+// Add after v28, before the "ADD NEW MIGRATIONS BELOW THIS LINE" comment
+
+  // ── v29: Guarantee user auth columns ─────────────────
+  {
+    version: 29,
+    description: "Guarantee passwordSalt, passwordHash, enrollmentNo exist on users table",
+    up: async (db) => {
+      const authCols = [
+        ["passwordSalt",        "TEXT"],
+        ["passwordHash",        "TEXT"],
+        ["enrollmentNo",        "TEXT"],
+        ["must_reset_password", "INTEGER DEFAULT 0"],
+        ["_synced",             "INTEGER DEFAULT 0"],
+        ["_synced_at",          "TEXT"],
+      ];
+      for (const [col, def] of authCols) {
+        await addColumnIfMissing(db, "users", col, def);
+      }
+      console.log("✅ [v29] users auth columns guaranteed");
+    },
+  },
 // ── ADD NEW MIGRATIONS BELOW THIS LINE ────────────────
 // {
-//   version: 29,
+//   version: 30,
 //   description: "...",
 //   up: async (db) => { ... },
 // },

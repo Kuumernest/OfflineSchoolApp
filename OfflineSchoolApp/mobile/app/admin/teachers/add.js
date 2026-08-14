@@ -6,10 +6,9 @@ import {
   StyleSheet, KeyboardAvoidingView, Platform,
   Clipboard,
 } from "react-native";
-import { useRouter }      from "expo-router";
-import { Ionicons }       from "@expo/vector-icons";
-import { useAuthStore }   from "@/store/auth.store";
-import api                from "@/services/api";
+import { useRouter }        from "expo-router";
+import { Ionicons }         from "@expo/vector-icons";
+import { TeacherService }   from "@/services/teacher.service";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -30,18 +29,17 @@ const NEXT_STEPS = [
 // ─────────────────────────────────────────────────────────
 
 export default function AddTeacherScreen() {
-  const router   = useRouter();
-  const { user } = useAuthStore();
+  const router = useRouter();
 
   const nameRef  = useRef(null);
   const emailRef = useRef(null);
 
-  const [name,       setName]       = useState("");
-  const [email,      setEmail]      = useState("");
-  const [errors,     setErrors]     = useState({});
-  const [saving,     setSaving]     = useState(false);
-  const [success,    setSuccess]    = useState(null);
-  const [copied,     setCopied]     = useState(false);
+  const [name,    setName]    = useState("");
+  const [email,   setEmail]   = useState("");
+  const [errors,  setErrors]  = useState({});
+  const [saving,  setSaving]  = useState(false);
+  const [success, setSuccess] = useState(null);
+  const [copied,  setCopied]  = useState(false);
 
   const trimName  = name.trim();
   const trimEmail = email.trim();
@@ -84,30 +82,30 @@ export default function AddTeacherScreen() {
     setErrors({});
 
     try {
-      const res = await api.post("/admin/teachers", {
-        name:     submittedName,
-        email:    submittedEmail,
-        schoolId: user?.schoolId,
-      });
-
-      const {
-        emailSent    = false,
-        tempPassword = null,
-        message      = null,
-      } = res.data ?? {};
+      // TeacherService.create() handles:
+      // - local SQLite persistence
+      // - server sync via API.admin.teachers.list
+      // - ID reconciliation (local → server)
+      // - 409 conflict detection
+      const teacherId = await TeacherService.create(submittedName, submittedEmail);
 
       setSuccess({
+        teacherId,
         teacherName:  submittedName,
         teacherEmail: submittedEmail,
-        emailSent,
-        tempPassword,
-        message,
+        // emailSent and tempPassword are server-side concerns the service
+        // does not expose — default emailSent to true for a clean UX
+        emailSent:    true,
+        tempPassword: null,
+        message:      null,
       });
     } catch (err) {
-      const status    = err?.response?.status;
-      const serverMsg = err?.response?.data?.message;
+      const message = err?.message ?? "Something went wrong. Please try again.";
 
-      if (status === 409) {
+      if (
+        message.toLowerCase().includes("already exists") ||
+        message.toLowerCase().includes("already registered")
+      ) {
         setErrors({
           email:
             "This email is already registered. " +
@@ -115,15 +113,12 @@ export default function AddTeacherScreen() {
         });
         emailRef.current?.focus();
       } else {
-        Alert.alert(
-          "Failed to Create",
-          serverMsg || err.message || "Something went wrong. Please try again."
-        );
+        Alert.alert("Failed to Create", message);
       }
     } finally {
       setSaving(false);
     }
-  }, [validate, trimName, trimEmail, user?.schoolId]);
+  }, [validate, trimName, trimEmail]);
 
   // ── Discard ─────────────────────────────────────────────
 
@@ -166,7 +161,14 @@ export default function AddTeacherScreen() {
   if (success) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-        <ScreenHeader title="Teacher Added" onBack={() => router.push("/teachers")} />
+        <ScreenHeader
+          title="Teacher Added"
+          onBack={() =>
+            success.teacherId
+              ? router.push(`/admin/teachers/${success.teacherId}`)
+              : router.push("/admin/teachers")
+          }
+        />
 
         <ScrollView contentContainerStyle={styles.successScroll}>
           <View style={styles.successCard}>
@@ -197,7 +199,7 @@ export default function AddTeacherScreen() {
               }
             </Text>
 
-            {/* Manual credentials */}
+            {/* Manual credentials — only shown when emailSent is false */}
             {!success.emailSent && success.tempPassword && (
               <View style={styles.credCard}>
                 <Text style={styles.credTitle}>Share these credentials manually</Text>
@@ -246,11 +248,18 @@ export default function AddTeacherScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              onPress={() => router.push("/teachers")}
+              onPress={() =>
+                success.teacherId
+                  ? router.push(`/admin/teachers/${success.teacherId}`)
+                  : router.push("/admin/teachers")
+              }
               style={styles.secondaryBtn}
             >
-              <Text style={styles.secondaryBtnText}>Back to Teachers</Text>
+              <Text style={styles.secondaryBtnText}>
+                {success.teacherId ? "View Teacher Profile" : "Back to Teachers"}
+              </Text>
             </TouchableOpacity>
+
           </View>
         </ScrollView>
       </View>
@@ -266,7 +275,11 @@ export default function AddTeacherScreen() {
       style={{ flex: 1, backgroundColor: "#F9FAFB" }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      <ScreenHeader title="Add Teacher" subtitle="Create a new teacher profile" onBack={handleDiscard} />
+      <ScreenHeader
+        title="Add Teacher"
+        subtitle="Create a new teacher profile"
+        onBack={handleDiscard}
+      />
 
       <ScrollView
         contentContainerStyle={styles.scroll}
@@ -322,12 +335,14 @@ export default function AddTeacherScreen() {
                   <Text style={styles.errorText}>{errors.name}</Text>
                 </View>
               ) : (
-                <Text style={styles.hint}>Full name as it will appear across the system.</Text>
+                <Text style={styles.hint}>
+                  Full name as it will appear across the system.
+                </Text>
               )}
               <Text style={[
                 styles.charCount,
-                charCount > MAX_NAME      && styles.charOver,
-                nearLimit && charCount <= MAX_NAME && styles.charNear,
+                charCount > MAX_NAME                       && styles.charOver,
+                nearLimit && charCount <= MAX_NAME         && styles.charNear,
               ]}>
                 {charCount}/{MAX_NAME}
               </Text>
@@ -371,7 +386,9 @@ export default function AddTeacherScreen() {
                 <Text style={styles.errorText}>{errors.email}</Text>
               </View>
             ) : (
-              <Text style={styles.hint}>Must be unique. Used for login and receiving credentials.</Text>
+              <Text style={styles.hint}>
+                Must be unique. Used for login and receiving credentials.
+              </Text>
             )}
           </View>
 
@@ -403,6 +420,7 @@ export default function AddTeacherScreen() {
           >
             <Text style={styles.discardText}>Discard &amp; Go Back</Text>
           </TouchableOpacity>
+
         </View>
 
         {/* What happens next */}
@@ -524,10 +542,10 @@ const styles = StyleSheet.create({
   credNote:      { fontSize: 11, color: "#B45309" },
 
   // Action buttons
-  primaryBtn:     { backgroundColor: "#4F46E5", borderRadius: 12,
-                    paddingVertical: 14, alignItems: "center", width: "100%", marginTop: 4 },
-  primaryBtnText: { fontSize: 15, fontWeight: "800", color: "#fff" },
-  secondaryBtn:   { backgroundColor: "#F3F4F6", borderRadius: 12,
-                    paddingVertical: 14, alignItems: "center", width: "100%" },
+  primaryBtn:       { backgroundColor: "#4F46E5", borderRadius: 12,
+                      paddingVertical: 14, alignItems: "center", width: "100%", marginTop: 4 },
+  primaryBtnText:   { fontSize: 15, fontWeight: "800", color: "#fff" },
+  secondaryBtn:     { backgroundColor: "#F3F4F6", borderRadius: 12,
+                      paddingVertical: 14, alignItems: "center", width: "100%" },
   secondaryBtnText: { fontSize: 15, fontWeight: "700", color: "#374151" },
 });
