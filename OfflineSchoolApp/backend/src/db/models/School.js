@@ -130,6 +130,32 @@ const settingsSchema = new mongoose.Schema(
       match:   [/^([01]\d|2[0-3]):[0-5]\d$|^$/, "gateEarlyBefore must look like 14:00"],
     },
 
+    /**
+     * The expiry date printed on student ID cards, as YYYY-MM-DD.
+     *
+     * Left empty, cards expire at the end of the academic year the school is
+     * currently in — which is the right default, because a card printed in
+     * October and one printed the following May then carry the same date
+     * instead of expiring seven months apart.
+     *
+     * A school sets this when its own calendar disagrees: cards that must last
+     * until an exam session in September, or a term-by-term card. Changing it
+     * only affects cards printed afterwards; the date is ink on a card already
+     * in a child's pocket, not a value looked up at the gate. Nothing checks
+     * this date when a card is scanned — it is there for the human reading the
+     * card, and expiry is enforced by a student leaving the register.
+     *
+     * A plain date string rather than a Date: this is a calendar day with no
+     * time in it, and storing it as a timestamp makes it land on the previous
+     * day for anyone west of UTC.
+     */
+    idCardValidUntil: {
+      type:    String,
+      default: "",
+      trim:    true,
+      match:   [/^\d{4}-\d{2}-\d{2}$|^$/, "idCardValidUntil must look like 2026-08-31"],
+    },
+
     currency: {
       type:    String,
       default: "USD",

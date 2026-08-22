@@ -10,6 +10,7 @@
  *  - School info fetch / save (with local SQLite cache)
  *  - Admin user management (always online)
  *  - Analytics (always online)
+ *  - ID card expiry and gate message policy (cached for offline reading)
  */
 
 import api                   from "./api";
@@ -39,6 +40,15 @@ const ensureSchema = (db) =>
 
       await db.execAsync(`
         CREATE TABLE IF NOT EXISTS settings_grading (
+          id         TEXT PRIMARY KEY,
+          schoolId   TEXT,
+          config     TEXT,
+          updated_at TEXT
+        )
+      `);
+
+      await db.execAsync(`
+        CREATE TABLE IF NOT EXISTS settings_idcard (
           id         TEXT PRIMARY KEY,
           schoolId   TEXT,
           config     TEXT,
@@ -357,4 +367,100 @@ export const fetchAnalytics = async (schoolId) => {
 
   const res = await api.get("/admin/settings/analytics", { params: { schoolId } });
   return res.data?.analytics;
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 8 — ID CARDS AND THE GATE
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * What the card says, and what happens when somebody scans it.
+ *
+ * Cached like the grading config, so an admin can at least SEE the current
+ * policy with no signal. Saving needs a connection: this is office work at a
+ * desk, and a queued change to a notification policy would be applied to scans
+ * that had already happened by the time it synced.
+ */
+export const fetchIdCardSettings = async (schoolId) => {
+  const { schoolId: authSchoolId } = getCurrentAuth();
+  const resolvedSchoolId           = schoolId || authSchoolId;
+
+  const net = await NetInfo.fetch();
+
+  if (net.isConnected) {
+    try {
+      const res    = await api.get("/admin/settings/id-card", {
+        params: { schoolId: resolvedSchoolId },
+      });
+      const config = { idCard: res.data?.idCard, gate: res.data?.gate };
+
+      if (config.idCard && resolvedSchoolId) {
+        const db = await getDatabase();
+        await ensureSchema(db);
+        await db.runAsync(
+          `INSERT INTO settings_idcard (id, schoolId, config, updated_at)
+           VALUES (?, ?, ?, ?)
+           ON CONFLICT(id) DO UPDATE SET
+             config     = excluded.config,
+             updated_at = excluded.updated_at`,
+          [resolvedSchoolId, resolvedSchoolId, JSON.stringify(config), now()]
+        ).catch(() => {});
+      }
+
+      return config;
+    } catch (err) {
+      console.warn("[settings] fetchIdCardSettings API failed, using cache:", err.message);
+    }
+  }
+
+  if (!resolvedSchoolId) return null;
+
+  try {
+    const db  = await getDatabase();
+    await ensureSchema(db);
+    const row = await db.getFirstAsync(
+      `SELECT config FROM settings_idcard WHERE schoolId = ? LIMIT 1`,
+      [resolvedSchoolId]
+    );
+    return row?.config ? JSON.parse(row.config) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const saveIdCardSettings = async ({
+  schoolId, validUntil, gateNotify, gateLateAfter, gateEarlyBefore,
+}) => {
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    throw new Error("Saving these settings requires an internet connection");
+  }
+
+  const { schoolId: authSchoolId } = getCurrentAuth();
+  const resolvedSchoolId           = schoolId || authSchoolId;
+
+  const res    = await api.put("/admin/settings/id-card", {
+    schoolId: resolvedSchoolId,
+    validUntil, gateNotify, gateLateAfter, gateEarlyBefore,
+  });
+  const config = { idCard: res.data?.idCard, gate: res.data?.gate };
+
+  if (config.idCard && resolvedSchoolId) {
+    try {
+      const db = await getDatabase();
+      await ensureSchema(db);
+      await db.runAsync(
+        `INSERT INTO settings_idcard (id, schoolId, config, updated_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           config     = excluded.config,
+           updated_at = excluded.updated_at`,
+        [resolvedSchoolId, resolvedSchoolId, JSON.stringify(config), now()]
+      );
+    } catch {
+      // The server has it; a stale cache is corrected on the next read.
+    }
+  }
+
+  return config;
 };

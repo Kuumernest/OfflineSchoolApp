@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
-  ChevronRight, AlertCircle, X,
+  ChevronRight, AlertCircle, X, CreditCard,
 } from "lucide-react";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
@@ -74,6 +74,7 @@ const SECTIONS = [
   { id: "profile",   label: "My Profile",       icon: User          },
   { id: "grading",   label: "Grading System",   icon: GraduationCap },
   { id: "admins",    label: "Admin Management", icon: Shield        },
+  { id: "idcards",   label: "ID Cards",         icon: CreditCard    },
   { id: "analytics", label: "Analytics",        icon: BarChart3     },
 ] as const;
 
@@ -1280,6 +1281,221 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
+// -----------------------------------------------------------------------------
+// ID CARDS AND THE GATE
+// -----------------------------------------------------------------------------
+
+interface IdCardSettings {
+  idCard: { validUntil: string; defaultValidUntil: string; effectiveValidUntil: string };
+  gate:   { notify: "off" | "exceptions" | "all"; lateAfter: string; earlyBefore: string };
+}
+
+/**
+ * One screen, because from the office it is one decision: what the card says,
+ * and what happens when somebody scans it.
+ */
+function IdCardSection({ schoolId }: { schoolId: string }) {
+  const { t }     = useTranslation();
+  const { toast } = useToast();
+
+  const [settings, setSettings] = useState<IdCardSettings | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await api.get("/admin/settings/id-card", { params: { schoolId } });
+        setSettings({ idCard: data.idCard, gate: data.gate });
+      } catch (err) {
+        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err) });
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [schoolId]);
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setSaving(true);
+    try {
+      const { data } = await api.put("/admin/settings/id-card", {
+        schoolId,
+        validUntil:      settings.idCard.validUntil,
+        gateNotify:      settings.gate.notify,
+        gateLateAfter:   settings.gate.lateAfter,
+        gateEarlyBefore: settings.gate.earlyBefore,
+      });
+      setSettings({ idCard: data.idCard, gate: data.gate });
+      toast({
+        kind: "success",
+        title: t("settings.idCardSaved"),
+        // Said every time, because it is the thing an admin gets wrong: this
+        // changes cards printed from now on, not cards already laminated.
+        message: t("settings.idCardReprint"),
+      });
+    } catch (err) {
+      toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err) });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <Loader2 className="h-8 w-8 animate-spin text-indigo-600" />
+    </div>
+  );
+
+  if (!settings) return (
+    <Card>
+      <div className="flex items-center gap-2 text-amber-600">
+        <AlertCircle className="h-5 w-5" />
+        <p className="text-sm">{t("settings.loadFailed")}</p>
+      </div>
+    </Card>
+  );
+
+  const { idCard, gate } = settings;
+  const usingDefault = !idCard.validUntil;
+
+  const NOTIFY_CHOICES = [
+    { value: "off",        label: t("settings.gateNotifyOff"), hint: t("settings.gateNotifyOffHint") },
+    { value: "exceptions", label: t("settings.gateNotifyExc"), hint: t("settings.gateNotifyExcHint") },
+    { value: "all",        label: t("settings.gateNotifyAll"), hint: t("settings.gateNotifyAllHint") },
+  ] as const;
+
+  return (
+    <div className="space-y-5">
+
+      <Card>
+        <CardTitle>{t("settings.idCardExpiry")}</CardTitle>
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-gray-500">
+            {t("settings.idCardExpiryBlurb")}
+          </p>
+
+          <div>
+            <FieldLabel>{t("settings.validUntil")}</FieldLabel>
+            <div className="flex flex-wrap items-center gap-3">
+              <input
+                type="date"
+                value={idCard.validUntil}
+                onChange={(e) =>
+                  setSettings({ ...settings, idCard: { ...idCard, validUntil: e.target.value } })
+                }
+                className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+              />
+              {!usingDefault && (
+                <button
+                  type="button"
+                  onClick={() =>
+                    setSettings({ ...settings, idCard: { ...idCard, validUntil: "" } })
+                  }
+                  className="text-xs font-semibold text-indigo-600 hover:text-indigo-700"
+                >
+                  {t("settings.useDefaultDate")}
+                </button>
+              )}
+            </div>
+
+            {/* What an empty box actually means, spelled out - otherwise it
+                reads as "no expiry" rather than "the usual date". */}
+            <p className="mt-2 text-xs text-gray-500">
+              {usingDefault
+                ? t("settings.expiryDefaulting", { date: idCard.defaultValidUntil })
+                : t("settings.expiryOverridden", { date: idCard.effectiveValidUntil })}
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <CardTitle>{t("settings.gateMessages")}</CardTitle>
+        <div className="space-y-4">
+          <p className="text-xs leading-relaxed text-gray-500">
+            {t("settings.gateMessagesBlurb")}
+          </p>
+
+          <div className="space-y-2">
+            {NOTIFY_CHOICES.map((choice) => (
+              <label
+                key={choice.value}
+                className={cn(
+                  "flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition",
+                  gate.notify === choice.value
+                    ? "border-indigo-300 bg-indigo-50"
+                    : "border-gray-100 bg-gray-50 hover:border-gray-200"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="gateNotify"
+                  className="mt-0.5 h-4 w-4 accent-indigo-600"
+                  checked={gate.notify === choice.value}
+                  onChange={() =>
+                    setSettings({
+                      ...settings,
+                      gate: { ...gate, notify: choice.value as IdCardSettings["gate"]["notify"] },
+                    })
+                  }
+                />
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">{choice.label}</p>
+                  <p className="text-xs text-gray-500">{choice.hint}</p>
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {/* Only meaningful under "exceptions" - the thresholds define what an
+              exception IS, so they are hidden rather than left inert. */}
+          {gate.notify === "exceptions" && (
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <FieldLabel>{t("settings.lateAfter")}</FieldLabel>
+                <input
+                  type="time"
+                  value={gate.lateAfter}
+                  onChange={(e) =>
+                    setSettings({ ...settings, gate: { ...gate, lateAfter: e.target.value } })
+                  }
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">{t("settings.lateAfterHint")}</p>
+              </div>
+              <div>
+                <FieldLabel>{t("settings.earlyBefore")}</FieldLabel>
+                <input
+                  type="time"
+                  value={gate.earlyBefore}
+                  onChange={(e) =>
+                    setSettings({ ...settings, gate: { ...gate, earlyBefore: e.target.value } })
+                  }
+                  className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+                />
+                <p className="mt-1.5 text-xs text-gray-500">{t("settings.earlyBeforeHint")}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </Card>
+
+      <div className="flex justify-end">
+        <button
+          onClick={handleSave}
+          disabled={saving}
+          className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700 disabled:opacity-60"
+        >
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t("common.save")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export default function SettingsPage() {
   const { t } = useTranslation();
   const user = useUser();
@@ -1362,6 +1578,7 @@ export default function SettingsPage() {
             {activeSection === "profile"   && <ProfileSection />}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
+            {activeSection === "idcards"   && <IdCardSection    schoolId={schoolId} />}
             {activeSection === "analytics" && <AnalyticsSection schoolId={schoolId} />}
           </div>
         </main>

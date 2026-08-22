@@ -37,6 +37,8 @@ import {
   fetchAnalytics,
   fetchSchoolSettings,
   saveSchoolSettings,
+  fetchIdCardSettings,
+  saveIdCardSettings,
 } from "../../../src/services/settings.service";
 
 // ─────────────────────────────────────────────────────────
@@ -48,6 +50,7 @@ const SECTIONS = [
   { id: "profile",   label: "My Profile",       icon: "person-circle-outline" },
   { id: "grading",   label: "Grading System",   icon: "school-outline"        },
   { id: "admins",    label: "Admin Management", icon: "shield-outline"        },
+  { id: "idcards",   label: "ID Cards",         icon: "card-outline"          },
   { id: "analytics", label: "Analytics",        icon: "bar-chart-outline"     },
 ];
 
@@ -841,6 +844,227 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
 // GRADING SECTION
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// ID CARDS AND THE GATE
+// ─────────────────────────────────────────────────────────
+
+/**
+ * One screen, because from the office it is one decision: what the card says,
+ * and what happens when somebody scans it.
+ */
+const IdCardSection = ({ schoolId }) => {
+  const [settings, setSettings] = useState(null);
+  const [loading,  setLoading]  = useState(true);
+  const [saving,   setSaving]   = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      try {
+        const config = await fetchIdCardSettings(schoolId);
+        if (alive) setSettings(config);
+      } finally {
+        if (alive) setLoading(false);
+      }
+    })();
+    return () => { alive = false; };
+  }, [schoolId]);
+
+  const patchGate   = (patch) =>
+    setSettings((prev) => ({ ...prev, gate:   { ...prev.gate,   ...patch } }));
+  const patchIdCard = (patch) =>
+    setSettings((prev) => ({ ...prev, idCard: { ...prev.idCard, ...patch } }));
+
+  const handleSave = async () => {
+    if (!settings) return;
+    setSaving(true);
+    try {
+      const config = await saveIdCardSettings({
+        schoolId,
+        validUntil:      settings.idCard.validUntil,
+        gateNotify:      settings.gate.notify,
+        gateLateAfter:   settings.gate.lateAfter,
+        gateEarlyBefore: settings.gate.earlyBefore,
+      });
+      setSettings(config);
+      Alert.alert(
+        "Saved",
+        // Said every time, because it is the thing an admin gets wrong: this
+        // changes cards printed from now on, not cards already laminated.
+        "This applies to cards printed from now on. Cards already issued keep " +
+        "the date printed on them."
+      );
+    } catch (err) {
+      Alert.alert("Could not save", err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <View style={{ paddingVertical: 40, alignItems: "center" }}>
+        <ActivityIndicator color="#3B4996" />
+      </View>
+    );
+  }
+
+  if (!settings?.idCard) {
+    return (
+      <View style={styles.card}>
+        <Text style={{ fontSize: 13, color: "#96570B" }}>
+          These settings could not be loaded, and nothing is cached on this
+          device yet. Connect once and reopen this screen.
+        </Text>
+      </View>
+    );
+  }
+
+  const { idCard, gate } = settings;
+  const usingDefault = !idCard.validUntil;
+
+  const CHOICES = [
+    { value: "off",        label: "Never",
+      hint: "Record the scan, tell nobody." },
+    { value: "exceptions", label: "Only when something is unusual",
+      hint: "A late arrival or a child leaving early. Recommended." },
+    { value: "all",        label: "Every scan",
+      hint: "Every arrival and departure. Expect a high message volume." },
+  ];
+
+  return (
+    <View style={{ gap: 14 }}>
+
+      <View style={styles.card}>
+        <Text style={idCardStyles.title}>Card expiry</Text>
+        <Text style={idCardStyles.blurb}>
+          The date printed on student ID cards. Leave it empty and cards expire
+          at the end of the current academic year, so every card printed this
+          year carries the same date.
+        </Text>
+
+        <Text style={idCardStyles.label}>Valid until</Text>
+        <TextInput
+          style={styles.input}
+          value={idCard.validUntil}
+          onChangeText={(v) => patchIdCard({ validUntil: v.trim() })}
+          placeholder="YYYY-MM-DD"
+          placeholderTextColor="#9CA3AF"
+          autoCapitalize="none"
+          keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
+        />
+
+        {/* What an empty box actually means, spelled out — otherwise it reads
+            as "no expiry" rather than "the usual date". */}
+        <Text style={idCardStyles.hint}>
+          {usingDefault
+            ? `Cards will be valid until ${idCard.defaultValidUntil}, the end of the academic year.`
+            : `Cards will be valid until ${idCard.effectiveValidUntil}.`}
+        </Text>
+
+        {!usingDefault && (
+          <TouchableOpacity onPress={() => patchIdCard({ validUntil: "" })}>
+            <Text style={idCardStyles.link}>Use the default date</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.card}>
+        <Text style={idCardStyles.title}>Gate messages</Text>
+        <Text style={idCardStyles.blurb}>
+          What a parent is told when their child's card is scanned at the gate.
+          A school of 500 scanning twice a day is about 20,000 messages a month,
+          so sending every scan is rarely the right choice.
+        </Text>
+
+        {CHOICES.map((choice) => {
+          const active = gate.notify === choice.value;
+          return (
+            <TouchableOpacity
+              key={choice.value}
+              onPress={() => patchGate({ notify: choice.value })}
+              activeOpacity={0.8}
+              style={[idCardStyles.choice, active && idCardStyles.choiceOn]}
+            >
+              <Ionicons
+                name={active ? "radio-button-on" : "radio-button-off"}
+                size={18}
+                color={active ? "#3B4996" : "#9CA3AF"}
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={idCardStyles.choiceLabel}>{choice.label}</Text>
+                <Text style={idCardStyles.choiceHint}>{choice.hint}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+
+        {/* Only meaningful under "exceptions" — the thresholds define what an
+            exception IS, so they are hidden rather than left inert. */}
+        {gate.notify === "exceptions" && (
+          <View style={{ marginTop: 12, gap: 12 }}>
+            <View>
+              <Text style={idCardStyles.label}>Arrival is late after</Text>
+              <TextInput
+                style={styles.input}
+                value={gate.lateAfter}
+                onChangeText={(v) => patchGate({ lateAfter: v.trim() })}
+                placeholder="07:45"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+            <View>
+              <Text style={idCardStyles.label}>Departure is early before</Text>
+              <TextInput
+                style={styles.input}
+                value={gate.earlyBefore}
+                onChangeText={(v) => patchGate({ earlyBefore: v.trim() })}
+                placeholder="14:00"
+                placeholderTextColor="#9CA3AF"
+              />
+            </View>
+          </View>
+        )}
+      </View>
+
+      <TouchableOpacity
+        onPress={handleSave}
+        disabled={saving}
+        activeOpacity={0.85}
+        style={[idCardStyles.saveBtn, saving && { opacity: 0.6 }]}
+      >
+        {saving
+          ? <ActivityIndicator color="#fff" size="small" />
+          : <Ionicons name="save-outline" size={17} color="#fff" />}
+        <Text style={idCardStyles.saveTxt}>Save</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const idCardStyles = StyleSheet.create({
+  title:  { fontSize: 15, fontWeight: "700", color: "#0D1220", marginBottom: 6 },
+  blurb:  { fontSize: 12, lineHeight: 18, color: "#4F5A70", marginBottom: 14 },
+  label:  { fontSize: 12, fontWeight: "600", color: "#343D4F", marginBottom: 6 },
+  hint:   { marginTop: 8, fontSize: 12, color: "#4F5A70", lineHeight: 17 },
+  link:   { marginTop: 10, fontSize: 12, fontWeight: "600", color: "#3B4996" },
+
+  choice: {
+    flexDirection: "row", alignItems: "flex-start", gap: 10,
+    borderWidth: 1, borderColor: "#F3F4F6", backgroundColor: "#F9FAFB",
+    borderRadius: 12, padding: 12, marginBottom: 8,
+  },
+  choiceOn:    { borderColor: "#C7CEEA", backgroundColor: "#EEF0FA" },
+  choiceLabel: { fontSize: 13, fontWeight: "600", color: "#0D1220" },
+  choiceHint:  { marginTop: 2, fontSize: 11, color: "#4F5A70", lineHeight: 16 },
+
+  saveBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: "#3B4996", borderRadius: 12, paddingVertical: 13,
+  },
+  saveTxt: { color: "#fff", fontSize: 15, fontWeight: "600" },
+});
+
 const GradingSection = ({ schoolId }) => {
   const [config,  setConfig]  = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1154,6 +1378,9 @@ export default function AdminSettings() {
             schoolId={schoolId}
             currentUserId={currentUser?._id || currentUser?.id}
           />
+        )}
+        {activeSection === "idcards" && (
+          <IdCardSection schoolId={schoolId} />
         )}
         {activeSection === "analytics" && (
           <AnalyticsSection schoolId={schoolId} />

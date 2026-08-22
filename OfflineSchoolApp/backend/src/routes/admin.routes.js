@@ -3071,6 +3071,125 @@ router.put("/school-info", asyncHandler(async (req, res) => {
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════
+// ID CARDS AND THE GATE
+// ═════════════════════════════════════════════════════════════════════════════
+
+const { expiryFor, academicYearEnd, parseDay, toDayString } =
+  require("../utils/idCardExpiry");
+
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+/**
+ * GET /admin/settings/id-card
+ *
+ * One screen, because it is one decision from the office's point of view: what
+ * the card says, and what happens when somebody scans it.
+ *
+ * `defaultValidUntil` is returned alongside the school's own setting so the
+ * screen can show what an empty field actually means — "leave blank and cards
+ * expire 31 August 2026" is an answer; an empty box is a guess.
+ */
+router.get("/settings/id-card", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+
+  const school = await School.findById(schoolId)
+    .select("academicYear settings").lean();
+  if (!school) return sendError(res, 404, "School not found");
+
+  const settings = school.settings ?? {};
+
+  return sendSuccess(res, {
+    idCard: {
+      validUntil:        settings.idCardValidUntil || "",
+      defaultValidUntil: toDayString(academicYearEnd(school.academicYear
+                                                     ?? settings.academicYear)),
+      effectiveValidUntil: toDayString(expiryFor(school)),
+    },
+    gate: {
+      notify:      settings.gateNotify      ?? "exceptions",
+      lateAfter:   settings.gateLateAfter   ?? "07:45",
+      earlyBefore: settings.gateEarlyBefore ?? "14:00",
+    },
+  });
+}));
+
+/**
+ * PUT /admin/settings/id-card
+ *
+ * Every field is optional, and each is written only when it is present in the
+ * body — so a screen that edits one setting cannot blank the others by omitting
+ * them. An empty string for validUntil is meaningful and IS accepted: it means
+ * "go back to the academic-year default".
+ */
+router.put("/settings/id-card", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+
+  const { validUntil, gateNotify, gateLateAfter, gateEarlyBefore } = req.body;
+  const update = {};
+
+  if (validUntil !== undefined) {
+    const trimmed = String(validUntil ?? "").trim();
+    if (trimmed && !parseDay(trimmed)) {
+      // Caught here rather than left to the schema's regex, because that would
+      // accept 2026-02-30 and Mongo would then store a day that does not exist.
+      return sendError(res, 400, "validUntil must be a real date, as 2026-08-31");
+    }
+    update["settings.idCardValidUntil"] = trimmed;
+  }
+
+  if (gateNotify !== undefined) {
+    if (!["off", "exceptions", "all"].includes(gateNotify)) {
+      return sendError(res, 400, "gateNotify must be off, exceptions or all");
+    }
+    update["settings.gateNotify"] = gateNotify;
+  }
+
+  for (const [key, value] of [
+    ["gateLateAfter", gateLateAfter], ["gateEarlyBefore", gateEarlyBefore],
+  ]) {
+    if (value === undefined) continue;
+    const trimmed = String(value ?? "").trim();
+    if (trimmed && !HHMM.test(trimmed)) {
+      return sendError(res, 400, `${key} must be a 24-hour time, as 07:45`);
+    }
+    update[`settings.${key}`] = trimmed;
+  }
+
+  if (Object.keys(update).length === 0) {
+    return sendError(res, 400, "Nothing to update");
+  }
+
+  // Dotted paths with $set, not a whole settings object: replacing settings
+  // wholesale would drop currency, timezone and the academic year along with
+  // everything else this screen does not know about.
+  const school = await School.findByIdAndUpdate(
+    schoolId, { $set: update }, { new: true, runValidators: true }
+  ).select("academicYear settings").lean();
+  if (!school) return sendError(res, 404, "School not found");
+
+  const settings = school.settings ?? {};
+
+  return sendSuccess(res, {
+    idCard: {
+      validUntil:          settings.idCardValidUntil || "",
+      defaultValidUntil:   toDayString(academicYearEnd(school.academicYear
+                                                       ?? settings.academicYear)),
+      effectiveValidUntil: toDayString(expiryFor(school)),
+    },
+    gate: {
+      notify:      settings.gateNotify      ?? "exceptions",
+      lateAfter:   settings.gateLateAfter   ?? "07:45",
+      earlyBefore: settings.gateEarlyBefore ?? "14:00",
+    },
+    // Said plainly, because it is the thing an admin gets wrong: this changes
+    // cards printed from now on and nothing already laminated.
+    reprintRequired: validUntil !== undefined,
+  });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
 // SECTION 15 — ERROR HANDLING
 // ═════════════════════════════════════════════════════════════════════════════
 

@@ -17,6 +17,7 @@ const { buildTranscriptHtml } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
 const QRCode                  = require("qrcode");
 const gate                    = require("../services/gate.service");
+const { expiryFor } = require("../utils/idCardExpiry");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
 const GuardianAccess = require("../db/models/GuardianAccess");
@@ -86,6 +87,12 @@ const schoolHeading = async (schoolId) => {
     motto:   school?.motto ?? null,
     academicYear: school?.settings?.academicYear ?? null,
     currentTerm:  school?.settings?.currentTerm ?? null,
+    // Carried through in the shape the model uses, because expiryFor() reads
+    // it from settings. Flattening it here would silently ignore whatever the
+    // school had set and quietly print the default on every card.
+    settings: {
+      idCardValidUntil: school?.settings?.idCardValidUntil ?? "",
+    },
   };
 };
 
@@ -250,27 +257,21 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
   const skipped = rows.length - students.length;
 
   /**
-   * The end of the academic year the school is currently in.
+   * When the card expires.
    *
-   * Cameroonian school years run September to July, so a card printed in
-   * October and one printed the following May must expire on the same date —
-   * taking "a year from today" would give two children in the same class cards
-   * that expire seven months apart.
+   * A school sets this in Settings; left unset it is the end of the academic
+   * year the school is currently in. The arithmetic lives in one place so the
+   * date the settings screen shows as "the default" is the date that actually
+   * gets printed.
    */
-  const yearLabel = school.academicYear;
-  const endYear = (() => {
-    const match = /(\d{4})\s*[/-]\s*(\d{4})/.exec(String(yearLabel ?? ""));
-    if (match) return Number(match[2]);
-    const now = new Date();
-    return now.getUTCMonth() >= 8 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
-  })();
+  const expiresOn = expiryFor(school);
 
   const lang = req.query.lang;
   const data = {
     school,
     class: { _id: String(klass._id), name: klass.name },
     students,
-    validUntil: formatPrintDate(new Date(Date.UTC(endYear, 7, 31)), lang),
+    validUntil: formatPrintDate(expiresOn, lang),
   };
 
   return respond(req, res, {
