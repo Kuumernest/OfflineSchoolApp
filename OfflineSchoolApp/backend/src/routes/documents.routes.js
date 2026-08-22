@@ -14,6 +14,7 @@ const ResultSummary = require("../db/models/ResultSummary");
 
 const { buildClassListHtml }  = require("../print/classList");
 const { buildTranscriptHtml } = require("../print/transcript");
+const { buildIdCardsHtml }    = require("../print/idCard");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
 const GuardianAccess = require("../db/models/GuardianAccess");
@@ -151,6 +152,93 @@ router.get("/class-list/:classId", asyncHandler(async (req, res) => {
     html: () => buildClassListHtml({
       data,
       variant:   req.query.variant,
+      labels:    labelsFor(lang),
+      printedOn: formatPrintDate(new Date(), lang),
+      origin:    originOf(req),
+    }),
+  });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// ID CARDS
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Identity cards for a class, ten to an A4 sheet.
+ *
+ * A class at a time, because that is the actual job — nobody prints one card.
+ * `?studentId=` narrows it to one for a replacement, which is the other half of
+ * the job and the only other quantity anyone asks for.
+ *
+ * Students with no admission number are EXCLUDED rather than printed blank. The
+ * number is the card's whole purpose as an identifier, and a card carrying an
+ * empty field looks like a printing fault rather than a data gap — it would be
+ * laminated and handed to a child before anyone noticed.
+ */
+router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const klass = await Class.findOne({
+    _id: req.params.classId, schoolId, deletedAt: null,
+  }).select("name").lean();
+  if (!klass) {
+    return res.status(404).json({ success: false, message: "Class not found" });
+  }
+
+  const filter = {
+    schoolId, classId: req.params.classId, status: "approved", deletedAt: null,
+  };
+  if (req.query.studentId) filter._id = String(req.query.studentId);
+
+  const rows = await Student.find(filter)
+    .select("studentName name firstName lastName enrollmentNo photoUrl guardianPhone")
+    .lean();
+
+  const school = await schoolHeading(schoolId);
+
+  const students = rows
+    .map((s) => ({
+      _id:           String(s._id),
+      name:          displayName(s) || null,
+      enrollmentNo:  s.enrollmentNo ?? null,
+      className:     klass.name,
+      photoUrl:      s.photoUrl ?? null,
+      guardianPhone: s.guardianPhone ?? null,
+    }))
+    .filter((s) => s.enrollmentNo)
+    .sort(byName);
+
+  const skipped = rows.length - students.length;
+
+  /**
+   * The end of the academic year the school is currently in.
+   *
+   * Cameroonian school years run September to July, so a card printed in
+   * October and one printed the following May must expire on the same date —
+   * taking "a year from today" would give two children in the same class cards
+   * that expire seven months apart.
+   */
+  const yearLabel = school.academicYear;
+  const endYear = (() => {
+    const match = /(\d{4})\s*[/-]\s*(\d{4})/.exec(String(yearLabel ?? ""));
+    if (match) return Number(match[2]);
+    const now = new Date();
+    return now.getUTCMonth() >= 8 ? now.getUTCFullYear() + 1 : now.getUTCFullYear();
+  })();
+
+  const lang = req.query.lang;
+  const data = {
+    school,
+    class: { _id: String(klass._id), name: klass.name },
+    students,
+    validUntil: formatPrintDate(new Date(Date.UTC(endYear, 7, 31)), lang),
+  };
+
+  return respond(req, res, {
+    data: { ...data, skippedWithoutAdmissionNo: skipped },
+    html: () => buildIdCardsHtml({
+      data,
       labels:    labelsFor(lang),
       printedOn: formatPrintDate(new Date(), lang),
       origin:    originOf(req),

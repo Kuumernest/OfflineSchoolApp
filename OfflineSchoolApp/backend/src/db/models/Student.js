@@ -149,6 +149,20 @@ const studentSchema = new mongoose.Schema(
     // commit writes but never declares is silently dropped.
     graduatedAt: { type: Date, default: null },
 
+    /**
+     * Passport photo, for the ID card.
+     *
+     * Declared even though nothing populates it yet: the application flow
+     * captures a passport photo as a DOCUMENT, and no approved student here has
+     * one. The card is built to print a framed blank box when this is empty —
+     * which is how these are actually produced, printed then photographed then
+     * laminated — and to use the image the moment one is attached.
+     *
+     * Holds a path like /uploads/... or an absolute URL, the same shapes the
+     * school logo already uses.
+     */
+    photoUrl: { type: String, default: null, trim: true },
+
     // Guardian portal access lives on its own collection, not here — see
     // db/models/GuardianAccess.js. A code hung off a Student cannot serve a
     // parent with two children at the school, which is the ordinary case.

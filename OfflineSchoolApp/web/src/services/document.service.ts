@@ -30,3 +30,9 @@ export const fetchTranscriptHtml = (
   studentId: string, schoolId: string, lang: string
 ): Promise<string> =>
   fetchDocument(`/transcript/${studentId}`, { schoolId, lang });
+
+/** A whole class of ID cards, ten to an A4 sheet. */
+export const fetchIdCardsHtml = (
+  classId: string, schoolId: string, lang: string
+): Promise<string> =>
+  fetchDocument(`/id-cards/${classId}`, { schoolId, lang });

@@ -1191,5 +1191,14 @@
     "selectedCount_other": "{{count}} enfants sélectionnés",
     "covers": "Couvre",
     "searchChild": "Rechercher par nom ou matricule"
+  },
+  "idc": {
+    "title": "Cartes d'identité",
+    "hint": "Dix par feuille A4, prêtes à découper et plastifier.",
+    "blank": "Les cartes s'impriment avec un cadre photo vide lorsqu'aucune photo n'est enregistrée — la méthode habituelle.",
+    "skipped": "{{count}} élève sans matricule est exclu",
+    "skipped_other": "{{count}} élèves sans matricule sont exclus",
+    "cardCount": "{{count}} carte",
+    "cardCount_other": "{{count}} cartes"
   }
 }

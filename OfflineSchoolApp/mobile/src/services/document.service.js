@@ -100,6 +100,13 @@ export const getTranscriptHtml = ({ schoolId, studentId, lang = "en" }) =>
     id: studentId, schoolId, lang,
   });
 
+/** A class of ID cards, ten to an A4 sheet. */
+export const getIdCardsHtml = ({ schoolId, classId, lang = "en" }) =>
+  fetchDocument({
+    kind: "id-cards", path: `/documents/id-cards/${classId}`,
+    id: classId, schoolId, lang,
+  });
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PUTTING IT ON PAPER
 // ─────────────────────────────────────────────────────────────────────────────
@@ -134,6 +141,7 @@ export const shareDocument = async (html, fileName = "document") => {
 export default {
   getClassListHtml,
   getTranscriptHtml,
+  getIdCardsHtml,
   printDocument,
   shareDocument,
 };

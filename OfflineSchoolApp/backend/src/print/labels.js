@@ -82,6 +82,12 @@ const LABELS = {
       cash: "Cash", mobile_money: "Mobile money", bank: "Bank transfer",
       cheque: "Cheque", waiver: "Waiver", other: "Other",
     },
+
+    // ── ID card ──
+    idCard:      "Student identity card",
+    affixPhoto:  "Affix photo here",
+    validUntil:  "Valid until",
+    ifFound:     "If found, call",
   },
 
   fr: {
@@ -145,6 +151,11 @@ const LABELS = {
       cash: "Espèces", mobile_money: "Mobile money", bank: "Virement bancaire",
       cheque: "Chèque", waiver: "Remise", other: "Autre",
     },
+
+    idCard:      "Carte d'identité scolaire",
+    affixPhoto:  "Coller la photo ici",
+    validUntil:  "Valable jusqu'au",
+    ifFound:     "En cas de perte, appeler",
   },
 };
 

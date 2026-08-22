@@ -40,6 +40,9 @@ const C = {
 
 const VARIANTS = ["plain", "register", "contacts"];
 
+/** ID cards are picked by class, like a class list — not by student. */
+const BY_CLASS = new Set(["classList", "idCards"]);
+
 export default function DocumentsScreen() {
   const router      = useRouter();
   const { t, language } = useTranslation();
@@ -82,12 +85,16 @@ export default function DocumentsScreen() {
     );
   }, [students, query]);
 
-  const ready = tab === "classList" ? Boolean(classId) : Boolean(studentId);
+  const ready = BY_CLASS.has(tab) ? Boolean(classId) : Boolean(studentId);
 
   const load = useCallback(async () => {
-    return tab === "classList"
-      ? DocumentService.getClassListHtml({ schoolId, classId, variant, lang: language })
-      : DocumentService.getTranscriptHtml({ schoolId, studentId, lang: language });
+    if (tab === "classList") {
+      return DocumentService.getClassListHtml({ schoolId, classId, variant, lang: language });
+    }
+    if (tab === "idCards") {
+      return DocumentService.getIdCardsHtml({ schoolId, classId, lang: language });
+    }
+    return DocumentService.getTranscriptHtml({ schoolId, studentId, lang: language });
   }, [tab, schoolId, classId, variant, studentId, language]);
 
   const run = async (mode) => {
@@ -97,8 +104,8 @@ export default function DocumentsScreen() {
 
       if (mode === "print") await DocumentService.printDocument(html);
       else {
-        const name = tab === "classList"
-          ? (classes.find((c) => c._id === classId)?.name ?? "class-list")
+        const name = BY_CLASS.has(tab)
+          ? (classes.find((c) => c._id === classId)?.name ?? tab)
           : (students.find((s) => s._id === studentId)?.name ?? "transcript");
         await DocumentService.shareDocument(html, name);
       }
@@ -138,7 +145,11 @@ export default function DocumentsScreen() {
       <ScrollView contentContainerStyle={styles.body} keyboardShouldPersistTaps="handled">
         {/* Which document */}
         <View style={styles.chips}>
-          {[["classList", t("cl.title")], ["transcript", t("tr.title")]].map(([key, label]) => (
+          {[
+            ["classList",  t("cl.title")],
+            ["idCards",    t("idc.title")],
+            ["transcript", t("tr.title")],
+          ].map(([key, label]) => (
             <TouchableOpacity
               key={key}
               style={[styles.chip, tab === key && styles.chipOn]}
@@ -150,7 +161,7 @@ export default function DocumentsScreen() {
           ))}
         </View>
 
-        {tab === "classList" ? (
+        {BY_CLASS.has(tab) ? (
           <>
             <View style={styles.card}>
               <Text style={styles.cardTitle}>{t("cl.pick")}</Text>
@@ -174,7 +185,13 @@ export default function DocumentsScreen() {
               )}
             </View>
 
-            <View style={styles.card}>
+            {tab === "idCards" && (
+              <View style={styles.card}>
+                <Text style={styles.optionHint}>{t("idc.hint")} {t("idc.blank")}</Text>
+              </View>
+            )}
+
+            {tab === "classList" && <View style={styles.card}>
               <Text style={styles.cardTitle}>{t("cl.variant")}</Text>
               {VARIANTS.map((v) => (
                 <TouchableOpacity
@@ -192,7 +209,7 @@ export default function DocumentsScreen() {
                   )}
                 </TouchableOpacity>
               ))}
-            </View>
+            </View>}
           </>
         ) : (
           <View style={styles.card}>

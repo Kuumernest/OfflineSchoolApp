@@ -1191,5 +1191,14 @@
     "selectedCount_other": "{{count}} children selected",
     "covers": "Covers",
     "searchChild": "Search by name or admission number"
+  },
+  "idc": {
+    "title": "ID cards",
+    "hint": "Ten to an A4 sheet, ready to cut and laminate.",
+    "blank": "Cards print with a blank photo box where no photo is on file — the usual way these are made.",
+    "skipped": "{{count}} student has no admission number and is left out",
+    "skipped_other": "{{count}} students have no admission number and are left out",
+    "cardCount": "{{count}} card",
+    "cardCount_other": "{{count}} cards"
   }
 }

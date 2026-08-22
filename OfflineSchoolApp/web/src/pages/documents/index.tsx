@@ -10,7 +10,7 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Printer, Eye, FileText, Users } from "lucide-react";
+import { Printer, Eye, FileText, Users, IdCard } from "lucide-react";
 
 import { useUser }     from "@/store/auth.store";
 import { PageHeader }  from "@/components/ui/PageHeader";
@@ -25,13 +25,15 @@ import { getErrorMessage } from "@/lib/api";
 
 import { fetchClasses }  from "@/services/class.service";
 import { fetchStudents } from "@/services/student.service";
-import { fetchClassListHtml, fetchTranscriptHtml } from "@/services/document.service";
+import {
+  fetchClassListHtml, fetchTranscriptHtml, fetchIdCardsHtml,
+} from "@/services/document.service";
 import { printHtml, previewHtml } from "@/print/document";
 
 /** The three sheets a roster is actually used as. */
 type ClassListVariant = "plain" | "register" | "contacts";
 
-type Tab = "classList" | "transcript";
+type Tab = "classList" | "transcript" | "idCards";
 
 export default function DocumentsPage() {
   const { t, i18n } = useTranslation();
@@ -76,9 +78,10 @@ export default function DocumentsPage() {
       // French should not get an English register.
       const lang = i18n.resolvedLanguage ?? "en";
 
-      const html = tab === "classList"
-        ? await fetchClassListHtml(classId, schoolId, variant, lang)
-        : await fetchTranscriptHtml(studentId, schoolId, lang);
+      const html =
+        tab === "classList"  ? await fetchClassListHtml(classId, schoolId, variant, lang) :
+        tab === "idCards"    ? await fetchIdCardsHtml(classId, schoolId, lang) :
+                               await fetchTranscriptHtml(studentId, schoolId, lang);
 
       if (mode === "print") printHtml(html);
       else previewHtml(html);
@@ -91,7 +94,8 @@ export default function DocumentsPage() {
 
   if (classesQ.isLoading) return <PageSpinner />;
 
-  const ready = tab === "classList" ? Boolean(classId) : Boolean(studentId);
+  // ID cards are picked by class, like a class list — not by student.
+  const ready = tab === "transcript" ? Boolean(studentId) : Boolean(classId);
 
   const VARIANTS: { key: ClassListVariant; hint: string }[] = [
     { key: "plain",    hint: t("cl.plainHint") },
@@ -129,8 +133,9 @@ export default function DocumentsPage() {
       {/* Which document */}
       <div className="flex gap-1.5">
         {([
-          ["classList",  t("cl.title"), <Users key="u" className="h-4 w-4" />],
-          ["transcript", t("tr.title"), <FileText key="f" className="h-4 w-4" />],
+          ["classList",  t("cl.title"),  <Users key="u" className="h-4 w-4" />],
+          ["idCards",    t("idc.title"), <IdCard key="i" className="h-4 w-4" />],
+          ["transcript", t("tr.title"),  <FileText key="f" className="h-4 w-4" />],
         ] as const).map(([key, label, icon]) => (
           <button
             key={key}
@@ -149,7 +154,7 @@ export default function DocumentsPage() {
         ))}
       </div>
 
-      {tab === "classList" ? (
+      {tab === "classList" || tab === "idCards" ? (
         <Card className="space-y-5">
           <FormField label={t("cl.pick")} required>
             <SelectField
@@ -160,7 +165,13 @@ export default function DocumentsPage() {
             />
           </FormField>
 
-          <div>
+          {tab === "idCards" && (
+            <p className="rounded-control border border-line bg-canvas px-3 py-2 text-xs text-ink-muted">
+              {t("idc.hint")} {t("idc.blank")}
+            </p>
+          )}
+
+          {tab === "classList" && <div>
             <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
               {t("cl.variant")}
             </p>
@@ -182,7 +193,7 @@ export default function DocumentsPage() {
                 </button>
               ))}
             </div>
-          </div>
+          </div>}
         </Card>
       ) : (
         <Card className="space-y-4">
