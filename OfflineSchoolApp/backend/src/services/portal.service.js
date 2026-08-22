@@ -86,12 +86,28 @@ const childrenOf = async (schoolId, studentIds) => {
 const assertOwnStudents = async (schoolId, ids) => {
   const found = await Student.find({
     _id: { $in: ids }, schoolId, deletedAt: null,
-  }).select("_id").lean();
+  }).select("_id studentName name firstName lastName enrollmentNo").lean();
 
   if (found.length !== ids.length) {
     const err = new Error("One or more children do not belong to this school");
     err.status = 404;
     err.code   = "STUDENT_NOT_FOUND";
+    throw err;
+  }
+
+  // Sign-in is admission number + code. A child without an admission number
+  // gives the parent nothing to type in the first field, so the code would be
+  // issued, written down, handed over and then simply not work — with the
+  // office having no way to tell why. Refusing here, by name, is the only
+  // point at which that is cheap to fix.
+  const numberless = found.filter((s) => !s.enrollmentNo || !String(s.enrollmentNo).trim());
+  if (numberless.length) {
+    const err = new Error(
+      `These children have no admission number yet, so a code could not be used ` +
+      `to sign in: ${numberless.map((s) => displayName(s) || s._id).join(", ")}`
+    );
+    err.status = 400;
+    err.code   = "NO_ADMISSION_NUMBER";
     throw err;
   }
 };

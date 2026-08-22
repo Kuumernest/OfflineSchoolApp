@@ -145,11 +145,24 @@ export default function RootLayout() {
 
     const path           = "/" + (segments?.join("/") || "");
     const isAuthGroup    = segments[0] === "auth";
+
+    // The guardian portal sits outside this whole scheme. A parent has no User
+    // record — they hold a portal code, not an account — so `user` is null for
+    // them and always will be. Without this the guard bounced them straight
+    // back to /auth/login and the portal could never render for the only people
+    // it exists for. A signed-in staff member opening it would be thrown out
+    // too, by the wrong-section rule further down.
+    const isPortal       = segments[0] === "portal";
     const onSetPassword  = segments[0] === "auth" && segments[1] === "set-password";
     const onProfileSetup = segments[1] === "profile";
 
     if (onProfileSetup) {
       console.log("🔓 Profile setup screen — guard bypassed");
+      return;
+    }
+
+    if (isPortal) {
+      console.log("🔓 Guardian portal — guard bypassed (no staff account needed)");
       return;
     }
 
@@ -181,7 +194,7 @@ export default function RootLayout() {
     // Sections every signed-in role may open, regardless of their home
     // section. Without this the guard would bounce a user straight back out
     // of /sync/pending the moment they tapped the offline banner.
-    const SHARED_SECTIONS = new Set(["sync"]);
+    const SHARED_SECTIONS = new Set(["sync", "portal"]);
 
     if (
       currentSection &&

@@ -1567,6 +1567,28 @@ router.put("/students/:id/approve", asyncHandler(async (req, res) => {
   }
 
   if (!student) return sendError(res, 404, "Student application not found");
+
+  // Already approved is the end state this request asked for, so it answers 200
+  // rather than 409.
+  //
+  // A phone queues an approval offline. The send lands, the response is lost on
+  // a bad connection, and the outbox replays it — or a second member of staff
+  // approves the same application first. Either way the replay used to get a
+  // bare 409, which the outbox classifies as a CONFLICT and parks for a human
+  // to resolve. The work was done; the queue just could not tell, so the row sat
+  // there reporting `conflicts: 1` on every sync for ever.
+  //
+  // Only "approved" is treated this way. A rejected or suspended record really
+  // is a conflict — approving it is not what the caller asked for and a person
+  // should look at it.
+  if (student.status === "approved") {
+    return sendSuccess(res, {
+      replay:  true,
+      message: "This application was already approved",
+      student: { ...student, id: student._id },
+    });
+  }
+
   if (student.status !== "pending") {
     return sendError(res, 409, "Only pending applications can be approved");
   }
@@ -1618,30 +1640,31 @@ router.put("/students/:id/approve", asyncHandler(async (req, res) => {
     const year   = new Date().getFullYear();
     const prefix = `${schoolCode}/${year}/`;
 
-    // Find highest existing sequence across BOTH collections
-    const latestNos = await Promise.all([
-      S
-        ? S.find({ admissionNo: { $regex: `^${prefix}` } })
-            .sort({ admissionNo: -1 })
-            .limit(1)
-            .lean()
-            .catch(() => [])
-        : [],
-      App
-        ? App.find({ admissionNo: { $regex: `^${prefix}` } })
-            .sort({ admissionNo: -1 })
-            .limit(1)
-            .lean()
-            .catch(() => [])
-        : [],
+    // Highest existing sequence across both collections AND both identifier
+    // fields.
+    //
+    // This used to search `admissionNo` only. Records exist whose number lives
+    // solely in `enrollmentNo` — students approved before the two fields were
+    // written together — and they were invisible here, so the generator would
+    // hand out a number that was already in use and the approval would then
+    // fail on the unique index. Matching on either field is what stops that.
+    const numberQuery = {
+      $or: [
+        { admissionNo:  { $regex: `^${prefix}` } },
+        { enrollmentNo: { $regex: `^${prefix}` } },
+      ],
+    };
+
+    const [studentRows, appRows] = await Promise.all([
+      S   ? S.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => [])   : [],
+      App ? App.find(numberQuery).select("admissionNo enrollmentNo").lean().catch(() => []) : [],
     ]);
 
     let nextSeq = 1;
-    for (const results of latestNos) {
-      if (results.length > 0) {
-        const last  = results[0].admissionNo || "";
-        const parts = last.split("/");
-        const seq   = parseInt(parts[parts.length - 1], 10);
+    for (const row of [...studentRows, ...appRows]) {
+      for (const value of [row.admissionNo, row.enrollmentNo]) {
+        if (!value || !String(value).startsWith(prefix)) continue;
+        const seq = parseInt(String(value).slice(prefix.length), 10);
         if (!isNaN(seq) && seq >= nextSeq) nextSeq = seq + 1;
       }
     }
@@ -1940,6 +1963,18 @@ router.put("/students/:id/reject", asyncHandler(async (req, res) => {
   }
 
   if (!student) return sendError(res, 404, "Student application not found");
+
+  // Same reasoning as approve above: already rejected is the outcome this
+  // request wanted, so a replayed send settles rather than parking as a
+  // conflict a human has to clear by hand.
+  if (student.status === "rejected") {
+    return sendSuccess(res, {
+      replay:  true,
+      message: "This application was already rejected",
+      student: { ...student, id: student._id },
+    });
+  }
+
   if (student.status !== "pending") {
     return sendError(res, 409, "Only pending applications can be rejected");
   }
