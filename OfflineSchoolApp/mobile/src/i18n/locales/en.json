@@ -477,7 +477,12 @@
     "roomPh": "e.g. Lab 2",
     "teacherLoad": "Teacher load",
     "unfilled": "Unfilled periods",
-    "break": "Break"
+    "break": "Break",
+    "assignedOnly": "Only teachers assigned to this subject in this class.",
+    "noTeacherAssigned": "No teacher is assigned to this subject in this class. Assign one first.",
+    "chooseSubjectFirst": "Choose a subject first",
+    "teachersBusy": "{{count}} teacher is already teaching in this period.",
+    "teachersBusy_other": "{{count}} teachers are already teaching in this period."
   },
   "periods": {
     "title": "The school day",

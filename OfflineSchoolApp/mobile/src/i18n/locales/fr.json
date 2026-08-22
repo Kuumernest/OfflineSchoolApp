@@ -477,7 +477,12 @@
     "roomPh": "ex. Labo 2",
     "teacherLoad": "Charge des enseignants",
     "unfilled": "Créneaux non pourvus",
-    "break": "Récréation"
+    "break": "Récréation",
+    "assignedOnly": "Seuls les enseignants affectés à cette matière dans cette classe.",
+    "noTeacherAssigned": "Aucun enseignant n'est affecté à cette matière dans cette classe. Affectez-en un d'abord.",
+    "chooseSubjectFirst": "Choisissez d'abord une matière",
+    "teachersBusy": "{{count}} enseignant enseigne déjà à cette période.",
+    "teachersBusy_other": "{{count}} enseignants enseignent déjà à cette période."
   },
   "periods": {
     "title": "La journée scolaire",

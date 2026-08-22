@@ -57,7 +57,7 @@ import {
 } from "@/services/timetable.service";
 import { fetchPeriods } from "@/services/period.service";
 import { fetchClasses, fetchSubjects } from "@/services/class.service";
-import { fetchTeachers } from "@/services/teacher.service";
+import { fetchTeachers, fetchTeacherIdsFor } from "@/services/teacher.service";
 
 import {
   SCHOOL_WEEK,
@@ -553,6 +553,8 @@ export default function TimetablePage() {
               cell.existing?._id,
             ),
           }))}
+          classId={classId}
+          schoolId={schoolId}
           saving={saveMutation.isPending}
           removing={removeMutation.isPending}
           onClose={() => setCell(null)}
@@ -643,6 +645,8 @@ function SlotEditor({
   periodName,
   subjects,
   teachers,
+  classId,
+  schoolId,
   saving,
   removing,
   onClose,
@@ -653,6 +657,9 @@ function SlotEditor({
   periodName: string;
   subjects:   EditorOption[];
   teachers:   EditorOption[];
+  /** Needed to look up who actually teaches the chosen subject here. */
+  classId:    string;
+  schoolId:   string;
   saving:     boolean;
   removing:   boolean;
   onClose:    () => void;
@@ -666,8 +673,43 @@ function SlotEditor({
   const [teacherId, setTeacherId] = useState(existing?.teacherId ?? "");
   const [room,      setRoom]      = useState(existing?.room ?? "");
 
-  const busyTeachers = teachers.filter((t) => t.disabled).length;
-  const canSave = !!subjectId && !!teacherId;
+  /**
+   * Only the teachers assigned to this subject IN THIS CLASS.
+   *
+   * The list used to be every teacher in the school, narrowed only by who was
+   * already busy that period. So picking Mathematics offered staff who do not
+   * teach Mathematics, and the resulting timetable looked perfectly valid to
+   * everyone downstream — the mistake surfaces in a classroom, not on screen.
+   * The mobile builder has always filtered this way; the web never did.
+   */
+  const assignedQ = useQuery({
+    queryKey: ["assigned-teachers", schoolId, classId, subjectId],
+    queryFn:  () => fetchTeacherIdsFor(schoolId, classId, subjectId),
+    enabled:  Boolean(schoolId && classId && subjectId),
+  });
+
+  const options = useMemo(() => {
+    if (!subjectId) return [];
+    if (!assignedQ.data) return [];
+    return teachers.filter((o) => assignedQ.data.has(o.value));
+  }, [teachers, assignedQ.data, subjectId]);
+
+  /**
+   * The teacher actually in effect.
+   *
+   * Derived rather than cleared through an effect. A teacher held in state who
+   * is not on the current list must not count — otherwise changing the subject
+   * leaves a name selected that the dropdown no longer offers, and Save would
+   * submit it. Deriving also avoids the cascading render an effect-and-setState
+   * pair produces on every list change.
+   */
+  const effectiveTeacherId =
+    teacherId && options.some((o) => o.value === teacherId) ? teacherId : "";
+
+  const busyTeachers = options.filter((o) => o.disabled).length;
+  const noneAssigned =
+    Boolean(subjectId) && !assignedQ.isFetching && options.length === 0;
+  const canSave = !!subjectId && !!effectiveTeacherId;
 
   return (
     <Modal
@@ -676,7 +718,10 @@ function SlotEditor({
       title={`${DAY_LABELS[target.day]} · ${periodName}`}
     >
       <form
-        onSubmit={(e) => { e.preventDefault(); if (canSave) onSave({ subjectId, teacherId, room }); }}
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (canSave) onSave({ subjectId, teacherId: effectiveTeacherId, room });
+        }}
         className="space-y-4"
       >
         <FormField label={t("academic.subject")} required>
@@ -691,16 +736,23 @@ function SlotEditor({
         <FormField
           label={t("academic.teacher")}
           required
+          error={noneAssigned ? t("timetable.noTeacherAssigned") : undefined}
           hint={
             busyTeachers > 0
-              ? `${busyTeachers} ${busyTeachers === 1 ? "teacher is" : "teachers are"} already teaching in this period and can't be picked.`
-              : undefined
+              ? t("timetable.teachersBusy", { count: busyTeachers })
+              : subjectId ? t("timetable.assignedOnly") : undefined
           }
         >
           <SelectField
-            options={teachers}
-            placeholder={t("timetable.chooseTeacher")}
-            value={teacherId}
+            options={options}
+            placeholder={
+              !subjectId              ? t("timetable.chooseSubjectFirst") :
+              assignedQ.isFetching    ? t("common.loading") :
+                                        t("timetable.chooseTeacher")
+            }
+            disabled={!subjectId || assignedQ.isFetching}
+            invalid={noneAssigned}
+            value={effectiveTeacherId}
             onChange={(e) => setTeacherId(e.target.value)}
           />
         </FormField>

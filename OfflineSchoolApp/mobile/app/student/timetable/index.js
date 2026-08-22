@@ -220,10 +220,15 @@ const loadFullTimetable = async (db, classId) => {
     if (periodMap.size === 0 && pColSet.size > 0) {
       try {
         const pRows = await db.getAllAsync(
-          `SELECT ${pIdCol} AS id, ${pName} AS name,
+          // `periods p` — the alias is load-bearing. Every interpolated column
+          // above is written `p.<col>`, so without it SQLite reports
+          // "no such column: p.name", which reads like a schema problem and is
+          // in fact a missing two-character alias. The introspection was always
+          // correct; the FROM clause simply never declared what `p` referred to.
+          `SELECT p.${pIdCol} AS id, ${pName} AS name,
                   ${pStart} AS startTime, ${pEnd} AS endTime,
                   ${pBreak} AS isBreak, ${pSort} AS sortOrder
-           FROM periods
+           FROM periods p
            ORDER BY COALESCE(${pSort}, 0) ASC`
         );
         for (const p of pRows ?? []) {

@@ -249,6 +249,44 @@ export async function deleteTeacher(teacherId: string): Promise<unknown> {
 
 // ─── Fetch assignments (public) ───────────────────────────────────────────────
 
+/** Pulls an id out of the several shapes an assignment reference arrives in. */
+const refId = (value: unknown): string => {
+  if (!value) return "";
+  if (typeof value === "string") return value;
+  const obj = value as { _id?: string; id?: string };
+  return String(obj._id ?? obj.id ?? "");
+};
+
+/**
+ * Which teachers are assigned to teach one subject to one class.
+ *
+ * The timetable builder needs this because offering every teacher in the school
+ * is not a neutral default — it invites picking a teacher who does not teach the
+ * subject, and the resulting timetable looks valid to everyone downstream.
+ *
+ * Returns teacher ids only; the caller already holds the roster and does not
+ * need a second copy of it.
+ */
+export async function fetchTeacherIdsFor(
+  schoolId: string, classId: string, subjectId: string
+): Promise<Set<string>> {
+  if (!classId || !subjectId) return new Set();
+
+  const assignments = await fetchTeacherAssignments(schoolId);
+
+  return new Set(
+    assignments
+      .filter((a) => {
+        const cls = refId(a.class) || a.classId || a.class_id || "";
+        const sub = refId(a.subject) || a.subjectId || a.subject_id || "";
+        return String(cls) === String(classId) && String(sub) === String(subjectId);
+      })
+      .map((a) => refId(a.teacher) || a.teacherId || a.teacher_id || "")
+      .filter(Boolean)
+      .map(String)
+  );
+}
+
 export async function fetchTeacherAssignments(
   schoolId: string
 ): Promise<RawAssignment[]> {
