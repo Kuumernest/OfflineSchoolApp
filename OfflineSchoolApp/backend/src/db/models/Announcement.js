@@ -227,17 +227,53 @@ announcementSchema.virtual("acknowledgedCount").get(function () {
 // MIDDLEWARE
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Enforce targetClasses is non-empty when audience is "class". */
-announcementSchema.pre("save", function (next) {
+/**
+ * Enforce targetClasses is non-empty when audience is "class".
+ *
+ * Written as an async hook that THROWS rather than a callback hook that calls
+ * next(). Mongoose 9 no longer passes a next callback to document middleware —
+ * it passes a single internal options object — so `function (next) { … next() }`
+ * threw "next is not a function" on every save. That killed the entire
+ * announcement write surface: create, update, pin, mark-read, acknowledge and
+ * soft-delete all go through .save().
+ *
+ * The async form works on Mongoose 6 through 9, so this is not a version lock.
+ */
+announcementSchema.pre("save", async function () {
   if (this.audience === "class" && (!this.targetClasses || this.targetClasses.length === 0)) {
-    return next(new Error("targetClasses must not be empty when audience is 'class'"));
+    throw new Error("targetClasses must not be empty when audience is 'class'");
   }
   // Clear targetClasses for non-class audiences to keep data clean
   if (this.audience !== "class") {
     this.targetClasses = [];
   }
-  next();
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STATICS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Find an announcement by an ObjectId OR a plain string _id.
+ *
+ * The mobile client generates its own ids (nanoid, e.g. "iz5q6xic96rmrf64hup")
+ * and those are stored verbatim as _id. findById() casts to ObjectId first and
+ * throws CastError on them, which surfaced as a 500 on every route that looked
+ * an announcement up that way. Three routes each needed the same fallback, so
+ * it lives here rather than being copied a fourth time.
+ */
+announcementSchema.statics.findByAnyId = async function (id) {
+  if (!id) return null;
+
+  if (mongoose.Types.ObjectId.isValid(id)) {
+    const doc = await this.findById(id);
+    if (doc) return doc;
+    // A 24-char hex string id passes isValid but may still be stored as a
+    // string, so fall through rather than reporting "not found".
+  }
+
+  return this.findOne({ _id: id });
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MODEL

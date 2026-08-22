@@ -5,21 +5,29 @@ import { Loader2 } from "lucide-react";
 type ButtonVariant = "primary" | "secondary" | "danger" | "ghost";
 type ButtonSize    = "sm" | "md" | "lg";
 
+/**
+ * Exactly one filled accent button belongs on a screen — the thing you came to
+ * do. Everything else is `secondary` (bordered) or `ghost` (bare). When two
+ * buttons are both filled, neither reads as the primary action.
+ */
 const variantStyles: Record<ButtonVariant, string> = {
   primary:
-    "bg-primary-600 text-white hover:bg-primary-700 focus:ring-primary-500 shadow-sm",
+    "bg-primary-600 text-white hover:bg-primary-700 active:bg-primary-800 shadow-card",
   secondary:
-    "bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 focus:ring-primary-500",
+    "bg-surface text-ink-body border border-line-strong hover:bg-surface-muted active:bg-canvas",
   danger:
-    "bg-red-600 text-white hover:bg-red-700 focus:ring-red-500 shadow-sm",
+    "bg-danger text-white hover:brightness-95 active:brightness-90 shadow-card",
   ghost:
-    "text-gray-600 hover:bg-gray-100 hover:text-gray-800",
+    "text-ink-muted hover:bg-canvas hover:text-ink-body active:bg-line/60",
 };
 
+/* Fixed heights, not vertical padding. A row of controls only lines up if
+   every control resolves to the same height regardless of whether it holds an
+   icon, a label, or both. */
 const sizeStyles: Record<ButtonSize, string> = {
-  sm: "px-3 py-1.5 text-xs gap-1.5",
-  md: "px-4 py-2   text-sm gap-2",
-  lg: "px-6 py-3   text-base gap-2",
+  sm: "h-8  px-2.5 text-xs  gap-1.5",
+  md: "h-9  px-3.5 text-sm  gap-2",
+  lg: "h-11 px-5   text-sm  gap-2",
 };
 
 interface ButtonProps
@@ -44,10 +52,14 @@ export function Button({
   return (
     <button
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
-        "inline-flex items-center justify-center font-medium rounded-lg transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-offset-2",
-        "disabled:opacity-50 disabled:cursor-not-allowed",
+        "inline-flex items-center justify-center whitespace-nowrap",
+        "font-medium rounded-control transition-colors",
+        "disabled:opacity-45 disabled:cursor-not-allowed disabled:shadow-none",
+        // Icons inherit the button's text size rather than each call site
+        // picking its own w-4 / w-5 and knocking the row out of alignment.
+        "[&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0",
         variantStyles[variant],
         sizeStyles[size],
         className
@@ -55,7 +67,7 @@ export function Button({
       {...props}
     >
       {loading
-        ? <Loader2 className="w-4 h-4 animate-spin" />
+        ? <Loader2 className="animate-spin" aria-hidden="true" />
         : icon}
       {children}
     </button>

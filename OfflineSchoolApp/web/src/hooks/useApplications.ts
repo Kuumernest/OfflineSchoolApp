@@ -8,16 +8,59 @@ import {
   useRef,
 } from "react";
 
-import { StudentApplicationsService }   from "../services/studentApplications.service";
-import { ClassService }                  from "../services/class.service";
-import { useAuth }                       from "./useAuth";
+// The applications service exports plain functions, not a
+// `StudentApplicationsService` namespace object, and class.service exports
+// `fetchClasses` rather than a `ClassService`. There is also no useAuth hook —
+// the store exposes `useUser`. All three imports named things that do not
+// exist, so this module could not compile.
+import {
+  fetchPendingApplications,
+  approveApplication,
+  rejectApplication,
+  type StudentApplication,
+} from "@/services/studentApplications.service";
+import { fetchClasses } from "@/services/class.service";
+import { useUser }      from "@/store/auth.store";
 
 import type {
   NormalisedApplication,
   ClassOption,
   ApprovalResult,
   RejectionResult,
-} from "../types/applications";
+} from "@/types/applications";
+
+/**
+ * The service's row and the UI's row are nearly the same shape, but
+ * NormalisedApplication additionally requires firstName/lastName. The server
+ * only sends a single `name`, so they are split here — on the LAST space, so
+ * that "Mary Grace Okonkwo" keeps "Mary Grace" as the given name rather than
+ * treating "Grace Okonkwo" as a surname.
+ */
+const toNormalised = (a: StudentApplication): NormalisedApplication => {
+  const name = (a.name ?? "").trim();
+  const cut  = name.lastIndexOf(" ");
+
+  return {
+    id:           a.id || a._id,
+    name,
+    firstName:    cut > 0 ? name.slice(0, cut) : name || null,
+    lastName:     cut > 0 ? name.slice(cut + 1) : null,
+    email:        a.email        ?? "",
+    phone:        a.phone        ?? "",
+    guardianName: a.guardianName ?? "",
+    className:    a.className    ?? "",
+    classId:      a.classId ?? a.class_id ?? null,
+    status:       a.status       ?? "pending",
+    created_at:   a.created_at   ?? null,
+    updated_at:   a.updated_at   ?? null,
+    // The two ApplicationDocument types differ only in which fields are
+    // optional, so the service's rows satisfy the UI's contract at runtime.
+    documents:    (a.documents ?? []) as NormalisedApplication["documents"],
+    address:      a.address      ?? "",
+    notes:        a.notes        ?? "",
+    schoolId:     a.schoolId     ?? null,
+  };
+};
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -57,7 +100,7 @@ export interface UseApplicationsReturn {
 // ─────────────────────────────────────────────────────────
 
 export const useApplications = (): UseApplicationsReturn => {
-  const { user } = useAuth();
+  const user     = useUser();
   const schoolId = user?.schoolId ?? null;
 
   const isMounted = useRef(true);
@@ -88,26 +131,32 @@ export const useApplications = (): UseApplicationsReturn => {
         setError(null);
 
         const [apps, classRows] = await Promise.all([
-          StudentApplicationsService.getPendingApplications(schoolId),
-          ClassService.getAll(false),
+          fetchPendingApplications(schoolId ?? ""),
+          // fetchClasses is school-scoped; without the id it would return
+          // every school's classes to whoever asked.
+          fetchClasses(schoolId ?? ""),
         ]);
 
         if (!isMounted.current) return;
 
-        setApplications(apps);
+        setApplications(apps.map(toNormalised));
 
-        // ClassService.getAll returns Class[] — map to ClassOption[]
-        const classOptions: ClassOption[] = (classRows || []).map(
-          (c: Record<string, unknown>) => ({
-            _id:      String(c._id || c.id || ""),
-            id:       String(c._id || c.id || ""),
+        // fetchClasses returns Class[]; ClassOption additionally carries an
+        // `id` alias and allows a null level. Indexing through an unknown hop
+        // keeps this tolerant of the snake_case variants the API also emits.
+        const classOptions: ClassOption[] = (classRows || []).map((row) => {
+          const c  = row as unknown as Record<string, unknown>;
+          const id = String(c._id || c.id || "");
+          return {
+            _id:      id,
+            id,
             name:     (c.name as string) || "",
             level:    (c.level as string) || null,
             section:  (c.section as string) || "",
             schoolId: (c.schoolId as string) || undefined,
             isActive: c.isActive as boolean | undefined,
-          })
-        );
+          };
+        });
         setClasses(classOptions);
       } catch (err: unknown) {
         console.error("[useApplications] loadData failed:", err);
@@ -145,10 +194,10 @@ export const useApplications = (): UseApplicationsReturn => {
   // ── Approve ─────────────────────────────────────────────────────────────
   const approve = useCallback(
     async (applicationId: string, classId: string): Promise<ApprovalResult> => {
-      const result = await StudentApplicationsService.approveApplication(
-        applicationId,
-        classId
-      );
+      const raw = await approveApplication(applicationId, classId);
+      // ApproveApplicationResult types `message` as string | null; the UI's
+      // ApprovalResult wants string | undefined.
+      const result: ApprovalResult = { ...raw, message: raw.message ?? undefined };
       if (isMounted.current) {
         setApplications((prev) =>
           prev.filter((a) => a.id !== applicationId)
@@ -165,9 +214,9 @@ export const useApplications = (): UseApplicationsReturn => {
       applicationId: string,
       reason?: string
     ): Promise<RejectionResult> => {
-      const result = await StudentApplicationsService.rejectApplication(
+      const result: RejectionResult = await rejectApplication(
         applicationId,
-        reason || ""
+        reason || "",
       );
       if (isMounted.current) {
         setApplications((prev) =>

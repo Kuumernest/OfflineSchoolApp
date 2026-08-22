@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }   from "@/store/auth.store";
 import * as ExamService   from "@/services/exam.service";
 import { examQueryKeys }  from "./useExams";
-import toast              from "react-hot-toast";
+import { useToast }       from "@/components/ui/Toast";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -73,6 +73,7 @@ export const useStudentResult = (examId: string, studentId: string) => {
 
 export const useProcessResults = () => {
   const qc       = useQueryClient();
+  const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
   return useMutation({
@@ -89,10 +90,10 @@ export const useProcessResults = () => {
       qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "grade")    });
       qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "school")   });
       qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId)            });
-      toast.success("Results calculated successfully 🎉");
+      toast({ title: "Results calculated successfully 🎉", kind: "success" });
     },
     onError: (e: Error) =>
-      toast.error(e.message || "Failed to process results"),
+      toast({ title: e.message || "Failed to process results", kind: "error" }),
   });
 };
 
@@ -100,6 +101,7 @@ export const useProcessResults = () => {
 
 export const usePublishResults = () => {
   const qc       = useQueryClient();
+  const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
   return useMutation({
@@ -111,10 +113,10 @@ export const usePublishResults = () => {
       qc.invalidateQueries({ queryKey: examQueryKeys.lists()                   });
       qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId)       });
       qc.invalidateQueries({ queryKey: resultKeys.results(examId)              });
-      toast.success("Results published! Students can now view their scores 📢");
+      toast({ title: "Results published! Students can now view their scores 📢", kind: "success" });
     },
     onError: (e: Error) =>
-      toast.error(e.message || "Failed to publish results"),
+      toast({ title: e.message || "Failed to publish results", kind: "error" }),
   });
 };
 

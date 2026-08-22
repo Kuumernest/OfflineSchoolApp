@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -73,24 +74,28 @@ const ICON: Record<ToastKind, typeof CheckCircle2> = {
 };
 
 const ICON_COLOR: Record<ToastKind, string> = {
-  success: "text-emerald-500",
-  error:   "text-red-500",
-  warning: "text-amber-500",
-  info:    "text-blue-500",
+  success: "text-success",
+  error:   "text-danger",
+  warning: "text-warning",
+  info:    "text-info",
 };
 
+// A toast sits on top of the page, so it keeps a solid surface and a hairline
+// rather than a tinted fill — the icon carries the kind. A tinted panel
+// floating over a tinted alert on the page below was two different reds
+// arguing about which one mattered.
 const BORDER_COLOR: Record<ToastKind, string> = {
-  success: "border-emerald-200",
-  error:   "border-red-200",
-  warning: "border-amber-200",
-  info:    "border-blue-200",
+  success: "border-success-line",
+  error:   "border-danger-line",
+  warning: "border-warning-line",
+  info:    "border-info-line",
 };
 
 const BG_COLOR: Record<ToastKind, string> = {
-  success: "bg-emerald-50",
-  error:   "bg-red-50",
-  warning: "bg-amber-50",
-  info:    "bg-blue-50",
+  success: "bg-surface",
+  error:   "bg-surface",
+  warning: "bg-surface",
+  info:    "bg-surface",
 };
 
 let _idCounter = 0;
@@ -132,7 +137,7 @@ function ToastItem({
       role="alert"
       aria-live="polite"
       className={cn(
-        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-xl border px-4 py-3 shadow-lg backdrop-blur-sm transition-all duration-300",
+        "pointer-events-auto flex w-full max-w-sm items-start gap-3 rounded-card border px-4 py-3 shadow-raise transition-all duration-300",
         BORDER_COLOR[entry.kind],
         BG_COLOR[entry.kind],
         entry.removing
@@ -141,14 +146,14 @@ function ToastItem({
       )}
     >
       <Icon
-        className={cn("mt-0.5 h-5 w-5 shrink-0", ICON_COLOR[entry.kind])}
+        className={cn("mt-0.5 h-4 w-4 shrink-0", ICON_COLOR[entry.kind])}
         aria-hidden="true"
       />
 
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-gray-900">{entry.title}</p>
+        <p className="text-[13px] font-semibold text-ink">{entry.title}</p>
         {entry.message && (
-          <p className="mt-0.5 text-sm text-gray-600 whitespace-pre-line">
+          <p className="mt-0.5 whitespace-pre-line text-xs text-ink-muted">
             {entry.message}
           </p>
         )}
@@ -158,7 +163,7 @@ function ToastItem({
               entry.action!.onClick();
               onDismiss(entry.id);
             }}
-            className="mt-2 inline-flex items-center rounded-lg bg-white px-3 py-1.5 text-xs font-semibold text-gray-700 shadow-sm ring-1 ring-gray-200 hover:bg-gray-50 transition-colors"
+            className="mt-2 inline-flex h-8 items-center rounded-control border border-line-strong bg-surface px-2.5 text-xs font-medium text-ink-body transition-colors hover:bg-canvas"
           >
             {entry.action.label}
           </button>
@@ -167,7 +172,7 @@ function ToastItem({
 
       <button
         onClick={() => onDismiss(entry.id)}
-        className="shrink-0 rounded-md p-0.5 text-gray-400 hover:text-gray-600 transition-colors"
+        className="shrink-0 rounded-control p-0.5 text-ink-faint transition-colors hover:text-ink-body"
         aria-label="Dismiss"
       >
         <X className="h-4 w-4" />
@@ -205,11 +210,11 @@ function ConfirmDialog({
 
   return (
     <div
-      className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-ink/40 p-4 backdrop-blur-[2px]"
       onClick={() => onResolve(false)}
     >
       <div
-        className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl animate-in fade-in zoom-in-95 duration-200"
+        className="w-full max-w-sm rounded-card border border-line bg-surface p-5 shadow-raise animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
         role="alertdialog"
         aria-modal="true"
@@ -218,42 +223,42 @@ function ConfirmDialog({
       >
         <div
           className={cn(
-            "mb-4 flex h-12 w-12 items-center justify-center rounded-full",
-            isDanger ? "bg-red-50" : "bg-amber-50"
+            "mb-3 flex h-9 w-9 items-center justify-center rounded-card",
+            isDanger ? "bg-danger-soft" : "bg-warning-soft"
           )}
         >
           {isDanger ? (
-            <AlertCircle className="h-6 w-6 text-red-600" />
+            <AlertCircle className="h-4.5 w-4.5 text-danger" />
           ) : (
-            <AlertTriangle className="h-6 w-6 text-amber-600" />
+            <AlertTriangle className="h-4.5 w-4.5 text-warning" />
           )}
         </div>
 
-        <h3 id="confirm-title" className="text-lg font-bold text-gray-900">
+        <h3 id="confirm-title" className="text-base font-semibold text-ink">
           {options.title}
         </h3>
         <p
           id="confirm-message"
-          className="mt-2 text-sm text-gray-500 whitespace-pre-line"
+          className="mt-1.5 whitespace-pre-line text-sm text-ink-muted"
         >
           {options.message}
         </p>
 
-        <div className="mt-6 flex gap-3">
+        <div className="mt-5 flex justify-end gap-2">
           <button
             ref={cancelRef}
             onClick={() => onResolve(false)}
-            className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+            className="h-9 rounded-control border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink-body transition-colors hover:bg-canvas"
           >
             {options.cancelLabel || "Cancel"}
           </button>
           <button
             onClick={() => onResolve(true)}
             className={cn(
-              "flex-1 rounded-xl py-2.5 text-sm font-semibold text-white transition-colors",
+              "h-9 rounded-control px-3.5 text-sm font-medium text-white transition-colors",
               isDanger
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-indigo-600 hover:bg-indigo-700"
+                ? "bg-danger hover:brightness-95"
+                : "bg-primary-600 hover:bg-primary-700"
             )}
           >
             {options.confirmLabel || "Confirm"}
@@ -320,13 +325,17 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
     [confirmState]
   );
 
-  const value = useCallback(
+  // useMemo, not useCallback-then-call: `value()` built a fresh object on every
+  // render, so the context identity changed each time the provider re-rendered
+  // (i.e. on every toast shown or dismissed) and re-rendered every consumer.
+  // Now that the whole app's toasts come through here, that reaches every page.
+  const value = useMemo(
     () => ({ toast, confirm }),
     [toast, confirm]
   );
 
   return (
-    <ToastContext.Provider value={value()}>
+    <ToastContext.Provider value={value}>
       {children}
 
       {createPortal(

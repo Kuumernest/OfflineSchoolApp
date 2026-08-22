@@ -1,8 +1,8 @@
 // web/src/pages/exams/results/index.tsx
 import { useState, useMemo }          from "react";
 import { useSearchParams, Link }      from "react-router-dom";
-import { useAuthStore }               from "@/store/auth.store";
 import { useExams }                   from "@/hooks/useExams";
+import { useTranslation } from "react-i18next";
 import {
   useExamStats,
   useRankings,
@@ -92,17 +92,18 @@ const ExamPicker = ({
   exams:      Exam[];
   selectedId: string | null;
   onSelect:   (id: string) => void;
-}) => (
-  <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
+}) => {
+  const { t } = useTranslation();
+  return <div className="bg-white rounded-xl border border-gray-100 overflow-hidden">
     <div className="px-4 py-3 bg-gray-50 border-b border-gray-100">
       <p className="text-xs font-bold text-gray-500 uppercase tracking-wide">
-        Select Exam
+        {t("results.selectExam")}
       </p>
     </div>
 
     {exams.length === 0 ? (
       <div className="px-4 py-8 text-center text-sm text-gray-400">
-        No completed or published exams yet
+        {t("results.noneCompleted")}
       </div>
     ) : (
       <div className="max-h-80 overflow-y-auto divide-y divide-gray-50">
@@ -145,22 +146,23 @@ const ExamPicker = ({
         })}
       </div>
     )}
-  </div>
-);
+  </div>;
+};
 
 // ─────────────────────────────────────────────────────────
 // STATS OVERVIEW — 8 metric cards
 // ─────────────────────────────────────────────────────────
 
 const StatsOverview = ({ stats }: { stats: Stats }) => {
+  const { t } = useTranslation();
   const cards = [
-    { label: "Students",  value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
+    { label: t("academic.student_other"),  value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
     { label: "Passed",    value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
     { label: "Failed",    value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
-    { label: "Pass Rate", value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { label: "Average",   value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
-    { label: "Highest",   value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
-    { label: "Lowest",    value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
+    { label: t("exams.passRate"), value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
+    { label: t("academic.average"),   value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
+    { label: t("results.highest"),   value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
+    { label: t("results.lowest"),    value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
     { label: "Avg GPA",   value: stats.averageGpa.toFixed(2),     color: "text-purple-600",  bg: "bg-purple-50"   },
   ];
 
@@ -186,6 +188,7 @@ const PassFailDonut = ({
 }: {
   passed: number; failed: number; total: number;
 }) => {
+  const { t } = useTranslation();
   const passAngle = total > 0 ? Math.round((passed / total) * 360) : 0;
 
   return (
@@ -208,7 +211,7 @@ const PassFailDonut = ({
             <p className="text-sm font-bold text-gray-900">
               {total > 0 ? Math.round((passed / total) * 100) : 0}%
             </p>
-            <p className="text-xs text-gray-400">Pass</p>
+            <p className="text-xs text-gray-400">{t("examCreate.pass")}</p>
           </div>
         </div>
       </div>
@@ -246,12 +249,13 @@ const ScoreDistributionBar = ({
   average, highest, lowest,
 }: {
   average: number; highest: number; lowest: number;
-}) => (
-  <div className="space-y-3">
+}) => {
+  const { t } = useTranslation();
+  return <div className="space-y-3">
     {[
-      { label: "Highest", value: highest, color: "bg-emerald-500" },
-      { label: "Average", value: average, color: "bg-indigo-500"  },
-      { label: "Lowest",  value: lowest,  color: "bg-red-500"     },
+      { label: t("results.highest"), value: highest, color: "bg-emerald-500" },
+      { label: t("academic.average"), value: average, color: "bg-indigo-500"  },
+      { label: t("results.lowest"),  value: lowest,  color: "bg-red-500"     },
     ].map(({ label, value, color }) => (
       <div key={label} className="flex items-center gap-3">
         <span className="w-14 text-xs text-gray-500 text-right">{label}</span>
@@ -266,8 +270,8 @@ const ScoreDistributionBar = ({
         </span>
       </div>
     ))}
-  </div>
-);
+  </div>;
+};
 
 // ─────────────────────────────────────────────────────────
 // GRADE DISTRIBUTION CHART
@@ -280,13 +284,14 @@ const GradeDistributionChart = ({
   distribution: Record<string, number>;
   total:        number;
 }) => {
+  const { t } = useTranslation();
   const entries = Object.entries(distribution)
     .sort(([a], [b]) => a.localeCompare(b));
 
   if (entries.length === 0) {
     return (
       <p className="text-sm text-gray-400 text-center py-6">
-        No grade data available
+        {t("results.noGradeData")}
       </p>
     );
   }
@@ -341,10 +346,11 @@ const SubjectPerformanceTable = ({
 }: {
   subjects: SubjectStat[];
 }) => {
+  const { t } = useTranslation();
   if (subjects.length === 0) {
     return (
       <p className="text-sm text-gray-400 text-center py-6">
-        No subject breakdown available
+        {t("results.noBreakdown")}
       </p>
     );
   }
@@ -358,12 +364,12 @@ const SubjectPerformanceTable = ({
         <thead className="bg-gray-50 text-xs font-bold text-gray-500
                           uppercase tracking-wide">
           <tr>
-            <th className="px-4 py-2.5 text-left">Subject</th>
-            <th className="px-4 py-2.5 text-right">Average</th>
-            <th className="px-4 py-2.5 text-right">Highest</th>
-            <th className="px-4 py-2.5 text-right">Lowest</th>
-            <th className="px-4 py-2.5 text-right">Pass Rate</th>
-            <th className="px-4 py-2.5 text-right">Students</th>
+            <th className="px-4 py-2.5 text-left">{t("academic.subject")}</th>
+            <th className="px-4 py-2.5 text-right">{t("academic.average")}</th>
+            <th className="px-4 py-2.5 text-right">{t("results.highest")}</th>
+            <th className="px-4 py-2.5 text-right">{t("results.lowest")}</th>
+            <th className="px-4 py-2.5 text-right">{t("exams.passRate")}</th>
+            <th className="px-4 py-2.5 text-right">{t("academic.student_other")}</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -415,6 +421,7 @@ const RankingsTable = ({
   examId: string;
   scope:  RankScope;
 }) => {
+  const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const { data, isLoading } = useRankings(examId, scope);
   const rankings: ResultSummary[] = data?.data ?? [];
@@ -452,8 +459,8 @@ const RankingsTable = ({
     return (
       <EmptyState
         icon="🏆"
-        title="No rankings yet"
-        subtitle="Process results first to generate rankings"
+        title={t("results.noRankings")}
+        subtitle={t("results.processFirst")}
       />
     );
   }
@@ -466,7 +473,7 @@ const RankingsTable = ({
           type="text"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search by name, admission number or class…"
+          placeholder={t("results.searchPh")}
           className="w-full px-3 py-2 border border-gray-200 rounded-lg
                      text-sm focus:outline-none focus:ring-2
                      focus:ring-primary-400"
@@ -478,15 +485,15 @@ const RankingsTable = ({
           <thead className="bg-gray-50 text-xs font-bold text-gray-500
                             uppercase tracking-wide">
             <tr>
-              <th className="px-4 py-3 text-left">Pos</th>
-              <th className="px-4 py-3 text-left">Student</th>
-              <th className="px-4 py-3 text-left">Class</th>
-              <th className="px-4 py-3 text-right">Score</th>
+              <th className="px-4 py-3 text-left">{t("results.pos")}</th>
+              <th className="px-4 py-3 text-left">{t("academic.student")}</th>
+              <th className="px-4 py-3 text-left">{t("academic.class")}</th>
+              <th className="px-4 py-3 text-right">{t("academic.score")}</th>
               <th className="px-4 py-3 text-right">%</th>
-              <th className="px-4 py-3 text-center">Grade</th>
+              <th className="px-4 py-3 text-center">{t("academic.grade")}</th>
               <th className="px-4 py-3 text-center">GPA</th>
-              <th className="px-4 py-3 text-center">Subjects</th>
-              <th className="px-4 py-3 text-center">Status</th>
+              <th className="px-4 py-3 text-center">{t("academic.subject_other")}</th>
+              <th className="px-4 py-3 text-center">{t("common.status")}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -675,8 +682,8 @@ const TopBottomStudents = ({
 // ─────────────────────────────────────────────────────────
 
 export default function ExamResultsPage() {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
-  const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
   const [selectedExamId, setSelectedExamId] = useState<string | null>(
     searchParams.get("examId") ?? null
@@ -721,7 +728,7 @@ export default function ExamResultsPage() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
-            Results Analytics
+            {t("results.analytics")}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
             Select a completed exam to view performance data and rankings
@@ -748,7 +755,7 @@ export default function ExamResultsPage() {
             onSelect={handleSelectExam}
           />
           <p className="text-xs text-gray-400 text-center">
-            Only completed & published exams shown
+            {t("results.onlyCompleted")}
           </p>
         </div>
 
@@ -758,7 +765,7 @@ export default function ExamResultsPage() {
             <div className="bg-white rounded-xl border border-gray-100">
               <EmptyState
                 icon="📊"
-                title="Select an exam to view analytics"
+                title={t("results.selectToView")}
                 subtitle="Choose a completed or published exam from the list on the left"
               />
             </div>
@@ -770,8 +777,8 @@ export default function ExamResultsPage() {
             <div className="bg-white rounded-xl border border-gray-100">
               <EmptyState
                 icon="🧮"
-                title="No results found"
-                subtitle="Process the exam results first from the exam detail page"
+                title={t("results.none")}
+                subtitle={t("results.processFromDetail")}
               />
               {selectedExamId && (
                 <div className="flex justify-center pb-8">
@@ -845,7 +852,7 @@ export default function ExamResultsPage() {
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="bg-white rounded-xl border border-gray-100 p-5">
                       <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                        Pass / Fail Split
+                        {t("results.passFailSplit")}
                       </h3>
                       <PassFailDonut
                         passed={stats.passed}
@@ -856,7 +863,7 @@ export default function ExamResultsPage() {
 
                     <div className="bg-white rounded-xl border border-gray-100 p-5">
                       <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                        Score Distribution
+                        {t("results.scoreDistribution")}
                       </h3>
                       <ScoreDistributionBar
                         average={stats.average}
@@ -869,7 +876,7 @@ export default function ExamResultsPage() {
                   {/* Grade distribution */}
                   <div className="bg-white rounded-xl border border-gray-100 p-5">
                     <h3 className="font-semibold text-gray-900 mb-4 text-sm">
-                      Grade Distribution
+                      {t("results.gradeDistribution")}
                     </h3>
                     <GradeDistributionChart
                       distribution={stats.gradeDistribution}
@@ -890,7 +897,7 @@ export default function ExamResultsPage() {
                   <div className="bg-white rounded-xl border border-gray-100 p-4
                                   flex items-center justify-between">
                     <p className="text-sm font-semibold text-gray-700">
-                      Rank students by:
+                      {t("results.rankBy")}
                     </p>
                     <div className="flex gap-1">
                       {RANK_SCOPES.map((s) => (
@@ -939,7 +946,7 @@ export default function ExamResultsPage() {
                                   overflow-hidden">
                     <div className="px-5 py-3 border-b border-gray-100">
                       <h3 className="font-semibold text-gray-900 text-sm">
-                        Performance by Subject
+                        {t("results.bySubject")}
                         <span className="ml-2 text-xs text-gray-400 font-normal">
                           {stats.subjectStats.length} subject
                           {stats.subjectStats.length !== 1 ? "s" : ""}
@@ -953,7 +960,7 @@ export default function ExamResultsPage() {
                   {stats.subjectStats.length > 0 && (
                     <div className="bg-white rounded-xl border border-gray-100 p-5">
                       <h3 className="font-semibold text-gray-900 text-sm mb-4">
-                        Subject Pass Rates
+                        {t("results.subjectPassRates")}
                       </h3>
                       <div className="space-y-3">
                         {[...stats.subjectStats]

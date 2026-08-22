@@ -139,6 +139,17 @@ export default function LoginScreen() {
             <Text style={styles.applyBtnText}>Apply for Admission →</Text>
           </TouchableOpacity>
         </View>
+
+        {/* ── Parent portal ──
+            A guardian has no account here — they sign in with their child's
+            admission number and a code from the school office, so this is a
+            separate door rather than another way through this form. */}
+        <TouchableOpacity
+          style={styles.portalLink}
+          onPress={() => router.push("/portal")}
+        >
+          <Text style={styles.portalLinkText}>Parent portal →</Text>
+        </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -146,6 +157,8 @@ export default function LoginScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB" },
+  portalLink:     { marginTop: 18, alignItems: "center", paddingVertical: 10 },
+  portalLinkText: { color: "#4F46E5", fontSize: 14, fontWeight: "600" },
   scroll:    { padding: 24, paddingTop: 60 },
   header:    { alignItems: "center", marginBottom: 32 },
   emoji:     { fontSize: 48, marginBottom: 8 },

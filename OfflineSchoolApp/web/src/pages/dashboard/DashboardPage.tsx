@@ -1,14 +1,16 @@
 // web/src/pages/dashboard/DashboardPage.tsx
 import { useQuery }        from "@tanstack/react-query";
 import { useNavigate }     from "react-router-dom";
+import { useTranslation }  from "react-i18next";
 import {
   Users, GraduationCap, School, FileText,
-  BookOpen, CheckSquare, TrendingUp, AlertCircle,
-  Clock, UserCheck,
+  BookOpen, CheckSquare, AlertCircle, ArrowRight,
 } from "lucide-react";
 
 import { useUser }               from "@/store/auth.store";
 import { PageSpinner }           from "@/components/ui/Spinner";
+import { PageHeader }            from "@/components/ui/PageHeader";
+import { useFormat }              from "@/i18n/format";
 import StatCard                  from "@/components/dashboard/StatCard";
 import RecentExams               from "@/components/dashboard/RecentExams";
 import RecentAnnouncements       from "@/components/dashboard/RecentAnnouncements";
@@ -16,11 +18,10 @@ import ExamStatusChart           from "@/components/dashboard/ExamStatusChart";
 import AttendanceWidget          from "@/components/dashboard/AttendanceWidget";
 import SchoolBanner              from "@/components/dashboard/SchoolBanner";
 import SystemHealthGrid          from "@/components/dashboard/SystemHealthGrid";
+import QuickActions              from "@/components/dashboard/QuickActions";
 import AlertsPanel, {
   deriveAlerts,
 }                                from "@/components/dashboard/AlertsPanel";
-import ModulesGrid               from "@/components/dashboard/ModulesGrid";
-import { QUICK_ACTIONS }         from "@/constants/dashboard.constants";
 
 import {
   fetchStudentStats,
@@ -45,30 +46,31 @@ function ErrorBanner({ message }: { message: string }) {
   return (
     <div
       role="alert"
-      className="
-        flex items-center gap-2 rounded-lg
-        border border-red-200 dark:border-red-800
-        bg-red-50 dark:bg-red-900/20
-        px-4 py-3 text-sm text-red-700 dark:text-red-400
-      "
+      className="flex items-start gap-2 rounded-card border border-danger-line bg-danger-soft px-4 py-3 text-sm text-danger"
     >
-      <AlertCircle className="h-4 w-4 shrink-0" />
+      <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
     </div>
   );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PENDING APPLICATIONS BANNER
+// PENDING APPLICATIONS
+//
+// This used to appear three times on one screen — a banner at the top, the
+// subtitle of the Students stat, and a large amber quick-access card below it.
+// Saying the same thing three times does not make it more urgent, it makes the
+// page look padded. One row, once.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function PendingApplicationsBanner({
+function PendingApplications({
   count,
   onClick,
 }: {
   count:   number;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   if (count === 0) return null;
 
   return (
@@ -76,39 +78,31 @@ function PendingApplicationsBanner({
       type="button"
       onClick={onClick}
       className="
-        w-full flex items-center gap-3 rounded-xl
-        border border-amber-200 bg-amber-50
-        px-5 py-4 text-left transition
-        hover:bg-amber-100
-        dark:border-amber-700 dark:bg-amber-900/20
-        dark:hover:bg-amber-900/30
+        group flex w-full items-center gap-3 rounded-card
+        border border-warning-line bg-warning-soft px-4 py-3
+        text-left transition-colors hover:brightness-[0.98]
       "
     >
-      {/* Pulsing dot */}
-      <span className="relative flex h-3 w-3 shrink-0">
-        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-400 opacity-75" />
-        <span className="relative inline-flex h-3 w-3 rounded-full bg-amber-500" />
-      </span>
-
-      <div className="flex-1 min-w-0">
-        <p className="text-sm font-semibold text-amber-900 dark:text-amber-300">
-          {count} Pending Student Application{count !== 1 ? "s" : ""}
-        </p>
-        <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-          {count === 1
-            ? "1 student is waiting for review and approval."
-            : `${count} students are waiting for review and approval.`}
-          {" "}Click to review →
-        </p>
-      </div>
-
-      {/* Count badge */}
-      <span className="
-        shrink-0 inline-flex items-center justify-center
-        h-8 w-8 rounded-full bg-amber-500 text-white
-        text-sm font-bold
-      ">
-        {count > 99 ? "99+" : count}
+      <span
+        className="h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+        aria-hidden="true"
+      />
+      <p className="min-w-0 flex-1 text-sm text-warning">
+        {/*
+          Pluralisation goes through i18next rather than `count !== 1 ? "s" : ""`.
+          French pluralises differently — 0 takes the singular — so the English
+          rule baked into JSX produces wrong French no matter the translation.
+        */}
+        <span className="font-semibold">
+          {t("dashboard.pendingApplications", { count })}
+        </span>
+        <span className="text-warning/80">
+          {" "}{t("dashboard.awaitingReview")}
+        </span>
+      </p>
+      <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-warning">
+        {t("dashboard.review")}
+        <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
       </span>
     </button>
   );
@@ -119,6 +113,8 @@ function PendingApplicationsBanner({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
+  const { t }    = useTranslation();
+  const fmt      = useFormat();
   const user     = useUser();
   const navigate = useNavigate();
   const schoolId = user?.schoolId ?? "";
@@ -230,281 +226,151 @@ export default function DashboardPage() {
 
   const alerts = hd ? deriveAlerts(hd) : [];
 
+  // Through the shared formatter, so the date follows the chosen language
+  // rather than the browser's locale — those disagree the moment a user
+  // switches to French on an English-configured machine.
+  const today = fmt.date(new Date());
+
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
 
-      {/* ── Welcome header ── */}
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
-            Welcome back, {user?.name?.split(" ")[0]} 👋
-          </h2>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Here&apos;s what&apos;s happening at your school today.
-          </p>
-        </div>
-
-        {/* Live attendance pill */}
-        {ad && (
-          <div className="
-            flex items-center gap-2 rounded-full
-            border border-gray-200 dark:border-gray-700
-            bg-white dark:bg-gray-800
-            px-4 py-2 shadow-sm text-sm
-          ">
-            <span
-              className={`h-2 w-2 rounded-full ${
-                ad.rate >= 75 ? "bg-green-500" : "bg-red-500"
-              }`}
-              aria-hidden="true"
-            />
-            <span className="font-medium text-gray-700 dark:text-gray-300">
-              Today&apos;s Attendance:
-            </span>
-            <span className={`font-bold ${
-              ad.rate >= 75 ? "text-green-600" : "text-red-600"
-            }`}>
-              {ad.rate}%
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* ── School banner ── */}
-      {schoolQ.data && <SchoolBanner school={schoolQ.data} />}
-
-      {/* ── Pending applications banner ── */}
-      <PendingApplicationsBanner
-        count={pendingCount}
-        onClick={() => navigate("/students/applications")}
+      {/*
+        One title, no greeting. "Welcome back, Lenora 👋" is the kind of line
+        that reads warm on day one and as noise by day three — it occupied the
+        most valuable strip of the page and carried no information.
+      */}
+      <PageHeader
+        title={t("dashboard.title")}
+        meta={
+          <>
+            <span>{today}</span>
+            {schoolQ.data && (
+              <>
+                <span aria-hidden="true">·</span>
+                <SchoolBanner school={schoolQ.data} />
+              </>
+            )}
+          </>
+        }
       />
 
-      {/* ── Core error (informational — data still shows as zeros) ── */}
-      {coreError && (
-        <ErrorBanner
-          message={
-            (coreError as Error)?.message ??
-            "Some dashboard stats could not be loaded."
-          }
-        />
+      {/* ── Anything needing attention, grouped ───────────────────────────── */}
+      {(coreError || pendingCount > 0 || alerts.length > 0) && (
+        <div className="space-y-2">
+          {coreError && (
+            <ErrorBanner
+              message={
+                (coreError as Error)?.message ?? t("dashboard.statsFailed")
+              }
+            />
+          )}
+
+          <PendingApplications
+            count={pendingCount}
+            onClick={() => navigate("/students/applications")}
+          />
+
+          {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
+        </div>
       )}
 
-      {/* ══ ROW 1 — Stat Cards ══════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-4">
-
+      {/* ── Metrics ───────────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         <StatCard
-          title="Students"
-          value={sd?.total ?? 0}
+          title={t("academic.student_other")}
+          value={fmt.number(sd?.total ?? 0)}
           subtitle={
             pendingCount > 0
-              ? `${pendingCount} pending approval`
-              : `${sd?.active ?? 0} active`
+              ? t("dashboard.pendingCount", { count: pendingCount })
+              : t("dashboard.activeCount",  { count: sd?.active ?? 0 })
           }
-          subtitleColor={pendingCount > 0 ? "text-amber-600 font-semibold" : undefined}
+          subtitleColor={pendingCount > 0 ? "text-warning font-medium" : undefined}
           icon={GraduationCap}
-          iconColor="text-blue-600"
-          iconBg="bg-blue-50 dark:bg-blue-900/20"
           href="/students"
         />
-
         <StatCard
-          title="Teachers"
-          value={td?.total ?? 0}
-          subtitle={`${td?.active ?? 0} active`}
+          title={t("academic.teacher_other")}
+          value={fmt.number(td?.total ?? 0)}
+          subtitle={t("dashboard.activeCount", { count: td?.active ?? 0 })}
           icon={Users}
-          iconColor="text-green-600"
-          iconBg="bg-green-50 dark:bg-green-900/20"
           href="/teachers"
         />
-
         <StatCard
-          title="Classes"
-          value={cd?.total ?? 0}
-          subtitle={`${cd?.withSubjects ?? 0} with subjects`}
+          title={t("academic.class_other")}
+          value={fmt.number(cd?.total ?? 0)}
+          subtitle={t("dashboard.withSubjects", { count: cd?.withSubjects ?? 0 })}
           icon={School}
-          iconColor="text-purple-600"
-          iconBg="bg-purple-50 dark:bg-purple-900/20"
           href="/classes"
         />
-
         <StatCard
-          title="Subjects"
-          value={bd?.total ?? 0}
-          subtitle="Across all classes"
+          title={t("academic.subject_other")}
+          value={fmt.number(bd?.total ?? 0)}
+          subtitle={t("dashboard.acrossAllClasses")}
           icon={BookOpen}
-          iconColor="text-pink-600"
-          iconBg="bg-pink-50 dark:bg-pink-900/20"
           href="/classes?tab=subjects"
         />
-
         <StatCard
-          title="Exams"
-          value={ed?.total ?? 0}
-          subtitle={`${ed?.ongoing ?? 0} ongoing`}
+          title={t("nav.exams")}
+          value={fmt.number(ed?.total ?? 0)}
+          subtitle={t("dashboard.ongoingCount", { count: ed?.ongoing ?? 0 })}
           icon={FileText}
-          iconColor="text-orange-600"
-          iconBg="bg-orange-50 dark:bg-orange-900/20"
           href="/exams"
         />
-
         <StatCard
-          title="Attendance"
-          value={`${ad?.rate ?? 0}%`}
-          subtitle={`${ad?.todayPresent ?? 0} present today`}
+          title={t("nav.attendance")}
+          value={`${fmt.number(ad?.rate ?? 0)}%`}
+          subtitle={t("dashboard.presentToday", { count: ad?.todayPresent ?? 0 })}
           icon={CheckSquare}
-          iconColor="text-teal-600"
-          iconBg="bg-teal-50 dark:bg-teal-900/20"
           href="/attendance"
         />
-
       </div>
 
-      {/* ══ ROW 2 — Quick-access cards when applications are pending ════ */}
-      {pendingCount > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/*
+        Content column + rail, rather than six full-width bands stacked down
+        the page. The wide column takes the things you read (lists of exams and
+        notices); the narrow one takes the things you glance at.
+      */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
 
-          <button
-            type="button"
-            onClick={() => navigate("/students/applications")}
-            className="
-              flex items-center gap-4 rounded-xl text-left transition
-              border border-amber-200 bg-amber-50
-              px-5 py-4 hover:bg-amber-100
-              dark:border-amber-700 dark:bg-amber-900/20
-            "
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-500 text-white">
-              <Clock className="h-6 w-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-amber-900 dark:text-amber-200">
-                Review Applications
-              </p>
-              <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
-                {pendingCount} student{pendingCount !== 1 ? "s" : ""} awaiting approval
-              </p>
-            </div>
-          </button>
+        <div className="space-y-4 lg:col-span-2">
+          <RecentExams exams={recentExamsQ.data ?? []} />
 
-          <button
-            type="button"
-            onClick={() => navigate("/students?status=approved")}
-            className="
-              flex items-center gap-4 rounded-xl text-left transition
-              border border-emerald-200 bg-emerald-50
-              px-5 py-4 hover:bg-emerald-100
-              dark:border-emerald-700 dark:bg-emerald-900/20
-            "
-          >
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-500 text-white">
-              <UserCheck className="h-6 w-6" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-emerald-900 dark:text-emerald-200">
-                Approved Students
-              </p>
-              <p className="text-xs text-emerald-700 dark:text-emerald-400 mt-0.5">
-                {sd?.total ?? 0} enrolled
-              </p>
-            </div>
-          </button>
+          <RecentAnnouncements
+            announcements={announcementsQ.data ?? []}
+            loading={announcementsQ.isLoading}
+            error={
+              announcementsQ.isError
+                ? ((announcementsQ.error as Error)?.message ??
+                    "Failed to load announcements")
+                : undefined
+            }
+          />
 
+          {hd && <SystemHealthGrid stats={hd} />}
         </div>
-      )}
 
-      {/* ══ ROW 3 — System Health + Alerts ═════════════════════════════ */}
-      <div className="space-y-4">
-        {hd ? (
-          <SystemHealthGrid stats={hd} />
-        ) : healthQ.isLoading ? (
-          <div className="
-            flex h-44 items-center justify-center rounded-xl
-            border border-gray-200 dark:border-gray-700
-            bg-white dark:bg-gray-800 shadow-sm
-          ">
-            <span className="text-sm text-gray-400">Loading health stats…</span>
-          </div>
-        ) : null}
+        <div className="space-y-4">
+          <AttendanceWidget
+            present={ad?.todayPresent ?? 0}
+            absent={ad?.todayAbsent   ?? 0}
+            rate={ad?.rate            ?? 0}
+            loading={attendanceQ.isLoading}
+          />
 
-        {alerts.length > 0 && <AlertsPanel alerts={alerts} />}
-      </div>
+          <ExamStatusChart
+            stats={{
+              ongoing:   ed?.ongoing   ?? 0,
+              completed: ed?.completed ?? 0,
+              draft:     ed?.draft     ?? 0,
+              total:     ed?.total     ?? 0,
+            }}
+          />
 
-      {/* ══ ROW 4 — Chart + Attendance + Announcements ══════════════════ */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <ExamStatusChart
-          stats={{
-            ongoing:   ed?.ongoing   ?? 0,
-            completed: ed?.completed ?? 0,
-            draft:     ed?.draft     ?? 0,
-            total:     ed?.total     ?? 0,
-          }}
-        />
-        <AttendanceWidget
-          present={ad?.todayPresent ?? 0}
-          absent={ad?.todayAbsent   ?? 0}
-          rate={ad?.rate            ?? 0}
-          loading={attendanceQ.isLoading}
-        />
-        <RecentAnnouncements
-          announcements={announcementsQ.data ?? []}
-          loading={announcementsQ.isLoading}
-          error={
-            announcementsQ.isError
-              ? ((announcementsQ.error as Error)?.message ??
-                  "Failed to load announcements")
-              : undefined
-          }
-        />
-      </div>
-
-      {/* ══ ROW 5 — Recent Exams + Quick Actions ════════════════════════ */}
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-
-        <RecentExams exams={recentExamsQ.data ?? []} />
-
-        {/* Quick Actions */}
-        <div className="
-          rounded-xl border border-gray-200 dark:border-gray-700
-          bg-white dark:bg-gray-800 p-5 shadow-sm
-        ">
-          <div className="flex items-center gap-2 mb-5">
-            <TrendingUp className="h-5 w-5 text-indigo-600" aria-hidden="true" />
-            <h3 className="font-semibold text-gray-900 dark:text-white">
-              Quick Actions
-            </h3>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-3 2xl:grid-cols-4 gap-3">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.label}
-                type="button"
-                onClick={() => navigate(action.path)}
-                className="
-                  flex min-h-24 flex-col items-center justify-center gap-2
-                  rounded-xl border border-gray-200 dark:border-gray-700
-                  px-3 py-4 text-center
-                  hover:bg-gray-50 dark:hover:bg-gray-700
-                  transition-colors
-                "
-              >
-                <span className="text-2xl" aria-hidden="true">
-                  {action.emoji}
-                </span>
-                <span className="text-xs sm:text-sm font-medium text-gray-700 dark:text-gray-300 leading-tight">
-                  {action.label}
-                </span>
-              </button>
-            ))}
-          </div>
+          <QuickActions />
         </div>
 
       </div>
-
-      {/* ══ ROW 6 — Modules Grid ════════════════════════════════════════ */}
-      <ModulesGrid />
-
     </div>
   );
 }

@@ -4,8 +4,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api from "@/services/api";
 import { ArrowLeft, Edit2, Loader2, AlertCircle, Info } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 export default function TemplatePreviewPage() {
+  const { t } = useTranslation();
   const navigate     = useNavigate();
   const [params]     = useSearchParams();
   const user         = useAuthStore((s) => s.user);
@@ -76,7 +78,7 @@ export default function TemplatePreviewPage() {
                        border border-blue-200 transition-colors"
           >
             <Edit2 size={14} />
-            Edit
+            {t("common.edit")}
           </button>
         )}
       </div>
@@ -111,7 +113,7 @@ export default function TemplatePreviewPage() {
             className="bg-blue-600 text-white text-sm font-semibold
                        px-5 py-2.5 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Go Back
+            {t("templates.goBack")}
           </button>
         </div>
       )}
@@ -122,7 +124,7 @@ export default function TemplatePreviewPage() {
           srcDoc={html}
           className="flex-1 w-full border-0"
           sandbox="allow-same-origin"
-          title="Report Preview"
+          title={t("templates.previewTitle")}
           style={{ minHeight: "calc(100vh - 64px)" }}
         />
       )}

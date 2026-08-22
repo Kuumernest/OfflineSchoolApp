@@ -9,6 +9,7 @@ import {
 }                                                   from "lucide-react";
 import { cn }                                       from "@/utils/cn";
 import { useAuthStore }                             from "@/store/auth.store";
+import { useTranslation } from "react-i18next";
 import {
   fetchNotifications,
   markAsRead,
@@ -83,6 +84,7 @@ function timeAgo(dateStr: string): string {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function NotificationPanel() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
@@ -97,7 +99,7 @@ export default function NotificationPanel() {
   // ── Close on outside click ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
         setIsOpen(false);
       }
     };
@@ -201,7 +203,7 @@ export default function NotificationPanel() {
           <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h3 className="text-sm font-semibold text-gray-800">
-                Notifications
+                {t("notifications.title")}
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
                 {unreadCount > 0
@@ -221,7 +223,7 @@ export default function NotificationPanel() {
                   className="text-xs text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                 >
                   <CheckCheck className="w-3.5 h-3.5" />
-                  Read all
+                  {t("notifications.readAll")}
                 </button>
               )}
               <button
@@ -279,30 +281,30 @@ export default function NotificationPanel() {
                   <>
                     <AlertCircle className="w-10 h-10 text-green-200 mx-auto mb-3" />
                     <p className="text-sm font-medium text-gray-500">
-                      No active alerts
+                      {t("notifications.noAlerts")}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      Your system is running smoothly.
+                      {t("notifications.smooth")}
                     </p>
                   </>
                 ) : filter === "unread" ? (
                   <>
                     <Bell className="w-10 h-10 text-gray-200 mx-auto mb-3" />
                     <p className="text-sm font-medium text-gray-500">
-                      All caught up!
+                      {t("notifications.allRead")}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      You've read all your notifications.
+                      {t("notifications.allReadHint")}
                     </p>
                   </>
                 ) : (
                   <>
                     <Bell className="w-10 h-10 text-gray-200 mx-auto mb-3" />
                     <p className="text-sm font-medium text-gray-500">
-                      No notifications yet
+                      {t("notifications.none")}
                     </p>
                     <p className="text-xs text-gray-400 mt-1">
-                      You'll see notifications here when they arrive.
+                      {t("notifications.noneHint")}
                     </p>
                   </>
                 )}
@@ -378,20 +380,20 @@ export default function NotificationPanel() {
                       {n.type === "alert" && (
                         <span className="text-xs bg-red-50 text-red-600 px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
                           <ShieldAlert className="w-3 h-3" />
-                          Alert
+                          {t("notifications.alert")}
                         </span>
                       )}
 
                       {n.priority === "urgent" && n.type !== "alert" && (
                         <span className="text-xs text-red-600 bg-red-50 px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
                           <AlertTriangle className="w-3 h-3" />
-                          Urgent
+                          {t("notifications.urgent")}
                         </span>
                       )}
 
                       {n.priority === "high" && n.type !== "alert" && (
                         <span className="text-xs text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded font-medium">
-                          High
+                          {t("notifications.high")}
                         </span>
                       )}
 

@@ -2,7 +2,6 @@ import { useState, useCallback, useId } from "react";
 import { useNavigate }                  from "react-router-dom";
 import { useQuery, useMutation }        from "@tanstack/react-query";
 import {
-  Plus,
   BookOpen,
   School,
   ChevronLeft,
@@ -18,6 +17,7 @@ import { fetchTeachers } from "@/services/teacher.service";
 import { createSubject } from "@/services/subject.service";
 import { cn }            from "@/utils/cn";
 import type { Class, Teacher } from "@/types";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -136,6 +136,7 @@ function ResultsSummary({
   onDone:       () => void;
   onAddAnother: () => void;
 }) {
+  const { t } = useTranslation();
   const succeeded = results.filter((r) => r.ok);
   const failed    = results.filter((r) => !r.ok);
 
@@ -182,14 +183,14 @@ function ResultsSummary({
           onClick={onAddAnother}
           className="w-full rounded-xl border-2 border-indigo-600 py-3 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors"
         >
-          Add Another Subject
+          {t("subjectsAdd.another")}
         </button>
         <button
           type="button"
           onClick={onDone}
           className="w-full rounded-xl bg-emerald-600 py-3 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
         >
-          Done
+          {t("common.done")}
         </button>
       </div>
     </div>
@@ -201,6 +202,7 @@ function ResultsSummary({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AddSubjectPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
@@ -367,7 +369,7 @@ export default function AddSubjectPage() {
       <div className="min-h-screen bg-gray-50">
         <header className="sticky top-0 z-20 flex items-center gap-4 border-b border-gray-200 bg-white px-6 py-4">
           <div className="flex-1">
-            <h1 className="text-xl font-bold text-gray-900">Subject Created</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.created")}</h1>
             <p className="text-sm text-gray-500">
               "{form.name.trim()}" — results below
             </p>
@@ -397,15 +399,15 @@ export default function AddSubjectPage() {
           type="button"
           onClick={handleDiscard}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-          aria-label="Go back"
+          aria-label={t("common.goBack")}
         >
           <ChevronLeft size={20} aria-hidden="true" />
         </button>
 
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">Add Subject</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("subjectsAdd.title")}</h1>
           <p className="text-sm text-gray-500">
-            Create a subject and assign it to one or more classes
+            {t("subjectsAdd.blurb")}
           </p>
         </div>
       </header>
@@ -425,7 +427,7 @@ export default function AddSubjectPage() {
             {/* Subject name */}
             <Field
               id={nameId}
-              label="Subject Name"
+              label={t("subjects.nameLabel")}
               required
               error={errors.name}
               hint="Use a clear, recognisable name."
@@ -448,7 +450,7 @@ export default function AddSubjectPage() {
                   type="text"
                   value={form.name}
                   onChange={(e) => handleChange("name", e.target.value)}
-                  placeholder="e.g. Mathematics, English Language"
+                  placeholder={t("subjectsAdd.namePh")}
                   maxLength={MAX_NAME_LENGTH + 5}
                   disabled={isBusy}
                   autoFocus
@@ -473,7 +475,7 @@ export default function AddSubjectPage() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2 pt-1">
-                <span className="text-xs text-gray-400" aria-hidden="true">Examples:</span>
+                <span className="text-xs text-gray-400" aria-hidden="true">{t("subjectsAdd.examples")}</span>
                 {EXAMPLES.map((ex) => (
                   <button
                     key={ex}
@@ -491,7 +493,7 @@ export default function AddSubjectPage() {
             {/* Subject code */}
             <Field
               id={codeId}
-              label="Subject Code"
+              label={t("subjects.codeLabel")}
               hint="Optional short code, e.g. MATH101"
             >
               <input
@@ -499,7 +501,7 @@ export default function AddSubjectPage() {
                 type="text"
                 value={form.code}
                 onChange={(e) => handleChange("code", e.target.value)}
-                placeholder="e.g. MATH101"
+                placeholder={t("subjects.codePh")}
                 maxLength={MAX_CODE_LENGTH}
                 disabled={isBusy}
                 aria-describedby={`${codeId}-hint`}
@@ -514,7 +516,7 @@ export default function AddSubjectPage() {
             {/* Classes multi-select */}
             <Field
               id={classesId}
-              label="Classes"
+              label={t("academic.class_other")}
               required
               error={errors.classIds}
               hint="Select all classes that will teach this subject."
@@ -534,7 +536,7 @@ export default function AddSubjectPage() {
                   </p>
                 ) : classes.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-gray-400">
-                    No classes found. Create a class first.
+                    {t("subjectsAdd.noClasses")}
                   </p>
                 ) : (
                   <>
@@ -626,7 +628,7 @@ export default function AddSubjectPage() {
             {/* Teacher */}
             <Field
               id={teacherId}
-              label="Assigned Teacher"
+              label={t("classes.assignedTeacher")}
               hint="Optional — you can assign a teacher later."
             >
               <select
@@ -675,7 +677,7 @@ export default function AddSubjectPage() {
                   <div
                     className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"
                     role="status"
-                    aria-label="Creating subject…"
+                    aria-label={t("subjectsAdd.creating")}
                   />
                   <span>
                     Creating in {form.classIds.length}{" "}

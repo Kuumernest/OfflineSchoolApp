@@ -1,22 +1,26 @@
-// web/src/pages/admin/students/applications/index.tsx
+// web/src/pages/students/applications/index.tsx
+//
+// Imports use the @/ alias rather than relative paths. They were written as
+// "../../../../" for an earlier location (pages/admin/students/applications/),
+// which from here resolves above src/ — every one of them failed to resolve.
 
 import React, { useState, useCallback } from "react";
 import { useNavigate }                   from "react-router-dom";
 
-import { useApplications, STALE_DAYS }   from "../../../../hooks/useApplications";
-import { SummaryCard }                   from "../../../../components/applications/SummaryCard";
-import { ApplicationCard }               from "../../../../components/applications/ApplicationCard";
-import { ReviewModal }                   from "../../../../components/applications/ReviewModal";
-import { EmptyState }                    from "../../../../components/applications/EmptyState";
-import { ErrorBanner }                   from "../../../../components/applications/ErrorBanner";
-import { Toast }                         from "../../../../components/applications/Toast";
-import { Spinner }                       from "../../../../components/applications/Spinner";
+import { useApplications, STALE_DAYS }   from "@/hooks/useApplications";
+import { SummaryCard }                   from "@/components/applications/SummaryCard";
+import { ApplicationCard }               from "@/components/applications/ApplicationCard";
+import { ReviewModal }                   from "@/components/applications/ReviewModal";
+import { EmptyState }                    from "@/components/applications/EmptyState";
+import { ErrorBanner }                   from "@/components/applications/ErrorBanner";
+import { Toast }                         from "@/components/applications/Toast";
+import { Spinner }                       from "@/components/applications/Spinner";
+import { useTranslation } from "react-i18next";
 
 import type {
   NormalisedApplication,
-  ApprovalResult,
   ToastMessage,
-} from "../../../../types/applications";
+} from "@/types/applications";
 
 // ─── Tiny icon components ────────────────────────────────────────────────────
 
@@ -76,8 +80,9 @@ const PageHeader: React.FC<PageHeaderProps> = ({
   onRefresh,
   refreshing,
   subtitle,
-}) => (
-  <header
+}) => {
+  const { t } = useTranslation();
+  return <header
     className="flex items-center gap-3 px-5 pt-6 sm:pt-8 pb-4 bg-white
                border-b border-gray-100 flex-shrink-0"
   >
@@ -86,14 +91,14 @@ const PageHeader: React.FC<PageHeaderProps> = ({
       className="w-10 h-10 rounded-xl bg-gray-100 flex items-center
                  justify-center hover:bg-gray-200 transition-colors
                  focus:outline-none focus:ring-2 focus:ring-gray-300"
-      aria-label="Go back"
+      aria-label={t("common.goBack")}
     >
       <SvgIcon d={PATHS.back} color="#111827" size={22} />
     </button>
 
     <div className="flex-1 min-w-0">
       <h1 className="text-xl font-bold text-gray-900 leading-tight">
-        Applications
+        {t("admissions.applications")}
       </h1>
       <p className="text-sm text-gray-500 mt-0.5">{subtitle}</p>
     </div>
@@ -105,7 +110,7 @@ const PageHeader: React.FC<PageHeaderProps> = ({
                  justify-center hover:bg-amber-200 transition-colors
                  disabled:opacity-50 focus:outline-none focus:ring-2
                  focus:ring-amber-300"
-      aria-label="Refresh applications"
+      aria-label={t("applications.refresh")}
     >
       <SvgIcon
         d={PATHS.refresh}
@@ -114,14 +119,15 @@ const PageHeader: React.FC<PageHeaderProps> = ({
         className={refreshing ? "animate-spin" : ""}
       />
     </button>
-  </header>
-);
+  </header>;
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN PAGE
 // ─────────────────────────────────────────────────────────────────────────────
 
 const StudentApplicationsPage: React.FC = () => {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   const {
@@ -238,7 +244,7 @@ const StudentApplicationsPage: React.FC = () => {
           onBack={() => navigate(-1)}
           onRefresh={() => loadData(true)}
           refreshing={false}
-          subtitle="Loading…"
+          subtitle={t("common.loading")}
         />
         <div className="flex flex-col items-center justify-center flex-1 gap-3">
           <Spinner size={40} color="#4F46E5" />
@@ -273,7 +279,7 @@ const StudentApplicationsPage: React.FC = () => {
           icon={<SvgIcon d={PATHS.personAdd} color="#D97706" />}
           iconColor="#D97706"
           value={applications.length}
-          label="Pending"
+          label={t("common.pending")}
         />
         <SummaryCard
           bg="#FEE2E2"
@@ -287,7 +293,7 @@ const StudentApplicationsPage: React.FC = () => {
           icon={<SvgIcon d={PATHS.school} color="#4F46E5" />}
           iconColor="#4F46E5"
           value={classes.length}
-          label="Classes"
+          label={t("academic.class_other")}
         />
       </div>
 

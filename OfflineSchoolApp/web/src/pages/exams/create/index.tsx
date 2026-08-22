@@ -3,7 +3,10 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import { useCreateExam } from "@/hooks/useExams";
-import api from "../../lib/api";
+import type { ExamType, ExamStatus } from "@/types/exam.types";
+// "../../lib/api" resolves to src/pages/lib/api, which does not exist.
+import api, { getErrorMessage } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 const EXAM_TYPE_OPTIONS = [
 { value: "written", label: "Written" },
@@ -83,6 +86,7 @@ form: DetailsForm;
 onChange: (field: keyof DetailsForm, value: string) => void;
 errors: Partial<Record<keyof DetailsForm, string>>;
 }) => {
+  const { t } = useTranslation();
 const tm = Number(form.totalMarks);
 const pm = Number(form.passMark);
 const passRate = tm > 0 ? ((pm / tm) * 100).toFixed(1) : null;
@@ -95,13 +99,13 @@ text
   {/* Name */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-1">
-      Exam Name <span className="text-red-500">*</span>
+      {t("examCreate.name")} <span className="text-red-500">*</span>
     </label>
     <input
       type="text"
       value={form.name}
       onChange={(e) => onChange("name", e.target.value)}
-      placeholder="e.g. First Term Examination 2024/2025"
+      placeholder={t("examCreate.namePh")}
       className={`w-full px-4 py-2.5 rounded-xl border text-sm
         focus:outline-none focus:ring-2 focus:ring-primary-500
         ${errors.name ? "border-red-400" : "border-gray-200"}`}
@@ -114,7 +118,7 @@ text
   {/* Type */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-2">
-      Exam Type <span className="text-red-500">*</span>
+      {t("examCreate.type")} <span className="text-red-500">*</span>
     </label>
     <div className="flex flex-wrap gap-2">
       {EXAM_TYPE_OPTIONS.map((opt) => (
@@ -139,7 +143,7 @@ text
   <div className="grid grid-cols-2 gap-4">
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Academic Year <span className="text-red-500">*</span>
+        {t("academic.schoolYear")} <span className="text-red-500">*</span>
       </label>
       <div className="flex flex-wrap gap-2">
         {ACADEMIC_YEAR_OPTIONS.map((opt) => (
@@ -161,7 +165,7 @@ text
     </div>
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Term <span className="text-red-500">*</span>
+        {t("academic.term")} <span className="text-red-500">*</span>
       </label>
       <div className="flex flex-wrap gap-2">
         {TERM_OPTIONS.map((opt) => (
@@ -187,7 +191,7 @@ text
   <div className="grid grid-cols-2 gap-4">
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
-        Start Date
+        {t("common.startDate")}
       </label>
       <input
         type="date"
@@ -199,7 +203,7 @@ text
     </div>
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
-        End Date
+        {t("common.endDate")}
       </label>
       <input
         type="date"
@@ -218,7 +222,7 @@ text
   <div className="grid grid-cols-2 gap-4">
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
-        Total Marks <span className="text-red-500">*</span>
+        {t("examCreate.totalMarks")} <span className="text-red-500">*</span>
       </label>
       <input
         type="number"
@@ -235,7 +239,7 @@ text
     </div>
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-1">
-        Pass Mark <span className="text-red-500">*</span>
+        {t("examCreate.passMark")} <span className="text-red-500">*</span>
       </label>
       <input
         type="number"
@@ -262,7 +266,7 @@ text
   {/* Status */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-2">
-      Initial Status
+      {t("examCreate.initialStatus")}
     </label>
     <div className="flex gap-2">
       {[
@@ -289,14 +293,14 @@ text
   {/* Description */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-1">
-      Description
+      {t("common.description")}
       <span className="text-gray-400 font-normal ml-1">(optional)</span>
     </label>
     <textarea
       value={form.description}
       onChange={(e) => onChange("description", e.target.value)}
       rows={3}
-      placeholder="Brief description of the exam…"
+      placeholder={t("examCreate.descriptionPh")}
       className="w-full px-4 py-2.5 rounded-xl border border-gray-200
         text-sm focus:outline-none focus:ring-2 focus:ring-primary-500
         resize-none"
@@ -306,14 +310,14 @@ text
   {/* Instructions */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-1">
-      Instructions
+      {t("common.instructions")}
       <span className="text-gray-400 font-normal ml-1">(optional)</span>
     </label>
     <textarea
       value={form.instructions}
       onChange={(e) => onChange("instructions", e.target.value)}
       rows={3}
-      placeholder="Instructions visible to students…"
+      placeholder={t("examCreate.instructionsPh")}
       className="w-full px-4 py-2.5 rounded-xl border border-gray-200
         text-sm focus:outline-none focus:ring-2 focus:ring-primary-500
         resize-none"
@@ -340,6 +344,7 @@ setAssignments: React.Dispatch<React.SetStateAction<Record<string, ClassAssignme
 totalMarks: number;
 passMark: number;
 }) => {
+  const { t } = useTranslation();
 const [classes, setClasses] = useState<ClassOption[]>([]);
 const [subjects, setSubjects] = useState<SubjectOption[]>([]);
 const [teachers, setTeachers] = useState<TeacherOption[]>([]);
@@ -377,9 +382,11 @@ if (!activeClass) { setSubjects([]); return; }
 api.get("/admin/subjects", {
 params: { schoolId, classId: activeClass },
 }).then((res) => {
+// /admin/subjects answers either a bare array or { subjects: [...] }
+// depending on the code path, so both are unwrapped here.
+const body = res.data as { subjects?: SubjectOption[] } | SubjectOption[] | undefined;
 setSubjects(
-res.data?.subjects ||
-(Array.isArray(res.data) ? res.data : [])
+Array.isArray(body) ? body : body?.subjects ?? []
 );
 }).catch(() => setSubjects([]));
 }, [activeClass, schoolId]);
@@ -475,12 +482,12 @@ text
       <p className="text-xl font-bold text-primary-600">
         {Object.keys(assignments).length}
       </p>
-      <p className="text-xs text-gray-500 font-medium">Classes</p>
+      <p className="text-xs text-gray-500 font-medium">{t("academic.class_other")}</p>
     </div>
     <div className="w-px h-8 bg-primary-200" />
     <div className="text-center">
       <p className="text-xl font-bold text-primary-600">{totalSubjects}</p>
-      <p className="text-xs text-gray-500 font-medium">Subjects</p>
+      <p className="text-xs text-gray-500 font-medium">{t("academic.subject_other")}</p>
     </div>
     <p className="text-xs text-gray-500 ml-2">
       Select classes on the left, then tick subjects on the right
@@ -494,12 +501,12 @@ text
                     overflow-hidden">
       <div className="bg-gray-50 px-3 py-2 text-xs font-bold text-gray-500
                       uppercase tracking-wide border-b border-gray-200">
-        Classes
+        {t("academic.class_other")}
       </div>
       <div className="overflow-y-auto h-full">
         {classes.length === 0 ? (
           <p className="text-xs text-gray-400 text-center py-8">
-            No classes found
+            {t("classes.none")}
           </p>
         ) : (
           classes.map((cls) => {
@@ -552,7 +559,7 @@ text
         <div className="flex items-center justify-center h-full text-gray-400">
           <div className="text-center">
             <p className="text-4xl mb-2">←</p>
-            <p className="text-sm">Select a class first</p>
+            <p className="text-sm">{t("examCreate.selectClassFirst")}</p>
           </div>
         </div>
       ) : (
@@ -565,7 +572,7 @@ text
             </span>
             <input
               type="text"
-              placeholder="Search…"
+              placeholder={t("common.searchShort")}
               value={subjectSearch}
               onChange={(e) => setSubjectSearch(e.target.value)}
               className="text-xs px-2 py-1 border border-gray-200
@@ -575,7 +582,7 @@ text
           <div className="overflow-y-auto h-full pb-2">
             {filteredSubjects.length === 0 ? (
               <p className="text-xs text-gray-400 text-center py-8">
-                No subjects found
+                {t("subjects.none")}
               </p>
             ) : (
               filteredSubjects.map((sub) => {
@@ -630,7 +637,7 @@ text
                         <div className="col-span-3">
                           <label className="text-xs text-gray-500
                                            font-semibold">
-                            Teacher
+                            {t("academic.teacher")}
                           </label>
                           <select
                             value={entry.teacherId ?? ""}
@@ -644,7 +651,7 @@ text
                               border border-gray-200 rounded-lg
                               focus:outline-none bg-white"
                           >
-                            <option value="">No teacher</option>
+                            <option value="">{t("examCreate.noTeacher")}</option>
                             {teachers.map((t) => (
                               <option key={t._id} value={t._id}>
                                 {t.name}
@@ -656,7 +663,7 @@ text
                         <div>
                           <label className="text-xs text-gray-500
                                            font-semibold">
-                            Max
+                            {t("examCreate.max")}
                           </label>
                           <input
                             type="number"
@@ -676,7 +683,7 @@ text
                         <div>
                           <label className="text-xs text-gray-500
                                            font-semibold">
-                            Pass
+                            {t("examCreate.pass")}
                           </label>
                           <input
                             type="number"
@@ -718,6 +725,7 @@ assignments,
 form: DetailsForm;
 assignments: Record<string, ClassAssignment>;
 }) => {
+  const { t } = useTranslation();
 const totalSubjects = Object.values(assignments).reduce(
 (acc, cls) => acc + Object.keys(cls.subjects).length, 0
 );
@@ -728,18 +736,18 @@ text
 
   {/* Exam summary */}
   <div className="bg-gray-50 rounded-xl p-5">
-    <h3 className="font-semibold text-gray-900 mb-4">Exam Details</h3>
+    <h3 className="font-semibold text-gray-900 mb-4">{t("examCreate.details")}</h3>
     <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
       {[
         { label: "Name",          value: form.name },
         { label: "Type",          value: EXAM_TYPE_OPTIONS.find((t) => t.value === form.type)?.label },
-        { label: "Academic Year", value: form.academicYear },
-        { label: "Term",          value: form.term },
+        { label: t("academic.schoolYear"), value: form.academicYear },
+        { label: t("academic.term"),          value: form.term },
         { label: "Status",        value: form.status },
-        { label: "Start Date",    value: form.startDate || "—" },
-        { label: "End Date",      value: form.endDate   || "—" },
-        { label: "Total Marks",   value: form.totalMarks },
-        { label: "Pass Mark",     value: form.passMark },
+        { label: t("common.startDate"),    value: form.startDate || "—" },
+        { label: t("common.endDate"),      value: form.endDate   || "—" },
+        { label: t("examCreate.totalMarks"),   value: form.totalMarks },
+        { label: t("examCreate.passMark"),     value: form.passMark },
       ].map(({ label, value }) => (
         <div key={label} className="flex justify-between border-b
                                     border-gray-200 pb-2">
@@ -753,7 +761,7 @@ text
   {/* Assignments */}
   <div>
     <div className="flex items-center justify-between mb-3">
-      <h3 className="font-semibold text-gray-900">Subject Assignments</h3>
+      <h3 className="font-semibold text-gray-900">{t("examCreate.subjectAssignments")}</h3>
       <span className="text-xs bg-primary-100 text-primary-700
                        font-bold px-3 py-1 rounded-full">
         {Object.keys(assignments).length} class(es) ·
@@ -810,6 +818,7 @@ text
 const currentYear = new Date().getFullYear();
 
 export default function CreateExamPage() {
+  const { t } = useTranslation();
 const navigate = useNavigate();
 const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 const createExam = useCreateExam();
@@ -819,7 +828,7 @@ const [step, setStep] = useState<Step>(0);
 const [form, setForm] = useState<DetailsForm>({
 name: "",
 type: "first_test",
-academicYear: ${currentYear}/${currentYear + 1},
+academicYear: `${currentYear}/${currentYear + 1}`,
 term: "Term 1",
 status: "draft",
 startDate: "",
@@ -830,15 +839,13 @@ description: "",
 instructions: "",
 });
 
-const [assignments, setAssignments] = useState<
-Record<string, ClassAssignment>
+  const [assignments, setAssignments] = useState<
+    Record<string, ClassAssignment>
+  >({});
 
-({});
-
-const [errors, setErrors] = useState<
-Partial<Record<keyof DetailsForm, string>>
-
-({});
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof DetailsForm, string>>
+  >({});
 
 const onChange = useCallback(
 (field: keyof DetailsForm, value: string) => {
@@ -855,7 +862,7 @@ const tm = Number(form.totalMarks);
 const pm = Number(form.passMark);
 if (isNaN(tm) || tm <= 0) e.totalMarks = "Must be a positive number";
 if (isNaN(pm) || pm < 0 || pm > tm)
-e.passMark = Must be between 0 and ${tm};
+e.passMark = `Must be between 0 and ${tm}`;
 if (
 form.startDate &&
 form.endDate &&
@@ -880,10 +887,10 @@ const handleSubmit = async () => {
 try {
 const result = await createExam.mutateAsync({
 name: form.name.trim(),
-type: form.type as any,
+type: form.type as ExamType,
 academicYear: form.academicYear,
 term: form.term,
-status: form.status as any,
+status: form.status as ExamStatus,
 startDate: form.startDate || "",
 endDate: form.endDate || "",
 totalMarks: Number(form.totalMarks),
@@ -893,8 +900,6 @@ instructions: form.instructions.trim(),
 classIds: Object.keys(assignments),
 schoolId, // ✅ add this
 });
-
-text
 
   const examId =
     result?.exam?._id ||
@@ -923,8 +928,8 @@ text
   }
 
   navigate(`/exams/${examId}`);
-} catch (err: any) {
-  alert(err.message || "Failed to create exam");
+} catch (err) {
+  alert(getErrorMessage(err) || "Failed to create exam");
 }
 };
 
@@ -942,9 +947,9 @@ text
     >
       ← Back
     </button>
-    <h1 className="text-2xl font-bold text-gray-900">Create Exam</h1>
+    <h1 className="text-2xl font-bold text-gray-900">{t("examCreate.title")}</h1>
     <p className="text-gray-500 text-sm">
-      Set up a new examination for your school
+      {t("examCreate.blurb")}
     </p>
   </div>
 

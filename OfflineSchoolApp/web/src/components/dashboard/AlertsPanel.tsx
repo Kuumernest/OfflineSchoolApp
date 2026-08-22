@@ -35,8 +35,10 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
       id:      "stale",
       type:    "danger",
       message: `${n} application${n > 1 ? "s" : ""} pending over 3 days`,
-      // FIXED: route updated to match actual AdmissionsPage location
-      route:   "/admissions",
+      // The admissions page is mounted under /students, not at the root. The
+      // bare "/admissions" this used to point at matched no route, so acting
+      // on the most urgent alert on the dashboard landed on the 404 page.
+      route:   "/students/admissions",
     });
   }
 
@@ -46,7 +48,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
       id:      "unassigned",
       type:    "warning",
       message: `${n} teacher${n > 1 ? "s" : ""} not yet assigned`,
-      route:   "/assignments",
+      route:   "/teachers/assignments",
     });
   }
 
@@ -100,7 +102,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
       id:      "no-assignments",
       type:    "warning",
       message: "No teacher assignments yet — assign teachers to subjects",
-      route:   "/assignments",
+      route:   "/teachers/assignments",
     });
   }
 
@@ -122,24 +124,24 @@ const SEVERITY_STYLES: Record<
   }
 > = {
   danger: {
-    wrap:    "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800",
-    icon:    "text-red-600 dark:text-red-400",
-    text:    "text-red-800 dark:text-red-300",
-    chevron: "text-red-400",
+    wrap:    "bg-danger-soft border-danger-line hover:brightness-[0.98]",
+    icon:    "text-danger",
+    text:    "text-danger",
+    chevron: "text-danger/50",
     Icon:    AlertCircle,
   },
   warning: {
-    wrap:    "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800",
-    icon:    "text-amber-600 dark:text-amber-400",
-    text:    "text-amber-800 dark:text-amber-300",
-    chevron: "text-amber-400",
+    wrap:    "bg-warning-soft border-warning-line hover:brightness-[0.98]",
+    icon:    "text-warning",
+    text:    "text-warning",
+    chevron: "text-warning/50",
     Icon:    AlertTriangle,
   },
   info: {
-    wrap:    "bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800",
-    icon:    "text-blue-600 dark:text-blue-400",
-    text:    "text-blue-800 dark:text-blue-300",
-    chevron: "text-blue-400",
+    wrap:    "bg-info-soft border-info-line hover:brightness-[0.98]",
+    icon:    "text-info",
+    text:    "text-info",
+    chevron: "text-info/50",
     Icon:    Info,
   },
 };
@@ -162,9 +164,9 @@ function AlertRow({
       type="button"
       onClick={onClick}
       className={`
-        w-full flex items-center gap-3
-        rounded-lg border px-3 py-2.5 text-left
-        transition-opacity hover:opacity-80
+        flex w-full items-center gap-3
+        rounded-card border px-4 py-3 text-left
+        transition-[filter]
         ${s.wrap}
       `}
     >
@@ -172,7 +174,7 @@ function AlertRow({
         className={`h-4 w-4 shrink-0 ${s.icon}`}
         aria-hidden="true"
       />
-      <span className={`flex-1 text-sm font-medium ${s.text}`}>
+      <span className={`flex-1 text-sm ${s.text}`}>
         {alert.message}
       </span>
       <ChevronRight
@@ -195,27 +197,20 @@ export default function AlertsPanel({ alerts }: { alerts: DashAlert[] }) {
   if (alerts.length === 0) return null;
 
   return (
-    <div
-      className="
-        rounded-xl border border-gray-200 dark:border-gray-700
-        bg-white dark:bg-gray-800
-        p-4 shadow-sm
-      "
-    >
-      <h3 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-        Alerts{" "}
-        <span className="text-red-500 font-bold">({alerts.length})</span>
-      </h3>
-
-      <div className="space-y-2">
-        {alerts.map((alert) => (
-          <AlertRow
-            key={alert.id}
-            alert={alert}
-            onClick={() => navigate(alert.route)}
-          />
-        ))}
-      </div>
+    /*
+      No card wrapper. These already carry a tinted, bordered surface each —
+      nesting them inside a white panel with an "Alerts (3)" heading framed a
+      warning inside a box inside a box, and the count restated what three
+      visible rows already said.
+    */
+    <div className="space-y-2">
+      {alerts.map((alert) => (
+        <AlertRow
+          key={alert.id}
+          alert={alert}
+          onClick={() => navigate(alert.route)}
+        />
+      ))}
     </div>
   );
 }

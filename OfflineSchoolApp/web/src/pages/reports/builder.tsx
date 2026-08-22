@@ -3,10 +3,13 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api              from "@/services/api";
+import { getErrorMessage } from "@/lib/api";
 import {
   ArrowLeft, Save, Loader2, Code2,
   Palette, List, Star, Eye,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
 // VARIABLE REFERENCE
@@ -245,6 +248,7 @@ type Tab = "html" | "css" | "vars" | "preview";
 // ─────────────────────────────────────────────────────────
 
 export default function TemplateBuilderPage() {
+  const { t } = useTranslation();
   const navigate    = useNavigate();
   const [params]    = useSearchParams();
   const user        = useAuthStore((s) => s.user);
@@ -299,8 +303,8 @@ export default function TemplateBuilderPage() {
         });
       }
       navigate("/reports/templates");
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setSaving(false);
     }
@@ -353,13 +357,13 @@ export default function TemplateBuilderPage() {
           <h1 className="text-lg font-bold text-gray-900">
             {isEditing ? "Edit Template" : "New Template"}
           </h1>
-          <p className="text-xs text-gray-500">Report Card Builder</p>
+          <p className="text-xs text-gray-500">{t("builder.title")}</p>
         </div>
 
         {/* Name input */}
         <input
           type="text"
-          placeholder="Template name…"
+          placeholder={t("builder.namePh")}
           value={name}
           onChange={(e) => setName(e.target.value)}
           className="border border-gray-200 rounded-lg px-3 py-2 text-sm
@@ -382,7 +386,7 @@ export default function TemplateBuilderPage() {
             size={14}
             className={isDefault ? "fill-blue-500 text-blue-500" : ""}
           />
-          Default
+          {t("common.default")}
         </button>
 
         {/* Save button */}
@@ -425,7 +429,7 @@ export default function TemplateBuilderPage() {
             { id: "css",     label: "CSS",        Icon: Palette },
             { id: "vars",    label: "Variables",  Icon: List    },
             { id: "preview", label: "Preview",    Icon: Eye     },
-          ] as { id: Tab; label: string; Icon: any }[]
+          ] as { id: Tab; label: string; Icon: LucideIcon }[]
         ).map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -455,7 +459,7 @@ export default function TemplateBuilderPage() {
             spellCheck={false}
             className="w-full h-full p-6 font-mono text-sm text-gray-900
                        bg-gray-50 resize-none focus:outline-none leading-relaxed"
-            placeholder="Paste your HTML here…"
+            placeholder={t("builder.htmlPh")}
             style={{ minHeight: "calc(100vh - 180px)" }}
           />
         )}
@@ -468,7 +472,7 @@ export default function TemplateBuilderPage() {
             spellCheck={false}
             className="w-full h-full p-6 font-mono text-sm text-gray-900
                        bg-gray-50 resize-none focus:outline-none leading-relaxed"
-            placeholder="Optional extra CSS styles…"
+            placeholder={t("builder.cssPh")}
             style={{ minHeight: "calc(100vh - 180px)" }}
           />
         )}
@@ -480,7 +484,7 @@ export default function TemplateBuilderPage() {
             style={{ maxHeight: "calc(100vh - 180px)" }}
           >
             <p className="text-sm text-gray-500 italic">
-              Click any placeholder to append it to your HTML.
+              {t("builder.clickPlaceholder")}
             </p>
             {VARIABLE_GROUPS.map((group) => (
               <div key={group.group}>
@@ -527,7 +531,7 @@ export default function TemplateBuilderPage() {
           >
             <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2
                             text-xs text-yellow-700 flex items-center gap-2">
-              <span className="font-semibold">Layout Preview</span>
+              <span className="font-semibold">{t("builder.layoutPreview")}</span>
               — placeholders are still visible. Save then use the Preview
               button on the templates list to see filled data.
             </div>
@@ -544,7 +548,7 @@ export default function TemplateBuilderPage() {
               `}
               className="flex-1 w-full border-0"
               sandbox="allow-same-origin"
-              title="Template Preview"
+              title={t("builder.templatePreview")}
             />
           </div>
         )}

@@ -28,6 +28,7 @@ import {
 }                            from "../db/dbHelpers";
 import { generateUUID }      from "../utils/idHelpers";
 import NetInfo               from "@react-native-community/netinfo";
+import { MutationQueue }     from "./mutationQueue.service";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONNECTIVITY TRACKING
@@ -308,98 +309,29 @@ const upsertTeacherAttendance = async (db, {
 // SECTION 7 — PUSH UNSYNCED
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Queues any attendance row that has not reached the server, then lets the
+ * shared outbox send it.
+ *
+ * This used to POST the rows itself. That made it a second sender beside the
+ * outbox — which attendance also enqueues to — so a record whose queued
+ * mutation was in backoff got sent anyway, without an Idempotency-Key, and
+ * the backend had no way to recognise the duplicate. Now there is one
+ * sender; this only produces work for it.
+ */
 export const pushUnsyncedAttendance = async () => {
   const db = await getDatabase();
   await ensureSchema(db);
 
   if (!_isConnected) return;
 
-  const now = nowStr();
-  const sc  = _studentIdCol;
-  const cc  = _classIdCol;
-
   try {
-    const unsynced = await db.getAllAsync(
-      `SELECT * FROM attendance WHERE (_synced = 0 OR _synced IS NULL)`
-    ).catch(() => []);
-
-    if (unsynced.length) {
-      console.log(`[attendance] Pushing ${unsynced.length} student record(s)…`);
-    }
-
-    for (const record of unsynced) {
-      const studentId = String(
-        record[sc] || record.studentId || record.student_id || ""
-      ).trim();
-      if (!studentId) continue;
-
-      try {
-        await api.post("/attendance/students", {
-          schoolId:  record.schoolId,
-          classId:   record[cc] || record.classId || record.class_id,
-          subjectId: record.subjectId,
-          periodId:  record.periodId,
-          studentId,
-          date:      record.date,
-          status:    record.status,
-          note:      record.note,
-        });
-        await db.runAsync(
-          `UPDATE attendance SET _synced = 1, _synced_at = ? WHERE id = ?`,
-          [now, record.id]
-        );
-      } catch (err) {
-        if (err?.response?.status === 409) {
-          await db.runAsync(
-            `UPDATE attendance SET _synced = 1, _synced_at = ? WHERE id = ?`,
-            [now, record.id]
-          );
-        } else {
-          console.warn(`[attendance] Push failed for ${record.id}:`, err?.message);
-        }
-      }
-    }
+    const { backfillOutbox } = require("./syncBackfill.service");
+    const { MutationQueue }  = require("./mutationQueue.service");
+    await backfillOutbox();
+    await MutationQueue.drain({ includeUploads: false });
   } catch (err) {
-    console.warn("[attendance] pushUnsyncedAttendance (students) failed:", err?.message);
-  }
-
-  try {
-    const unsynced = await db.getAllAsync(
-      `SELECT * FROM teacher_attendance WHERE (_synced = 0 OR _synced IS NULL)`
-    ).catch(() => []);
-
-    if (unsynced.length) {
-      console.log(`[attendance] Pushing ${unsynced.length} teacher record(s)…`);
-    }
-
-    for (const record of unsynced) {
-      try {
-        await api.post("/attendance/teachers", {
-          schoolId:     record.schoolId,
-          teacherId:    record.teacherId,
-          date:         record.date,
-          status:       record.status,
-          checkInTime:  record.checkInTime,
-          checkOutTime: record.checkOutTime,
-          note:         record.note,
-        });
-        await db.runAsync(
-          `UPDATE teacher_attendance SET _synced = 1, _synced_at = ? WHERE id = ?`,
-          [now, record.id]
-        );
-      } catch (err) {
-        if (err?.response?.status === 409) {
-          await db.runAsync(
-            `UPDATE teacher_attendance SET _synced = 1, _synced_at = ? WHERE id = ?`,
-            [now, record.id]
-          );
-        } else {
-          console.warn(`[attendance] Teacher push failed for ${record.id}:`, err?.message);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[attendance] pushUnsyncedAttendance (teachers) failed:", err?.message);
+    console.warn("[attendance] pushUnsyncedAttendance failed:", err?.message);
   }
 };
 
@@ -538,34 +470,12 @@ export const AttendanceService = {
       synced: false, now,
     });
 
-    if (!_isConnected) {
-      return { id, studentId: resolvedStudentId, date, status, note, source: "local" };
-    }
-
-    try {
-      const response = await api.post("/attendance/students", {
-        schoolId, classId, subjectId, periodId,
-        studentId: resolvedStudentId, date, status, note,
-      });
-
-      await db.runAsync(
-        `UPDATE attendance SET _synced = 1, _synced_at = ?
-         WHERE ${_studentIdCol} = ? AND ${_classIdCol} = ? AND date = ?`,
-        [now, resolvedStudentId, classId ?? null, date]
-      );
-
-      return response.data;
-    } catch (err) {
-      if (err?.response?.status === 409) {
-        await db.runAsync(
-          `UPDATE attendance SET _synced = 1, _synced_at = ?
-           WHERE ${_studentIdCol} = ? AND ${_classIdCol} = ? AND date = ?`,
-          [now, resolvedStudentId, classId ?? null, date]
-        );
-      } else {
-        console.warn("[attendance] markStudentAttendance API failed:", err?.message);
-      }
-    }
+    await MutationQueue.enqueue({
+      entityKey: `attendance:student:${schoolId}:${classId}:${subjectId || ""}:${resolvedStudentId}:${date}`,
+      method: "POST",
+      endpoint: "/attendance/students",
+      payload: { schoolId, classId, subjectId, periodId, studentId: resolvedStudentId, date, status, note, __local: { table: "attendance", ids: [id] } },
+    });
 
     return { id, studentId: resolvedStudentId, date, status, source: "local" };
   },
@@ -615,12 +525,7 @@ export const AttendanceService = {
       `[attendance] Bulk local: ${localSaved} saved, ${localFailed} failed`
     );
 
-    if (!_isConnected) {
-      return { classId, date, count: localSaved, failed: localFailed, source: "local" };
-    }
-
-    try {
-      const serverRecords = records.map((r) => {
+    const serverRecords = records.map((r) => {
         const studentId = resolveStudentId(
           r.studentId ?? r.student_id ?? r.student ?? r.id ?? null
         );
@@ -629,20 +534,15 @@ export const AttendanceService = {
           : null;
       }).filter(Boolean);
 
-      const response = await api.post("/attendance/students/bulk", {
-        schoolId, classId, subjectId, periodId, date, records: serverRecords,
-      });
-
-      await db.runAsync(
-        `UPDATE attendance SET _synced = 1, _synced_at = ?
-         WHERE ${_classIdCol} = ? AND date = ? AND _synced = 0`,
-        [now, classId, date]
-      );
-
-      return response.data;
-    } catch (err) {
-      console.warn("[attendance] markClassAttendanceBulk API failed:", err?.message);
-    }
+    const localIds = await db.getAllAsync(
+      `SELECT id FROM attendance WHERE ${_classIdCol} = ? AND date = ? AND _synced = 0`, [classId, date]
+    );
+    await MutationQueue.enqueue({
+      entityKey: `attendance:class:${schoolId}:${classId}:${subjectId || ""}:${date}`,
+      method: "POST",
+      endpoint: "/attendance/students/bulk",
+      payload: { schoolId, classId, subjectId, periodId, date, records: serverRecords, __local: { table: "attendance", ids: localIds.map((row) => row.id) } },
+    });
 
     return { classId, date, count: localSaved, failed: localFailed, source: "local" };
   },
@@ -908,34 +808,12 @@ export const AttendanceService = {
       synced: false, now,
     });
 
-    if (!_isConnected) {
-      return { id, teacherId, date, status, source: "local" };
-    }
-
-    try {
-      const response = await api.post("/attendance/teachers", {
-        schoolId, teacherId, date, status,
-        checkInTime, checkOutTime, note,
-      });
-
-      await db.runAsync(
-        `UPDATE teacher_attendance SET _synced = 1, _synced_at = ?
-         WHERE teacherId = ? AND date = ?`,
-        [now, teacherId, date]
-      );
-
-      return response.data;
-    } catch (err) {
-      if (err?.response?.status === 409) {
-        await db.runAsync(
-          `UPDATE teacher_attendance SET _synced = 1, _synced_at = ?
-           WHERE teacherId = ? AND date = ?`,
-          [now, teacherId, date]
-        );
-      } else {
-        console.warn("[attendance] markTeacherAttendance API failed:", err?.message);
-      }
-    }
+    await MutationQueue.enqueue({
+      entityKey: `attendance:teacher:${schoolId}:${teacherId}:${date}`,
+      method: "POST",
+      endpoint: "/attendance/teachers",
+      payload: { schoolId, teacherId, date, status, checkInTime, checkOutTime, note, __local: { table: "teacher_attendance", ids: [id] } },
+    });
 
     return { id, teacherId, date, status, source: "local" };
   },
@@ -979,25 +857,15 @@ export const AttendanceService = {
       }
     }
 
-    if (!_isConnected) {
-      return { schoolId, date, count: localSaved, failed: localFailed, source: "local" };
-    }
-
-    try {
-      const response = await api.post("/attendance/teachers/bulk", {
-        schoolId, date, records,
-      });
-
-      await db.runAsync(
-        `UPDATE teacher_attendance SET _synced = 1, _synced_at = ?
-         WHERE schoolId = ? AND date = ? AND _synced = 0`,
-        [now, schoolId, date]
-      );
-
-      return response.data;
-    } catch (err) {
-      console.warn("[attendance] markTeacherAttendanceBulk API failed:", err?.message);
-    }
+    const localIds = await db.getAllAsync(
+      "SELECT id FROM teacher_attendance WHERE schoolId = ? AND date = ? AND _synced = 0", [schoolId, date]
+    );
+    await MutationQueue.enqueue({
+      entityKey: `attendance:teachers:${schoolId}:${date}`,
+      method: "POST",
+      endpoint: "/attendance/teachers/bulk",
+      payload: { schoolId, date, records, __local: { table: "teacher_attendance", ids: localIds.map((row) => row.id) } },
+    });
 
     return { schoolId, date, count: localSaved, failed: localFailed, source: "local" };
   },

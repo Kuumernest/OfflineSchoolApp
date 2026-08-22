@@ -19,6 +19,7 @@ import { Badge }           from "@/components/ui/Badge";
 import { SearchInput }     from "@/components/ui/SearchInput";
 import { Select }          from "@/components/ui/Select";
 import { Pagination }      from "@/components/ui/Pagination";
+import { useTranslation } from "react-i18next";
 import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
@@ -97,7 +98,7 @@ const toQueryStatus = (uiStatus: string): string => uiStatus || "all";
  * both shapes so this keeps working if the API contract changes.
  */
 const resolveClassName = (student: Student): string =>
-  student.class?.name ?? (student as any).className ?? "Unassigned";
+  student.class?.name ?? student.className ?? "Unassigned";
 
 /**
  * Returns a human-readable count label that reflects the active filter.
@@ -134,8 +135,8 @@ function ErrorBanner({ message }: { message: string }) {
     <div
       role="alert"
       className="flex items-center gap-2 rounded-lg border border-red-200
-                 dark:border-red-800 bg-red-50 dark:bg-red-900/20 px-4 py-3
-                 text-sm text-red-700 dark:text-red-400"
+ bg-red-50 px-4 py-3
+                 text-sm text-red-700"
     >
       <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
@@ -160,21 +161,21 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
       <Td>
         <div className="flex items-center gap-3">
           <div
-            className="w-9 h-9 rounded-full bg-primary-100 dark:bg-primary-900/30
+            className="w-9 h-9 rounded-full bg-primary-100
                        flex items-center justify-center shrink-0"
             aria-hidden="true"
           >
-            <span className="text-primary-700 dark:text-primary-300
+            <span className="text-primary-700
                              text-sm font-bold">
               {nameInitial(student.name)}
             </span>
           </div>
           <div>
-            <p className="font-medium text-gray-900 dark:text-gray-100 text-sm">
+            <p className="font-medium text-gray-900 text-sm">
               {student.name}
             </p>
             {student.email && (
-              <p className="text-xs text-gray-400 dark:text-gray-500">
+              <p className="text-xs text-gray-400">
                 {student.email}
               </p>
             )}
@@ -184,14 +185,14 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
 
       {/* Enrollment / admission number */}
       <Td>
-        <span className="text-gray-600 dark:text-gray-400 text-sm font-mono">
-          {student.admissionNumber || (student as any).enrollmentNo || "—"}
+        <span className="text-gray-600 text-sm font-mono">
+          {student.admissionNumber || student.enrollmentNo || "—"}
         </span>
       </Td>
 
       {/* Class */}
       <Td>
-        <span className="text-gray-600 dark:text-gray-400 text-sm">
+        <span className="text-gray-600 text-sm">
           {resolveClassName(student)}
         </span>
       </Td>
@@ -201,27 +202,27 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
         <div className="space-y-0.5">
           {student.phone && (
             <div className="flex items-center gap-1.5 text-xs
-                            text-gray-500 dark:text-gray-400">
+                            text-gray-500">
               <Phone className="w-3 h-3" aria-hidden="true" />
               {student.phone}
             </div>
           )}
           {student.email && (
             <div className="flex items-center gap-1.5 text-xs
-                            text-gray-500 dark:text-gray-400">
+                            text-gray-500">
               <Mail className="w-3 h-3" aria-hidden="true" />
               {student.email}
             </div>
           )}
           {!student.phone && !student.email && (
-            <span className="text-xs text-gray-300 dark:text-gray-600">—</span>
+            <span className="text-xs text-gray-300">—</span>
           )}
         </div>
       </Td>
 
       {/* Guardian */}
       <Td>
-        <span className="text-sm text-gray-600 dark:text-gray-400">
+        <span className="text-sm text-gray-600">
           {student.guardianName || "—"}
         </span>
       </Td>
@@ -244,7 +245,7 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
             // TODO: open context menu
           }}
           className="p-1 text-gray-400 hover:text-gray-600
-                     dark:hover:text-gray-200 rounded"
+ rounded"
         >
           <MoreVertical className="w-4 h-4" aria-hidden="true" />
         </button>
@@ -258,6 +259,7 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function StudentsPage() {
+  const { t } = useTranslation();
   const user     = useUser();
   const navigate = useNavigate();
   const schoolId = user?.schoolId ?? "";
@@ -329,7 +331,7 @@ export default function StudentsPage() {
 
   const classOptions: SelectOption[] = (classesQuery.data ?? []).map(
     (c: SchoolClass) => ({
-      value: c._id ?? (c as any).id ?? "",
+      value: c._id ?? c.id ?? "",
       label: c.name,
     })
   );
@@ -343,11 +345,11 @@ export default function StudentsPage() {
       <div className="flex flex-col sm:flex-row sm:items-center
                       sm:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-            Students
+          <h2 className="text-xl font-bold text-gray-900">
+            {t("students.title")}
           </h2>
           {/* ✅ Count label now reflects the active filter honestly */}
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-0.5">
+          <p className="text-sm text-gray-500 mt-0.5">
             {countLabel(total, status)}
           </p>
         </div>
@@ -356,7 +358,7 @@ export default function StudentsPage() {
           icon={<Plus className="w-4 h-4" aria-hidden="true" />}
           onClick={() => navigate("/students/new")}
         >
-          Add Student
+          {t("students.add")}
         </Button>
       </div>
 
@@ -379,20 +381,20 @@ export default function StudentsPage() {
       )}
 
       {/* Filters */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border
-                      border-gray-200 dark:border-gray-700 shadow-sm p-4">
+      <div className="bg-white rounded-xl border
+                      border-gray-200 shadow-sm p-4">
         <div className="flex flex-col sm:flex-row gap-3">
           <SearchInput
             value={search}
             onChange={handleSearch}
-            placeholder="Search by name, email, admission number…"
+            placeholder={t("students.searchPh")}
             className="flex-1"
           />
           <Select
             value={classId}
             onChange={handleClassChange}
             options={classOptions}
-            placeholder="All Classes"
+            placeholder={t("students.allClasses")}
           />
           {/* ✅ No placeholder — "All Statuses" is the first explicit option */}
           <Select
@@ -404,8 +406,8 @@ export default function StudentsPage() {
       </div>
 
       {/* Table card */}
-      <div className="bg-white dark:bg-gray-800 rounded-xl border
-                      border-gray-200 dark:border-gray-700 shadow-sm
+      <div className="bg-white rounded-xl border
+                      border-gray-200 shadow-sm
                       overflow-hidden">
 
         {studentsQuery.isLoading ? (
@@ -418,7 +420,7 @@ export default function StudentsPage() {
                 aria-hidden="true"
               />
             }
-            title="No students found"
+            title={t("students.none")}
             subtitle={
               search || classId || status !== "all"
                 ? "Try adjusting your filters"
@@ -430,7 +432,7 @@ export default function StudentsPage() {
                   icon={<Plus className="w-4 h-4" aria-hidden="true" />}
                   onClick={() => navigate("/students/new")}
                 >
-                  Add Student
+                  {t("students.add")}
                 </Button>
               ) : undefined
             }
@@ -440,14 +442,14 @@ export default function StudentsPage() {
             <Table>
               <THead>
                 <tr>
-                  <Th>Student</Th>
-                  <Th>Enrollment No</Th>
-                  <Th>Class</Th>
-                  <Th>Contact</Th>
-                  <Th>Guardian</Th>
-                  <Th>Status</Th>
+                  <Th>{t("academic.student")}</Th>
+                  <Th>{t("academic.enrollmentNo")}</Th>
+                  <Th>{t("academic.class")}</Th>
+                  <Th>{t("common.contact")}</Th>
+                  <Th>{t("students.guardian")}</Th>
+                  <Th>{t("common.status")}</Th>
                   <Th className="w-10">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">{t("common.actions")}</span>
                   </Th>
                 </tr>
               </THead>
@@ -463,7 +465,7 @@ export default function StudentsPage() {
               </TBody>
             </Table>
 
-            <div className="border-t border-gray-100 dark:border-gray-700">
+            <div className="border-t border-gray-100">
               <Pagination
                 page={page}
                 pages={pages}

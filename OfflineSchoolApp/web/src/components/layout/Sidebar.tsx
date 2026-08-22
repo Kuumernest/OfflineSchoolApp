@@ -1,11 +1,12 @@
 // web/src/components/layout/Sidebar.tsx
-import { useState }                       from "react";
-import { NavLink, useLocation }           from "react-router-dom";
-import { ChevronDown, GraduationCap, X } from "lucide-react";
-import { NAV_ITEMS, type NavItem }        from "@/config/navigation";
-import { useUser }                        from "@/store/auth.store";
-import { cn }                             from "@/utils/cn";
-import { type UserRole }                  from "@/types";
+import { useState, useEffect }          from "react";
+import { useTranslation }                from "react-i18next";
+import { NavLink, useLocation }         from "react-router-dom";
+import { ChevronRight, GraduationCap, X } from "lucide-react";
+import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
+import { useUser }                      from "@/store/auth.store";
+import { cn }                           from "@/utils/cn";
+import { type UserRole }                from "@/types";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -16,6 +17,26 @@ const hasAccess = (item: NavItem, role: UserRole) =>
 
 const isParentActive = (item: NavItem, pathname: string) =>
   item.children?.some((c) => c.path && pathname.startsWith(c.path)) ?? false;
+
+/**
+ * Translate a nav entry, falling back to its English label.
+ *
+ * The fallback matters: a new nav item added without a translation key still
+ * renders its name rather than an empty row or a raw "nav.foo".
+ */
+const useNavLabel = () => {
+  const { t } = useTranslation();
+  return (item: NavItem) =>
+    item.labelKey ? t(item.labelKey, { defaultValue: item.label }) : item.label;
+};
+
+/* Shared by every row in the rail so a top-level link, a group header and a
+   child link are all the same height and share one left edge. Rows are 34px:
+   the full nav has to fit without scrolling on a laptop, or the rail becomes a
+   second thing to navigate. */
+const ROW =
+  "group flex w-full items-center gap-2.5 rounded-control " +
+  "px-2.5 h-[34px] text-[13px] font-medium transition-colors";
 
 // ─────────────────────────────────────────────────────────
 // SINGLE ITEM
@@ -28,32 +49,47 @@ function SingleItem({
   item:   NavItem;
   depth?: number;
 }) {
+  const navLabel = useNavLabel();
   if (!item.path) return null;
 
   return (
     <NavLink
       to={item.path}
+      end={item.path === "/dashboard"}
       className={({ isActive }) =>
         cn(
-          "flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-all duration-150",
-          depth === 0 ? "mx-2" : "mx-4 pl-8",
+          ROW,
           isActive
-            ? "bg-primary-600 text-white shadow-sm"
-            : "text-slate-400 hover:text-white hover:bg-slate-700/60"
+            ? "bg-primary-600 text-nav-text-active"
+            : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
         )
       }
     >
-      <item.icon
-        className={cn(
-          "flex-shrink-0",
-          depth === 0 ? "w-5 h-5" : "w-4 h-4"
-        )}
-      />
-      <span>{item.label}</span>
-      {item.badge && (
-        <span className="ml-auto bg-red-500 text-white text-xs px-1.5 py-0.5 rounded-full">
-          {item.badge}
-        </span>
+      {({ isActive }) => (
+        <>
+          {depth === 0 ? (
+            <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+          ) : (
+            /* Children get a dot rather than a second icon. Two icon columns
+               at different sizes made the nesting read as noise; one dot that
+               brightens when active reads as a child. */
+            <span
+              className={cn(
+                "ml-1 h-1.5 w-1.5 shrink-0 rounded-full transition-colors",
+                isActive
+                  ? "bg-nav-text-active"
+                  : "bg-nav-line group-hover:bg-nav-text"
+              )}
+              aria-hidden="true"
+            />
+          )}
+          <span className="truncate">{navLabel(item)}</span>
+          {item.badge && (
+            <span className="ml-auto rounded-control bg-danger px-1.5 text-[11px] font-semibold leading-5 text-white">
+              {item.badge}
+            </span>
+          )}
+        </>
       )}
     </NavLink>
   );
@@ -71,7 +107,23 @@ function GroupItem({
   role: UserRole;
 }) {
   const { pathname } = useLocation();
-  const [open, setOpen] = useState(() => isParentActive(item, pathname));
+  const navLabel     = useNavLabel();
+  const active       = isParentActive(item, pathname);
+  const [open, setOpen] = useState(active);
+
+  // Navigating into a section from outside the rail — a dashboard tile, a deep
+  // link — has to open the section holding the current page, or the rail gives
+  // no indication of where you are.
+  //
+  // Adjusted during render rather than in an effect: React's documented way to
+  // reconcile state with a changed input. An effect would paint the collapsed
+  // section first and expand it on a second pass, which the user sees as a
+  // flicker on every navigation.
+  const [wasActive, setWasActive] = useState(active);
+  if (active !== wasActive) {
+    setWasActive(active);
+    if (active) setOpen(true);
+  }
 
   const visibleChildren =
     item.children?.filter((c) => hasAccess(c, role)) ?? [];
@@ -80,38 +132,41 @@ function GroupItem({
   return (
     <div>
       <button
+        type="button"
         onClick={() => setOpen((o) => !o)}
-        style={{ width: "calc(100% - 1rem)" }}
+        aria-expanded={open}
         className={cn(
-          "flex items-center gap-3 px-3 py-2.5 mx-2 rounded-lg text-sm font-medium",
-          "transition-all duration-150",
-          isParentActive(item, pathname)
-            ? "text-white bg-slate-700/60"
-            : "text-slate-400 hover:text-white hover:bg-slate-700/60"
+          ROW,
+          active && !open
+            ? "text-nav-text-active"
+            : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
         )}
       >
-        <item.icon className="w-5 h-5 flex-shrink-0" />
-        <span className="flex-1 text-left">{item.label}</span>
-        <ChevronDown
+        <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <span className="flex-1 truncate text-left">{navLabel(item)}</span>
+        <ChevronRight
           className={cn(
-            "w-4 h-4 transition-transform duration-200",
-            open && "rotate-180"
+            "h-3.5 w-3.5 shrink-0 text-nav-line transition-transform duration-150",
+            "group-hover:text-nav-text",
+            open && "rotate-90"
           )}
+          aria-hidden="true"
         />
       </button>
 
-      <div
-        className={cn(
-          "overflow-hidden transition-all duration-200",
-          open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-        )}
-      >
-        <div className="mt-1 space-y-0.5 pb-1">
+      {open && (
+        <div className="relative mt-0.5 space-y-0.5 pb-1">
+          {/* Guide rail: ties the children to their parent so an indented list
+              reads as one group instead of four loose links. */}
+          <span
+            className="absolute left-[18px] top-0 bottom-1 w-px bg-nav-line"
+            aria-hidden="true"
+          />
           {visibleChildren.map((child) => (
             <SingleItem key={child.path} item={child} depth={1} />
           ))}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -126,53 +181,58 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ isOpen, onClose }: SidebarProps) {
+  const { t } = useTranslation();
   const user = useUser();
   const role = (user?.role ?? "student") as UserRole;
+  const { pathname } = useLocation();
+
+  // Tapping a link on mobile should dismiss the overlay; on desktop the rail
+  // is static and this is a no-op. DashboardLayout passes a stable onClose so
+  // listing it here cannot loop.
+  useEffect(() => { onClose(); }, [pathname, onClose]);
+
+  const initial = user?.name?.charAt(0).toUpperCase() ?? "?";
 
   return (
     <>
       {/* Mobile overlay */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-20 lg:hidden"
+          className="fixed inset-0 z-20 bg-ink/40 backdrop-blur-[1px] lg:hidden"
           onClick={onClose}
+          aria-hidden="true"
         />
       )}
 
       {/* Panel */}
       <aside
         className={cn(
-          "fixed top-0 left-0 h-full w-64 bg-slate-900 z-30 flex flex-col",
-          "transform transition-transform duration-300 ease-in-out",
-          "lg:translate-x-0 lg:static lg:z-auto",
+          "fixed top-0 left-0 z-30 flex h-full w-60 flex-col bg-nav-bg",
+          "transition-transform duration-200 ease-[var(--ease-out-quiet)]",
+          "lg:static lg:z-auto lg:translate-x-0",
           isOpen ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        {/* Logo */}
-        <div className="flex items-center justify-between h-16 px-4 border-b border-slate-700/50">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-primary-600 rounded-lg flex items-center justify-center">
-              <GraduationCap className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <p className="text-white font-semibold text-sm leading-none">
-                SchoolAdmin
-              </p>
-              <p className="text-slate-400 text-xs mt-0.5 capitalize">
-                {role.replace("_", " ")}
-              </p>
-            </div>
+        {/* Brand — same 56px as the top bar, so the two align across the seam */}
+        <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-nav-line px-4">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-control bg-primary-600">
+            <GraduationCap className="h-4 w-4 text-white" aria-hidden="true" />
           </div>
+          <p className="truncate font-display text-[17px] text-nav-text-active">
+            SchoolAdmin
+          </p>
           <button
+            type="button"
             onClick={onClose}
-            className="lg:hidden text-slate-400 hover:text-white p-1"
+            className="ml-auto rounded-control p-1 text-nav-text hover:text-nav-text-active lg:hidden"
+            aria-label={t("nav.close")}
           >
-            <X className="w-5 h-5" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 overflow-y-auto py-4 space-y-0.5 scrollbar-hide">
+        <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
           {NAV_ITEMS.map((item) => {
             if (!hasAccess(item, role)) return null;
             return item.children ? (
@@ -183,19 +243,19 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
           })}
         </nav>
 
-        {/* User info */}
-        <div className="border-t border-slate-700/50 p-4">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center flex-shrink-0">
-              <span className="text-white text-xs font-bold">
-                {user?.name?.charAt(0).toUpperCase() ?? "?"}
-              </span>
+        {/* Signed-in user */}
+        <div className="shrink-0 border-t border-nav-line p-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-nav-raised text-xs font-semibold text-nav-text-active">
+              {initial}
             </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-white text-sm font-medium truncate">
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-[13px] font-medium text-nav-text-active">
                 {user?.name}
               </p>
-              <p className="text-slate-400 text-xs truncate">{user?.email}</p>
+              <p className="truncate text-[11px] capitalize text-nav-text">
+                {role.replace("_", " ")}
+              </p>
             </div>
           </div>
         </div>

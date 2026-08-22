@@ -30,6 +30,10 @@ export interface AuthUser {
   enrollmentNo:      string | null;
   role:              string;
   schoolId:          string;
+  // Login sends the school name flat on some deployments and populated on
+  // others; the report card header reads whichever is present.
+  schoolName?:       string;
+  school?:           { name?: string } | null;
   isActive:          boolean;
   mustResetPassword: boolean;
   permissions:       string[];
@@ -104,7 +108,12 @@ const extractErrorMessage = (err: unknown): string => {
   return "An unknown error occurred";
 };
 
-const normaliseAuthUser = (raw: Record<string, unknown>): AuthUser => ({
+/**
+ * Exported because auth.service.ts needs it too. It previously cast raw
+ * response bodies straight to AuthUser, producing objects with a null name or
+ * schoolId that then failed to satisfy setAuth(). One normaliser, one shape.
+ */
+export const normaliseAuthUser = (raw: Record<string, unknown>): AuthUser => ({
   _id:          String(raw._id  || raw.id || ""),
   name:         String(raw.name  || ""),
   email:        (raw.email        as string) || null,

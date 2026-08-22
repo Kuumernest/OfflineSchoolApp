@@ -26,6 +26,7 @@ import { getTeacherStats }      from "../../src/services/teacherStats.service";
 import { getSchoolInfo }        from "../../src/services/school.service";
 import { isTeacherProfileComplete } from "./profile/setup";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
+import { toDisplayUri }        from "../../src/utils/logoUri";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
@@ -103,17 +104,13 @@ const computeSlotStatus = (startTime, endTime) => {
 const SchoolBanner = React.memo(({ school }) => {
   if (!school?.name) return null;
 
-  const hasLogo  = !!school.logo;
   const location = [school.city, school.country].filter(Boolean).join(", ");
 
-  const logoUri = (() => {
-    if (!school.logo || typeof school.logo !== "string") return null;
-    const raw = school.logo.trim();
-    if (!raw) return null;
-    if (raw.startsWith("http") || raw.startsWith("data:")) return raw;
-    const mime = raw.startsWith("iVBOR") ? "image/png" : "image/jpeg";
-    return `data:${mime};base64,${raw}`;
-  })();
+  // Prefers the locally cached file, so the logo still shows offline now that
+  // the server sends a URL rather than inline base64. The old inline version
+  // of this also mis-typed "/uploads/…" paths as base64.
+  const logoUri  = toDisplayUri(school.logoLocal, school.logo);
+  const hasLogo  = !!logoUri;
 
   return (
     <View style={sb.banner}>

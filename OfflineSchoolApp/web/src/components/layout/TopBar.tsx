@@ -1,9 +1,10 @@
 // web/src/components/layout/TopBar.tsx
 import {
-  Menu, Search, LogOut, ChevronDown, X,
+  Menu, Search, LogOut, ChevronDown, X, Settings,
   User, Users, BookOpen, LayoutDashboard, GraduationCap,
 }                                                   from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
 import { useAuthStore, useUser }                    from "@/store/auth.store";
 import { cn }                                       from "@/utils/cn";
@@ -13,6 +14,7 @@ import {
   type SearchResult,
 }                                                   from "@/utils/search";
 import NotificationPanel                            from "@/components/layout/NotificationPanel";
+import { LanguageSwitcher }                           from "@/components/ui/LanguageSwitcher";
 
 interface TopBarProps {
   onMenuClick: () => void;
@@ -28,30 +30,33 @@ const TYPE_CONFIG: Record<
   SearchResult["type"],
   { label: string; icon: React.ReactNode; badge: string }
 > = {
+  // The icon distinguishes the kind of result; the chip does not need to
+  // repeat that in a fifth colour. One neutral chip keeps a mixed result list
+  // scannable instead of turning it into a swatch board.
   page: {
     label: "Pages",
-    icon:  <LayoutDashboard className="w-3.5 h-3.5 text-gray-400   shrink-0" />,
-    badge: "bg-gray-100  text-gray-600",
+    icon:  <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
+    badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   student: {
     label: "Students",
-    icon:  <GraduationCap  className="w-3.5 h-3.5 text-blue-400   shrink-0" />,
-    badge: "bg-blue-50   text-blue-600",
+    icon:  <GraduationCap  className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
+    badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   teacher: {
     label: "Teachers",
-    icon:  <Users          className="w-3.5 h-3.5 text-green-400  shrink-0" />,
-    badge: "bg-green-50  text-green-600",
+    icon:  <Users          className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
+    badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   class: {
     label: "Classes",
-    icon:  <BookOpen       className="w-3.5 h-3.5 text-purple-400 shrink-0" />,
-    badge: "bg-purple-50 text-purple-600",
+    icon:  <BookOpen       className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
+    badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   subject: {
     label: "Subjects",
-    icon:  <User           className="w-3.5 h-3.5 text-orange-400 shrink-0" />,
-    badge: "bg-orange-50 text-orange-600",
+    icon:  <User           className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
+    badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
 };
 
@@ -69,7 +74,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
         part.toLowerCase() === query.toLowerCase() ? (
           <mark
             key={i}
-            className="bg-yellow-100 text-yellow-800 rounded px-0.5 not-italic"
+            className="rounded-[3px] bg-warning-soft px-0.5 font-semibold text-warning not-italic"
           >
             {part}
           </mark>
@@ -83,6 +88,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
 
 // ─── Component ────────────────────────────────────────────────────────────────
 export default function TopBar({ onMenuClick, title }: TopBarProps) {
+  const { t }      = useTranslation();
   const user       = useUser();
   const { logout } = useAuthStore();
   const navigate   = useNavigate();
@@ -227,29 +233,39 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const totalResults = results.length;
 
   return (
-    <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 shrink-0">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line bg-surface px-4 lg:px-6">
 
       {/* ── Left ─────────────────────────────────────────────────────────── */}
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-2">
         <button
+          type="button"
           onClick={onMenuClick}
-          className="lg:hidden p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg"
+          className="-ml-1 rounded-control p-2 text-ink-muted hover:bg-canvas hover:text-ink-body lg:hidden"
+          aria-label={t("nav.toggle")}
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="h-4.5 w-4.5" />
         </button>
-        <h1 className="text-lg font-semibold text-gray-800">{title}</h1>
+        {/*
+          The rail already says which section you are in, and the page renders
+          its own <h1>. A third copy of the same word in 18px bold was the
+          loudest thing on the screen and told you nothing — so it is a quiet
+          breadcrumb here, not a heading.
+        */}
+        <span className="truncate text-sm font-medium text-ink-muted">
+          {title}
+        </span>
       </div>
 
       {/* ── Center: Search ───────────────────────────────────────────────── */}
-      <div className="hidden md:flex flex-1 max-w-md mx-8">
+      <div className="mx-auto hidden max-w-md flex-1 md:flex">
         <div className="relative w-full" ref={searchRef}>
 
           {/* Search Icon / Spinner */}
           <div className="absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none">
             {isLoading ? (
-              <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
+              <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
             ) : (
-              <Search className="w-4 h-4 text-gray-400" />
+              <Search className="h-4 w-4 text-ink-faint" />
             )}
           </div>
 
@@ -265,11 +281,13 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 setSearchOpen(true);
               }
             }}
-            placeholder="Search students, teachers, classes…"
+            placeholder={t("common.searchPlaceholder")}
             className="
-              w-full pl-9 pr-9 py-2 text-sm bg-gray-50 border border-gray-200
-              rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500
-              focus:border-transparent transition-colors
+              h-9 w-full rounded-control border border-line bg-canvas
+              pl-9 pr-9 text-sm text-ink-body placeholder:text-ink-faint
+              transition-colors
+              hover:border-line-strong
+              focus:border-primary-500 focus:bg-surface focus:outline-none
             "
           />
 
@@ -282,7 +300,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 setResults([]);
                 inputRef.current?.focus();
               }}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition-colors"
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-faint transition-colors hover:text-ink-body"
             >
               <X className="w-4 h-4" />
             </button>
@@ -290,12 +308,12 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
 
           {/* ── Results Dropdown ──────────────────────────────────────────── */}
           {searchOpen && (
-            <div className="absolute top-full left-0 right-0 mt-1.5 bg-white border border-gray-200 rounded-xl shadow-xl z-50 overflow-hidden">
+            <div className="absolute left-0 right-0 top-full z-50 mt-1.5 overflow-hidden rounded-card border border-line bg-surface shadow-raise">
 
               {/* Error */}
               {error && (
                 <div className="px-4 py-4 text-center">
-                  <p className="text-sm text-red-500">{error}</p>
+                  <p className="text-sm text-danger">{error}</p>
                 </div>
               )}
 
@@ -303,8 +321,8 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               {isLoading && !error && (
                 <div className="px-4 py-6 text-center">
                   <div className="flex items-center justify-center gap-2">
-                    <div className="w-4 h-4 border-2 border-primary-400 border-t-transparent rounded-full animate-spin" />
-                    <p className="text-sm text-gray-500">Searching…</p>
+                    <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
+                    <p className="text-sm text-ink-muted">Searching…</p>
                   </div>
                 </div>
               )}
@@ -313,10 +331,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               {!isLoading && !error && totalResults > 0 && (
                 <>
                   {/* Count header */}
-                  <div className="px-4 py-2 border-b border-gray-100 bg-gray-50">
-                    <p className="text-xs text-gray-400">
+                  <div className="border-b border-line bg-surface-muted px-4 py-2">
+                    <p className="text-xs text-ink-faint">
                       {totalResults} result{totalResults !== 1 ? "s" : ""} for{" "}
-                      <span className="font-medium text-gray-600">
+                      <span className="font-medium text-ink-body">
                         "{searchQuery}"
                       </span>
                     </p>
@@ -327,10 +345,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                       (type) => (
                         <div key={type}>
                           {/* Group header */}
-                          <div className="px-4 py-1.5 bg-gray-50 border-y border-gray-100 sticky top-0">
-                            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                          <div className="sticky top-0 border-y border-line bg-surface-muted px-4 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
                               {TYPE_CONFIG[type].label}
-                              <span className="ml-1.5 text-gray-300">
+                              <span className="ml-1.5 text-line-strong">
                                 ({grouped[type].length})
                               </span>
                             </span>
@@ -346,17 +364,17 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                                 key={item.id}
                                 onClick={() => handleSelect(item)}
                                 className={cn(
-                                  "w-full text-left px-4 py-2.5 flex items-center gap-3 transition-colors border-b border-gray-50 last:border-0",
+                                  "flex w-full items-center gap-3 border-b border-line px-4 py-2 text-left transition-colors last:border-0",
                                   isActive
                                     ? "bg-primary-50"
-                                    : "hover:bg-gray-50"
+                                    : "hover:bg-surface-muted"
                                 )}
                               >
                                 {/* Icon */}
                                 <div
                                   className={cn(
-                                    "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
-                                    isActive ? "bg-primary-100" : "bg-gray-100"
+                                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-control",
+                                    isActive ? "bg-primary-100" : "bg-canvas"
                                   )}
                                 >
                                   {TYPE_CONFIG[type].icon}
@@ -366,10 +384,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                                 <div className="flex-1 min-w-0">
                                   <p
                                     className={cn(
-                                      "text-sm font-medium truncate",
+                                      "truncate text-sm font-medium",
                                       isActive
                                         ? "text-primary-700"
-                                        : "text-gray-800"
+                                        : "text-ink"
                                     )}
                                   >
                                     <HighlightMatch
@@ -378,7 +396,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                                     />
                                   </p>
                                   {item.sublabel && (
-                                    <p className="text-xs text-gray-400 truncate mt-0.5">
+                                    <p className="mt-0.5 truncate text-xs text-ink-muted">
                                       <HighlightMatch
                                         text={item.sublabel}
                                         query={searchQuery}
@@ -390,7 +408,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                                 {/* Type badge */}
                                 <span
                                   className={cn(
-                                    "text-xs px-2 py-0.5 rounded-full font-medium shrink-0",
+                                    "shrink-0 rounded-control px-2 py-0.5 text-[11px] font-medium",
                                     TYPE_CONFIG[type].badge
                                   )}
                                 >
@@ -405,9 +423,13 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                   </div>
 
                   {/* Footer hint */}
-                  <div className="px-4 py-2 border-t border-gray-100 bg-gray-50">
-                    <p className="text-xs text-gray-400">
-                      ↑↓ Navigate · Enter Select · Esc Close
+                  <div className="border-t border-line bg-surface-muted px-4 py-2">
+                    <p className="text-[11px] text-ink-faint">
+                      <kbd className="rounded-[3px] bg-surface px-1 ring-1 ring-inset ring-line">↑↓</kbd> navigate
+                      <span className="mx-1.5 text-line-strong">·</span>
+                      <kbd className="rounded-[3px] bg-surface px-1 ring-1 ring-inset ring-line">↵</kbd> open
+                      <span className="mx-1.5 text-line-strong">·</span>
+                      <kbd className="rounded-[3px] bg-surface px-1 ring-1 ring-inset ring-line">esc</kbd> close
                     </p>
                   </div>
                 </>
@@ -416,12 +438,12 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
               {/* No results */}
               {!isLoading && !error && totalResults === 0 && (
                 <div className="px-4 py-8 text-center">
-                  <Search className="w-8 h-8 text-gray-300 mx-auto mb-2" />
-                  <p className="text-sm font-medium text-gray-600">
-                    No results found
+                  <Search className="mx-auto mb-2 h-6 w-6 text-ink-faint" />
+                  <p className="text-sm font-medium text-ink">
+                    {t("common.noResults")}
                   </p>
-                  <p className="text-xs text-gray-400 mt-1">
-                    Try a different name or keyword
+                  <p className="mt-1 text-xs text-ink-muted">
+                    {t("common.tryDifferent")}
                   </p>
                 </div>
               )}
@@ -431,7 +453,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
       </div>
 
       {/* ── Right: notifications + profile ───────────────────────────────── */}
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-1">
 
         {/* Notification bell */}
         <NotificationPanel />
@@ -439,56 +461,81 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         {/* Profile dropdown */}
         <div className="relative" ref={dropdownRef}>
           <button
+            type="button"
             onClick={() => setDropdownOpen((o) => !o)}
-            className="flex items-center gap-2 p-1.5 hover:bg-gray-100 rounded-lg transition-colors"
+            aria-expanded={dropdownOpen}
+            aria-haspopup="menu"
+            className={cn(
+              "flex items-center gap-2 rounded-control p-1 pr-1.5 transition-colors",
+              dropdownOpen ? "bg-canvas" : "hover:bg-canvas"
+            )}
           >
-            <div className="w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center">
-              <span className="text-white text-sm font-bold">
+            {/*
+              Neutral, not accent. The avatar is an identity marker that sits
+              on every screen; painting it in the action colour competes with
+              the one button on the page that is actually actionable.
+            */}
+            <div className="flex h-7 w-7 items-center justify-center rounded-full bg-canvas ring-1 ring-inset ring-line-strong">
+              <span className="text-xs font-semibold text-ink-body">
                 {user?.name?.charAt(0).toUpperCase() ?? "?"}
               </span>
             </div>
-            <div className="hidden sm:block text-left">
-              <p className="text-sm font-medium text-gray-800 leading-none">
-                {user?.name}
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5 capitalize">
-                {user?.role?.replace("_", " ")}
-              </p>
-            </div>
+            <span className="hidden max-w-[10rem] truncate text-[13px] font-medium text-ink-body sm:block">
+              {user?.name}
+            </span>
             <ChevronDown
               className={cn(
-                "w-4 h-4 text-gray-400 transition-transform hidden sm:block",
+                "hidden h-3.5 w-3.5 text-ink-faint transition-transform sm:block",
                 dropdownOpen && "rotate-180"
               )}
+              aria-hidden="true"
             />
           </button>
 
           {dropdownOpen && (
-            <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-              <div className="px-4 py-2 border-b border-gray-100">
-                <p className="text-sm font-medium text-gray-800 truncate">
+            <div
+              role="menu"
+              className="absolute right-0 z-50 mt-1.5 w-56 overflow-hidden rounded-card border border-line bg-surface py-1 shadow-raise"
+            >
+              <div className="border-b border-line px-3 py-2">
+                <p className="truncate text-[13px] font-medium text-ink">
                   {user?.name}
                 </p>
-                <p className="text-xs text-gray-500 truncate">
+                <p className="truncate text-xs text-ink-muted">
                   {user?.email}
+                </p>
+                <p className="mt-1 text-[11px] capitalize text-ink-faint">
+                  {user?.role?.replace("_", " ")}
                 </p>
               </div>
               <button
+                type="button"
+                role="menuitem"
                 onClick={() => {
                   navigate("/settings");
                   setDropdownOpen(false);
                 }}
-                className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-body hover:bg-canvas"
               >
-                Settings
+                <Settings className="h-4 w-4 text-ink-faint" aria-hidden="true" />
+                {t("common.settings")}
               </button>
               <button
+                type="button"
+                role="menuitem"
                 onClick={handleLogout}
-                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2"
+                className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-danger hover:bg-danger-soft"
               >
-                <LogOut className="w-4 h-4" />
-                Sign Out
+                <LogOut className="h-4 w-4" aria-hidden="true" />
+                {t("common.signOut")}
               </button>
+
+              {/* Language sits in the profile menu, next to sign-out: it is a
+                  personal preference, not a school setting, and this is where
+                  a user already looks for "things about me". */}
+              <div className="mt-1 border-t border-line pt-1">
+                <LanguageSwitcher />
+              </div>
             </div>
           )}
         </div>

@@ -126,7 +126,9 @@ const isAuthenticated = () => {
     const state = useAuthStore.getState();
     const user  = state?.user;
     const token = state?.token;
-    return !!(user && token && token !== "offline_mode");
+    // ✅ Allow offline_mode — the user is still logged in, just offline.
+    //    Local stats should still be computed from the SQLite cache.
+    return !!(user && token);
   } catch {
     return false;
   }
@@ -695,12 +697,41 @@ if (assign.table) {
 // PUBLIC API
 // ─────────────────────────────────────────────────────────
 
-export const getAdminStats = async () => {
+/**
+ * Dashboard counts, read from the local database.
+ *
+ * This used to return fetchAdminStatsFromServer(), which made the dashboard
+ * the only screen in the app displaying server-side numbers. Every feature
+ * screen counts its own rows out of SQLite, so the two disagreed constantly —
+ * a student created offline showed up in the students list but not in the
+ * dashboard tile, and anything the device had not pulled yet showed the
+ * opposite way round.
+ *
+ * In an offline-first app there can only be one display source of truth, and
+ * it has to be the local database: it is the only one that is always
+ * available and the only one that includes changes not yet pushed. The server
+ * is authoritative for *reconciliation* — sync pulls its data into SQLite —
+ * but it is not what the UI counts.
+ *
+ * Pass { refresh: true } to pull from the server into SQLite first.
+ */
+export const getAdminStats = async ({ refresh = false } = {}) => {
   if (!isAuthenticated()) {
     console.log("⏭️ getAdminStats: not authenticated — skipping");
     return { ...EMPTY_STATS };
   }
-  return fetchAdminStatsFromServer();
+
+  if (refresh) {
+    try {
+      const { SyncManager } = require("./syncManager");
+      // force: an explicit refresh must not be swallowed by the rate-limit gap.
+      await SyncManager.syncAll({ force: true });
+    } catch (err) {
+      console.log("getAdminStats: refresh failed, using local data:", err.message);
+    }
+  }
+
+  return getAdminStatsLocal();
 };
 
 export { getAdminStatsLocal, fetchAdminStatsFromServer };

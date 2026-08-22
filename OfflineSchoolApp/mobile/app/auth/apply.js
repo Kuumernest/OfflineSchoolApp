@@ -16,7 +16,12 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import * as ImagePicker    from "expo-image-picker";
-import * as FileSystem     from "expo-file-system";
+// SDK 57 moved the default export of expo-file-system to the new File/Directory
+// API, and the old helpers imported from the package root now THROW at runtime
+// rather than warn. Importing them from "/legacy" is what keeps this working;
+// without it every call here fails with a deprecation error at the moment a
+// user asks for a PDF.
+import * as FileSystem     from "expo-file-system/legacy";
 import { Ionicons }        from "@expo/vector-icons";
 import { API_URL }         from "../../src/services/api";
 

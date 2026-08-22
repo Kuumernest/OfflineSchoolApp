@@ -23,6 +23,10 @@ import {
 }                          from "../utils/authHelpers";
 import { API }             from "./apiEndpoints";
 import api                 from "./api";
+import {
+  canonicalDay,
+  VALID_DAYS,
+}                          from "../utils/timetableMappers";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONSTANTS
@@ -30,45 +34,17 @@ import api                 from "./api";
 
 const TABLE = "timetable";
 
-const DAY_CANONICAL = {
-  monday:    "monday",
-  tuesday:   "tuesday",
-  wednesday: "wednesday",
-  thursday:  "thursday",
-  friday:    "friday",
-  saturday:  "saturday",
-  sunday:    "sunday",
-  mon: "monday",
-  tue: "tuesday",
-  wed: "wednesday",
-  thu: "thursday",
-  fri: "friday",
-  sat: "saturday",
-  sun: "sunday",
-};
-
-/**
- * Normalises any day-of-week string to a full lowercase canonical name.
- * "MON" → "monday", "Tuesday" → "tuesday", "fri" → "friday" etc.
- *
- * Exported so the timetable UI can normalise day keys before lookup
- * without duplicating this logic.
- */
-export const canonicalDay = (raw) =>
-  DAY_CANONICAL[(raw || "").toLowerCase().trim()] ||
-  (raw || "").toLowerCase().trim();
-
 // DAY_SORT_EXPR contains no user input — safe to interpolate.
-// Never interpolate variables that originate from user or network data.
+// Handles all formats that may be stored: Title-case, lowercase, 3-letter codes.
 const DAY_SORT_EXPR = `
-  CASE LOWER(day_of_week)
-    WHEN 'monday'    THEN 1  WHEN 'mon' THEN 1
-    WHEN 'tuesday'   THEN 2  WHEN 'tue' THEN 2
-    WHEN 'wednesday' THEN 3  WHEN 'wed' THEN 3
-    WHEN 'thursday'  THEN 4  WHEN 'thu' THEN 4
-    WHEN 'friday'    THEN 5  WHEN 'fri' THEN 5
-    WHEN 'saturday'  THEN 6  WHEN 'sat' THEN 6
-    WHEN 'sunday'    THEN 7  WHEN 'sun' THEN 7
+  CASE LOWER(TRIM(day_of_week))
+    WHEN 'monday'    THEN 1
+    WHEN 'tuesday'   THEN 2
+    WHEN 'wednesday' THEN 3
+    WHEN 'thursday'  THEN 4
+    WHEN 'friday'    THEN 5
+    WHEN 'saturday'  THEN 6
+    WHEN 'sunday'    THEN 7
     ELSE 99
   END
 `;
@@ -77,10 +53,6 @@ const DAY_SORT_EXPR = `
 // SECTION 2 — ROLE-AWARE ENDPOINT RESOLUTION
 // ═════════════════════════════════════════════════════════════════════════════
 
-/**
- * Returns the correct timetable LIST endpoint for the caller's role.
- * Admins use the admin namespace; teachers and students use their own.
- */
 const getTimetableEndpoint = () => {
   if (hasRole(["super_admin", "school_admin"])) return API.admin.timetable.list;
   if (hasRole("teacher")) return API.teacher?.timetable || API.admin.timetable.list;
@@ -134,7 +106,6 @@ const ensureSchema = (db) =>
         return;
       }
 
-      // ── Table exists — inspect and patch columns ──────────────────────────
       const cols     = await getTableColumns(db, TABLE);
       const has_id   = cols.includes("_id");
       const hasOldId = cols.includes("id");
@@ -234,7 +205,6 @@ async function migrateOldTable(db, existingCols = []) {
     console.log("[timetable] Migration id → _id complete");
   } catch (err) {
     console.error("[timetable] migrateOldTable failed:", err.message);
-    // Attempt to restore backup so data is not lost
     await db
       .execAsync(`ALTER TABLE ${TABLE}_backup RENAME TO ${TABLE}`)
       .catch(() => {});
@@ -243,7 +213,68 @@ async function migrateOldTable(db, existingCols = []) {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 5 — NORMALISE SERVER → LOCAL
+// SECTION 5 — REPAIR LEGACY DAY NAMES IN SQLITE
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Canonicalises every day_of_week value in SQLite that does not already match
+ * a VALID_DAYS entry (Title-case: "Monday", "Tuesday" …).
+ *
+ * This handles all three legacy formats:
+ *   "MON" / "TUE"        → "Monday" / "Tuesday"   (old 3-letter codes)
+ *   "monday" / "tuesday" → "Monday" / "Tuesday"   (previous fix attempt)
+ *
+ * Runs before every push so stale rows are always corrected before being sent.
+ */
+
+const repairLegacyDayNames = async (db) => {
+  try {
+    // Select rows whose day_of_week is NOT already a valid uppercase 3-letter code.
+    // VALID_DAYS = ["MON","TUE","WED","THU","FRI","SAT","SUN"]
+    const placeholders = VALID_DAYS.map(() => "?").join(",");
+    const rows = await db.getAllAsync(
+      `SELECT _id, day_of_week FROM ${TABLE}
+       WHERE day_of_week IS NOT NULL
+         AND TRIM(day_of_week) NOT IN (${placeholders})`,
+      VALID_DAYS                         // ✅ ["MON","TUE","WED","THU","FRI","SAT","SUN"]
+    );
+
+    if (!rows?.length) return;
+
+    console.log(
+      `[timetable] repairLegacyDayNames: fixing ${rows.length} row(s)…`
+    );
+
+    await withTransaction(db, async () => {
+      for (const row of rows) {
+        const fixed = canonicalDay(row.day_of_week);  // now returns "MON","TUE" etc.
+
+        if (!fixed || !VALID_DAYS.includes(fixed)) {
+          console.warn(
+            `[timetable] repairLegacyDayNames: cannot resolve ` +
+            `"${row.day_of_week}" for _id=${row._id} — skipping`
+          );
+          continue;
+        }
+
+        console.log(
+          `[timetable] repairLegacyDayNames: ` +
+          `"${row.day_of_week}" → "${fixed}" (_id=${row._id})`
+        );
+
+        await db.runAsync(
+          `UPDATE ${TABLE} SET day_of_week = ? WHERE _id = ?`,
+          [fixed, row._id]
+        );
+      }
+    });
+  } catch (err) {
+    console.warn("[timetable] repairLegacyDayNames failed:", err.message);
+  }
+};
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 6 — NORMALISE SERVER → LOCAL
 // ═════════════════════════════════════════════════════════════════════════════
 
 const resolveRef = (field, ...fallbacks) => {
@@ -278,7 +309,7 @@ const normaliseServerSlot = (raw, fallbackSchoolId) => {
     subject_id:  resolveRef(raw.subject, raw.subjectId, raw.subject_id) || null,
     teacher_id:  resolveRef(raw.teacher, raw.teacherId, raw.teacher_id) || null,
     period_id:   resolveRef(raw.period,  raw.periodId,  raw.period_id)  || null,
-    day_of_week: day,
+    day_of_week: day,               // Title-case e.g. "Monday"
     room:        raw.room      || null,
     version:     raw.version   || 1,
     deleted_at:  raw.deletedAt || raw.deleted_at || null,
@@ -294,7 +325,6 @@ const normaliseLocalSlot = (row) => ({
   classId:   row.class_id    || null,
   subjectId: row.subject_id  || null,
   teacherId: row.teacher_id  || null,
-  // Always return canonical day so the UI never sees mixed formats
   dayOfWeek: row.day_of_week ? canonicalDay(row.day_of_week) : null,
   periodId:  row.period_id   || null,
   room:      row.room        || null,
@@ -305,7 +335,7 @@ const normaliseLocalSlot = (row) => ({
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 6 — LOCAL PERSISTENCE
+// SECTION 7 — LOCAL PERSISTENCE
 // ═════════════════════════════════════════════════════════════════════════════
 
 const persistSlotsLocally = async (db, slots, timestamp) => {
@@ -358,8 +388,6 @@ const persistSlotsLocally = async (db, slots, timestamp) => {
             ]
           );
         }
-
-        // Count every processed slot — including soft-deletes
         count++;
       }
     })
@@ -369,7 +397,7 @@ const persistSlotsLocally = async (db, slots, timestamp) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 7 — SYNC: PULL FROM SERVER
+// SECTION 8 — SYNC: PULL FROM SERVER
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const syncTimetableFromServer = async (filterClassId = null) => {
@@ -413,7 +441,12 @@ export const syncTimetableFromServer = async (filterClassId = null) => {
 
     console.log(`[timetable] Normalised ${slots.length} slot(s) from server`);
     if (slots.length > 0) {
-      console.log("[timetable] sample day_of_week:", slots[0].day_of_week);
+      // ✅ This log will confirm what format the server actually returns
+      console.log(
+        "[timetable] sample from server — raw dayOfWeek:",
+        raw[0]?.dayOfWeek ?? raw[0]?.day_of_week,
+        "→ canonical:", slots[0].day_of_week
+      );
     }
 
     const synced = await persistSlotsLocally(db, slots, ts);
@@ -426,156 +459,46 @@ export const syncTimetableFromServer = async (filterClassId = null) => {
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 8 — SYNC: PUSH TO SERVER
+// SECTION 9 — SYNC: PUSH TO SERVER
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * Queues every pending timetable change, then lets the shared outbox send it.
+ *
+ * This used to do the sending itself — PUT/POST/DELETE per row, with its own
+ * id reconciliation and its own 409 handling. That made it a second sender
+ * beside the outbox, with retry rules that differed from everything else in
+ * the app. The reconciliation moved to a registered reconciler; the legacy
+ * day-name repair still runs first so no row is queued with a day the server
+ * would reject.
+ *
+ * Screens call this for an immediate push after an edit, so it drains as well
+ * as enqueues. Attachments are skipped: a timetable slot has none.
+ */
 export const pushUnsyncedTimetableSlots = async () => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    console.log("[timetable] Offline — skipping push");
+    console.log("[timetable] Offline — changes stay queued");
     return;
   }
 
-  const db           = await getDatabase();
-  const { schoolId } = getCurrentAuth();
+  const db = await getDatabase();
   await ensureSchema(db);
+  await repairLegacyDayNames(db);
 
-  const ts = new Date().toISOString();
-
-  // ── Phase 1: Push pending soft-deletes ────────────────────────────────────
-  const pendingDeletes = await db.getAllAsync(
-    `SELECT _id FROM ${TABLE}
-     WHERE ${IS_DELETED} AND (_synced = 0 OR _synced IS NULL)`
-  ).catch(() => []);
-
-  for (const row of pendingDeletes ?? []) {
-    const id = row._id;
-    if (!id) continue;
-
-    if (!isServerGeneratedId(id)) {
-      await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [id]).catch(() => {});
-      console.log(`[timetable] Local-only slot removed: ${id}`);
-      continue;
-    }
-
-    try {
-      await api.delete(API.admin.timetable.detail(id));
-      await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [id]);
-      console.log(`[timetable] Delete synced: ${id}`);
-    } catch (err) {
-      if (err?.response?.status === 404) {
-        await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [id]);
-        console.log(`[timetable] Slot already absent on server: ${id}`);
-      } else {
-        console.warn(`[timetable] Delete push failed (${id}): ${err.message}`);
-      }
-    }
-  }
-
-  // ── Phase 2: Push unsynced creates and updates ────────────────────────────
-  const pendingUpserts = await db.getAllAsync(
-    `SELECT * FROM ${TABLE}
-     WHERE (_synced = 0 OR _synced IS NULL) AND ${NOT_DELETED}`
-  ).catch(() => []);
-
-  if (pendingUpserts?.length) {
-    console.log(`[timetable] Pushing ${pendingUpserts.length} pending slot(s)…`);
-  }
-
-  for (const row of pendingUpserts ?? []) {
-    const id = row._id;
-    if (!id) continue;
-
-    try {
-      if (isServerGeneratedId(id)) {
-        // ── PUT — updated while offline ───────────────────────────────────
-        await api.put(API.admin.timetable.detail(id), {
-          subjectId: row.subject_id,
-          teacherId: row.teacher_id,
-          dayOfWeek: row.day_of_week,
-          periodId:  row.period_id,
-          classId:   row.class_id,
-          room:      row.room,
-        });
-
-        await db.runAsync(
-          `UPDATE ${TABLE}
-           SET _synced = 1, _synced_at = ?, updated_at = ?
-           WHERE _id = ?`,
-          [ts, ts, id]
-        );
-        console.log(`[timetable] Update synced: ${id}`);
-      } else {
-        // ── POST — created offline ────────────────────────────────────────
-        const response = await api.post(API.admin.timetable.list, {
-          schoolId:  row.school_id || schoolId,
-          classId:   row.class_id,
-          subjectId: row.subject_id,
-          teacherId: row.teacher_id,
-          dayOfWeek: row.day_of_week,
-          periodId:  row.period_id,
-          room:      row.room || null,
-        });
-
-        const serverSlot = response.data?.slot || response.data?.data;
-        const serverId   = serverSlot?._id
-          ? String(serverSlot._id)
-          : serverSlot?.id
-            ? String(serverSlot.id)
-            : null;
-
-        if (serverId && serverId !== id) {
-          await withFkOff(db, async () => {
-            await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [id]);
-            await db.runAsync(
-              `INSERT OR REPLACE INTO ${TABLE}
-                 (_id, school_id, class_id, subject_id, teacher_id,
-                  day_of_week, period_id, room, version,
-                  _synced, _synced_at, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
-              [
-                serverId,
-                row.school_id || schoolId,
-                row.class_id,
-                row.subject_id,
-                row.teacher_id,
-                row.day_of_week,
-                row.period_id,
-                row.room,
-                row.version || 1,
-                ts,
-                row.created_at || ts,
-                ts,
-              ]
-            );
-          });
-          console.log(`[timetable] New slot synced: ${id} → ${serverId}`);
-        } else {
-          await db.runAsync(
-            `UPDATE ${TABLE}
-             SET _synced = 1, _synced_at = ?, updated_at = ?
-             WHERE _id = ?`,
-            [ts, ts, id]
-          );
-          console.log(`[timetable] Slot synced (no server id returned): ${id}`);
-        }
-      }
-    } catch (err) {
-      if (err?.response?.status === 409) {
-        await db.runAsync(
-          `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE _id = ?`,
-          [ts, id]
-        );
-        console.log(`[timetable] Conflict — already on server: ${id}`);
-      } else {
-        console.warn(`[timetable] Push failed (${id}): ${err.message}`);
-      }
-    }
+  try {
+    const { backfillOutbox } = require("./syncBackfill.service");
+    const { MutationQueue }  = require("./mutationQueue.service");
+    await backfillOutbox();
+    const result = await MutationQueue.drain({ includeUploads: false });
+    if (result.synced || result.failed) console.log("[timetable] Push:", result);
+  } catch (err) {
+    console.warn("[timetable] pushUnsyncedTimetableSlots failed:", err.message);
   }
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 9 — CONFLICT CHECKS
+// SECTION 10 — CONFLICT CHECKS
 // ═════════════════════════════════════════════════════════════════════════════
 
 const assertNoConflict = async (db, slot, excludeId = null) => {
@@ -588,45 +511,40 @@ const assertNoConflict = async (db, slot, excludeId = null) => {
 
   const classConflict = await db.getFirstAsync(
     `SELECT _id FROM ${TABLE}
-     WHERE class_id           = ?
-       AND LOWER(day_of_week) = LOWER(?)
-       AND period_id          = ?
+     WHERE class_id              = ?
+       AND LOWER(TRIM(day_of_week)) = LOWER(TRIM(?))
+       AND period_id             = ?
        AND ${NOT_DELETED}
        ${excludeClause}
      LIMIT 1`,
     classParams
   );
-  if (classConflict) {
-    throw new Error("This class already has a lesson in this period");
-  }
+  if (classConflict) throw new Error("This class already has a lesson in this period");
 
   const teacherParams = [teacherId, dayOfWeek, periodId];
   if (excludeId) teacherParams.push(excludeId);
 
   const teacherConflict = await db.getFirstAsync(
     `SELECT _id FROM ${TABLE}
-     WHERE teacher_id         = ?
-       AND LOWER(day_of_week) = LOWER(?)
-       AND period_id          = ?
+     WHERE teacher_id               = ?
+       AND LOWER(TRIM(day_of_week)) = LOWER(TRIM(?))
+       AND period_id                = ?
        AND ${NOT_DELETED}
        ${excludeClause}
      LIMIT 1`,
     teacherParams
   );
-  if (teacherConflict) {
-    throw new Error("This teacher is already teaching in this period");
-  }
+  if (teacherConflict) throw new Error("This teacher is already teaching in this period");
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 10 — PUBLIC SERVICE OBJECT
+// SECTION 11 — PUBLIC SERVICE OBJECT
 // ═════════════════════════════════════════════════════════════════════════════
 
 export const timetableService = {
 
   async getByClass(classId) {
     if (!classId) return [];
-
     const db = await getDatabase();
     await ensureSchema(db);
 
@@ -693,6 +611,14 @@ export const timetableService = {
     const normalisedDay              = canonicalDay(dayOfWeek);
     const ts                         = new Date().toISOString();
 
+    if (!normalisedDay || !VALID_DAYS.includes(normalisedDay)) {
+      throw new Error(
+        `[timetable] Invalid dayOfWeek: "${dayOfWeek}" ` +
+        `(resolved to "${normalisedDay}"). ` +
+        `Expected one of: ${VALID_DAYS.join(", ")}`
+      );
+    }
+
     await assertNoConflict(db, { classId, teacherId, dayOfWeek: normalisedDay, periodId });
 
     const localId = generateLocalId();
@@ -724,7 +650,7 @@ export const timetableService = {
         classId,
         subjectId,
         teacherId,
-        dayOfWeek: normalisedDay,
+        dayOfWeek: normalisedDay,    // ✅ Title-case
         periodId,
         room:      room?.trim() || null,
       });
@@ -785,7 +711,15 @@ export const timetableService = {
     );
     if (!current) throw new Error("[timetable] Slot not found");
 
-    const normalisedDay = dayOfWeek ? canonicalDay(dayOfWeek) : current.day_of_week;
+    const normalisedDay = canonicalDay(dayOfWeek ?? current.day_of_week);
+
+    if (!normalisedDay || !VALID_DAYS.includes(normalisedDay)) {
+      throw new Error(
+        `[timetable] Invalid dayOfWeek: "${dayOfWeek}" ` +
+        `(resolved to "${normalisedDay}"). ` +
+        `Expected one of: ${VALID_DAYS.join(", ")}`
+      );
+    }
 
     const resolved = {
       classId:   classId   || current.class_id,
@@ -796,9 +730,7 @@ export const timetableService = {
 
     await assertNoConflict(db, resolved, id);
 
-    const ts = new Date().toISOString();
-
-    // room: undefined → keep existing | room: "" → clear | room: "101A" → set
+    const ts          = new Date().toISOString();
     const resolvedRoom = room === undefined
       ? current.room
       : (room?.trim() || null);
@@ -847,7 +779,7 @@ export const timetableService = {
         subjectId: subjectId || current.subject_id,
         teacherId: teacherId || current.teacher_id,
         classId:   classId   || current.class_id,
-        dayOfWeek: normalisedDay,
+        dayOfWeek: normalisedDay,    // ✅ Title-case
         periodId:  periodId  || current.period_id,
         room:      resolvedRoom,
       });
@@ -880,7 +812,6 @@ export const timetableService = {
     await ensureSchema(db);
     const ts = new Date().toISOString();
 
-    // Hard-delete local-only slots — they were never on the server
     if (!isServerGeneratedId(id)) {
       await db.runAsync(`DELETE FROM ${TABLE} WHERE _id = ?`, [id]);
       console.log(`[timetable] Local-only slot hard-deleted: ${id}`);

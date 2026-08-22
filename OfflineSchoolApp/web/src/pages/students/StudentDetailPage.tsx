@@ -34,6 +34,7 @@ import {
 }                               from "@/services/student.service";
 import { cn }                   from "@/utils/cn";
 import type { Student }         from "@/types";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -214,6 +215,7 @@ function EnrollmentCard({
   enrollmentNo:      string | null;
   mustResetPassword: boolean;
 }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -231,7 +233,7 @@ function EnrollmentCard({
     <div className="rounded-2xl border border-indigo-200 bg-indigo-50 p-5 shadow-sm">
       <div className="flex items-center gap-2 mb-3">
         <IdCard className="h-4 w-4 text-indigo-600" />
-        <h2 className="text-sm font-bold text-indigo-900">Login Credentials</h2>
+        <h2 className="text-sm font-bold text-indigo-900">{t("studentDetail.credentials")}</h2>
       </div>
 
       <p className="text-xs text-indigo-600 mb-3 leading-relaxed">
@@ -263,7 +265,7 @@ function EnrollmentCard({
         <div className="mt-3 flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5">
           <ShieldAlert className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-800 leading-relaxed">
-            <span className="font-semibold">Password not yet changed.</span>{" "}
+            <span className="font-semibold">{t("studentDetail.passwordNotChangedYet")}</span>{" "}
             The student is still using their default password. Ask them to
             log in and change it.
           </p>
@@ -288,6 +290,7 @@ function MoveClassPicker({
   onSelect:       (cls: SchoolClass) => void;
   onCancel:       () => void;
 }) {
+  const { t } = useTranslation();
   const others = classes.filter(
     (c) => String(c._id ?? c.id) !== String(currentClassId ?? "")
   );
@@ -297,13 +300,13 @@ function MoveClassPicker({
       <div className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-xl">
         <div className="mb-4 flex items-center gap-2">
           <ArrowRightLeft className="h-5 w-5 text-indigo-600" />
-          <h3 className="text-lg font-bold text-gray-900">Move to Class</h3>
+          <h3 className="text-lg font-bold text-gray-900">{t("studentDetail.moveToClass")}</h3>
         </div>
 
         {others.length === 0 ? (
           <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-3 text-sm text-amber-800">
             <AlertCircle className="h-4 w-4 shrink-0" />
-            No other classes available. Create more classes first.
+            {t("studentDetail.noOtherClasses")}
           </div>
         ) : (
           <div className="max-h-72 overflow-y-auto rounded-xl border border-gray-200">
@@ -334,7 +337,7 @@ function MoveClassPicker({
           onClick={onCancel}
           className="mt-4 w-full rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition-colors"
         >
-          Cancel
+          {t("common.cancel")}
         </button>
       </div>
     </div>
@@ -346,6 +349,7 @@ function MoveClassPicker({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function StudentDetailPage() {
+  const { t } = useTranslation();
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
   const user     = useUser();
@@ -429,33 +433,33 @@ export default function StudentDetailPage() {
 
   const handleSuspend = useCallback(async () => {
     const yes = await confirm({
-      title:        "Suspend Student",
+      title:        t("studentDetail.suspend"),
       message:      `Are you sure you want to suspend "${student?.name}"?\n\nThey will not be able to log in until restored.`,
       confirmLabel: "Suspend",
       kind:         "warning",
     });
     if (yes) suspendMutation.mutate();
-  }, [student, confirm, suspendMutation]);
+  }, [student, confirm, suspendMutation, t]);
 
   const handleRestore = useCallback(async () => {
     const yes = await confirm({
-      title:        "Restore Student",
+      title:        t("studentDetail.restore"),
       message:      `Restore "${student?.name}" and re-enable their account?`,
       confirmLabel: "Restore",
       kind:         "default",
     });
     if (yes) restoreMutation.mutate();
-  }, [student, confirm, restoreMutation]);
+  }, [student, confirm, restoreMutation, t]);
 
   const handleDelete = useCallback(async () => {
     const yes = await confirm({
-      title:        "Delete Student",
+      title:        t("studentDetail.delete"),
       message:      `Permanently delete "${student?.name}"?\n\nThis action cannot be undone.`,
       confirmLabel: "Delete",
       kind:         "danger",
     });
     if (yes) deleteMutation.mutate();
-  }, [student, confirm, deleteMutation]);
+  }, [student, confirm, deleteMutation, t]);
 
   const handleMoveSelect = useCallback(
     async (cls: SchoolClass) => {
@@ -482,8 +486,8 @@ export default function StudentDetailPage() {
 
   // 🔧 Backend now returns className as a top-level string (enriched list).
   // Support both shapes so this works with legacy and current API responses.
-  const classNameDisplay = (student as any)?.className || student?.class?.name;
-  const classIdForMove   = (student as any)?.classId || (student?.class as any)?._id || (student?.class as any)?.id;
+  const classNameDisplay = student?.className || student?.class?.name;
+  const classIdForMove   = student?.classId || student?.class?._id || student?.class?.id;
 
   // ── Loading state ─────────────────────────────────────────────────────────
 
@@ -502,15 +506,15 @@ export default function StudentDetailPage() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
           <AlertCircle className="h-7 w-7 text-red-500" />
         </div>
-        <p className="text-lg font-bold text-gray-900">Student not found</p>
+        <p className="text-lg font-bold text-gray-900">{t("studentDetail.notFound")}</p>
         <p className="text-sm text-gray-400">
-          This student may have been deleted or does not exist.
+          {t("studentDetail.notFoundHint")}
         </p>
         <button
           onClick={() => navigate("/students")}
           className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
         >
-          Back to Students
+          {t("studentDetail.back")}
         </button>
       </div>
     );
@@ -520,8 +524,8 @@ export default function StudentDetailPage() {
 
   const firstLetter       = (student.name || "?").charAt(0).toUpperCase();
   // 🔧 Backend normaliseStudent guarantees enrollmentNo (mapped from admissionNo if needed)
-  const enrollmentNo      = (student as any).enrollmentNo as string | null ?? null;
-  const mustResetPassword = (student as any).mustResetPassword as boolean ?? false;
+  const enrollmentNo      = student.enrollmentNo ?? null;
+  const mustResetPassword = student.mustResetPassword ?? false;
 
   return (
     <div className="flex flex-col gap-6">
@@ -539,14 +543,14 @@ export default function StudentDetailPage() {
           <h1 className="truncate text-2xl font-bold text-gray-900">
             {student.name}
           </h1>
-          <p className="text-sm text-gray-500">Student Detail</p>
+          <p className="text-sm text-gray-500">{t("studentDetail.title")}</p>
         </div>
 
         <button
           onClick={() => studentQuery.refetch()}
           disabled={studentQuery.isFetching}
           className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gray-100 text-gray-500 hover:bg-gray-200 disabled:opacity-50 transition-colors"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           <RefreshCw
             className={cn("h-4 w-4", studentQuery.isFetching && "animate-spin")}
@@ -615,7 +619,7 @@ export default function StudentDetailPage() {
               {mustResetPassword && (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-700">
                   <KeyRound className="h-3 w-3" />
-                  Password not changed
+                  {t("studentDetail.passwordNotChanged")}
                 </span>
               )}
             </div>
@@ -626,93 +630,93 @@ export default function StudentDetailPage() {
       <div className="grid gap-6 lg:grid-cols-2">
 
         {/* ── Personal info ── */}
-        <Section title="Personal Information">
+        <Section title={t("studentDetail.personal")}>
           <InfoRow
             icon={User}
-            label="Full Name"
+            label={t("common.fullName")}
             value={student.name}
             iconColor="text-amber-500"
           />
           <InfoRow
             icon={Mail}
-            label="Email Address"
+            label={t("common.email")}
             value={student.email}
             iconColor="text-indigo-500"
           />
           <InfoRow
             icon={Phone}
-            label="Phone Number"
+            label={t("common.phone")}
             value={student.phone}
             iconColor="text-emerald-500"
           />
           <InfoRow
             icon={Calendar}
-            label="Date of Birth"
+            label={t("common.dateOfBirth")}
             value={formatDate(student.dateOfBirth) ?? student.dateOfBirth}
             iconColor="text-purple-500"
           />
           <InfoRow
             icon={IdCard}
-            label="Enrollment Number"
+            label={t("academic.enrollmentNo")}
             value={enrollmentNo}
             iconColor="text-indigo-600"
             mono
           />
           <InfoRow
             icon={Hash}
-            label="Admission Number"
+            label={t("studentDetail.admissionNumber")}
             value={student.admissionNumber}
             iconColor="text-gray-500"
           />
           <InfoRow
             icon={User}
-            label="Gender"
+            label={t("common.gender")}
             value={student.gender}
             iconColor="text-pink-500"
           />
           <InfoRow
             icon={MapPin}
-            label="Address"
+            label={t("common.address")}
             value={student.address}
             iconColor="text-gray-400"
           />
         </Section>
 
         {/* ── School info ── */}
-        <Section title="School Information">
+        <Section title={t("studentDetail.school")}>
           <InfoRow
             icon={School}
-            label="Class"
+            label={t("academic.class")}
             value={classNameDisplay}
             iconColor="text-indigo-500"
           />
           <InfoRow
             icon={Users}
-            label="Guardian Name"
+            label={t("studentDetail.guardianName")}
             value={student.guardianName}
             iconColor="text-amber-500"
           />
           <InfoRow
             icon={Phone}
-            label="Guardian Phone"
+            label={t("studentDetail.guardianPhone")}
             value={student.guardianPhone}
             iconColor="text-emerald-500"
           />
           <InfoRow
             icon={Calendar}
-            label="Enrolled On"
-            value={formatDate((student as any).enrolledAt)}
+            label={t("studentDetail.enrolledOn")}
+            value={formatDate(student.enrolledAt)}
             iconColor="text-indigo-400"
           />
           <InfoRow
             icon={Calendar}
-            label="Created"
+            label={t("common.created")}
             value={formatDate(student.createdAt)}
             iconColor="text-gray-400"
           />
           <InfoRow
             icon={Calendar}
-            label="Last Updated"
+            label={t("common.lastUpdated")}
             value={formatDate(student.updatedAt)}
             iconColor="text-gray-400"
           />
@@ -728,14 +732,14 @@ export default function StudentDetailPage() {
 
         {/* ── Actions ── */}
         <div className="flex flex-col gap-3 lg:col-span-2">
-          <h2 className="text-sm font-bold text-gray-700">Actions</h2>
+          <h2 className="text-sm font-bold text-gray-700">{t("common.actions")}</h2>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {/* Move */}
             <ActionButton
               icon={ArrowRightLeft}
-              label="Move to Class"
-              description="Transfer this student to a different class"
+              label={t("studentDetail.moveToClass")}
+              description={t("studentDetail.moveHint")}
               variant="default"
               disabled={isBusy}
               onClick={() => setShowMovePicker(true)}
@@ -745,8 +749,8 @@ export default function StudentDetailPage() {
             {isSuspended ? (
               <ActionButton
                 icon={CheckCircle2}
-                label="Restore Student"
-                description="Re-enable this student's account"
+                label={t("studentDetail.restore")}
+                description={t("studentDetail.restoreHint")}
                 variant="success"
                 disabled={isBusy}
                 onClick={handleRestore}
@@ -754,8 +758,8 @@ export default function StudentDetailPage() {
             ) : (
               <ActionButton
                 icon={Ban}
-                label="Suspend Student"
-                description="Temporarily disable this student's account"
+                label={t("studentDetail.suspend")}
+                description={t("studentDetail.suspendHint")}
                 variant="warning"
                 disabled={isBusy}
                 onClick={handleSuspend}
@@ -765,8 +769,8 @@ export default function StudentDetailPage() {
             {/* Delete */}
             <ActionButton
               icon={Trash2}
-              label="Delete Student"
-              description="Permanently remove this student and their account"
+              label={t("studentDetail.delete")}
+              description={t("studentDetail.deleteHint")}
               variant="danger"
               disabled={isBusy}
               onClick={handleDelete}

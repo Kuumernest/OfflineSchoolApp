@@ -18,6 +18,7 @@ import {
 import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
 import type { Class, Teacher, Subject } from "@/types";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -116,6 +117,7 @@ const Field = ({ label, required, error, hint, children }: FieldProps) => (
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function EditSubjectPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { id }   = useParams<{ id: string }>();
   const user     = useUser();
@@ -261,7 +263,7 @@ export default function EditSubjectPage() {
         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-red-50">
           <AlertCircle size={28} className="text-red-500" />
         </div>
-        <p className="text-lg font-bold text-gray-900">Subject not found</p>
+        <p className="text-lg font-bold text-gray-900">{t("subjectsEdit.notFound")}</p>
         <p className="text-sm text-gray-500">
           The subject you are trying to edit does not exist or was deleted.
         </p>
@@ -269,7 +271,7 @@ export default function EditSubjectPage() {
           onClick={() => navigate("/subjects")}
           className="mt-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors"
         >
-          Back to Subjects
+          {t("subjectsEdit.back")}
         </button>
       </div>
     );
@@ -285,13 +287,13 @@ export default function EditSubjectPage() {
           type="button"
           onClick={handleDiscard}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
-          title="Go back"
+          title={t("common.goBack")}
         >
           <ChevronLeft size={20} />
         </button>
 
         <div className="flex-1 min-w-0">
-          <h1 className="text-xl font-bold text-gray-900">Edit Subject</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("subjectsEdit.title")}</h1>
           <p className="truncate text-sm text-gray-500">
             {subject?.name ?? "Update subject details"}
           </p>
@@ -337,14 +339,14 @@ export default function EditSubjectPage() {
                   onClick={handleReset}
                   className="text-xs font-bold text-amber-700 underline hover:text-amber-900"
                 >
-                  Reset
+                  {t("common.reset")}
                 </button>
               </div>
             )}
 
             {/* Subject name */}
             <Field
-              label="Subject Name"
+              label={t("subjects.nameLabel")}
               required
               error={errors.name}
               hint="Use a clear, recognisable name."
@@ -367,7 +369,7 @@ export default function EditSubjectPage() {
                   type="text"
                   value={form.name}
                   onChange={(e) => handleChange("name", e.target.value)}
-                  placeholder="e.g. Mathematics, English Language"
+                  placeholder={t("subjectsAdd.namePh")}
                   maxLength={MAX_NAME_LENGTH + 5}
                   disabled={isBusy}
                   autoFocus
@@ -387,14 +389,14 @@ export default function EditSubjectPage() {
 
             {/* Subject code */}
             <Field
-              label="Subject Code"
+              label={t("subjects.codeLabel")}
               hint="Optional short code, e.g. MATH101"
             >
               <input
                 type="text"
                 value={form.code}
                 onChange={(e) => handleChange("code", e.target.value)}
-                placeholder="e.g. MATH101"
+                placeholder={t("subjects.codePh")}
                 maxLength={MAX_CODE_LENGTH}
                 disabled={isBusy}
                 className={cn(
@@ -408,7 +410,7 @@ export default function EditSubjectPage() {
             </Field>
 
             {/* Class */}
-            <Field label="Class" required error={errors.classId}>
+            <Field label={t("academic.class")} required error={errors.classId}>
               <div
                 className={cn(
                   "flex items-center gap-2 rounded-xl border-2 bg-gray-50 px-3 transition-colors",
@@ -441,7 +443,7 @@ export default function EditSubjectPage() {
 
             {/* Teacher */}
             <Field
-              label="Assigned Teacher"
+              label={t("classes.assignedTeacher")}
               hint="Optional — leave blank to unassign."
             >
               <select

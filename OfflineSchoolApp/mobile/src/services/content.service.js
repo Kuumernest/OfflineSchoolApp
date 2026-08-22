@@ -970,6 +970,32 @@ export const deleteContent = async (contentId) => {
     } catch { /* fall through to API */ }
   }
 
+  // A delete is a plain JSON mutation, so it belongs on the shared outbox —
+  // not in upload_queue, which exists for binary bodies. Queuing it here
+  // means it inherits the outbox's idempotency key, backoff and the
+  // pending-changes UI instead of needing its own drain loop.
+  const queueDelete = async (reason) => {
+    const { MutationQueue } = require("./mutationQueue.service");
+    await MutationQueue.enqueue({
+      entityKey: `content:${contentId}`,
+      method: "DELETE",
+      endpoint: `/teacher/content/${contentId}`,
+      payload: { id: contentId },
+    });
+    console.log(`[deleteContent] ${reason} — queued delete for ${contentId}`);
+    return { success: true, queued: true, offline: true };
+  };
+
+  // ── Check connectivity — queue delete when offline ─────────────────────────
+  const net = await NetInfo.fetch();
+  if (!net.isConnected) {
+    try {
+      return await queueDelete("offline");
+    } catch (queueErr) {
+      console.warn("[deleteContent] queue failed:", queueErr.message);
+    }
+  }
+
   try {
     const response = await api.delete(`/teacher/content/${contentId}`);
     return response.data;
@@ -979,6 +1005,16 @@ export const deleteContent = async (contentId) => {
       || err.response?.data?.message
       || err.message
       || "Delete failed";
+
+    // ── Queue on network failure ─────────────────────────────────────────────
+    if (!err.response || err.code === "ECONNABORTED") {
+      try {
+        return await queueDelete("network lost");
+      } catch (queueErr) {
+        console.warn("[deleteContent] queue failed:", queueErr.message);
+      }
+    }
+
     console.error(`[deleteContent] ${status ?? "NETWORK"} — ${message}`);
     throw new Error(message);
   }

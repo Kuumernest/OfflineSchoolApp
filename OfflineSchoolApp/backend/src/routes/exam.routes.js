@@ -14,6 +14,20 @@ const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
 
+const { authorize } = require("../../middleware/auth");
+const {
+  guardResultWrite,
+  logResultChange,
+  diffField,
+} = require("../services/resultAudit.service");
+
+// This router is mounted behind `authenticate` but carried no authorisation of
+// its own, so any signed-in account — including a student — could call
+// PATCH /:examId/unlock and clear the lock on every result in the school.
+// Enforcing a lock that anybody may remove is not enforcement.
+const staffOnly = authorize("admin", "school_admin", "super_admin", "teacher");
+const adminOnly = authorize("admin", "school_admin", "super_admin");
+
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
@@ -777,7 +791,7 @@ router.get("/:examId/scores", asyncHandler(async (req, res) => {
   return res.json({ success: true, scores });
 }));
 
-router.post("/:examId/scores/bulk", asyncHandler(async (req, res) => {
+router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
   const { classId, subjectId, examSubjectId, scores } = req.body;
@@ -791,6 +805,12 @@ router.post("/:examId/scores/bulk", asyncHandler(async (req, res) => {
   const exam = await Exam.findOne({ _id: examId, schoolId }).lean();
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
+  // Nothing checked isLocked or isPublished here, so a published report card
+  // could be rewritten under a parent who had already read it. An admin may
+  // still correct a mistake, but only with a reason that gets recorded.
+  const audit = await guardResultWrite(req, res, { examId, schoolId, subjectId });
+  if (!audit) return;
+
   const examSubject = examSubjectId
     ? await ExamSubject.findById(examSubjectId).lean()
     : await ExamSubject.findOne({
@@ -800,7 +820,19 @@ router.post("/:examId/scores/bulk", asyncHandler(async (req, res) => {
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
   const saved         = [];
   const failed        = [];
+  const changes       = [];
   const now           = new Date();
+
+  // One read of the whole sheet's prior state. The alternative — a findOne per
+  // student inside the loop — turns a 40-student save into 80 round trips.
+  const priorRows = await StudentScore.find({
+    examId, subjectId, schoolId,
+    studentId: { $in: scores.map((s) => s?.studentId).filter(Boolean) },
+  }).select("studentId score isAbsent isExempt teacherRemark").lean();
+
+  const priorByStudent = new Map(
+    priorRows.map((row) => [String(row.studentId), row])
+  );
 
   for (const row of scores) {
     try {
@@ -851,10 +883,35 @@ router.post("/:examId/scores/bulk", asyncHandler(async (req, res) => {
       ).lean();
 
       saved.push(doc);
+
+      // Record only what moved. Re-saving an unchanged sheet is common and
+      // must not fill the history with noise.
+      const prior = priorByStudent.get(String(studentId));
+      const fields = prior
+        ? [
+            diffField("score",         prior.score         ?? null, score         ?? null),
+            diffField("isAbsent",      prior.isAbsent      ?? false, isAbsent     ?? false),
+            diffField("isExempt",      prior.isExempt      ?? false, isExempt     ?? false),
+            diffField("teacherRemark", prior.teacherRemark ?? null, teacherRemark ?? null),
+          ].filter(Boolean)
+        : [{ field: "score", oldValue: null, newValue: score ?? null }];
+
+      for (const f of fields) {
+        changes.push({
+          entity:    "score",
+          entityId:  String(doc._id),
+          action:    prior ? "updated" : "created",
+          studentId: String(studentId),
+          subjectId,
+          ...f,
+        });
+      }
     } catch (err) {
       failed.push({ ...row, reason: err.message });
     }
   }
+
+  await logResultChange(audit, changes);
 
   if (examSubject) {
     await ExamSubject.findByIdAndUpdate(examSubject._id, {
@@ -862,6 +919,18 @@ router.post("/:examId/scores/bulk", asyncHandler(async (req, res) => {
       submittedBy:      req.user?._id,
       submittedAt:      now,
     });
+
+    if (examSubject.submissionStatus !== "submitted") {
+      await logResultChange(audit, {
+        entity:   "examSubject",
+        entityId: String(examSubject._id),
+        action:   "submitted",
+        subjectId,
+        field:    "submissionStatus",
+        oldValue: examSubject.submissionStatus ?? "pending",
+        newValue: "submitted",
+      });
+    }
   }
 
   console.log(`📝 Scores saved: ${saved.length} | failed: ${failed.length}`);
@@ -1206,35 +1275,105 @@ router.patch(
 // PATCH /:examId/lock
 // ─────────────────────────────────────────────────────────
 
-router.patch("/:examId/lock", asyncHandler(async (req, res) => {
+router.patch("/:examId/lock", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
+  const examId   = req.params.examId;
   const now      = new Date();
-  await ResultSummary.updateMany(
-    { examId: req.params.examId, schoolId },
+
+  const result = await ResultSummary.updateMany(
+    { examId, schoolId },
     { isLocked: true, lockedAt: now }
   );
   await Exam.findOneAndUpdate(
-    { _id: req.params.examId, schoolId },
+    { _id: examId, schoolId },
     { resultsLockedAt: now }
   );
-  return res.json({ success: true, message: "Results locked" });
+
+  await logResultChange(
+    {
+      examId, schoolId,
+      reason:     (req.body?.reason || "").trim() || null,
+      isOverride: false,
+      actor: {
+        id:   req.user?._id ? String(req.user._id) : null,
+        name: req.user?.name || null,
+        role: req.user?.role || null,
+      },
+    },
+    {
+      entity:   "exam",
+      entityId: examId,
+      action:   "locked",
+      field:    "isLocked",
+      oldValue: false,
+      newValue: true,
+    }
+  );
+
+  return res.json({
+    success: true,
+    message: "Results locked",
+    locked:  result?.modifiedCount ?? 0,
+  });
 }));
 
 // ─────────────────────────────────────────────────────────
 // PATCH /:examId/unlock
 // ─────────────────────────────────────────────────────────
 
-router.patch("/:examId/unlock", asyncHandler(async (req, res) => {
+router.patch("/:examId/unlock", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
-  await ResultSummary.updateMany(
-    { examId: req.params.examId, schoolId },
+  const examId   = req.params.examId;
+
+  // Unlocking is the act that makes published marks editable again, so it is
+  // the one that most needs a recorded justification. Locking does not: it
+  // only ever narrows what can happen.
+  const reason = (req.body?.reason || req.body?.changeReason || "").trim();
+  if (!reason) {
+    return res.status(400).json({
+      success: false,
+      code:    "REASON_REQUIRED",
+      message: "Send a `reason` explaining why these results are being unlocked.",
+    });
+  }
+
+  const result = await ResultSummary.updateMany(
+    { examId, schoolId },
     { isLocked: false, lockedAt: null }
   );
   await Exam.findOneAndUpdate(
-    { _id: req.params.examId, schoolId },
+    { _id: examId, schoolId },
     { resultsLockedAt: null }
   );
-  return res.json({ success: true, message: "Results unlocked" });
+
+  // Awaited, and allowed to throw: an unlock that leaves no record is exactly
+  // the event this table exists to capture.
+  await logResultChange(
+    {
+      examId, schoolId,
+      reason,
+      isOverride: true,
+      actor: {
+        id:   req.user?._id ? String(req.user._id) : null,
+        name: req.user?.name || null,
+        role: req.user?.role || null,
+      },
+    },
+    {
+      entity:   "exam",
+      entityId: examId,
+      action:   "unlocked",
+      field:    "isLocked",
+      oldValue: true,
+      newValue: false,
+    }
+  );
+
+  return res.json({
+    success:  true,
+    message:  "Results unlocked",
+    unlocked: result?.modifiedCount ?? 0,
+  });
 }));
 
 // ─────────────────────────────────────────────────────────

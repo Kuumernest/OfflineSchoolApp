@@ -30,8 +30,11 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# local env files -- EXPO_PUBLIC_API_URL etc. .env.example is the committed
+# template and is deliberately kept out of these rules.
+.env
+.env.*
+!.env.example
 
 # typescript
 *.tsbuildinfo

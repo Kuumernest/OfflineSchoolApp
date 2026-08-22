@@ -25,6 +25,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { StudentService } from "../../../src/services/student.service";
+import { getStudentStatusConfig } from "../../../src/utils/studentStatus";
 
 // ─────────────────────────────────────────────────────────
 // COLORS  (unchanged)
@@ -111,20 +112,7 @@ const getDisplayName = (student) =>
  * Maps a status value → { label, color, bg }
  * Mirrors web statusLabel() + statusVariant() combined.
  */
-const getStatusConfig = (status) => {
-  switch ((status ?? "").toLowerCase()) {
-    case "approved":
-      return { label: "Active",     color: C.success, bg: C.successBg };
-    case "pending":
-      return { label: "Pending",    color: C.warning, bg: C.warningBg };
-    case "suspended":
-      return { label: "Suspended",  color: C.error,   bg: C.errorBg   };
-    case "rejected":
-      return { label: "Rejected",   color: C.purple,  bg: C.purpleBg  };
-    default:
-      return { label: status || "Unknown", color: C.gray500, bg: C.gray100 };
-  }
-};
+const getStatusConfig = getStudentStatusConfig;
 
 /**
  * Mirrors web resolveClassName():

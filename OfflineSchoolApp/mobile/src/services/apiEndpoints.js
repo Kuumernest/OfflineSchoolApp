@@ -22,6 +22,23 @@ export const API = {
       restore:  (id) => `/admin/students/${id}/restore`,
       move:     (id) => `/admin/students/${id}/move`,
       generateEnrollmentNo: (id) => `/admin/students/${id}/enrollment-number`,
+
+      // Approve fallback chain — the backend exposes the approve/reject
+      // actions under /admin/students/:id/approve (PUT). Older builds tried
+      // /admin/applications and /admin/student-applications first; those
+      // paths do not exist, so the students path is now FIRST.
+      approveFallbackChain: (id) => [
+        `/admin/students/${id}/approve`,
+        `/admin/applications/${id}/approve`,
+        `/admin/student-applications/${id}/approve`,
+      ],
+
+      // Reject fallback chain
+      rejectFallbackChain: (id) => [
+        `/admin/students/${id}/reject`,
+        `/admin/applications/${id}/reject`,
+        `/admin/student-applications/${id}/reject`,
+      ],
     },
 
     // ── NEW: dedicated applications collection ──────────────────────────

@@ -3,41 +3,62 @@ import { cn } from "@/utils/cn";
 
 type BadgeVariant =
   | "default"
+  | "primary"
+  | "secondary"
   | "success"
   | "warning"
   | "danger"
   | "info"
   | "purple";
 
+/**
+ * Status pills, tinted from the status tokens.
+ *
+ * Every variant is a soft fill plus a hairline and dark text, so they sit at
+ * one visual weight — a row of badges reads as a row, and the eye is drawn by
+ * *which* colour appears rather than by one variant shouting louder.
+ */
 const variants: Record<BadgeVariant, string> = {
-  default: "bg-gray-100  text-gray-700",
-  success: "bg-green-100 text-green-700",
-  warning: "bg-yellow-100 text-yellow-700",
-  danger:  "bg-red-100   text-red-700",
-  info:    "bg-blue-100  text-blue-700",
-  purple:  "bg-purple-100 text-purple-700",
+  default:   "bg-canvas          text-ink-muted    ring-line",
+  // primary/secondary are the selected / unselected pair used by tab counters.
+  primary:   "bg-primary-600     text-white        ring-primary-600",
+  secondary: "bg-canvas          text-ink-faint    ring-line",
+  success:   "bg-success-soft    text-success      ring-success-line",
+  warning:   "bg-warning-soft    text-warning      ring-warning-line",
+  danger:    "bg-danger-soft     text-danger       ring-danger-line",
+  info:      "bg-info-soft       text-info         ring-info-line",
+  // Retained for callers that pass it; drawn from the info scale so it no
+  // longer introduces a hue the rest of the system does not use.
+  purple:    "bg-info-soft       text-info         ring-info-line",
 };
 
 interface BadgeProps {
-  label:     string;
-  variant?:  BadgeVariant;
+  /** Either pass `label`, or pass the text as children — both are supported. */
+  label?:     string;
+  children?:  React.ReactNode;
+  variant?:   BadgeVariant;
   className?: string;
 }
 
 export function Badge({
   label,
+  children,
   variant = "default",
   className,
 }: BadgeProps) {
   return (
     <span
       className={cn(
-        "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium",
+        "inline-flex items-center gap-1 px-2 py-0.5",
+        "rounded-control text-xs font-medium leading-5",
+        // An inset ring instead of a border: it costs no layout height, so a
+        // badge never nudges the table row it sits in.
+        "ring-1 ring-inset",
         variants[variant],
         className
       )}
     >
-      {label}
+      {label ?? children}
     </span>
   );
 }

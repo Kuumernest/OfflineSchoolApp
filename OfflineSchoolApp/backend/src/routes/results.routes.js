@@ -28,6 +28,10 @@ router.get("/:examId/rankings",                       adminOrTeacher, ctrl.getEx
 // Single student result
 router.get("/:examId/student/:studentId",             adminOrTeacher, ctrl.getStudentResult);
 
+// Change history for an exam — ?studentId= ?subjectId= ?overridesOnly=1
+// Admin-only: it names who changed what, which is not a teacher's business.
+router.get("/:examId/history",                        adminOnly,      ctrl.getResultHistory);
+
 // Full report card (scores + summary + positions)
 router.get(
   "/:examId/student/:studentId/reportcard",

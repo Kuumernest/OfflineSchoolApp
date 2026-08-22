@@ -90,6 +90,23 @@ const userSchema = new mongoose.Schema(
       default: false,
     },
 
+    /**
+     * UI language for this person.
+     *
+     * Null means "follow the device / browser", which is the right default:
+     * guessing a language from a name or a school is worse than letting the
+     * platform answer. It becomes non-null only when someone chooses.
+     *
+     * Server-side this is what decides the language of a notification or a
+     * report card generated on their behalf — neither of which has a browser
+     * to read a preference from.
+     */
+    language: {
+      type:    String,
+      enum:    ["en", "fr", null],
+      default: null,
+    },
+
     // ── Password History ──────────────────────────────────────────────────────
     passwordChangedAt: Date,
     lastLoginAt:       Date,

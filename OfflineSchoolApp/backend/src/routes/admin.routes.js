@@ -2849,16 +2849,132 @@ router.get("/settings/analytics", asyncHandler(async (req, res) => {
 // SECTION 14 — SCHOOL INFO
 // ═════════════════════════════════════════════════════════════════════════════
 
+const logoStorage = require("../utils/logoStorage");
+
+/**
+ * Byte length of the *trimmed* logo — the fingerprint clients compare against
+ * their cached copy. Only meaningful for legacy inline logos; once a school is
+ * migrated the field holds a short URL, which the client compares directly.
+ *
+ * Trimming matters: the mobile cache trims on write, so fingerprinting the
+ * untrimmed value would differ by any stray whitespace and make the client
+ * re-download a 160 KB logo on every check, forever.
+ */
+const LOGO_LEN_EXPR = {
+  $strLenBytes: { $trim: { input: { $ifNull: ["$logo", ""] } } },
+};
+
+const logoFingerprint = (logo) =>
+  logo ? Buffer.byteLength(String(logo).trim()) : 0;
+
+/** Longest logo value we are willing to return on the light path. */
+const LOGO_HEAD_BYTES = 512;
+
+/**
+ * Reads what a school's logo *is* without transferring the image.
+ *
+ * One aggregation returns its byte length plus the leading bytes. When the
+ * value is short enough, that head IS the whole value — which is how a
+ * migrated school's URL comes back on the light path for free, while a
+ * legacy 160 KB base64 blob stays in the database where it belongs.
+ *
+ * @returns {Promise<{ logoLen: number, logoHead: string, isReference: boolean }|null>}
+ */
+const probeLogo = async (objectId) => {
+  try {
+    const rows = await School.aggregate([
+      { $match: { _id: objectId } },
+      {
+        $project: {
+          logoLen:  LOGO_LEN_EXPR,
+          logoHead: {
+            $substrBytes: [{ $trim: { input: { $ifNull: ["$logo", ""] } } }, 0, LOGO_HEAD_BYTES],
+          },
+        },
+      },
+    ]);
+    const row = rows[0];
+    if (!row) return null;
+
+    const head = String(row.logoHead || "");
+    return {
+      logoLen:  row.logoLen ?? 0,
+      logoHead: head,
+      // Only trust the head as a complete value if nothing was truncated.
+      isReference: row.logoLen <= LOGO_HEAD_BYTES && logoStorage.isLogoReference(head),
+    };
+  } catch (err) {
+    console.warn("[school-info] logo probe failed:", err.message);
+    return null;
+  }
+};
+
+/**
+ * GET /admin/school-info
+ *
+ * The logo is stored inline as a base64 data string and is routinely ~160 KB
+ * — 99% of this document. Fetching it from the remote cluster took ~8 s per
+ * call, and the mobile client polls school info on every sync cycle, so a
+ * static logo was re-read every 30 s and regularly blew the client's 8 s
+ * timeout ("No response ← /admin/school-info").
+ *
+ * So the logo is opt-in. By default we return the small fields plus a
+ * fingerprint (`logoLen`, computed in the database via $strLenBytes so the
+ * bytes never leave it) that lets a client tell whether the copy it already
+ * cached is current. Pass ?includeLogo=1 to actually download it.
+ */
 router.get("/school-info", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
-  const school   = await School.findById(schoolId)
-    .select(
-      "name code address city state country phone email " +
-      "logo motto website applicationsOpen isActive"
-    )
-    .lean();
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+
+  const includeLogo =
+    req.query.includeLogo === "1" || req.query.includeLogo === "true";
+
+  const LIGHT_FIELDS =
+    "name code address city state country phone email " +
+    "motto website applicationsOpen isActive updatedAt";
+
+  if (includeLogo) {
+    const school = await School.findById(schoolId)
+      .select(`${LIGHT_FIELDS} logo`)
+      .lean();
+    if (!school) return sendError(res, 404, "School not found");
+    return sendSuccess(res, {
+      school: { ...school, logoLen: logoFingerprint(school.logo) },
+    });
+  }
+
+  // School._id is a Mongoose ObjectId and aggregate() does not auto-cast,
+  // so the id must be cast explicitly or $match silently returns nothing —
+  // which would report logoLen 0 and make a client believe there is no logo.
+  const mongoose = require("mongoose");
+  const objectId = mongoose.Types.ObjectId.isValid(String(schoolId))
+    ? new mongoose.Types.ObjectId(String(schoolId))
+    : null;
+
+  const [school, meta] = await Promise.all([
+    School.findById(schoolId).select(LIGHT_FIELDS).lean(),
+    objectId ? probeLogo(objectId) : Promise.resolve(null),
+  ]);
+
   if (!school) return sendError(res, 404, "School not found");
-  return sendSuccess(res, { school });
+
+  // A migrated school stores a short URL, so the probe already carries the
+  // whole value and there is nothing to withhold. A legacy inline logo stays
+  // opt-in, with logoLen as the fingerprint.
+  //
+  // A null logoLen means "unknown", not "no logo" — the client must not read
+  // it as a reason to drop a logo it already has cached.
+  if (meta?.isReference) {
+    return sendSuccess(res, {
+      school: { ...school, logo: meta.logoHead, logoLen: null, logoIsUrl: true },
+    });
+  }
+
+  return sendSuccess(res, {
+    school: { ...school, logo: null, logoLen: meta?.logoLen ?? null },
+    logoOmitted: true,
+  });
 }));
 
 router.put("/school-info", asyncHandler(async (req, res) => {
@@ -2883,13 +2999,38 @@ router.put("/school-info", asyncHandler(async (req, res) => {
     ...(email            !== undefined && { email: email?.toLowerCase().trim()  }),
     ...(website          !== undefined && { website                             }),
     ...(applicationsOpen !== undefined && { applicationsOpen                    }),
-    ...(logoBase64                     && { logo: logoBase64                    }),
   };
+
+  // The logo arrives as base64 (the mobile picker posts JSON), but it is
+  // stored as a file — the document keeps only a short public path. Writing
+  // the bytes into Mongo is what made every school read cost ~160 KB.
+  let previousLogo = null;
+  if (logoBase64) {
+    try {
+      const saved = logoStorage.saveLogoFromBase64(schoolId, logoBase64);
+      const current = await School.findById(schoolId).select("logo").lean();
+      previousLogo = current?.logo || null;
+      updateFields.logo = saved.publicPath;
+      console.log(
+        `[school-info] Logo stored as ${saved.filename} ` +
+        `(${(saved.bytes / 1024).toFixed(0)} KB, ${saved.mime})`
+      );
+    } catch (err) {
+      return sendError(res, 400, `Logo rejected: ${err.message}`);
+    }
+  }
 
   const school = await School.findByIdAndUpdate(
     schoolId, updateFields, { new: true, runValidators: true }
   );
   if (!school) return sendError(res, 404, "School not found");
+
+  // Only remove the old file once the document points at the new one, and
+  // only if it is genuinely a different file.
+  if (previousLogo && previousLogo !== updateFields.logo &&
+      logoStorage.isLogoReference(previousLogo)) {
+    logoStorage.deleteLogoFile(previousLogo);
+  }
 
   return sendSuccess(res, { school });
 }));

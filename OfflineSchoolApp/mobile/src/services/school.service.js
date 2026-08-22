@@ -39,6 +39,7 @@
 import NetInfo     from "@react-native-community/netinfo";
 import api         from "./api";
 import { getDatabase } from "../db/database";
+import { toDisplayUri } from "../utils/logoUri";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — MEMORY CACHE
@@ -81,10 +82,16 @@ const normaliseRow = (row) => {
   const id = safeStr(row.id || row._id);
   if (!id) return null;                           // id is mandatory
 
+  const logo      = safeStr(row.logo || row.logoUrl);
+  const logoLocal = safeStr(row.logo_local || row.logoLocal);
+
   return {
     id,
     name:    safeStr(row.name    || row.school_name || row.schoolName),
-    logo:    safeStr(row.logo    || row.logoUrl),
+    logo,
+    // The offline-ready copy, and a ready-to-render uri that prefers it.
+    logoLocal,
+    logoUri: toDisplayUri(logoLocal, logo),
     email:   safeStr(row.email),
     phone:   safeStr(row.phone   || row.phoneNumber),
     address: safeStr(row.address || row.location),
@@ -142,6 +149,7 @@ const ensureTable = async (db) => {
       id         TEXT PRIMARY KEY,
       name       TEXT,
       logo       TEXT,
+      logo_local TEXT,
       email      TEXT,
       phone      TEXT,
       address    TEXT,
@@ -163,6 +171,9 @@ const ensureTable = async (db) => {
 
     const required = [
       { name: "logo",       def: "TEXT"            },
+      // Local file:// copy of the logo, so it renders with no connection now
+      // that the server stores logos as files and sends a URL.
+      { name: "logo_local", def: "TEXT"            },
       { name: "email",      def: "TEXT"            },
       { name: "phone",      def: "TEXT"            },
       { name: "address",    def: "TEXT"            },
@@ -220,6 +231,7 @@ export const upsertSchoolLocal = async (school) => {
       id:       safeStr(rawId),
       name:     safeStr(school.name    || school.school_name  || school.schoolName),
       logo:     safeStr(school.logo    || school.logoUrl),
+      logoLocal: safeStr(school.logoLocal || school.logo_local),
       email:    safeStr(school.email),
       phone:    safeStr(school.phone   || school.phoneNumber),
       address:  safeStr(school.address || school.location),
@@ -234,12 +246,15 @@ export const upsertSchoolLocal = async (school) => {
 
     await db.runAsync(
       `INSERT INTO schools
-         (id, name, logo, email, phone, address, city, state,
+         (id, name, logo, logo_local, email, phone, address, city, state,
           country, website, motto, code, verified, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(id) DO UPDATE SET
          name       = excluded.name,
          logo       = excluded.logo,
+         -- Keep the cached file when this write does not carry one, so a
+         -- metadata-only refresh never drops the offline copy.
+         logo_local = COALESCE(NULLIF(excluded.logo_local, ''), schools.logo_local),
          email      = excluded.email,
          phone      = excluded.phone,
          address    = excluded.address,
@@ -252,7 +267,7 @@ export const upsertSchoolLocal = async (school) => {
          verified   = excluded.verified,
          updated_at = excluded.updated_at`,
       [
-        n.id, n.name, n.logo, n.email, n.phone,
+        n.id, n.name, n.logo, n.logoLocal, n.email, n.phone,
         n.address, n.city, n.state, n.country,
         n.website, n.motto, n.code, n.verified,
         new Date().toISOString(),

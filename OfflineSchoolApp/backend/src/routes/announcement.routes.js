@@ -87,20 +87,7 @@ const extractUserId = (req) =>
  * Fix: try ObjectId first; if it's not a valid ObjectId format, fall back
  * to a plain { _id: id } string query which works for any _id type.
  */
-const findAnnouncementById = async (id) => {
-  if (!id) return null;
-
-  // Fast path — valid ObjectId
-  if (mongoose.Types.ObjectId.isValid(id)) {
-    const doc = await Announcement.findById(id);
-    if (doc) return doc;
-    // Could be a string id that happens to pass isValid (24-char hex) —
-    // fall through to string query as well.
-  }
-
-  // String id path (nanoid, UUID, client-generated random ids)
-  return Announcement.findOne({ _id: id });
-};
+const findAnnouncementById = (id) => Announcement.findByAnyId(id);
 
 const resolveStudentClassId = async (userId, schoolId) => {
   try {
@@ -188,20 +175,56 @@ const resolveTeacherClassIds = async (teacherId, schoolId) => {
   }
 };
 
+/**
+ * Read an id out of a ref that may or may not be populated.
+ *
+ * GET /:id populates author and readBy.user (it needs the names), while the
+ * list route leaves them as raw ids. A bare .toString() on a populated ref
+ * yields "[object Object]", so every comparison against it either always fails
+ * or — when both sides are populated — always succeeds. That is why the detail
+ * route reported isRead: false for an announcement the list route showed as
+ * read.
+ */
+const idOf = (ref) => {
+  if (!ref) return null;
+  if (typeof ref === "string") return ref;
+  return (ref._id ?? ref.id ?? ref)?.toString() ?? null;
+};
+
 const enrichForUser = (announcement, userId, isAdmin = false) => {
   const enriched = {
     ...announcement,
     isRead: (announcement.readBy || []).some(
-      (r) => r.user?.toString() === userId
+      (r) => idOf(r.user) === userId
     ),
     isAcknowledged: (announcement.acknowledgedBy || []).some(
-      (r) => r.user?.toString() === userId
+      (r) => idOf(r.user) === userId
     ),
   };
 
   if (isAdmin) {
-    enriched.readCount         = (announcement.readBy         || []).length;
-    enriched.acknowledgedCount = (announcement.acknowledgedBy || []).length;
+    // Exclude the author: "N read" means N recipients read it. The author now
+    // gets a receipt like anyone else (see POST /:id/read) so their own
+    // announcement can be dismissed from the bell — that must not show up as
+    // a reader.
+    const authorId = idOf(announcement.author);
+
+    // Count DISTINCT non-author users, not raw receipt rows. The read-modify-save
+    // this endpoint used to do could interleave and write the same user twice —
+    // there are such rows in existing data — and a duplicate would otherwise
+    // inflate the label. New writes are atomic, so this only has to absorb the
+    // legacy rows; it means no migration is needed to make the number correct.
+    const distinctReaders = (rows) => {
+      const seen = new Set();
+      for (const row of rows || []) {
+        const id = idOf(row.user);
+        if (id && id !== authorId) seen.add(id);
+      }
+      return seen.size;
+    };
+
+    enriched.readCount         = distinctReaders(announcement.readBy);
+    enriched.acknowledgedCount = distinctReaders(announcement.acknowledgedBy);
   } else {
     delete enriched.readBy;
     delete enriched.acknowledgedBy;
@@ -442,17 +465,20 @@ router.post("/students/:id/read", authenticated, async (req, res) => {
       return res.status(404).json({ message: "Announcement not found" });
     }
 
-    const userId      = extractUserId(req);
-    const alreadyRead = (announcement.readBy || []).some(
-      (r) => r.user?.toString() === userId
+    const userId = extractUserId(req);
+
+    // Atomic + idempotent, matching POST /:id/read — a student's phone retries
+    // this from the offline queue, so a duplicate receipt is a real risk.
+    const result = await Announcement.updateOne(
+      { _id: announcement._id, "readBy.user": { $ne: userId } },
+      { $push: { readBy: { user: userId, readAt: new Date() } } }
     );
 
-    if (!alreadyRead) {
-      announcement.readBy.push({ user: req.user._id, readAt: new Date() });
-      await announcement.save();
-    }
-
-    res.json({ success: true, message: "Marked as read" });
+    res.json({
+      success:     true,
+      message:     "Marked as read",
+      alreadyRead: result.modifiedCount === 0,
+    });
   } catch (err) {
     console.error("POST /announcements/students/:id/read error:", err.message);
     res.status(500).json({ message: "Failed to mark as read" });
@@ -914,22 +940,26 @@ router.post("/:id/read", authenticated, async (req, res) => {
 
     const userId = extractUserId(req);
 
-    // ✅ Guard: don't create a read receipt for your own announcement
-    const authorId = announcement.author?.toString();
-    if (authorId && authorId === userId) {
-      return res.status(200).json({ success: true, message: "Own announcement — skipped" });
-    }
-
-    const alreadyRead = (announcement.readBy || []).some(
-      (r) => r.user?.toString() === userId
+    // The author used to be skipped here, which left their own announcement
+    // permanently unread in the bell — clicking it did nothing, while
+    // "mark all read" (which never skipped the author) did clear it. The two
+    // endpoints disagreed. Everyone gets a receipt now; the author is instead
+    // excluded from readCount in enrichForUser, so "N read" still counts only
+    // recipients.
+    //
+    // $push guarded by $ne is atomic and idempotent: two taps, or a tap racing
+    // the sync engine, can never write a duplicate receipt (which would have
+    // inflated readCount). The read-modify-save it replaces could.
+    const result = await Announcement.updateOne(
+      { _id: announcement._id, "readBy.user": { $ne: userId } },
+      { $push: { readBy: { user: userId, readAt: new Date() } } }
     );
 
-    if (!alreadyRead) {
-      announcement.readBy.push({ user: req.user._id, readAt: new Date() });
-      await announcement.save();
-    }
-
-    res.json({ success: true, message: "Marked as read" });
+    res.json({
+      success:     true,
+      message:     "Marked as read",
+      alreadyRead: result.modifiedCount === 0,
+    });
   } catch (err) {
     // ✅ FIX: removed `next(err)` — next was never injected so calling it
     //    threw "next is not a function", which produced the 500.

@@ -64,29 +64,59 @@ const normalizeUser = (user) => {
 // ── Module-level sync guard ────────────────────────────────────────────────
 let _syncLock        = false;
 let _lastSyncAt      = 0;
+let _prevSyncAt      = 0;
 const MIN_SYNC_GAP_MS = 15_000;
 
-export const acquireSyncLock = () => {
+/** Dedupes concurrent upgradeOfflineSession() calls. */
+let _upgradeInFlight = null;
+
+/**
+ * @param {{force?: boolean}} opts  `force` skips the rate-limit gap. Used by
+ *   the reconnect and foreground triggers, which are edge-driven and must not
+ *   be swallowed just because a periodic tick happened to run seconds earlier.
+ *
+ * The gap stamp is provisional: a caller that bails out before doing any real
+ * work calls releaseSyncLock(false) and the previous stamp is restored. Without
+ * that rollback, every offline tick consumed the whole 15 s budget, so the
+ * sync fired the moment the network came back was rejected as "too soon" and
+ * the user waited out a full interval before anything uploaded.
+ */
+export const acquireSyncLock = ({ force = false } = {}) => {
   const now = Date.now();
-  if (_syncLock)                            return false;
-  if (now - _lastSyncAt < MIN_SYNC_GAP_MS) return false;
+  if (_syncLock)                                    return false;
+  if (!force && now - _lastSyncAt < MIN_SYNC_GAP_MS) return false;
   _syncLock   = true;
+  _prevSyncAt = _lastSyncAt;
   _lastSyncAt = now;
   return true;
 };
 
-export const releaseSyncLock = () => { _syncLock = false; };
+/**
+ * @param {boolean} consumed  Pass false when the caller acquired the lock but
+ *   did no work (offline, logged out, password wall) so the rate-limit window
+ *   is handed back instead of burned.
+ */
+export const releaseSyncLock = (consumed = true) => {
+  _syncLock = false;
+  if (!consumed) _lastSyncAt = _prevSyncAt;
+};
 
 export const resetSyncLock = () => {
   _syncLock   = false;
   _lastSyncAt = 0;
+  _prevSyncAt = 0;
 };
 
 // ── Store ──────────────────────────────────────────────────────────────────
 export const useAuthStore = create((set, get) => ({
   user:             null,
   token:            null,
+  // The refresh token VALUE. Deliberately not named `refreshToken` — that
+  // name belongs to the refresh action below, and api.js used to read the
+  // action by mistake, which broke token refresh entirely.
+  refreshTokenValue: null,
   error:            null,
+  syncError:        null,
   isLoading:        false,
   hydrated:         false,
   // ✅ Keep hasInitialized as an alias so any code still reading the old
@@ -95,6 +125,10 @@ export const useAuthStore = create((set, get) => ({
   profileCompleted: false,
 
   setProfileCompleted: (val) => set({ profileCompleted: val }),
+
+  // ✅ Set/clear sync error so the UI can warn about stale data
+  setSyncError: (msg) => set({ syncError: msg }),
+  clearSyncError: () => set({ syncError: null }),
 
   // ── SET USER ──────────────────────────────────────────────────────────────
   setUser: async (user, token) => {
@@ -139,9 +173,10 @@ export const useAuthStore = create((set, get) => ({
     set({ isLoading: true });
 
     try {
-      const [token, userJson] = await Promise.all([
+      const [token, userJson, storedRefresh] = await Promise.all([
         SecureStore.getItemAsync(TOKEN_KEY),
         SecureStore.getItemAsync(USER_KEY),
+        SecureStore.getItemAsync(REFRESH_TOKEN_KEY).catch(() => null),
       ]);
 
       console.log("🔑 token from SecureStore:", token ? "found" : "null");
@@ -174,6 +209,7 @@ export const useAuthStore = create((set, get) => ({
       set({
         user,
         token,
+        refreshTokenValue: storedRefresh || null,
         hydrated:       true,
         hasInitialized: true,
         isLoading:      false,   // ← combined into one set()
@@ -378,9 +414,29 @@ export const useAuthStore = create((set, get) => ({
         user  = normalizeUser(safeUser);
         token = OFFLINE_TOKEN;
 
+        // Keep any refresh token from a previous online session for THIS
+        // user. It is what lets upgradeOfflineSession() turn this
+        // offline-only session into a real one when the network returns —
+        // without it, everything queued offline would never sync.
+        try {
+          const prior = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+          const priorUserJson = await SecureStore.getItemAsync(USER_KEY);
+          const priorUser = priorUserJson ? JSON.parse(priorUserJson) : null;
+          if (prior && priorUser && String(priorUser.id) === String(user.id)) {
+            refreshToken = prior;
+          } else if (prior) {
+            // Different user — the old refresh token must not be reused.
+            await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY).catch(() => {});
+          }
+        } catch { /* ignore */ }
+
         await SecureStore.setItemAsync(TOKEN_KEY, token);
         await SecureStore.setItemAsync(USER_KEY,  JSON.stringify(user));
-        console.log("✅ Offline session saved to SecureStore");
+        console.log(
+          `✅ Offline session saved to SecureStore${
+            refreshToken ? " (upgradeable)" : " (no refresh token — sync needs re-login online)"
+          }`
+        );
       }
 
       resetSyncLock();
@@ -390,6 +446,7 @@ export const useAuthStore = create((set, get) => ({
       set({
         user,
         token,
+        refreshTokenValue: refreshToken || null,
         hydrated:         true,
         hasInitialized:   true,
         isLoading:        false,   // ← no separate finally needed
@@ -448,12 +505,73 @@ export const useAuthStore = create((set, get) => ({
       const data = await res.json();
       if (!res.ok || !data.token) return false;
       await SecureStore.setItemAsync(TOKEN_KEY, data.token);
-      set({ token: data.token });
+      if (data.refreshToken) {
+        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, data.refreshToken);
+      }
+      set({
+        token: data.token,
+        ...(data.refreshToken ? { refreshTokenValue: data.refreshToken } : {}),
+      });
       return true;
     } catch (err) {
       console.error("refreshToken error:", err.message);
       return false;
     }
+  },
+
+  // ── UPGRADE OFFLINE SESSION ───────────────────────────────────────────────
+  //
+  // A user who logged in while offline holds the sentinel token
+  // "offline_mode". isAuthenticated() rejects that sentinel, so SyncManager
+  // refuses to run and everything written during the session stays queued
+  // forever. This exchanges the sentinel for a real access token as soon as
+  // the network is back, using the refresh token kept from the last online
+  // session.
+  //
+  // Returns true when the session is (or has become) a real online session.
+  upgradeOfflineSession: async () => {
+    const { token, user } = get();
+    if (!user)                    return false;
+    if (token !== OFFLINE_TOKEN)  return true;   // already a real session
+
+    if (_upgradeInFlight) return _upgradeInFlight;
+
+    _upgradeInFlight = (async () => {
+      try {
+        if (NetInfo) {
+          const net = await NetInfo.fetch();
+          if (!net.isConnected) return false;
+        }
+
+        const { refreshAccessToken } = require("../services/api");
+        const newToken = await refreshAccessToken();
+
+        if (!newToken) {
+          console.log(
+            "🔒 Offline session could not be upgraded — sign in again to sync queued changes"
+          );
+          set({
+            syncError:
+              "Signed in offline. Sign in again while connected to upload your changes.",
+          });
+          return false;
+        }
+
+        // refreshAccessToken already persisted the token and updated
+        // `token` / `refreshTokenValue` in the store.
+        console.log("🔓 Offline session upgraded to an online session");
+        set({ syncError: null });
+        resetSyncLock();
+        return true;
+      } catch (err) {
+        console.warn("upgradeOfflineSession failed:", err.message);
+        return false;
+      } finally {
+        _upgradeInFlight = null;
+      }
+    })();
+
+    return _upgradeInFlight;
   },
 
   // ── LOGOUT ────────────────────────────────────────────────────────────────
@@ -479,13 +597,14 @@ export const useAuthStore = create((set, get) => ({
     //    re-appear; the navigation guard sees token:null and redirects
     //    to /auth/login immediately.
     set({
-      user:             null,
-      token:            null,
-      hydrated:         true,
-      hasInitialized:   true,
-      isLoading:        false,
-      profileCompleted: false,
-      error:            null,
+      user:              null,
+      token:             null,
+      refreshTokenValue: null,
+      hydrated:          true,
+      hasInitialized:    true,
+      isLoading:         false,
+      profileCompleted:  false,
+      error:             null,
     });
 
     return true;

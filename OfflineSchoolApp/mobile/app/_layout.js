@@ -11,6 +11,8 @@ import {
 import { getDatabase }  from "../src/db/database";
 import { useAuthStore } from "../src/store/auth.store";
 import { getRoleRoute } from "../src/services/routes";
+import { SyncManager }  from "../src/services/syncManager";
+import { loadStoredLanguage } from "../src/i18n";
 
 export default function RootLayout() {
   const router   = useRouter();
@@ -24,6 +26,7 @@ export default function RootLayout() {
   const user           = useAuthStore((s) => s.user);
   const token          = useAuthStore((s) => s.token);
   const initAuth       = useAuthStore((s) => s.initAuth);
+  const setSyncError   = useAuthStore((s) => s.setSyncError);
 
   // ✅ Auth is ready when EITHER flag is true AND we are not mid-login
   const authReady = (hydrated || hasInitialized) && !isLoading;
@@ -35,6 +38,7 @@ export default function RootLayout() {
 
   // ── Debug — log every state change so we can see what's blocking ───────
   useEffect(() => {
+    if (!__DEV__) return;
     console.log("[layout] state →", {
       dbReady,
       hydrated,
@@ -46,6 +50,15 @@ export default function RootLayout() {
       hasToken: !!token,
     });
   }, [dbReady, hydrated, hasInitialized, isLoading, authReady, forceReady, user, token]);
+
+  // ── Language ───────────────────────────────────────────────────────────
+  // The device locale is already applied synchronously at import, so the first
+  // frame is in the right language; this only applies a saved override. It is
+  // deliberately not awaited by anything — a language preference must never be
+  // able to hold up app start.
+  useEffect(() => {
+    loadStoredLanguage().catch(() => { /* keep the device language */ });
+  }, []);
 
   // ── Boot — open SQLite ─────────────────────────────────────────────────
   useEffect(() => {
@@ -101,6 +114,29 @@ export default function RootLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authReady]);
 
+  // ── Sync engine ────────────────────────────────────────────────────────
+  // Lives here, not in app/index.js. index is a route, and several flows
+  // never pass through it — auth/set-password replaces straight to a role
+  // dashboard, and the guard below redirects out of the auth group directly.
+  // Since logout() calls SyncManager.destroy(), any of those paths left the
+  // session with no interval, no reconnect listener, and no sync at all
+  // until the app was killed and reopened.
+  //
+  // ensureStarted() is idempotent and de-duplicates concurrent calls, so
+  // re-running it on every session change is cheap.
+  useEffect(() => {
+    if (!dbReady)               return;
+    if (!user || !token)        return;
+    if (user.mustResetPassword) return;   // password wall — no data access yet
+
+    SyncManager.ensureStarted().catch((err) => {
+      console.warn("[layout] sync engine failed to start:", err.message);
+      // Surface it — the screens below are about to render cached data with
+      // no indication that it is stale.
+      setSyncError?.("Data sync failed. Some information may be outdated.");
+    });
+  }, [dbReady, user?.id, token, user?.mustResetPassword, setSyncError]);
+
   // ── Navigation guard ───────────────────────────────────────────────────
   const canNavigate = dbReady && (authReady || forceReady);
 
@@ -142,10 +178,16 @@ export default function RootLayout() {
     const currentSection = path.split("/")[1];
     const targetSection  = (target || "").split("/")[1];
 
+    // Sections every signed-in role may open, regardless of their home
+    // section. Without this the guard would bounce a user straight back out
+    // of /sync/pending the moment they tapped the offline banner.
+    const SHARED_SECTIONS = new Set(["sync"]);
+
     if (
       currentSection &&
       targetSection  &&
       currentSection !== targetSection &&
+      !SHARED_SECTIONS.has(currentSection) &&
       !onSetPassword
     ) {
       console.log("🚦 Wrong section — redirecting to:", target);

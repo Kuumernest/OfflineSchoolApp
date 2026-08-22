@@ -1,6 +1,7 @@
 // src/services/homework.service.js
 
 import { getDatabase } from '../db/database';
+import { MutationQueue } from "./mutationQueue.service";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -321,6 +322,21 @@ export const createHomework = async ({
     ` is_published=${is_published ? 1 : 0}`
   );
 
+  await MutationQueue.enqueue({
+    entityKey: "homework:" + id,
+    method: "POST",
+    endpoint: "/homework",
+    payload: {
+      id, schoolId: canonicalSchoolId, classId: String(class_id),
+      subjectId: String(subject_id), createdBy: String(created_by),
+      title: title.trim(), description, instructions, dueDate: due_date,
+      maxScore: Number(max_score), allowLate: !!allow_late,
+      latePenalty: Number(late_penalty), attachmentUrl: attachment_url,
+      attachmentName: attachment_name, attachmentType: attachment_type,
+      isPublished: !!is_published,
+      __local: { table: "homework", ids: [id] },
+    },
+  });
   return getHomeworkById(id);
 };
 
@@ -424,6 +440,35 @@ export const updateHomework = async (id, updates) => {
     [...values, id]
   );
 
+  // ✅ Enqueue mutation for offline-first sync
+  //    NOTE: Backend uses camelCase (classId, subjectId, dueDate, maxScore,
+  //    allowLate, latePenalty, isPublished, attachmentUrl) while SQLite
+  //    stores snake_case. Map correctly here.
+  const hw = await getHomeworkById(id);
+  if (hw) {
+    await MutationQueue.enqueue({
+      entityKey: "homework:" + id,
+      method: "PUT",
+      endpoint: `/homework/${id}`,
+      payload: {
+        id,
+        title:       updates.title       ?? hw.title,
+        description: updates.description ?? hw.description,
+        instructions: updates.instructions ?? hw.instructions,
+        dueDate:     updates.due_date    ?? hw.due_date,
+        maxScore:    updates.max_score   ?? hw.max_score,
+        allowLate:   updates.allow_late  !== undefined ? !!updates.allow_late : !!hw.allow_late,
+        latePenalty: updates.late_penalty ?? hw.late_penalty,
+        isPublished: updates.is_published !== undefined ? !!updates.is_published : !!hw.is_published,
+        status:      updates.status      ?? hw.status,
+        attachmentUrl:  updates.attachment_url  ?? hw.attachment_url,
+        attachmentName: updates.attachment_name ?? hw.attachment_name,
+        attachmentType: updates.attachment_type ?? hw.attachment_type,
+        __local: { table: "homework", ids: [id] },
+      },
+    });
+  }
+
   return getHomeworkById(id);
 };
 
@@ -436,6 +481,14 @@ export const deleteHomework = async (id) => {
      WHERE id = ?`,
     [id]
   );
+
+  // ✅ Enqueue delete mutation for offline-first sync
+  await MutationQueue.enqueue({
+    entityKey: "homework:" + id,
+    method: "DELETE",
+    endpoint: `/homework/${id}`,
+    payload: { id, __local: { table: "homework", ids: [id] } },
+  });
 };
 
 export const publishHomework   = (id) => updateHomework(id, { is_published: 1 });
@@ -506,6 +559,20 @@ export const gradeSubmission = async ({
      WHERE id = ?`,
     [Number(score), feedback, String(gradedBy), submissionId]
   );
+
+  // ✅ Enqueue grade mutation for offline-first sync
+  await MutationQueue.enqueue({
+    entityKey: "homework_submission:" + submissionId,
+    method: "PUT",
+    endpoint: `/homework/submissions/${submissionId}/grade`,
+    payload: {
+      id: submissionId,
+      score: Number(score),
+      feedback,
+      gradedBy: String(gradedBy),
+      __local: { table: "homework_submissions", ids: [submissionId] },
+    },
+  });
 };
 
 export const getStudentsWithoutSubmission = async (homeworkId) => {
@@ -595,6 +662,26 @@ export const submitHomework = async ({
         is_late, existing.id,
       ]
     );
+
+    // ✅ Enqueue submission update mutation for offline-first sync
+    //    NOTE: Backend submission schema uses `text` (not `submissionText`)
+    await MutationQueue.enqueue({
+      entityKey: "homework_submission:" + existing.id,
+      method: "PUT",
+      endpoint: `/homework/submissions/${existing.id}`,
+      payload: {
+        id: existing.id,
+        homeworkId,
+        studentId: String(studentId),
+        text: submission_text,
+        attachmentUrl: attachment_url,
+        attachmentName: attachment_name,
+        attachmentType: attachment_type,
+        isLate: !!is_late,
+        __local: { table: "homework_submissions", ids: [existing.id] },
+      },
+    });
+
     return existing.id;
   }
 
@@ -612,6 +699,25 @@ export const submitHomework = async ({
       is_late,
     ]
   );
+
+  // ✅ Enqueue submission create mutation for offline-first sync
+  //    NOTE: Backend submission schema uses `text` (not `submissionText`)
+  await MutationQueue.enqueue({
+    entityKey: "homework_submission:" + id,
+    method: "POST",
+    endpoint: "/homework/submissions",
+    payload: {
+      id,
+      homeworkId,
+      studentId: String(studentId),
+      text: submission_text,
+      attachmentUrl: attachment_url,
+      attachmentName: attachment_name,
+      attachmentType: attachment_type,
+      isLate: !!is_late,
+      __local: { table: "homework_submissions", ids: [id] },
+    },
+  });
 
   return id;
 };

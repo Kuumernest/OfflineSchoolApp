@@ -512,6 +512,8 @@ const provisionStudentAccount = async ({ student, schoolId, displayName, emailRa
     const canAttachEmail = Boolean(emailRaw) && !notice;
     const userFields = {
       _id:               uuidv4(),
+      // User.name IS a real schema path — unlike Student, which uses
+      // studentName. This must stay.
       name:              displayName,
       role:              "student",
       schoolId,
@@ -636,7 +638,6 @@ router.post("/apply", asyncHandler(async (req, res) => {
     _id:           uuidv4(),
     firstName:     firstName?.trim()     || null,
     lastName:      lastName?.trim()      || null,
-    name:          displayName,
     studentName:   displayName,
     email:         emailClean            || undefined,
     phone:         phone?.trim()         || null,
@@ -1027,20 +1028,22 @@ router.post(
   "/announcements/:id/read",
   authenticate, studentOnly,
   asyncHandler(async (req, res) => {
-    const announcement = await Announcement.findById(req.params.id);
+    // findByAnyId, not findById: mobile-created announcements have nanoid _ids,
+    // which findById CastErrors on — and this is the route the phone calls.
+    const announcement = await Announcement.findByAnyId(req.params.id);
     if (!announcement) return sendError(res, 404, "Announcement not found");
 
-    const userId      = req.user._id;
-    const alreadyRead = (announcement.readBy || []).some(
-      (r) => r.user?.toString() === String(userId)
+    // Atomic and idempotent — the phone replays this from its offline queue,
+    // and a duplicate receipt would inflate the admin's "N read" count.
+    const result = await Announcement.updateOne(
+      { _id: announcement._id, "readBy.user": { $ne: String(req.user._id) } },
+      { $push: { readBy: { user: req.user._id, readAt: new Date() } } }
     );
 
-    if (!alreadyRead) {
-      announcement.readBy.push({ user: userId, readAt: new Date() });
-      await announcement.save();
-    }
-
-    return sendSuccess(res, { message: "Marked as read" });
+    return sendSuccess(res, {
+      message:     "Marked as read",
+      alreadyRead: result.modifiedCount === 0,
+    });
   })
 );
 
@@ -1301,6 +1304,7 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
   const {
+    id,
     firstName, lastName, name, email, phone, dateOfBirth,
     gender, address, guardianName, guardianPhone, guardianEmail,
     classId, documents = [], notes,
@@ -1310,6 +1314,24 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
     [firstName, lastName].filter(Boolean).join(" ").trim();
   if (!displayName) return sendError(res, 400, "Student name is required");
   if (!classId)     return sendError(res, 400, "classId is required for direct enrollment");
+
+  // Student._id is a String UUID, so a client that enrolled this student
+  // offline can supply the id it already stored. Re-POSTing that id returns
+  // the existing record instead of creating a second one — which is what
+  // makes the mobile outbox safe to retry. Without it, a retry of an
+  // enrollment that carries no email (the only duplicate guard below) would
+  // silently create a duplicate student.
+  if (id) {
+    const existing = await Student.findById(String(id)).lean();
+    if (existing) {
+      return sendSuccess(res, {
+        student:       normaliseStudent(existing),
+        enrollmentNo:  existing.enrollmentNo || null,
+        deduplicated:  true,
+        message:       `${displayName} is already enrolled.`,
+      });
+    }
+  }
 
   const targetClass = await Class.findById(String(classId).trim()).lean();
   if (!targetClass) return sendError(res, 404, "Class not found");
@@ -1356,11 +1378,28 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   const now       = new Date();
   const className = [targetClass.name, targetClass.section].filter(Boolean).join(" ");
 
+  // Provision the login and enrolment number BEFORE creating the record.
+  //
+  // An enrolled student is only valid with both, so creating first and
+  // patching after left a window where the document could not satisfy its own
+  // schema — which is exactly why this endpoint failed with
+  // "Enrollment number is required / User ID is required".
+  const studentId = id ? String(id) : uuidv4();
+
+  const { userAccount, enrollmentNo, tempPassword, notice, emailAttached } =
+    await provisionStudentAccount({
+      student: { _id: studentId },
+      schoolId,
+      displayName,
+      emailRaw: emailClean,
+    });
+
   const student = await Student.create({
-    _id:           uuidv4(),
+    _id:           studentId,
+    userId:        userAccount._id,
+    enrollmentNo,
     firstName:     firstName?.trim()     || null,
     lastName:      lastName?.trim()      || null,
-    name:          displayName,
     studentName:   displayName,
     email:         emailClean            || undefined,
     phone:         phone?.trim()         || null,
@@ -1383,13 +1422,6 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
     approvedAt:    now,
     enrolledAt:    now,
   });
-
-  const { userAccount, enrollmentNo, tempPassword, notice, emailAttached } =
-    await provisionStudentAccount({ student, schoolId, displayName, emailRaw: emailClean });
-
-  student.userId      = userAccount._id;
-  student.admissionNo = enrollmentNo;
-  await student.save({ validateModifiedOnly: true });
 
   let emailResult = { success: false };
   if (emailClean) {
@@ -1455,12 +1487,26 @@ const handleApprove = asyncHandler(async (req, res) => {
     const emailRaw    = (appRecord.email || "").toLowerCase().trim();
     const now         = new Date();
 
+    // Provision the login and number first — an approved Student is only
+    // valid with both, so it cannot be created and then patched.
+    const newStudentId = uuidv4();
+
+    const { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser } =
+      await provisionStudentAccount({
+        student: { _id: newStudentId },
+        schoolId: appRecord.schoolId || schoolId,
+        displayName,
+        emailRaw,
+      });
+
     // Create canonical Student record
     const student = await Student.create({
-      _id:           uuidv4(),
+      _id:           newStudentId,
+      userId:        userAccount._id,
+      enrollmentNo,
+      applicationId: String(appRecord._id),
       firstName:     appRecord.firstName     || null,
       lastName:      appRecord.lastName      || null,
-      name:          displayName,
       studentName:   displayName,
       email:         emailRaw                || undefined,
       phone:         appRecord.phone         || null,
@@ -1482,15 +1528,6 @@ const handleApprove = asyncHandler(async (req, res) => {
       approvedAt:    now,
       enrolledAt:    now,
     });
-
-    const { userAccount, enrollmentNo, tempPassword, notice, emailAttached, isNewUser } =
-      await provisionStudentAccount({
-        student, schoolId: appRecord.schoolId || schoolId, displayName, emailRaw,
-      });
-
-    student.userId      = userAccount._id;
-    student.admissionNo = enrollmentNo;
-    await student.save({ validateModifiedOnly: true });
 
     // Mark StudentApplication as approved and link the new Student record
     await StudentApp.findByIdAndUpdate(id, {
@@ -1571,7 +1608,7 @@ const handleApprove = asyncHandler(async (req, res) => {
   student.reviewedAt  = now;
   student.approvedAt  = now;
   student.enrolledAt  = student.enrolledAt || now;
-  student.admissionNo = enrollmentNo;
+  student.enrollmentNo = enrollmentNo;
   await student.save({ validateModifiedOnly: true });
 
   let emailResult = { success: false };

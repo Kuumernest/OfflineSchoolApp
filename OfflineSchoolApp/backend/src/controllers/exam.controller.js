@@ -213,11 +213,23 @@ exports.createExam = asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
 
   const {
+    id,
     name, type, academicYear, term,
     classId, className, classIds, classNames,
     startDate, endDate, totalMarks, passMark,
     description, instructions, status, subjects,
   } = req.body;
+
+  // Exam._id is a String UUID, so a client that authored this exam offline
+  // can supply the id it already stored locally. Re-POSTing the same id is
+  // then a no-op that returns the existing exam, which is what makes the
+  // mobile outbox safe to retry.
+  if (id) {
+    const existing = await Exam.findById(String(id)).lean();
+    if (existing) {
+      return res.status(200).json({ success: true, exam: existing, deduplicated: true });
+    }
+  }
 
   if (!name?.trim()) {
     return res.status(400).json({ message: "name is required" });
@@ -251,6 +263,7 @@ exports.createExam = asyncHandler(async (req, res) => {
   }
 
   const exam = await Exam.create({
+    ...(id ? { _id: String(id) } : {}),
     schoolId,
     name:         name.trim(),
     type:         type         || "first_test",
@@ -282,6 +295,7 @@ exports.createExam = asyncHandler(async (req, res) => {
           : null;
 
         const es = await ExamSubject.create({
+          ...(s.id ? { _id: String(s.id) } : {}),
           examId:      exam._id,
           subjectId:   s.subjectId,
           classId:     s.classId || resolvedClassId,

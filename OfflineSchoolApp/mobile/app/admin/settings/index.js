@@ -23,6 +23,7 @@ import {
 import { Ionicons }        from "@expo/vector-icons";
 import { useRouter }       from "expo-router";
 import * as ImagePicker    from "expo-image-picker";
+import { toDisplayUri }    from "../../../src/utils/logoUri";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import {
   fetchProfile,
@@ -88,14 +89,12 @@ const DAYS_OF_WEEK = [
 // LOGO FORMAT HELPER
 // ─────────────────────────────────────────────────────────
 
-const normaliseLogo = (raw) => {
-  if (!raw || typeof raw !== "string" || raw.trim() === "") return null;
-  const trimmed = raw.trim();
-  if (trimmed.startsWith("http")) return trimmed;
-  if (trimmed.startsWith("data:")) return trimmed;
-  const mimeType = trimmed.startsWith("iVBOR") ? "image/png" : "image/jpeg";
-  return `data:${mimeType};base64,${trimmed}`;
-};
+/**
+ * Delegates to the shared resolver. The previous local version turned
+ * anything not starting with "http"/"data:" into a base64 data URI, so a
+ * server path like "/uploads/logos/x.jpg" became an unrenderable blob.
+ */
+const normaliseLogo = (raw) => toDisplayUri(raw);
 
 // ─────────────────────────────────────────────────────────
 // SHARED SUB-COMPONENTS

@@ -1,6 +1,13 @@
 // web/src/services/auth.service.ts
-import api              from "@/lib/axios";
-import { useAuthStore } from "@/store/auth.store";
+import api from "@/lib/axios";
+import {
+  useAuthStore,
+  normaliseAuthUser,
+  type AuthUser,
+} from "@/store/auth.store";
+
+// AuthUser is re-exported so existing importers of this module keep working.
+export type { AuthUser };
 
 export interface StaffLoginPayload {
   email:    string;
@@ -13,21 +20,6 @@ export interface StudentLoginPayload {
 }
 
 export type LoginPayload = StaffLoginPayload | StudentLoginPayload;
-
-export interface AuthUser {
-  id:                string;
-  _id:               string;
-  name:              string | null;
-  email:             string | null;
-  enrollmentNo:      string | null;
-  role:              string;
-  schoolId:          string | null;
-  isActive:          boolean;
-  mustResetPassword: boolean;
-  permissions:       string[];
-  createdAt:         string | null;
-  updatedAt:         string | null;
-}
 
 export interface AuthResult {
   user:         AuthUser;
@@ -50,15 +42,21 @@ const extractTokenAndUser = (data: Record<string, unknown>): AuthResult => {
 
   const refreshToken = (data.refreshToken as string | undefined) ?? null;
 
-  const user =
-    (data.user as AuthUser | undefined) ??
-    (data.data as AuthUser | undefined) ??
-    null;
+  // Only accept data.data as the user when it actually looks like one — an
+  // error envelope such as { success: false, data: { items: [] } } would
+  // otherwise be read as a user object.
+  let rawUser =
+    (data.user as Record<string, unknown> | undefined) ?? null;
 
-  if (!token) throw new Error("Auth response is missing a token");
-  if (!user)  throw new Error("Auth response is missing user data");
+  if (!rawUser && data.data && typeof data.data === "object") {
+    const candidate = data.data as Record<string, unknown>;
+    if (candidate._id || candidate.id) rawUser = candidate;
+  }
 
-  return { token, refreshToken, user };
+  if (!token)   throw new Error("Auth response is missing a token");
+  if (!rawUser) throw new Error("Auth response is missing user data");
+
+  return { token, refreshToken, user: normaliseAuthUser(rawUser) };
 };
 
 export async function login(payload: LoginPayload): Promise<AuthResult> {
@@ -83,9 +81,11 @@ export async function logout(): Promise<void> {
 
 export async function getMe(): Promise<AuthUser> {
   const { data } = await api.get<Record<string, unknown>>("/auth/me");
-  const user     = (data.user as AuthUser | undefined) ?? (data as AuthUser);
-  const store    = useAuthStore.getState();
-  if (user && store.token) store.setAuth(user, store.token);
+  const user  = normaliseAuthUser(
+    (data.user as Record<string, unknown> | undefined) ?? data,
+  );
+  const store = useAuthStore.getState();
+  if (store.token) store.setAuth(user, store.token);
   return user;
 }
 

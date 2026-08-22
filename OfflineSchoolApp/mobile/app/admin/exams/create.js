@@ -1181,18 +1181,24 @@ export default function CreateExamScreen() {
       if (!examId) throw new Error("Exam created but ID was not returned");
 
       let totalAssigned = 0;
+      let totalQueued   = 0;
       for (const [classId, clsData] of Object.entries(assignments)) {
         for (const [subjectId, subData] of Object.entries(clsData.subjects)) {
           try {
-            await api.post(`/exams/${examId}/subjects`, {
+            // Goes through ExamService so an assignment made offline is
+            // stored locally and queued, instead of being silently lost.
+            const res = await ExamService.assignExamSubject({
+              examId,
               subjectId,
               classId,
-              teacherId: subData.teacherId || null,
-              maxScore:  Number(subData.maxScore) || Number(form.totalMarks),
-              passMark:  Number(subData.passMark) || Number(form.passMark),
+              teacherId:   subData.teacherId || null,
+              subjectName: subData.subjectName || null,
+              maxScore:    Number(subData.maxScore) || Number(form.totalMarks),
+              passMark:    Number(subData.passMark) || Number(form.passMark),
               schoolId,
             });
             totalAssigned++;
+            if (res?.queued) totalQueued++;
           } catch (subErr) {
             console.warn(
               `Subject assign failed: ${subData.subjectName}`,
@@ -1203,10 +1209,13 @@ export default function CreateExamScreen() {
       }
 
       Alert.alert(
-        "Exam Created",
+        examResult?.queued || totalQueued > 0 ? "Exam Saved Offline" : "Exam Created",
         `"${form.name}" created${
           totalAssigned > 0 ? ` with ${totalAssigned} subject assignment(s)` : ""
-        }.`,
+        }.` +
+        (examResult?.queued || totalQueued > 0
+          ? "\n\nSaved on this device — it will upload automatically when you're back online."
+          : ""),
         [
           {
             text:    "Enter Marks Now",

@@ -12,6 +12,7 @@ import * as Haptics                        from "expo-haptics";
 import { getDatabase }    from "@/db/database";
 import { useAuthStore }   from "@/store/auth.store";
 import StudentService     from "@/services/student.service";
+import { getStudentStatusConfig } from "@/utils/studentStatus";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -26,16 +27,12 @@ const formatDate = (value) => {
   });
 };
 
-const getStatusConfig = (status) => {
-  switch (status?.toLowerCase()) {
-    case "suspended":
-      return { label: "Suspended", color: "#B91C1C", bg: "#FEF2F2", dot: "#EF4444" };
-    case "inactive":
-      return { label: "Inactive",  color: "#4B5563", bg: "#F9FAFB", dot: "#9CA3AF" };
-    default:
-      return { label: "Active",    color: "#065F46", bg: "#ECFDF5", dot: "#10B981" };
-  }
-};
+/**
+ * Delegates to the shared mapping. The version that lived here only knew
+ * "suspended" and "inactive" and defaulted everything else to "Active", so a
+ * pending student was listed as Pending and shown here as Active.
+ */
+const getStatusConfig = getStudentStatusConfig;
 
 // ─────────────────────────────────────────────────────────
 // SUB-COMPONENTS

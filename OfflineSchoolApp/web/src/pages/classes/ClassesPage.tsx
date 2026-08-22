@@ -31,6 +31,7 @@ import { Badge }                                         from "@/components/ui/B
 import { Modal }                                         from "@/components/ui/Modal";
 import { SearchInput }                                   from "@/components/ui/SearchInput";
 import { FormField, Input, SelectField }                 from "@/components/ui/FormField";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
 // SCHEMAS
@@ -97,6 +98,7 @@ const resolveSubjectTeacherName = (
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function ClassesPage() {
+  const { t } = useTranslation();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
   const qc       = useQueryClient();
@@ -209,7 +211,7 @@ export default function ClassesPage() {
   });
 
   const openSubjectModal = (sub?: Subject) => {
-    setEditingSubject(sub ?? null);
+      setEditingSubject(sub ?? null);
     subjectForm.reset(
       sub
         ? {
@@ -246,8 +248,13 @@ export default function ClassesPage() {
 
   // ── Delete ─────────────────────────────────────────────
   const deleteMutation = useMutation({
-    mutationFn: ({ type, id }: Pick<DeleteConfirmState, "type" | "id">) =>
-      type === "class" ? deleteClass(id) : deleteSubject(id),
+    // deleteClass resolves a DeleteClassResult while deleteSubject resolves
+    // void, and the union of the two is not a valid MutationFunction<void>.
+    // Neither result is read, so the mutation is typed as void.
+    mutationFn: async ({ type, id }: Pick<DeleteConfirmState, "type" | "id">) => {
+      if (type === "class") await deleteClass(id);
+      else                  await deleteSubject(id);
+    },
     onSuccess: (_data, vars) => {
       if (vars.type === "class") {
         qc.invalidateQueries({ queryKey: QK.classes(schoolId) });
@@ -307,12 +314,12 @@ export default function ClassesPage() {
       {/* Page Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white
+          <h1 className="text-2xl font-bold text-gray-900
                          flex items-center gap-2">
             <School className="h-7 w-7 text-primary-600" />
             Classes &amp; Subjects
           </h1>
-          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+          <p className="text-sm text-gray-500 mt-1">
             Manage your school&apos;s classes and subjects
           </p>
         </div>
@@ -329,8 +336,8 @@ export default function ClassesPage() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200 dark:border-gray-700">
-        <nav className="flex gap-6" aria-label="Page tabs">
+      <div className="border-b border-gray-200">
+        <nav className="flex gap-6" aria-label={t("classes.pageTabs")}>
           {(["classes", "subjects"] as const).map((t) => (
             <button
               key={t}
@@ -341,7 +348,7 @@ export default function ClassesPage() {
                 tab === t
                   ? "border-primary-600 text-primary-600"
                   : "border-transparent text-gray-500 hover:text-gray-700 \
-                     dark:text-gray-400 dark:hover:text-gray-200"
+"
               }`}
             >
               {t}
@@ -360,7 +367,7 @@ export default function ClassesPage() {
       <div className="flex items-center gap-3 flex-wrap">
         <SearchInput
           value={search}
-          onChange={(e) => setSearch(e.target.value)}
+          onChange={setSearch}
           placeholder={`Search ${tab}…`}
           className="max-w-xs"
         />
@@ -369,11 +376,11 @@ export default function ClassesPage() {
           <select
             value={filterClassId}
             onChange={(e) => setFilterClassId(e.target.value)}
-            aria-label="Filter by class"
+            aria-label={t("classes.filterByClass")}
             className="
-              rounded-md border border-gray-300 dark:border-gray-600
-              bg-white dark:bg-gray-800
-              text-sm text-gray-700 dark:text-gray-200
+              rounded-md border border-gray-300
+              bg-white
+              text-sm text-gray-700
               px-3 py-2
               focus:outline-none focus:ring-2 focus:ring-primary-500
             "
@@ -392,7 +399,7 @@ export default function ClassesPage() {
         filteredClasses.length === 0 ? (
           <EmptyState
             icon={<School className="h-10 w-10 text-gray-400" />}
-            title="No classes found"
+            title={t("classes.none")}
             description={
               search
                 ? "Try a different search term."
@@ -400,7 +407,7 @@ export default function ClassesPage() {
             }
             action={
               <Button onClick={() => openClassModal()}>
-                <Plus className="h-4 w-4 mr-1" /> Add Class
+                <Plus className="h-4 w-4 mr-1" /> {t("classes.add")}
               </Button>
             }
           />
@@ -438,7 +445,7 @@ export default function ClassesPage() {
         ) : filteredSubjects.length === 0 ? (
           <EmptyState
             icon={<BookOpen className="h-10 w-10 text-gray-400" />}
-            title="No subjects found"
+            title={t("subjects.none")}
             description={
               search
                 ? "Try a different search term."
@@ -446,7 +453,7 @@ export default function ClassesPage() {
             }
             action={
               <Button onClick={() => openSubjectModal()}>
-                <Plus className="h-4 w-4 mr-1" /> Add Subject
+                <Plus className="h-4 w-4 mr-1" /> {t("subjects.add")}
               </Button>
             }
           />
@@ -475,34 +482,34 @@ export default function ClassesPage() {
           noValidate
         >
           <FormField
-            label="Class Name"
+            label={t("classes.nameLabel")}
             error={classForm.formState.errors.name?.message}
             required
           >
             <Input
               {...classForm.register("name")}
-              placeholder="e.g. Grade 10"
+              placeholder={t("classes.namePh")}
               autoFocus
             />
           </FormField>
 
           <FormField
-            label="Level"
+            label={t("common.level")}
             error={classForm.formState.errors.level?.message}
           >
             <Input
               {...classForm.register("level")}
-              placeholder="e.g. 10"
+              placeholder={t("classes.levelPh")}
             />
           </FormField>
 
           <FormField
-            label="Section"
+            label={t("common.section")}
             error={classForm.formState.errors.section?.message}
           >
             <Input
               {...classForm.register("section")}
-              placeholder="e.g. A"
+              placeholder={t("classes.sectionPh")}
             />
           </FormField>
 
@@ -516,7 +523,7 @@ export default function ClassesPage() {
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={closeClassModal}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={classMutation.isPending}>
               {editingClass ? "Save Changes" : "Create Class"}
@@ -537,41 +544,41 @@ export default function ClassesPage() {
           noValidate
         >
           <FormField
-            label="Subject Name"
+            label={t("subjects.nameLabel")}
             error={subjectForm.formState.errors.name?.message}
             required
           >
             <Input
               {...subjectForm.register("name")}
-              placeholder="e.g. Mathematics"
+              placeholder={t("subjects.namePh")}
               autoFocus
             />
           </FormField>
 
           <FormField
-            label="Subject Code"
+            label={t("subjects.codeLabel")}
             error={subjectForm.formState.errors.code?.message}
           >
             <Input
               {...subjectForm.register("code")}
-              placeholder="e.g. MATH101"
+              placeholder={t("subjects.codePh")}
             />
           </FormField>
 
           <FormField
-            label="Class"
+            label={t("academic.class")}
             error={subjectForm.formState.errors.classId?.message}
             required
           >
             <SelectField
               {...subjectForm.register("classId")}
               options={classOptions}
-              placeholder="Select a class"
+              placeholder={t("classes.selectClass")}
             />
           </FormField>
 
           <FormField
-            label="Assigned Teacher"
+            label={t("classes.assignedTeacher")}
             error={subjectForm.formState.errors.teacherId?.message}
           >
             <SelectField
@@ -590,7 +597,7 @@ export default function ClassesPage() {
 
           <div className="flex justify-end gap-3 pt-2">
             <Button type="button" variant="ghost" onClick={closeSubjectModal}>
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button type="submit" loading={subjectMutation.isPending}>
               {editingSubject ? "Save Changes" : "Create Subject"}
@@ -606,9 +613,9 @@ export default function ClassesPage() {
         title={`Delete ${deleteConfirm?.type === "class" ? "Class" : "Subject"}`}
       >
         <div className="space-y-4">
-          <p className="text-sm text-gray-600 dark:text-gray-300">
+          <p className="text-sm text-gray-600">
             Are you sure you want to delete{" "}
-            <span className="font-semibold text-gray-900 dark:text-white">
+            <span className="font-semibold text-gray-900">
               {deleteConfirm?.name}
             </span>
             ?{" "}
@@ -631,7 +638,7 @@ export default function ClassesPage() {
               variant="ghost"
               onClick={() => setDeleteConfirm(null)}
             >
-              Cancel
+              {t("common.cancel")}
             </Button>
             <Button
               variant="danger"
@@ -644,7 +651,7 @@ export default function ClassesPage() {
                 })
               }
             >
-              Delete
+              {t("common.delete")}
             </Button>
           </div>
         </div>
@@ -673,17 +680,18 @@ function ClassCard({
   onDelete,
   onViewSubjects,
 }: ClassCardProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="
-        bg-white dark:bg-gray-800 rounded-xl
-        border border-gray-200 dark:border-gray-700
+        bg-white rounded-xl
+        border border-gray-200
         p-5 flex flex-col gap-3 shadow-sm hover:shadow-md transition-shadow
       "
     >
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">
-          <h3 className="font-semibold text-gray-900 dark:text-white text-lg truncate">
+          <h3 className="font-semibold text-gray-900 text-lg truncate">
             {cls.name}
           </h3>
           <div className="flex gap-2 mt-1 flex-wrap">
@@ -702,9 +710,9 @@ function ClassCard({
             className="
               p-1.5 rounded-lg text-gray-400
               hover:text-primary-600 hover:bg-primary-50
-              dark:hover:bg-primary-900/20 transition
+ transition
             "
-            title="Edit class"
+            title={t("classes.edit")}
             aria-label={`Edit ${cls.name}`}
           >
             <Pencil className="h-4 w-4" />
@@ -714,9 +722,9 @@ function ClassCard({
             className="
               p-1.5 rounded-lg text-gray-400
               hover:text-red-600 hover:bg-red-50
-              dark:hover:bg-red-900/20 transition
+ transition
             "
-            title="Delete class"
+            title={t("classes.delete")}
             aria-label={`Delete ${cls.name}`}
           >
             <Trash2 className="h-4 w-4" />
@@ -727,7 +735,7 @@ function ClassCard({
       <button
         type="button"
         className="
-          flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400
+          flex items-center gap-2 text-sm text-gray-500
           hover:text-primary-600 transition-colors text-left
         "
         onClick={() => onViewSubjects(cls)}
@@ -761,21 +769,22 @@ function SubjectsTable({
   onEdit,
   onDelete,
 }: SubjectsTableProps) {
+  const { t } = useTranslation();
   return (
     <div
       className="
-        bg-white dark:bg-gray-800 rounded-xl
-        border border-gray-200 dark:border-gray-700
+        bg-white rounded-xl
+        border border-gray-200
         overflow-hidden shadow-sm
       "
     >
       <table className="w-full text-sm" role="grid">
         <thead>
-          <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50">
+          <tr className="border-b border-gray-200 bg-gray-50">
             {(["Subject", "Code", "Class", "Teacher", ""] as const).map((h) => (
               <th
                 key={h}
-                className="text-left px-4 py-3 font-medium text-gray-600 dark:text-gray-300"
+                className="text-left px-4 py-3 font-medium text-gray-600"
               >
                 {h}
               </th>
@@ -783,27 +792,27 @@ function SubjectsTable({
           </tr>
         </thead>
 
-        <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+        <tbody className="divide-y divide-gray-100">
           {subjects.map((sub) => (
             <tr
               key={sub._id}
-              className="hover:bg-gray-50 dark:hover:bg-gray-700/40 transition-colors"
+              className="hover:bg-gray-50 transition-colors"
             >
-              <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+              <td className="px-4 py-3 font-medium text-gray-900">
                 {sub.name}
               </td>
 
-              <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
+              <td className="px-4 py-3 text-gray-500">
                 {sub.code
                   ? <Badge variant="secondary">{sub.code}</Badge>
                   : "—"}
               </td>
 
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+              <td className="px-4 py-3 text-gray-600">
                 {sub.class?.name ?? getClassName(sub.classId)}
               </td>
 
-              <td className="px-4 py-3 text-gray-600 dark:text-gray-300">
+              <td className="px-4 py-3 text-gray-600">
                 {getTeacherName(sub)}
               </td>
 
@@ -814,9 +823,9 @@ function SubjectsTable({
                     className="
                       p-1.5 rounded-lg text-gray-400
                       hover:text-primary-600 hover:bg-primary-50
-                      dark:hover:bg-primary-900/20 transition
+ transition
                     "
-                    title="Edit subject"
+                    title={t("subjects.edit")}
                     aria-label={`Edit ${sub.name}`}
                   >
                     <Pencil className="h-4 w-4" />
@@ -826,9 +835,9 @@ function SubjectsTable({
                     className="
                       p-1.5 rounded-lg text-gray-400
                       hover:text-red-600 hover:bg-red-50
-                      dark:hover:bg-red-900/20 transition
+ transition
                     "
-                    title="Delete subject"
+                    title={t("subjects.delete")}
                     aria-label={`Delete ${sub.name}`}
                   >
                     <Trash2 className="h-4 w-4" />
@@ -857,13 +866,13 @@ interface EmptyStateProps {
 function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
     <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
-      <div className="p-4 bg-gray-100 dark:bg-gray-800 rounded-full">
+      <div className="p-4 bg-gray-100 rounded-full">
         {icon}
       </div>
-      <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+      <h3 className="text-lg font-semibold text-gray-900">
         {title}
       </h3>
-      <p className="text-sm text-gray-500 dark:text-gray-400 max-w-xs">
+      <p className="text-sm text-gray-500 max-w-xs">
         {description}
       </p>
       {action && <div className="mt-2">{action}</div>}

@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams }  from "react-router-dom";
 import { useAuthStore }            from "@/store/auth.store";
 import api                         from "@/services/api";
+import { getErrorMessage }         from "@/lib/api";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,
   BookOpen, Plus, X, RefreshCw, User, Mail,
@@ -40,11 +42,44 @@ interface FormErrors {
   email?: string;
 }
 
+/**
+ * A subject row exactly as the assignment endpoints send it.
+ *
+ * Three endpoints feed these screens and none agree on names: an assignment
+ * row calls the subject `subjectId` while the subject catalogue calls the same
+ * value `id`, and class names arrive as either `className` or `class_name`.
+ * Every field is therefore optional and resolved by the normalisers below.
+ */
+/** A ref the API sends either populated or as a bare id string. */
+type RawRef = { _id?: string; name?: string } | string | null | undefined;
+
+const refId   = (ref: RawRef): string =>
+  (typeof ref === "string" ? ref : ref?._id) ?? "";
+const refName = (ref: RawRef): string =>
+  (typeof ref === "string" ? "" : ref?.name) ?? "";
+
+interface RawSubjectRow {
+  id?:           string;
+  _id?:          string;
+  assignmentId?: string;
+  subjectId?:    string;
+  name?:         string;
+  subjectName?:  string;
+  className?:    string;
+  class_name?:   string;
+  classId?:      string;
+  // Populated shapes: the assignments endpoint nests the subject and the class,
+  // and one older response spells the class `classObj`.
+  subject?:      RawRef;
+  class?:        RawRef;
+  classObj?:     { name?: string } | null;
+}
+
 // ─────────────────────────────────────────────────────────
 // NORMALISERS
 // ─────────────────────────────────────────────────────────
 
-const normaliseAssigned = (raw: any): AssignedSubject => ({
+const normaliseAssigned = (raw: RawSubjectRow): AssignedSubject => ({
   ...raw,
   id:           raw.subjectId    ?? raw.id           ?? raw.assignmentId ?? "",
   assignmentId: raw.assignmentId ?? raw.id           ?? "",
@@ -53,7 +88,7 @@ const normaliseAssigned = (raw: any): AssignedSubject => ({
   className:    raw.className    ?? raw.class_name   ?? "Unknown Class",
 });
 
-const normaliseAvailable = (raw: any): AvailableSubject => ({
+const normaliseAvailable = (raw: RawSubjectRow): AvailableSubject => ({
   ...raw,
   id:        raw.id      ?? raw.subjectId ?? "",
   subjectId: raw.id      ?? raw.subjectId ?? "",
@@ -66,6 +101,7 @@ const normaliseAvailable = (raw: any): AvailableSubject => ({
 // ─────────────────────────────────────────────────────────
 
 export default function EditTeacherPage() {
+  const { t } = useTranslation();
   const navigate              = useNavigate();
   const { id: teacherId }     = useParams<{ id: string }>();
   const user                  = useAuthStore((s) => s.user);
@@ -103,7 +139,8 @@ export default function EditTeacherPage() {
       }
 
       try {
-        isRefresh ? setRefreshing(true) : setLoading(true);
+        if (isRefresh) setRefreshing(true);
+        else setLoading(true);
         setLoadError(null);
 
         const [teacherRes, assignedRes, availableRes] = await Promise.all([
@@ -122,7 +159,7 @@ export default function EditTeacherPage() {
         setEmail(t.email ?? "");
 
         // ── Assigned subjects ─────────────────────────────
-        const rawAssigned: any[] =
+        const rawAssigned: RawSubjectRow[] =
           assignedRes.data?.assignments ??
           assignedRes.data?.data        ??
           (Array.isArray(assignedRes.data) ? assignedRes.data : []);
@@ -132,18 +169,18 @@ export default function EditTeacherPage() {
           .map((a) =>
             normaliseAssigned({
               assignmentId: String(a._id || a.id),
-              subjectId:    String(a.subject?._id || a.subject),
-              id:           String(a.subject?._id || a.subject),
-              name:         a.subject?.name  ?? "Unknown",
-              className:    a.class?.name    ?? "Unknown",
-              classId:      String(a.class?._id || a.classId || ""),
+              subjectId:    refId(a.subject),
+              id:           refId(a.subject),
+              name:         refName(a.subject) || "Unknown",
+              className:    refName(a.class)   || "Unknown",
+              classId:      refId(a.class) || a.classId || "",
             })
           );
 
         setAssigned(normAssigned);
 
         // ── Available = all subjects minus assigned ────────
-        const rawSubjects: any[] =
+        const rawSubjects: RawSubjectRow[] =
           availableRes.data?.subjects ??
           availableRes.data?.data     ??
           (Array.isArray(availableRes.data) ? availableRes.data : []);
@@ -157,17 +194,15 @@ export default function EditTeacherPage() {
               id:        String(s._id  || s.id),
               subjectId: String(s._id  || s.id),
               name:      s.name        ?? "Unknown",
-              className: s.class?.name ?? s.classObj?.name ?? s.className ?? "Unknown",
-              classId:   String(s.class?._id || s.classId || s.class || ""),
+              className: refName(s.class) || s.classObj?.name || s.className || "Unknown",
+              classId:   refId(s.class) || s.classId || "",
             })
           );
 
         setAvailable(normAvailable);
-      } catch (err: any) {
+      } catch (err) {
         if (isMounted.current) {
-          setLoadError(
-            err?.response?.data?.message || err.message || "Failed to load teacher."
-          );
+          setLoadError(getErrorMessage(err) || "Failed to load teacher.");
         }
       } finally {
         if (isMounted.current) {
@@ -205,10 +240,10 @@ export default function EditTeacherPage() {
         schoolId,
       });
       if (isMounted.current) navigate("/teachers");
-    } catch (err: any) {
+    } catch (err) {
       if (isMounted.current) {
         setErrors({
-          name: err?.response?.data?.message || err.message || "Failed to save.",
+          name: getErrorMessage(err) || "Failed to save.",
         });
       }
     } finally {
@@ -242,17 +277,17 @@ export default function EditTeacherPage() {
         const assignmentsRes = await api.get("/admin/assignments", {
           params: { schoolId, teacherId, subjectId: sid },
         });
-        const list: any[] =
+        const list: RawSubjectRow[] =
           assignmentsRes.data?.assignments ??
           assignmentsRes.data?.data        ??
           [];
         const match = list.find(
-          (a) => String(a.subject?._id || a.subject) === sid
+          (a) => refId(a.subject) === sid
         );
         if (match) {
           await api.delete(`/admin/assignments/${match._id || match.id}`);
         }
-      } catch (err: any) {
+      } catch (err) {
         // Roll back on failure
         if (isMounted.current) {
           setAssigned((p) => {
@@ -260,9 +295,7 @@ export default function EditTeacherPage() {
             return exists ? p : [...p, subject];
           });
           setAvailable((p) => p.filter((s) => (s.subjectId || s.id) !== sid));
-          alert(
-            err?.response?.data?.message || err.message || "Failed to remove subject."
-          );
+          alert(getErrorMessage(err) || "Failed to remove subject.");
         }
       } finally {
         if (isMounted.current) {
@@ -314,7 +347,7 @@ export default function EditTeacherPage() {
 
         if (!isMounted.current) return;
 
-        const rawAssigned: any[] =
+        const rawAssigned: RawSubjectRow[] =
           assignedRes.data?.assignments ??
           assignedRes.data?.data        ??
           [];
@@ -324,17 +357,17 @@ export default function EditTeacherPage() {
           .map((a) =>
             normaliseAssigned({
               assignmentId: String(a._id || a.id),
-              subjectId:    String(a.subject?._id || a.subject),
-              id:           String(a.subject?._id || a.subject),
-              name:         a.subject?.name  ?? "Unknown",
-              className:    a.class?.name    ?? "Unknown",
-              classId:      String(a.class?._id || a.classId || ""),
+              subjectId:    refId(a.subject),
+              id:           refId(a.subject),
+              name:         refName(a.subject) || "Unknown",
+              className:    refName(a.class)   || "Unknown",
+              classId:      refId(a.class) || a.classId || "",
             })
           );
 
         setAssigned(normAssigned);
 
-        const rawSubjects: any[] =
+        const rawSubjects: RawSubjectRow[] =
           availableRes.data?.subjects ??
           availableRes.data?.data     ??
           [];
@@ -348,12 +381,12 @@ export default function EditTeacherPage() {
                 id:        String(s._id || s.id),
                 subjectId: String(s._id || s.id),
                 name:      s.name        ?? "Unknown",
-                className: s.class?.name ?? s.classObj?.name ?? s.className ?? "Unknown",
-                classId:   String(s.class?._id || s.classId || s.class || ""),
+                className: refName(s.class) || s.classObj?.name || s.className || "Unknown",
+                classId:   refId(s.class) || s.classId || "",
               })
             )
         );
-      } catch (err: any) {
+      } catch (err) {
         // Roll back
         if (isMounted.current) {
           setAssigned((p) => p.filter((s) => (s.subjectId || s.id) !== sid));
@@ -361,9 +394,7 @@ export default function EditTeacherPage() {
             const exists = p.some((s) => (s.subjectId || s.id) === sid);
             return exists ? p : [...p, subject];
           });
-          alert(
-            err?.response?.data?.message || err.message || "Failed to assign subject."
-          );
+          alert(getErrorMessage(err) || "Failed to assign subject.");
         }
       } finally {
         if (isMounted.current) {
@@ -385,7 +416,7 @@ export default function EditTeacherPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
-        <PageHeader title="Edit Teacher" onBack={() => navigate("/teachers")} />
+        <PageHeader title={t("teachersEdit.title")} onBack={() => navigate("/teachers")} />
         <div className="flex-1 flex items-center justify-center gap-3">
           <Loader2 size={32} className="animate-spin text-indigo-600" />
           <span className="text-gray-500 text-sm">Loading teacher…</span>
@@ -401,7 +432,7 @@ export default function EditTeacherPage() {
   if (loadError) {
     return (
       <div className="min-h-screen bg-gray-50 flex flex-col">
-        <PageHeader title="Edit Teacher" onBack={() => navigate("/teachers")} />
+        <PageHeader title={t("teachersEdit.title")} onBack={() => navigate("/teachers")} />
         <div className="flex-1 flex flex-col items-center justify-center gap-4 p-8">
           <AlertCircle size={48} className="text-red-400" />
           <p className="text-sm text-red-600 text-center max-w-sm">{loadError}</p>
@@ -410,7 +441,7 @@ export default function EditTeacherPage() {
             className="bg-indigo-600 text-white text-sm font-semibold
                        px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-colors"
           >
-            Retry
+            {t("common.retry")}
           </button>
         </div>
       </div>
@@ -448,7 +479,7 @@ export default function EditTeacherPage() {
           className="w-9 h-9 flex items-center justify-center rounded-xl
                      bg-gray-100 hover:bg-gray-200 transition-colors
                      disabled:opacity-50"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           <RefreshCw
             size={16}
@@ -475,12 +506,12 @@ export default function EditTeacherPage() {
         {/* ── Profile fields ── */}
         <section className="bg-white rounded-2xl border border-gray-200
                             shadow-sm p-6 space-y-4">
-          <h2 className="text-sm font-bold text-gray-700">Profile</h2>
+          <h2 className="text-sm font-bold text-gray-700">{t("common.profile")}</h2>
 
           {/* Name */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-700">
-              Full Name
+              {t("common.fullName")}
             </label>
             <div className={`
               flex items-center gap-3 border rounded-xl px-4 py-3 bg-gray-50
@@ -497,7 +528,7 @@ export default function EditTeacherPage() {
                   setName(e.target.value);
                   if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
                 }}
-                placeholder="e.g. Jane Smith"
+                placeholder={t("teachersEdit.namePh")}
                 className="flex-1 bg-transparent text-sm text-gray-900
                            placeholder-gray-400 focus:outline-none"
               />
@@ -512,7 +543,7 @@ export default function EditTeacherPage() {
           {/* Email */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-700">
-              Email Address
+              {t("common.email")}
             </label>
             <div className={`
               flex items-center gap-3 border rounded-xl px-4 py-3 bg-gray-50
@@ -529,7 +560,7 @@ export default function EditTeacherPage() {
                   setEmail(e.target.value);
                   if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
                 }}
-                placeholder="e.g. jane@school.com"
+                placeholder={t("teachersEdit.emailPh")}
                 className="flex-1 bg-transparent text-sm text-gray-900
                            placeholder-gray-400 focus:outline-none"
               />
@@ -546,7 +577,7 @@ export default function EditTeacherPage() {
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-bold text-gray-700 flex-1">
-              Assigned Subjects
+              {t("teachersEdit.assigned")}
             </h2>
             <span className="bg-indigo-50 text-indigo-600 text-xs font-bold
                              px-2.5 py-1 rounded-full">
@@ -556,7 +587,7 @@ export default function EditTeacherPage() {
 
           {assigned.length === 0 ? (
             <p className="text-sm text-gray-400 italic text-center py-4">
-              No subjects assigned yet.
+              {t("teachersEdit.noneAssigned")}
             </p>
           ) : (
             <div className="divide-y divide-gray-100">
@@ -604,7 +635,7 @@ export default function EditTeacherPage() {
         <section className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <div className="flex items-center gap-2 mb-4">
             <h2 className="text-sm font-bold text-gray-700 flex-1">
-              Available Subjects
+              {t("teachersEdit.available")}
             </h2>
             <span className="bg-gray-100 text-gray-600 text-xs font-bold
                              px-2.5 py-1 rounded-full">
@@ -614,7 +645,7 @@ export default function EditTeacherPage() {
 
           {available.length === 0 ? (
             <p className="text-sm text-gray-400 italic text-center py-4">
-              No available subjects found.
+              {t("teachersEdit.noneAvailable")}
             </p>
           ) : (
             <div className="divide-y divide-gray-100">

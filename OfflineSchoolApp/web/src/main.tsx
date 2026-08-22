@@ -1,54 +1,99 @@
-/* web/src/index.css */
+// web/src/main.tsx
+//
+// Application entry point.
+//
+// This file previously held a copy of index.css — index.html loads it as the
+// module entry, so the app could not boot at all. It now does the four things
+// a bootstrap is responsible for and nothing else:
+//
+//   1. restore the session from localStorage BEFORE the first render, so
+//      ProtectedRoute never flashes the login screen at a signed-in user
+//   2. install the React Query cache
+//   3. install the router
+//   4. install the toast/confirm portal
+//   5. initialise i18n
+//
+// initAuth() is synchronous (it only reads localStorage), which is why it can
+// run here rather than inside an effect. Doing it before createRoot means the
+// very first paint already knows whether there is a session.
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
-@import "tailwindcss";
+import { StrictMode }        from "react";
+import { createRoot }        from "react-dom/client";
+import { BrowserRouter }     from "react-router-dom";
+import {
+  QueryClient,
+  QueryClientProvider,
+}                            from "@tanstack/react-query";
 
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-}
 
-@layer base {
-  * {
-    border-color: #e5e7eb;
-  }
+import App                   from "@/App";
+import { ToastProvider }     from "@/components/ui/Toast";
+import { useAuthStore }      from "@/store/auth.store";
 
-  html {
-    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  }
+// Imported for the side effect of calling i18n.init(). It must run before the
+// first render, or useTranslation() on the very first paint returns raw keys.
+import "@/i18n";
+import "@/index.css";
 
-  body {
-    margin: 0;
-    background-color: #f9fafb;
-    color: #111827;
-    font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION
+// ─────────────────────────────────────────────────────────────────────────────
 
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
+useAuthStore.getState().initAuth();
 
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
+// ─────────────────────────────────────────────────────────────────────────────
+// QUERY CLIENT
+//
+// staleTime is deliberately non-zero. A school dashboard is read-heavy and
+// mostly slow-moving data (classes, subjects, periods), so refetching on every
+// window focus produced a burst of requests each time an admin alt-tabbed
+// back. Mutations invalidate explicitly, which is more precise than polling.
+// ─────────────────────────────────────────────────────────────────────────────
 
-  ::-webkit-scrollbar-thumb {
-    background-color: #d1d5db;
-    border-radius: 9999px;
-  }
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime:            60_000,
+      gcTime:               5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: (failureCount, error) => {
+        // Never retry a request the server actively rejected — a 401/403/404
+        // will not become a 200 on the third attempt, and retrying a 401
+        // races the axios refresh interceptor.
+        const status = (error as { response?: { status?: number } })?.response?.status;
+        if (status && status >= 400 && status < 500) return false;
+        return failureCount < 2;
+      },
+    },
+    mutations: {
+      retry: false,
+    },
+  },
+});
 
-  ::-webkit-scrollbar-thumb:hover {
-    background-color: #9ca3af;
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// MOUNT
+// ─────────────────────────────────────────────────────────────────────────────
 
-@utility scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+const container = document.getElementById("root");
+if (!container) throw new Error('index.html is missing <div id="root">');
 
-@utility scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
+createRoot(container).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        {/*
+          One notification system: components/ui/Toast, the in-house context
+          that also owns the confirm dialogs. react-hot-toast used to be
+          mounted alongside it for the exam hooks; those 19 call sites all
+          turned out to sit inside hooks or components, where useToast()
+          reaches fine, so they now go through the same provider as every
+          other page and the dependency is gone.
+        */}
+        <ToastProvider>
+          <App />
+        </ToastProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
+  </StrictMode>,
+);

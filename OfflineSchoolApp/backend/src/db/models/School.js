@@ -216,6 +216,20 @@ const schoolSchema = new mongoose.Schema(
     logo:  { type: String, default: null, trim: true },
     motto: { type: String, default: null, trim: true, maxlength: 300 },
 
+    /**
+     * The school's working language — the default for anyone who has not
+     * chosen one, and the language a report card is printed in unless the
+     * template says otherwise.
+     *
+     * Cameroon runs both an anglophone and a francophone subsystem, so this
+     * is a property of the institution, not of the country.
+     */
+    defaultLanguage: {
+      type:    String,
+      enum:    ["en", "fr"],
+      default: "en",
+    },
+
     // ── Status flags ──────────────────────────────────────────────────────────
     isActive: {
       type:    Boolean,
@@ -411,7 +425,11 @@ schoolSchema.index({ createdAt: -1 });
  * Auto-generate a school code from the name if one is not provided.
  * e.g. "Green Hill School" → "GHS"
  */
-schoolSchema.pre("save", function (next) {
+// Async, not callback-style: Mongoose 9 does not pass a next callback to
+// document middleware, so `function (next)` left `next` undefined and every
+// school save threw "next is not a function". See the note on the equivalent
+// hook in Announcement.js.
+schoolSchema.pre("save", async function () {
   // ── Auto-generate code ─────────────────────────────────────────────────────
   if (!this.code && this.name) {
     const initials = this.name
@@ -437,8 +455,6 @@ schoolSchema.pre("save", function (next) {
   if (this.isModified("verified") && this.verified && !this.verifiedAt) {
     this.verifiedAt = new Date();
   }
-
-  next();
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

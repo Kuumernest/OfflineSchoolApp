@@ -10,7 +10,12 @@
 
 import * as Print      from "expo-print";
 import * as Sharing    from "expo-sharing";
-import * as FileSystem from "expo-file-system";
+// SDK 57 moved the default export of expo-file-system to the new File/Directory
+// API, and the old helpers imported from the package root now THROW at runtime
+// rather than warn. Importing them from "/legacy" is what keeps this working;
+// without it every call here fails with a deprecation error at the moment a
+// user asks for a PDF.
+import * as FileSystem from "expo-file-system/legacy";
 import "react-native-get-random-values";
 import { v4 as uuidv4 } from "uuid";
 

@@ -7,6 +7,7 @@ import { z }                      from "zod";
 import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
 
 import { useAuthStore, useMustResetPassword } from "@/store/auth.store";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA
@@ -24,6 +25,7 @@ type LoginForm = z.infer<typeof loginSchema>;
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function LoginPage() {
+  const { t } = useTranslation();
   const navigate        = useNavigate();
   const login           = useAuthStore((s) => s.login);
   const isLoading       = useAuthStore((s) => s.isLoading);
@@ -80,8 +82,8 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 bg-white/10 backdrop-blur rounded-2xl mb-4">
             <GraduationCap className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-white">School App</h1>
-          <p className="text-primary-200 mt-1">Sign in to your account</p>
+          <h1 className="text-3xl font-bold text-white">{t("login.appName")}</h1>
+          <p className="text-primary-200 mt-1">{t("login.signInToAccount")}</p>
         </div>
 
         {/* Card */}
@@ -91,7 +93,7 @@ export default function LoginPage() {
           {error && (
             <div role="alert" className="mb-5 p-3 bg-red-50 border border-red-200 rounded-lg flex items-start gap-2">
               <span className="text-red-600 text-sm flex-1">{error}</span>
-              <button type="button" onClick={clearError} aria-label="Dismiss error" className="text-red-400 hover:text-red-600 text-xs shrink-0">✕</button>
+              <button type="button" onClick={clearError} aria-label={t("login.dismissError")} className="text-red-400 hover:text-red-600 text-xs shrink-0">✕</button>
             </div>
           )}
 
@@ -100,7 +102,7 @@ export default function LoginPage() {
             {/* Identifier */}
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 mb-1">
-                Email or Enrollment Number
+                {t("login.identifier")}
               </label>
               <input
                 id="identifier"
@@ -108,7 +110,7 @@ export default function LoginPage() {
                 autoComplete="username"
                 autoCapitalize="off"
                 spellCheck={false}
-                placeholder="admin@school.com  or  GHS-2024-0042"
+                placeholder={t("login.identifierPh")}
                 aria-invalid={!!errors.identifier}
                 aria-describedby={errors.identifier ? "identifier-error" : "identifier-hint"}
                 className={`w-full px-4 py-3 rounded-lg border text-sm outline-none transition focus:ring-2 focus:ring-primary-500 ${errors.identifier ? "border-red-300 bg-red-50" : "border-gray-300"}`}
@@ -117,10 +119,10 @@ export default function LoginPage() {
               {!errors.identifier && (
                 <p id="identifier-hint" className="mt-1 text-xs text-gray-400">
                   {identifier.length === 0
-                    ? "Staff enter their email · Students enter their enrollment number"
+                    ? t("login.identifierHint")
                     : looksLikeEmail
-                      ? "✓ Signing in as staff / admin"
-                      : "✓ Signing in as student"}
+                      ? `✓ ${t("login.asStaff")}`
+                      : `✓ ${t("login.asStudent")}`}
                 </p>
               )}
               {errors.identifier && (
@@ -148,7 +150,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  aria-label={showPassword ? t("login.hidePassword") : t("login.showPassword")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                 >
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -182,27 +184,26 @@ export default function LoginPage() {
         {/* Divider */}
         <div className="flex items-center gap-3 my-6">
           <div className="flex-1 h-px bg-white/20" />
-          <span className="text-primary-300 text-sm">or</span>
+          <span className="text-primary-300 text-sm">{t("login.or")}</span>
           <div className="flex-1 h-px bg-white/20" />
         </div>
 
         {/* Apply CTA */}
         <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6">
-          <h2 className="text-white font-bold text-lg mb-2">New Student?</h2>
+          <h2 className="text-white font-bold text-lg mb-2">{t("login.newStudent")}</h2>
           <p className="text-primary-200 text-sm leading-relaxed mb-4">
-            Submit an application to join the school. You will receive your enrollment number
-            and login credentials once your application is approved.
+            {t("login.applyBlurb")}
           </p>
           <a
             href="/apply"
             className="block w-full text-center bg-white text-primary-700 font-semibold rounded-xl py-3 text-sm hover:bg-primary-50 transition"
           >
-            Apply for Admission →
+            {t("login.applyCta")} →
           </a>
         </div>
 
         <p className="text-center text-primary-300 text-sm mt-6">
-          School Management System &copy; {new Date().getFullYear()}
+          {t("login.copyright", { year: new Date().getFullYear() })}
         </p>
       </div>
     </div>

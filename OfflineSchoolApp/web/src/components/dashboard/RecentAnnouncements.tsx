@@ -1,5 +1,6 @@
 // web/src/components/dashboard/RecentAnnouncements.tsx
 import { useNavigate }             from "react-router-dom";
+import { useTranslation }           from "react-i18next";
 import { Megaphone, ArrowRight }   from "lucide-react";
 import { Card, CardHeader }        from "@/components/ui/Card";
 import { Badge }                   from "@/components/ui/Badge";
@@ -30,9 +31,9 @@ function Skeleton() {
     <div className="space-y-3" aria-busy="true" aria-label="Loading announcements">
       {[1, 2, 3].map((i) => (
         <div key={i} className="p-3 rounded-lg space-y-2">
-          <div className="h-4 w-3/4 rounded bg-gray-100 dark:bg-gray-700 animate-pulse" />
-          <div className="h-3 w-full  rounded bg-gray-100 dark:bg-gray-700 animate-pulse" />
-          <div className="h-3 w-1/3  rounded bg-gray-100 dark:bg-gray-700 animate-pulse" />
+          <div className="h-4 w-3/4 animate-pulse rounded bg-canvas" />
+          <div className="h-3 w-full animate-pulse rounded bg-canvas" />
+          <div className="h-3 w-1/3 animate-pulse rounded bg-canvas" />
         </div>
       ))}
     </div>
@@ -54,6 +55,7 @@ export default function RecentAnnouncements({
   loading = false,
   error,
 }: Props) {
+  const { t }    = useTranslation();
   const navigate = useNavigate();
 
   const body = (() => {
@@ -62,8 +64,8 @@ export default function RecentAnnouncements({
     if (error) {
       return (
         <div role="alert" className="text-center py-8">
-          <Megaphone className="w-10 h-10 text-red-300 mx-auto mb-2" aria-hidden="true" />
-          <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
+          <Megaphone className="mx-auto mb-2 h-6 w-6 text-danger/50" aria-hidden="true" />
+          <p className="text-sm text-danger">{error}</p>
         </div>
       );
     }
@@ -71,27 +73,23 @@ export default function RecentAnnouncements({
     if (announcements.length === 0) {
       return (
         <div className="text-center py-8">
-          <Megaphone className="w-10 h-10 text-gray-300 mx-auto mb-2" aria-hidden="true" />
-          <p className="text-sm text-gray-400 dark:text-gray-500">No announcements</p>
+          <Megaphone className="mx-auto mb-2 h-6 w-6 text-ink-faint" aria-hidden="true" />
+          <p className="text-sm text-ink-faint">{t("dashboard.noAnnouncements")}</p>
         </div>
       );
     }
 
     return (
-      <ul className="space-y-3">
+      <ul className="-mx-2 space-y-0.5">
         {announcements.map((a) => (
           <li key={a._id}>
             <button
               type="button"
               onClick={() => navigate("/announcements")}
-              className="
-                w-full text-left p-3 rounded-lg
-                hover:bg-gray-50 dark:hover:bg-gray-700/50
-                cursor-pointer transition-colors
-              "
+              className="w-full rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
             >
               <div className="flex items-start justify-between gap-2">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 line-clamp-1">
+                <p className="line-clamp-1 text-[13px] font-medium text-ink">
                   {a.title}
                 </p>
 
@@ -111,13 +109,13 @@ export default function RecentAnnouncements({
                   otherwise omit this block entirely. Check the dashboard
                   service type and use the correct field name below. */}
               {("description" in a) && (
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1 line-clamp-2">
+                <p className="mt-0.5 line-clamp-2 text-xs text-ink-muted">
                   {(a as RecentAnnouncement & { description?: string }).description}
                 </p>
               )}
 
               {a.createdAt && (
-                <p className="text-xs text-gray-300 dark:text-gray-600 mt-1.5">
+                <p className="mt-1 text-xs text-ink-faint">
                   {formatDistanceToNow(new Date(a.createdAt), { addSuffix: true })}
                 </p>
               )}
@@ -131,20 +129,16 @@ export default function RecentAnnouncements({
   return (
     <Card>
       <CardHeader
-        title="Announcements"
-        subtitle="Recent school notices"
+        title={t("dashboard.announcementsTitle")}
+        subtitle={t("dashboard.announcementsSubtitle")}
         action={
           <button
             type="button"
             onClick={() => navigate("/announcements")}
-            className="
-              text-sm text-primary-600 hover:text-primary-700
-              dark:text-primary-400 dark:hover:text-primary-300
-              flex items-center gap-1 font-medium
-            "
+            className="group inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
           >
-            View all
-            <ArrowRight className="w-3 h-3" aria-hidden="true" />
+            {t("common.viewAll")}
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
           </button>
         }
       />

@@ -35,6 +35,7 @@ const UPLOAD_DIRS = [
   "uploads/content/audio",
   "uploads/content/document",
   "uploads/content/image",
+  "uploads/logos",
 ];
 
 UPLOAD_DIRS.forEach((dir) => {
@@ -310,6 +311,21 @@ app.use("/api/auth", loadRoute("./routes/auth.routes"));
 app.use("/api",      loadRoute("./routes/public.routes"));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GUARDIAN PORTAL
+//
+// Mounted HERE, above the `app.use("/api", optionalAuthenticate, …)` line
+// further down, and that placement is the whole point. optionalAuthenticate
+// hands any request carrying a Bearer header to the staff authenticate
+// middleware, which looks up a User by the token's `id`. A portal token has no
+// `id` — it identifies a student, not a user — so mounting the portal below
+// that line answered every signed-in guardian with "User no longer exists".
+//
+// The router carries its own audience-checked token guard, so it is not
+// unprotected; it simply must not pass through the staff one.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use("/api/portal", loadRoute("./routes/portal.routes"));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // STUDENT ANNOUNCEMENT ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -327,19 +343,24 @@ app.post(
   async (req, res) => {
     try {
       const Announcement = require("./db/models/Announcement");
-      const announcement = await Announcement.findById(req.params.id);
+      // findByAnyId, not findById: this route is registered ahead of the
+      // students router and handles the phone's nanoid announcement ids.
+      const announcement = await Announcement.findByAnyId(req.params.id);
       if (!announcement) {
         return res.status(404).json({ message: "Announcement not found" });
       }
-      const userId      = req.user._id?.toString();
-      const alreadyRead = (announcement.readBy || []).some(
-        (r) => r.user?.toString() === userId
+
+      const userId = req.user._id?.toString();
+      const result = await Announcement.updateOne(
+        { _id: announcement._id, "readBy.user": { $ne: userId } },
+        { $push: { readBy: { user: userId, readAt: new Date() } } }
       );
-      if (!alreadyRead) {
-        announcement.readBy.push({ user: req.user._id, readAt: new Date() });
-        await announcement.save();
-      }
-      res.json({ success: true, message: "Marked as read" });
+
+      res.json({
+        success:     true,
+        message:     "Marked as read",
+        alreadyRead: result.modifiedCount === 0,
+      });
     } catch (err) {
       console.error("POST /students/announcements/:id/read error:", err.message);
       res.status(500).json({ message: "Failed to mark as read" });
@@ -426,9 +447,12 @@ app.post(
       }
 
       if (userDoc?.enrollmentNo) {
-        if (!student.admissionNo) {
+        // enrollmentNo is the Student schema's field; admissionNo is not a
+        // declared path, so a $set on it was silently discarded and the
+        // number never landed on the student record.
+        if (!student.enrollmentNo) {
           await Student.findByIdAndUpdate(student._id, {
-            $set: { admissionNo: userDoc.enrollmentNo },
+            $set: { enrollmentNo: userDoc.enrollmentNo },
           });
         }
         return res.json({ success: true, enrollmentNo: userDoc.enrollmentNo });
@@ -496,9 +520,9 @@ app.post(
         });
       }
 
-      if (!student.admissionNo) {
+      if (!student.enrollmentNo) {
         await Student.findByIdAndUpdate(student._id, {
-          $set: { admissionNo: enrollmentNo },
+          $set: { enrollmentNo },
         });
       }
 
@@ -516,6 +540,22 @@ app.post(
     }
   }
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// IDEMPOTENCY
+//
+// Must be mounted BEFORE every authenticated route that accepts writes.
+// It used to sit below the student and user routers, so a retried mutation
+// against those (exactly what the mobile outbox does on a flaky link) was
+// replayed instead of deduplicated.
+//
+// Uses optionalAuthenticate, not authenticate: /api/students is deliberately
+// optional-auth, and hard-authenticating here would break it. The middleware
+// no-ops when there is no req.user, and every route below still enforces its
+// own auth.
+// ─────────────────────────────────────────────────────────────────────────────
+
+app.use("/api", optionalAuthenticate, require("../middleware/idempotency"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STUDENT ROUTES
@@ -550,6 +590,11 @@ app.use("/api/attendance",
   loadRoute("./routes/attendance.routes")
 );
 
+app.use("/api/homework",
+  auth.authenticate,
+  loadRoute("./routes/homework.routes")
+);
+
 app.use("/api/quiz",
   auth.authenticate,
   loadRoute("./routes/quiz.routes")
@@ -573,6 +618,38 @@ app.use("/api/generated-reports",
 app.use("/api/exams",
   auth.authenticate,
   loadRoute("./routes/exam.routes")
+);
+
+// Fees. The router applies its own bursar-only authorisation, so authenticate
+// here is only establishing who is asking.
+app.use("/api/fees",
+  auth.authenticate,
+  loadRoute("./routes/fees.routes")
+);
+
+// Expenses and payroll. Admin-only, enforced inside the router.
+app.use("/api/finance",
+  auth.authenticate,
+  loadRoute("./routes/finance.routes")
+);
+
+// End-of-year rollover. Admin-only, enforced inside the router.
+app.use("/api/promotion",
+  auth.authenticate,
+  loadRoute("./routes/promotion.routes")
+);
+
+// Printable documents — class lists, transcripts. Staff-only, and teachers are
+// included because a class list is theirs to print.
+app.use("/api/documents",
+  auth.authenticate,
+  loadRoute("./routes/documents.routes")
+);
+
+// Spreadsheet exports. Per-export role checks live inside the router.
+app.use("/api/exports",
+  auth.authenticate,
+  loadRoute("./routes/export.routes")
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

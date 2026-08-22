@@ -5,9 +5,19 @@ import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
          EXAM_TYPE_LABELS }    from "@/constants/exam.constants";
-import * as ExamService        from "@/services/exam.service";
 import type { Exam }           from "@/types/exam.types";
+
+/** One subject line on a printed report card. */
+interface SubjectBreakdownRow {
+  subjectName?:    string;
+  score?:          number | null;
+  normalizedMark?: number | null;
+  grade?:          string;
+  isPassing?:      boolean;
+  isAbsent?:       boolean;
+}
 import api                     from "@/lib/api";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -76,9 +86,9 @@ function buildReportHtml(data: {
   percentage:       number;
   isPassing:        boolean;
   overallGrade:     string;
-  subjectBreakdown: any[];
+  subjectBreakdown: SubjectBreakdownRow[];
   schoolName:       string;
-}) {
+}, t: (key: string) => string) {
   const esc = (str: string) =>
     String(str ?? "")
       .replace(/&/g, "&amp;")
@@ -135,7 +145,7 @@ function buildReportHtml(data: {
     </style>
   </head><body>
     <h1>${esc(data.schoolName)}</h1>
-    <p class="subtitle">Academic Report Card</p>
+    <p class="subtitle">${t("reportCards.academic")}</p>
 
     <div class="info-grid">
       <div class="info-row">
@@ -168,15 +178,15 @@ function buildReportHtml(data: {
     <table>
       <thead>
         <tr>
-          <th>Subject</th>
-          <th style="text-align:center">Score</th>
+          <th>${t("academic.subject")}</th>
+          <th style="text-align:center">${t("academic.score")}</th>
           <th style="text-align:center">/20</th>
-          <th style="text-align:center">Grade</th>
-          <th style="text-align:center">Result</th>
+          <th style="text-align:center">${t("academic.grade")}</th>
+          <th style="text-align:center">${t("reportCards.result")}</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
-    </table>` : "<p style='color:#9ca3af;margin:16px 0'>No subject scores found.</p>"}
+    </table>` : `<p style='color:#9ca3af;margin:16px 0'>${t("reportCards.noScores")}</p>`}
 
     <div class="result ${data.isPassing ? "pass" : "fail"}">
       ${data.isPassing ? "✓ PASS" : "✗ FAIL"} —
@@ -196,6 +206,7 @@ function buildReportHtml(data: {
 // ─────────────────────────────────────────────────────────
 
 export default function ExamReportsPage() {
+  const { t } = useTranslation();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);
 
@@ -294,10 +305,10 @@ export default function ExamReportsPage() {
           isPassing:        data?.isPassing    ?? false,
           overallGrade:     data?.overallGrade || "—",
           subjectBreakdown: data?.subjectBreakdown || [],
-          schoolName:       (user as any)?.schoolName ||
-                            (user as any)?.school?.name ||
+          schoolName:       user?.schoolName ||
+                            user?.school?.name ||
                             "School",
-        });
+        }, t);
 
         // Open in new tab for printing
         const w = window.open("", "_blank");
@@ -332,9 +343,9 @@ export default function ExamReportsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Report Cards</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("reportCards.title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Generate and print student report cards
+            {t("reportCards.blurb")}
           </p>
         </div>
         <Link
@@ -359,7 +370,7 @@ export default function ExamReportsPage() {
                                flex items-center justify-center text-xs font-bold">
                 1
               </span>
-              Select Exam
+              {t("results.selectExam")}
             </h3>
 
             {examsLoading ? (
@@ -369,9 +380,9 @@ export default function ExamReportsPage() {
               </div>
             ) : exams.length === 0 ? (
               <div className="text-center py-8 text-gray-400">
-                <p className="font-semibold">No completed exams yet</p>
+                <p className="font-semibold">{t("reportCards.noneCompleted")}</p>
                 <p className="text-sm mt-1">
-                  Complete an exam first to generate report cards
+                  {t("reportCards.completeFirst")}
                 </p>
               </div>
             ) : (
@@ -401,7 +412,7 @@ export default function ExamReportsPage() {
                                  flex items-center justify-center text-xs font-bold">
                   2
                 </span>
-                Select Class
+                {t("reportCards.selectClass")}
               </h3>
 
               {classLoading ? (
@@ -426,7 +437,7 @@ export default function ExamReportsPage() {
                     </button>
                   ))}
                   {classes.length === 0 && (
-                    <p className="text-sm text-gray-400">No classes found</p>
+                    <p className="text-sm text-gray-400">{t("classes.none")}</p>
                   )}
                 </div>
               )}
@@ -441,7 +452,7 @@ export default function ExamReportsPage() {
                                  flex items-center justify-center text-xs font-bold">
                   3
                 </span>
-                Select Student
+                {t("reportCards.selectStudent")}
                 <span className="text-xs text-gray-400 font-normal">
                   (optional — leave empty for full class)
                 </span>
@@ -491,25 +502,25 @@ export default function ExamReportsPage() {
         {/* Sidebar — Generate panel */}
         <div className="space-y-4">
           <div className="bg-white rounded-xl border border-gray-100 p-5 sticky top-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Generate</h3>
+            <h3 className="font-semibold text-gray-900 mb-4">{t("common.generate")}</h3>
 
             {/* Summary */}
             <div className="space-y-2 mb-4">
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Exam</span>
+                <span className="text-gray-500">{t("academic.exam")}</span>
                 <span className="font-semibold text-gray-900 truncate
                                  ml-2 max-w-[160px] text-right">
                   {selectedExam?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Class</span>
+                <span className="text-gray-500">{t("academic.class")}</span>
                 <span className="font-semibold text-gray-900">
                   {selectedClass?.name || "—"}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">Student</span>
+                <span className="text-gray-500">{t("academic.student")}</span>
                 <span className="font-semibold text-gray-900">
                   {selectedStudent
                     ? selectedStudent.studentName || selectedStudent.name
@@ -575,7 +586,7 @@ export default function ExamReportsPage() {
             </button>
 
             <p className="text-xs text-gray-400 text-center mt-3">
-              Reports open in new tabs for printing
+              {t("reportCards.opensNewTab")}
             </p>
           </div>
         </div>

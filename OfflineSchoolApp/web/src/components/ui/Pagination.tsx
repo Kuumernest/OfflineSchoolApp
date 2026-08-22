@@ -1,5 +1,6 @@
 // web/src/components/ui/Pagination.tsx
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useTranslation }            from "react-i18next";
 import { cn }                        from "@/utils/cn";
 
 interface PaginationProps {
@@ -15,6 +16,7 @@ export function Pagination({
   total,
   onPageChange,
 }: PaginationProps) {
+  const { t } = useTranslation();
   if (pages <= 1) return null;
 
   // Build page number array with ellipsis
@@ -28,12 +30,14 @@ export function Pagination({
   }
 
   return (
-    <div className="flex items-center justify-between px-2 py-3">
-      <p className="text-sm text-gray-500">
-        Showing page{" "}
-        <span className="font-medium">{page}</span> of{" "}
-        <span className="font-medium">{pages}</span>{" "}
-        ({total.toLocaleString()} total)
+    <div className="flex items-center justify-between gap-4 border-t border-line px-1 pt-3">
+      {/* One interpolated sentence per clause rather than words wrapped around
+          <span>s — "Page 2 sur 5" and "Page 2 of 5" put the numbers in the same
+          places, but a translator cannot move them if they are separate nodes. */}
+      <p className="text-xs text-ink-muted tabular">
+        {t("pagination.summary", { page, pages })}
+        <span className="mx-1.5 text-line-strong">·</span>
+        {t("pagination.total", { count: total })}
       </p>
 
       <div className="flex items-center gap-1">
@@ -42,11 +46,13 @@ export function Pagination({
           onClick={() => onPageChange(page - 1)}
           disabled={page <= 1}
           className={cn(
-            "p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors",
-            "disabled:opacity-30 disabled:cursor-not-allowed"
+            "flex h-8 w-8 items-center justify-center rounded-control text-ink-muted transition-colors",
+            "hover:bg-canvas hover:text-ink-body",
+            "disabled:pointer-events-none disabled:opacity-30"
           )}
+          aria-label={t("pagination.prev")}
         >
-          <ChevronLeft className="w-4 h-4" />
+          <ChevronLeft className="h-4 w-4" />
         </button>
 
         {/* Page numbers */}
@@ -54,7 +60,7 @@ export function Pagination({
           p === "..." ? (
             <span
               key={`dots-${idx}`}
-              className="px-2 text-gray-400 text-sm"
+              className="px-1 text-xs text-ink-faint"
             >
               …
             </span>
@@ -63,10 +69,10 @@ export function Pagination({
               key={p}
               onClick={() => onPageChange(p)}
               className={cn(
-                "w-8 h-8 rounded-lg text-sm font-medium transition-colors",
+                "h-8 min-w-8 rounded-control px-2 text-xs font-medium tabular transition-colors",
                 page === p
                   ? "bg-primary-600 text-white"
-                  : "text-gray-600 hover:bg-gray-100"
+                  : "text-ink-muted hover:bg-canvas hover:text-ink-body"
               )}
             >
               {p}
@@ -79,11 +85,13 @@ export function Pagination({
           onClick={() => onPageChange(page + 1)}
           disabled={page >= pages}
           className={cn(
-            "p-2 rounded-lg text-gray-500 hover:bg-gray-100 transition-colors",
-            "disabled:opacity-30 disabled:cursor-not-allowed"
+            "flex h-8 w-8 items-center justify-center rounded-control text-ink-muted transition-colors",
+            "hover:bg-canvas hover:text-ink-body",
+            "disabled:pointer-events-none disabled:opacity-30"
           )}
+          aria-label={t("pagination.next")}
         >
-          <ChevronRight className="w-4 h-4" />
+          <ChevronRight className="h-4 w-4" />
         </button>
       </div>
     </div>

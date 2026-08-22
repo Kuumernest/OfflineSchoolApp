@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }    from "@/store/auth.store";
 import * as ExamService    from "@/services/exam.service";
 import { examQueryKeys }   from "./useExams";
-import toast               from "react-hot-toast";
+import { useToast }        from "@/components/ui/Toast";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -43,6 +43,7 @@ export const useSubmissions = (examId: string, classId?: string) => {
 
 export const useApproveSubmission = (examId: string) => {
   const qc       = useQueryClient();
+  const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
   return useMutation({
@@ -50,10 +51,10 @@ export const useApproveSubmission = (examId: string) => {
       ExamService.approveSubmission(examId, examSubjectId, schoolId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["submissions", examId] });
-      toast.success("Marks approved ✅");
+      toast({ title: "Marks approved ✅", kind: "success" });
     },
     onError: (e: Error) =>
-      toast.error(e.message || "Failed to approve submission"),
+      toast({ title: e.message || "Failed to approve submission", kind: "error" }),
   });
 };
 
@@ -61,6 +62,7 @@ export const useApproveSubmission = (examId: string) => {
 
 export const useRejectSubmission = (examId: string) => {
   const qc       = useQueryClient();
+  const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 
   return useMutation({
@@ -71,10 +73,10 @@ export const useRejectSubmission = (examId: string) => {
       ExamService.rejectSubmission(examId, examSubjectId, reason, schoolId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["submissions", examId] });
-      toast.success("Submission rejected");
+      toast({ title: "Submission rejected", kind: "success" });
     },
     onError: (e: Error) =>
-      toast.error(e.message || "Failed to reject submission"),
+      toast({ title: e.message || "Failed to reject submission", kind: "error" }),
   });
 };
 
@@ -99,6 +101,7 @@ export const useScores = (
 
 export const useSaveBulkScores = () => {
   const qc = useQueryClient();
+  const { toast } = useToast();
   return useMutation({
     mutationFn: ExamService.saveBulkScores,
     onSuccess: (_data, vars) => {
@@ -106,9 +109,9 @@ export const useSaveBulkScores = () => {
         queryKey: submissionKeys.scores(vars.examId, vars.subjectId, vars.classId),
       });
       qc.invalidateQueries({ queryKey: ["submissions", vars.examId] });
-      toast.success("Scores saved");
+      toast({ title: "Scores saved", kind: "success" });
     },
     onError: (e: Error) =>
-      toast.error(e.message || "Failed to save scores"),
+      toast({ title: e.message || "Failed to save scores", kind: "error" }),
   });
 };

@@ -84,8 +84,11 @@ export interface SchoolInfo {
   state?:   string;
   country?: string;
   motto?:   string;
+  /** Stored path ("/uploads/…"), absolute URL, or raw base64. */
   logo?:    string;
   logoUrl?: string;
+  /** Byte length of an inline logo the server chose not to send. */
+  logoLen?: number | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -446,16 +449,37 @@ export async function fetchSchoolInfo(
   schoolId: string
 ): Promise<SchoolInfo | null> {
   try {
+    const unwrap = (d: AdminSchoolInfoResponse) =>
+      d.school ?? d.data ?? (d as unknown as SchoolInfo & Record<string, unknown>);
+
     const { data } = await api.get<AdminSchoolInfoResponse>(
       `${BASE}/school-info${qs({ schoolId })}`
     );
 
-    const s =
-      data.school ??
-      data.data   ??
-      (data as unknown as SchoolInfo);
+    let s = unwrap(data);
 
     if (!s?.name) return null;
+
+    // The endpoint withholds the logo by default — a legacy school stores it
+    // inline as ~160 KB of base64, and re-reading that on every poll was what
+    // made this call time out. It sends `logoLen` as a fingerprint instead.
+    //
+    // So: a logo that is absent but has a non-zero length was withheld, not
+    // missing, and needs the explicit opt-in request. A migrated school
+    // returns its "/uploads/..." path on the light path and skips this.
+    const logoLen = Number(s.logoLen ?? 0);
+    if (!s.logo && !s.logoUrl && logoLen > 0) {
+      try {
+        const full = await api.get<AdminSchoolInfoResponse>(
+          `${BASE}/school-info${qs({ schoolId, includeLogo: 1 })}`
+        );
+        const withLogo = unwrap(full.data);
+        if (withLogo?.logo) s = withLogo;
+      } catch {
+        // Non-fatal: fall through and render the placeholder rather than
+        // failing the whole dashboard over a picture.
+      }
+    }
 
     return {
       name:    String(s.name),
@@ -464,6 +488,8 @@ export async function fetchSchoolInfo(
       country: s.country ? String(s.country) : undefined,
       motto:   s.motto   ? String(s.motto)   : undefined,
       // Accept both "logo" (raw base64) and "logoUrl" (full URL / data URI)
+      // Passed through verbatim; utils/logoSrc decides how to render it,
+      // since the value may be a stored path, a URL, or raw base64.
       logo:    s.logo    ? String(s.logo)
              : s.logoUrl ? String(s.logoUrl) : undefined,
     };

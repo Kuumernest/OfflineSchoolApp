@@ -3,6 +3,8 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate }  from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api              from "@/services/api";
+import { getErrorMessage } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 import {
   Plus, Edit2, Eye, Star, Copy, Trash2,
   FileText, Info, Loader2, AlertCircle,
@@ -26,6 +28,7 @@ interface Template {
 // ─────────────────────────────────────────────────────────
 
 export default function TemplatesPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -47,8 +50,8 @@ export default function TemplatesPage() {
         res.data?.data      ??
         (Array.isArray(res.data) ? res.data : []);
       setTemplates(data);
-    } catch (err: any) {
-      setError(err?.response?.data?.error || err.message);
+    } catch (err) {
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -67,8 +70,8 @@ export default function TemplatesPage() {
       setActionId(id);
       await api.patch(`/templates/${id}/default`, { schoolId });
       await load();
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err.message);
+    } catch (err) {
+      alert(getErrorMessage(err));
     } finally {
       setActionId(null);
     }
@@ -81,8 +84,8 @@ export default function TemplatesPage() {
       setActionId(id);
       await api.post(`/templates/${id}/duplicate`, { schoolId });
       await load();
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err.message);
+    } catch (err) {
+      alert(getErrorMessage(err));
     } finally {
       setActionId(null);
     }
@@ -100,8 +103,8 @@ export default function TemplatesPage() {
       setActionId(id);
       await api.delete(`/templates/${id}`, { params: { schoolId } });
       await load();
-    } catch (err: any) {
-      alert(err?.response?.data?.error || err.message);
+    } catch (err) {
+      alert(getErrorMessage(err));
     } finally {
       setActionId(null);
     }
@@ -118,9 +121,9 @@ export default function TemplatesPage() {
       <div className="bg-white border-b border-gray-200 px-6 py-4">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
           <div>
-            <h1 className="text-xl font-bold text-gray-900">Report Templates</h1>
+            <h1 className="text-xl font-bold text-gray-900">{t("templates.title")}</h1>
             <p className="text-sm text-gray-500 mt-0.5">
-              Manage your report card HTML designs
+              {t("templates.blurb")}
             </p>
           </div>
           <button
@@ -130,7 +133,7 @@ export default function TemplatesPage() {
                        transition-colors"
           >
             <Plus size={16} />
-            New Template
+            {t("templates.new")}
           </button>
         </div>
       </div>
@@ -168,7 +171,7 @@ export default function TemplatesPage() {
               onClick={load}
               className="ml-auto text-red-700 underline font-medium"
             >
-              Retry
+              {t("common.retry")}
             </button>
           </div>
         )}
@@ -180,7 +183,7 @@ export default function TemplatesPage() {
                             justify-center">
               <FileText size={40} className="text-gray-300" />
             </div>
-            <h2 className="text-lg font-bold text-gray-700">No Templates Yet</h2>
+            <h2 className="text-lg font-bold text-gray-700">{t("templates.none")}</h2>
             <p className="text-sm text-gray-500 text-center max-w-sm">
               Create your first report card template by pasting your school's
               HTML layout and using placeholders.
@@ -192,7 +195,7 @@ export default function TemplatesPage() {
                          transition-colors mt-2"
             >
               <Plus size={16} />
-              Create Template
+              {t("templates.create")}
             </button>
           </div>
         )}
@@ -243,6 +246,7 @@ function TemplateCard({
   template, isActioning,
   onEdit, onPreview, onSetDefault, onDuplicate, onDelete,
 }: TemplateCardProps) {
+  const { t } = useTranslation();
   return (
     <div className={`
       bg-white rounded-2xl border p-5 flex flex-col gap-4
@@ -268,7 +272,7 @@ function TemplateCard({
               <span className="flex items-center gap-1 bg-blue-50 text-blue-600
                                text-xs font-bold px-2 py-0.5 rounded-full">
                 <Star size={10} fill="currentColor" />
-                Default
+                {t("common.default")}
               </span>
             )}
           </div>
@@ -310,13 +314,13 @@ function TemplateCard({
           </div>
         ) : (
           <>
-            <ActionButton icon={<Eye size={13} />}   label="Preview" onClick={onPreview}    color="gray"   />
-            <ActionButton icon={<Edit2 size={13} />} label="Edit"    onClick={onEdit}       color="blue"   />
+            <ActionButton icon={<Eye size={13} />}   label={t("common.preview")} onClick={onPreview}    color="gray"   />
+            <ActionButton icon={<Edit2 size={13} />} label={t("common.edit")}    onClick={onEdit}       color="blue"   />
             {!template.isDefault && (
-              <ActionButton icon={<Star size={13} />} label="Default" onClick={onSetDefault} color="yellow" />
+              <ActionButton icon={<Star size={13} />} label={t("common.default")} onClick={onSetDefault} color="yellow" />
             )}
-            <ActionButton icon={<Copy size={13} />}  label="Copy"   onClick={onDuplicate}  color="purple" />
-            <ActionButton icon={<Trash2 size={13} />} label="Delete" onClick={onDelete}     color="red"    />
+            <ActionButton icon={<Copy size={13} />}  label={t("common.copy")}   onClick={onDuplicate}  color="purple" />
+            <ActionButton icon={<Trash2 size={13} />} label={t("common.delete")} onClick={onDelete}     color="red"    />
           </>
         )}
       </div>

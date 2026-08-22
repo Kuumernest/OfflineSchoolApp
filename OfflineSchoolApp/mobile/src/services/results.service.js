@@ -1,14 +1,21 @@
 // src/services/results.service.js
 "use strict";
 
-import api from "./api";
+import ExamService from "./exam.service";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
- * RESULTS API SERVICE
+ * RESULTS SERVICE
  *
- * NOTE: axios { data } is destructured here, so every function returns
- * the raw API response body directly.
+ * A thin, offline-aware facade over ExamService. It used to call axios
+ * directly with no cache at all, so a published result the student had
+ * already seen became unreadable the moment they lost signal.
+ *
+ * Reads resolve from the local cache when the network is unavailable and
+ * carry `isStale: true` so the caller can label the data as last-known.
+ * Writes that need server-side aggregation (processing) surface a
+ * REQUIRES_CONNECTION error rather than failing opaquely; status changes
+ * are queued on the durable outbox.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -17,10 +24,7 @@ import api from "./api";
 
 export async function processResults(examId, classId = null) {
   if (!examId) throw new Error("processResults: examId required");
-  const body = {};
-  if (classId) body.classId = classId;
-  const { data } = await api.post(`/exams/${examId}/process`, body);
-  return data;
+  return ExamService.processResults({ examId, classId });
 }
 
 // ── Get Exam Results List ─────────────────────────────────
@@ -28,8 +32,12 @@ export async function processResults(examId, classId = null) {
 
 export async function getExamResults(examId, params = {}) {
   if (!examId) throw new Error("getExamResults: examId required");
-  const { data } = await api.get(`/results/${examId}`, { params });
-  return data;
+  const { results, isStale } = await ExamService.getResults({
+    examId,
+    schoolId: params.schoolId,
+    classId:  params.classId,
+  });
+  return { success: true, data: results, results, isStale };
 }
 
 // ── Get Rankings ──────────────────────────────────────────
@@ -37,10 +45,7 @@ export async function getExamResults(examId, params = {}) {
 
 export async function getRankings(examId, scope = "class", classId = null) {
   if (!examId) throw new Error("getRankings: examId required");
-  const params = { rankBy: scope };
-  if (classId) params.classId = classId;
-  const { data } = await api.get(`/results/${examId}/rankings`, { params });
-  return data;
+  return ExamService.getRankings(examId, undefined, scope, classId);
 }
 
 // ── Get Single Student Result ─────────────────────────────
@@ -50,8 +55,7 @@ export async function getStudentResult(examId, studentId) {
   if (!examId || !studentId) {
     throw new Error("getStudentResult: examId and studentId required");
   }
-  const { data } = await api.get(`/results/${examId}/student/${studentId}`);
-  return data;
+  return ExamService.getStudentResult(examId, studentId);
 }
 
 // ── Get Exam Stats ────────────────────────────────────────
@@ -59,10 +63,8 @@ export async function getStudentResult(examId, studentId) {
 
 export async function getExamStats(examId, classId = null) {
   if (!examId) throw new Error("getExamStats: examId required");
-  const params = {};
-  if (classId) params.classId = classId;
-  const { data } = await api.get(`/results/${examId}/stats`, { params });
-  return data;
+  void classId; // stats are exam-wide server-side
+  return ExamService.getExamStats(examId);
 }
 
 // ── Publish Results ───────────────────────────────────────
@@ -70,10 +72,8 @@ export async function getExamStats(examId, classId = null) {
 
 export async function publishResults(examId, classId = null) {
   if (!examId) throw new Error("publishResults: examId required");
-  const body = { status: "published" };
-  if (classId) body.classId = classId;
-  const { data } = await api.patch(`/exams/${examId}/status`, body);
-  return data;
+  void classId;
+  return ExamService.updateExamStatus(examId, "published");
 }
 
 // ── Unpublish Results ─────────────────────────────────────
@@ -81,8 +81,6 @@ export async function publishResults(examId, classId = null) {
 
 export async function unpublishResults(examId, classId = null) {
   if (!examId) throw new Error("unpublishResults: examId required");
-  const body = { status: "completed" };
-  if (classId) body.classId = classId;
-  const { data } = await api.patch(`/exams/${examId}/status`, body);
-  return data;
+  void classId;
+  return ExamService.updateExamStatus(examId, "completed");
 }

@@ -28,6 +28,7 @@ import {
 }                             from "@/services/assignment.service";
 import { cn }                 from "@/utils/cn";
 import type { Teacher, Class, Subject } from "@/types";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -135,6 +136,7 @@ const StepCard = ({ step, children }: { step: Step; children: React.ReactNode })
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AssignTeacherPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const user     = useUser();
@@ -410,13 +412,13 @@ export default function AssignTeacherPage() {
               }}
               className="flex-1 rounded-xl border-2 border-indigo-600 py-2.5 text-sm font-bold text-indigo-600 hover:bg-indigo-50 transition-colors"
             >
-              Assign More
+              {t("assignments.assignMore")}
             </button>
             <button
               onClick={() => navigate("/teachers/assignments")}
               className="flex-1 rounded-xl bg-emerald-600 py-2.5 text-sm font-bold text-white hover:bg-emerald-700 transition-colors"
             >
-              Done
+              {t("common.done")}
             </button>
           </div>
         </div>
@@ -432,11 +434,11 @@ export default function AssignTeacherPage() {
         className="mb-4 flex items-center gap-1.5 text-sm font-medium text-gray-500 hover:text-gray-800 transition-colors"
       >
         <ChevronLeft size={16} />
-        Back to Assignments
+        {t("assignments.back")}
       </button>
 
-      <h1 className="text-2xl font-bold text-gray-900">Assign Teacher</h1>
-      <p className="mt-1 text-sm text-gray-500">Map subjects to a teacher</p>
+      <h1 className="text-2xl font-bold text-gray-900">{t("assignments.assignTeacher")}</h1>
+      <p className="mt-1 text-sm text-gray-500">{t("assignments.mapSubjects")}</p>
 
       <StepIndicator
         current={step}
@@ -453,7 +455,7 @@ export default function AssignTeacherPage() {
               type="text"
               value={teacherSearch}
               onChange={(e) => setTeacherSearch(e.target.value)}
-              placeholder="Search teachers…"
+              placeholder={t("assignments.searchTeachers")}
               className="flex-1 bg-transparent text-sm text-gray-900 placeholder-gray-400 outline-none"
             />
             {teacherSearch && (
@@ -529,7 +531,7 @@ export default function AssignTeacherPage() {
                 onClick={() => goToStep(1)}
                 className="text-xs font-medium text-indigo-500 hover:text-indigo-700"
               >
-                Change
+                {t("common.change")}
               </button>
             )}
           </div>
@@ -547,7 +549,7 @@ export default function AssignTeacherPage() {
           {classesQuery.isLoading ? (
             <p className="py-6 text-center text-sm text-gray-400">Loading classes…</p>
           ) : classes.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">No classes found.</p>
+            <p className="py-6 text-center text-sm text-gray-400">{t("assignments.noClasses")}</p>
           ) : (
             <div className="flex flex-col gap-2">
               {classes.map((cls) => {
@@ -629,12 +631,12 @@ export default function AssignTeacherPage() {
             <p className="py-6 text-center text-sm text-gray-400">Loading subjects…</p>
           ) : subjects.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-400">
-              No subjects in this class.
+              {t("assignments.noSubjectsInClass")}
             </p>
           ) : (
             <>
               <p className="mb-2 text-xs font-medium text-gray-400">
-                Select one or more subjects to assign
+                {t("assignments.selectSubjects")}
               </p>
 
               {availableSubjects.length > 0 && (
@@ -695,7 +697,7 @@ export default function AssignTeacherPage() {
                       </div>
                       {already && (
                         <span className="shrink-0 rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-400">
-                          Already assigned
+                          {t("assignments.alreadyAssigned")}
                         </span>
                       )}
                     </button>
@@ -722,12 +724,12 @@ export default function AssignTeacherPage() {
       {step === 4 && (
         <StepCard step={4}>
           <h3 className="mb-4 text-base font-bold text-gray-900">
-            Assignment Summary
+            {t("assignments.summary")}
           </h3>
 
           <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
             <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <Users size={12} /> Teacher
+              <Users size={12} /> {t("academic.teacher")}
             </p>
             <p className="text-sm font-bold text-gray-900">
               {selectedTeacher?.name}
@@ -736,7 +738,7 @@ export default function AssignTeacherPage() {
 
           <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
             <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <School size={12} /> Class
+              <School size={12} /> {t("academic.class")}
             </p>
             <p className="text-sm font-bold text-gray-900">
               {selectedClass?.name}
@@ -778,7 +780,7 @@ export default function AssignTeacherPage() {
             <div className="mb-4 flex items-center gap-2 rounded-xl bg-amber-50 px-3 py-2.5">
               <AlertCircle size={14} className="shrink-0 text-amber-600" />
               <p className="text-xs font-medium text-amber-800">
-                No subjects selected. Go back to select at least one.
+                {t("assignments.noneSelected")}
               </p>
             </div>
           )}
@@ -802,7 +804,7 @@ export default function AssignTeacherPage() {
               className="flex items-center gap-1.5 rounded-xl bg-gray-100 px-5 py-3 text-sm font-bold text-gray-700 hover:bg-gray-200 transition-colors"
             >
               <ChevronLeft size={16} />
-              Back
+              {t("common.back")}
             </button>
             <button
               onClick={() => mutation.mutate()}
@@ -822,7 +824,7 @@ export default function AssignTeacherPage() {
               ) : (
                 <>
                   <CheckSquare size={16} />
-                  Confirm
+                  {t("common.confirm")}
                 </>
               )}
             </button>

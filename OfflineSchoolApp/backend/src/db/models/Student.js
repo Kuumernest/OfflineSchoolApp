@@ -4,6 +4,25 @@
 const mongoose = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 
+/**
+ * Uploaded admission documents. Mirrors the sub-schema in
+ * StudentApplication so a document survives being carried across on
+ * approval — it previously did not, because `documents` was not declared
+ * on this schema and strict mode dropped it.
+ */
+const documentSchema = new mongoose.Schema(
+  {
+    title:    { type: String, default: null, trim: true },
+    filename: { type: String, default: null             },
+    path:     { type: String, default: null             },
+    url:      { type: String, default: null             },
+    type:     { type: String, default: "other"          },
+    size:     { type: Number, default: 0                },
+    mimeType: { type: String, default: null             },
+  },
+  { _id: false }
+);
+
 const studentSchema = new mongoose.Schema(
   {
     _id: {
@@ -15,9 +34,21 @@ const studentSchema = new mongoose.Schema(
     userId: {
       type:     String,
       ref:      "User",
-      required: [true, "User ID is required"],
+      // Required only once the student is enrolled.
+      //
+      // This collection holds two lifecycle stages: a pending application has
+      // no login and no number yet, an approved student has both. As an
+      // unconditional requirement this rejected every Student.create() in the
+      // codebase — direct enrollment, public application and approval alike —
+      // with "User ID is required", because all three create the record first
+      // and provision the account afterwards.
+      required: [
+        function () { return this.status === "approved"; },
+        "User ID is required for an enrolled student",
+      ],
       index:    true,
       unique:   true,
+      sparse:   true,
     },
 
     applicationId: {
@@ -45,7 +76,11 @@ const studentSchema = new mongoose.Schema(
       type:     String,
       uppercase: true,
       trim:     true,
-      required: [true, "Enrollment number is required"],
+      // Minted on approval, so an application legitimately has none yet.
+      required: [
+        function () { return this.status === "approved"; },
+        "Enrollment number is required for an enrolled student",
+      ],
       unique:   true,
       sparse:   true,
       index:    true,
@@ -92,7 +127,10 @@ const studentSchema = new mongoose.Schema(
     // ── Enrollment Status ─────────────────────────────────────────────────
     status: {
       type:    String,
-      enum:    ["pending", "approved", "rejected", "suspended"],
+      // "graduated" is a terminal state, added for promotion rollover. Every
+      // roster query already filters on status: "approved", so a graduate drops
+      // off the register without any of them needing to change.
+      enum:    ["pending", "approved", "rejected", "suspended", "graduated"],
       default: "approved",
       // ✅ no index: true — covered by compound index below
     },
@@ -107,7 +145,28 @@ const studentSchema = new mongoose.Schema(
     enrolledAt:  { type: Date, default: () => new Date() },
     approvedAt:  { type: Date, default: null },
     suspendedAt: { type: Date, default: null },
+    // Declared explicitly: the schema is strict, so a field the promotion
+    // commit writes but never declares is silently dropped.
+    graduatedAt: { type: Date, default: null },
+
+    // Guardian portal access lives on its own collection, not here — see
+    // db/models/GuardianAccess.js. A code hung off a Student cannot serve a
+    // parent with two children at the school, which is the ordinary case.
     deletedAt:   { type: Date, default: null },
+
+    // ── Admission review trail ────────────────────────────────────────────
+    //
+    // These were written by the enroll / approve / reject handlers but were
+    // never declared here. The schema is strict, so Mongoose discarded them
+    // without an error: the reviewer, the decision timestamps, the rejection
+    // reason, the uploaded documents and the admin's notes were all silently
+    // dropped on every admission decision.
+    reviewedBy:   { type: String, ref: "User", default: null },
+    reviewedAt:   { type: Date,                default: null },
+    rejectedAt:   { type: Date,                default: null },
+    rejectReason: { type: String, trim: true,  default: null },
+    notes:        { type: String, trim: true,  default: null },
+    documents:    { type: [documentSchema],    default: []   },
 
     // ── Additional Profile Fields ─────────────────────────────────────────
     alternatePhone:    { type: String, trim: true, default: null },

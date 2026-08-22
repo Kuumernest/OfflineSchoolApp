@@ -152,7 +152,11 @@ router.post("/refresh", async (req, res, next) => {
   try {
     const { refreshToken } = req.body;
     if (!refreshToken) {
-      return res.status(400).json({ success: false, message: "Refresh token required" });
+      // Fall through to the Mode B handler below (re-issue from a still-valid
+      // access token) instead of hard-failing. Returning 400 here made Mode B
+      // unreachable whenever JWT_REFRESH_SECRET was configured, so a client
+      // holding only an access token could never refresh.
+      return next();
     }
 
     let decoded;

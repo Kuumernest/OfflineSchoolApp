@@ -1,5 +1,8 @@
 // web/src/components/dashboard/AttendanceWidget.tsx
-import { CheckSquare, XCircle, TrendingUp } from "lucide-react";
+import { useTranslation }   from "react-i18next";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { useFormat }        from "@/i18n/format";
+import { cn }               from "@/utils/cn";
 
 interface Props {
   present:  number;
@@ -8,97 +11,82 @@ interface Props {
   loading?: boolean;
 }
 
+/**
+ * Today's attendance.
+ *
+ * The rate is the headline and the bar is the only coloured element — present
+ * and absent are figures, not alarms, so they are set in ink rather than in
+ * matching green and red boxes competing with the bar for the same message.
+ */
 export default function AttendanceWidget({
   present,
   absent,
   rate,
   loading = false,
 }: Props) {
+  const { t } = useTranslation();
+  const fmt   = useFormat();
   const total = present + absent;
+  const healthy = rate >= 75;
+  const pct = Math.max(0, Math.min(rate, 100));
 
   return (
-    <div
-      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200
-                  dark:border-gray-700 shadow-sm p-6 flex flex-col gap-4"
-    >
-      {/* ── Header ── */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100">
-          Today's Attendance
-        </h3>
+    <Card>
+      <CardHeader title={t("dashboard.attendanceToday")} />
 
-        <span
-          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${
-            rate >= 75
-              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-              : "bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400"
-          }`}
-        >
-          {rate}% rate
-        </span>
-      </div>
-
-      {/* ── Body ── */}
       {loading ? (
-        <div className="h-28 flex items-center justify-center text-gray-400 text-sm">
-          Loading…
+        <div className="space-y-3">
+          <div className="h-8 w-24 animate-pulse rounded-control bg-canvas" />
+          <div className="h-1.5 w-full animate-pulse rounded-full bg-canvas" />
         </div>
       ) : (
         <>
-          {/* Progress bar */}
-          <div className="w-full bg-gray-100 dark:bg-gray-700 rounded-full h-3 overflow-hidden">
+          <div className="flex items-baseline gap-2">
+            <span className="font-display text-[30px] leading-none text-ink tabular">
+              {fmt.number(rate)}%
+            </span>
+            <span className="text-xs text-ink-muted">{t("dashboard.presentShort")}</span>
+          </div>
+
+          <div
+            className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-canvas"
+            role="progressbar"
+            aria-valuenow={pct}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Attendance rate"
+          >
             <div
-              className={`h-3 rounded-full transition-all duration-700 ${
-                rate >= 75 ? "bg-green-500" : "bg-red-500"
-              }`}
-              style={{ width: `${Math.min(rate, 100)}%` }}
+              className={cn(
+                "h-full rounded-full transition-[width] duration-500",
+                healthy ? "bg-success" : "bg-warning"
+              )}
+              style={{ width: `${pct}%` }}
             />
           </div>
 
-          {/* Present / Absent cards */}
-          <div className="grid grid-cols-2 gap-3">
-            {/* Present */}
-            <div
-              className="flex items-center gap-3 bg-green-50 dark:bg-green-900/20
-                          rounded-xl p-3"
-            >
-              <CheckSquare className="h-5 w-5 text-green-600 shrink-0" />
-              <div>
-                <p className="text-xl font-bold text-green-700 dark:text-green-400 leading-tight">
-                  {present}
-                </p>
-                <p className="text-xs text-green-600 dark:text-green-500">
-                  Present
-                </p>
-              </div>
+          <dl className="mt-4 flex items-center gap-6">
+            <div>
+              <dt className="text-xs text-ink-muted">{t("academic.present")}</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-ink tabular">
+                {fmt.number(present)}
+              </dd>
             </div>
-
-            {/* Absent */}
-            <div
-              className="flex items-center gap-3 bg-red-50 dark:bg-red-900/20
-                          rounded-xl p-3"
-            >
-              <XCircle className="h-5 w-5 text-red-600 shrink-0" />
-              <div>
-                <p className="text-xl font-bold text-red-700 dark:text-red-400 leading-tight">
-                  {absent}
-                </p>
-                <p className="text-xs text-red-600 dark:text-red-500">
-                  Absent
-                </p>
-              </div>
+            <div>
+              <dt className="text-xs text-ink-muted">{t("academic.absent")}</dt>
+              <dd className="mt-0.5 text-sm font-semibold text-ink tabular">
+                {fmt.number(absent)}
+              </dd>
             </div>
-          </div>
+          </dl>
 
-          {/* Total */}
-          <p className="text-xs text-gray-500 dark:text-gray-400 flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 shrink-0" />
+          <p className="mt-4 border-t border-line pt-3 text-xs text-ink-faint">
             {total > 0
-              ? `${total} attendance record${total !== 1 ? "s" : ""} taken today`
-              : "No attendance records for today yet"}
+              ? t("dashboard.recordsToday", { count: total })
+              : t("dashboard.noAttendanceYet")}
           </p>
         </>
       )}
-    </div>
+    </Card>
   );
 }

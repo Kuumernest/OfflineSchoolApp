@@ -14,6 +14,8 @@ import type { ExamStatus,
               ExamSubject }                  from "@/types/exam.types";
 import * as ExamService                      from "@/services/exam.service";
 import api                                   from "@/services/api";
+import { getErrorMessage }                   from "@/lib/api";
+import { useTranslation } from "react-i18next";
 import {
   EXAM_STATUS_META,
   EXAM_TYPE_LABELS,
@@ -33,6 +35,29 @@ interface ScoreEntry {
   score:         string;
   isAbsent:      boolean;
   teacherRemark: string;
+}
+
+/**
+ * A student row in the mark-entry sheet.
+ *
+ * The roster arrives from three different endpoint shapes, each naming things
+ * slightly differently (`_id` vs `id`, `studentName` vs `name`), so every field
+ * is optional and read defensively at the point of use.
+ */
+interface MarkEntryStudent {
+  _id?:          string;
+  id?:           string;
+  name?:         string;
+  studentName?:  string;
+  admissionNo?:  string;
+}
+
+/** One saved score row as the scores endpoint returns it. */
+interface RawScoreRow {
+  studentId:      string;
+  score?:         number | string | null;
+  isAbsent?:      boolean;
+  teacherRemark?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -118,6 +143,7 @@ const DetailsTab = ({
   onStatusChange: (s: ExamStatus) => void;
   changingStatus: boolean;
 }) => {
+  const { t } = useTranslation();
   const nextStatuses = NEXT_STATUSES[exam.status] ?? [];
 
   const subjectProgress = submissions.map((sub) => {
@@ -134,14 +160,14 @@ const DetailsTab = ({
       {/* Status card */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gray-900">Exam Status</h3>
+          <h3 className="font-semibold text-gray-900">{t("exams.statusTitle")}</h3>
           <StatusBadge status={exam.status} />
         </div>
 
         {nextStatuses.length > 0 && (
           <div>
             <p className="text-xs text-gray-500 mb-2 font-medium">
-              Move to next stage:
+              {t("exams.moveNextStage")}
             </p>
             <div className="flex gap-2 flex-wrap">
               {nextStatuses.map((s) => (
@@ -171,7 +197,7 @@ const DetailsTab = ({
 
       {/* Exam info */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">Exam Information</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">{t("exams.information")}</h3>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           {[
             { label: "Type",          value: EXAM_TYPE_LABELS[exam.type as keyof typeof EXAM_TYPE_LABELS] ?? exam.type },
@@ -197,7 +223,7 @@ const DetailsTab = ({
           <div className="mt-4 pt-4 border-t border-gray-100">
             <p className="text-xs font-semibold text-gray-400
                           uppercase tracking-wide mb-1">
-              Description
+              {t("common.description")}
             </p>
             <p className="text-sm text-gray-600 leading-relaxed">
               {exam.description}
@@ -208,14 +234,14 @@ const DetailsTab = ({
 
       {/* Per-subject progress */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-1">Marks Progress</h3>
+        <h3 className="font-semibold text-gray-900 mb-1">{t("exams.marksProgress")}</h3>
         <p className="text-xs text-gray-400 mb-4">
-          How many student scores have been entered per subject
+          {t("exams.marksProgressHint")}
         </p>
 
         {subjectProgress.length === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">
-            No subjects assigned to this exam yet
+            {t("exams.noSubjectsYet")}
           </p>
         ) : (
           <div className="space-y-3">
@@ -279,7 +305,8 @@ const ScoreEntryPanel = ({
   schoolId: string;
   onClose:  () => void;
 }) => {
-  const [students, setStudents] = useState<any[]>([]);
+  const { t } = useTranslation();
+  const [students, setStudents] = useState<MarkEntryStudent[]>([]);
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
   const [saving,   setSaving]   = useState(false);
@@ -317,7 +344,7 @@ const ScoreEntryPanel = ({
           }).catch(() => ({ scores: [] })),
         ]);
 
-        const studentList: any[] =
+        const studentList: MarkEntryStudent[] =
           stuRes.data?.students ||
           stuRes.data?.data     ||
           (Array.isArray(stuRes.data) ? stuRes.data : []);
@@ -325,7 +352,8 @@ const ScoreEntryPanel = ({
         setStudents(studentList);
 
         const map: Record<string, ScoreEntry> = {};
-        for (const s of (scoresRes as any)?.scores ?? []) {
+        const scoreRows = (scoresRes as { scores?: RawScoreRow[] } | null)?.scores ?? [];
+        for (const s of scoreRows) {
           map[String(s.studentId)] = {
             score:         s.score != null ? String(s.score) : "",
             isAbsent:      s.isAbsent      ?? false,
@@ -382,8 +410,8 @@ const ScoreEntryPanel = ({
         schoolId,
       });
       setSaved(true);
-    } catch (err: any) {
-      alert(err.message || "Save failed. Please try again.");
+    } catch (err) {
+      alert(getErrorMessage(err) || "Save failed. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -456,7 +484,7 @@ const ScoreEntryPanel = ({
       <div className="px-4 py-2 bg-white border-b border-gray-100">
         <input
           type="text"
-          placeholder="Search student by name or admission number…"
+          placeholder={t("exams.searchStudentPh")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full px-3 py-1.5 border border-gray-200 rounded-lg
@@ -549,7 +577,7 @@ const ScoreEntryPanel = ({
                 <div className="flex flex-col items-center">
                   {absent ? (
                     <span className="text-xs font-semibold text-gray-400">
-                      ABSENT
+                      {t("exams.absent")}
                     </span>
                   ) : (
                     <>
@@ -601,6 +629,7 @@ const MarksTab = ({
   submissions: ExamSubjectWithTotals[];
   schoolId:    string;
 }) => {
+  const { t } = useTranslation();
   const [openSubjectId, setOpenSubjectId] = useState<string | null>(null);
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
@@ -628,8 +657,8 @@ const MarksTab = ({
     return (
       <EmptyState
         icon="📭"
-        title="No subjects assigned yet"
-        subtitle="Add subjects from the exam settings to start entering marks"
+        title={t("exams.noSubjectsShort")}
+        subtitle={t("exams.addSubjectsHint")}
       />
     );
   }
@@ -642,7 +671,7 @@ const MarksTab = ({
                         bg-black/40 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-xl">
             <h3 className="font-bold text-gray-900 text-lg mb-1">
-              Reject Submission
+              {t("exams.rejectSubmission")}
             </h3>
             <p className="text-sm text-gray-500 mb-4">
               {rejectTarget.subjectName}
@@ -653,7 +682,7 @@ const MarksTab = ({
               rows={3}
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Enter rejection reason (required)…"
+              placeholder={t("exams.rejectReasonPh")}
               className="w-full border border-gray-200 rounded-xl p-3
                          text-sm focus:outline-none focus:ring-2
                          focus:ring-red-400 resize-none"
@@ -667,7 +696,7 @@ const MarksTab = ({
                 className="flex-1 py-2.5 bg-gray-100 text-gray-700
                            rounded-xl text-sm font-semibold"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleRejectConfirm}
@@ -756,7 +785,7 @@ const MarksTab = ({
                                      hover:bg-green-700 disabled:opacity-50
                                      transition-colors"
                         >
-                          Approve
+                          {t("exams.approve")}
                         </button>
                         <button
                           onClick={() => setRejectTarget(sub)}
@@ -764,7 +793,7 @@ const MarksTab = ({
                                      bg-red-600 text-white rounded-lg
                                      hover:bg-red-700 transition-colors"
                         >
-                          Reject
+                          {t("exams.reject")}
                         </button>
                       </>
                     )}
@@ -807,7 +836,6 @@ const MarksTab = ({
 
 const ResultsTab = ({
   examId,
-  schoolId,
   examStatus,
   submissions,
 }: {
@@ -816,6 +844,7 @@ const ResultsTab = ({
   examStatus:  ExamStatus;
   submissions: ExamSubjectWithTotals[];
 }) => {
+  const { t } = useTranslation();
   const { data: resultsData, isLoading } = useExamResults(examId);
   const { data: statsData }              = useExamStats(examId);
   const processResults                   = useProcessResults();
@@ -857,7 +886,7 @@ const ResultsTab = ({
 
       {/* Guided steps */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">Results Checklist</h3>
+        <h3 className="font-semibold text-gray-900 mb-4">{t("exams.checklist")}</h3>
 
         <div className="space-y-3">
 
@@ -994,7 +1023,7 @@ const ResultsTab = ({
         <div className="bg-white rounded-xl border border-gray-100">
           <EmptyState
             icon="📊"
-            title="No results yet"
+            title={t("exams.noResultsYet")}
             subtitle={
               currentStep === 1
                 ? "Enter and approve all subject marks first"
@@ -1099,6 +1128,7 @@ const ResultsTab = ({
 // ─────────────────────────────────────────────────────────
 
 export default function ExamDetailPage() {
+  const { t } = useTranslation();
   const { id }         = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate       = useNavigate();
@@ -1144,13 +1174,13 @@ export default function ExamDetailPage() {
     return (
       <div className="text-center py-16">
         <p className="text-5xl mb-4">😕</p>
-        <p className="font-semibold text-gray-700">Exam not found</p>
+        <p className="font-semibold text-gray-700">{t("exams.notFound")}</p>
         <button
           onClick={() => navigate("/exams")}
           className="mt-4 px-6 py-2 bg-primary-600 text-white
                      rounded-xl text-sm font-semibold"
         >
-          Back to Exams
+          {t("exams.backToExams")}
         </button>
       </div>
     );

@@ -1,53 +1,16 @@
-import axios, { AxiosError } from "axios";
-import type { InternalAxiosRequestConfig, AxiosResponse } from "axios";
+// web/src/services/api.ts
+//
+// Re-export of the single axios instance in lib/axios.ts.
+//
+// This file used to create its OWN axios instance that read the bearer token
+// from localStorage keys "auth_token" / "auth_user". The auth store writes
+// "token" / "user", so every module importing from here — 13 of them, including
+// the student, teacher, class and subject services — sent requests with no
+// Authorization header at all and got a 401 on anything protected.
+//
+// Keeping the module as a re-export rather than deleting it means those imports
+// keep working while all of them now share one instance, and therefore one
+// token source, one refresh queue, and one 401 handler.
 
-// ─────────────────────────────────────────────────────────
-// BASE INSTANCE
-// ─────────────────────────────────────────────────────────
-
-const api = axios.create({
-  baseURL: "/api",           // proxied by Vite → http://192.168.1.232:5000/api
-  timeout: 30_000,
-  headers: {
-    "Content-Type": "application/json",
-  },
-});
-
-// ─────────────────────────────────────────────────────────
-// REQUEST INTERCEPTOR — attach JWT
-// ─────────────────────────────────────────────────────────
-
-api.interceptors.request.use(
-  (config: InternalAxiosRequestConfig) => {
-    const token = localStorage.getItem("auth_token");
-    if (token) {
-      if (!config.headers) config.headers = {} as InternalAxiosRequestConfig["headers"];
-      (config.headers as Record<string, string | undefined>)["Authorization"] = `Bearer ${token}`;
-    }
-    console.log(`[api] ${config.method?.toUpperCase()} ${config.url}`);
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-// ─────────────────────────────────────────────────────────
-// RESPONSE INTERCEPTOR — handle 401 globally
-// ─────────────────────────────────────────────────────────
-
-api.interceptors.response.use(
-  (response: AxiosResponse) => {
-    console.log(`[api] ✅ ${response.status} ← ${response.config.url}`);
-    return response;
-  },
-  (error: AxiosError) => {
-    if (error.response?.status === 401) {
-      // Token expired — clear storage and redirect to login
-      localStorage.removeItem("auth_token");
-      localStorage.removeItem("auth_user");
-      window.location.href = "/login";
-    }
-    return Promise.reject(error);
-  }
-);
-
-export default api;
+export { default } from "@/lib/axios";
+export { default as api } from "@/lib/axios";

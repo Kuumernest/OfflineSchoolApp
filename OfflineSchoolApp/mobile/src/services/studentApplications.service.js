@@ -984,20 +984,18 @@ export const StudentApplicationsService = {
 
   // ── pushPendingDecisions ──────────────────────────────────────────────
 
+  /**
+   * Queues pending admission decisions, then lets the shared outbox send them.
+   *
+   * This used to call approveOnServer/rejectOnServer directly — each walking
+   * its own endpoint fallback chain, with its own retry behaviour. Those
+   * chains now travel with the mutation (`__endpoints`) and MutationQueue
+   * walks them, so admission decisions retry, back off and surface exactly
+   * like every other write.
+   */
   async pushPendingDecisions() {
     const db = await getDatabase();
     await ensureSchema(db);
-
-    let isOnline = false;
-    try {
-      const net = await NetInfo.fetch();
-      isOnline  = Boolean(net.isConnected);
-    } catch { /* offline */ }
-
-    if (!isOnline) {
-      console.log("[studentApplications] Offline — skipping push");
-      return;
-    }
 
     if (!(await tableExists(db, "students"))) return;
 
@@ -1006,102 +1004,13 @@ export const StudentApplicationsService = {
       await safeAddColumn(db, "students", "_synced", "INTEGER DEFAULT 0");
     }
 
-    const dirty = await db.getAllAsync(
-      `SELECT * FROM students
-       WHERE  (_synced = 0 OR _synced IS NULL)
-         AND  status IN ('approved', 'rejected')
-       LIMIT  50`
-    ).catch(() => []);
-
-    if (!dirty?.length) {
-      console.log("[studentApplications] No unsynced decisions to push");
-      return;
-    }
-
-    const ts = new Date().toISOString();
-
-    for (const student of dirty) {
-      try {
-        let serverEnrollmentNo = null;
-
-        if (student.status === "approved") {
-          const classId = student.class_id || student.classId || null;
-          if (!classId) {
-            console.warn(
-              `[studentApplications] Skipping ${student.id} — no classId`
-            );
-            continue;
-          }
-          const response = await approveOnServer(student.id, classId);
-          serverEnrollmentNo =
-            response.data?.enrollmentNo          ||
-            response.data?.enrollment_no         ||
-            response.data?.student?.enrollmentNo ||
-            null;
-
-        } else if (student.status === "rejected") {
-          await rejectOnServer(student.id, student.rejection_reason || "");
-        }
-
-        await db.runAsync(
-          `UPDATE students SET _synced = 1, updated_at = ? WHERE id = ?`,
-          [ts, student.id]
-        );
-
-        if (serverEnrollmentNo) {
-          await db.runAsync(
-            `UPDATE students
-             SET enrollmentNo = ?, enrollment_no = ?,
-                 admissionNo  = ?, admissionNumber = ?, updated_at = ?
-             WHERE id = ?`,
-            [
-              serverEnrollmentNo, serverEnrollmentNo,
-              serverEnrollmentNo, serverEnrollmentNo,
-              ts, student.id,
-            ]
-          );
-
-          if (await tableExists(db, "users")) {
-            const userCols = await getTableColumns(db, "users");
-            let userRow = null;
-
-            if (userCols.includes("student_id")) {
-              userRow = await db.getFirstAsync(
-                `SELECT id FROM users WHERE student_id = ? LIMIT 1`,
-                [student.id]
-              ).catch(() => null);
-            }
-            if (!userRow && student.user_id) {
-              userRow = await db.getFirstAsync(
-                `SELECT id FROM users WHERE id = ? LIMIT 1`,
-                [student.user_id]
-              ).catch(() => null);
-            }
-            if (userRow) {
-              await updateRecord(db, "users", userRow.id, {
-                enrollmentNo:  serverEnrollmentNo,
-                enrollment_no: serverEnrollmentNo,
-              }, userCols);
-            }
-          }
-        }
-
-        console.log(
-          `[studentApplications] Synced: ${student.id} (${student.status})`
-        );
-      } catch (err) {
-        const status = err?.response?.status;
-        if (status === 409 || status === 404) {
-          await db.runAsync(
-            `UPDATE students SET _synced = 1 WHERE id = ?`, [student.id]
-          );
-        } else {
-          console.warn(
-            `[studentApplications] Push failed for ${student.id}:`,
-            err.message
-          );
-        }
-      }
+    try {
+      const { backfillOutbox } = require("./syncBackfill.service");
+      const { MutationQueue }  = require("./mutationQueue.service");
+      await backfillOutbox();
+      await MutationQueue.drain({ includeUploads: false });
+    } catch (err) {
+      console.warn("[studentApplications] pushPendingDecisions failed:", err.message);
     }
   },
 

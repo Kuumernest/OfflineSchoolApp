@@ -1,7 +1,6 @@
 // web/src/services/apiEndpoints.ts
 "use strict";
 
-import api from "@/lib/axios";
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from "axios";
 
 export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";

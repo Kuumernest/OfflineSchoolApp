@@ -35,12 +35,31 @@ import * as SecureStore from "expo-secure-store";
 // SECTION 1 — BASE URL
 // ═════════════════════════════════════════════════════════════════════════════
 
+// Release builds MUST supply the server address through the environment.
+// Expo inlines any EXPO_PUBLIC_* variable at build time (SDK 49+), so this is
+// read from .env / eas.json / the shell — never committed. See .env.example.
+//
+// In development it is optional: without it we fall back to the LAN address
+// below, which is what a phone on the same WiFi as the dev machine needs
+// (localhost would resolve to the phone itself).
+const ENV_URL = (process.env.EXPO_PUBLIC_API_URL || "").trim();
+
 const LAN_IP = "192.168.1.232";
 const PORT   = 5000;
 
 const getBaseURL = () => {
-  if (!__DEV__) return "https://your-production-domain.com/api";
-  return `http://${LAN_IP}:${PORT}/api`;
+  // Tolerate a trailing slash so ".../api" and ".../api/" behave identically.
+  if (ENV_URL) return ENV_URL.replace(/\/+$/, "");
+  if (__DEV__) return `http://${LAN_IP}:${PORT}/api`;
+
+  // No fallback here on purpose. A placeholder domain would build fine and
+  // then fail on every request in the user's hands, looking like a network
+  // fault. Failing at startup means a misconfigured build cannot ship quietly.
+  throw new Error(
+    "EXPO_PUBLIC_API_URL is not set - a release build has no server to talk to. " +
+      "Set it in .env, or in the build profile's env block in eas.json, before " +
+      "building. See .env.example."
+  );
 };
 
 export const API_URL = getBaseURL();
@@ -51,16 +70,82 @@ export const API_URL = getBaseURL();
 
 const api = axios.create({
   baseURL: API_URL,
-  timeout: 20_000,
+  timeout: 30_000,
   headers: { "Content-Type": "application/json" },
 });
+
+// ═════════════════════════════════════════════════════════════════════════════
+// SECTION 2A — GLOBAL CONCURRENCY LIMITER
+//
+// Android's OkHttp caps concurrent connections per host (default 5). A full
+// sync routinely fires GET /sync/pull (with retries), /admin/teacher-assignments,
+// /teacher/profile, /admin/assignments, /admin/school-info, announcements and
+// applications all at once. That saturates the pool; queued requests are then
+// assigned stale keep-alive sockets (server closed them after keepAliveTimeout)
+// → "Network Error" even though the server is healthy and direct calls succeed.
+//
+// Limiting to MAX_CONCURRENT_REQUESTS serializes the burst so every request
+// lands on a fresh, healthy socket. Requests are FIFO; the UI never blocks
+// because each screen's first request (the one the user is waiting on) still
+// goes first.
+//
+// A FAILED_KEYS buffer additionally detects repeatedly-failing sockets and
+// drops the keep-alive header on the next attempt so OkHttp opens a new
+// connection instead of reusing the poisoned one.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const MAX_CONCURRENT_REQUESTS = 3;
+let _activeRequests = 0;
+const _waitQueue = [];
+
+const _acquireSlot = () => {
+  if (_activeRequests < MAX_CONCURRENT_REQUESTS) {
+    _activeRequests++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _waitQueue.push(resolve));
+};
+
+const _releaseSlot = () => {
+  _activeRequests = Math.max(0, _activeRequests - 1);
+  const next = _waitQueue.shift();
+  if (next) {
+    _activeRequests++;
+    next();
+  }
+};
+
+const STALE_SOCKET_TTL_MS  = 30_000;
+const MAX_FAILED_HOST_KEYS = 8;
+const _failedHostKeys = new Map(); // key → lastFailureAt
+
+const _hostKey = (config) =>
+  `${config?.baseURL ?? API_URL}|${config?.url ?? ""}`;
+
+const _markHostFailed = (config) => {
+  const key = _hostKey(config);
+  _failedHostKeys.set(key, Date.now());
+  if (_failedHostKeys.size > MAX_FAILED_HOST_KEYS) {
+    const oldest = _failedHostKeys.keys().next().value;
+    if (oldest) _failedHostKeys.delete(oldest);
+  }
+};
+
+const _shouldDropKeepAlive = (config) => {
+  const last = _failedHostKeys.get(_hostKey(config));
+  if (!last) return false;
+  return Date.now() - last < STALE_SOCKET_TTL_MS;
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 3 — CONSTANTS
 // ═════════════════════════════════════════════════════════════════════════════
 
 const TOKEN_KEY       = "auth_token";
-const REFRESH_KEY     = "refresh_token";
+// NOTE: must match REFRESH_TOKEN_KEY in store/auth.store.js. They used to
+// differ ("refresh_token" here vs "auth_refresh_token" there), so the
+// SecureStore fallback below could never find a stored refresh token.
+const REFRESH_KEY     = "auth_refresh_token";
 const OFFLINE_TOKEN   = "offline_mode";
 
 /**
@@ -83,6 +168,16 @@ const SYNC_ROUTES = [
 
 const isSyncRoute = (url = "") =>
   SYNC_ROUTES.some((route) => url.includes(route));
+
+/**
+ * Routes that are reachable without a bearer token. Requests to these are
+ * allowed through even when no token is resolvable (pre-login, or while the
+ * session is an offline-only one).
+ */
+const PUBLIC_ROUTES = ["/public/", "/auth/"];
+
+const isPublicRoute = (url = "") =>
+  PUBLIC_ROUTES.some((route) => url.includes(route));
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 4 — CONNECTIVITY TRACKING
@@ -211,7 +306,7 @@ let _refreshPromise   = null;
  *
  * Returns the new access token string, or null if refresh failed.
  */
-const refreshAccessToken = async () => {
+export const refreshAccessToken = async () => {
   // Deduplicate concurrent refresh calls
   if (_isRefreshing && _refreshPromise) {
     return _refreshPromise;
@@ -223,16 +318,24 @@ const refreshAccessToken = async () => {
       if (__DEV__) console.log("[api] 🔄 Attempting token refresh…");
 
       // ── Get refresh token ─────────────────────────────────────────────────
+      //
+      // Read `refreshTokenValue`, NOT `refreshToken`: the latter is the
+      // store's refresh *action* (a function). Reading it returned a truthy
+      // function that JSON.stringify silently dropped, so the request body
+      // was always `{}` and the Mode B header below was always skipped —
+      // token refresh could never succeed.
       let refreshToken = null;
 
       try {
         const store = getAuthStore();
-        refreshToken = store?.getState?.()?.refreshToken ?? null;
+        const candidate = store?.getState?.()?.refreshTokenValue;
+        if (typeof candidate === "string" && candidate) refreshToken = candidate;
       } catch { /* ignore */ }
 
       if (!refreshToken) {
         try {
-          refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+          const stored = await SecureStore.getItemAsync(REFRESH_KEY);
+          if (typeof stored === "string" && stored) refreshToken = stored;
         } catch { /* ignore */ }
       }
 
@@ -243,10 +346,16 @@ const refreshAccessToken = async () => {
       const payload  = refreshToken ? { refreshToken } : {};
       const headers  = {};
 
-      if (!refreshToken && currentToken) {
-        // Mode B: server re-issues from a still-valid (or recently-expired)
-        // access token. Works when JWT_REFRESH_SECRET is not configured.
+      // Always send the bearer when we have one. Mode A ignores it; Mode B
+      // (server without JWT_REFRESH_SECRET, or no refresh token on hand)
+      // re-issues from a still-valid or recently-expired access token.
+      if (currentToken) {
         headers.Authorization = `Bearer ${currentToken}`;
+      }
+
+      if (!refreshToken && !currentToken) {
+        if (__DEV__) console.warn("[api] No refresh token and no access token — cannot refresh");
+        return null;
       }
 
       const response = await axios.post(
@@ -276,13 +385,15 @@ const refreshAccessToken = async () => {
       }
 
       // ── Update Zustand store ──────────────────────────────────────────────
+      //
+      // Write `refreshTokenValue`, never `refreshToken` — the latter is an
+      // action and assigning a string to it would destroy the method.
       try {
         const store = getAuthStore();
         if (store) {
           store.setState((prev) => ({
-            ...prev,
-            token:        newToken,
-            refreshToken: newRefreshToken ?? prev.refreshToken,
+            token:             newToken,
+            refreshTokenValue: newRefreshToken ?? prev.refreshTokenValue,
           }));
         }
       } catch { /* ignore */ }
@@ -320,17 +431,45 @@ const LOGOUT_RESET_MS = 10_000;
 api.interceptors.request.use(
   async (config) => {
 
+    // 0. Concurrency slot — held until the response interceptor fires.
+    //    Every early rejection / throw below must release it, or the
+    //    request queue deadlocks forever.
+    await _acquireSlot();
+
+    try {
+      return await _prepareRequest(config);
+    } catch (err) {
+      _releaseSlot();
+      return Promise.reject(err);
+    }
+  },
+  (error) => Promise.reject(error)
+);
+
+// Builds the final config after a concurrency slot is held.
+// This lives outside the interceptor so every early-return path
+// (offline guard, offline session, unexpected throw) releases the slot.
+async function _prepareRequest(config) {
+
     // 1. Offline guard
     if (!_isConnected) {
       const err     = new Error("No internet connection");
       err.isOffline = true;
-      return Promise.reject(err);
+      throw err;
     }
 
     // 2. Auth token
     const token = await getToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
+    } else if (!config._allowUnauthenticated && !isPublicRoute(config.url ?? "")) {
+      // The session is offline-only (token === "offline_mode") or absent.
+      // Firing unauthenticated would 401 and, on a non-sync route, trigger
+      // auto-logout. Reject locally so callers fall back to cached data.
+      const err            = new Error("Offline session — request not sent");
+      err.isOffline       = true;
+      err.isOfflineSession = true;
+      throw err;
     }
 
     // 3. Auto-inject schoolId for /admin/* routes
@@ -357,8 +496,14 @@ api.interceptors.request.use(
       config._retried = false;
     }
 
-    // 6. Keep-alive to reduce TCP reconnects on Android WiFi
-    config.headers["Connection"] = "keep-alive";
+    // 6. Keep-alive to reduce TCP reconnects on Android WiFi — but drop it
+    //    briefly after a socket failure so OkHttp opens a fresh connection
+    //    instead of reusing the poisoned one.
+    if (_shouldDropKeepAlive(config)) {
+      delete config.headers["Connection"];
+    } else {
+      config.headers["Connection"] = "keep-alive";
+    }
 
     // 7. Dev request log
     if (__DEV__) {
@@ -372,9 +517,7 @@ api.interceptors.request.use(
     }
 
     return config;
-  },
-  (error) => Promise.reject(error)
-);
+}
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 11 — RESPONSE INTERCEPTOR
@@ -383,6 +526,7 @@ api.interceptors.request.use(
 api.interceptors.response.use(
 
   (response) => {
+    _releaseSlot();
     if (__DEV__) {
       console.log(`[api] ✅ ${response.status} ← ${response.config?.url}`);
     }
@@ -390,6 +534,8 @@ api.interceptors.response.use(
   },
 
   async (error) => {
+    _releaseSlot();
+
     const status  = error?.response?.status;
     const url     = error?.config?.url    ?? "unknown";
     const fullUrl = `${error?.config?.baseURL ?? API_URL}${url}`;
@@ -472,6 +618,7 @@ api.interceptors.response.use(
         );
 
       } else if (error.request) {
+        _markHostFailed(error.config);
         if (isFinal) {
           const reason = error.code === "ECONNABORTED"
             ? `Timeout after ${api.defaults.timeout}ms`

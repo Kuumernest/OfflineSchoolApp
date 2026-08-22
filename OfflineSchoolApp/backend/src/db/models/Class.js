@@ -108,6 +108,26 @@ const classSchema = new mongoose.Schema(
       trim:    true,
     },
 
+    /**
+     * Where this class's students go at the end of the year.
+     *
+     * Stated, never inferred. `level` is null on every real class here, and the
+     * names cannot be ordered — "Form 10" sorts before "Form 2", and nothing in
+     * "Form 5" says the next stop is "Lower Sixth". A promotion run that guessed
+     * would move children into the wrong class, so where this is null the run
+     * marks the student as needing a decision instead of assuming one.
+     */
+    nextClassId: {
+      type:    String,
+      default: null,
+    },
+
+    /** Students here leave at the end of the year rather than moving up. */
+    isFinalYear: {
+      type:    Boolean,
+      default: false,
+    },
+
     description: {
       type:    String,
       default: null,

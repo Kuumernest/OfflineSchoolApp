@@ -585,6 +585,12 @@ export const updateQuestionOptions = async (questionId, options = []) => {
       ]
     );
   }
+
+  // ✅ Mark the question as unsynced so SyncManager pushes it
+  await db.runAsync(
+    `UPDATE questions SET _synced = 0, updated_at = datetime('now') WHERE id = ?`,
+    [questionId]
+  );
 };
 
 export const deleteQuestion = async (id) => {

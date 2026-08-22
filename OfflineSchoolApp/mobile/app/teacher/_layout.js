@@ -1,8 +1,9 @@
 // app/teacher/_layout.js
 
 import { Stack } from "expo-router";
-import { Alert } from "react-native";
+import { Alert, View, StyleSheet } from "react-native";
 import { useUploadQueue } from "../../src/hooks/useUploadQueue";
+import SyncStatusBar from "../../src/components/SyncStatusBar";
 
 export default function TeacherLayout() {
   useUploadQueue({
@@ -28,10 +29,19 @@ export default function TeacherLayout() {
   });
 
   return (
-    <Stack
-      screenOptions={{
-        headerShown: false,
-      }}
-    />
+    <View style={styles.root}>
+      <Stack
+        screenOptions={{
+          headerShown: false,
+        }}
+      />
+      {/* Overlay — rendered after the navigator so it sits on top without
+          displacing any screen's layout. */}
+      <SyncStatusBar />
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+});

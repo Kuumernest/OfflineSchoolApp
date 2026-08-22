@@ -7,6 +7,12 @@ const ExamScore       = require("../db/models/ExamScore");
 const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
+const ResultChangeLog = require("../db/models/ResultChangeLog");
+const {
+  guardResultWrite,
+  logResultChange,
+  diffField,
+} = require("../services/resultAudit.service");
 
 const {
   computeResults:  computeResultsService,
@@ -517,16 +523,51 @@ const publishResult = asyncHandler(async (req, res) => {
     });
   }
 
-  if (summary.isLocked && publish) {
-    return res.status(400).json({
-      success: false,
-      error:   "Result is locked and cannot be modified",
-    });
+  // 423 Locked, not 400: the request is well formed, the resource's own state
+  // forbids it. And the check now covers unpublishing too — pulling a result
+  // back from parents who have seen it is a change, not an exemption.
+  if (summary.isLocked) {
+    const reason = (req.body?.changeReason || req.body?.reason || "").trim();
+    if (!reason) {
+      return res.status(423).json({
+        success: false,
+        code:    "RESULTS_LOCKED",
+        message: "This result is locked. Send a `changeReason` to record why you are overriding the lock.",
+      });
+    }
   }
+
+  const wasPublished = Boolean(summary.isPublished);
+  const reason       = (req.body?.changeReason || req.body?.reason || "").trim() || null;
 
   summary.isPublished = Boolean(publish);
   summary.publishedAt = publish ? new Date() : null;
   await summary.save();
+
+  if (wasPublished !== Boolean(publish)) {
+    await logResultChange(
+      {
+        examId:     String(summary.examId),
+        schoolId:   String(summary.schoolId),
+        studentId:  summary.studentId ? String(summary.studentId) : null,
+        reason,
+        isOverride: Boolean(summary.isLocked),
+        actor: {
+          id:   req.user?._id ? String(req.user._id) : null,
+          name: req.user?.name || null,
+          role: req.user?.role || null,
+        },
+      },
+      {
+        entity:   "summary",
+        entityId: String(summary._id),
+        action:   publish ? "published" : "unpublished",
+        field:    "isPublished",
+        oldValue: wasPublished,
+        newValue: Boolean(publish),
+      }
+    );
+  }
 
   return res.json({
     success: true,
@@ -546,9 +587,25 @@ const upsertScore = asyncHandler(async (req, res) => {
     score, maxScore, isAbsent, isExempt, teacherRemark,
   } = req.body;
 
+  const audit = await guardResultWrite(req, res, {
+    examId,
+    schoolId: schoolId || req.user?.schoolId,
+    studentId,
+    subjectId,
+  });
+  if (!audit) return;
+
   const existing = await ExamScore.findOne({ examId, studentId, subjectId });
 
   if (existing) {
+    // Snapshot before Object.assign mutates the document in place.
+    const before = {
+      score:         existing.score         ?? null,
+      isAbsent:      existing.isAbsent      ?? false,
+      isExempt:      existing.isExempt      ?? false,
+      teacherRemark: existing.teacherRemark ?? null,
+    };
+
     const corrections = existing.corrections ?? [];
     if (existing.score !== null && existing.score !== score) {
       corrections.push({
@@ -570,6 +627,24 @@ const upsertScore = asyncHandler(async (req, res) => {
       syncStatus:    "pending",
     });
     await existing.save();
+
+    await logResultChange(
+      audit,
+      [
+        diffField("score",         before.score,         score         ?? null),
+        diffField("isAbsent",      before.isAbsent,      isAbsent      ?? before.isAbsent),
+        diffField("isExempt",      before.isExempt,      isExempt      ?? before.isExempt),
+        diffField("teacherRemark", before.teacherRemark, teacherRemark ?? before.teacherRemark),
+      ]
+        .filter(Boolean)
+        .map((f) => ({
+          entity:   "score",
+          entityId: String(existing._id),
+          action:   "updated",
+          ...f,
+        }))
+    );
+
     return res.json({ success: true, action: "updated", data: existing });
   }
 
@@ -584,6 +659,15 @@ const upsertScore = asyncHandler(async (req, res) => {
     enteredBy:     req.user?._id,
     enteredAt:     new Date(),
     syncStatus:    "pending",
+  });
+
+  await logResultChange(audit, {
+    entity:   "score",
+    entityId: String(newScore._id),
+    action:   "created",
+    field:    "score",
+    oldValue: null,
+    newValue: score ?? null,
   });
 
   return res.status(201).json({
@@ -607,13 +691,62 @@ const deleteScore = asyncHandler(async (req, res) => {
     });
   }
 
+  const audit = await guardResultWrite(req, res, {
+    examId:    String(score.examId),
+    schoolId:  String(score.schoolId),
+    studentId: score.studentId ? String(score.studentId) : null,
+    subjectId: score.subjectId ? String(score.subjectId) : null,
+  });
+  if (!audit) return;
+
   score.deletedAt  = new Date();
   score.syncStatus = "pending";
   await score.save();
 
+  await logResultChange(audit, {
+    entity:   "score",
+    entityId: String(score._id),
+    action:   "deleted",
+    field:    "score",
+    oldValue: score.score ?? null,
+    newValue: null,
+  });
+
   return res.json({
     success: true,
     message: "Score deleted successfully",
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// GET /api/results/:examId/history
+//
+// The change history for an exam, or for one student within it.
+// ?studentId=  narrow to a single student
+// ?overridesOnly=1  only edits made past a lock — what an auditor asks for
+// ─────────────────────────────────────────────────────────
+
+const getResultHistory = asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  const { examId } = req.params;
+  const { studentId, subjectId, overridesOnly } = req.query;
+
+  const filter = { schoolId, examId };
+  if (studentId) filter.studentId = String(studentId);
+  if (subjectId) filter.subjectId = String(subjectId);
+  if (overridesOnly === "1" || overridesOnly === "true") filter.isOverride = true;
+
+  const limit = Math.min(Number(req.query.limit) || 200, 1000);
+
+  const rows = await ResultChangeLog.find(filter)
+    .sort({ changedAt: -1 })
+    .limit(limit)
+    .lean();
+
+  return res.json({
+    success: true,
+    count:   rows.length,
+    data:    rows,
   });
 });
 
@@ -635,4 +768,5 @@ module.exports = {
   publishResult,
   upsertScore,
   deleteScore,
+  getResultHistory,
 };

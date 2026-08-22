@@ -1922,12 +1922,81 @@ router.get("/school/info", asyncHandler(async (req, res) => {
     }
 
     const School = require("../db/models/School");
+
+    // The logo is an inline base64 string, routinely ~160 KB, and dwarfs the
+    // rest of this document. Shipping it on every poll made this route take
+    // seconds against the remote cluster, so it is opt-in via ?includeLogo=1.
+    const includeLogo =
+      req.query.includeLogo === "1" || req.query.includeLogo === "true";
+
+    const LIGHT_FIELDS =
+      "name code address city state country phone email website motto updatedAt";
+
     const school = await School.findById(schoolId)
-      .select("name code address city state country phone email logo website motto")
+      .select(includeLogo ? `${LIGHT_FIELDS} logo` : LIGHT_FIELDS)
       .lean();
 
     if (!school) return res.status(404).json({ success: false, message: "School not found" });
-    return res.json({ success: true, school });
+
+    // Fingerprint the TRIMMED logo — the mobile cache trims on write, so an
+    // untrimmed length would mismatch forever and re-download it every check.
+    if (includeLogo) {
+      return res.json({
+        success: true,
+        school: {
+          ...school,
+          logoLen: school.logo ? Buffer.byteLength(String(school.logo).trim()) : 0,
+        },
+      });
+    }
+
+    // Probe what the logo is without transferring the image. When the value
+    // is a short reference (a migrated school's URL) the head IS the whole
+    // value, so it comes back for free; a legacy base64 blob stays put.
+    const mongoose    = require("mongoose");
+    const logoStorage = require("../utils/logoStorage");
+    const HEAD = 512;
+
+    let logoLen = null;
+    let logoUrl = null;
+
+    if (mongoose.Types.ObjectId.isValid(String(schoolId))) {
+      try {
+        const rows = await School.aggregate([
+          { $match: { _id: new mongoose.Types.ObjectId(String(schoolId)) } },
+          { $project: {
+              logoLen: { $strLenBytes: { $trim: { input: { $ifNull: ["$logo", ""] } } } },
+              logoHead: {
+                $substrBytes: [{ $trim: { input: { $ifNull: ["$logo", ""] } } }, 0, HEAD],
+              },
+          } },
+        ]);
+        const row = rows[0];
+        if (row) {
+          logoLen = row.logoLen ?? null;
+          const head = String(row.logoHead || "");
+          if (row.logoLen <= HEAD && logoStorage.isLogoReference(head)) {
+            logoUrl = head;
+            logoLen = null;   // a URL needs no fingerprint
+          }
+        }
+      } catch (err) {
+        console.warn("[teacher/school/info] logo probe failed:", err.message);
+      }
+    }
+
+    if (logoUrl) {
+      return res.json({
+        success: true,
+        school: { ...school, logo: logoUrl, logoLen: null, logoIsUrl: true },
+      });
+    }
+
+    return res.json({
+      success: true,
+      school: { ...school, logo: null, logoLen },
+      logoOmitted: true,
+    });
   } catch (err) {
     console.error("GET /teacher/school/info error:", err.message);
     return res.status(500).json({ success: false, message: "Failed to fetch school info" });

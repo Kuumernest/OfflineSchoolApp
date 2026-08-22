@@ -1,64 +1,59 @@
 // web/src/components/dashboard/QuickActions.tsx
-import { useNavigate } from "react-router-dom";
+import { useNavigate }      from "react-router-dom";
+import { useTranslation }    from "react-i18next";
+import { Card, CardHeader } from "@/components/ui/Card";
+import { QUICK_ACTIONS }    from "@/constants/dashboard.constants";
 
-// ─────────────────────────────────────────────────────────
-// ACTION CONFIG
-// Add / remove entries here to change the grid
-// ─────────────────────────────────────────────────────────
-const ACTIONS = [
-  { label: "Add Student",     emoji: "👨‍🎓", path: "/students"      },
-  { label: "Add Teacher",     emoji: "👨‍🏫", path: "/teachers"      },
-  { label: "Create Exam",     emoji: "📝",  path: "/exams"         },
-  { label: "Attendance",      emoji: "✅",  path: "/attendance"    },
-  { label: "Announcement",    emoji: "📢",  path: "/announcements" },
-  { label: "View Reports",    emoji: "📊",  path: "/reports"       },
-] as const;
-
-// ─────────────────────────────────────────────────────────
-// COMPONENT
-// ─────────────────────────────────────────────────────────
+/**
+ * The things an admin opens the console to do.
+ *
+ * This replaces two panels that overlapped almost completely: a grid of emoji
+ * tiles, and a "Modules" list that reproduced the sidebar with a description
+ * under each entry. The sidebar is the navigation — a second copy of it on the
+ * landing page is not a feature, it is why the page needed scrolling.
+ *
+ * What is left is only the actions that *start* something. Each is a tile with
+ * a recessed icon well that fills with accent on hover, so the grid reads as a
+ * set of controls rather than a list of links.
+ */
 export default function QuickActions() {
+  const { t }    = useTranslation();
   const navigate = useNavigate();
 
   return (
-    <div
-      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200
-                  dark:border-gray-700 shadow-sm p-6 flex flex-col"
-    >
-      <h3 className="text-base font-semibold text-gray-800 dark:text-gray-100 mb-4">
-        Quick Actions
-      </h3>
+    <Card>
+      <CardHeader title={t("dashboard.quickActions")} />
 
-      <div className="grid grid-cols-3 gap-3 flex-1">
-        {ACTIONS.map((action) => (
+      <div className="grid grid-cols-2 gap-2">
+        {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path }) => (
           <button
-            key={action.label}
-            onClick={() => navigate(action.path)}
+            key={path}
+            type="button"
+            onClick={() => navigate(path)}
             className="
-              flex flex-col items-center justify-center gap-2
-              p-4 rounded-xl text-center
-              border border-gray-100 dark:border-gray-700
-              hover:border-primary-300 dark:hover:border-primary-700
-              hover:bg-primary-50 dark:hover:bg-primary-900/20
-              active:scale-95
-              transition-all duration-150 group
+              group flex flex-col items-start gap-2 rounded-control
+              border border-line bg-gradient-to-b from-surface to-[#fcfcfe]
+              p-2.5 text-left
+              transition duration-150 ease-[var(--ease-out-quiet)]
+              hover:-translate-y-px hover:border-line-strong hover:shadow-card
             "
           >
-            <span className="text-2xl leading-none select-none">
-              {action.emoji}
-            </span>
             <span
               className="
-                text-xs font-medium leading-tight
-                text-gray-600 dark:text-gray-400
-                group-hover:text-primary-700 dark:group-hover:text-primary-400
+                flex h-7 w-7 items-center justify-center rounded-control
+                bg-canvas text-ink-muted ring-1 ring-inset ring-line
+                transition-colors duration-150
+                group-hover:bg-primary-600 group-hover:text-white group-hover:ring-primary-600
               "
             >
-              {action.label}
+              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+            </span>
+            <span className="w-full truncate text-xs font-medium leading-tight text-ink-body transition-colors group-hover:text-ink">
+              {t(labelKey, { defaultValue: label })}
             </span>
           </button>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

@@ -1,4 +1,4 @@
-// backend/src/routes/timetable.routes.js - FULLY FIXED
+// backend/src/routes/timetable.routes.js
 "use strict";
 
 const express       = require("express");
@@ -6,12 +6,6 @@ const router        = express.Router();
 const TimetableSlot = require("../db/models/TimetableSlot");
 const User          = require("../db/models/User");
 const Subject       = require("../db/models/Subject");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FIXED (Issue 4): Load Class model at module level — fail loudly at startup,
-// not silently on every request. A missing model is a configuration error and
-// should crash the process during boot, not hide itself in production traffic.
-// ─────────────────────────────────────────────────────────────────────────────
 
 let Class = null;
 try {
@@ -37,67 +31,100 @@ const { authenticate } = require("../../middleware/auth");
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-// ─────────────────────────────────────────────────────────────────────────────
-// FIXED (Issue 2): Consolidate null | "" into $in so MongoDB can use a sparse
-// index on deletedAt. The three-branch $or previously prevented index usage.
-//
-// TODO: run a one-time migration to normalise legacy "" values to null so the
-// "" branch can eventually be removed:
-//   db.timetableslots.updateMany({ deletedAt: "" }, { $set: { deletedAt: null } })
-// ─────────────────────────────────────────────────────────────────────────────
-
 const NOT_DELETED = {
   $or: [
-    { deletedAt: { $exists: false }    },
-    { deletedAt: { $in: [null, ""] }   },  // null + legacy empty-string values
+    { deletedAt: { $exists: false }  },
+    { deletedAt: { $in: [null, ""] } },
   ],
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DAY NORMALISATION
 //
-// FIXED (Issue 3): canonicalDay now accepts a strict flag. In strict mode any
-// value not present in DAY_CANONICAL throws a ValidationError so bad data is
-// rejected at the boundary rather than stored silently.
+// MUST match the TimetableSlot Mongoose schema enum exactly:
+//   ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+//
+// The previous version mapped to "monday"/"tuesday" etc. which Mongoose
+// correctly rejected because those values are not in the enum.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const DAY_CANONICAL = {
-  monday:    "monday",    mon: "monday",
-  tuesday:   "tuesday",   tue: "tuesday",
-  wednesday: "wednesday", wed: "wednesday",
-  thursday:  "thursday",  thu: "thursday",
-  friday:    "friday",    fri: "friday",
-  saturday:  "saturday",  sat: "saturday",
-  sunday:    "sunday",    sun: "sunday",
+  // ── full lowercase ─────────────────────────────────────────────────────────
+  monday:    "MON",
+  tuesday:   "TUE",
+  wednesday: "WED",
+  thursday:  "THU",
+  friday:    "FRI",
+  saturday:  "SAT",
+  sunday:    "SUN",
+  // ── 3-letter lowercase ─────────────────────────────────────────────────────
+  mon:       "MON",
+  tue:       "TUE",
+  wed:       "WED",
+  thu:       "THU",
+  fri:       "FRI",
+  sat:       "SAT",
+  sun:       "SUN",
+  // ── already-canonical UPPERCASE (idempotent) ───────────────────────────────
+  MON:       "MON",
+  TUE:       "TUE",
+  WED:       "WED",
+  THU:       "THU",
+  FRI:       "FRI",
+  SAT:       "SAT",
+  SUN:       "SUN",
+  // ── Title-case full names ──────────────────────────────────────────────────
+  Monday:    "MON",
+  Tuesday:   "TUE",
+  Wednesday: "WED",
+  Thursday:  "THU",
+  Friday:    "FRI",
+  Saturday:  "SAT",
+  Sunday:    "SUN",
 };
 
+/** Values the Mongoose enum accepts — single source of truth. */
+const VALID_DAYS = new Set(["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]);
+
 /**
- * Converts any supported day string to its canonical lowercase form.
+ * Converts any supported day string to its canonical uppercase 3-letter code.
  *
- * @param {string} raw      - Raw day value from request or database.
+ * @param {string} raw
  * @param {{ strict?: boolean }} [opts]
- * @param {boolean} [opts.strict=false] - When true, throw on unrecognised values.
- * @returns {string} Canonical lowercase day name.
- * @throws {Error} name="ValidationError" when strict=true and day is unknown.
+ * @returns {string} e.g. "MON", "TUE" …
+ * @throws {Error} name="ValidationError" when strict=true and value is unknown.
  */
 const canonicalDay = (raw, { strict = false } = {}) => {
-  const key       = (raw || "").toLowerCase().trim();
-  const canonical = DAY_CANONICAL[key];
-
-  if (!canonical && strict) {
-    const err     = new Error(`Invalid dayOfWeek value: "${raw}"`);
-    err.name      = "ValidationError";
-    err.statusCode = 400;
-    throw err;
+  if (!raw) {
+    if (strict) {
+      const err      = new Error(`dayOfWeek is required`);
+      err.name       = "ValidationError";
+      err.statusCode = 400;
+      throw err;
+    }
+    return null;
   }
 
-  // Non-strict: return whatever was lowercased so read paths never blow up.
-  return canonical || key;
+  const str      = raw.toString().trim();
+  const canonical =
+    DAY_CANONICAL[str] ||              // exact hit (covers UPPERCASE + Title-case)
+    DAY_CANONICAL[str.toLowerCase()];  // case-insensitive fallback
+
+  if (!canonical || !VALID_DAYS.has(canonical)) {
+    if (strict) {
+      const err      = new Error(`${raw} is not a valid day`);
+      err.name       = "ValidationError";
+      err.statusCode = 400;
+      throw err;
+    }
+    return null;
+  }
+
+  return canonical;
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SLOT NORMALISATION
-// Always returns canonical lowercase dayOfWeek.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const normalizeSlot = (s) => ({
@@ -118,16 +145,10 @@ const normalizeSlot = (s) => ({
 // ROLE GUARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Allows school_admin, admin, super_admin, and teacher roles.
- * Teachers need read access to their own schedule.
- */
 const staffOnly = (req, res, next) => {
   const ALLOWED = new Set(["super_admin", "school_admin", "admin", "teacher"]);
   if (!req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "Not authenticated" });
+    return res.status(401).json({ success: false, message: "Not authenticated" });
   }
   if (!ALLOWED.has(req.user.role)) {
     return res.status(403).json({
@@ -138,15 +159,10 @@ const staffOnly = (req, res, next) => {
   next();
 };
 
-/**
- * Admin-only guard for write operations (create, update, delete).
- */
 const adminOnly = (req, res, next) => {
   const ALLOWED = new Set(["super_admin", "school_admin", "admin"]);
   if (!req.user) {
-    return res
-      .status(401)
-      .json({ success: false, message: "Not authenticated" });
+    return res.status(401).json({ success: false, message: "Not authenticated" });
   }
   if (!ALLOWED.has(req.user.role)) {
     return res.status(403).json({
@@ -157,21 +173,11 @@ const adminOnly = (req, res, next) => {
   next();
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ROUTE HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Returns true when the requesting user holds an admin-level role. */
 const isAdminRole = (user) =>
   new Set(["super_admin", "school_admin", "admin"]).has(user?.role);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/timetable
-// Query: ?schoolId=&classId=&teacherId=
-//
-// FIXED (Issue 6): Teachers are silently scoped to their own teacherId so they
-// cannot enumerate other teachers' schedules by passing ?teacherId=<otherId>.
-// Admins continue to receive unscoped results.
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get(
@@ -182,7 +188,6 @@ router.get(
     const { schoolId, classId } = req.query;
     let   { teacherId }         = req.query;
 
-    // FIXED (Issue 6): non-admin users may only see their own slots.
     if (!isAdminRole(req.user)) {
       teacherId = String(req.user._id || req.user.id || "").trim();
     }
@@ -224,16 +229,13 @@ router.get(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/timetable/my-schedule
-// Teacher fetches their own schedule using the JWT identity.
-//
-// IMPORTANT: registered BEFORE /:id to prevent Express matching "my-schedule"
-// as a Mongo ObjectId and throwing a CastError.
+// Registered BEFORE /:id to prevent "my-schedule" matching as a Mongo ObjectId
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get(
   "/my-schedule",
   authenticate,
-  staffOnly,        // staffOnly — teachers must be able to reach this endpoint
+  staffOnly,
   asyncHandler(async (req, res) => {
     const teacherId = String(req.user._id || req.user.id || "").trim();
     const schoolId  = req.user.schoolId || req.query.schoolId || null;
@@ -256,7 +258,6 @@ router.get(
     const subjectIds = [...new Set(slots.map((s) => s.subjectId).filter(Boolean))];
     const classIds   = [...new Set(slots.map((s) => s.classId).filter(Boolean))];
 
-    // FIXED (Issue 4): Class is loaded at module level — no require() here.
     const [subjectDocs, classDocs] = await Promise.all([
       subjectIds.length > 0
         ? Subject.find({ _id: { $in: subjectIds } }).select("name code").lean()
@@ -290,9 +291,6 @@ router.get(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // POST /api/admin/timetable
-//
-// FIXED (Issue 3): dayOfWeek validated in strict mode — rejects unknown values
-// before they can be stored.
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.post(
@@ -321,7 +319,7 @@ router.post(
       });
     }
 
-    // FIXED (Issue 3): strict=true rejects invalid day names immediately.
+    // ✅ strict=true — rejects anything not in the Mongoose enum
     const day = canonicalDay(dayOfWeek, { strict: true });
 
     const classConflict = await TimetableSlot.findOne({
@@ -366,10 +364,6 @@ router.post(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PUT /api/admin/timetable/:id
-//
-// FIXED (Issue 3): dayOfWeek validated in strict mode.
-// FIXED (Issue 5): optimistic concurrency check on the version field prevents
-// silent overwrites when two admins edit the same slot simultaneously.
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.put(
@@ -394,13 +388,10 @@ router.put(
       dayOfWeek,
       periodId,
       classId,
-      // FIXED (Issue 5): client should send the version it last read so we can
-      // detect concurrent edits. If omitted the check is skipped (backwards
-      // compatible with older clients).
       version: clientVersion,
     } = req.body;
 
-    // FIXED (Issue 5): reject stale writes.
+    // Optimistic concurrency check
     if (clientVersion !== undefined && slot.version !== Number(clientVersion)) {
       return res.status(409).json({
         success:  false,
@@ -410,8 +401,10 @@ router.put(
       });
     }
 
-    // FIXED (Issue 3): strict canonicalDay on incoming dayOfWeek.
-    const newDay     = dayOfWeek ? canonicalDay(dayOfWeek, { strict: true }) : slot.dayOfWeek;
+    // ✅ strict=true — rejects anything not in the Mongoose enum
+    const newDay     = dayOfWeek
+      ? canonicalDay(dayOfWeek, { strict: true })
+      : slot.dayOfWeek;
     const newPeriod  = periodId  || slot.periodId;
     const newClass   = classId   || slot.classId;
     const newTeacher = teacherId || slot.teacherId;
@@ -495,9 +488,6 @@ router.delete(
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/timetable/teacher/:teacherId
-// Returns slots for a specific teacher — admin use only.
-//
-// FIXED (Issue 3): weekDay query param normalised in strict mode.
 // ─────────────────────────────────────────────────────────────────────────────
 
 router.get(
@@ -510,7 +500,6 @@ router.get(
 
     const filter = { teacherId, ...NOT_DELETED };
     if (schoolId) filter.schoolId  = String(schoolId).trim();
-    // FIXED (Issue 3): strict mode rejects bad weekDay values at the boundary.
     if (weekDay)  filter.dayOfWeek = canonicalDay(weekDay, { strict: true });
 
     const slots = await TimetableSlot
@@ -534,8 +523,6 @@ router.use((err, req, res, _next) => {
     return res.status(err.statusCode || 400).json({
       success: false,
       error:   "Validation Error",
-      // Mongoose ValidationError surfaces field messages via err.errors;
-      // our custom ValidationError surfaces a plain message string.
       details: err.errors
         ? Object.values(err.errors).map((e) => e.message)
         : [err.message],
@@ -556,12 +543,5 @@ router.use((err, req, res, _next) => {
     message: err.message,
   });
 });
-
-// ─────────────────────────────────────────────────────────────────────────────
-// FIXED (Issue 1): module.exports is the very last statement in the file.
-// All code that previously appeared after this line has been removed — it was
-// unreachable dead code containing the syntax error `{ ... }` which caused
-// Node.js to throw a SyntaxError when loading the module.
-// ─────────────────────────────────────────────────────────────────────────────
 
 module.exports = router;

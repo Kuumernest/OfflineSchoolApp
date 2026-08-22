@@ -1,3 +1,4 @@
+// app/admin/dashboard/index.js
 "use strict";
 
 import React, {
@@ -15,12 +16,41 @@ import { getAdminStats }          from "../../../src/services/adminStats.service
 import { syncTeacherAssignments } from "../../../src/services/syncAssignments.service";
 import { getSchoolInfo }          from "../../../src/services/school.service";
 import SyncOverwriteService       from "../../../src/services/sync-overwrite.service";
+import { toDisplayUri }           from "../../../src/utils/logoUri";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
 const QUICK_ACTIONS = [
+  {
+    id:    "collect-fees",
+    title: "Collect Fees",
+    icon:  "cash-outline",
+    color: "#3B4996",
+    route: "/admin/fees",
+  },
+  {
+    id:    "print-register",
+    title: "Print Register",
+    icon:  "print-outline",
+    color: "#4F5A70",
+    route: "/admin/documents",
+  },
+  {
+    id:    "record-expense",
+    title: "Record Expense",
+    icon:  "receipt-outline",
+    color: "#9F2318",
+    route: "/admin/finance/expenses",
+  },
+  {
+    id:    "add-student",
+    title: "Add Student",
+    icon:  "person-add-outline",
+    color: "#0891B2",
+    route: "/admin/students/add",
+  },
   {
     id:    "add-class",
     title: "Add Class",
@@ -66,6 +96,62 @@ const QUICK_ACTIONS = [
 ];
 
 const ALL_MODULES = [
+  {
+    id:          "fees",
+    title:       "Fees",
+    icon:        "cash-outline",
+    color:       "#3B4996",
+    route:       "/admin/fees",
+    description: "Balances & payments",
+  },
+  {
+    id:          "expenses",
+    title:       "Expenses",
+    icon:        "receipt-outline",
+    color:       "#9F2318",
+    route:       "/admin/finance/expenses",
+    description: "Money going out",
+  },
+  {
+    id:          "payroll",
+    title:       "Payroll",
+    icon:        "briefcase-outline",
+    color:       "#12683A",
+    route:       "/admin/finance/payroll",
+    description: "Runs & payslips (read-only)",
+  },
+  {
+    id:          "fin-reports",
+    title:       "Reports",
+    icon:        "stats-chart-outline",
+    color:       "#3B4996",
+    route:       "/admin/finance/reports",
+    description: "Income vs expenditure",
+  },
+  {
+    id:          "promotion",
+    title:       "End of Year",
+    icon:        "school-outline",
+    color:       "#1B4F8A",
+    route:       "/admin/promotion",
+    description: "Rollover (read-only)",
+  },
+  {
+    id:          "printing",
+    title:       "Printing",
+    icon:        "print-outline",
+    color:       "#4F5A70",
+    route:       "/admin/documents",
+    description: "Class lists & transcripts",
+  },
+  {
+    id:          "exports",
+    title:       "Exports",
+    icon:        "grid-outline",
+    color:       "#12683A",
+    route:       "/admin/exports",
+    description: "Excel spreadsheets",
+  },
   {
     id:          "classes",
     title:       "Classes",
@@ -203,14 +289,17 @@ const getGreeting = () => {
 const SchoolBanner = React.memo(({ school }) => {
   if (!school?.name) return null;
 
-  const hasLogo  = !!school.logo;
+  // Prefers the locally cached file, so the logo still shows offline now that
+  // the server sends a URL rather than inline base64.
+  const logoUri  = toDisplayUri(school.logoLocal, school.logo);
+  const hasLogo  = !!logoUri;
   const location = [school.city, school.country].filter(Boolean).join(", ");
 
   return (
     <View style={sb.banner}>
       {hasLogo ? (
         <Image
-          source={{ uri: `data:image/jpeg;base64,${school.logo}` }}
+          source={{ uri: logoUri }}
           style={sb.logo}
           resizeMode="contain"
         />
@@ -364,10 +453,7 @@ export default function AdminDashboard() {
 
   const mountedRef         = useRef(true);
   const initialLoadDoneRef = useRef(false);
-  
 
-  // Track mounted state so stale async callbacks never update
-  // unmounted component state
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -375,46 +461,48 @@ export default function AdminDashboard() {
 
   // ── Core data loader ──────────────────────────────────
   const loadStats = useCallback(
-  async (isRefresh = false, forceSync = false) => {
-    try {
-      setError(null);
-      if (isRefresh) setRefreshing(true);
-      else           setLoading(true);
+    async (isRefresh = false, forceSync = false) => {
+      try {
+        setError(null);
+        if (isRefresh) setRefreshing(true);
+        else           setLoading(true);
 
-      // Run assignment sync + stats fetch + school info + overwrite count in parallel
-      const [data, schoolData, owCount] = await Promise.all([
-        (async () => {
-          await syncTeacherAssignments(forceSync);
-          return getAdminStats();
-        })(),
-        getSchoolInfo(schoolId),
-        SyncOverwriteService.getUnseenCount(schoolId),
-      ]);
+        const [data, schoolData, owCount] = await Promise.all([
+          (async () => {
+            await syncTeacherAssignments(forceSync);
+            // Counts come from SQLite — the same source every feature screen
+            // reads — so the dashboard and the screens can no longer disagree.
+            // Pull-to-refresh syncs first, then recounts.
+            return getAdminStats({ refresh: isRefresh });
+          })(),
+          getSchoolInfo(schoolId),
+          SyncOverwriteService.getUnseenCount(schoolId),
+        ]);
 
-      if (!mountedRef.current) return;
+        if (!mountedRef.current) return;
 
-      setStats({
-        ...data,
-        assignedSubjects:
-          data?.assignedSubjects ?? data?.totalAssignments ?? 0,
-      });
+        setStats({
+          ...data,
+          assignedSubjects:
+            data?.assignedSubjects ?? data?.totalAssignments ?? 0,
+        });
 
-      if (schoolData) setSchool(schoolData);
-      setOverwriteCount(owCount);
+        if (schoolData) setSchool(schoolData);
+        setOverwriteCount(owCount);
 
-    } catch (err) {
-      console.error("Dashboard stats error:", err);
-      if (!mountedRef.current) return;
-      setError("Failed to load dashboard data. Pull down to retry.");
-    } finally {
-      if (!mountedRef.current) return;
-      setLoading(false);
-      setRefreshing(false);
-      initialLoadDoneRef.current = true;
-    }
-  },
-  [schoolId]
-);
+      } catch (err) {
+        console.error("Dashboard stats error:", err);
+        if (!mountedRef.current) return;
+        setError("Failed to load dashboard data. Pull down to retry.");
+      } finally {
+        if (!mountedRef.current) return;
+        setLoading(false);
+        setRefreshing(false);
+        initialLoadDoneRef.current = true;
+      }
+    },
+    [schoolId]
+  );
 
   // Initial load on mount
   useEffect(() => {
@@ -543,7 +631,7 @@ export default function AdminDashboard() {
         route:   "/admin/assignments",
       });
     }
-        // ── LWW sync overwrites ─────────────────────────
+
     if (overwriteCount > 0) {
       list.push({
         id:      "sync-overwrites",
@@ -557,7 +645,7 @@ export default function AdminDashboard() {
     }
 
     return list;
-    }, [stats, overwriteCount]);
+  }, [stats, overwriteCount]);
 
   const statValue = useCallback(
     (key) => stats?.[key] ?? 0,
@@ -732,7 +820,7 @@ export default function AdminDashboard() {
 
 const styles = StyleSheet.create({
   container:     { flex: 1, backgroundColor: "#F3F4F6" },
-  centered:      {
+  centered: {
     flex:            1,
     justifyContent:  "center",
     alignItems:      "center",
@@ -783,11 +871,11 @@ const styles = StyleSheet.create({
   // ── Stat cards ─────────────────────────────────────────
   statsRow: { flexDirection: "row", gap: 8, marginBottom: 8 },
   statCard: {
-    flex:        1,
-    padding:     12,
+    flex:         1,
+    padding:      12,
     borderRadius: 12,
-    alignItems:  "center",
-    gap:         4,
+    alignItems:   "center",
+    gap:          4,
   },
   statNumber: { fontSize: 20, fontWeight: "700", color: "#111827" },
   statLabel:  { fontSize: 11, color: "#6B7280", textAlign: "center" },

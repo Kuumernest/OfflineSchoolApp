@@ -3,13 +3,15 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
-  ChevronRight, AlertCircle, CheckCircle2, X,
+  ChevronRight, AlertCircle, X,
 } from "lucide-react";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
 import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
+import { resolveLogoSrc }        from "@/utils/logoSrc";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -115,13 +117,9 @@ const ROLE_LABELS: Record<string, string> = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const normaliseLogo = (raw: string | null | undefined): string | null => {
-  if (!raw || typeof raw !== "string" || raw.trim() === "") return null;
-  const t = raw.trim();
-  if (t.startsWith("http") || t.startsWith("data:")) return t;
-  const mime = t.startsWith("iVBOR") ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${t}`;
-};
+// Shared with the dashboard banner. This page had its own copy that could not
+// render a stored "/uploads/logos/..." path — see utils/logoSrc.
+const normaliseLogo = resolveLogoSrc;
 
 const extractMessage = (err: unknown): string =>
   (err as { response?: { data?: { message?: string } } })
@@ -266,6 +264,7 @@ function SaveButton({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function SchoolSection({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const EMPTY: SchoolSettings = {
@@ -333,7 +332,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
   }, [schoolId]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+      const file = e.target.files?.[0];
     if (!file) return;
     setLogoFile(file);
     setRemoveLogo(false);
@@ -411,7 +410,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 
       {/* ── Logo ── */}
       <Card>
-        <CardTitle>School Logo</CardTitle>
+        <CardTitle>{t("settings.schoolLogo")}</CardTitle>
         <div className="flex items-start gap-6">
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
@@ -420,7 +419,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
                   <Building2 className="h-8 w-8 text-gray-300" />
-                  <span className="text-[10px] text-gray-400">No Logo</span>
+                  <span className="text-[10px] text-gray-400">{t("settings.noLogo")}</span>
                 </div>
               )
             }
@@ -453,7 +452,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
                 "
               >
                 <Trash2 className="h-4 w-4" />
-                Remove Logo
+                {t("settings.removeLogo")}
               </button>
             )}
 
@@ -466,20 +465,20 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 
       {/* ── Basic info ── */}
       <Card>
-        <CardTitle>Basic Information</CardTitle>
+        <CardTitle>{t("settings.basicInfo")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <FieldLabel>School Name *</FieldLabel>
-            <Input value={form.name} onChange={(v) => set("name", v)} placeholder="e.g. Greenfield Academy" />
+            <Input value={form.name} onChange={(v) => set("name", v)} placeholder={t("settings.namePh")} />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>Motto / Tagline</FieldLabel>
-            <Input value={form.motto} onChange={(v) => set("motto", v)} placeholder="e.g. Excellence in Education" />
+            <FieldLabel>{t("settings.motto")}</FieldLabel>
+            <Input value={form.motto} onChange={(v) => set("motto", v)} placeholder={t("settings.mottoPh")} />
           </div>
 
           {/* School type chips */}
           <div className="sm:col-span-2">
-            <FieldLabel>School Type</FieldLabel>
+            <FieldLabel>{t("settings.schoolType")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {SCHOOL_TYPES.map((t) => (
                 <button
@@ -499,42 +498,42 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           </div>
 
           <div>
-            <FieldLabel>School Code</FieldLabel>
-            <Input value={form.schoolCode} onChange={(v) => set("schoolCode", v.toUpperCase())} placeholder="e.g. GFA" />
+            <FieldLabel>{t("settings.schoolCode")}</FieldLabel>
+            <Input value={form.schoolCode} onChange={(v) => set("schoolCode", v.toUpperCase())} placeholder={t("settings.codePh")} />
           </div>
           <div>
-            <FieldLabel>Reg. Number</FieldLabel>
-            <Input value={form.registrationNumber} onChange={(v) => set("registrationNumber", v)} placeholder="Official registration number" />
+            <FieldLabel>{t("settings.regNumber")}</FieldLabel>
+            <Input value={form.registrationNumber} onChange={(v) => set("registrationNumber", v)} placeholder={t("settings.regNumberHint")} />
           </div>
           <div>
-            <FieldLabel>Year Founded</FieldLabel>
-            <Input value={form.foundedYear} onChange={(v) => set("foundedYear", v)} placeholder="e.g. 1998" type="number" />
+            <FieldLabel>{t("settings.yearFounded")}</FieldLabel>
+            <Input value={form.foundedYear} onChange={(v) => set("foundedYear", v)} placeholder={t("settings.foundedPh")} type="number" />
           </div>
           <div>
-            <FieldLabel>Principal / Head Teacher</FieldLabel>
-            <Input value={form.principalName} onChange={(v) => set("principalName", v)} placeholder="Full name" />
+            <FieldLabel>{t("settings.principal")}</FieldLabel>
+            <Input value={form.principalName} onChange={(v) => set("principalName", v)} placeholder={t("common.fullName")} />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>About</FieldLabel>
-            <Textarea value={form.description} onChange={(v) => set("description", v)} placeholder="Brief description of the school…" />
+            <FieldLabel>{t("common.about")}</FieldLabel>
+            <Textarea value={form.description} onChange={(v) => set("description", v)} placeholder={t("settings.descriptionPh")} />
           </div>
         </div>
       </Card>
 
       {/* ── Contact ── */}
       <Card>
-        <CardTitle>Contact Details</CardTitle>
+        <CardTitle>{t("settings.contactDetails")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <FieldLabel>School Email</FieldLabel>
-            <Input value={form.email} onChange={(v) => set("email", v)} placeholder="school@example.com" type="email" />
+            <FieldLabel>{t("settings.schoolEmail")}</FieldLabel>
+            <Input value={form.email} onChange={(v) => set("email", v)} placeholder={t("settings.schoolEmailPh")} type="email" />
           </div>
           <div>
-            <FieldLabel>Phone</FieldLabel>
+            <FieldLabel>{t("common.phone")}</FieldLabel>
             <Input value={form.phone} onChange={(v) => set("phone", v)} placeholder="+233…" type="tel" />
           </div>
           <div className="sm:col-span-2">
-            <FieldLabel>Website</FieldLabel>
+            <FieldLabel>{t("common.website")}</FieldLabel>
             <Input value={form.website} onChange={(v) => set("website", v)} placeholder="https://…" type="url" />
           </div>
         </div>
@@ -542,39 +541,39 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 
       {/* ── Location ── */}
       <Card>
-        <CardTitle>Location</CardTitle>
+        <CardTitle>{t("common.location")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <FieldLabel>Street Address</FieldLabel>
-            <Textarea value={form.address} onChange={(v) => set("address", v)} placeholder="Street address…" rows={2} />
+            <FieldLabel>{t("common.streetAddress")}</FieldLabel>
+            <Textarea value={form.address} onChange={(v) => set("address", v)} placeholder={t("settings.streetPh")} rows={2} />
           </div>
           <div>
-            <FieldLabel>City</FieldLabel>
-            <Input value={form.city} onChange={(v) => set("city", v)} placeholder="City" />
+            <FieldLabel>{t("common.city")}</FieldLabel>
+            <Input value={form.city} onChange={(v) => set("city", v)} placeholder={t("common.city")} />
           </div>
           <div>
-            <FieldLabel>State / Region</FieldLabel>
-            <Input value={form.state} onChange={(v) => set("state", v)} placeholder="State" />
+            <FieldLabel>{t("common.state")}</FieldLabel>
+            <Input value={form.state} onChange={(v) => set("state", v)} placeholder={t("common.state")} />
           </div>
           <div>
-            <FieldLabel>Country</FieldLabel>
-            <Input value={form.country} onChange={(v) => set("country", v)} placeholder="Country" />
+            <FieldLabel>{t("common.country")}</FieldLabel>
+            <Input value={form.country} onChange={(v) => set("country", v)} placeholder={t("common.country")} />
           </div>
           <div>
-            <FieldLabel>Postal Code</FieldLabel>
-            <Input value={form.postalCode} onChange={(v) => set("postalCode", v)} placeholder="Postal / ZIP code" />
+            <FieldLabel>{t("common.postalCode")}</FieldLabel>
+            <Input value={form.postalCode} onChange={(v) => set("postalCode", v)} placeholder={t("settings.postalPh")} />
           </div>
         </div>
       </Card>
 
       {/* ── Academic calendar ── */}
       <Card>
-        <CardTitle>Academic Calendar</CardTitle>
+        <CardTitle>{t("settings.academicCalendar")}</CardTitle>
         <div className="space-y-4">
 
           {/* Term system */}
           <div>
-            <FieldLabel>Term System</FieldLabel>
+            <FieldLabel>{t("settings.termSystem")}</FieldLabel>
             <div className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 gap-1">
               {TERM_SYSTEMS.map((t) => (
                 <button
@@ -596,18 +595,18 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           {/* Academic year */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <FieldLabel hint="YYYY-MM-DD">Academic Year Start</FieldLabel>
-              <Input value={form.academicYearStart} onChange={(v) => set("academicYearStart", v)} placeholder="e.g. 2025-09-01" />
+              <FieldLabel hint="YYYY-MM-DD">{t("settings.yearStart")}</FieldLabel>
+              <Input value={form.academicYearStart} onChange={(v) => set("academicYearStart", v)} placeholder={t("settings.yearStartPh")} />
             </div>
             <div>
-              <FieldLabel hint="YYYY-MM-DD">Academic Year End</FieldLabel>
-              <Input value={form.academicYearEnd} onChange={(v) => set("academicYearEnd", v)} placeholder="e.g. 2026-07-31" />
+              <FieldLabel hint="YYYY-MM-DD">{t("settings.yearEnd")}</FieldLabel>
+              <Input value={form.academicYearEnd} onChange={(v) => set("academicYearEnd", v)} placeholder={t("settings.yearEndPh")} />
             </div>
           </div>
 
           {/* School days */}
           <div>
-            <FieldLabel>School Days</FieldLabel>
+            <FieldLabel>{t("settings.schoolDays")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
               {DAYS_OF_WEEK.map((day) => (
                 <button
@@ -629,18 +628,18 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           {/* Hours */}
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <FieldLabel>School Start Time</FieldLabel>
+              <FieldLabel>{t("settings.startTime")}</FieldLabel>
               <Input value={form.schoolStartTime} onChange={(v) => set("schoolStartTime", v)} type="time" />
             </div>
             <div>
-              <FieldLabel>School End Time</FieldLabel>
+              <FieldLabel>{t("settings.endTime")}</FieldLabel>
               <Input value={form.schoolEndTime} onChange={(v) => set("schoolEndTime", v)} type="time" />
             </div>
           </div>
         </div>
       </Card>
 
-      <SaveButton onClick={handleSave} loading={saving} label="Save School Settings" />
+      <SaveButton onClick={handleSave} loading={saving} label={t("settings.saveSchool")} />
     </div>
   );
 }
@@ -650,6 +649,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfileSection() {
+  const { t } = useTranslation();
   const user       = useUser();
   const setUser    = useAuthStore((s) => s.setUser);
   const { toast }  = useToast();
@@ -722,18 +722,18 @@ function ProfileSection() {
 
       {/* ── Personal info ── */}
       <Card>
-        <CardTitle>Personal Information</CardTitle>
+        <CardTitle>{t("settings.personalInfo")}</CardTitle>
         <div className="space-y-4">
           <div>
-            <FieldLabel>Full Name</FieldLabel>
-            <Input value={name} onChange={setName} placeholder="Your full name" />
+            <FieldLabel>{t("common.fullName")}</FieldLabel>
+            <Input value={name} onChange={setName} placeholder={t("settings.yourFullName")} />
           </div>
           <div>
-            <FieldLabel>Email Address</FieldLabel>
-            <Input value={email} onChange={setEmail} placeholder="your@email.com" type="email" />
+            <FieldLabel>{t("common.email")}</FieldLabel>
+            <Input value={email} onChange={setEmail} placeholder={t("settings.yourEmailPh")} type="email" />
           </div>
           <div>
-            <FieldLabel>Role</FieldLabel>
+            <FieldLabel>{t("common.role")}</FieldLabel>
             <span
               className={cn(
                 "inline-flex rounded-full px-3 py-1 text-xs font-semibold",
@@ -744,13 +744,13 @@ function ProfileSection() {
             </span>
           </div>
         </div>
-        <SaveButton onClick={handleSaveProfile} loading={saving} label="Save Profile" />
+        <SaveButton onClick={handleSaveProfile} loading={saving} label={t("settings.saveProfile")} />
       </Card>
 
       {/* ── Password ── */}
       <Card>
         <div className="flex items-center justify-between mb-5">
-          <h3 className="text-base font-bold text-gray-900">Password</h3>
+          <h3 className="text-base font-bold text-gray-900">{t("common.password")}</h3>
           <button
             onClick={() => setShowPwForm((v) => !v)}
             className="text-sm font-medium text-indigo-600 hover:underline"
@@ -763,7 +763,7 @@ function ProfileSection() {
           <div className="space-y-4">
             {/* Current password */}
             <div>
-              <FieldLabel>Current Password</FieldLabel>
+              <FieldLabel>{t("settings.currentPassword")}</FieldLabel>
               <div className="relative">
                 <input
                   type={showCurrentPw ? "text" : "password"}
@@ -788,7 +788,7 @@ function ProfileSection() {
 
             {/* New password */}
             <div>
-              <FieldLabel>New Password</FieldLabel>
+              <FieldLabel>{t("settings.newPassword")}</FieldLabel>
               <div className="relative">
                 <input
                   type={showNewPw ? "text" : "password"}
@@ -799,7 +799,7 @@ function ProfileSection() {
                     px-4 py-2.5 pr-11 text-sm outline-none
                     focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
                   "
-                  placeholder="Min 8 characters"
+                  placeholder={t("settings.min8")}
                 />
                 <button
                   type="button"
@@ -813,7 +813,7 @@ function ProfileSection() {
 
             {/* Confirm */}
             <div>
-              <FieldLabel>Confirm New Password</FieldLabel>
+              <FieldLabel>{t("settings.confirmPassword")}</FieldLabel>
               <input
                 type="password"
                 value={confirmPw}
@@ -823,10 +823,10 @@ function ProfileSection() {
                   px-4 py-2.5 text-sm outline-none
                   focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100
                 "
-                placeholder="Re-enter new password"
+                placeholder={t("settings.reenterPassword")}
               />
               {confirmPw && newPw !== confirmPw && (
-                <p className="mt-1 text-xs text-red-500">Passwords do not match</p>
+                <p className="mt-1 text-xs text-red-500">{t("settings.passwordsDiffer")}</p>
               )}
             </div>
 
@@ -854,6 +854,7 @@ function ProfileSection() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function GradingSection({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
   const { toast }   = useToast();
   const [config,    setConfig]  = useState<GradingConfig | null>(null);
   const [loading,   setLoading] = useState(true);
@@ -895,7 +896,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
     <Card>
       <div className="flex items-center gap-2 text-amber-600">
         <AlertCircle className="h-5 w-5" />
-        <p className="text-sm">No grading configuration found.</p>
+        <p className="text-sm">{t("settings.noGradingConfig")}</p>
       </div>
     </Card>
   );
@@ -903,13 +904,13 @@ function GradingSection({ schoolId }: { schoolId: string }) {
   return (
     <div className="space-y-5">
       <Card>
-        <CardTitle>Grading Settings</CardTitle>
+        <CardTitle>{t("settings.gradingSettings")}</CardTitle>
         <div className="space-y-5">
 
           <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4">
             <div>
-              <p className="text-sm font-semibold text-gray-900">GPA System</p>
-              <p className="text-xs text-gray-500">Enable Grade Point Average tracking</p>
+              <p className="text-sm font-semibold text-gray-900">{t("settings.gpaSystem")}</p>
+              <p className="text-xs text-gray-500">{t("settings.gpaEnable")}</p>
             </div>
             <label className="relative inline-flex cursor-pointer items-center">
               <input
@@ -929,7 +930,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
           </div>
 
           <div>
-            <FieldLabel>Pass Mark (%)</FieldLabel>
+            <FieldLabel>{t("settings.passMarkPct")}</FieldLabel>
             <input
               type="number"
               min={0}
@@ -949,14 +950,14 @@ function GradingSection({ schoolId }: { schoolId: string }) {
           {/* Grade bands */}
           {Array.isArray(config.grades) && config.grades.length > 0 && (
             <div>
-              <p className="mb-3 text-sm font-semibold text-gray-700">Grade Bands</p>
+              <p className="mb-3 text-sm font-semibold text-gray-700">{t("settings.gradeBands")}</p>
               <div className="overflow-hidden rounded-xl border border-gray-200">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-400">
                     <tr>
-                      <th className="px-4 py-2.5 text-left">Grade</th>
-                      <th className="px-4 py-2.5 text-left">Min %</th>
-                      <th className="px-4 py-2.5 text-left">Max %</th>
+                      <th className="px-4 py-2.5 text-left">{t("academic.grade")}</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.minPct")}</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.maxPct")}</th>
                       {config.useGpa && <th className="px-4 py-2.5 text-left">GPA</th>}
                     </tr>
                   </thead>
@@ -1013,7 +1014,7 @@ function GradingSection({ schoolId }: { schoolId: string }) {
             </div>
           )}
         </div>
-        <SaveButton onClick={handleSave} loading={saving} label="Save Grading System" />
+        <SaveButton onClick={handleSave} loading={saving} label={t("settings.saveGrading")} />
       </Card>
     </div>
   );
@@ -1030,6 +1031,7 @@ function AdminsSection({
   schoolId:      string;
   currentUserId: string;
 }) {
+  const { t } = useTranslation();
   const { toast }    = useToast();
   const [admins,     setAdmins]     = useState<AdminUser[]>([]);
   const [loading,    setLoading]    = useState(true);
@@ -1109,7 +1111,7 @@ function AdminsSection({
             "
           >
             <Plus className="h-4 w-4" />
-            Add Admin
+            {t("settings.addAdmin")}
           </button>
         </div>
 
@@ -1147,7 +1149,7 @@ function AdminsSection({
 
           {admins.length === 0 && (
             <p className="py-6 text-center text-sm text-gray-400">
-              No admin users found.
+              {t("settings.noAdmins")}
             </p>
           )}
         </div>
@@ -1158,7 +1160,7 @@ function AdminsSection({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">Add Admin</h3>
+              <h3 className="text-lg font-bold text-gray-900">{t("settings.addAdmin")}</h3>
               <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
                 <X className="h-5 w-5" />
               </button>
@@ -1166,15 +1168,15 @@ function AdminsSection({
 
             <div className="space-y-4">
               <div>
-                <FieldLabel>Full Name</FieldLabel>
-                <Input value={newName} onChange={setNewName} placeholder="Admin name" />
+                <FieldLabel>{t("common.fullName")}</FieldLabel>
+                <Input value={newName} onChange={setNewName} placeholder={t("settings.adminName")} />
               </div>
               <div>
-                <FieldLabel>Email Address</FieldLabel>
-                <Input value={newEmail} onChange={setNewEmail} placeholder="admin@school.com" type="email" />
+                <FieldLabel>{t("common.email")}</FieldLabel>
+                <Input value={newEmail} onChange={setNewEmail} placeholder={t("settings.adminEmailPh")} type="email" />
               </div>
               <div>
-                <FieldLabel>Role</FieldLabel>
+                <FieldLabel>{t("common.role")}</FieldLabel>
                 <select
                   value={newRole}
                   onChange={(e) => setNewRole(e.target.value)}
@@ -1184,7 +1186,7 @@ function AdminsSection({
                   "
                 >
                   <option value="admin">Admin</option>
-                  <option value="school_admin">School Admin</option>
+                  <option value="school_admin">{t("settings.schoolAdmin")}</option>
                 </select>
               </div>
             </div>
@@ -1194,7 +1196,7 @@ function AdminsSection({
                 onClick={() => setShowModal(false)}
                 className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
               >
-                Cancel
+                {t("common.cancel")}
               </button>
               <button
                 onClick={handleCreate}
@@ -1217,6 +1219,7 @@ function AdminsSection({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AnalyticsSection({ schoolId }: { schoolId: string }) {
+  const { t } = useTranslation();
   const { toast }      = useToast();
   const [analytics,    setAnalytics] = useState<Analytics | null>(null);
   const [loading,      setLoading]   = useState(true);
@@ -1244,7 +1247,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
     <Card>
       <div className="flex items-center gap-2 text-amber-600">
         <AlertCircle className="h-5 w-5" />
-        <p className="text-sm">Analytics data unavailable.</p>
+        <p className="text-sm">{t("settings.analyticsUnavailable")}</p>
       </div>
     </Card>
   );
@@ -1259,7 +1262,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
   return (
     <div className="space-y-5">
       <Card>
-        <CardTitle>School Summary</CardTitle>
+        <CardTitle>{t("settings.schoolSummary")}</CardTitle>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((s) => (
             <div key={s.label} className={cn("rounded-2xl p-5 text-center", s.bg)}>
@@ -1278,6 +1281,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function SettingsPage() {
+  const { t } = useTranslation();
   const user = useUser();
   const [activeSection, setActiveSection] = useState<SectionId>("school");
 
@@ -1289,9 +1293,9 @@ export default function SettingsPage() {
 
       {/* ── Page header ── */}
       <div className="border-b border-gray-200 bg-white px-6 py-5">
-        <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("settings.title")}</h1>
         <p className="mt-1 text-sm text-gray-500">
-          Manage your school, profile and system preferences
+          {t("settings.blurb")}
         </p>
       </div>
 

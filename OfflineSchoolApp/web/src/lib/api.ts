@@ -1,5 +1,9 @@
 // web/src/lib/api.ts
-import axios, {
+import axios from "axios";
+// verbatimModuleSyntax is on, so types must be imported as types — otherwise
+// the emitted JS keeps a runtime import for symbols that only exist in the
+// type system.
+import type {
   AxiosError,
   AxiosResponse,
   InternalAxiosRequestConfig,

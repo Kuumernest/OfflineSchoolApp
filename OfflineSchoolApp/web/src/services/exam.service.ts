@@ -44,7 +44,7 @@ export const getExamById = async (
 examId: string,
 schoolId: string
 ): Promise<ExamDetailResponse> => {
-const { data } = await api.get(/exams/${examId}, {
+const { data } = await api.get(`/exams/${examId}`, {
 params: { schoolId },
 });
 return data;
@@ -65,7 +65,7 @@ export const updateExam = async (
 examId: string,
 payload: Partial<CreateExamForm> & { schoolId: string }
 ) => {
-const { data } = await api.put(/exams/${examId}, payload);
+const { data } = await api.put(`/exams/${examId}`, payload);
 return data;
 };
 
@@ -74,7 +74,7 @@ examId: string,
 status: string,
 schoolId: string
 ) => {
-const { data } = await api.patch(/exams/${examId}/status, {
+const { data } = await api.patch(`/exams/${examId}/status`, {
 status,
 schoolId,
 });
@@ -85,7 +85,7 @@ export const deleteExam = async (
 examId: string,
 schoolId: string
 ) => {
-const { data } = await api.delete(/exams/${examId}, {
+const { data } = await api.delete(`/exams/${examId}`, {
 params: { schoolId },
 });
 return data;
@@ -103,7 +103,7 @@ subjectId?: string;
 status?: string;
 }): Promise<SubmissionsResponse> => {
 const { data } = await api.get(
-/exams/${params.examId}/submissions,
+`/exams/${params.examId}/submissions`,
 {
 params: {
 schoolId: params.schoolId,
@@ -127,7 +127,7 @@ passMark?: number;
 schoolId: string;
 }
 ) => {
-const { data } = await api.post(/exams/${examId}/subjects, payload);
+const { data } = await api.post(`/exams/${examId}/subjects`, payload);
 return data;
 };
 
@@ -137,7 +137,7 @@ examSubjectId: string,
 schoolId: string
 ) => {
 const { data } = await api.patch(
-/exams/${examId}/subjects/${examSubjectId}/approve,
+`/exams/${examId}/subjects/${examSubjectId}/approve`,
 { schoolId }
 );
 return data;
@@ -150,7 +150,7 @@ reason: string,
 schoolId: string
 ) => {
 const { data } = await api.patch(
-/exams/${examId}/subjects/${examSubjectId}/reject,
+`/exams/${examId}/subjects/${examSubjectId}/reject`,
 { reason, schoolId }
 );
 return data;
@@ -166,7 +166,7 @@ subjectId?: string;
 classId?: string;
 schoolId: string;
 }) => {
-const { data } = await api.get(/exams/${params.examId}/scores, {
+const { data } = await api.get(`/exams/${params.examId}/scores`, {
 params: {
 subjectId: params.subjectId,
 classId: params.classId,
@@ -191,7 +191,7 @@ teacherRemark: string | null;
 schoolId: string;
 }) => {
 const { data } = await api.post(
-/exams/${payload.examId}/scores/bulk,
+`/exams/${payload.examId}/scores/bulk`,
 payload
 );
 return data;
@@ -206,7 +206,7 @@ examId: string,
 schoolId: string,
 classId?: string
 ): Promise<ResultsResponse> => {
-const { data } = await api.get(/exams/${examId}/results, {
+const { data } = await api.get(`/exams/${examId}/results`, {
 params: { schoolId, classId },
 });
 return data;
@@ -216,7 +216,7 @@ export const getExamStats = async (
 examId: string,
 schoolId: string
 ): Promise<StatsResponse> => {
-const { data } = await api.get(/results/${examId}/stats, {
+const { data } = await api.get(`/results/${examId}/stats`, {
 params: { schoolId },
 });
 return data;
@@ -228,7 +228,7 @@ schoolId: string,
 rankBy: "class" | "grade" | "school" = "class",
 classId?: string
 ) => {
-const { data } = await api.get(/results/${examId}/rankings, {
+const { data } = await api.get(`/results/${examId}/rankings`, {
 params: { schoolId, rankBy, classId },
 });
 return data;
@@ -239,7 +239,7 @@ examId: string,
 schoolId: string,
 classId?: string
 ) => {
-const { data } = await api.post(/exams/${examId}/process, {
+const { data } = await api.post(`/exams/${examId}/process`, {
 schoolId,
 classId,
 });
@@ -250,7 +250,7 @@ export const publishResults = async (
 examId: string,
 schoolId: string
 ) => {
-const { data } = await api.patch(/exams/${examId}/status, {
+const { data } = await api.patch(`/exams/${examId}/status`, {
 status: "published",
 schoolId,
 });
@@ -268,7 +268,7 @@ studentId: string,
 schoolId: string
 ) => {
 const { data } = await api.get(
-/results/${examId}/student/${studentId},
+`/results/${examId}/student/${studentId}`,
 { params: { schoolId } }
 );
 return data?.data || data?.result || data || null;
@@ -285,7 +285,7 @@ studentId: string,
 schoolId: string
 ) => {
 const { data } = await api.get(
-/results/${examId}/student/${studentId}/reportcard,
+`/results/${examId}/student/${studentId}/reportcard`,
 { params: { schoolId } }
 );
 return data?.data || data || null;
@@ -303,7 +303,7 @@ classId?: string;
 page?: number;
 limit?: number;
 }) => {
-const { data } = await api.get(/results/${params.examId}, {
+const { data } = await api.get(`/results/${params.examId}`, {
 params: {
 schoolId: params.schoolId,
 classId: params.classId,

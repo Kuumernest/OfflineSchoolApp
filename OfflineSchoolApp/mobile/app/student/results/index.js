@@ -8,7 +8,7 @@ import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
-import api              from "../../../src/services/api";
+import ExamService      from "../../../src/services/exam.service";
 
 const COLORS = {
   primary:   "#2563EB",
@@ -87,35 +87,25 @@ const fetchMyResults = async (userId, schoolId) => {
   console.log(`[fetchMyResults] trying ids: [${idList.join(", ")}]`);
 
   // ── Step 1: Get list of published exams for this school ──────────────────
-  let exams = [];
+  //
+  // ExamService is network-first with a SQLite fallback, so a result the
+  // student has already opened stays readable with no signal.
+  let exams   = [];
+  let isStale = false;
   try {
-    const res  = await api.get("/exams", {
-      params: { schoolId, status: "published" },
-      timeout: 10000,
-    });
-    exams =
-      res.data?.exams  ||
-      res.data?.data   ||
-      (Array.isArray(res.data) ? res.data : []);
-    console.log(`[fetchMyResults] found ${exams.length} published exam(s)`);
+    const res = await ExamService.getExams({ schoolId, status: "published" });
+    exams   = res.exams   || [];
+    isStale = res.isStale || false;
+    console.log(
+      `[fetchMyResults] found ${exams.length} published exam(s)` +
+      (isStale ? " (from cache)" : "")
+    );
   } catch (err) {
-    console.warn("[fetchMyResults] /exams failed:", err.message);
-
-    // Fallback: try alternate exam endpoint patterns
-    try {
-      const res2 = await api.get("/exams/published", {
-        params: { schoolId },
-        timeout: 8000,
-      });
-      exams =
-        res2.data?.exams ||
-        res2.data?.data  ||
-        (Array.isArray(res2.data) ? res2.data : []);
-    } catch { /* ignore */ }
+    console.warn("[fetchMyResults] exam list failed:", err.message);
   }
 
   if (exams.length === 0) {
-    return { results: [], source: "no-exams" };
+    return { results: [], source: "no-exams", isStale };
   }
 
   // ── Step 2: For each exam, try each student ID ────────────────────────────
@@ -130,15 +120,13 @@ const fetchMyResults = async (userId, schoolId) => {
     for (const studentId of idList) {
       if (found) break;
       try {
-        // This matches your existing: GET /results/:examId/student/:studentId
-        const res  = await api.get(
-          `/results/${examId}/student/${studentId}`,
-          { params: { schoolId }, timeout: 8000 }
-        );
-        const data = res.data;
+        // Network-first, SQLite fallback (ExamService.getStudentResult).
+        const data = await ExamService.getStudentResult(examId, studentId, schoolId);
 
-        // Your backend returns { success, data: { summary, scores } }
+        // Backend returns { success, data: { summary, scores } }; the cached
+        // copy is already the unwrapped result object.
         const resultData = data?.data || data?.result || data;
+        if (data?.isStale) isStale = true;
 
         if (resultData && (resultData.summary || resultData.percentage != null)) {
           // Normalise into a flat shape for the UI
@@ -183,8 +171,12 @@ const fetchMyResults = async (userId, schoolId) => {
         const status = err.response?.status;
         if (status === 404) continue; // No result for this studentId, try next
         if (status === 403) continue; // Unauthorized for this ID
+        if (err.code === "OFFLINE_NO_CACHE") {
+          isStale = true;
+          continue; // Offline and this one was never cached — skip quietly
+        }
         console.warn(
-          `[fetchMyResults] /results/${examId}/student/${studentId}:`,
+          `[fetchMyResults] result ${examId}/${studentId}:`,
           err.message
         );
       }
@@ -192,7 +184,7 @@ const fetchMyResults = async (userId, schoolId) => {
   }
 
   console.log(`[fetchMyResults] → ${results.length} result(s) found`);
-  return { results, source: "api" };
+  return { results, source: isStale ? "cache" : "api", isStale };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

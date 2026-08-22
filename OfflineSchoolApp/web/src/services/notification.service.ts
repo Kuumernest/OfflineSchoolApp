@@ -94,7 +94,10 @@ async function fetchAnnouncementNotifications(
   limit = 20,
 ): Promise<Notification[]> {
   try {
-    const { data } = await api.get("/admin/announcements", {
+    // Announcements live at /announcements, not /admin/announcements — the
+    // latter 404s. The catch below swallowed it, so the notification bell just
+    // showed nothing rather than reporting a problem.
+    const { data } = await api.get("/announcements", {
       params: {
         schoolId,
         limit,
@@ -162,7 +165,8 @@ export async function markAsRead(notificationId: string): Promise<void> {
   if (notificationId.startsWith("alert-")) return;
 
   try {
-    await api.patch(`/admin/announcements/${notificationId}/read`);
+    // POST, not PATCH, and /announcements rather than /admin/announcements.
+    await api.post(`/announcements/${notificationId}/read`);
   } catch (err) {
     console.warn("[Notifications] Mark as read failed:", err);
   }
@@ -171,7 +175,9 @@ export async function markAsRead(notificationId: string): Promise<void> {
 // ─── Mark all as read ─────────────────────────────────────────────────────────
 export async function markAllAsRead(schoolId: string): Promise<void> {
   try {
-    await api.patch("/admin/announcements/read-all", { schoolId });
+    // schoolId must be in the body — the handler destructures req.body and
+    // would otherwise 500, or match every school if it got through.
+    await api.post("/announcements/read-all", { schoolId });
   } catch (err) {
     console.warn("[Notifications] Mark all as read failed:", err);
   }

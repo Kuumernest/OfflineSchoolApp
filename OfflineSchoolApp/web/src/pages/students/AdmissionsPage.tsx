@@ -28,6 +28,7 @@ import {
   type ApplicationDocument,
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -113,6 +114,7 @@ function FlashBanner({
   onClose: () => void;
   onCopy?: () => void;
 }) {
+  const { t } = useTranslation();
   const isSuccess = flash.kind === "success";
 
   return (
@@ -155,7 +157,7 @@ function FlashBanner({
               className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-white px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
             >
               <Clipboard className="h-3.5 w-3.5" />
-              Copy Password
+              {t("admissions.copyPassword")}
             </button>
           )}
         </div>
@@ -203,6 +205,7 @@ function ApplicationCard({
   application: StudentApplication;
   onReview: (app: StudentApplication) => void;
 }) {
+  const { t } = useTranslation();
   const stale    = isStaleApplication(application.created_at);
   const docCount = application.documents?.length ?? 0;
 
@@ -276,7 +279,7 @@ function ApplicationCard({
         className="mt-4 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
       >
         <Eye className="h-4 w-4" />
-        Review Application
+        {t("admissions.review")}
       </button>
     </div>
   );
@@ -400,6 +403,7 @@ function ReviewSheet({
   onClassSelect: (cls: SchoolClass) => void;
   onOpenDocument: (doc: ApplicationDocument) => void;
 }) {
+  const { t } = useTranslation();
   const isBusy = approving || rejecting;
 
   return (
@@ -409,9 +413,9 @@ function ReviewSheet({
 
         <div className="flex items-center gap-3 border-b border-gray-100 bg-white px-5 py-4">
           <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold text-gray-900">Review Application</h2>
+            <h2 className="text-xl font-bold text-gray-900">{t("admissions.review")}</h2>
             <p className="text-sm text-gray-500">
-              Approve or reject this application
+              {t("admissions.reviewHint")}
             </p>
           </div>
           <button
@@ -428,51 +432,51 @@ function ReviewSheet({
           <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
             <div className="mb-4 flex items-center gap-2">
               <Users className="h-4 w-4 text-indigo-600" />
-              <h3 className="text-sm font-bold text-gray-900">Student Details</h3>
+              <h3 className="text-sm font-bold text-gray-900">{t("admissions.studentDetails")}</h3>
             </div>
 
             <div className="grid gap-4 sm:grid-cols-2">
               <DetailRow
                 icon={<Users className="h-4 w-4 text-amber-600" />}
-                label="Full Name"
+                label={t("common.fullName")}
                 value={application.name}
               />
               <DetailRow
                 icon={<Mail className="h-4 w-4 text-indigo-600" />}
-                label="Email Address"
+                label={t("common.email")}
                 value={application.email || "No email provided"}
               />
               <DetailRow
                 icon={<Phone className="h-4 w-4 text-emerald-600" />}
-                label="Phone Number"
+                label={t("common.phone")}
                 value={application.phone}
               />
               <DetailRow
                 icon={<Users className="h-4 w-4 text-indigo-600" />}
-                label="Guardian / Parent"
+                label={t("admissions.guardian")}
                 value={application.guardianName}
               />
               <DetailRow
                 icon={<School className="h-4 w-4 text-purple-600" />}
-                label="Applied for Class"
+                label={t("admissions.appliedForClass")}
                 value={application.className || application.grade || "Not specified"}
               />
               <DetailRow
                 icon={<Calendar className="h-4 w-4 text-indigo-600" />}
-                label="Applied On"
+                label={t("admissions.appliedOn")}
                 value={formatDate(application.created_at)}
               />
               {application.address ? (
                 <DetailRow
                   icon={<School className="h-4 w-4 text-gray-500" />}
-                  label="Address"
+                  label={t("common.address")}
                   value={application.address}
                 />
               ) : null}
               {application.notes ? (
                 <DetailRow
                   icon={<FileText className="h-4 w-4 text-gray-500" />}
-                  label="Notes"
+                  label={t("common.notes")}
                   value={application.notes}
                 />
               ) : null}
@@ -483,7 +487,7 @@ function ReviewSheet({
           <section className="mb-4 rounded-2xl border border-gray-200 bg-white p-4">
             <div className="mb-4 flex items-center gap-2">
               <FileText className="h-4 w-4 text-emerald-600" />
-              <h3 className="text-sm font-bold text-gray-900">Documents</h3>
+              <h3 className="text-sm font-bold text-gray-900">{t("common.documents")}</h3>
             </div>
 
             {application.documents?.length ? (
@@ -500,7 +504,7 @@ function ReviewSheet({
             ) : (
               <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-gray-50 px-3 py-3 text-sm text-gray-500">
                 <FileText className="h-4 w-4 text-gray-400" />
-                No documents attached
+                {t("admissions.noDocuments")}
               </div>
             )}
           </section>
@@ -510,7 +514,7 @@ function ReviewSheet({
             <div className="mb-4 flex items-center gap-2">
               <School className="h-4 w-4 text-indigo-600" />
               <h3 className="text-sm font-bold text-gray-900">
-                Assign Class Upon Approval
+                {t("admissions.assignClass")}
               </h3>
             </div>
 
@@ -566,7 +570,7 @@ function ReviewSheet({
             <div className="mb-4 flex items-center gap-2">
               <AlertCircle className="h-4 w-4 text-red-500" />
               <h3 className="text-sm font-bold text-gray-900">
-                Rejection Reason <span className="font-normal text-gray-400">(Optional)</span>
+                {t("admissions.rejectionReason")} <span className="font-normal text-gray-400">(Optional)</span>
               </h3>
             </div>
 
@@ -575,7 +579,7 @@ function ReviewSheet({
               onChange={(e) => setRejectReason(e.target.value)}
               disabled={isBusy}
               rows={3}
-              placeholder="Write a reason for rejection…"
+              placeholder={t("admissions.rejectionPh")}
               className="w-full rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder-gray-400 outline-none transition-colors focus:border-indigo-500 focus:bg-white"
             />
           </section>
@@ -631,6 +635,7 @@ function ReviewSheet({
 // ─────────────────────────────────────────────────────────
 
 export default function AdmissionsPage() {
+  const { t } = useTranslation();
   const user      = useUser();
   const schoolId  = user?.schoolId ?? "";
   const qc        = useQueryClient();
@@ -873,7 +878,7 @@ export default function AdmissionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Applications</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("admissions.applications")}</h1>
           <p className="mt-1 text-sm text-gray-500">
             {applications.length}{" "}
             {applications.length === 1 ? "pending application" : "pending applications"}
@@ -884,7 +889,7 @@ export default function AdmissionsPage() {
           onClick={() => qc.invalidateQueries({ queryKey: ["applications", schoolId] })}
           disabled={applicationsQuery.isFetching}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-50 text-amber-600 transition-colors hover:bg-amber-100 disabled:opacity-50"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           <RefreshCw
             className={cn("h-4 w-4", applicationsQuery.isFetching && "animate-spin")}
@@ -918,7 +923,7 @@ export default function AdmissionsPage() {
           bg="#FEF3C7"
           icon={<UserPlus className="h-5 w-5 text-amber-600" />}
           value={applications.length}
-          label="Pending"
+          label={t("common.pending")}
         />
         <SummaryCard
           bg="#FEE2E2"
@@ -930,7 +935,7 @@ export default function AdmissionsPage() {
           bg="#EEF2FF"
           icon={<School className="h-5 w-5 text-indigo-600" />}
           value={classes.length}
-          label="Classes"
+          label={t("academic.class_other")}
         />
       </div>
 
@@ -938,7 +943,7 @@ export default function AdmissionsPage() {
       {applications.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-white px-8 py-16 text-center shadow-sm">
           <CheckCircle2 className="h-12 w-12 text-emerald-600" />
-          <p className="mt-3 text-lg font-bold text-gray-900">All caught up!</p>
+          <p className="mt-3 text-lg font-bold text-gray-900">{t("admissions.allCaughtUp")}</p>
           <p className="mt-1 max-w-md text-sm text-gray-400">
             No pending applications at the moment. New submissions will appear
             here for review.

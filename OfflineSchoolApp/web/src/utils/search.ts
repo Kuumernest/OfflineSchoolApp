@@ -23,12 +23,23 @@ const PAGE_ITEMS: SearchResult[] = [
   { id: "subjects",           label: "Subjects",           path: "/subjects",           type: "page" },
   { id: "attendance",         label: "Attendance",         path: "/attendance",         type: "page" },
   { id: "attendance-reports", label: "Attendance Reports", path: "/attendance/reports", type: "page" },
-  { id: "grades",             label: "Grades",             path: "/grades",             type: "page" },
   { id: "timetable",          label: "Timetable",          path: "/timetable",          type: "page" },
-  { id: "finance",            label: "Finance",            path: "/finance",            type: "page" },
+  { id: "periods",            label: "Periods",            path: "/periods",            type: "page" },
   { id: "exams",              label: "Exams",              path: "/exams",              type: "page" },
+  { id: "exam-results",       label: "Exam Results",       path: "/exams/results",      type: "page" },
+  { id: "exam-reports",       label: "Exam Reports",       path: "/exams/reports",      type: "page" },
+  { id: "admissions",         label: "Admissions",         path: "/students/admissions",   type: "page" },
+  { id: "applications",       label: "Applications",       path: "/students/applications", type: "page" },
+  { id: "assignments",        label: "Teacher Assignments", path: "/teachers/assignments", type: "page" },
+  { id: "announcements",      label: "Announcements",      path: "/announcements",      type: "page" },
+  { id: "reports",            label: "Reports",            path: "/reports",            type: "page" },
+  { id: "report-templates",   label: "Report Templates",   path: "/reports/templates",  type: "page" },
   { id: "settings",           label: "Settings",           path: "/settings",           type: "page" },
 ];
+
+// "Grades" and "Finance" were listed here and are not pages in this app —
+// searching either one and pressing Enter navigated to the 404. Removed, and
+// the pages that do exist but were missing from the index are added above.
 
 // ─── Cache layer (5 min TTL) ──────────────────────────────────────────────────
 interface CacheEntry<T> {

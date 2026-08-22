@@ -1,6 +1,14 @@
 // web/src/components/ui/DataTable.tsx
 import { cn } from "@/utils/cn";
 
+/**
+ * Table parts, tuned for scanning rather than reading.
+ *
+ * Rows are 44px, not 56px: an admin comparing twenty students wants twenty on
+ * screen. Density comes from the row height and a hairline divider — never
+ * from shrinking the text below 14px, which just makes it hard to read.
+ */
+
 // ── Table root ───────────────────────────────────────────
 export function Table({
   children,
@@ -10,8 +18,15 @@ export function Table({
   className?: string;
 }) {
   return (
+    // The scroll container is the table's own, so a wide table scrolls inside
+    // its card instead of pushing the whole page sideways.
     <div className="overflow-x-auto">
-      <table className={cn("w-full text-sm", className)}>
+      <table
+        className={cn(
+          "w-full text-sm border-separate border-spacing-0",
+          className
+        )}
+      >
         {children}
       </table>
     </div>
@@ -20,25 +35,31 @@ export function Table({
 
 // ── Head ─────────────────────────────────────────────────
 export function THead({ children }: { children: React.ReactNode }) {
-  return (
-    <thead className="bg-gray-50 border-b border-gray-200">
-      {children}
-    </thead>
-  );
+  return <thead className="bg-surface-muted">{children}</thead>;
 }
 
 // ── Header cell ──────────────────────────────────────────
 export function Th({
   children,
   className,
+  numeric = false,
 }: {
   children?:  React.ReactNode;
   className?: string;
+  /** Right-align, for columns of figures. */
+  numeric?:   boolean;
 }) {
   return (
     <th
+      scope="col"
       className={cn(
-        "px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider",
+        "px-4 h-10 text-xs font-semibold text-ink-muted",
+        // Sentence case, not SCREAMING. Uppercase headers cost legibility and
+        // buy nothing once the header row is already tinted and ruled.
+        "border-b border-line",
+        // sticky so the header survives a long scroll inside the card
+        "sticky top-0 z-10 bg-surface-muted",
+        numeric ? "text-right" : "text-left",
         className
       )}
     >
@@ -49,9 +70,7 @@ export function Th({
 
 // ── Body ─────────────────────────────────────────────────
 export function TBody({ children }: { children: React.ReactNode }) {
-  return (
-    <tbody className="divide-y divide-gray-100">{children}</tbody>
-  );
+  return <tbody>{children}</tbody>;
 }
 
 // ── Row ──────────────────────────────────────────────────
@@ -64,12 +83,27 @@ export function Tr({
   onClick?:   () => void;
   className?: string;
 }) {
+  const interactive = Boolean(onClick);
+
   return (
     <tr
       onClick={onClick}
+      tabIndex={interactive ? 0 : undefined}
+      role={interactive ? "button" : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onClick?.();
+              }
+            }
+          : undefined
+      }
       className={cn(
-        "hover:bg-gray-50 transition-colors",
-        onClick && "cursor-pointer",
+        "group transition-colors",
+        interactive && "cursor-pointer hover:bg-primary-50/50",
+        !interactive && "hover:bg-surface-muted",
         className
       )}
     >
@@ -82,14 +116,22 @@ export function Tr({
 export function Td({
   children,
   className,
+  numeric = false,
 }: {
   children?:  React.ReactNode;
   className?: string;
+  /** Right-align, for columns of figures. */
+  numeric?:   boolean;
 }) {
   return (
     <td
       className={cn(
-        "px-4 py-3 text-gray-700 whitespace-nowrap",
+        "px-4 h-11 text-ink-body whitespace-nowrap",
+        // Border on the cell rather than divide-y on the body: with
+        // border-separate that is what keeps the rule under the sticky header
+        // from detaching when the body scrolls.
+        "border-b border-line",
+        numeric ? "text-right tabular" : "text-left",
         className
       )}
     >
@@ -111,11 +153,15 @@ export function EmptyTable({
   action?:   React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center py-16">
-      {icon && <div className="mb-3">{icon}</div>}
-      <p className="text-gray-600 font-medium">{title}</p>
+    <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
+      {icon && (
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-card bg-canvas text-ink-faint [&_svg]:h-5 [&_svg]:w-5">
+          {icon}
+        </div>
+      )}
+      <p className="text-sm font-semibold text-ink">{title}</p>
       {subtitle && (
-        <p className="text-gray-400 text-sm mt-1">{subtitle}</p>
+        <p className="mt-1 max-w-sm text-xs text-ink-muted">{subtitle}</p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>

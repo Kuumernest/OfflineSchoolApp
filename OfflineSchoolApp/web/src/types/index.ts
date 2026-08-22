@@ -19,6 +19,8 @@ export interface User {
   role:              UserRole;
   schoolId:          string;
   schoolName?:       string;
+  // Some endpoints populate the school instead of sending a flat schoolName.
+  school?:           { name?: string } | null;
   isActive:          boolean;
   mustResetPassword?: boolean;
   createdAt?:        string;
@@ -65,6 +67,9 @@ export interface School {
 
 export interface Class {
   _id:        string;
+  // Mongo exposes an `id` virtual next to `_id`; some list endpoints send only
+  // that one, so callers legitimately read either.
+  id?:        string;
   name:       string;
   level?:     string;
   section?:   string;
@@ -129,14 +134,22 @@ export interface Student {
   status:   string;
   isActive: boolean;
 
+  // Set when the account still holds its generated first password, so the UI
+  // can surface "must reset" without a second request.
+  mustResetPassword?: boolean;
+
   // ── Dates ─────────────────────────────────────────────
   enrolledAt?: string;
   createdAt?:  string;
   updatedAt?:  string;
 
   // ── Class (populated or lightweight shape) ────────────
+  // Flat name sent by the list endpoints, which do not populate `class`.
+  className?: string | null;
+
   class?: {
     _id?:  string | null;
+    id?:   string;
     name:  string;
   } | null;
 }

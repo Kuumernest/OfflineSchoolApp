@@ -1,5 +1,6 @@
 // web/src/components/dashboard/SchoolBanner.tsx
-import { MapPin, School } from "lucide-react";
+import { MapPin, School }   from "lucide-react";
+import { resolveLogoSrc }     from "@/utils/logoSrc";
 
 interface SchoolInfo {
   name:      string;
@@ -12,31 +13,30 @@ interface SchoolInfo {
   logoBase64?: string;
 }
 
-const resolveLogoSrc = (school: SchoolInfo): string | null => {
-  const raw = school.logo || school.logoUrl || school.logoBase64 || null;
-  if (!raw || typeof raw !== "string" || raw.trim() === "") return null;
-  const t = raw.trim();
-  if (t.startsWith("http") || t.startsWith("data:")) return t;
-  const mime = t.startsWith("iVBOR") ? "image/png" : "image/jpeg";
-  return `data:${mime};base64,${t}`;
-};
-
+/**
+ * School identity line, sat inside the page header rather than in a tinted
+ * banner of its own.
+ *
+ * It used to be a full-width indigo panel — the first and loudest thing on the
+ * page, spending the top of the screen restating something the admin already
+ * knows. It is context, so it is now drawn as context.
+ */
 export default function SchoolBanner({ school }: { school: SchoolInfo }) {
-  const logoSrc  = resolveLogoSrc(school);
+  const logoSrc  = resolveLogoSrc(
+    school.logo || school.logoUrl || school.logoBase64
+  );
   const location = [school.city, school.state, school.country].filter(Boolean).join(", ");
 
   return (
-    <div className="flex items-center gap-4 rounded-xl border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 px-4 py-3">
-
-      {/* Logo / fallback */}
-      <div className="h-12 w-12 shrink-0 overflow-hidden rounded-xl border border-indigo-100 dark:border-indigo-700 bg-white dark:bg-gray-800 flex items-center justify-center">
+    <div className="flex items-center gap-2.5">
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-control bg-surface ring-1 ring-inset ring-line">
         {logoSrc ? (
           <img
             src={logoSrc}
-            alt={`${school.name} logo`}
+            alt=""
             className="h-full w-full object-contain"
             onError={(e) => {
-              const img      = e.currentTarget;
+              const img = e.currentTarget;
               img.style.display = "none";
               const fallback = img.nextElementSibling as HTMLElement | null;
               if (fallback) fallback.style.display = "flex";
@@ -48,26 +48,27 @@ export default function SchoolBanner({ school }: { school: SchoolInfo }) {
           style={logoSrc ? undefined : { display: "flex" }}
           aria-hidden="true"
         >
-          <School className="h-6 w-6 text-indigo-400" />
+          <School className="h-4 w-4 text-ink-faint" />
         </span>
       </div>
 
-      {/* Text */}
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-indigo-900 dark:text-indigo-100 truncate leading-tight">
+      <div className="min-w-0">
+        <p className="truncate text-sm font-medium text-ink-body">
           {school.name}
         </p>
-        {location && (
-          <p className="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-            <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
-            <span className="truncate">{location}</span>
-          </p>
-        )}
-        {school.motto && (
-          <p className="text-xs text-indigo-500 dark:text-indigo-400 italic font-medium mt-0.5 truncate">
-            &ldquo;{school.motto}&rdquo;
-          </p>
-        )}
+        <p className="flex items-center gap-2 text-xs text-ink-faint">
+          {location && (
+            <span className="flex min-w-0 items-center gap-1">
+              <MapPin className="h-3 w-3 shrink-0" aria-hidden="true" />
+              <span className="truncate">{location}</span>
+            </span>
+          )}
+          {school.motto && (
+            <span className="hidden truncate italic sm:inline">
+              &ldquo;{school.motto}&rdquo;
+            </span>
+          )}
+        </p>
       </div>
     </div>
   );

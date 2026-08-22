@@ -21,6 +21,7 @@ import { useUser }         from "@/store/auth.store";
 import { cn }              from "@/utils/cn";
 import type { RawSubject } from "@/services/subject.service";
 import type { Class }      from "@/types/classes.types";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -173,8 +174,9 @@ const SubjectCard = ({
   onEdit,
   onDelete,
   hideClassBadge = false,
-}: SubjectCardProps) => (
-  <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4">
+}: SubjectCardProps) => {
+  const { t } = useTranslation();
+  return <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4">
     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50">
       <BookOpen size={20} className="text-emerald-600" />
     </div>
@@ -205,7 +207,7 @@ const SubjectCard = ({
         ) : (
           <span className="inline-flex items-center gap-1 rounded-lg bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-800">
             <UserX size={11} />
-            No teacher assigned
+            {t("subjects.noTeacher")}
           </span>
         )}
       </div>
@@ -215,20 +217,20 @@ const SubjectCard = ({
       <button
         onClick={() => onEdit(subject)}
         className="rounded-lg p-2 text-indigo-500 transition-colors hover:bg-indigo-50"
-        title="Edit subject"
+        title={t("subjects.edit")}
       >
         <Pencil size={17} />
       </button>
       <button
         onClick={() => onDelete(subject)}
         className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-        title="Delete subject"
+        title={t("subjects.delete")}
       >
         <Trash2 size={17} />
       </button>
     </div>
-  </div>
-);
+  </div>;
+};
 
 interface ClassSectionProps {
   className:    string;
@@ -324,13 +326,14 @@ const DeleteDialog = ({
   onConfirm,
   onCancel,
   busy,
-}: DeleteDialogProps) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+}: DeleteDialogProps) => {
+  const { t } = useTranslation();
+  return <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
     <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
       <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-red-50">
         <Trash2 size={22} className="text-red-600" />
       </div>
-      <h3 className="text-lg font-bold text-gray-900">Delete Subject</h3>
+      <h3 className="text-lg font-bold text-gray-900">{t("subjects.delete")}</h3>
       <p className="mt-2 text-sm text-gray-500">
         Permanently delete{" "}
         <span className="font-semibold text-gray-900">"{subject.name}"</span>{" "}
@@ -345,7 +348,7 @@ const DeleteDialog = ({
           disabled={busy}
           className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
-          Cancel
+          {t("common.cancel")}
         </button>
         <button
           onClick={onConfirm}
@@ -356,14 +359,15 @@ const DeleteDialog = ({
         </button>
       </div>
     </div>
-  </div>
-);
+  </div>;
+};
 
 // ═════════════════════════════════════════════════════════════════════════════
 // MAIN PAGE
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function AdminSubjectsPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
@@ -379,7 +383,8 @@ export default function AdminSubjectsPage() {
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
-      isRefresh ? setRefreshing(true) : setLoading(true);
+      if (isRefresh) setRefreshing(true);
+      else setLoading(true);
       setError(null);
 
       const [rawSubjects, classRows] = await Promise.all([
@@ -472,8 +477,8 @@ export default function AdminSubjectsPage() {
       return (
         <EmptyState
           icon={School}
-          title="No classes yet"
-          subtitle="A subject must be linked to a class. Create a class first."
+          title={t("classes.noneYet")}
+          subtitle={t("subjects.needClass")}
           action={{
             label:   "Add Class",
             color:   "#4F46E5",
@@ -487,14 +492,14 @@ export default function AdminSubjectsPage() {
       return (
         <EmptyState
           icon={BookOpen}
-          title="No subjects found"
+          title={t("subjects.none")}
           subtitle={
             selectedClassId
               ? "No subjects in this class yet. Add one to get started."
               : "Add your first subject and link it to a class."
           }
           action={{
-            label:   "Add Subject",
+            label:   t("subjects.add"),
             color:   "#059669",
             onClick: () => navigate("/subjects/add"),
           }}
@@ -557,7 +562,7 @@ export default function AdminSubjectsPage() {
         </button>
 
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-gray-900">Subjects</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("subjects.title")}</h1>
           <p className="text-sm text-gray-500">
             {stats.total} {stats.total === 1 ? "subject" : "subjects"}
             {stats.unassigned > 0 ? ` • ${stats.unassigned} unassigned` : ""}
@@ -568,7 +573,7 @@ export default function AdminSubjectsPage() {
           onClick={() => loadData(true)}
           disabled={refreshing}
           className="flex h-10 w-10 items-center justify-center rounded-xl bg-gray-100 text-gray-600 hover:bg-gray-200 disabled:opacity-50"
-          title="Refresh"
+          title={t("common.refresh")}
         >
           <RefreshCw size={18} className={refreshing ? "animate-spin" : ""} />
         </button>
@@ -578,7 +583,7 @@ export default function AdminSubjectsPage() {
           className="flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-emerald-700"
         >
           <Plus size={18} />
-          Add Subject
+          {t("subjects.add")}
         </button>
       </header>
 
@@ -623,7 +628,7 @@ export default function AdminSubjectsPage() {
               onClick={() => loadData()}
               className="shrink-0 text-sm font-bold text-red-600 hover:underline"
             >
-              Retry
+              {t("common.retry")}
             </button>
           </div>
         )}

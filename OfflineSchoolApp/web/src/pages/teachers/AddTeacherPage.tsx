@@ -3,6 +3,8 @@ import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api from "@/services/api";
+import { getErrorMessage, isConflict } from "@/lib/api";
+import { useTranslation } from "react-i18next";
 import {
   ArrowLeft, UserPlus, Mail, User,
   Key, Lock, AlertCircle, CheckCircle,
@@ -59,6 +61,7 @@ interface SuccessState {
 // ─────────────────────────────────────────────────────────
 
 export default function AddTeacherPage() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useAuthStore((s) => s.user);
 
@@ -156,11 +159,8 @@ export default function AddTeacherPage() {
           tempPassword,
           message,
         });
-      } catch (err: any) {
-        const status    = err?.response?.status;
-        const serverMsg = err?.response?.data?.message;
-
-        if (status === 409) {
+      } catch (err) {
+        if (isConflict(err)) {
           setErrors({
             email:
               "This email address is already registered. " +
@@ -169,7 +169,7 @@ export default function AddTeacherPage() {
           emailRef.current?.focus();
         } else {
           setErrors({
-            name: serverMsg || err.message || "Failed to create teacher. Please try again.",
+            name: getErrorMessage(err) || "Failed to create teacher. Please try again.",
           });
         }
       } finally {
@@ -222,7 +222,7 @@ export default function AddTeacherPage() {
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl
                               p-4 mb-6 text-left space-y-3">
                 <p className="text-xs font-bold text-yellow-800 uppercase tracking-wide">
-                  Share these credentials manually
+                  {t("teachersAdd.shareManually")}
                 </p>
                 <div>
                   <p className="text-xs text-yellow-700 font-medium">📧 Email</p>
@@ -242,14 +242,14 @@ export default function AddTeacherPage() {
                                  text-indigo-600 hover:text-indigo-800 transition-colors"
                     >
                       {copied
-                        ? <><Check size={13} /> Copied</>
-                        : <><Copy size={13} /> Copy</>
+                        ? <><Check size={13} /> {t("common.copied")}</>
+                        : <><Copy size={13} /> {t("common.copy")}</>
                       }
                     </button>
                   </div>
                 </div>
                 <p className="text-xs text-yellow-700">
-                  The teacher must change this password on first login.
+                  {t("teachersAdd.mustChange")}
                 </p>
               </div>
             )}
@@ -261,14 +261,14 @@ export default function AddTeacherPage() {
                 className="w-full bg-indigo-600 hover:bg-indigo-700 text-white
                            font-semibold py-3 rounded-xl transition-colors"
               >
-                Add Another Teacher
+                {t("teachersAdd.another")}
               </button>
               <button
                 onClick={() => navigate("/teachers")}
                 className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700
                            font-semibold py-3 rounded-xl transition-colors"
               >
-                Back to Teachers
+                {t("teachersAdd.back")}
               </button>
             </div>
           </div>
@@ -308,7 +308,7 @@ export default function AddTeacherPage() {
           {/* Name field */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-700">
-              Teacher Name <span className="text-red-500">*</span>
+              {t("teachersAdd.nameLabel")} <span className="text-red-500">*</span>
             </label>
             <div className={`
               flex items-center gap-3 border rounded-xl px-4 py-3 bg-gray-50
@@ -329,7 +329,7 @@ export default function AddTeacherPage() {
                   setName(e.target.value);
                   if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
                 }}
-                placeholder="e.g. Mr John Doe"
+                placeholder={t("teachersAdd.namePh")}
                 maxLength={MAX_NAME_LENGTH + 5}
                 autoComplete="name"
                 autoFocus
@@ -345,7 +345,7 @@ export default function AddTeacherPage() {
                 </p>
               ) : (
                 <p className="text-xs text-gray-400">
-                  Full name as it will appear across the system.
+                  {t("teachersAdd.nameHint")}
                 </p>
               )}
               <p className={`
@@ -364,7 +364,7 @@ export default function AddTeacherPage() {
           {/* Email field */}
           <div className="space-y-1.5">
             <label className="block text-sm font-semibold text-gray-700">
-              Email Address <span className="text-red-500">*</span>
+              {t("common.email")} <span className="text-red-500">*</span>
             </label>
             <div className={`
               flex items-center gap-3 border rounded-xl px-4 py-3 bg-gray-50
@@ -385,7 +385,7 @@ export default function AddTeacherPage() {
                   setEmail(e.target.value);
                   if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
                 }}
-                placeholder="teacher@school.com"
+                placeholder={t("teachersAdd.emailPh")}
                 autoComplete="email"
                 className="flex-1 bg-transparent text-gray-900 placeholder-gray-400
                            text-sm focus:outline-none"
@@ -420,7 +420,7 @@ export default function AddTeacherPage() {
             ) : (
               <>
                 <UserPlus size={18} />
-                Create Teacher
+                {t("teachersAdd.submit")}
               </>
             )}
           </button>
@@ -440,7 +440,7 @@ export default function AddTeacherPage() {
         {/* What happens next */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-6">
           <h3 className="text-sm font-bold text-gray-700 mb-4">
-            What happens next?
+            {t("teachersAdd.whatNext")}
           </h3>
           <div className="space-y-3">
             {NEXT_STEPS.map(({ icon: Icon, color, bg, text }) => (
@@ -466,6 +466,7 @@ export default function AddTeacherPage() {
 // ─────────────────────────────────────────────────────────
 
 function Header({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-4 flex
                     items-center gap-4 shrink-0">
@@ -477,8 +478,8 @@ function Header({ onBack }: { onBack: () => void }) {
         <ArrowLeft size={20} className="text-gray-700" />
       </button>
       <div>
-        <h1 className="text-lg font-bold text-gray-900">Add Teacher</h1>
-        <p className="text-xs text-gray-500 mt-0.5">Create a new teacher profile</p>
+        <h1 className="text-lg font-bold text-gray-900">{t("teachersAdd.title")}</h1>
+        <p className="text-xs text-gray-500 mt-0.5">{t("teachersAdd.blurb")}</p>
       </div>
     </div>
   );

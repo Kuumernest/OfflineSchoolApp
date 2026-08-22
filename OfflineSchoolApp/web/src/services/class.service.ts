@@ -12,9 +12,67 @@ import type {
   EntityId,
 } from "@/types/classes.types";
 
+// ─── Raw wire shapes ──────────────────────────────────────────────────────────
+//
+// The API is inconsistent across endpoints: some send camelCase, some snake_case,
+// some populate `class`/`teacher` as objects and others send a bare id string.
+// The normalisers below probe every one of those spellings, so the raw types
+// spell them out rather than falling back to `any` — that way a field the API
+// stops sending shows up here instead of silently becoming undefined.
+
+interface RawTeacher {
+  _id?:      string;
+  id?:       string;
+  name?:     string;
+  email?:    string;
+  schoolId?: string;
+  isActive?: boolean;
+}
+
+interface RawClass {
+  _id?:           string;
+  id?:            string;
+  name?:          string;
+  level?:         string;
+  section?:       string;
+  schoolId?:      string;
+  school_id?:     string;
+  isActive?:      boolean;
+  deletedAt?:     string | null;
+  deleted_at?:    string | null;
+  createdAt?:     string;
+  created_at?:    string;
+  updatedAt?:     string;
+  updated_at?:    string;
+  subjectCount?:  number | string | null;
+  studentCount?:  number | string | null;
+}
+
+interface RawSubject {
+  _id?:          string;
+  id?:           string;
+  name?:         string;
+  code?:         string;
+  class?:        RawClass | string | null;
+  classId?:      string;
+  class_id?:     string;
+  teacher?:      RawTeacher | string | null;
+  teacherId?:    string;
+  teacher_id?:   string;
+  teacherName?:  string;
+  teacher_name?: string;
+  teacherEmail?: string;
+  schoolId?:     string;
+  school_id?:    string;
+  createdAt?:    string;
+  created_at?:   string;
+  updatedAt?:    string;
+  updated_at?:   string;
+}
+
 // ─── Normalise class ──────────────────────────────────────────────────────────
 
-function normaliseClass(raw: any): Class {
+function normaliseClass(raw: RawClass): Class {
   const id = raw._id || raw.id || "";
 
   return {
@@ -39,43 +97,46 @@ function normaliseClass(raw: any): Class {
 
 // ─── Normalise subject ────────────────────────────────────────────────────────
 
-function normaliseSubject(raw: any): Subject {
+function normaliseSubject(raw: RawSubject): Subject {
+  const rawClass   = typeof raw.class   === "object" && raw.class   ? raw.class   : null;
+  const rawTeacher = typeof raw.teacher === "object" && raw.teacher ? raw.teacher : null;
+
   const classId =
     (typeof raw.class === "string" ? raw.class : null) ||
-    raw.class?._id  ||
-    raw.class?.id   ||
+    rawClass?._id   ||
+    rawClass?.id    ||
     raw.classId     ||
     raw.class_id    ||
     "";
 
   const teacherId =
     (typeof raw.teacher === "string" ? raw.teacher : null) ||
-    raw.teacher?._id  ||
-    raw.teacher?.id   ||
+    rawTeacher?._id   ||
+    rawTeacher?.id    ||
     raw.teacherId     ||
     raw.teacher_id    ||
     "";
 
   const teacherName =
-    raw.teacher?.name ||
+    rawTeacher?.name  ||
     raw.teacherName   ||
     raw.teacher_name  ||
     "";
 
   const teacherEmail =
-    raw.teacher?.email ||
+    rawTeacher?.email  ||
     raw.teacherEmail   ||
     "";
 
   const teacher: TeacherRef | undefined =
-    raw.teacher && typeof raw.teacher === "object"
+    rawTeacher
       ? {
-          _id:      raw.teacher._id   || raw.teacher.id || "",
-          name:     raw.teacher.name  || "",
-          email:    raw.teacher.email || "",
+          _id:      rawTeacher._id   || rawTeacher.id || "",
+          name:     rawTeacher.name  || "",
+          email:    rawTeacher.email || "",
           role:     "teacher" as const,
-          schoolId: raw.teacher.schoolId || "",
-          isActive: raw.teacher.isActive !== false,
+          schoolId: rawTeacher.schoolId || "",
+          isActive: rawTeacher.isActive !== false,
         }
       : teacherId
         ? {
@@ -88,10 +149,7 @@ function normaliseSubject(raw: any): Subject {
           }
         : undefined;
 
-  const classObj: Class | undefined =
-    raw.class && typeof raw.class === "object"
-      ? normaliseClass(raw.class)
-      : undefined;
+  const classObj: Class | undefined = rawClass ? normaliseClass(rawClass) : undefined;
 
   const subjectId = raw._id || raw.id || "";
 
@@ -113,15 +171,22 @@ function normaliseSubject(raw: any): Subject {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function unwrapList(data: any, primaryKey: string): any[] {
-  if (Array.isArray(data))               return data;
-  if (Array.isArray(data?.[primaryKey])) return data[primaryKey];
-  if (Array.isArray(data?.data))         return data.data;
+// Responses arrive as a bare array, as { <primaryKey>: [...] }, or as { data: ... }.
+// The caller states which element type it expects; nothing here can verify that,
+// which is exactly what the normalisers above are for.
+type Envelope = Record<string, unknown> | unknown[] | null | undefined;
+
+function unwrapList<T>(data: Envelope, primaryKey: string): T[] {
+  if (Array.isArray(data)) return data as T[];
+  const obj = (data ?? {}) as Record<string, unknown>;
+  if (Array.isArray(obj[primaryKey])) return obj[primaryKey] as T[];
+  if (Array.isArray(obj.data))        return obj.data as T[];
   return [];
 }
 
-function unwrapSingle(data: any, primaryKey: string): any {
-  return data?.[primaryKey] ?? data?.data ?? data;
+function unwrapSingle<T>(data: Envelope, primaryKey: string): T {
+  const obj = (data ?? {}) as Record<string, unknown>;
+  return (obj[primaryKey] ?? obj.data ?? data) as T;
 }
 
 // ─── Classes ──────────────────────────────────────────────────────────────────
@@ -136,14 +201,14 @@ export async function fetchClasses(
       includeInactive: String(includeInactive),
     },
   });
-  return unwrapList(data, "classes").map(normaliseClass);
+  return unwrapList<RawClass>(data, "classes").map(normaliseClass);
 }
 
 export async function createClass(
   payload: CreateClassPayload,
 ): Promise<Class> {
   const { data } = await api.post("/admin/classes", payload);
-  return normaliseClass(unwrapSingle(data, "class"));
+  return normaliseClass(unwrapSingle<RawClass>(data, "class"));
 }
 
 export async function updateClass(
@@ -151,7 +216,7 @@ export async function updateClass(
   payload: UpdateClassPayload,
 ): Promise<Class> {
   const { data } = await api.put(`/admin/classes/${classId}`, payload);
-  return normaliseClass(unwrapSingle(data, "class"));
+  return normaliseClass(unwrapSingle<RawClass>(data, "class"));
 }
 
 export async function deleteClass(
@@ -170,7 +235,7 @@ export async function toggleClassActive(
   const { data } = await api.patch(
     `/admin/classes/${classId}/toggle-active`
   );
-  return normaliseClass(unwrapSingle(data, "class"));
+  return normaliseClass(unwrapSingle<RawClass>(data, "class"));
 }
 
 // ─── Subjects ─────────────────────────────────────────────────────────────────
@@ -185,14 +250,14 @@ export async function fetchSubjects(
       ...(classId ? { classId } : {}),
     },
   });
-  return unwrapList(data, "subjects").map(normaliseSubject);
+  return unwrapList<RawSubject>(data, "subjects").map(normaliseSubject);
 }
 
 export async function createSubject(
   payload: CreateSubjectPayload,
 ): Promise<Subject> {
   const { data } = await api.post("/admin/subjects", payload);
-  return normaliseSubject(unwrapSingle(data, "subject"));
+  return normaliseSubject(unwrapSingle<RawSubject>(data, "subject"));
 }
 
 export async function updateSubject(
@@ -200,7 +265,7 @@ export async function updateSubject(
   payload:   UpdateSubjectPayload,
 ): Promise<Subject> {
   const { data } = await api.put(`/admin/subjects/${subjectId}`, payload);
-  return normaliseSubject(unwrapSingle(data, "subject"));
+  return normaliseSubject(unwrapSingle<RawSubject>(data, "subject"));
 }
 
 export async function deleteSubject(subjectId: EntityId): Promise<void> {

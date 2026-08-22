@@ -1,7 +1,10 @@
 // web/src/components/dashboard/RecentExams.tsx
-import { FileText } from "lucide-react";
-import { useNavigate } from "react-router-dom";
-import { type RecentExam } from "@/services/dashboard.service";
+import { useNavigate }        from "react-router-dom";
+import { useTranslation }      from "react-i18next";
+import { ArrowRight }         from "lucide-react";
+import { Card, CardHeader }   from "@/components/ui/Card";
+import { Badge }              from "@/components/ui/Badge";
+import { type RecentExam }    from "@/services/dashboard.service";
 
 interface Props {
   exams:    RecentExam[];
@@ -10,93 +13,95 @@ interface Props {
 }
 
 export default function RecentExams({ exams, loading = false, error }: Props) {
+  const { t }    = useTranslation();
   const navigate = useNavigate();
 
   return (
-    <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-4 shadow-sm flex flex-col gap-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <FileText className="h-5 w-5 text-orange-500" aria-hidden="true" />
-          <h3 className="font-semibold text-gray-900 dark:text-white">
-            Recent Exams
-          </h3>
-        </div>
-        <button
-          type="button"
-          onClick={() => navigate("/exams")}
-          className="text-xs text-primary-600 hover:text-primary-700 dark:text-primary-400 font-medium"
-        >
-          View all
-        </button>
-      </div>
+    <Card>
+      <CardHeader
+        title={t("dashboard.recentExams")}
+        action={
+          <button
+            type="button"
+            onClick={() => navigate("/exams")}
+            className="group inline-flex items-center gap-1 text-xs font-medium text-primary-600 hover:text-primary-700"
+          >
+            {t("common.viewAll")}
+            <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" aria-hidden="true" />
+          </button>
+        }
+      />
 
-      {/* Error state */}
-      {error && (
-        <p className="text-sm text-red-500 dark:text-red-400">{error}</p>
-      )}
+      {error && <p className="text-sm text-danger">{error}</p>}
 
-      {/* Loading skeleton */}
       {loading && !error && (
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="h-12 rounded-lg bg-gray-100 dark:bg-gray-700 animate-pulse"
-            />
+            <div key={i} className="h-10 animate-pulse rounded-control bg-canvas" />
           ))}
         </div>
       )}
 
-      {/* Empty state */}
       {!loading && !error && exams.length === 0 && (
-        <p className="text-sm text-gray-400 dark:text-gray-500 text-center py-4">
-          No exams found.
+        <p className="py-6 text-center text-sm text-ink-faint">
+          {t("dashboard.noExams")}
         </p>
       )}
 
-      {/* List */}
       {!loading && !error && exams.length > 0 && (
-        <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+        // Negative margin so a row's hover fill reaches the card edge instead
+        // of stopping short of the padding and looking clipped.
+        <ul className="-mx-2">
           {exams.map((exam) => (
-            <li
-              key={exam._id}
-              onClick={() => navigate(`/exams/${exam._id}`)}
-              className="flex items-center justify-between py-2.5 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700/40 -mx-1 px-1 rounded-lg transition"
-            >
-              <div className="min-w-0">
-                <p className="text-sm font-medium text-gray-800 dark:text-gray-200 truncate">
-                  {exam.title}
-                </p>
-                {exam.subject && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 truncate">
-                    {exam.subject}
-                  </p>
-                )}
-              </div>
-              <StatusPill status={exam.status} />
+            <li key={exam._id}>
+              <button
+                type="button"
+                onClick={() => navigate(`/exams/${exam._id}`)}
+                className="flex w-full items-center gap-3 rounded-control px-2 py-2 text-left transition-colors hover:bg-canvas"
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-ink">
+                    {exam.title}
+                  </span>
+                  {exam.subject && (
+                    <span className="block truncate text-xs text-ink-faint">
+                      {exam.subject}
+                    </span>
+                  )}
+                </span>
+                <StatusPill status={exam.status} />
+              </button>
             </li>
           ))}
         </ul>
       )}
-    </div>
+    </Card>
   );
 }
 
 // ── Status pill ───────────────────────────────────────────────────────────────
+//
+// Mapped onto the shared Badge variants rather than four bespoke colour pairs,
+// so an exam's status reads the same here as it does on the exams table.
 
-const STATUS_STYLES: Record<string, string> = {
-  ongoing:   "bg-green-100  text-green-700  dark:bg-green-900/30  dark:text-green-400",
-  completed: "bg-gray-100   text-gray-600   dark:bg-gray-700      dark:text-gray-300",
-  draft:     "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
-  scheduled: "bg-blue-100   text-blue-700   dark:bg-blue-900/30   dark:text-blue-400",
+const STATUS_VARIANT: Record<
+  string,
+  "success" | "default" | "warning" | "info"
+> = {
+  ongoing:   "success",
+  completed: "default",
+  draft:     "warning",
+  scheduled: "info",
 };
 
 function StatusPill({ status }: { status?: string }) {
   const label = status ?? "unknown";
-  const style = STATUS_STYLES[label.toLowerCase()] ?? STATUS_STYLES.draft;
   return (
-    <span className={`shrink-0 ml-2 text-xs font-medium px-2 py-0.5 rounded-full capitalize ${style}`}>
+    <Badge
+      variant={STATUS_VARIANT[label.toLowerCase()] ?? "default"}
+      className="shrink-0 capitalize"
+    >
       {label}
-    </span>
+    </Badge>
   );
 }

@@ -26,6 +26,7 @@ import {
   getUserAttempts,
 } from "../../src/services/quiz.service";
 import { isStudentProfileComplete } from "./profile/setup";
+import { toDisplayUri }             from "../../src/utils/logoUri";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -352,14 +353,17 @@ const loadSchoolInfoForStudent = async (db, schoolId) => {
 const SchoolBanner = React.memo(({ school, className }) => {
   if (!school?.name) return null;
 
-  const hasLogo  = !!school.logo;
+  // Prefers the locally cached file, so the logo still shows offline now that
+  // the server sends a URL rather than inline base64.
+  const logoUri  = toDisplayUri(school.logoLocal, school.logo);
+  const hasLogo  = !!logoUri;
   const location = [school.city, school.country].filter(Boolean).join(", ");
 
   return (
     <View style={sb.banner}>
       {hasLogo ? (
         <Image
-          source={{ uri: `data:image/jpeg;base64,${school.logo}` }}
+          source={{ uri: logoUri }}
           style={sb.logo}
           resizeMode="contain"
         />

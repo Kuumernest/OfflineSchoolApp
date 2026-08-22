@@ -1,111 +1,262 @@
-:root {
-  --text: #6b6375;
-  --text-h: #08060d;
-  --bg: #fff;
-  --border: #e5e4e7;
-  --code-bg: #f4f3ec;
-  --accent: #aa3bff;
-  --accent-bg: rgba(170, 59, 255, 0.1);
-  --accent-border: rgba(170, 59, 255, 0.5);
-  --social-bg: rgba(244, 243, 236, 0.5);
-  --shadow:
-    rgba(0, 0, 0, 0.1) 0 10px 15px -3px, rgba(0, 0, 0, 0.05) 0 4px 6px -2px;
+/* web/src/index.css */
 
-  --sans: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --heading: system-ui, 'Segoe UI', Roboto, sans-serif;
-  --mono: ui-monospace, Consolas, monospace;
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&display=swap");
+@import "tailwindcss";
 
-  font: 18px/145% var(--sans);
-  letter-spacing: 0.18px;
-  color-scheme: light dark;
-  color: var(--text);
-  background: var(--bg);
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+/* ─────────────────────────────────────────────────────────────────────────────
+   THEME
+   Tailwind v4 reads design tokens from @theme, NOT from tailwind.config.js.
+   The old config file declared primary-* and sidebar-* but the v4 Vite plugin
+   never loaded it, so every `bg-primary-600` in the app resolved to nothing.
+   Declaring them here is what makes those utilities real.
 
-  @media (max-width: 1024px) {
-    font-size: 16px;
+   The console is light-only on purpose. It previously carried ~116 `dark:`
+   variants with no toggle and no `dark` class ever set on the root, so none of
+   them could activate; they were removed rather than left to imply a theme
+   that does not exist.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@theme {
+  /* ── Type ──────────────────────────────────────────────────────────────────
+     Two families, each with one job.
+
+     Inter runs the interface: it was drawn for screens at small sizes and its
+     figures line up in a column, which is what a console full of tables needs.
+
+     Source Serif carries page titles and the brand only. That single editorial
+     note is what separates "tidy" from "considered" — but it earns its place
+     precisely because it is rationed. Put a serif on table headers or buttons
+     and the whole thing turns into a wedding invitation.
+
+     To drop the serif entirely: point --font-display at --font-sans below. */
+  --font-sans:    "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Source Serif 4", ui-serif, Georgia, serif;
+
+  /* ── Accent ────────────────────────────────────────────────────────────────
+     ONE hue carries interaction: primary buttons, the active nav item, focus
+     rings, links. Everything else is neutral. Anything that is coloured but
+     not interactive is either status (below) or a mistake.
+
+     Kept under the `primary-*` name because ~34 pages already reference it —
+     renaming would have been a rename, not a redesign.
+
+     Deep indigo rather than a mid blue. A saturated blue button is the default
+     of every bootstrapped admin panel; taking the accent darker and quieter is
+     most of why an interface reads as expensive. It also buys contrast: white
+     on this passes AA comfortably at any size. */
+  --color-primary-50:  #f2f4fb;
+  --color-primary-100: #e3e8f6;
+  --color-primary-200: #c8d1ed;
+  --color-primary-300: #a3b1df;
+  --color-primary-400: #7688cb;
+  --color-primary-500: #5464b2;
+  --color-primary-600: #3b4996;  /* primary action */
+  --color-primary-700: #2e3878;
+  --color-primary-800: #262e60;
+  --color-primary-900: #20264e;
+  --color-primary-950: #141833;
+
+  /* ── Surfaces ──────────────────────────────────────────────────────────────
+     A faintly cool canvas under pure-white cards. The gap between them is
+     small on purpose: enough that a card lifts, not so much that the page
+     reads as grey. */
+  --color-canvas:        #f4f5f8;
+  --color-surface:       #ffffff;
+  --color-surface-muted: #fafbfc;
+
+  /* ── Lines ─────────────────────────────────────────────────────────────────
+     Finer and cooler than stock grey. Borders are the most repeated element in
+     a dense UI, so a line that is a shade too dark makes every screen look
+     ruled rather than composed. */
+  --color-line:        #e9ebf0;
+  --color-line-strong: #d5d9e2;
+
+  /* ── Ink ───────────────────────────────────────────────────────────────────
+     Four steps, each with a job. The darkest is a blue-black, not #000 — pure
+     black on white glares, and the slight hue ties the text to the accent.
+
+     Every step clears WCAG AA (4.5:1) against all three surfaces, checked, not
+     assumed. The faintest step is deliberately less faint than it wants to be:
+     it carries timestamps, placeholders and the header meta line, which are
+     real content. A pale grey there looks refined in a mockup and is unreadable
+     on a laptop at an angle — measured 2.59:1 before this was corrected. */
+  --color-ink:       #0d1220;  /* headings, table values      — 18.68:1 */
+  --color-ink-body:  #343d4f;  /* body copy                   — 10.90:1 */
+  --color-ink-muted: #4f5a70;  /* labels, secondary text      —  6.93:1 */
+  --color-ink-faint: #666f84;  /* placeholders, timestamps    —  5.03:1 */
+
+  /* ── Navigation rail ───────────────────────────────────────────────────────
+     Near-black with a blue cast, so the rail reads as a solid architectural
+     edge rather than a dark grey panel. */
+  --color-nav-bg:          #0b0f1a;
+  --color-nav-raised:      #171d2d;
+  --color-nav-line:        #222941;
+  --color-nav-text:        #8e98ae;
+  --color-nav-text-active: #ffffff;
+
+  /* ── Status ────────────────────────────────────────────────────────────────
+     Colour here MEANS something. Reserved for state, never for decoration.
+     Deep text on a pale tint, so a status pill sits at the same visual weight
+     as the ink around it instead of flaring. */
+  --color-success:      #12683a;
+  --color-success-soft: #eef7f1;
+  --color-success-line: #c3e2d0;
+
+  --color-warning:      #96570b;
+  --color-warning-soft: #fdf6ec;
+  --color-warning-line: #f0dcbb;
+
+  --color-danger:       #9f2318;
+  --color-danger-soft:  #fdf2f1;
+  --color-danger-line:  #f2d3cf;
+
+  --color-info:         #1c4ea8;
+  --color-info-soft:    #f0f4fc;
+  --color-info-line:    #cfdbf2;
+
+  /* ── Radius ────────────────────────────────────────────────────────────────
+     Two values, not five. Controls are tighter than the containers holding
+     them, which is what stops a dense layout looking like a pile of pills. */
+  --radius-control: 0.5rem;    /* buttons, inputs, badges */
+  --radius-card:    0.75rem;   /* cards, panels, dropdowns */
+
+  /* ── Elevation ─────────────────────────────────────────────────────────────
+     Two-part shadows: a tight contact shadow that seats the element, plus a
+     wide diffuse one for the light. A single blurred drop shadow is the tell
+     of a cheap interface — real objects cast both.
+
+     Tinted with the ink hue rather than black, so shadows sit in the palette
+     instead of greying it. */
+  /* The leading `inset` line is a 1px highlight along the top edge — the
+     difference between a rectangle and something with a surface, the same
+     trick a physical bezel plays catching light on its upper lip. It is baked
+     into the token rather than applied as an arbitrary utility because
+     Tailwind's class scanner stops at the comma in `[box-shadow:a,b]`, so
+     that version silently emitted nothing. */
+  --shadow-card:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+                  0 1px 1px 0 rgb(13 18 32 / 0.03),
+                  0 2px 6px -2px rgb(13 18 32 / 0.05);
+
+  /* Hover/active lift for an interactive card. */
+  --shadow-lift:  inset 0 1px 0 0 rgb(255 255 255 / 0.9),
+                  0 1px 2px 0 rgb(13 18 32 / 0.04),
+                  0 6px 16px -6px rgb(13 18 32 / 0.10);
+
+  /* Genuinely floating: dropdowns, modals, toasts. */
+  --shadow-raise: 0 1px 2px 0 rgb(13 18 32 / 0.04),
+                  0 4px 12px -4px rgb(13 18 32 / 0.06),
+                  0 16px 40px -12px rgb(13 18 32 / 0.14);
+
+  /* Motion: a gentle deceleration, and durations short enough to feel
+     immediate. Anything past ~200ms on a hover reads as lag, not polish. */
+  --ease-out-quiet: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+@layer base {
+  * {
+    border-color: var(--color-line);
+  }
+
+  html {
+    font-family: var(--font-sans);
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink-body);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    /* Inter's contextual alternates round the punctuation and fix a few
+       awkward pairs. Free refinement, one line. */
+    font-feature-settings: "cv02", "cv03", "cv04", "calt";
+    text-rendering: optimizeLegibility;
+  }
+
+  /* Headings tighten as they grow. Type set at one tracking across every size
+     looks loose at display sizes and cramped at small ones — following the
+     size is what makes a hierarchy feel drawn rather than scaled. */
+  h1 { letter-spacing: -0.021em; }
+  h2 { letter-spacing: -0.017em; }
+  h3 { letter-spacing: -0.011em; }
+
+  /* Tabular figures everywhere a number is compared against another number.
+     Without this the proportional digits in Inter make a column of counts
+     ragged, which is the fastest way to make a data table look amateur. */
+  th,
+  td,
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* One focus treatment for the whole app. Visible on keyboard, absent on
+     mouse — the browser's :focus-visible does that discrimination for us. */
+  :focus-visible {
+    outline: 2px solid var(--color-primary-600);
+    outline-offset: 2px;
+    border-radius: var(--radius-control);
+  }
+
+  /* Selection picked up from the accent instead of the browser's default
+     cobalt, which clashes with every palette it lands on. */
+  ::selection {
+    background-color: var(--color-primary-100);
+    color: var(--color-primary-900);
+  }
+
+  /* Respect a reader who has asked the OS to stop animating things. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background-color: #d5d9e2;
+    border: 3px solid transparent;
+    background-clip: content-box;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: #b4bac7;
   }
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
-    --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+/* Page and section titles. The optical-size axis is what a variable serif is
+   for: at 28px the letterforms thin out and the contrast opens up, which is
+   the quality you are actually seeing when a heading looks "expensive". */
+@utility font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+}
+
+/* A utility's pseudo-element rules nest inside the one @utility block. The
+   separate `@utility scrollbar-hide::-webkit-scrollbar` this replaces is not
+   valid v4 syntax — utility names must be plain identifiers — and it failed
+   the build outright. */
+@utility scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
-
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
-}
-
-#root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: center;
-  border-inline: 1px solid var(--border);
-  min-height: 100svh;
-  display: flex;
-  flex-direction: column;
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-}
-
-h1,
-h2 {
-  font-family: var(--heading);
-  font-weight: 500;
-  color: var(--text-h);
-}
-
-h1 {
-  font-size: 56px;
-  letter-spacing: -1.68px;
-  margin: 32px 0;
-  @media (max-width: 1024px) {
-    font-size: 36px;
-    margin: 20px 0;
-  }
-}
-h2 {
-  font-size: 24px;
-  line-height: 118%;
-  letter-spacing: -0.24px;
-  margin: 0 0 8px;
-  @media (max-width: 1024px) {
-    font-size: 20px;
-  }
-}
-p {
-  margin: 0;
-}
-
-code,
-.counter {
-  font-family: var(--mono);
-  display: inline-flex;
-  border-radius: 4px;
-  color: var(--text-h);
-}
-
-code {
-  font-size: 15px;
-  line-height: 135%;
-  padding: 4px 8px;
-  background: var(--code-bg);
 }

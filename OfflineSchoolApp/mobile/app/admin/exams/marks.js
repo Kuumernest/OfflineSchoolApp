@@ -14,6 +14,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
+import { getDatabase }  from "../../../src/db/database";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -62,39 +63,85 @@ const displayClass = (cls) => {
 // ROLE-AWARE CLASS FETCHER
 // ─────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────
+// OFFLINE FALLBACKS
+//
+// Entering marks is the exam task most likely to happen with no signal, so
+// every loader on this screen falls back to SQLite. Classes, students and
+// exams are all synced locally; without these fallbacks the screen could
+// not even reach the mark sheet offline.
+// ─────────────────────────────────────────────────────────
+
+const classesFromCache = async (schoolId) => {
+  try {
+    const db  = await getDatabase();
+    const rows = await db.getAllAsync(
+      `SELECT id, name FROM classes
+       WHERE (deleted_at IS NULL OR deleted_at = '')
+         AND (schoolId = ? OR school_id = ? OR ? IS NULL)
+       ORDER BY name ASC`,
+      [schoolId, schoolId, schoolId ?? null]
+    );
+    return (rows ?? []).map((c) => ({
+      id:   String(c.id),
+      name: c.name || `Class …${String(c.id).slice(-4)}`,
+    }));
+  } catch (err) {
+    console.warn("[classesFromCache] failed:", err.message);
+    return [];
+  }
+};
+
+const studentsFromCache = async (classId) => {
+  try {
+    const db = await getDatabase();
+    const rows = await db.getAllAsync(
+      `SELECT id, name, studentName, admissionNo, admissionNumber, email, classId, class_id
+       FROM students
+       WHERE (classId = ? OR class_id = ?)
+         AND (deleted_at IS NULL OR deleted_at = '')
+       ORDER BY COALESCE(studentName, name) ASC`,
+      [String(classId), String(classId)]
+    );
+    return (rows ?? []).map((s) => ({
+      _id:         String(s.id),
+      studentName: s.studentName || s.name || "Unknown",
+      admissionNo: s.admissionNo || s.admissionNumber || null,
+      email:       s.email || null,
+      classId:     String(s.classId || s.class_id || classId),
+    }));
+  } catch (err) {
+    console.warn("[studentsFromCache] failed:", err.message);
+    return [];
+  }
+};
+
 const fetchClasses = async (schoolId, role) => {
   try {
-    if (isAdminRole(role)) {
-      const res = await api.get("/admin/classes", { params: { schoolId } });
-      const raw =
-        res.data?.classes ||
-        res.data?.data    ||
-        (Array.isArray(res.data) ? res.data : []);
-      return raw.map((c) => ({
-        id:   String(c._id || c.id),
-        name: c.name || c.className || `Class …${String(c._id || c.id).slice(-4)}`,
-      }));
-    }
-    const res = await api.get("/teacher/my-classes");
+    const res = isAdminRole(role)
+      ? await api.get("/admin/classes", { params: { schoolId } })
+      : await api.get("/teacher/my-classes");
     const raw =
       res.data?.classes ||
       res.data?.data    ||
       (Array.isArray(res.data) ? res.data : []);
-    return raw.map((c) => ({
+    const list = raw.map((c) => ({
       id:   String(c._id || c.id),
       name: c.name || c.className || `Class …${String(c._id || c.id).slice(-4)}`,
     }));
+    if (list.length) return list;
+    return classesFromCache(schoolId);
   } catch (err) {
-    console.warn("[fetchClasses] failed:", err.message);
-    return [];
+    console.warn("[fetchClasses] network failed, using cache:", err.message);
+    return classesFromCache(schoolId);
   }
 };
 
 const fetchExamRecord = async (examId, schoolId) => {
   if (!examId) return null;
   try {
-    const res = await api.get(`/exams/${examId}`, { params: { schoolId } });
-    return res.data?.exam || res.data || null;
+    const { exam } = await ExamService.getExamById(examId, schoolId);
+    return exam || null;
   } catch (err) {
     console.warn("[fetchExamRecord] failed:", err.message);
     return null;
@@ -151,17 +198,21 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
       res.data?.students ||
       res.data?.data     ||
       (Array.isArray(res.data) ? res.data : []);
-    return raw.map((s) => ({
-      _id:         String(s._id || s.id),
-      studentName: s.studentName || s.name || "Unknown",
-      admissionNo: s.admissionNo || null,
-      email:       s.email || null,
-      classId:     String(s.classId || classId),
-    }));
+    if (raw.length > 0) {
+      return raw.map((s) => ({
+        _id:         String(s._id || s.id),
+        studentName: s.studentName || s.name || "Unknown",
+        admissionNo: s.admissionNo || null,
+        email:       s.email || null,
+        classId:     String(s.classId || classId),
+      }));
+    }
   } catch (err) {
     console.warn("[fetchStudents] roster fallback failed:", err.message);
-    return [];
   }
+
+  // Last resort: the locally synced roster.
+  return studentsFromCache(classId);
 };
 
 // ─────────────────────────────────────────────────────────
@@ -181,12 +232,10 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
       if (isRefresh) setRefreshing(true);
       else           setLoading(true);
       setError(null);
-      const res = await api.get("/exams", { params: { schoolId, limit: 50 } });
-      setExams(
-        res.data?.exams ||
-        res.data?.data  ||
-        (Array.isArray(res.data) ? res.data : [])
-      );
+      // Network-first with a SQLite fallback, so the exam picker still
+      // opens offline and the teacher can reach the mark sheet.
+      const { exams: list } = await ExamService.getExams({ schoolId, limit: 50 });
+      setExams(list || []);
     } catch (err) {
       console.error("ExamSelector load failed:", err.message);
       setError("Failed to load exams");
@@ -992,13 +1041,16 @@ const ScoreEntry = ({
     const doSave = async () => {
       try {
         setSaving(true);
-        await ExamService.saveBulkScores({
+        const saveRes = await ExamService.saveBulkScores({
           examId, classId, subjectId, examSubjectId,
           scores: records, schoolId,
         });
         Alert.alert(
-          "Saved",
-          `Scores saved for ${records.length} student(s).`,
+          saveRes?.queued ? "Saved Offline" : "Saved",
+          `Scores saved for ${records.length} student(s).` +
+          (saveRes?.queued
+            ? "\n\nStored on this device — they will upload automatically when you're back online."
+            : ""),
           [
             { text: "Enter Another Subject", onPress: () => onSaved("back") },
             { text: "Done", style: "cancel", onPress: () => onSaved("exit") },

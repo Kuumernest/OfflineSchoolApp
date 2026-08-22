@@ -18,5 +18,15 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Allow the conventional underscore throwaway. Without this the omit
+      // idiom `const { [key]: _, ...rest } = obj` is reported as an unused
+      // variable, which is the only way to express that omission in TS.
+      "@typescript-eslint/no-unused-vars": ["error", {
+        argsIgnorePattern:         "^_",
+        varsIgnorePattern:         "^_",
+        caughtErrorsIgnorePattern: "^_",
+      }],
+    },
   },
 ])

@@ -6,6 +6,7 @@ import { DocumentCard }                 from "./DocumentCard";
 import { ClassPicker }                  from "./ClassPicker";
 import { Spinner }                      from "./Spinner";
 import { formatDate }                   from "../../utils/formatDate";
+import { useTranslation } from "react-i18next";
 
 import type {
   NormalisedApplication,
@@ -97,6 +98,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   onReject,
   onClose,
 }) => {
+  const { t } = useTranslation();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(
     application.classId ? String(application.classId) : null
   );
@@ -117,7 +119,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !isBusy) onClose();
+        if (e.key === "Escape" && !isBusy) onClose();
     };
     document.addEventListener("keydown", handleKey);
     document.body.style.overflow = "hidden";
@@ -219,10 +221,10 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               id="review-modal-title"
               className="text-xl font-bold text-gray-900"
             >
-              Review Application
+              {t("admissions.review")}
             </h2>
             <p className="text-sm text-gray-500 mt-0.5">
-              Approve or reject this application
+              {t("admissions.reviewHint")}
             </p>
           </div>
           <button
@@ -232,7 +234,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                        flex items-center justify-center hover:bg-gray-100
                        transition-colors disabled:opacity-40 focus:outline-none
                        focus:ring-2 focus:ring-gray-300"
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             <SvgIcon d={PATHS.close} color="#6B7280" size={20} />
           </button>
@@ -253,7 +255,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               <button
                 onClick={() => setError(null)}
                 className="text-red-400 hover:text-red-600 focus:outline-none"
-                aria-label="Dismiss error"
+                aria-label={t("login.dismissError")}
               >
                 <SvgIcon d={PATHS.close} color="currentColor" size={16} />
               </button>
@@ -264,50 +266,50 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           <Section>
             <SectionHeader
               icon={<SvgIcon d={PATHS.person} color="#4F46E5" size={16} />}
-              title="Student Details"
+              title={t("admissions.studentDetails")}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.person}   color="#D97706" />}
-              label="Full Name"
+              label={t("common.fullName")}
               value={application.name}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.mail}     color="#4F46E5" />}
-              label="Email Address"
+              label={t("common.email")}
               value={application.email || "No email provided"}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.phone}    color="#059669" />}
-              label="Phone Number"
+              label={t("common.phone")}
               value={application.phone}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.people}   color="#4F46E5" />}
-              label="Guardian / Parent"
+              label={t("admissions.guardian")}
               value={application.guardianName}
             />
             {application.address && (
               <DetailRow
                 icon={<SvgIcon d={PATHS.home}   color="#6B7280" />}
-                label="Address"
+                label={t("common.address")}
                 value={application.address}
               />
             )}
             {application.notes && (
               <DetailRow
                 icon={<SvgIcon d={PATHS.docText} color="#6B7280" />}
-                label="Notes"
+                label={t("common.notes")}
                 value={application.notes}
               />
             )}
             <DetailRow
               icon={<SvgIcon d={PATHS.school}   color="#7C3AED" />}
-              label="Applied for Class"
+              label={t("admissions.appliedForClass")}
               value={application.className || "Not specified"}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.calendar} color="#4F46E5" />}
-              label="Applied On"
+              label={t("admissions.appliedOn")}
               value={formatDate(application.created_at)}
             />
           </Section>
@@ -316,7 +318,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           <Section>
             <SectionHeader
               icon={<SvgIcon d={PATHS.docText} color="#059669" size={16} />}
-              title="Documents"
+              title={t("common.documents")}
             />
             {application.documents.length > 0 ? (
               application.documents.map((doc, i) => (
@@ -332,7 +334,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
                               border-gray-200 rounded-xl p-3">
                 <SvgIcon d={PATHS.docEmpty} color="#9CA3AF" size={20} />
                 <span className="text-sm text-gray-500 font-medium">
-                  No documents attached
+                  {t("admissions.noDocuments")}
                 </span>
               </div>
             )}
@@ -342,7 +344,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           <Section>
             <SectionHeader
               icon={<SvgIcon d={PATHS.school} color="#4F46E5" size={16} />}
-              title="Assign Class Upon Approval"
+              title={t("admissions.assignClass")}
             />
 
             {classes.length === 0 ? (
@@ -374,7 +376,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
           <Section>
             <SectionHeader
               icon={<SvgIcon d={PATHS.chat} color="#DC2626" size={16} />}
-              title="Rejection Reason"
+              title={t("admissions.rejectionReason")}
               suffix={
                 <span className="text-xs text-gray-400 font-normal">
                   (Optional)
@@ -384,7 +386,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Write a reason for rejection…"
+              placeholder={t("admissions.rejectionPh")}
               rows={3}
               disabled={isBusy}
               className="w-full bg-gray-50 border border-gray-200 rounded-xl
@@ -410,7 +412,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               ) : (
                 <>
                   <SvgIcon d={PATHS.closeCirc} color="#fff" size={18} />
-                  Reject
+                  {t("exams.reject")}
                 </>
               )}
             </button>
@@ -429,7 +431,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               ) : (
                 <>
                   <SvgIcon d={PATHS.checkCirc} color="#fff" size={18} />
-                  Approve
+                  {t("exams.approve")}
                 </>
               )}
             </button>

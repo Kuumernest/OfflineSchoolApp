@@ -7,8 +7,8 @@ import {
   Plus, FileText, Clock, CheckCircle, AlertCircle,
   TrendingUp, Filter, Search, RefreshCw, Bell,
   Calendar, BarChart2, ChevronLeft, ChevronRight,
-  Download, Copy, Archive, X, MoreVertical,
-  BookOpen, Users, AlertTriangle,
+  X, MoreVertical,
+  BookOpen, AlertTriangle,
 } from "lucide-react";
 import {
   useExams,
@@ -20,7 +20,8 @@ import { useAuthStore }       from "@/store/auth.store";
 import { EXAM_STATUS_META }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/api";
-import toast                  from "react-hot-toast";
+import { useToast }           from "@/components/ui/Toast";
+import { useTranslation } from "react-i18next";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ const fmtDate = (d?: string | null) => {
 };
 
 const daysUntil = (dateStr?: string | null) => {
-  if (!dateStr) return null;
+    if (!dateStr) return null;
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const d     = new Date(dateStr + "T00:00:00");
   return Math.round((d.getTime() - today.getTime()) / 86_400_000);
@@ -98,8 +99,10 @@ const daysUntil = (dateStr?: string | null) => {
 const sortExams = (exams: Exam[], sortBy: string): Exam[] => {
   const [field, dir] = sortBy.split("_");
   return [...exams].sort((a, b) => {
-    let av = (a as Record<string, unknown>)[field] as string ?? "";
-    let bv = (b as Record<string, unknown>)[field] as string ?? "";
+    // Exam has no index signature, so TS refuses the direct cast; going via
+    // unknown is the sanctioned way to say "index this by a runtime key".
+    let av = ((a as unknown as Record<string, unknown>)[field] as string) ?? "";
+    let bv = ((b as unknown as Record<string, unknown>)[field] as string) ?? "";
     if (field === "createdAt" || field === "startDate") {
       av = av || ""; bv = bv || "";
     }
@@ -171,6 +174,7 @@ const AlertsPanel = ({
   alerts:  AlertItem[];
   onClose: () => void;
 }) => {
+  const { t } = useTranslation();
   const iconMap = {
     conflict: <AlertTriangle className="w-4 h-4 text-red-500"    />,
     reminder: <Bell          className="w-4 h-4 text-blue-500"   />,
@@ -191,7 +195,7 @@ const AlertsPanel = ({
                       border-b border-gray-100 bg-gray-50">
         <div className="flex items-center gap-2">
           <Bell className="w-4 h-4 text-gray-500" />
-          <span className="text-sm font-semibold text-gray-900">Alerts</span>
+          <span className="text-sm font-semibold text-gray-900">{t("exams.alerts")}</span>
           {alerts.length > 0 && (
             <span className="bg-red-500 text-white text-xs rounded-full
                              w-5 h-5 flex items-center justify-center font-bold">
@@ -247,6 +251,8 @@ const QuickActionsMenu = ({
   onArchiveCompleted: () => void;
   schoolId:           string;
 }) => {
+  const { toast } = useToast();
+
   const navigate = useNavigate();
 
   const actions = [
@@ -269,7 +275,7 @@ const QuickActionsMenu = ({
           a.click();
           URL.revokeObjectURL(url);
         } catch {
-          toast.error("Export failed — try again");
+          toast({ title: "Export failed — try again", kind: "error" });
         }
         onClose();
       },
@@ -322,6 +328,7 @@ const ExamRow = ({
   canManage:      boolean;
   index:          number;
 }) => {
+  const { t } = useTranslation();
   const navigate  = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef                 = useRef<HTMLDivElement>(null);
@@ -404,7 +411,7 @@ const ExamRow = ({
             className="text-xs font-semibold text-primary-600 hover:text-primary-700
                        bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-lg
                        transition-colors whitespace-nowrap">
-            View
+            {t("common.view")}
           </Link>
 
           {canManage && (
@@ -483,7 +490,6 @@ const CalendarView = ({
 
   // Map exam start dates to this month
   const byDate = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, "0");
     const map: Record<string, Exam[]> = {};
     for (const e of exams) {
       if (!e.startDate) continue;
@@ -615,6 +621,7 @@ const TimelineView = ({
   exams:       Exam[];
   onExamClick: (e: Exam) => void;
 }) => {
+  const { t } = useTranslation();
   // Group by subject/name prefix
   const byType = useMemo(() => {
     const map: Record<string, { label: string; exams: Exam[] }> = {};
@@ -637,8 +644,8 @@ const TimelineView = ({
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm">
         <div className="flex flex-col items-center justify-center py-20 text-gray-400">
           <BarChart2 className="w-12 h-12 mb-3 text-gray-200" />
-          <p className="font-medium text-gray-500">No exams with dates to display</p>
-          <p className="text-sm mt-1">Add start dates to your exams to see the timeline</p>
+          <p className="font-medium text-gray-500">{t("exams.noDates")}</p>
+          <p className="text-sm mt-1">{t("exams.addDates")}</p>
         </div>
       </div>
     );
@@ -680,7 +687,7 @@ const TimelineView = ({
           <div className="flex border-b border-gray-100 bg-gray-50">
             <div className="w-36 shrink-0 px-4 py-3 text-xs font-semibold
                             text-gray-400 uppercase tracking-wide">
-              Type
+              {t("common.type")}
             </div>
             <div className="flex-1 relative h-10">
               {monthMarkers.map((m) => (
@@ -748,6 +755,7 @@ const ExamDetailSlideOver = ({
   onStatusChange: (id: string, status: ExamStatus) => void;
   canManage:      boolean;
 }) => {
+  const { t } = useTranslation();
   const navigate     = useNavigate();
   const nextStatuses = STATUS_TRANSITIONS[exam.status] ?? [];
 
@@ -802,7 +810,7 @@ const ExamDetailSlideOver = ({
           {exam.description && (
             <div className="bg-gray-50 rounded-xl p-4">
               <p className="text-xs font-semibold text-gray-400 uppercase mb-1">
-                Description
+                {t("common.description")}
               </p>
               <p className="text-sm text-gray-700 leading-relaxed">{exam.description}</p>
             </div>
@@ -812,7 +820,7 @@ const ExamDetailSlideOver = ({
           {exam.instructions && (
             <div className="bg-amber-50 rounded-xl p-4">
               <p className="text-xs font-semibold text-amber-600 uppercase mb-1">
-                Instructions
+                {t("common.instructions")}
               </p>
               <p className="text-sm text-amber-900 leading-relaxed">{exam.instructions}</p>
             </div>
@@ -822,7 +830,7 @@ const ExamDetailSlideOver = ({
           {canManage && nextStatuses.length > 0 && (
             <div className="pt-2 border-t border-gray-100">
               <p className="text-xs font-semibold text-gray-400 uppercase mb-2">
-                Move to
+                {t("exams.moveTo")}
               </p>
               <div className="flex flex-wrap gap-2">
                 {nextStatuses.map((s) => {
@@ -848,14 +856,14 @@ const ExamDetailSlideOver = ({
           <button onClick={() => { navigate(`/exams/${exam._id}`); onClose(); }}
             className="flex-1 py-2 bg-primary-600 text-white rounded-xl text-sm
                        font-semibold hover:bg-primary-700 transition-colors">
-            Open Exam
+            {t("exams.openExam")}
           </button>
           {canManage && (
             <button
               onClick={() => { navigate(`/exams/${exam._id}?tab=marks`); onClose(); }}
               className="flex-1 py-2 bg-indigo-50 text-indigo-700 rounded-xl
                          text-sm font-semibold hover:bg-indigo-100 transition-colors">
-              Enter Marks
+              {t("exams.enterMarks")}
             </button>
           )}
         </div>
@@ -871,7 +879,8 @@ const ExamDetailSlideOver = ({
 const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
 
 export default function ExamsPage() {
-  const navigate  = useNavigate();
+  const { t } = useTranslation();
+  const { toast } = useToast();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId ?? "";
   const canManage = ADMIN_ROLES.has(user?.role ?? "");
@@ -896,7 +905,6 @@ export default function ExamsPage() {
   const [alerts,          setAlerts]          = useState<AlertItem[]>([]);
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [subjects,        setSubjects]        = useState<SubjectOption[]>([]);
-  const [availableTerms,  setAvailableTerms]  = useState<string[]>([]);
   const [availableTypes,  setAvailableTypes]  = useState<string[]>([]);
 
   const quickMenuRef = useRef<HTMLDivElement>(null);
@@ -933,7 +941,6 @@ export default function ExamsPage() {
   // ── Derive filter options from loaded exams ───────────────────────────────
   useEffect(() => {
     const exams = examsData?.exams ?? [];
-    setAvailableTerms([...new Set(exams.map((e) => e.term).filter(Boolean))]);
     setAvailableTypes([...new Set(exams.map((e) => e.type).filter(Boolean))]);
   }, [examsData]);
 
@@ -1042,7 +1049,7 @@ export default function ExamsPage() {
 
   const handleArchiveCompleted = useCallback(async () => {
     const completed = (examsData?.exams ?? []).filter((e) => e.status === "completed");
-    if (!completed.length) { toast("No completed exams to archive"); return; }
+    if (!completed.length) { toast({ title: "No completed exams to archive", kind: "info" }); return; }
     if (!window.confirm(`Archive ${completed.length} completed exam(s)?`)) return;
 
     let count = 0;
@@ -1052,7 +1059,7 @@ export default function ExamsPage() {
         count++;
       } catch { /* continue */ }
     }
-    toast.success(`Archived ${count} exam(s)`);
+    toast({ title: `Archived ${count} exam(s)`, kind: "success" });
     refetch();
     refetchDash();
   }, [examsData, schoolId, refetch, refetchDash]);
@@ -1093,9 +1100,9 @@ export default function ExamsPage() {
       {/* ── Page Header ─────────────────────────────────────────────────── */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Exams & Results</h1>
+          <h1 className="text-2xl font-bold text-gray-900">{t("exams.title")}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            Manage examinations, mark entry and result publishing
+            {t("exams.blurb")}
           </p>
         </div>
 
@@ -1104,7 +1111,7 @@ export default function ExamsPage() {
           <button onClick={handleRefresh}
             className="p-2 border border-gray-200 rounded-xl bg-white
                        hover:bg-gray-50 transition-colors"
-            title="Refresh">
+            title={t("common.refresh")}>
             <RefreshCw className={`w-4 h-4 text-gray-500
               ${isLoading ? "animate-spin" : ""}`} />
           </button>
@@ -1114,7 +1121,7 @@ export default function ExamsPage() {
             <button onClick={() => setShowAlerts((v) => !v)}
               className="relative p-2 border border-gray-200 rounded-xl bg-white
                          hover:bg-gray-50 transition-colors"
-              title="Alerts">
+              title={t("exams.alerts")}>
               <Bell className="w-4 h-4 text-gray-500" />
               {alerts.length > 0 && (
                 <span className="absolute -top-1 -right-1 bg-red-500 text-white
@@ -1151,7 +1158,7 @@ export default function ExamsPage() {
               <button onClick={() => setShowQuickMenu((v) => !v)}
                 className="p-2 border border-gray-200 rounded-xl bg-white
                            hover:bg-gray-50 transition-colors"
-                title="Quick actions">
+                title={t("dashboard.quickActions")}>
                 <MoreVertical className="w-4 h-4 text-gray-500" />
               </button>
               {showQuickMenu && (
@@ -1171,7 +1178,7 @@ export default function ExamsPage() {
                          hover:bg-primary-700 text-white px-4 py-2.5 rounded-xl
                          font-semibold text-sm transition-colors shadow-sm">
               <Plus className="w-4 h-4" />
-              New Exam
+              {t("exams.new")}
             </Link>
           )}
         </div>
@@ -1181,43 +1188,43 @@ export default function ExamsPage() {
       {d && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <StatCard
-            label="Total"     value={d.total}
+            label={t("common.total")}     value={d.total}
             icon={FileText}   color="bg-gray-100 text-gray-600"
             highlight={statusFilter === "all"}
             onClick={() => setStatusFilter("all")}
           />
           <StatCard
-            label="Draft"     value={d.draft}
+            label={t("examStatus.draft")}     value={d.draft}
             icon={FileText}   color="bg-gray-100 text-gray-400"
             highlight={statusFilter === "draft"}
             onClick={() => setStatusFilter("draft")}
           />
           <StatCard
-            label="Scheduled" value={d.scheduled}
+            label={t("examStatus.scheduled")} value={d.scheduled}
             icon={Clock}      color="bg-indigo-50 text-indigo-600"
             highlight={statusFilter === "scheduled"}
             onClick={() => setStatusFilter("scheduled")}
           />
           <StatCard
-            label="Ongoing"   value={d.ongoing}
+            label={t("examStatus.ongoing")}   value={d.ongoing}
             icon={AlertCircle}color="bg-amber-50 text-amber-600"
             highlight={statusFilter === "ongoing"}
             onClick={() => setStatusFilter("ongoing")}
           />
           <StatCard
-            label="Completed" value={d.completed}
+            label={t("examStatus.completed")} value={d.completed}
             icon={CheckCircle}color="bg-green-50 text-green-600"
             highlight={statusFilter === "completed"}
             onClick={() => setStatusFilter("completed")}
           />
           <StatCard
-            label="Published" value={d.published}
+            label={t("results.published")} value={d.published}
             icon={TrendingUp} color="bg-purple-50 text-purple-600"
             highlight={statusFilter === "published"}
             onClick={() => setStatusFilter("published")}
           />
           <StatCard
-            label="Pass Rate"
+            label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
             icon={BookOpen}   color="bg-teal-50 text-teal-600"
             sub="school avg"
@@ -1229,14 +1236,14 @@ export default function ExamsPage() {
       {dashData?.dashboard?.results && (
         <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-4">
-            <h3 className="text-sm font-semibold text-gray-700">Results Overview</h3>
+            <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
             <div className="flex flex-wrap gap-6">
               {[
-                { label: "Published",      value: dashData.dashboard.results.published,          color: "text-purple-600" },
+                { label: t("results.published"),      value: dashData.dashboard.results.published,          color: "text-purple-600" },
                 { label: "Pending",        value: dashData.dashboard.results.pending,             color: "text-amber-600"  },
                 { label: "Missing Grades", value: dashData.dashboard.results.missingGrades,       color: "text-red-600"    },
                 { label: "Avg Score",      value: `${dashData.dashboard.results.averagePerformance}%`, color: "text-green-600" },
-                { label: "Pass Rate",      value: `${dashData.dashboard.results.passRate}%`,       color: "text-primary-600"},
+                { label: t("exams.passRate"),      value: `${dashData.dashboard.results.passRate}%`,       color: "text-primary-600"},
               ].map((item) => (
                 <div key={item.label} className="text-center">
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
@@ -1259,7 +1266,7 @@ export default function ExamsPage() {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search exams…"
+              placeholder={t("exams.searchPh")}
               className="w-full pl-9 pr-3 py-2 border border-gray-200 rounded-lg
                          text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
@@ -1319,7 +1326,7 @@ export default function ExamsPage() {
             <select value={classFilter} onChange={(e) => setClassFilter(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
-              <option value="">All classes</option>
+              <option value="">{t("exams.allClasses")}</option>
               {classes.map((c) => (
                 <option key={c._id} value={c._id}>{c.name}</option>
               ))}
@@ -1329,7 +1336,7 @@ export default function ExamsPage() {
             <select value={subjectFilter} onChange={(e) => setSubjectFilter(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
-              <option value="">All subjects</option>
+              <option value="">{t("exams.allSubjects")}</option>
               {subjects.map((s) => (
                 <option key={s._id} value={s._id}>{s.name}</option>
               ))}
@@ -1339,7 +1346,7 @@ export default function ExamsPage() {
             <select value={termFilter} onChange={(e) => setTermFilter(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
-              <option value="">All terms</option>
+              <option value="">{t("exams.allTerms")}</option>
               {["Term 1","Term 2","Term 3","Full Year"].map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
@@ -1349,7 +1356,7 @@ export default function ExamsPage() {
             <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
-              <option value="">All types</option>
+              <option value="">{t("exams.allTypes")}</option>
               {availableTypes.map((t) => (
                 <option key={t} value={t}>{EXAM_TYPE_LABELS[t] ?? t}</option>
               ))}
@@ -1360,7 +1367,7 @@ export default function ExamsPage() {
               onChange={(e) => setDateFrom(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="From date"
+              placeholder={t("common.fromDate")}
             />
 
             {/* Date to */}
@@ -1368,7 +1375,7 @@ export default function ExamsPage() {
               onChange={(e) => setDateTo(e.target.value)}
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="To date"
+              placeholder={t("common.toDate")}
             />
 
             {/* Clear filters */}
@@ -1378,7 +1385,7 @@ export default function ExamsPage() {
                            text-red-600 hover:text-red-700 font-semibold
                            justify-center pt-1">
                 <X className="w-3 h-3" />
-                Clear all filters
+                {t("common.clearAllFilters")}
               </button>
             )}
           </div>
@@ -1397,7 +1404,7 @@ export default function ExamsPage() {
                             justify-center mx-auto mb-4">
               <FileText className="w-8 h-8 text-gray-300" />
             </div>
-            <p className="font-semibold text-gray-700">No exams found</p>
+            <p className="font-semibold text-gray-700">{t("exams.none")}</p>
             <p className="text-gray-400 text-sm mt-1">
               {activeFilterCount > 0
                 ? "Try adjusting or clearing your filters"
@@ -1407,7 +1414,7 @@ export default function ExamsPage() {
             {activeFilterCount > 0 && (
               <button onClick={clearFilters}
                 className="mt-3 text-sm text-primary-600 font-semibold hover:underline">
-                Clear filters
+                {t("common.clearFilters")}
               </button>
             )}
             {canManage && !activeFilterCount && (
@@ -1415,7 +1422,7 @@ export default function ExamsPage() {
                 className="inline-flex items-center gap-2 mt-4 bg-primary-600
                            text-white px-4 py-2 rounded-xl text-sm font-semibold
                            hover:bg-primary-700 transition-colors">
-                <Plus className="w-4 h-4" /> Create Exam
+                <Plus className="w-4 h-4" /> {t("exams.create")}
               </Link>
             )}
           </div>
@@ -1444,12 +1451,12 @@ export default function ExamsPage() {
                 <tr className="bg-gray-50 text-xs font-semibold text-gray-500
                                uppercase tracking-wide border-b border-gray-100">
                   <th className="px-4 py-3 text-left w-8">#</th>
-                  <th className="px-4 py-3 text-left">Exam</th>
-                  <th className="px-4 py-3 text-left">Class</th>
-                  <th className="px-4 py-3 text-left">Dates</th>
-                  <th className="px-4 py-3 text-left">Status</th>
-                  <th className="px-4 py-3 text-left">Marks</th>
-                  <th className="px-4 py-3 text-left">Actions</th>
+                  <th className="px-4 py-3 text-left">{t("academic.exam")}</th>
+                  <th className="px-4 py-3 text-left">{t("academic.class")}</th>
+                  <th className="px-4 py-3 text-left">{t("common.dates")}</th>
+                  <th className="px-4 py-3 text-left">{t("common.status")}</th>
+                  <th className="px-4 py-3 text-left">{t("exams.marks")}</th>
+                  <th className="px-4 py-3 text-left">{t("common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">

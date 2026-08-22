@@ -1,28 +1,20 @@
 // app/index.js
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect } from "react";
 import { useRouter, useRootNavigationState } from "expo-router";
 import { View, ActivityIndicator, StatusBar } from "react-native";
 
 import { useAuthStore } from "../src/store/auth.store";
 import { getRoleRoute } from "../src/services/routes";
-import { SyncManager } from "../src/services/syncManager";
 
 export default function Index() {
   const router              = useRouter();
   const rootNavigationState = useRootNavigationState();
 
   const user           = useAuthStore((state) => state.user);
-  const token          = useAuthStore((state) => state.token);
   const initAuth       = useAuthStore((state) => state.initAuth);
   const isLoading      = useAuthStore((state) => state.isLoading);
   const hasInitialized = useAuthStore((state) => state.hasInitialized);
-  const setSyncError   = useAuthStore((state) => state.setSyncError);
-
-  // ── Tracks whether sync has been started for the current session.
-  // Stored in a ref so changing it never triggers a re-render.
-  // Reset whenever the user identity changes (logout → new login).
-  const syncStarted = useRef(false);
 
   // ─────────────────────────────────────────────────────────
   // 1. Initialise auth store once on mount
@@ -33,46 +25,13 @@ export default function Index() {
     }
   }, [initAuth, hasInitialized]);
 
-  // ─────────────────────────────────────────────────────────
-  // 2. Reset sync gate when the logged-in user changes.
-  //    Without this, a second user logging in on the same
-  //    device would skip sync because the ref still holds
-  //    true from the previous session.
-  // ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    syncStarted.current = false;
-  }, [user?.id]);
+  // NOTE: starting the sync engine used to live here. It moved to
+  // app/_layout.js — index is a route, and the flows that replace straight to
+  // a role dashboard (auth/set-password, and the layout's own auth-group
+  // redirect) never mount it, so those sessions never got a sync engine.
 
   // ─────────────────────────────────────────────────────────
-  // 3. Start background sync.
-  //    Blocked until:
-  //      • A user and token exist
-  //      • The user has set their permanent password
-  //      • Sync has not already been started this session
-  // ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!user || !token)        return;
-    if (user.mustResetPassword) return; // password wall — no data access yet
-    if (syncStarted.current)    return;
-
-    syncStarted.current = true;
-    console.log("🔄 Starting full sync…");
-
-    SyncManager.syncAll().catch((error) => {
-      console.error("⚠️ Sync failed:", error.message);
-
-      // Surface the failure so the UI can warn the user that
-      // data may be stale.
-      if (typeof setSyncError === "function") {
-        setSyncError(
-          "Data sync failed. Some information may be outdated."
-        );
-      }
-    });
-  }, [user, token, setSyncError]);
-
-  // ─────────────────────────────────────────────────────────
-  // 4. Navigate based on auth state (runs after every relevant
+  // 2. Navigate based on auth state (runs after every relevant
   //    state change; no-ops until navigation is ready).
   // ─────────────────────────────────────────────────────────
   useEffect(() => {

@@ -1212,181 +1212,27 @@ export const getTeacherAnnouncementClasses = async () => {
 // Retries pending reads, acks, and create/update/delete operations.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Queues every pending announcement change, then lets the shared outbox
+ * send it.
+ *
+ * This used to POST/PUT/DELETE the dirty rows itself and flush read and
+ * acknowledge receipts inline, each with its own ad-hoc status handling.
+ * That was a parallel write path with retry rules of its own. The backfill
+ * sweep now produces the same mutations — receipts marked `silent`, so a
+ * failed read-receipt never surfaces as "your work didn't save" — and
+ * MutationQueue sends them.
+ */
 export const pushUnsyncedAnnouncements = async () => {
   if (!(await canSync())) return;
 
-  const db   = await getDatabase();
-  await ensureTable(db);
-  const user = getCurrentUser();
-
-  // ── Retry pending reads ───────────────────────────────────────────────────
   try {
-    const pendingReads = await db.getAllAsync(
-      "SELECT id, updated_at FROM announcements WHERE _read_pending = 1"
-    );
-
-    for (const row of pendingReads || []) {
-      // ✅ Drop items older than 24 h — they are stale and will never self-heal
-      const age = Date.now() - new Date(row.updated_at || 0).getTime();
-      if (age > 24 * 60 * 60 * 1000) {
-        await db.runAsync(
-          "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
-          [row.id]
-        );
-        continue;
-      }
-
-      const endpoint = isStudent(user)
-        ? `/students/announcements/${row.id}/read`
-        : `/announcements/${row.id}/read`;
-
-      try {
-        await api.post(endpoint);
-        await db.runAsync(
-          "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
-          [row.id]
-        );
-      } catch (err) {
-        const status = err?.response?.status;
-        if (status === 404) {
-          await db.runAsync(
-            "DELETE FROM announcements WHERE id = ?",
-            [row.id]
-          );
-        } else if (status === 409) {
-          await db.runAsync(
-            "UPDATE announcements SET _read_pending = 0 WHERE id = ?",
-            [row.id]
-          );
-        } else if (status === 401 || status === 403) {
-          // Auth broken — stop retrying all reads this session
-          console.warn("[pushReads] auth error — stopping read flush");
-          break;
-        } else {
-          console.warn(`[pushReads] retry failed for ${row.id}:`, err.message);
-        }
-      }
-    }
+    const { backfillOutbox } = require("./syncBackfill.service");
+    const { MutationQueue }  = require("./mutationQueue.service");
+    await backfillOutbox();
+    await MutationQueue.drain({ includeUploads: false });
   } catch (err) {
-    console.warn("[pushUnsyncedAnnouncements] pendingReads failed:", err.message);
-  }
-
-  // ── Retry pending acknowledges ────────────────────────────────────────────
-  try {
-    const pendingAcks = await db.getAllAsync(
-      "SELECT id, updated_at FROM announcements WHERE _ack_pending = 1"
-    );
-
-    for (const row of pendingAcks || []) {
-      const age = Date.now() - new Date(row.updated_at || 0).getTime();
-      if (age > 24 * 60 * 60 * 1000) {
-        await db.runAsync(
-          "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
-          [row.id]
-        );
-        continue;
-      }
-
-      const endpoint = isStudent(user)
-        ? `/students/announcements/${row.id}/acknowledge`
-        : `/announcements/${row.id}/acknowledge`;
-
-      try {
-        await api.post(endpoint);
-        await db.runAsync(
-          "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
-          [row.id]
-        );
-      } catch (err) {
-        const status = err?.response?.status;
-        if (status === 404) {
-          await db.runAsync(
-            "DELETE FROM announcements WHERE id = ?",
-            [row.id]
-          );
-        } else if (status === 409) {
-          await db.runAsync(
-            "UPDATE announcements SET _ack_pending = 0 WHERE id = ?",
-            [row.id]
-          );
-        } else if (status === 401 || status === 403) {
-          console.warn("[pushAcks] auth error — stopping ack flush");
-          break;
-        } else {
-          console.warn(`[pushAcks] retry failed for ${row.id}:`, err.message);
-        }
-      }
-    }
-  } catch (err) {
-    console.warn("[pushUnsyncedAnnouncements] pendingAcks failed:", err.message);
-  }
-
-  // ── Push unsynced create / update / delete ────────────────────────────────
-  if (!isAdmin(user) && !isTeacher(user)) return;
-
-  const endpoint = getPushEndpoint(user);
-  if (!endpoint) return;
-
-  let dirty = [];
-  try {
-    dirty = await db.getAllAsync(
-      "SELECT * FROM announcements WHERE _synced = 0 AND _operation IS NOT NULL"
-    );
-  } catch (err) {
-    console.warn("[pushUnsyncedAnnouncements] dirty query failed:", err.message);
-    return;
-  }
-
-  for (const row of dirty) {
-    try {
-      const op  = row._operation;
-      const now = new Date().toISOString();
-
-      if (op === "create") {
-        await api.post(endpoint, {
-          id:            row.id,
-          title:         row.title,
-          body:          row.body,
-          audience:      row.audience,
-          targetClasses: safeJsonParse(row.target_classes, []),
-          priority:      row.priority,
-          isPinned:      row.is_pinned === 1,
-          publishAt:     row.publish_at,
-          expiresAt:     row.expires_at,
-        });
-      } else if (op === "update") {
-        await api.put(`${endpoint}/${row.id}`, {
-          title:         row.title,
-          body:          row.body,
-          audience:      row.audience,
-          targetClasses: safeJsonParse(row.target_classes, []),
-          priority:      row.priority,
-          isPinned:      row.is_pinned === 1,
-        });
-      } else if (op === "delete") {
-        await api.delete(`${endpoint}/${row.id}`);
-      }
-
-      await db.runAsync(
-        `UPDATE announcements
-         SET _synced = 1, _synced_at = ?, _operation = NULL
-         WHERE id = ?`,
-        [now, row.id]
-      );
-    } catch (err) {
-      const status = err?.response?.status;
-      if (status === 409 || status === 404) {
-        await db.runAsync(
-          "UPDATE announcements SET _synced = 1, _operation = NULL WHERE id = ?",
-          [row.id]
-        );
-      } else {
-        console.warn(
-          `[pushUnsyncedAnnouncements] failed for ${row.id}:`,
-          err.message
-        );
-      }
-    }
+    console.warn("[announcements] pushUnsyncedAnnouncements failed:", err.message);
   }
 };
 

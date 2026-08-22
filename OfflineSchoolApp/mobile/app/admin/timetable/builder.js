@@ -18,31 +18,37 @@ import { SubjectService } from "../../../src/services/subject.service";
 import timetableService, {
   pushUnsyncedTimetableSlots,
   syncTimetableFromServer,
+}                         from "../../../src/services/timetableService";
+
+// ✅ canonicalDay and VALID_DAYS now live in timetableMappers — import from there
+import {
   canonicalDay,
-} from "../../../src/services/timetableService";
+  VALID_DAYS,
+}                         from "../../../src/utils/timetableMappers";
+
 import SlotEditorModal from "./components/SlotEditorModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 /**
- * DAYS uses full canonical names so they match the values that
- * timetableService stores in SQLite (always full lowercase).
+ * DAYS uses the canonical uppercase 3-letter keys that match the Mongoose enum
+ * ("MON", "TUE" … "SUN") and what timetableService stores in SQLite after the
+ * repairLegacyDayNames migration.
+ *
  * The label field is for display only.
  */
 const DAYS = [
-  { key: "monday",    label: "Mon" },
-  { key: "tuesday",   label: "Tue" },
-  { key: "wednesday", label: "Wed" },
-  { key: "thursday",  label: "Thu" },
-  { key: "friday",    label: "Fri" },
+  { key: "MON", label: "Mon" },
+  { key: "TUE", label: "Tue" },
+  { key: "WED", label: "Wed" },
+  { key: "THU", label: "Thu" },
+  { key: "FRI", label: "Fri" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 /**
  * Resolves a display name for a slot's related entity (subject / teacher).
- * Uses an options object instead of positional parameters to prevent
- * accidental transposition at call sites.
  */
 const resolveName = (slot, { objectKey, nameKey, idKey, altIdKey }, lookupMap) => {
   if (slot[nameKey] && typeof slot[nameKey] === "string") return slot[nameKey];
@@ -69,8 +75,6 @@ export default function AdminTimetableBuilder() {
   const mountedRef = useRef(true);
   const initialLoadDoneRef = useRef(false);
 
-  // Keep a ref in sync with selectedClassId so loadInitialData
-  // can check it without capturing it as a dependency.
   const selectedClassIdRef = useRef(null);
 
   const [classes,    setClasses]    = useState([]);
@@ -91,7 +95,7 @@ export default function AdminTimetableBuilder() {
   const [selectedCell, setSelectedCell] = useState(null);
   const [selectedSlot, setSelectedSlot] = useState(null);
 
-  // Keep ref in sync
+  // Keep ref in sync with state
   useEffect(() => {
     selectedClassIdRef.current = selectedClassId;
   }, [selectedClassId]);
@@ -116,22 +120,10 @@ export default function AdminTimetableBuilder() {
   }, []);
 
   // ── Lookup maps ─────────────────────────────────────────────────────────────
-  /**
-   * Builds subject and teacher Maps keyed by their server ID string.
-   *
-   * Subject names were previously missing because SubjectService.getAll()
-   * is only called by SlotEditorModal — it never ran during grid load.
-   * This function now detects an empty subjectMap and triggers a subject
-   * sync so the grid always has names to display.
-   */
   const buildLookupMaps = useCallback(async (db) => {
     let newSubjectMap = new Map();
     let newTeacherMap = new Map();
 
-    /**
-     * Returns the actual PRIMARY KEY column name for a table.
-     * Checks the SQLite pk flag first, then falls back to common names.
-     */
     const resolvePkCol = (cols) =>
       (cols || []).find((c) => c.pk === 1)?.name
       || (cols || []).find((c) => c.name === "_id")?.name
@@ -154,12 +146,10 @@ export default function AdminTimetableBuilder() {
 
         let rows = await readSubjects();
 
-        // If the local subjects table is empty, pull from the server now
-        // so the grid has subject names to display immediately.
         if (!rows.length) {
           console.warn("[timetable] subjectMap empty — syncing subjects from server…");
           try {
-            await SubjectService.getAll();   // persists server subjects locally
+            await SubjectService.getAll();
             rows = await readSubjects();
           } catch (syncErr) {
             console.warn("[timetable] Subject sync failed:", syncErr.message);
@@ -167,9 +157,7 @@ export default function AdminTimetableBuilder() {
         }
 
         rows.forEach((s) => {
-          if (s.pk && s.name) {
-            newSubjectMap.set(String(s.pk).trim(), s.name);
-          }
+          if (s.pk && s.name) newSubjectMap.set(String(s.pk).trim(), s.name);
         });
         console.log(`🗂️ subjectMap: ${newSubjectMap.size} entries`);
       }
@@ -192,9 +180,7 @@ export default function AdminTimetableBuilder() {
         ).catch(() => []);
 
         rows.forEach((t) => {
-          if (t.pk && t.name) {
-            newTeacherMap.set(String(t.pk).trim(), t.name);
-          }
+          if (t.pk && t.name) newTeacherMap.set(String(t.pk).trim(), t.name);
         });
         console.log(`🗂️ teacherMap: ${newTeacherMap.size} entries`);
       }
@@ -270,7 +256,6 @@ export default function AdminTimetableBuilder() {
       setSubjectMap(newSubjectMap);
       setTeacherMap(newTeacherMap);
 
-      // Use the ref so this callback does not depend on selectedClassId state
       if (activeClasses.length > 0 && !selectedClassIdRef.current) {
         setSelectedClassId(activeClasses[0].id);
       }
@@ -293,7 +278,7 @@ export default function AdminTimetableBuilder() {
     loadInitialData();
   }, []);
 
-  // ── Focus effect — lightweight refresh, push only when pending ──────────────
+  // ── Focus effect ────────────────────────────────────────────────────────────
   useFocusEffect(
     useCallback(() => {
       if (!initialLoadDoneRef.current) return;
@@ -315,16 +300,14 @@ export default function AdminTimetableBuilder() {
     if (selectedClassId) loadSlots();
   }, [selectedClassId]);
 
-  // ── After slots load, rebuild lookup maps so new subjects are captured ───────
-  //    This handles the case where slots were synced AFTER the initial map build.
+  // ── Rebuild lookup maps if any slot has a missing subject name ───────────────
   useEffect(() => {
     if (!slots.length) return;
 
     const rebuildIfNeeded = async () => {
-      // Check if any slot's subjectId is missing from the current map
       const missingSubject = slots.some((s) => {
-        const sid = s.subjectId ? String(s.subjectId).trim() :
-                    s.subject_id ? String(s.subject_id).trim() : null;
+        const sid = s.subjectId   ? String(s.subjectId).trim()   :
+                    s.subject_id  ? String(s.subject_id).trim()  : null;
         return sid && !subjectMap.has(sid);
       });
 
@@ -379,22 +362,30 @@ export default function AdminTimetableBuilder() {
   );
 
   /**
-   * Builds a Map keyed by "day|periodId" for O(1) grid cell lookup.
+   * Builds a Map keyed by "DAY|periodId" for O(1) grid cell lookup.
    *
-   * Subject names were previously "—" because subjectMap was built before
-   * subjects were synced. Now:
-   *  1. buildLookupMaps forces a subject sync if the map would be empty.
-   *  2. The effect above rebuilds the map if any slot still has a missing name.
-   *  3. resolveName trims IDs before lookup to prevent whitespace mismatches.
+   * canonicalDay is now imported from timetableMappers and returns
+   * "MON", "TUE" etc. — matching the DAYS[].key values above.
    */
   const slotMap = useMemo(() => {
     const map = new Map();
 
     slots.forEach((s) => {
-      const dayKey = s.dayOfWeek   ? canonicalDay(s.dayOfWeek)   :
-                     s.day_of_week ? canonicalDay(s.day_of_week) : null;
-      const periodKey = s.periodId || s.period_id || null;
-      if (!dayKey || !periodKey) return;
+      // Accept both camelCase (JS objects from service) and snake_case (raw SQLite rows)
+      const rawDay    = s.dayOfWeek   ?? s.day_of_week   ?? null;
+      const rawPeriod = s.periodId    ?? s.period_id      ?? null;
+
+      // canonicalDay returns "MON","TUE" … or null if unresolvable
+      const dayKey    = rawDay    ? canonicalDay(rawDay)          : null;
+      const periodKey = rawPeriod ? String(rawPeriod).trim()      : null;
+
+      if (!dayKey || !periodKey) {
+        console.warn(
+          "[timetable] slotMap: skipping slot — missing day or period",
+          { id: s._id || s.id, rawDay, rawPeriod }
+        );
+        return;
+      }
 
       // Normalise IDs — trim whitespace so map lookups never silently miss
       const rawSubjectId =
@@ -407,7 +398,6 @@ export default function AdminTimetableBuilder() {
         (s.teacher_id ? String(s.teacher_id).trim() : null) ||
         null;
 
-      // Direct map lookup first (fastest path), then fall through to resolveName
       const subjectName =
         (rawSubjectId && subjectMap.get(rawSubjectId)) ||
         resolveName(s, {
@@ -430,7 +420,7 @@ export default function AdminTimetableBuilder() {
 
       map.set(`${dayKey}|${periodKey}`, {
         ...s,
-        dayOfWeek:   dayKey,
+        dayOfWeek:   dayKey,     // always canonical "MON","TUE" etc.
         periodId:    periodKey,
         subjectName,
         teacherName,
@@ -440,7 +430,9 @@ export default function AdminTimetableBuilder() {
     return map;
   }, [slots, subjectMap, teacherMap]);
 
-  // day.key is already canonical ("monday" etc.) — lookup is direct
+  /**
+   * day.key is already canonical ("MON" etc.) — lookup is direct and O(1).
+   */
   const getSlot = useCallback(
     (dayOfWeek, periodId) => slotMap.get(`${dayOfWeek}|${periodId}`) || null,
     [slotMap]
@@ -476,7 +468,7 @@ export default function AdminTimetableBuilder() {
           classId:   selectedClassIdRef.current,
           subjectId,
           teacherId,
-          dayOfWeek: selectedCell.dayOfWeek,
+          dayOfWeek: selectedCell.dayOfWeek,   // already canonical "MON" etc.
           periodId:  selectedCell.period.id,
           room,
         });
@@ -485,7 +477,7 @@ export default function AdminTimetableBuilder() {
           classId:   selectedClassIdRef.current,
           subjectId,
           teacherId,
-          dayOfWeek: selectedCell.dayOfWeek,
+          dayOfWeek: selectedCell.dayOfWeek,   // already canonical "MON" etc.
           periodId:  selectedCell.period.id,
           room,
         });
@@ -493,7 +485,6 @@ export default function AdminTimetableBuilder() {
 
       if (mountedRef.current) {
         closeModal();
-        // Rebuild lookup maps after save so the new slot's subject name appears
         const db = await getDatabase();
         const { newSubjectMap, newTeacherMap } = await buildLookupMaps(db);
         if (mountedRef.current) {
@@ -742,7 +733,7 @@ export default function AdminTimetableBuilder() {
                         )}
                       </View>
 
-                      {/* Slot cells */}
+                      {/* Slot cells — day.key is "MON","TUE" etc. */}
                       {DAYS.map((day) => {
                         const slot    = getSlot(day.key, period.id);
                         const pending = slot && slot._synced === 0;
@@ -895,8 +886,8 @@ const styles = StyleSheet.create({
   gridMetaTitle: { fontSize: 14, fontWeight: "600", color: "#6B7280", marginBottom: 12 },
   highlightText: { color: "#111827", fontWeight: "700" },
 
-  classChipsScroll:   { marginBottom: 16, marginHorizontal: -20 },
-  classChipsContent:  { paddingHorizontal: 20 },
+  classChipsScroll:  { marginBottom: 16, marginHorizontal: -20 },
+  classChipsContent: { paddingHorizontal: 20 },
   classChip: {
     backgroundColor: "#FFFFFF", paddingHorizontal: 16, paddingVertical: 8,
     borderRadius: 20, marginRight: 8, borderWidth: 1, borderColor: "#E5E7EB",
@@ -910,7 +901,7 @@ const styles = StyleSheet.create({
   dayHeaderCell:    { width: 110, padding: 8, alignItems: "center" },
   gridHeaderText:   { fontWeight: "700", color: "#374151", fontSize: 13 },
 
-  gridRow:  { flexDirection: "row", marginBottom: 6 },
+  gridRow: { flexDirection: "row", marginBottom: 6 },
   periodCell: {
     width: 110, minHeight: 82,
     backgroundColor: "#FFFFFF", borderRadius: 12, padding: 10,
