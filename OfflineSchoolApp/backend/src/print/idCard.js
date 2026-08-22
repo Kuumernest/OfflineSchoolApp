@@ -121,6 +121,12 @@ const CARD_CSS = `
   }
 
   .fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.9mm; }
+
+  /* The QR is scanned at the gate, so it is sized for a cheap camera at arm's
+     length rather than for looks: below about 14mm a phone struggles in the
+     shade of a doorway. */
+  .qr      { width: 15mm; height: 15mm; flex: none; }
+  .qr svg  { width: 100%; height: 100%; display: block; }
   .field__label { font-size: 4.8pt; text-transform: uppercase; letter-spacing: 0.08em;
                   color: ${BRAND}; font-weight: 700; }
   .field__value { font-size: 7.6pt; font-weight: 700; line-height: 1.15; color: ${INK};
@@ -194,9 +200,12 @@ const renderCard = ({ student, school, labels, origin, validUntil }) => {
             <div class="field__label">${esc(labels.class)}</div>
             <div class="field__value">${orDash(student.className)}</div>
           </div>
-          <div>
-            <div class="field__label">${esc(labels.validUntil)}</div>
-            <div class="field__value field__value--mono">${orDash(validUntil)}</div>
+          <div style="display:flex;align-items:flex-end;gap:2mm">
+            <div style="flex:1;min-width:0">
+              <div class="field__label">${esc(labels.validUntil)}</div>
+              <div class="field__value field__value--mono">${orDash(validUntil)}</div>
+            </div>
+            ${student.qrSvg ? `<div class="qr">${student.qrSvg}</div>` : ""}
           </div>
         </div>
       </div>

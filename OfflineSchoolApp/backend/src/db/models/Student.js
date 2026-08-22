@@ -163,6 +163,22 @@ const studentSchema = new mongoose.Schema(
      */
     photoUrl: { type: String, default: null, trim: true },
 
+    /**
+     * The value printed as a QR code on the student's ID card.
+     *
+     * Deliberately NOT the admission number and NOT the record id. An admission
+     * number is guessable — GVA00/2026/004 implies 005 — and a record id is
+     * permanent, so a card photographed once would work for ever. This is
+     * random and reissuable: losing a card means printing a new one with a new
+     * token, and the old card stops opening the gate.
+     *
+     * It identifies, it does not authenticate. A QR on a plastic card is
+     * visible and photographable by anyone who can see it, so the scanner must
+     * be operated by staff at the gate — the person is the check, and the code
+     * only saves them looking up a name.
+     */
+    gateToken: { type: String, default: null },
+
     // Guardian portal access lives on its own collection, not here — see
     // db/models/GuardianAccess.js. A code hung off a Student cannot serve a
     // parent with two children at the school, which is the ordinary case.
@@ -229,6 +245,8 @@ studentSchema.index({ schoolId: 1, isActive:  1 });
 studentSchema.index({ schoolId: 1, status:    1 }); // ✅ defined ONCE
 studentSchema.index({ createdAt: -1             });
 studentSchema.index({ enrollmentNo: 1, schoolId: 1 });
+// Sparse so the many students without a card yet do not collide on null.
+studentSchema.index({ gateToken: 1 }, { unique: true, sparse: true });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MIDDLEWARE

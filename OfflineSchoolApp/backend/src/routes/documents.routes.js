@@ -15,6 +15,8 @@ const ResultSummary = require("../db/models/ResultSummary");
 const { buildClassListHtml }  = require("../print/classList");
 const { buildTranscriptHtml } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
+const QRCode                  = require("qrcode");
+const gate                    = require("../services/gate.service");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
 const GuardianAccess = require("../db/models/GuardianAccess");
@@ -208,7 +210,7 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
 
   const school = await schoolHeading(schoolId);
 
-  const students = rows
+  const eligible = rows
     .map((s) => ({
       _id:           String(s._id),
       name:          displayName(s) || null,
@@ -219,6 +221,31 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
     }))
     .filter((s) => s.enrollmentNo)
     .sort(byName);
+
+  // A gate token is minted on first print rather than at enrolment, so a school
+  // that never uses the scanner never accumulates credentials it does not want.
+  // Reprinting a card reuses the same token; only an explicit reissue changes
+  // it, which is what makes a replacement card cancel the lost one.
+  const students = await Promise.all(eligible.map(async (s) => {
+    const token = await gate.tokenFor({ schoolId, studentId: s._id });
+    let qrSvg = null;
+    if (token) {
+      try {
+        qrSvg = await QRCode.toString(token, {
+          type: "svg", margin: 0, width: 160,
+          // M corrects ~15% damage. A laminated card in a school bag gets
+          // scratched, and a code that stops scanning after a term is worse
+          // than one a millimetre larger.
+          errorCorrectionLevel: "M",
+        });
+      } catch {
+        // A card without its QR is still a valid ID card; failing the whole
+        // sheet because one code would not render is the wrong trade.
+        qrSvg = null;
+      }
+    }
+    return { ...s, qrSvg };
+  }));
 
   const skipped = rows.length - students.length;
 
@@ -247,7 +274,13 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
   };
 
   return respond(req, res, {
-    data: { ...data, skippedWithoutAdmissionNo: skipped },
+    // The JSON view drops the QR markup: it is several hundred bytes per
+    // student and useful only to the renderer.
+    data: {
+      ...data,
+      students: data.students.map(({ qrSvg, ...rest }) => ({ ...rest, hasQr: Boolean(qrSvg) })),
+      skippedWithoutAdmissionNo: skipped,
+    },
     html: () => buildIdCardsHtml({
       data,
       labels:    labelsFor(lang),

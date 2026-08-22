@@ -653,6 +653,12 @@ app.use("/api/exports",
   loadRoute("./routes/export.routes")
 );
 
+// The school gate: QR sign-in and sign-out. Staff-only, enforced inside.
+app.use("/api/gate",
+  auth.authenticate,
+  loadRoute("./routes/gate.routes")
+);
+
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -875,6 +881,33 @@ async function startServer() {
 
       console.log("════════════════════════════════════");
     });
+
+    // ── Notification dispatcher ───────────────────────────────────────────
+    //
+    // Nothing else drains the queue. Without this a fee receipt or a gate
+    // arrival sits pending until somebody calls /api/gate/dispatch by hand,
+    // which is exactly the kind of thing that looks fine in testing and
+    // silently never delivers in production.
+    //
+    // unref() so the timer never holds the process open during a shutdown.
+    const notifications = require("./services/notification");
+    const NOTIFY_INTERVAL_MS = 60_000;
+
+    const notifyTimer = setInterval(() => {
+      notifications.dispatch({ limit: 25 })
+        .then((r) => {
+          if (r.sent || r.failed) {
+            console.log(
+              `[notify] sent ${r.sent}, failed ${r.failed}, ` +
+              `skipped ${r.skipped}, ${r.remaining} still due`
+            );
+          }
+        })
+        .catch((err) => console.warn("[notify] dispatch failed:", err.message));
+    }, NOTIFY_INTERVAL_MS);
+    notifyTimer.unref();
+
+    console.log(`📨 notification dispatcher every ${NOTIFY_INTERVAL_MS / 1000}s`);
 
     server.keepAliveTimeout = 65_000;
     server.headersTimeout   = 66_000;
