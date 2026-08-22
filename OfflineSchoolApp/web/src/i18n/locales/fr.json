@@ -166,13 +166,13 @@
     "rankInClass": "Rang dans la classe",
     "remark": "Appréciation",
     "teacherRemark": "Appréciation de l'enseignant",
-    "principalRemark": "Appréciation du chef d'établissement",
+    "principalRemark": "Appréciation du Principal",
     "reportCard": "Bulletin de notes",
     "transcript": "Relevé de notes",
     "passMark": "Moyenne de passage",
     "grade": "Mention",
     "classCouncil": "Conseil de classe",
-    "headTeacher": "Chef d'établissement",
+    "headTeacher": "Principal",
     "guardian": "Tuteur",
     "present": "Présent",
     "absent": "Absent",
@@ -724,7 +724,7 @@
     "academicPerf": "Résultats scolaires",
     "classTeacher": "Professeur principal",
     "teacherRemark": "APPRÉCIATION DU PROFESSEUR PRINCIPAL",
-    "principalRemark": "APPRÉCIATION DU CHEF D'ÉTABLISSEMENT",
+    "principalRemark": "APPRÉCIATION DU PRINCIPAL",
     "nextTermBegins": "Rentrée du prochain trimestre :",
     "daysOpen": "Jours de classe :",
     "presentLabel": "Présent :",
@@ -752,7 +752,7 @@
     "regNumberHint": "Numéro d'enregistrement officiel",
     "yearFounded": "Année de création",
     "motto": "Devise",
-    "principal": "Directeur / chef d'établissement",
+    "principal": "Principal",
     "schoolEmail": "E-mail de l'établissement",
     "schoolDays": "Jours de classe",
     "startTime": "Heure de début des cours",
@@ -1061,7 +1061,7 @@
     "preview": "Aperçu",
     "printedOn": "Imprimé le",
     "teacher": "Professeur principal",
-    "headTeacher": "Directeur",
+    "headTeacher": "Principal",
     "registrar": "Secrétaire",
     "share": "Partager le PDF",
     "offline": "Pas de connexion — voici la dernière copie récupérée par ce téléphone."
@@ -1205,5 +1205,15 @@
     "skipped_other": "{{count}} élèves sans matricule sont exclus",
     "cardCount": "{{count}} carte",
     "cardCount_other": "{{count}} cartes"
+  },
+  "photo": {
+    "title": "Photo de la carte",
+    "hint": "Une photo nette de la tête et des épaules. C'est elle qui figure sur la carte de l'élève. JPEG, PNG ou WebP, jusqu'à 3 Mo.",
+    "add": "Ajouter une photo",
+    "change": "Changer la photo",
+    "saved": "Photo enregistrée",
+    "failed": "Impossible d'enregistrer la photo",
+    "removeTitle": "Supprimer cette photo ?",
+    "removeBody": "La carte s'imprimera avec un cadre photo vide."
   }
 }

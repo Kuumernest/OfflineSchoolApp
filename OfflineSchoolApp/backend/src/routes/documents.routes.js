@@ -18,6 +18,7 @@ const { buildIdCardsHtml }    = require("../print/idCard");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
 const GuardianAccess = require("../db/models/GuardianAccess");
+const photoStorage   = require("../utils/photoStorage");
 const { displayName, byName } = require("../utils/studentName");
 
 /**
@@ -89,6 +90,16 @@ const schoolHeading = async (schoolId) => {
 // Printing a register or a transcript is staff work. Teachers need class lists,
 // so they are included here — unlike the finance and rollover routers.
 router.use(authorize("admin", "school_admin", "super_admin", "teacher"));
+
+/**
+ * The office, not the staffroom.
+ *
+ * This router is deliberately open to teachers so they can print their own
+ * registers — but that is a READ permission. The routes below change a student
+ * record or hand out a guardian's credentials, so they carry their own narrower
+ * guard rather than inheriting the permissive one above.
+ */
+const officeOnly = authorize("admin", "school_admin", "super_admin");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CLASS LIST
@@ -368,6 +379,67 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════
+// STUDENT PHOTOS (office side)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Set a student's photo from the office.
+ *
+ * The student can set their own from their profile, but most cannot: a young
+ * child has no account they use, and the photo is usually taken at the desk
+ * during enrolment. Without this, the ID card's photo box could only ever be
+ * filled by students old enough to sign in themselves.
+ */
+router.put("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const student = await Student.findOne({
+    _id: req.params.studentId, schoolId, deletedAt: null,
+  }).select("photoUrl").lean();
+  if (!student) {
+    return res.status(404).json({ success: false, message: "Student not found" });
+  }
+
+  const { photoBase64 } = req.body;
+  if (!photoBase64) return bad(res, "photoBase64 is required");
+
+  let saved;
+  try {
+    saved = photoStorage.savePhotoFromBase64(req.params.studentId, photoBase64);
+  } catch (err) {
+    return bad(res, err.message, "BAD_PHOTO");
+  }
+
+  await Student.updateOne({ _id: req.params.studentId }, { photoUrl: saved.publicPath });
+
+  // Old file removed only after the new path is stored, so a failure cannot
+  // leave the student with neither.
+  if (student.photoUrl && student.photoUrl !== saved.publicPath) {
+    photoStorage.deletePhotoFile(student.photoUrl);
+  }
+
+  return res.json({ success: true, photoUrl: saved.publicPath, bytes: saved.bytes });
+}));
+
+router.delete("/student-photo/:studentId", officeOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const student = await Student.findOne({
+    _id: req.params.studentId, schoolId, deletedAt: null,
+  }).select("photoUrl").lean();
+  if (!student) {
+    return res.status(404).json({ success: false, message: "Student not found" });
+  }
+
+  if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+  await Student.updateOne({ _id: req.params.studentId }, { photoUrl: null });
+
+  return res.json({ success: true, photoUrl: null });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
 // GUARDIAN PORTAL ACCESS
 // ═════════════════════════════════════════════════════════════════════════════
 
@@ -379,7 +451,7 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
  * to check before doing so. Only the code's last two characters are returned —
  * the system cannot reproduce a code it has issued.
  */
-router.get("/guardian-access", asyncHandler(async (req, res) => {
+router.get("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -421,7 +493,7 @@ router.get("/guardian-access", asyncHandler(async (req, res) => {
  * same children — which is what "the parent lost the slip" needs. Nothing logs
  * the code and nothing stores it; only its hash is kept.
  */
-router.post("/guardian-access", asyncHandler(async (req, res) => {
+router.post("/guardian-access", officeOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -442,7 +514,7 @@ router.post("/guardian-access", asyncHandler(async (req, res) => {
 }));
 
 /** Change which children an access covers, without changing the code. */
-router.put("/guardian-access/:accessId", asyncHandler(async (req, res) => {
+router.put("/guardian-access/:accessId", officeOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -458,7 +530,7 @@ router.put("/guardian-access/:accessId", asyncHandler(async (req, res) => {
   }
 }));
 
-router.delete("/guardian-access/:accessId", asyncHandler(async (req, res) => {
+router.delete("/guardian-access/:accessId", officeOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 

@@ -1,4 +1,4 @@
-import { useState, useCallback }                 from "react";
+import { useState, useCallback, useRef }          from "react";
 import { useNavigate, useParams }                from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
@@ -35,6 +35,11 @@ import {
 import { cn }                   from "@/utils/cn";
 import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
+import { Button }               from "@/components/ui/Button";
+import { getErrorMessage }      from "@/lib/api";
+import {
+  uploadStudentPhoto, deleteStudentPhoto,
+} from "@/services/document.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -347,6 +352,113 @@ function MoveClassPicker({
 // ─────────────────────────────────────────────────────────────────────────────
 // PAGE
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The photo printed on the student's ID card.
+ *
+ * The student can set their own from their profile on the phone; this exists
+ * because most cannot — a young child has no account they use, and the picture
+ * is taken at the desk during enrolment. Without an office-side control the
+ * card's photo box could only ever be filled by students old enough to sign in.
+ */
+function PhotoCard({
+  studentId, schoolId, photoUrl, onChanged,
+}: {
+  studentId: string;
+  schoolId:  string;
+  photoUrl:  string | null;
+  onChanged: () => void;
+}) {
+  const { t } = useTranslation();
+  const { toast, confirm } = useToast();
+  const [busy, setBusy] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const src = photoUrl
+    ? (/^https?:/i.test(photoUrl) ? photoUrl : photoUrl)
+    : null;
+
+  const onPick = async (file: File | undefined) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      // Read as a data URL and hand over just the payload — the server sniffs
+      // the real format from the magic bytes rather than trusting us.
+      const base64 = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload  = () => resolve(String(reader.result).split(",")[1] ?? "");
+        reader.onerror = () => reject(new Error("Could not read that file"));
+        reader.readAsDataURL(file);
+      });
+
+      await uploadStudentPhoto(studentId, schoolId, base64);
+      toast({ kind: "success", title: t("photo.saved") });
+      onChanged();
+    } catch (err) {
+      toast({ kind: "error", title: t("photo.failed"), message: getErrorMessage(err) });
+    } finally {
+      setBusy(false);
+      // Cleared so choosing the same file twice still fires a change event.
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  const onRemove = async () => {
+    const ok = await confirm({
+      title:   t("photo.removeTitle"),
+      message: t("photo.removeBody"),
+      confirmLabel: t("common.delete"),
+      kind: "danger",
+    });
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await deleteStudentPhoto(studentId, schoolId);
+      onChanged();
+    } catch (err) {
+      toast({ kind: "error", title: t("photo.failed"), message: getErrorMessage(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-start gap-4 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="flex h-[96px] w-[72px] flex-none items-center justify-center overflow-hidden rounded-lg border-2 border-indigo-500 bg-indigo-50">
+        {src
+          ? <img src={src} alt="" className="h-full w-full object-cover" />
+          : <IdCard className="h-8 w-8 text-indigo-300" aria-hidden="true" />}
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <h2 className="text-sm font-bold text-gray-700">{t("photo.title")}</h2>
+        <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("photo.hint")}</p>
+
+        <div className="mt-3 flex flex-wrap gap-2">
+          <input
+            ref={inputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp"
+            className="hidden"
+            onChange={(e) => onPick(e.target.files?.[0])}
+          />
+          <Button
+            size="sm"
+            loading={busy}
+            onClick={() => inputRef.current?.click()}
+          >
+            {photoUrl ? t("photo.change") : t("photo.add")}
+          </Button>
+          {photoUrl && !busy && (
+            <Button size="sm" variant="secondary" onClick={onRemove}>
+              {t("common.delete")}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function StudentDetailPage() {
   const { t } = useTranslation();
@@ -721,6 +833,16 @@ export default function StudentDetailPage() {
             iconColor="text-gray-400"
           />
         </Section>
+
+        {/* ── ID card photo ── */}
+        <div className="lg:col-span-2">
+          <PhotoCard
+            studentId={student._id}
+            schoolId={schoolId}
+            photoUrl={(student as { photoUrl?: string | null }).photoUrl ?? null}
+            onChanged={() => { void qc.invalidateQueries({ queryKey: QK.student(id ?? "") }); }}
+          />
+        </div>
 
         {/* ── Enrollment / Login credentials card ── */}
         <div className="lg:col-span-2">

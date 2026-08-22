@@ -36,6 +36,7 @@ const UPLOAD_DIRS = [
   "uploads/content/document",
   "uploads/content/image",
   "uploads/logos",
+  "uploads/photos",
 ];
 
 UPLOAD_DIRS.forEach((dir) => {

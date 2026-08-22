@@ -27,6 +27,21 @@ const {
 /** Ten per A4: two columns of five. */
 const PER_SHEET = 10;
 
+/**
+ * The card's colours.
+ *
+ * Drawn from the app's own primary indigo rather than invented, so a printed
+ * card and the console that produced it look like one system. Kept to a band
+ * and two accents: a card that is colour end to end costs a fortune in toner
+ * across a class of forty and reads as a leaflet rather than an identity
+ * document.
+ */
+const INK       = "#14181f";
+const BRAND     = "#3B4996";
+const BRAND_DEEP = "#2B3670";
+const TINT      = "#F0F4FF";
+const MUTED     = "#55607a";
+
 const CARD_CSS = `
   /* Cards are cut from the sheet, so the page margin is generous enough to
      survive a guillotine that is a millimetre out. */
@@ -56,64 +71,88 @@ const CARD_CSS = `
     width: 85.6mm;
     height: 54mm;
     box-sizing: border-box;
-    border: 0.3mm dashed #9aa3b2;   /* the cut line */
+    /* Dashed grey is the CUT line — deliberately not the brand colour, so the
+       guillotine guide is never mistaken for part of the design. */
+    border: 0.3mm dashed #9aa3b2;
     border-radius: 2mm;
-    padding: 2.6mm 3mm;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     page-break-inside: avoid;
     position: relative;
+    background: #fff;
   }
 
-  /* ── Masthead ── */
+  /* ── Masthead: the coloured band ── */
   .card__top {
     display: flex; align-items: center; gap: 2mm;
-    border-bottom: 0.4mm solid #14181f;
-    padding-bottom: 1.4mm;
+    background: ${BRAND};
+    color: #fff;
+    padding: 1.8mm 3mm;
+    border-bottom: 0.6mm solid ${BRAND_DEEP};
   }
-  .card__logo   { width: 8mm; height: 8mm; object-fit: contain; flex: none; }
+  .card__logo   {
+    width: 8mm; height: 8mm; object-fit: contain; flex: none;
+    background: #fff; border-radius: 1mm; padding: 0.4mm;
+  }
   .card__school { font-size: 7.4pt; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: 0.02em; line-height: 1.1; }
+                  letter-spacing: 0.02em; line-height: 1.1; color: #fff; }
   .card__kind   { font-size: 5.2pt; letter-spacing: 0.14em; text-transform: uppercase;
-                  color: #55607a; margin-top: 0.3mm; }
+                  color: #ffffffc0; margin-top: 0.3mm; }
 
   /* ── Body ── */
-  .card__body { display: flex; gap: 3mm; flex: 1; padding-top: 1.8mm; min-height: 0; }
+  .card__body {
+    display: flex; gap: 3mm; flex: 1; min-height: 0;
+    padding: 2mm 3mm 0;
+  }
 
   .photo {
     width: 20mm; height: 26mm; flex: none;
-    border: 0.3mm solid #55607a;
+    border: 0.4mm solid ${BRAND};
     border-radius: 1mm;
     object-fit: cover;
-    background: #f2f4f8;
+    background: ${TINT};
   }
   /* The blank a photograph is pasted into. */
   .photo--empty {
     display: flex; align-items: center; justify-content: center;
-    font-size: 5pt; color: #8a93a6; text-align: center; line-height: 1.3;
+    font-size: 5pt; color: ${BRAND}; text-align: center; line-height: 1.3;
     padding: 1mm;
   }
 
   .fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.9mm; }
   .field__label { font-size: 4.8pt; text-transform: uppercase; letter-spacing: 0.08em;
-                  color: #55607a; }
-  .field__value { font-size: 7.6pt; font-weight: 700; line-height: 1.15;
+                  color: ${BRAND}; font-weight: 700; }
+  .field__value { font-size: 7.6pt; font-weight: 700; line-height: 1.15; color: ${INK};
                   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .field__value--name { font-size: 8.6pt; }
   .field__value--mono { font-variant-numeric: tabular-nums; letter-spacing: 0.02em; }
 
-  /* ── Foot ── */
-  .card__foot {
-    border-top: 0.3mm solid #c8cdd8;
-    padding-top: 1.2mm;
-    display: flex; justify-content: space-between; align-items: flex-end;
-    font-size: 4.9pt; color: #55607a; gap: 2mm;
+  /* ── Signatures ── */
+  .card__signs {
+    display: flex; gap: 3mm; align-items: flex-end;
+    padding: 0 3mm 0.6mm;
   }
-  .card__contact { min-width: 0; overflow: hidden; text-overflow: ellipsis;
-                   white-space: nowrap; }
-  .card__sign    { text-align: right; flex: none; }
-  .card__signline { width: 20mm; border-bottom: 0.25mm dotted #14181f; height: 3mm; }
+  .sign      { flex: 1; min-width: 0; }
+  .sign__line {
+    border-bottom: 0.25mm solid ${MUTED};
+    height: 3.4mm;
+  }
+  .sign__label {
+    font-size: 4.4pt; color: ${MUTED}; margin-top: 0.4mm;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* ── Foot: the tinted contact strip ── */
+  .card__foot {
+    background: ${TINT};
+    border-top: 0.3mm solid ${BRAND};
+    padding: 1mm 3mm;
+    font-size: 4.9pt; color: ${BRAND_DEEP};
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    font-weight: 600;
+  }
 
   @media screen {
     body { padding: 14px; background: #eceef3; }
@@ -162,16 +201,24 @@ const renderCard = ({ student, school, labels, origin, validUntil }) => {
         </div>
       </div>
 
+      <!-- Two signatures: the holder's and the school's. A card the student has
+           not signed proves only that the school printed it; the pair is what
+           makes it theirs and lets a challenge be checked against the ink. -->
+      <div class="card__signs">
+        <div class="sign">
+          <div class="sign__line"></div>
+          <div class="sign__label">${esc(labels.studentSignature)}</div>
+        </div>
+        <div class="sign">
+          <div class="sign__line"></div>
+          <div class="sign__label">${esc(labels.headTeacher)}</div>
+        </div>
+      </div>
+
       <div class="card__foot">
-        <div class="card__contact">
-          ${student.guardianPhone
-            ? `${esc(labels.ifFound)} ${esc(student.guardianPhone)}`
-            : (school.phone ? `${esc(labels.ifFound)} ${esc(school.phone)}` : "&nbsp;")}
-        </div>
-        <div class="card__sign">
-          <div class="card__signline"></div>
-          <div>${esc(labels.headTeacher)}</div>
-        </div>
+        ${student.guardianPhone
+          ? `${esc(labels.ifFound)} ${esc(student.guardianPhone)}`
+          : (school.phone ? `${esc(labels.ifFound)} ${esc(school.phone)}` : "&nbsp;")}
       </div>
     </div>
   `;

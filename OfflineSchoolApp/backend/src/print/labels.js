@@ -19,7 +19,7 @@ const LABELS = {
     // ── Shared ──
     printedOn:      "Printed",
     teacher:        "Class teacher",
-    headTeacher:    "Head teacher",
+    headTeacher:    "Principal",
     registrar:      "Registrar",
     student:        "Student",
     class:          "Class",
@@ -88,12 +88,13 @@ const LABELS = {
     affixPhoto:  "Affix photo here",
     validUntil:  "Valid until",
     ifFound:     "If found, call",
+    studentSignature: "Student's signature",
   },
 
   fr: {
     printedOn:      "Imprimé le",
     teacher:        "Professeur principal",
-    headTeacher:    "Directeur",
+    headTeacher:    "Principal",
     registrar:      "Secrétaire",
     student:        "Élève",
     class:          "Classe",
@@ -156,6 +157,7 @@ const LABELS = {
     affixPhoto:  "Coller la photo ici",
     validUntil:  "Valable jusqu'au",
     ifFound:     "En cas de perte, appeler",
+    studentSignature: "Signature de l'élève",
   },
 };
 

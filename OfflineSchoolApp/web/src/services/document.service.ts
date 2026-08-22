@@ -36,3 +36,28 @@ export const fetchIdCardsHtml = (
   classId: string, schoolId: string, lang: string
 ): Promise<string> =>
   fetchDocument(`/id-cards/${classId}`, { schoolId, lang });
+
+// ─── Student photo (office side) ──────────────────────────────────────────────
+
+/**
+ * Set a student's ID-card photo from the office.
+ *
+ * The student can set their own from their profile, but most cannot — a young
+ * child has no account they use, and the picture is normally taken at the desk
+ * during enrolment. Sent as base64 rather than multipart to match how the
+ * school logo already travels, so one upload path serves both.
+ */
+export async function uploadStudentPhoto(
+  studentId: string, schoolId: string, photoBase64: string
+): Promise<string> {
+  const { data } = await api.put(`${BASE}/student-photo/${studentId}`, {
+    schoolId, photoBase64,
+  });
+  return (data as { photoUrl: string }).photoUrl;
+}
+
+export async function deleteStudentPhoto(
+  studentId: string, schoolId: string
+): Promise<void> {
+  await api.delete(`${BASE}/student-photo/${studentId}`, { params: { schoolId } });
+}

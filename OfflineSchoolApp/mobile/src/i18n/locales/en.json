@@ -166,13 +166,13 @@
     "rankInClass": "Position in class",
     "remark": "Remark",
     "teacherRemark": "Teacher's remark",
-    "principalRemark": "Head teacher's remark",
+    "principalRemark": "Principal's remark",
     "reportCard": "Report card",
     "transcript": "Transcript",
     "passMark": "Pass mark",
     "grade": "Grade",
     "classCouncil": "Class council",
-    "headTeacher": "Head teacher",
+    "headTeacher": "Principal",
     "guardian": "Guardian",
     "present": "Present",
     "absent": "Absent",
@@ -1061,7 +1061,7 @@
     "preview": "Preview",
     "printedOn": "Printed",
     "teacher": "Class teacher",
-    "headTeacher": "Head teacher",
+    "headTeacher": "Principal",
     "registrar": "Registrar",
     "share": "Share PDF",
     "offline": "No signal — this is the last copy this phone fetched."
@@ -1205,5 +1205,15 @@
     "skipped_other": "{{count}} students have no admission number and are left out",
     "cardCount": "{{count}} card",
     "cardCount_other": "{{count}} cards"
+  },
+  "photo": {
+    "title": "ID card photo",
+    "hint": "A clear head-and-shoulders picture. This is what prints on the student's ID card. JPEG, PNG or WebP, up to 3 MB.",
+    "add": "Add photo",
+    "change": "Change photo",
+    "saved": "Photo saved",
+    "failed": "Could not save the photo",
+    "removeTitle": "Remove this photo?",
+    "removeBody": "The ID card will print with a blank photo box instead."
   }
 }

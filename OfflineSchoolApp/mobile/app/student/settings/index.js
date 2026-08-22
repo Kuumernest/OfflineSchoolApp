@@ -20,8 +20,9 @@ import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
-import api              from "../../../src/services/api";
+import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
+import * as ImagePicker from "expo-image-picker";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -610,6 +611,8 @@ export default function StudentSettingsScreen() {
   const [profileComplete,  setProfileComplete]  = useState(false);
   const [notifEnabled,     setNotifEnabled]     = useState(true);
   const [showChangePwd,    setShowChangePwd]    = useState(false);
+  const [photoUrl,         setPhotoUrl]         = useState(null);
+  const [photoBusy,        setPhotoBusy]        = useState(false);
 
   // mustResetPassword drives the forced-change flow
   const mustReset    = user?.mustResetPassword === true;
@@ -621,6 +624,73 @@ export default function StudentSettingsScreen() {
     profile?.enrollment_no ||
     profile?.admissionNo  ||
     null;
+
+  // ── Photo ────────────────────────────────────────────────────────────────
+
+  /** Stored as a path; the card and this screen need a full URL. */
+  const absolutePhoto = (value) => {
+    if (!value) return null;
+    if (/^(https?:|data:|file:)/i.test(value)) return value;
+    return `${API_URL}${value.startsWith("/") ? "" : "/"}${value}`.replace("/api/", "/");
+  };
+
+  const pickPhoto = async () => {
+    try {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        Alert.alert("Permission needed", "Allow photo access to choose a picture.");
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        // Passport proportions, so what is cropped here is what the card prints
+        // rather than being re-cropped later into something unflattering.
+        aspect: [3, 4],
+        quality: 0.7,
+        base64: true,
+      });
+
+      if (result.canceled || !result.assets?.[0]?.base64) return;
+
+      setPhotoBusy(true);
+      const res = await api.put("/students/photo", {
+        photoBase64: result.assets[0].base64,
+      });
+      const url = res.data?.data?.photoUrl ?? res.data?.photoUrl ?? null;
+      setPhotoUrl(url);
+    } catch (err) {
+      // The server's message names the real problem — too large, not an image —
+      // so it is shown rather than replaced with something generic.
+      Alert.alert(
+        "Could not save photo",
+        err?.response?.data?.message || err.message || "Please try again."
+      );
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const removePhoto = () => {
+    Alert.alert("Remove photo?", "Your ID card will print with a blank photo box.", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove", style: "destructive",
+        onPress: async () => {
+          setPhotoBusy(true);
+          try {
+            await api.delete("/students/photo");
+            setPhotoUrl(null);
+          } catch (err) {
+            Alert.alert("Could not remove photo", err.message);
+          } finally {
+            setPhotoBusy(false);
+          }
+        },
+      },
+    ]);
+  };
 
   // ── Load profile ─────────────────────────────────────────────────────────
 
@@ -634,6 +704,7 @@ export default function StudentSettingsScreen() {
         const p   = res.data?.data || res.data?.student || res.data;
         if (p && typeof p === "object" && !p.error) {
           setProfile(p);
+          setPhotoUrl(p.photoUrl ?? null);
           setProfileComplete(p.profileCompleted ?? false);
 
           // Keep the store's enrollmentNo fresh if the API returned it
@@ -885,6 +956,57 @@ export default function StudentSettingsScreen() {
             <Ionicons name="chevron-forward" size={18} color={C.white} />
           </TouchableOpacity>
         )}
+
+        {/* ── PHOTO ──
+            This is the picture that goes on the student's ID card, which is
+            why it sits at the top of their own settings rather than being
+            something only the office can set. */}
+        <Section title="Photo">
+          <View style={styles.photoRow}>
+            <View style={styles.photoFrame}>
+              {photoUrl ? (
+                <Image source={{ uri: absolutePhoto(photoUrl) }} style={styles.photoImg} />
+              ) : (
+                <Ionicons name="person" size={34} color="#9AA3B2" />
+              )}
+            </View>
+
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text style={styles.photoTitle}>ID card photo</Text>
+              <Text style={styles.photoHint}>
+                A clear head-and-shoulders picture. This is printed on your
+                student ID card.
+              </Text>
+
+              <View style={styles.photoBtns}>
+                <TouchableOpacity
+                  style={[styles.photoBtn, photoBusy && styles.photoBtnOff]}
+                  onPress={pickPhoto}
+                  disabled={photoBusy}
+                  activeOpacity={0.85}
+                >
+                  {photoBusy
+                    ? <ActivityIndicator color="#fff" size="small" />
+                    : (
+                      <Text style={styles.photoBtnText}>
+                        {photoUrl ? "Change" : "Add photo"}
+                      </Text>
+                    )}
+                </TouchableOpacity>
+
+                {photoUrl && !photoBusy && (
+                  <TouchableOpacity
+                    style={styles.photoBtnGhost}
+                    onPress={removePhoto}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.photoBtnGhostText}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Section>
 
         {/* ── ACCOUNT ── */}
         <Section title="Account">
@@ -1140,6 +1262,28 @@ export default function StudentSettingsScreen() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
+  photoRow:   { flexDirection: "row", gap: 14, alignItems: "flex-start", padding: 4 },
+  photoFrame: {
+    width: 72, height: 96, borderRadius: 8,
+    borderWidth: 2, borderColor: "#3B4996", backgroundColor: "#F0F4FF",
+    alignItems: "center", justifyContent: "center", overflow: "hidden",
+  },
+  photoImg:   { width: "100%", height: "100%" },
+  photoTitle: { fontSize: 14, fontWeight: "700", color: "#0D1220" },
+  photoHint:  { marginTop: 2, fontSize: 12, color: "#4F5A70", lineHeight: 17 },
+  photoBtns:  { flexDirection: "row", gap: 8, marginTop: 10 },
+  photoBtn: {
+    minWidth: 96, height: 36, borderRadius: 8, backgroundColor: "#3B4996",
+    alignItems: "center", justifyContent: "center", paddingHorizontal: 14,
+  },
+  photoBtnOff:  { opacity: 0.5 },
+  photoBtnText: { color: "#fff", fontSize: 13, fontWeight: "600" },
+  photoBtnGhost: {
+    height: 36, borderRadius: 8, borderWidth: 1, borderColor: "#D5D9E2",
+    alignItems: "center", justifyContent: "center", paddingHorizontal: 14,
+  },
+  photoBtnGhostText: { color: "#4F5A70", fontSize: 13, fontWeight: "600" },
+
   screen:   { flex: 1, backgroundColor: C.gray50 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center" },
 

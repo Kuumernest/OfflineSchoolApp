@@ -25,6 +25,7 @@ const Class         = require("../db/models/Class");
 const Announcement  = require("../db/models/Announcement");
 const Content       = require("../db/models/Content");
 const SyncOverwrite = require("../db/models/SyncOverwrite");
+const photoStorage  = require("../utils/photoStorage");
 
 const { sendEmail } = require("../services/email.service");
 
@@ -732,6 +733,75 @@ router.get("/teacher/my-students", authenticate, teacherOrAdmin, handleTeacherSt
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 7 — STUDENT PROFILE ROUTES
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/students/photo   { photoBase64 }
+//
+// A student's own passport photo, which is what the ID card prints.
+//
+// Student-scoped: the record is resolved from the signed-in user, so nobody can
+// set someone else's photo by passing an id. The bytes go to disk and only a
+// short path is stored — a photo inline on the document would be carried by
+// every roster read, class list and sync, which is the problem the school logo
+// already had to be moved out of.
+// ─────────────────────────────────────────────────────────────────────────────
+router.put(
+  "/photo",
+  authenticate, studentOnly,
+  asyncHandler(async (req, res) => {
+    const userId   = req.user._id?.toString();
+    const schoolId = resolveSchoolId(req);
+    const student  = await resolveStudentRecord(userId, schoolId);
+
+    if (!student) return sendError(res, 404, "Student record not found");
+
+    const { photoBase64 } = req.body;
+    if (!photoBase64) return sendError(res, 400, "photoBase64 is required");
+
+    let saved;
+    try {
+      saved = photoStorage.savePhotoFromBase64(student._id, photoBase64);
+    } catch (err) {
+      // These messages name the actual problem — too large, not an image — so
+      // they are worth passing through rather than replacing with "bad request".
+      return sendError(res, 400, err.message);
+    }
+
+    const previous = student.photoUrl;
+
+    await Student.updateOne({ _id: student._id }, { photoUrl: saved.publicPath });
+
+    // Remove the old file only after the new path is safely stored. The other
+    // order risks deleting the only copy and then failing to save the new one,
+    // which loses the photo entirely.
+    if (previous && previous !== saved.publicPath) {
+      photoStorage.deletePhotoFile(previous);
+    }
+
+    return sendSuccess(res, {
+      photoUrl: saved.publicPath,
+      bytes:    saved.bytes,
+      mime:     saved.mime,
+    });
+  })
+);
+
+router.delete(
+  "/photo",
+  authenticate, studentOnly,
+  asyncHandler(async (req, res) => {
+    const userId   = req.user._id?.toString();
+    const schoolId = resolveSchoolId(req);
+    const student  = await resolveStudentRecord(userId, schoolId);
+
+    if (!student) return sendError(res, 404, "Student record not found");
+
+    if (student.photoUrl) photoStorage.deletePhotoFile(student.photoUrl);
+    await Student.updateOne({ _id: student._id }, { photoUrl: null });
+
+    return sendSuccess(res, { photoUrl: null });
+  })
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/students/timetable
