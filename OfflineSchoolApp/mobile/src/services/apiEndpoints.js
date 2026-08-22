@@ -149,6 +149,10 @@ export const API = {
     apply:          "/students/apply",
     appStatus:      (id) => `/students/application-status/${id}`,
     subjectContent: "/students/subject-content",
+    // Student-scoped: the server takes the class from the signed-in student's
+    // own record. Without this key the role-aware chooser in timetableService
+    // fell through to the admin endpoint and took a 403 on every open.
+    timetable:      "/students/timetable",
     results: {
       list:   "/students/results",
       detail: (id) => `/students/results/${id}`,

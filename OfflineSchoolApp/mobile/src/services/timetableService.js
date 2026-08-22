@@ -53,10 +53,18 @@ const DAY_SORT_EXPR = `
 // SECTION 2 — ROLE-AWARE ENDPOINT RESOLUTION
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * The timetable endpoint this session is allowed to read.
+ *
+ * The `|| API.admin.timetable.list` fallbacks are gone for students. Falling
+ * back to a staff-only route does not degrade gracefully — it produces a 403 on
+ * every open and an empty screen — so a missing student endpoint now returns
+ * null and the caller skips the fetch instead of guaranteeing a failure.
+ */
 const getTimetableEndpoint = () => {
   if (hasRole(["super_admin", "school_admin"])) return API.admin.timetable.list;
   if (hasRole("teacher")) return API.teacher?.timetable || API.admin.timetable.list;
-  return API.student?.timetable || API.admin.timetable.list;
+  return API.student?.timetable || null;
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -418,7 +426,13 @@ export const syncTimetableFromServer = async (filterClassId = null) => {
 
     console.log("[timetable] Pulling from server with params:", params);
 
-    const response = await api.get(getTimetableEndpoint(), {
+    const endpoint = getTimetableEndpoint();
+    if (!endpoint) {
+      console.log("[timetable] No endpoint for this role — skipping pull");
+      return 0;
+    }
+
+    const response = await api.get(endpoint, {
       params,
       timeout: 20_000,
     });

@@ -733,6 +733,85 @@ router.get("/teacher/my-students", authenticate, teacherOrAdmin, handleTeacherSt
 // SECTION 7 — STUDENT PROFILE ROUTES
 // ═════════════════════════════════════════════════════════════════════════════
 
+// ─────────────────────────────────────────────────────────────────────────────
+// GET /api/students/timetable
+//
+// A student's own class timetable, with the periods that give it a shape.
+//
+// This did not exist. The student timetable screen reads local tables that
+// nothing ever filled: /sync/pull carries no timetable, and every route under
+// /api/admin/timetable is staffOnly — so the phone fell back to the admin
+// endpoint, took a 403 on every open, and showed an empty week with no
+// explanation.
+//
+// The class is taken from the student's OWN record and any classId in the query
+// is ignored. A student asking for another class is not a case worth
+// supporting, and honouring the parameter would make this an open read of the
+// whole school's timetable.
+// ─────────────────────────────────────────────────────────────────────────────
+router.get(
+  "/timetable",
+  authenticate, studentOnly,
+  asyncHandler(async (req, res) => {
+    const userId   = req.user._id?.toString();
+    const schoolId = resolveSchoolId(req);
+    const student  = await resolveStudentRecord(userId, schoolId);
+
+    if (!student?.classId) {
+      // Not an error: a newly approved student may not be placed yet. An empty
+      // list lets the screen say "no timetable" rather than "something failed".
+      return sendSuccess(res, { slots: [], periods: [], count: 0 });
+    }
+
+    const TimetableSlot = require("../db/models/TimetableSlot");
+    const Period        = require("../db/models/Period");
+    const Subject       = require("../db/models/Subject");
+
+    const filter = {
+      classId: String(student.classId),
+      $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+    };
+    if (student.schoolId) filter.schoolId = String(student.schoolId);
+
+    const slots = await TimetableSlot.find(filter)
+      .sort({ dayOfWeek: 1, periodId: 1 })
+      .lean();
+
+    const subjectIds = [...new Set(slots.map((s) => s.subjectId).filter(Boolean))];
+    const teacherIds = [...new Set(slots.map((s) => s.teacherId).filter(Boolean))];
+
+    const [subjects, teachers, periods] = await Promise.all([
+      subjectIds.length
+        ? Subject.find({ _id: { $in: subjectIds } }).select("name code").lean()
+        : [],
+      teacherIds.length
+        // Only the name. A timetable does not need staff email addresses, and
+        // the admin endpoint returning them is not a reason to repeat it here.
+        ? User.find({ _id: { $in: teacherIds } }).select("name").lean()
+        : [],
+      Period.find({
+        schoolId: student.schoolId,
+        $or: [{ deletedAt: null }, { deletedAt: { $exists: false } }],
+      }).sort({ sortOrder: 1 }).lean().catch(() => []),
+    ]);
+
+    const subjectMap = new Map(subjects.map((x) => [String(x._id), x]));
+    const teacherMap = new Map(teachers.map((x) => [String(x._id), x]));
+
+    return sendSuccess(res, {
+      // `slots` is the key the mobile client reads first, matching the shape
+      // /api/admin/timetable already returns so the same parser handles both.
+      slots: slots.map((s) => ({
+        ...s,
+        subject: subjectMap.get(String(s.subjectId)) || null,
+        teacher: teacherMap.get(String(s.teacherId)) || null,
+      })),
+      periods,
+      count: slots.length,
+    });
+  })
+);
+
 router.get(
   "/profile",
   authenticate, studentOnly,

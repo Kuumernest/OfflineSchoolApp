@@ -1103,6 +1103,15 @@ export const getStudentTimetable = async (classId) => {
     const hasTable = await tableExists(db, "timetable");
     if (!hasTable) return [];
 
+    // The periods table has carried different shapes across releases, so its
+    // columns are checked rather than assumed. Hardcoding them threw
+    // "no such column: p.name" on any device whose table predates them, and the
+    // student saw an empty timetable with nothing to explain it.
+    const pCols = await db.getAllAsync(`PRAGMA table_info(periods)`, []).catch(() => []);
+    const pSet  = new Set(pCols.map((c) => c.name));
+    const pName = pSet.has("name")      ? "p.name"      : "NULL";
+    const pSort = pSet.has("sortorder") ? "p.sortorder" : "0";
+
     return await db.getAllAsync(
       `SELECT
          t.id, t.day,
@@ -1112,8 +1121,8 @@ export const getStudentTimetable = async (classId) => {
          s.name        AS subjectName,
          s.code        AS subjectCode,
          u.name        AS teacherName,
-         p.name        AS periodName,
-         p.sortorder   AS sortOrder
+         ${pName}      AS periodName,
+         ${pSort}      AS sortOrder
        FROM timetable t
        LEFT JOIN subjects s ON s.id = t.subject_id
        LEFT JOIN users    u ON u.id = t.teacher_id
@@ -1131,7 +1140,7 @@ export const getStudentTimetable = async (classId) => {
            WHEN 'sunday'    THEN 7
            ELSE 8
          END,
-         p.sortorder ASC,
+         ${pSort} ASC,
          t.start_time ASC`,
       [classId]
     );

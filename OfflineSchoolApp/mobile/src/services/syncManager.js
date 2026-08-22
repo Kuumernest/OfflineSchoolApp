@@ -759,6 +759,22 @@ class SyncManagerClass {
         await safeAddColumn(db, "periods", "dirty",     "INTEGER DEFAULT 0");
         await safeAddColumn(db, "periods", "operation", "TEXT");
         await safeAddColumn(db, "periods", "schoolId",  "TEXT");
+
+        // The columns every query on this table assumes. CREATE TABLE IF NOT
+        // EXISTS does nothing to a table that already exists, so a device that
+        // first created `periods` under an older schema kept the old shape for
+        // ever — and the student timetable failed with "no such column: p.name"
+        // on every open, showing an empty week with no explanation.
+        //
+        // NOT NULL is deliberately omitted: SQLite refuses to ADD COLUMN with a
+        // NOT NULL constraint and no default, so requiring it here would make
+        // the repair itself throw on the devices that need it.
+        await safeAddColumn(db, "periods", "name",      "TEXT");
+        await safeAddColumn(db, "periods", "starttime", "TEXT");
+        await safeAddColumn(db, "periods", "endtime",   "TEXT");
+        await safeAddColumn(db, "periods", "sortorder", "INTEGER DEFAULT 0");
+        await safeAddColumn(db, "periods", "isbreak",   "INTEGER DEFAULT 0");
+        await safeAddColumn(db, "periods", "isactive",  "INTEGER DEFAULT 1");
       }
     } catch (err) {
       console.log("[SyncManager] Periods migration skipped:", err.message);
