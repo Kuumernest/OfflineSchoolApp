@@ -272,6 +272,7 @@ class SyncManagerClass {
     // forever, which is what made the app feel sluggish while idle.
     this.SYNC_INTERVAL_MS      = 120_000;
     this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
     this._destroyed            = false;
     this._migrationsDone       = false;
     this._netUnsubscribe       = null;
@@ -455,6 +456,7 @@ class SyncManagerClass {
     this._destroyed            = false;
     this.isSyncing             = false;
     this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
 
     if (!this._migrationsDone) {
       await this.runAllMigrations();
@@ -504,6 +506,7 @@ class SyncManagerClass {
     this._appStateSub          = null;
     this.isSyncing             = false;
     this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
     this._repairsDone          = false;
     this._destroyed            = true;
     console.log("[SyncManager] Destroyed");
@@ -1029,8 +1032,15 @@ class SyncManagerClass {
 
       if (!this.isStudent()) {
         await this.markOrphanedRecordsAsSynced();
+
+        // Class-ID repair needs /admin/classes, so it belongs here rather than
+        // in the student branch it used to sit in — where it could only 403.
+        if (!this._classIdsRepaired) {
+          await this.repairClassIds();
+          this._classIdsRepaired = true;
+        }
       } else if (!this._staleSubjectsCleared) {
-        await this.repairClassIds();
+        // Students keep the stale-subject sweep, which reads only local tables.
         await this.clearStaleSubjectsAndRepull();
         this._staleSubjectsCleared = true;
       }
@@ -1099,7 +1109,24 @@ class SyncManagerClass {
   // SECTION 7 — REPAIR HELPERS
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Reconcile local class IDs against the server's, matching on class name.
+   *
+   * Reads /admin/classes, which is admin-only — so this can only ever run for
+   * an admin session. It used to be called from the STUDENT branch of sync(),
+   * where it answered 403 every time: the repair never ran for anybody, and it
+   * printed a red error on the first sync of every student session, which is
+   * the kind of noise that trains people to ignore real failures.
+   *
+   * The guard is here rather than only at the call site so the next caller
+   * cannot reintroduce it by accident.
+   */
   async repairClassIds() {
+    if (!this.isAdmin()) {
+      console.log("[SyncManager] repairClassIds: skipped — needs an admin session");
+      return;
+    }
+
     const db       = await getDatabase();
     const schoolId = await this.getSchoolId();
     if (!schoolId) return;
@@ -2578,6 +2605,7 @@ class SyncManagerClass {
 
   async forceSync() {
     this._staleSubjectsCleared = false;
+    this._classIdsRepaired     = false;
     this._lastSchoolInfoAt     = null;   // let school info refresh too
     await this.resetLastSync();
     return this.syncAll();
