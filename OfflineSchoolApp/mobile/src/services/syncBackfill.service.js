@@ -137,6 +137,33 @@ const SPECS = [
     }),
   },
 
+  /**
+   * Gate scans taken on this device.
+   *
+   * The same safety net as fee payments and expenses: the app being killed
+   * between the local INSERT and the enqueue. `direction` is included because
+   * the device decided it from the scans it held, and the server must not
+   * re-derive it from a view that was missing them.
+   */
+  {
+    key: "gateScan",
+    table: "gate_events",
+    adminOnly: true,
+    where: IS_DIRTY,
+    endpoint: () => "/gate/scan",
+    method: "POST",
+    reconcile: "gateScan",
+    noLocalFlag: true,
+    payload: (row, { schoolId }) => ({
+      _id:       row.id,
+      schoolId:  row.school_id || schoolId,
+      token:     row.token,
+      at:        row.at,
+      direction: row.direction,
+      station:   row.station || null,
+    }),
+  },
+
   {
     key: "class",
     table: "classes",
@@ -790,6 +817,15 @@ export const registerReconcilers = () => {
     await db.runAsync(
       `UPDATE expenses SET _void_pending = 0 WHERE id = ?`,
       [args.localId]
+    ).catch(() => {});
+  });
+
+  /** A gate scan reached the server. */
+  registerReconciler("gateScan", async ({ args }) => {
+    const db = await getDatabase();
+    await db.runAsync(
+      `UPDATE gate_events SET _synced = 1, _synced_at = ? WHERE id = ?`,
+      [new Date().toISOString(), args.localId]
     ).catch(() => {});
   });
 

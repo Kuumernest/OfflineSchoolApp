@@ -38,6 +38,13 @@ const QUICK_ACTIONS = [
     route: "/admin/documents",
   },
   {
+    id:    "gate-scan",
+    title: "Gate Scan",
+    icon:  "qr-code-outline",
+    color: "#12683A",
+    route: "/admin/gate",
+  },
+  {
     id:    "record-expense",
     title: "Record Expense",
     icon:  "receipt-outline",

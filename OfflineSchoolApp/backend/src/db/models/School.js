@@ -97,6 +97,39 @@ const settingsSchema = new mongoose.Schema(
       },
     },
 
+    /**
+     * How chatty the gate is.
+     *
+     * "exceptions" by default, and that default is the whole point. A school of
+     * 500 scanning twice a day generates 20,000 messages a month, and after the
+     * first week "arrived 07:42" is noise a parent stops reading — which is
+     * worse than silence, because the one message that mattered is now buried
+     * in it. On a paid channel it is also the single largest line on the bill.
+     *
+     *   off        — record the scan, tell nobody
+     *   exceptions — only a late arrival or an early departure
+     *   all        — every scan, for a school that wants it and will pay for it
+     */
+    gateNotify: {
+      type:    String,
+      enum:    ["off", "exceptions", "all"],
+      default: "exceptions",
+    },
+
+    /** After this, an arrival is late. 24-hour clock, school-local. */
+    gateLateAfter: {
+      type:    String,
+      default: "07:45",
+      match:   [/^([01]\d|2[0-3]):[0-5]\d$|^$/, "gateLateAfter must look like 07:45"],
+    },
+
+    /** Before this, a departure is early — a child leaving mid-day. */
+    gateEarlyBefore: {
+      type:    String,
+      default: "14:00",
+      match:   [/^([01]\d|2[0-3]):[0-5]\d$|^$/, "gateEarlyBefore must look like 14:00"],
+    },
+
     currency: {
       type:    String,
       default: "USD",

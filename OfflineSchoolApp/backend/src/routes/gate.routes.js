@@ -44,6 +44,7 @@ router.post("/scan", asyncHandler(async (req, res) => {
       schoolId,
       token:     req.body.token,
       at:        req.body.at,
+      direction: req.body.direction,
       station:   req.body.station,
       scannedBy: req.user?._id ? String(req.user._id) : null,
       // A school can turn the messages off without turning the gate off.
@@ -66,12 +67,53 @@ router.post("/scan", asyncHandler(async (req, res) => {
       duplicate: result.duplicate,
       notified:  Boolean(result.notification && result.notification.status !== "skipped"),
       notifySkipped: result.notification?.skipReason ?? null,
+      // Why no message went, when none did — "arrived on time" is an answer,
+      // an empty field is a worry.
+      notifyReason:  result.notifyPolicy?.reason ?? null,
     });
   } catch (err) {
     return res.status(err.status ?? 500).json({
       success: false, code: err.code ?? "SCAN_FAILED", message: err.message,
     });
   }
+}));
+
+/**
+ * GET /api/gate/roster — every card this school can recognise.
+ *
+ * A gate device holds this so it can turn a QR token into a child's NAME with
+ * no signal. Without it an offline scanner could record the event but not show
+ * who it was, which is the one thing the person on the gate needs to see.
+ *
+ * It is a list of gate tokens, so it is only useful to a device that can
+ * already read the cards — staff-only, like the rest of this router.
+ */
+router.get("/roster", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const Student = require("../db/models/Student");
+  const Class   = require("../db/models/Class");
+  const { displayName } = require("../utils/studentName");
+
+  const rows = await Student.find({
+    schoolId, status: "approved", deletedAt: null, gateToken: { $ne: null },
+  }).select("studentName name firstName lastName enrollmentNo classId gateToken").lean();
+
+  const classes = await Class.find({ schoolId, deletedAt: null }).select("name").lean();
+  const className = new Map(classes.map((c) => [String(c._id), c.name]));
+
+  return res.json({
+    success: true,
+    count: rows.length,
+    data: rows.map((s) => ({
+      token:        s.gateToken,
+      studentId:    String(s._id),
+      name:         displayName(s) || null,
+      enrollmentNo: s.enrollmentNo ?? null,
+      className:    s.classId ? (className.get(String(s.classId)) ?? null) : null,
+    })),
+  });
 }));
 
 /** GET /api/gate/today — the day's log and who is currently on site. */

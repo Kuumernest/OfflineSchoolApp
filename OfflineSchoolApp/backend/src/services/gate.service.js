@@ -4,6 +4,7 @@
 const crypto = require("crypto");
 
 const Student   = require("../db/models/Student");
+const School    = require("../db/models/School");
 const GateEvent = require("../db/models/GateEvent");
 const notify    = require("./notification");
 const { displayName } = require("../utils/studentName");
@@ -70,6 +71,45 @@ const tokenFor = async ({ schoolId, studentId }) => {
   return issueToken({ schoolId, studentId });
 };
 
+/** Minutes past midnight for "07:45", or null when unset or malformed. */
+const minutesOf = (hhmm) => {
+  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(String(hhmm ?? ""));
+  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+};
+
+/**
+ * Whether this particular scan is worth telling a parent about.
+ *
+ * The default is "exceptions", and the reasoning is worth stating: a school of
+ * 500 scanning twice a day is 20,000 messages a month. After the first week
+ * "arrived 07:42" is noise a parent stops opening — which is worse than
+ * silence, because the message that mattered is then buried in it. A late
+ * arrival or a child leaving at 11am is the message somebody acts on.
+ *
+ * @returns {{ notify: boolean, reason: string }}
+ */
+const shouldNotify = ({ school, direction, at }) => {
+  const mode = school?.settings?.gateNotify ?? "exceptions";
+
+  if (mode === "off") return { notify: false, reason: "gate notifications are off" };
+  if (mode === "all") return { notify: true,  reason: "every scan" };
+
+  const when = at instanceof Date ? at : new Date(at);
+  const mins = when.getHours() * 60 + when.getMinutes();
+
+  if (direction === "in") {
+    const late = minutesOf(school?.settings?.gateLateAfter) ?? minutesOf("07:45");
+    return mins > late
+      ? { notify: true,  reason: "arrived late" }
+      : { notify: false, reason: "arrived on time" };
+  }
+
+  const early = minutesOf(school?.settings?.gateEarlyBefore) ?? minutesOf("14:00");
+  return mins < early
+    ? { notify: true,  reason: "left early" }
+    : { notify: false, reason: "left at the normal time" };
+};
+
 /**
  * Record a scan.
  *
@@ -83,7 +123,10 @@ const tokenFor = async ({ schoolId, studentId }) => {
  * @param {Date}   [opts.at]       when the device recorded it — may be in the past
  * @returns {Promise<{event, student, direction, duplicate, notification}>}
  */
-const scan = async ({ schoolId, token, at, scannedBy, station, notifyGuardian = true }) => {
+const scan = async ({
+  schoolId, token, at, scannedBy, station,
+  direction: given, notifyGuardian = true,
+}) => {
   const value = String(token ?? "").trim();
   if (!value) {
     const err = new Error("No code was scanned");
@@ -131,7 +174,19 @@ const scan = async ({ schoolId, token, at, scannedBy, station, notifyGuardian = 
     };
   }
 
-  const direction = last?.direction === "in" ? "out" : "in";
+  /**
+   * A device that scanned offline already decided this, from the scans it holds
+   * — the server could not have known them. Its answer is trusted for that
+   * reason; deriving here from a partial view would flip a queued departure
+   * into a second arrival the moment it synced.
+   *
+   * Only "in" and "out" are accepted, so a malformed payload cannot write a
+   * third state into the log.
+   */
+  const direction =
+    given === "in" || given === "out"
+      ? given
+      : (last?.direction === "in" ? "out" : "in");
 
   const event = await GateEvent.create({
     schoolId,
@@ -143,15 +198,18 @@ const scan = async ({ schoolId, token, at, scannedBy, station, notifyGuardian = 
     station: station ?? null,
   });
 
+  const school = await School.findById(schoolId).lean().catch(() => null);
+  const policy = shouldNotify({ school, direction, at: when });
+
   let notification = null;
-  if (notifyGuardian) {
+  if (notifyGuardian && policy.notify) {
     // Queued, never sent inline. A gate with no connectivity must still let a
     // queue of children through at the same speed.
     notification = await notify.enqueue({
       schoolId,
       kind: direction === "in" ? "gate.arrival" : "gate.departure",
       studentId: String(student._id),
-      data: { at: when },
+      data: { at: when, reason: policy.reason },
     });
 
     await GateEvent.updateOne(
@@ -160,7 +218,12 @@ const scan = async ({ schoolId, token, at, scannedBy, station, notifyGuardian = 
     );
   }
 
-  return { event, student, direction, duplicate: false, notification };
+  return {
+    event, student, direction, duplicate: false, notification,
+    // Returned so the gate screen can say "not notified — on time" rather than
+    // leaving the operator wondering whether the message failed.
+    notifyPolicy: policy,
+  };
 };
 
 /** Everyone scanned today, newest first — what the gate screen shows. */
@@ -195,4 +258,7 @@ const today = async ({ schoolId, date }) => {
   };
 };
 
-module.exports = { issueToken, tokenFor, scan, today, dayKey, DEBOUNCE_SECONDS };
+module.exports = {
+  issueToken, tokenFor, scan, today, dayKey,
+  shouldNotify, DEBOUNCE_SECONDS,
+};
