@@ -245,8 +245,20 @@ studentSchema.index({ schoolId: 1, isActive:  1 });
 studentSchema.index({ schoolId: 1, status:    1 }); // ✅ defined ONCE
 studentSchema.index({ createdAt: -1             });
 studentSchema.index({ enrollmentNo: 1, schoolId: 1 });
-// Sparse so the many students without a card yet do not collide on null.
-studentSchema.index({ gateToken: 1 }, { unique: true, sparse: true });
+// Unique ONLY over real token strings. NOTE: a plain `sparse: true` index is
+// NOT enough here — sparse only excludes documents where the field is MISSING,
+// while this schema stores an explicit `gateToken: null` on every student, and
+// MongoDB treats null as a value for uniqueness (classic E11000 dup key
+// `{ gateToken: null }`). A partialFilterExpression excluding non-strings
+// fixes that without needing a data migration of the existing nulls.
+studentSchema.index(
+  { gateToken: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { gateToken: { $type: "string" } },
+    name: "gateToken_1",
+  }
+);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MIDDLEWARE

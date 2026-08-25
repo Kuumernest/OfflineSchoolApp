@@ -11,23 +11,24 @@ const mongoose = require("mongoose");
  * Symptom:  POST /api/students → 409 "E11000 duplicate key error collection:
  *           ... students index: gateToken_1 dup key: { gateToken: null }"
  *
- * Why:      Student.js declares the index as
- *           `studentSchema.index({ gateToken: 1 }, { unique: true, sparse: true })`
- *           so the many students who do not have a gate card yet (null token)
- *           can coexist. But databases created before sparse was added carry
- *           the ORIGINAL index — unique, NOT sparse — under the same name
- *           `gateToken_1`. MongoDB will not rewrite an existing index whose
- *           options conflict with a new createIndex call (IndexOptionsConflict),
- *           so Mongoose's autoIndex silently fails and the stale non-sparse
- *           index keeps rejecting every extra null token.
+ * Why:      Student.js declares gateToken with `default: null`, so EVERY
+ *           student document is stored with an explicit `gateToken: null`.
+ *           Older databases carry a unique NON-sparse `gateToken_1`, and even
+ *           the "fixed" sparse version does NOT help: MongoDB sparse indexes
+ *           only exclude documents where the field is MISSING — a field that
+ *           is present with value null IS indexed, so uniqueness still applies
+ *           to null. The second student without a card therefore collides.
  *
- * Fix:      At boot (and in the one-off repair script), inspect the live index.
- *           If `gateToken_1` exists without `sparse`, drop it and recreate it
- *           as `{ unique: true, sparse: true }`. Idempotent — after the first
- *           run it no-ops on every later boot.
- *
- * A non-null token stays unique (that is the point of the gate-card lookup in
- * gate.service). Only absent/null tokens are allowed to repeat.
+ * Fix:      At boot, inspect the live index. If `gateToken_1` exists without
+ *           the partialFilterExpression that excludes non-string tokens, drop
+ *           it and recreate as
+ *             { unique: true,
+ *               partialFilterExpression: { gateToken: { $type: "string" } } }
+ *           Real tokens stay unique (that is the point of the gate-card lookup
+ *           in gate.service); null/absent tokens are excluded from the index
+ *           entirely, so any number of card-less students can coexist — no
+ *           data migration needed for the existing nulls.
+ *           Idempotent — after the first run it no-ops on every later boot.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 async function ensureStudentGateTokenIndex() {
@@ -48,16 +49,23 @@ async function ensureStudentGateTokenIndex() {
       (ix.key && ix.key.gateToken !== undefined && Object.keys(ix.key).length === 1)
   );
 
-  if (current) {
-    if (current.sparse) {
-      // Already the intended shape — nothing to do.
-      console.log("[indexes] students.gateToken_1 is unique+sparse ✅");
-      return;
-    }
+  if (
+    current &&
+    current.partialFilterExpression &&
+    current.partialFilterExpression.gateToken &&
+    current.unique
+  ) {
+    // Already the intended shape — nothing to do.
+    console.log("[indexes] students.gateToken_1 is unique+partial ✅");
+    return;
+  }
 
-    // 2) Stale non-sparse unique index — drop it.
+  if (current) {
+    // 2) Stale index (unique non-sparse, or sparse without the partial
+    //    filter) — either shape rejects the second `{ gateToken: null }`.
     console.warn(
-      `[indexes] students.gateToken_1 is unique but NOT sparse (stale) — dropping it`
+      `[indexes] students.gateToken_1 is stale (unique=${!!current.unique}, ` +
+        `sparse=${!!current.sparse}, partial=${!!current.partialFilterExpression}) — dropping it`
     );
     await col.dropIndex(current.name);
   }
@@ -65,7 +73,11 @@ async function ensureStudentGateTokenIndex() {
   // 3) Recreate exactly as the model declares it.
   await col.createIndex(
     { gateToken: 1 },
-    { unique: true, sparse: true, name: "gateToken_1" }
+    {
+      unique: true,
+      partialFilterExpression: { gateToken: { $type: "string" } },
+      name: "gateToken_1",
+    }
   );
 
   const after = await col.indexes();
