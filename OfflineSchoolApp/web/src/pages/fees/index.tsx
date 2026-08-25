@@ -35,6 +35,13 @@ const currentAcademicYear = (): string => {
   return `${startYear}/${startYear + 1}`;
 };
 
+/** Pickable years: two back through one forward from the current one. */
+const academicYearOptions = (): string[] => {
+  const now = new Date();
+  const startYear = now.getMonth() >= 8 ? now.getFullYear() : now.getFullYear() - 1;
+  return [-2, -1, 0, 1].map((i) => `${startYear + i}/${startYear + i + 1}`);
+};
+
 export default function FeesPage() {
   const { t }    = useTranslation();
   const fmt      = useFormat();
@@ -115,11 +122,16 @@ export default function FeesPage() {
               >
                 {t("fees.academicYear")}
               </label>
-              <input
+              {/* Picked, not typed — a typo here silently shows an empty
+                  outstanding report for a year that has no records. */}
+              <Select
                 id="fee-year"
+                className="w-full"
+                options={[...new Set([year, ...academicYearOptions()])].map(
+                  (y) => ({ value: y, label: y })
+                )}
                 value={year}
                 onChange={(e) => setYear(e.target.value)}
-                className="h-9 w-full rounded-control border border-line-strong bg-surface px-3 text-sm text-ink-body transition-colors hover:border-ink-faint focus:border-primary-500 focus:outline-none"
               />
             </div>
 
