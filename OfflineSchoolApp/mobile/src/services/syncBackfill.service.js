@@ -850,6 +850,13 @@ export const registerReconcilers = () => {
       created?.enrollmentNo || created?.enrollment_no ||
       response?.data?.enrollmentNo || null;
 
+    // Credentials the server minted while creating the login account. They are
+    // returned exactly once (POST /students response), so this is the only
+    // chance to capture them — the add-student screen reads them back from
+    // this row to show the "share credentials" card, like the web does.
+    const tempPassword = response?.data?.tempPassword || null;
+    const emailSent    = response?.data?.emailSent === true;
+
     // Adopt the id the server assigned so later edits target the right row.
     if (serverId && String(serverId) !== String(localId)) {
       await mapId(localId, String(serverId), "students");
@@ -878,8 +885,17 @@ export const registerReconcilers = () => {
       ).catch(() => {});
     }
 
+    if (tempPassword) {
+      const targetId = serverId || localId;
+      await db.runAsync(
+        `UPDATE students SET temp_password = ?, email_sent = ? WHERE id = ?`,
+        [tempPassword, emailSent ? 1 : 0, String(targetId)]
+      ).catch(() => {});
+    }
+
     console.log(
-      `[backfill] Student enrolled upstream${enrollmentNo ? ` as ${enrollmentNo}` : ""}`
+      `[backfill] Student enrolled upstream${enrollmentNo ? ` as ${enrollmentNo}` : ""}` +
+        `${tempPassword && !emailSent ? " (credentials to share manually)" : ""}`
     );
   });
 

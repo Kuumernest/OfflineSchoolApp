@@ -340,6 +340,10 @@ export default function AddStudentScreen() {
           ...prev,
           syncStatus:   row.synced ? "synced" : prev.syncStatus,
           enrollmentNo: row.enrollmentNo ?? prev.enrollmentNo,
+          // Server-minted login credentials, captured by the outbox
+          // reconciler. Shown once on the success card, like the web flow.
+          tempPassword: row.tempPassword ?? prev.tempPassword,
+          emailSent:    row.emailSent,
           message: row.synced
             ? `${row.name} enrolled successfully.`
             : prev.message,

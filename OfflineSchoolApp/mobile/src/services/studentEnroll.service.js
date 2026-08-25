@@ -44,6 +44,11 @@ const EXTRA_COLUMNS = [
   ["className",      "TEXT"],
   ["enrollment_no",  "TEXT"],
   ["sync_error",     "TEXT"],
+  // Credentials minted by the server at enrollment time. The temp password is
+  // surfaced ONCE through the add-student success card (same contract as the
+  // web app) — it lives here only so the outbox round-trip can carry it back.
+  ["temp_password",  "TEXT"],
+  ["email_sent",     "INTEGER DEFAULT 0"],
 ];
 
 export const ensureStudentColumns = async (db) => {
@@ -163,7 +168,8 @@ export const getEnrollmentStatus = async (localId) => {
   const serverId = await resolveId(localId).catch(() => localId);
 
   const row = await db.getFirstAsync(
-    `SELECT id, name, status, enrollmentNo, enrollment_no, _synced, _operation, sync_error
+    `SELECT id, name, status, enrollmentNo, enrollment_no,
+            temp_password, email_sent, _synced, _operation, sync_error
      FROM students WHERE id = ? OR id = ? LIMIT 1`,
     [String(localId), String(serverId)]
   ).catch(() => null);
@@ -175,6 +181,11 @@ export const getEnrollmentStatus = async (localId) => {
     name:         row.name,
     status:       row.status,
     enrollmentNo: row.enrollmentNo || row.enrollment_no || null,
+    // One-time credentials minted by the server — see the studentEnroll
+    // reconciler. Null when the row was never pushed or the account was
+    // already deduplicated server-side.
+    tempPassword: row.temp_password || null,
+    emailSent:    row.email_sent === 1,
     synced:       row._synced === 1,
     error:        row.sync_error || null,
   };
