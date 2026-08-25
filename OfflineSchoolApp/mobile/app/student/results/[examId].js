@@ -206,6 +206,9 @@ export default function StudentReportCardScreen() {
         result={myExamResult}
         exam={currentExam}
         schoolName={user?.schoolName || user?.school?.name}
+        examId={String(examId)}
+        studentId={String(studentId)}
+        schoolId={schoolId}
         showRankings
       />
     </View>

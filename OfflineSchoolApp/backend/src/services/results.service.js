@@ -94,6 +94,10 @@ async function processResults(examId, classId = null, processedBy = null) {
       subjectName: es.subjectName || null,
       subjectId:   es.subjectId,
       classId:     es.classId,
+      // Canonical weight semantics: ExamSubject.weight is percentage-style
+      // (schema default 100). ÷100 → multiplier coefficient, so the default
+      // leaves every subject equally weighted (×1).
+      weight:      es.weight,
     });
   }
 
@@ -117,9 +121,15 @@ async function processResults(examId, classId = null, processedBy = null) {
       const subjectInfo = subjectMap.get(String(scoreDoc.examSubjectId));
       const maxScore    = subjectInfo?.maxScore || scoreDoc.maxScore || 100;
 
+      // Percentage-style weight → multiplier coefficient (default 100 ⇒ ×1).
+      const coefficient = subjectInfo?.weight != null
+        ? Math.round((Number(subjectInfo.weight) / 100) * 100) / 100 || 1
+        : 1;
+
       subjectScores.push({
         score:       scoreDoc.score  ?? 0,
         maxScore,
+        coefficient,
         isAbsent:    scoreDoc.isAbsent  || false,
         isExempt:    scoreDoc.isExempt  || false,
         subjectId:   String(scoreDoc.subjectId),

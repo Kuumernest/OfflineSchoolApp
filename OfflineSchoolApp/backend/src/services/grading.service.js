@@ -151,6 +151,11 @@ function calculateOverallResult(subjectScores) {
   let totalRawScore  = 0;
   let totalMaxScore  = 0;
   let totalPoints    = 0;
+  // Coefficient-weighted accumulators. Every subject carries a coefficient
+  // (ExamSubject.weight ÷ 100; default weight 100 ⇒ coefficient 1), so with
+  // default data these leave the results unchanged.
+  let totalWeightedPoints = 0;
+  let totalCoefficient    = 0;
   let subjectsPassed = 0;
   let subjectsFailed = 0;
 
@@ -160,9 +165,17 @@ function calculateOverallResult(subjectScores) {
   for (const entry of gradedSubjects) {
     const result = gradeSubject(entry.score ?? 0, entry.maxScore ?? 100);
 
+    const coefficient = Number(entry.coefficient) > 0
+      ? Math.round(Number(entry.coefficient) * 100) / 100
+      : 1;
+    const weightedMark =
+      Math.round(result.normalizedMark * coefficient * 100) / 100;
+
     totalRawScore += entry.score ?? 0;
     totalMaxScore += entry.maxScore ?? 100;
     totalPoints   += result.points;
+    totalWeightedPoints += result.points * coefficient;
+    totalCoefficient    += coefficient;
 
     if (result.isPassing) subjectsPassed++;
     else                  subjectsFailed++;
@@ -173,6 +186,8 @@ function calculateOverallResult(subjectScores) {
       score:          entry.score,
       maxScore:       entry.maxScore,
       normalizedMark: result.normalizedMark,
+      coefficient,
+      weightedMark,
       grade:          result.grade,
       points:         result.points,
       remark:         result.remark,
@@ -193,6 +208,8 @@ function calculateOverallResult(subjectScores) {
       score:          null,
       maxScore:       entry.maxScore,
       normalizedMark: 0,
+      coefficient:    Number(entry.coefficient) || 1,
+      weightedMark:   null,
       grade:          entry.isExempt ? "EX" : "AB",
       points:         0,
       remark:         entry.isExempt ? "Exempt" : "Absent",
@@ -207,9 +224,18 @@ function calculateOverallResult(subjectScores) {
   const subjectsTotal  = subjectScores.length;
   const subjectsAbsent = absentSubjects.length;
 
-  // Average on the /20 scale (GPA basis)
-  const normalizedAverage = subjectsGraded > 0
+  // ── Averages ────────────────────────────────────────────────────────────────
+  // Unweighted mean of GPA points — the pre-coefficient behaviour, kept as a
+  // reference value.
+  const plainAverage = subjectsGraded > 0
     ? Math.round((totalPoints / subjectsGraded) * 100) / 100
+    : 0;
+
+  // Coefficient-weighted mean of GPA points. With the default coefficient (×1)
+  // on every subject this equals plainAverage exactly, so legacy data is
+  // unaffected. This weighted basis drives the overall grade / pass decision.
+  const normalizedAverage = totalCoefficient > 0
+    ? Math.round((totalWeightedPoints / totalCoefficient) * 100) / 100
     : 0;
 
   // Percentage on raw scores
@@ -220,10 +246,10 @@ function calculateOverallResult(subjectScores) {
   // GPA
   const gpa = normalizedAverage; // same in Cameroon system
 
-  // Overall grade from normalized average (convert back to /20 for lookup)
+  // Overall grade from the weighted average (convert back to /20 for lookup)
   const overall = lookupGrade(normalizedAverage * 5);
 
-  // Passing if average GPA >= 2.0 (= C grade = 10/20)
+  // Passing if weighted GPA >= 2.0 (= C grade = 10/20)
   const isPassing = normalizedAverage >= 2.0;
 
   return {
@@ -231,6 +257,8 @@ function calculateOverallResult(subjectScores) {
     maxTotalScore:     Math.round(totalMaxScore * 100) / 100,
     percentage:        Math.round(percentage * 100) / 100,
     normalizedAverage: Math.round(normalizedAverage * 100) / 100,
+    plainAverage,
+    totalCoefficients: Math.round(totalCoefficient * 100) / 100,
     overallGrade:      overall.grade,
     overallRemark:     overall.remark,
     gpa:               Math.round(gpa * 100) / 100,

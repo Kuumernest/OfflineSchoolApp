@@ -4,15 +4,19 @@
 const { v4: uuidv4 }  = require("uuid");
 const ExamResult      = require("../db/models/ExamResult");
 const ExamScore       = require("../db/models/ExamScore");
+const StudentScore    = require("../db/models/StudentScore");
+const ResultSummary   = require("../db/models/ResultSummary");
 const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
+const School          = require("../db/models/School");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
   guardResultWrite,
   logResultChange,
   diffField,
 } = require("../services/resultAudit.service");
+const { renderReportCardHtml } = require("../services/reportHtml.service");
 
 const {
   computeResults:  computeResultsService,
@@ -127,9 +131,14 @@ const getExamRankings = asyncHandler(async (req, res) => {
 const getStudentResult = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
 
+  // ✅ Phase 0 repoint: this route used to read ExamResult/ExamScore — models
+  //    the processing pipeline no longer writes (processResults lands data in
+  //    ResultSummary / StudentScore). Consumers got an empty summary and the
+  //    web batch print silently fell back to blank marks. Response shape is
+  //    unchanged: { summary, scores }.
   const [summary, scores] = await Promise.all([
-    ExamResult.findOne({ examId, studentId, deletedAt: null }).lean(),
-    ExamScore.find({ examId, studentId, deletedAt: null }).lean(),
+    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
+    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
   ]);
 
   if (!summary && !scores.length) {
@@ -149,32 +158,46 @@ const getStudentResult = asyncHandler(async (req, res) => {
 // GET /api/results/:examId/student/:studentId/reportcard
 // ─────────────────────────────────────────────────────────
 
-const getStudentReportCard = asyncHandler(async (req, res) => {
-  const { examId, studentId } = req.params;
-
+// Shared payload builder — used by the JSON endpoint and the HTML renderer
+// endpoint (Phase 2 single-engine consolidation). Returns
+// { ok: true, data } or { ok: false }.
+const buildStudentReportCardData = async (examId, studentId) => {
+  // ✅ Phase 0 repoint: reads the LIVE pipeline collections (StudentScore +
+  //    ResultSummary, written by processResults) instead of ExamResult/ExamScore.
+  //    Payload shape is unchanged — the mobile ReportCard (admin + student
+  //    views), the web batch print and the shared HTML renderer consume it.
   const [scores, examSubjects, summary, exam] = await Promise.all([
-    ExamScore.find({ examId, studentId, deletedAt: null }).lean(),
+    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
     ExamSubject.find({ examId, deletedAt: null }).lean(),
-    ExamResult.findOne({ examId, studentId }).lean(),
+    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
     Exam.findById(examId).lean(),
   ]);
 
-  if (!scores.length) {
-    return res.status(404).json({
-      success: false,
-      error:   "No scores found for this student in this exam",
-      detail:  "Enter marks first before generating a report card",
-    });
+  if (!summary && !scores.length) return { ok: false };
+
+  // Lookup by both ref styles: StudentScore.examSubjectId → ExamSubject._id,
+  // while rows entered before subjects were set up may only carry subjectId.
+  const subjectMap = new Map();
+  for (const es of examSubjects) {
+    subjectMap.set(String(es._id), es);
+    if (es.subjectId != null) subjectMap.set(String(es.subjectId), es);
   }
 
-  const subjectMap = new Map(
-    examSubjects.map((es) => [String(es.subjectId), es])
-  );
+  // Canonical weight semantics: ExamSubject.weight is percentage-style
+  // (schema default 100). ÷100 → multiplier coefficient, so the default
+  // leaves every subject equally weighted (×1). This replaces the old
+  // `es.weight ?? 1`, which silently turned every subject into ×100.
+  const resolveCoeff = (es) => {
+    if (!es || es.weight == null) return 1;
+    const c = Math.round((Number(es.weight) / 100) * 100) / 100;
+    return c > 0 ? c : 1;
+  };
 
   const subjectRows = scores.map((score) => {
-    const es       = subjectMap.get(String(score.subjectId)) || {};
+    const es       = subjectMap.get(String(score.examSubjectId)) ||
+                     subjectMap.get(String(score.subjectId)) || {};
     const maxScore = score.maxScore || es.maxScore || 100;
-    const coeff    = es.weight ?? 1;
+    const coeff    = resolveCoeff(es);
 
     const normalizedMark =
       score.score != null && !score.isAbsent && !score.isExempt
@@ -200,7 +223,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
       coefficient:   coeff,
       percentage:    score.percentage    ?? null,
       grade:         score.grade         ?? null,
-      gradePoint:    score.gradePoint    ?? null,
+      gradePoint:    score.gpaPoints     ?? null,
       isPassing:     score.isPassing     ?? null,
       normalizedMark,
       weightedScore,
@@ -218,9 +241,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
     ? Math.round((totalWeighted / totalCoeff) * 100) / 100
     : 0;
 
-  return res.json({
-    success: true,
-    data: {
+  const data = {
       examId,
       studentId,
       studentName:  summary?.studentName || null,
@@ -235,7 +256,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
       summary: summary
         ? {
             totalScore:      summary.totalScore,
-            totalMaxScore:   summary.totalMaxScore,
+            totalMaxScore:   summary.maxTotalScore,
             percentage:      summary.percentage,
             average:         summary.average,
             overallGrade:    summary.overallGrade,
@@ -251,7 +272,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
             subjectsPassed:  summary.subjectsPassed,
             subjectsFailed:  summary.subjectsFailed,
             promotionStatus: summary.promotionStatus,
-            subjectScores:   summary.subjectScores,
+            subjectScores:   summary.subjectBreakdown,
           }
         : null,
       computed: {
@@ -259,6 +280,71 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
         weightedAverage,
         outOf: 20,
       },
+};
+
+  return { ok: true, data };
+};
+
+// ─────────────────────────────────────────────────────────
+// GET /api/results/:examId/student/:studentId/reportcard
+// ─────────────────────────────────────────────────────────
+
+const getStudentReportCard = asyncHandler(async (req, res) => {
+  const { examId, studentId } = req.params;
+
+  const built = await buildStudentReportCardData(examId, studentId);
+  if (!built?.ok) {
+    return res.status(404).json({
+      success: false,
+      error:   "No scores found for this student in this exam",
+      detail:  "Enter marks first before generating a report card",
+    });
+  }
+
+  return res.json({ success: true, data: built.data });
+});
+
+// ─────────────────────────────────────────────────────────
+// GET /api/results/:examId/student/:studentId/reportcard/html
+//
+// ✅ Phase 2: single rendering engine. Returns the canonical printable HTML
+//    produced server-side; the web batch print and the mobile PDF export
+//    fetch this instead of keeping their own local builders.
+//    ?lang=fr switches label language (default en).
+// ─────────────────────────────────────────────────────────
+
+const getStudentReportCardHtml = asyncHandler(async (req, res) => {
+  const { examId, studentId } = req.params;
+  const lang =
+    String(req.query.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
+
+  const built = await buildStudentReportCardData(examId, studentId);
+  if (!built?.ok) {
+    return res.status(404).json({
+      success: false,
+      error:   "No scores found for this student in this exam",
+      detail:  "Enter marks first before generating a report card",
+    });
+  }
+
+  let schoolName = req.user?.schoolName || null;
+  if (!schoolName && req.user?.schoolId) {
+    const school = await School.findOne({ _id: req.user.schoolId })
+      .select("name")
+      .lean();
+    schoolName = school?.name || null;
+  }
+
+  const html = renderReportCardHtml(built.data, {
+    lang,
+    schoolName: schoolName || "School",
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      html,
+      filename: `report-${built.data.admissionNo || studentId}-${examId}.html`,
     },
   });
 });
@@ -376,50 +462,67 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
   );
   const isPassing     = average >= pass;
 
-  const existing = await ExamResult.findOne({ examId, studentId, schoolId });
+  // ✅ Phase 0 repoint: persist to ResultSummary (the live pipeline model)
+  //    instead of ExamResult. GET /reportcard reads ResultSummary now, so
+  //    "Calculate & save" must write where the read happens or the saved
+  //    values would never show up on reload.
+  const computedFields = {
+    average,
+    percentage:    avgPercentage,
+    overallGrade:  overallMatch?.grade     || null,
+    overallRemark: overallMatch?.remark    || null,
+    gpa:           overallMatch?.gpaPoints ?? null,
+    subjectsPassed,
+    subjectsFailed,
+    subjectsTotal: subjectBreakdown.length,
+    isPassing,
+    subjectBreakdown,
+    syncStatus:    "synced",
+    lastSyncedAt:  new Date(),
+  };
+
+  const existing = await ResultSummary.findOne({
+    examId, studentId, deletedAt: null,
+  });
 
   let summary;
   if (existing) {
-    summary = await ExamResult.findByIdAndUpdate(
+    summary = await ResultSummary.findByIdAndUpdate(
       existing._id,
-      {
-        $set: {
-          classId:       exam?.classId         || existing.classId || null,
-          average,
-          percentage:    avgPercentage,
-          overallGrade:  overallMatch?.grade    || null,
-          overallRemark: overallMatch?.remark   || null,
-          gpa:           overallMatch?.gpaPoints ?? null,
-          subjectsPassed,
-          subjectsFailed,
-          subjectsTotal: subjectBreakdown.length,
-          isPassing,
-          subjectBreakdown,
-          syncStatus:    "synced",
-          lastSyncedAt:  new Date(),
-        },
-      },
+      { $set: computedFields },
       { new: true }
     ).lean();
   } else {
-    const created = await ExamResult.create({
-      _id:           uuidv4(),
+    // No processed summary yet — create a minimal one. classId and schoolId
+    // are schema-required; take them from the student's score rows, falling
+    // back to the exam.
+    const firstScore = await StudentScore.findOne({
+      examId, studentId, deletedAt: null,
+    })
+      .select("classId schoolId studentName admissionNo className academicYear term")
+      .lean();
+
+    const classId = firstScore?.classId || exam?.classId || null;
+    if (!classId || !schoolId) {
+      return res.status(409).json({
+        success: false,
+        error:   "No result summary for this student in this exam",
+        detail:  "Run Results → Compute for this exam first, then retry.",
+      });
+    }
+
+    const created = await ResultSummary.create({
+      _id:          uuidv4(),
       examId,
       studentId,
       schoolId,
-      classId:       exam?.classId         || null,
-      average,
-      percentage:    avgPercentage,
-      overallGrade:  overallMatch?.grade    || null,
-      overallRemark: overallMatch?.remark   || null,
-      gpa:           overallMatch?.gpaPoints ?? null,
-      subjectsPassed,
-      subjectsFailed,
-      subjectsTotal: subjectBreakdown.length,
-      isPassing,
-      subjectBreakdown,
-      syncStatus:    "synced",
-      lastSyncedAt:  new Date(),
+      classId,
+      studentName:  firstScore?.studentName || null,
+      admissionNo:  firstScore?.admissionNo || null,
+      className:    firstScore?.className   || null,
+      academicYear: firstScore?.academicYear || exam?.academicYear || null,
+      term:         firstScore?.term        || exam?.term        || null,
+      ...computedFields,
     });
     summary = created.toObject ? created.toObject() : created;
   }
@@ -762,6 +865,7 @@ module.exports = {
   getExamRankings,
   getStudentResult,
   getStudentReportCard,
+  getStudentReportCardHtml,
   calculateStudentReportCard,
   computeResults,
   publishResults,

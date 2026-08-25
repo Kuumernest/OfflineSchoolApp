@@ -6,7 +6,7 @@ import React, {
 } from "react";
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
-  ActivityIndicator, Alert, StatusBar, RefreshControl,
+  ActivityIndicator, Alert, StatusBar, RefreshControl, BackHandler,
   TextInput, ScrollView, KeyboardAvoidingView, Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -24,6 +24,15 @@ const rateColor = (pct) => {
   if (pct >= 70) return "#059669";
   if (pct >= 50) return "#D97706";
   return "#DC2626";
+};
+
+// Keep a score box to digits plus at most one decimal point. Numeric
+// keypads still offer "-" and "." on Android, and pasting bypasses them
+// entirely, so the text is cleaned on the way in rather than trusted.
+const sanitizeScore = (v) => {
+  const cleaned = String(v ?? "").replace(/[^0-9.]/g, "");
+  const parts   = cleaned.split(".");
+  return parts.length <= 2 ? cleaned : `${parts[0]}.${parts.slice(1).join("")}`;
 };
 
 const STATUS_META = {
@@ -134,17 +143,6 @@ const fetchClasses = async (schoolId, role) => {
   } catch (err) {
     console.warn("[fetchClasses] network failed, using cache:", err.message);
     return classesFromCache(schoolId);
-  }
-};
-
-const fetchExamRecord = async (examId, schoolId) => {
-  if (!examId) return null;
-  try {
-    const { exam } = await ExamService.getExamById(examId, schoolId);
-    return exam || null;
-  } catch (err) {
-    console.warn("[fetchExamRecord] failed:", err.message);
-    return null;
   }
 };
 
@@ -517,14 +515,31 @@ const ex = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
-// STEP 0.5 — CLASS SELECTOR
+// STEP 1 — CLASS + SUBJECT SELECTOR (subjects grouped by class)
+//
+// Single screen: the exam is already chosen, so the teacher / admin can
+// immediately see every class in that exam and the subject mark-sheets
+// under it. Tapping a subject row opens the mark sheet for that class +
+// subject, where they fill in the marks for ALL students before the one
+// Save button.
 // ─────────────────────────────────────────────────────────
 
-const ClassSelector = ({ examId, examName, schoolId, role, onSelect }) => {
-  const [classes,    setClasses]    = useState([]);
+const SUB_STATUS_META = {
+  pending:   { color: "#D97706", bg: "#FEF3C7", label: "Pending",   },
+  submitted: { color: "#4F46E5", bg: "#EEF2FF", label: "Submitted", },
+  approved:  { color: "#059669", bg: "#ECFDF5", label: "Approved",  },
+  rejected:  { color: "#DC2626", bg: "#FEF2F2", label: "Rejected",  },
+};
+
+const ClassSubjectPicker = ({
+  examId, examName, schoolId, role,
+  initialClassId = "", onSelect,
+}) => {
+  const [sections,   setSections]   = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error,      setError]      = useState(null);
+  const [search,     setSearch]     = useState("");
 
   const load = useCallback(async (isRefresh = false) => {
     try {
@@ -532,107 +547,104 @@ const ClassSelector = ({ examId, examName, schoolId, role, onSelect }) => {
       else           setLoading(true);
       setError(null);
 
-      const [submissionsRes, allClasses, examRecord] = await Promise.all([
+      const [submissionsRes, allClasses] = await Promise.all([
         ExamService.getSubmissions({ examId, schoolId }),
         fetchClasses(schoolId, role),
-        fetchExamRecord(examId, schoolId),
       ]);
 
       const submissions = submissionsRes?.submissions || [];
 
       const classMap = {};
-      for (const c of allClasses) {
-        classMap[c.id] = c.name;
-      }
+      for (const c of allClasses) classMap[String(c.id)] = c.name;
 
-      const examClassIds   = examRecord?.classIds || [];
-      const examClassNames = examRecord?.classNames
-        ? examRecord.classNames.split(",").map((n) => n.trim())
-        : [];
-
-      examClassIds.forEach((cid, i) => {
-        const cidStr = String(cid);
-        if (!classMap[cidStr] && examClassNames[i]) {
-          classMap[cidStr] = examClassNames[i];
-        }
-      });
-
-      const map = {};
-
-      for (let i = 0; i < examClassIds.length; i++) {
-        const cidStr = String(examClassIds[i]);
-        if (!map[cidStr]) {
-          map[cidStr] = {
-            classId:      cidStr,
-            className:    classMap[cidStr] || examClassNames[i] || `Class …${cidStr.slice(-4)}`,
-            subjectCount: 0,
-          };
-        }
-      }
-
+      const grouped = {};
       for (const s of submissions) {
-        const cid = extractClassId(s);
-        if (!cid) continue;
-        const cidStr = String(cid);
-        if (!map[cidStr]) {
-          map[cidStr] = {
-            classId:      cidStr,
-            className:    classMap[cidStr] || `Class …${cidStr.slice(-4)}`,
-            subjectCount: 0,
+        const cidStr = String(extractClassId(s) || "");
+        if (!cidStr) continue;
+        if (!grouped[cidStr]) {
+          grouped[cidStr] = {
+            classId:   cidStr,
+            className: classMap[cidStr] || s.className || ("Class …" + cidStr.slice(-4)),
+            subjects:  [],
           };
         }
-        map[cidStr].subjectCount++;
+        grouped[cidStr].subjects.push({
+          id:                 String(s._id || s.id),
+          examSubjectId:      String(s._id || s.id),
+          subjectId:          String(s.subjectId || ""),
+          subjectName:        s.subjectName  || "Unknown Subject",
+          className:          grouped[cidStr].className,
+          classId:            cidStr,
+          teacherName:        s.teacherName || "No teacher",
+          maxScore:           s.maxScore ?? 100,
+          passMark:           s.passMark ?? 50,
+          submissionStatus:   s.submissionStatus || "pending",
+          totalScoresEntered: s.totalScoresEntered ?? 0,
+          totalStudents:      s.totalStudents ?? 0,
+        });
       }
 
-      const classList = Object.values(map).sort(
-        (a, b) => a.className.localeCompare(b.className)
+      const list = Object.values(grouped).sort((a, b) =>
+        a.className.localeCompare(b.className)
       );
 
-      if (classList.length === 1) {
-        onSelect(classList[0]);
-        return;
-      }
-
-      setClasses(classList);
+      setSections(list);
     } catch (err) {
-      console.error("ClassSelector load failed:", err.message);
-      setError("Failed to load classes");
+      console.error("ClassSubjectPicker load failed:", err.message);
+      setError("Failed to load classes & subjects");
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [examId, schoolId, role, onSelect]);
+  }, [examId, schoolId, role]);
 
   useEffect(() => { load(); }, [load]);
 
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    let list = sections;
+    if (initialClassId) list = list.filter((sc) => sc.classId === String(initialClassId));
+    if (!q) return list;
+    return list
+      .map((sc) => ({
+        ...sc,
+        subjects: sc.subjects.filter(
+          (s) =>
+            s.subjectName.toLowerCase().includes(q) ||
+            sc.className.toLowerCase().includes(q)
+        ),
+      }))
+      .filter((sc) => sc.subjects.length > 0);
+  }, [sections, search, initialClassId]);
+
   if (loading) {
     return (
-      <View style={cl.centered}>
+      <View style={cs.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={cl.loadingText}>Loading classes…</Text>
+        <Text style={cs.loadingText}>Loading classes & subjects…</Text>
       </View>
     );
   }
 
   if (error) {
     return (
-      <View style={cl.centered}>
+      <View style={cs.centered}>
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
-        <Text style={cl.errorText}>{error}</Text>
-        <TouchableOpacity style={cl.retryBtn} onPress={() => load()}>
-          <Text style={cl.retryText}>Retry</Text>
+        <Text style={cs.errorText}>{error}</Text>
+        <TouchableOpacity style={cs.retryBtn} onPress={() => load()}>
+          <Text style={cs.retryText}>Retry</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  if (classes.length === 0) {
+  if (filtered.length === 0) {
     return (
-      <View style={cl.centered}>
+      <View style={cs.centered}>
         <Ionicons name="school-outline" size={48} color="#D1D5DB" />
-        <Text style={cl.emptyTitle}>No Classes Assigned</Text>
-        <Text style={cl.emptyText}>
-          This exam has no subjects assigned to any class yet.{"\n"}
+        <Text style={cs.emptyTitle}>No Subjects Assigned</Text>
+        <Text style={cs.emptyText}>
+          This exam has no subjects assigned to a class yet.{"\n"}
           Add subjects from the exam detail screen.
         </Text>
       </View>
@@ -640,272 +652,183 @@ const ClassSelector = ({ examId, examName, schoolId, role, onSelect }) => {
   }
 
   return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={cl.list}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => load(true)}
-          tintColor="#4F46E5"
-          colors={["#4F46E5"]}
+    <View style={{ flex: 1 }}>
+      {/* Search */}
+      <View style={cs.searchWrap}>
+        <Ionicons name="search-outline" size={16} color="#9CA3AF" />
+        <TextInput
+          style={cs.searchInput}
+          placeholder="Search subject or class…"
+          placeholderTextColor="#9CA3AF"
+          value={search}
+          onChangeText={setSearch}
+          autoCapitalize="none"
+          autoCorrect={false}
         />
-      }
-    >
-      <Text style={cl.hint}>Select a class to enter marks for</Text>
-      <Text style={cl.examName}>{examName}</Text>
+        {!!search && (
+          <TouchableOpacity onPress={() => setSearch("")}>
+            <Ionicons name="close-circle" size={16} color="#9CA3AF" />
+          </TouchableOpacity>
+        )}
+      </View>
 
-      {classes.map((cls) => (
-        <TouchableOpacity
-          key={cls.classId}
-          style={cl.card}
-          onPress={() => onSelect(cls)}
-          activeOpacity={0.7}
-        >
-          <View style={cl.cardIcon}>
-            <Ionicons name="school-outline" size={22} color="#4F46E5" />
+      <Text style={cs.hint}>
+        {examName} — choose a subject for a class to enter its marks
+      </Text>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={cs.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => load(true)}
+            tintColor="#4F46E5"
+            colors={["#4F46E5"]}
+          />
+        }
+      >
+        {filtered.map((sc) => (
+          <View key={sc.classId}>
+            {/* Class header */}
+            <View style={cs.classHeader}>
+              <View style={cs.classIconBg}>
+                <Ionicons name="school-outline" size={16} color="#4F46E5" />
+              </View>
+              <View style={cs.classHeaderText}>
+                <Text style={cs.className}>{sc.className}</Text>
+                <Text style={cs.classMeta}>
+                  {sc.subjects.length} subject
+                  {sc.subjects.length !== 1 ? "s" : ""}
+                </Text>
+              </View>
+            </View>
+
+            {sc.subjects.map((s) => {
+              const meta = SUB_STATUS_META[s.submissionStatus] || SUB_STATUS_META.pending;
+              const isApproved = s.submissionStatus === "approved";
+              const isRejected = s.submissionStatus === "rejected";
+              const pctEntered = s.totalStudents > 0
+                ? Math.round((s.totalScoresEntered / s.totalStudents) * 100)
+                : s.totalScoresEntered > 0 ? 100 : 0;
+
+              return (
+                <TouchableOpacity
+                  key={s.id}
+                  style={cs.card}
+                  onPress={() => onSelect(s)}
+                  activeOpacity={0.7}
+                  disabled={isApproved}
+                >
+                  <View style={cs.cardAccent} />
+                  <View style={cs.cardIcon}>
+                    <Ionicons name="book" size={20} color="#4F46E5" />
+                  </View>
+                  <View style={cs.cardInfo}>
+                    <Text style={cs.cardName}>{s.subjectName}</Text>
+                    <Text style={cs.cardSub}>
+                      {s.teacherName} · Max: {s.maxScore} · Pass: {s.passMark}
+                    </Text>
+                    {s.totalStudents > 0 && (
+                      <View style={cs.progressRow}>
+                        <View style={cs.progressBg}>
+                          <View style={[cs.progressFill, { width: `${pctEntered}%` }]} />
+                        </View>
+                        <Text style={cs.progressText}>
+                          {s.totalScoresEntered}/{s.totalStudents} entered
+                        </Text>
+                      </View>
+                    )}
+                    {isRejected && (
+                      <Text style={cs.rejectText} numberOfLines={2}>
+                        ★ rejected — re-enter marks
+                      </Text>
+                    )}
+                  </View>
+                  <View style={cs.cardRight}>
+                    <View style={[cs.statusBadge, { backgroundColor: meta.bg }]}>
+                      <Text style={[cs.statusText, { color: meta.color }]}>{meta.label}</Text>
+                    </View>
+                    {!isApproved && (
+                      <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
           </View>
-          <View style={cl.cardInfo}>
-            <Text style={cl.cardName}>{displayClass(cls)}</Text>
-            <Text style={cl.cardSub}>
-              {cls.subjectCount > 0
-                ? `${cls.subjectCount} subject${cls.subjectCount !== 1 ? "s" : ""} assigned`
-                : "Tap to enter marks"}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={20} color="#D1D5DB" />
-        </TouchableOpacity>
-      ))}
-    </ScrollView>
+        ))}
+      </ScrollView>
+    </View>
   );
 };
 
-const cl = StyleSheet.create({
-  centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 32 },
+const cs = StyleSheet.create({
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", gap: 12, padding: 24 },
   loadingText: { fontSize: 14, color: "#6B7280" },
   errorText:   { fontSize: 14, color: "#DC2626", textAlign: "center" },
+  retryBtn: {
+    backgroundColor:   "#4F46E5",
+    borderRadius:      10,
+    paddingVertical:   10,
+    paddingHorizontal: 24,
+    marginTop:         4,
+  },
+  retryText:   { color: "#FFF", fontWeight: "700", fontSize: 14 },
   emptyTitle:  { fontSize: 16, fontWeight: "700", color: "#374151", textAlign: "center" },
   emptyText:   { fontSize: 13, color: "#9CA3AF", textAlign: "center", lineHeight: 20 },
-  retryBtn: {
-    backgroundColor:   "#4F46E5",
-    borderRadius:      10,
-    paddingVertical:   10,
-    paddingHorizontal: 24,
-    marginTop:         4,
+  searchWrap: {
+    flexDirection: "row", alignItems: "center",
+    backgroundColor: "#F9FAFB", borderRadius: 10, paddingHorizontal: 12, height: 40,
+    borderWidth: 1, borderColor: "#E5E7EB", gap: 8, margin: 12, marginBottom: 4,
   },
-  retryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  list:      { padding: 16, gap: 10, paddingBottom: 40 },
-  hint:      { fontSize: 13, color: "#9CA3AF", marginBottom: 2 },
-  examName:  { fontSize: 15, fontWeight: "700", color: "#111827", marginBottom: 16 },
+  searchInput: { flex: 1, fontSize: 14, color: "#111827" },
+  hint:        { fontSize: 12, color: "#6B7280", marginHorizontal: 16, marginTop: 4, marginBottom: 2 },
+  list:        { paddingHorizontal: 16, paddingBottom: 48, gap: 4 },
+  classHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    backgroundColor: "#F3F4F6", borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8,
+    marginBottom: 6,
+  },
+  classIconBg: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center",
+  },
+  classHeaderText: { flex: 1 },
+  className: { fontSize: 14, fontWeight: "700", color: "#111827" },
+  classMeta: { fontSize: 11, color: "#6B7280", marginTop: 1 },
   card: {
     flexDirection:   "row",
     alignItems:      "center",
     backgroundColor: "#FFF",
-    borderRadius:    14,
-    padding:         16,
-    borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    gap:             14,
-    shadowColor:     "#000",
-    shadowOpacity:   0.04,
-    shadowRadius:    6,
-    elevation:       2,
-  },
-  cardIcon: {
-    width:           48,
-    height:          48,
-    borderRadius:    14,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
-  },
-  cardInfo: { flex: 1 },
-  cardName: { fontSize: 16, fontWeight: "700", color: "#111827" },
-  cardSub:  { fontSize: 12, color: "#6B7280", marginTop: 3 },
-});
-
-// ─────────────────────────────────────────────────────────
-// STEP 1 — SUBJECT SELECTOR
-// ─────────────────────────────────────────────────────────
-
-const SubjectSelector = ({ examId, classId, schoolId, onSelect }) => {
-  const [subjects,   setSubjects]   = useState([]);
-  const [loading,    setLoading]    = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [error,      setError]      = useState(null);
-
-  const load = useCallback(async (isRefresh = false) => {
-    try {
-      if (isRefresh) setRefreshing(true);
-      else           setLoading(true);
-      setError(null);
-
-      const res = await ExamService.getSubmissions({ examId, schoolId });
-      const all = res?.submissions || [];
-
-      const forClass = classId
-        ? all.filter(
-            (s) => String(extractClassId(s) || "") === String(classId)
-          )
-        : all;
-
-      setSubjects(forClass);
-    } catch (err) {
-      console.error("SubjectSelector load failed:", err.message);
-      setError("Failed to load subjects");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [examId, classId, schoolId]);
-
-  useEffect(() => { load(); }, [load]);
-
-  if (loading) {
-    return (
-      <View style={ss.centered}>
-        <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={ss.loadingText}>Loading subjects…</Text>
-      </View>
-    );
-  }
-
-  if (error) {
-    return (
-      <View style={ss.centered}>
-        <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
-        <Text style={ss.errorText}>{error}</Text>
-        <TouchableOpacity style={ss.retryBtn} onPress={() => load()}>
-          <Text style={ss.retryText}>Retry</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  return (
-    <ScrollView
-      showsVerticalScrollIndicator={false}
-      contentContainerStyle={ss.list}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={() => load(true)}
-          tintColor="#4F46E5"
-          colors={["#4F46E5"]}
-        />
-      }
-    >
-      <Text style={ss.hint}>Select a subject to enter marks</Text>
-
-      {subjects.length === 0 ? (
-        <View style={ss.empty}>
-          <Ionicons name="book-outline" size={48} color="#D1D5DB" />
-          <Text style={ss.emptyText}>No subjects for this class</Text>
-          <Text style={ss.emptySubText}>
-            Assign subjects to this class from the exam detail screen
-          </Text>
-        </View>
-      ) : (
-        subjects.map((s) => {
-          const statusColor =
-            s.submissionStatus === "approved"  ? "#059669" :
-            s.submissionStatus === "submitted" ? "#4F46E5" :
-            s.submissionStatus === "rejected"  ? "#DC2626" : "#D97706";
-
-          const statusBg =
-            s.submissionStatus === "approved"  ? "#ECFDF5" :
-            s.submissionStatus === "submitted" ? "#EEF2FF" :
-            s.submissionStatus === "rejected"  ? "#FEF2F2" : "#FEF3C7";
-
-          return (
-            <TouchableOpacity
-              key={s._id || s.id}
-              style={ss.card}
-              onPress={() => onSelect(s)}
-              activeOpacity={0.7}
-            >
-              <View style={ss.cardIcon}>
-                <Ionicons name="book" size={20} color="#4F46E5" />
-              </View>
-              <View style={ss.cardInfo}>
-                <Text style={ss.cardName}>
-                  {s.subjectName || "Unknown Subject"}
-                </Text>
-                <Text style={ss.cardSub}>
-                  {s.teacherName || "No teacher"} · Max: {s.maxScore} · Pass: {s.passMark}
-                </Text>
-                <Text style={ss.scoresEntered}>
-                  {s.totalScoresEntered ?? 0} score(s) entered
-                </Text>
-              </View>
-              <View style={ss.cardRight}>
-                <View style={[ss.statusBadge, { backgroundColor: statusBg }]}>
-                  <Text style={[ss.statusText, { color: statusColor }]}>
-                    {(s.submissionStatus || "pending").charAt(0).toUpperCase() +
-                     (s.submissionStatus || "pending").slice(1)}
-                  </Text>
-                </View>
-                <Ionicons
-                  name="chevron-forward"
-                  size={18}
-                  color="#D1D5DB"
-                  style={{ marginTop: 4 }}
-                />
-              </View>
-            </TouchableOpacity>
-          );
-        })
-      )}
-    </ScrollView>
-  );
-};
-
-const ss = StyleSheet.create({
-  centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
-  loadingText: { fontSize: 14, color: "#6B7280" },
-  errorText:   { fontSize: 14, color: "#DC2626", textAlign: "center" },
-  retryBtn: {
-    backgroundColor:   "#4F46E5",
-    borderRadius:      10,
-    paddingVertical:   10,
-    paddingHorizontal: 24,
-    marginTop:         4,
-  },
-  retryText:    { color: "#FFF", fontWeight: "700", fontSize: 14 },
-  list:         { padding: 16, gap: 10, paddingBottom: 40 },
-  hint:         { fontSize: 13, color: "#9CA3AF", marginBottom: 4 },
-  empty:        { alignItems: "center", paddingVertical: 60, gap: 8 },
-  emptyText:    { fontSize: 14, color: "#9CA3AF", textAlign: "center", fontWeight: "600" },
-  emptySubText: { fontSize: 12, color: "#D1D5DB", textAlign: "center" },
-  card: {
-    flexDirection:   "row",
-    alignItems:      "center",
-    backgroundColor: "#FFF",
-    borderRadius:    14,
-    padding:         14,
-    borderWidth:     1,
-    borderColor:     "#F3F4F6",
-    gap:             12,
-    shadowColor:     "#000",
-    shadowOpacity:   0.04,
-    shadowRadius:    6,
-    elevation:       2,
-  },
-  cardIcon: {
-    width:           44,
-    height:          44,
     borderRadius:    12,
-    backgroundColor: "#EEF2FF",
-    alignItems:      "center",
-    justifyContent:  "center",
+    padding:         12,
+    borderWidth:     1,
+    borderColor:     "#F3F4F6",
+    gap:             10,
+    marginBottom:    6,
+    shadowColor:     "#000",
+    shadowOpacity:   0.04,
+    shadowRadius:    6,
+    elevation:       1,
   },
-  cardInfo:      { flex: 1 },
-  cardName:      { fontSize: 15, fontWeight: "700", color: "#111827" },
-  cardSub:       { fontSize: 12, color: "#6B7280", marginTop: 2 },
-  scoresEntered: { fontSize: 11, color: "#059669", fontWeight: "600", marginTop: 2 },
-  cardRight:     { alignItems: "flex-end", gap: 4 },
-  statusBadge:   { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
-  statusText:    { fontSize: 11, fontWeight: "700" },
+  cardAccent: { width: 4, borderRadius: 2, alignSelf: "stretch", backgroundColor: "#EEF2FF" },
+  cardIcon: {
+    width: 38, height: 38, borderRadius: 10,
+    backgroundColor: "#EEF2FF", alignItems: "center", justifyContent: "center",
+  },
+  cardInfo:  { flex: 1 },
+  cardName:  { fontSize: 14, fontWeight: "700", color: "#111827" },
+  cardSub:   { fontSize: 11, color: "#6B7280", marginTop: 2 },
+  progressRow: { flexDirection: "row", alignItems: "center", gap: 6, marginTop: 5 },
+  progressBg: {
+    height: 5, borderRadius: 3, flex: 1, backgroundColor: "#F3F4F6", overflow: "hidden",
+  },
+  progressFill:       { height: 5, borderRadius: 3, backgroundColor: "#059669" },
+  progressText:       { fontSize: 10, color: "#6B7280", fontWeight: "600" },
+  rejectText:         { fontSize: 11, color: "#DC2626", marginTop: 2, fontWeight: "600" },
+  cardRight:          { alignItems: "flex-end", gap: 4 },
+  statusBadge:        { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4 },
+  statusText:         { fontSize: 11, fontWeight: "700" },
 });
 
 // ─────────────────────────────────────────────────────────
@@ -924,6 +847,8 @@ const ScoreEntry = ({
   subjectName,
   onSaved,
   saveRef,
+  onSavingChange,
+  onDirtyChange,
 }) => {
   const [students,   setStudents]   = useState([]);
   const [scores,     setScores]     = useState({});
@@ -931,6 +856,7 @@ const ScoreEntry = ({
   const [saving,     setSaving]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [search,     setSearch]     = useState("");
+  const [dirty,      setDirty]      = useState(false);
 
   const loadData = useCallback(async (isRefresh = false) => {
     try {
@@ -963,6 +889,7 @@ const ScoreEntry = ({
         };
       }
       setScores(map);
+      setDirty(false);
     } catch (err) {
       console.error("ScoreEntry load failed:", err.message);
       Alert.alert("Load Failed", "Could not load students. Please try again.");
@@ -975,6 +902,7 @@ const ScoreEntry = ({
   useEffect(() => { loadData(); }, [loadData]);
 
   const updateScore = useCallback((studentId, field, value) => {
+    setDirty(true);
     setScores((prev) => ({
       ...prev,
       [studentId]: { ...prev[studentId], [field]: value },
@@ -982,6 +910,7 @@ const ScoreEntry = ({
   }, []);
 
   const toggleAbsent = useCallback((studentId) => {
+    setDirty(true);
     setScores((prev) => {
       const wasAbsent = prev[studentId]?.isAbsent ?? false;
       return {
@@ -996,6 +925,7 @@ const ScoreEntry = ({
   }, []);
 
   const markAllPresent = useCallback(() => {
+    setDirty(true);
     setScores((prev) => {
       const updated = {};
       for (const s of students) {
@@ -1006,6 +936,7 @@ const ScoreEntry = ({
   }, [students]);
 
   const handleSave = useCallback(async () => {
+    if (saving) return;
     if (students.length === 0) {
       Alert.alert("No Students", "There are no students to save scores for.");
       return;
@@ -1024,14 +955,26 @@ const ScoreEntry = ({
       };
     });
 
+    // Number("abc") is NaN, and NaN fails BOTH range comparisons, so an
+    // unparseable box would otherwise sail through and reach the server.
     const invalid = records.filter(
-      (r) => !r.isAbsent && r.score !== null && (r.score < 0 || r.score > maxScore)
+      (r) =>
+        !r.isAbsent && r.score !== null &&
+        (!Number.isFinite(r.score) || r.score < 0 || r.score > maxScore)
     );
 
     if (invalid.length > 0) {
+      const names = invalid
+        .map((r) => students.find((s) => s._id === r.studentId)?.studentName)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ");
       Alert.alert(
         "Invalid Scores",
-        `${invalid.length} score(s) are out of range (0–${maxScore}).`
+        `${invalid.length} score(s) must be a number between 0 and ${maxScore}.` +
+        (names ? `
+
+Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
       );
       return;
     }
@@ -1045,6 +988,7 @@ const ScoreEntry = ({
           examId, classId, subjectId, examSubjectId,
           scores: records, schoolId,
         });
+        setDirty(false);
         Alert.alert(
           saveRes?.queued ? "Saved Offline" : "Saved",
           `Scores saved for ${records.length} student(s).` +
@@ -1075,11 +1019,16 @@ const ScoreEntry = ({
     } else {
       await doSave();
     }
-  }, [students, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
+  }, [saving, students, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
 
   useEffect(() => {
     if (saveRef) saveRef.current = handleSave;
   }, [handleSave, saveRef]);
+
+  // The Save button and the back guard live in the parent header, so it
+  // needs to know when a save is in flight and whether anything is unsaved.
+  useEffect(() => { onSavingChange?.(saving); }, [saving, onSavingChange]);
+  useEffect(() => { onDirtyChange?.(dirty);   }, [dirty,  onDirtyChange]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -1220,7 +1169,9 @@ const ScoreEntry = ({
                     ]}
                     value={entry.isAbsent ? "ABS" : rawScore}
                     onChangeText={(v) => {
-                      if (!entry.isAbsent) updateScore(item._id, "score", v);
+                      if (!entry.isAbsent) {
+                        updateScore(item._id, "score", sanitizeScore(v));
+                      }
                     }}
                     keyboardType="numeric"
                     editable={!entry.isAbsent}
@@ -1405,6 +1356,11 @@ export default function MarkEntryScreen() {
 
   const saveRef = useRef(null);
 
+  // Mirrored up from ScoreEntry so the header can disable Save mid-flight
+  // and the back guard knows whether marks would be lost.
+  const [entrySaving, setEntrySaving] = useState(false);
+  const [entryDirty,  setEntryDirty]  = useState(false);
+
   // Resolve className when missing from params
   useEffect(() => {
     if (!paramClassId || !schoolId) return;
@@ -1423,17 +1379,53 @@ export default function MarkEntryScreen() {
   }, [paramClassId, schoolId, role]);
 
   const step =
-    selectedSubject ? 3 :
-    selectedClass   ? 2 :
+    selectedSubject ? 2 :
     selectedExam    ? 1 :
                       0;
 
-  const handleBack = useCallback(() => {
-    if (step === 3 && !paramSubjectId) setSelectedSubject(null);
-    else if (step === 2 && !paramClassId) setSelectedClass(null);
+  const leaveStep = useCallback(() => {
+    if (step === 2 && !paramSubjectId) setSelectedSubject(null);
     else if (step === 1 && !paramExamId) setSelectedExam(null);
     else router.back();
-  }, [step, paramSubjectId, paramClassId, paramExamId, router]);
+  }, [step, paramSubjectId, paramExamId, router]);
+
+  const handleBack = useCallback(() => {
+    // A whole class's marks live only in ScoreEntry's local state until
+    // Save, so leaving step 2 unsaved would silently discard the lot.
+    if (step === 2 && entrySaving) return;
+
+    if (step === 2 && entryDirty) {
+      Alert.alert(
+        "Unsaved marks",
+        "You have entered marks on this sheet that have not been saved yet.",
+        [
+          { text: "Keep Editing", style: "cancel" },
+          { text: "Save Now",     onPress: () => saveRef.current?.() },
+          { text: "Discard",      style: "destructive", onPress: leaveStep },
+        ]
+      );
+      return;
+    }
+
+    leaveStep();
+  }, [step, entrySaving, entryDirty, leaveStep]);
+
+  // Route the Android hardware / gesture back through the same guard.
+  useEffect(() => {
+    const backSub = BackHandler.addEventListener("hardwareBackPress", () => {
+      handleBack();
+      return true;
+    });
+    return () => backSub.remove();
+  }, [handleBack]);
+
+  // Leaving the mark sheet retires whatever status it last reported.
+  useEffect(() => {
+    if (step !== 2) {
+      setEntrySaving(false);
+      setEntryDirty(false);
+    }
+  }, [step]);
 
   const handleSaved = useCallback((action) => {
     if (action === "back" && !paramSubjectId) setSelectedSubject(null);
@@ -1441,18 +1433,19 @@ export default function MarkEntryScreen() {
   }, [paramSubjectId, router]);
 
   const headerTitle =
-    step === 3 ? selectedSubject?.subjectName :
-    step === 2 ? "Select Subject"             :
+    step === 2 ? selectedSubject?.subjectName :
     step === 1 ? selectedExam?.name           :
                  "Mark Entry";
 
   const headerSub =
-    step === 3
-      ? `${selectedExam?.name || "Exam"} · ${displayClass(selectedClass)}` :
     step === 2
-      ? `${displayClass(selectedClass)} — pick a subject`                   :
+      ? `${selectedExam?.name || "Exam"} · ${
+          selectedSubject?.className ||
+          selectedClass?.className ||
+          displayClass(selectedClass)
+        }` :
     step === 1
-      ? "Select a class"                                                    :
+      ? "Choose a subject for a class"                                     :
       "Select an exam to start";
 
   return (
@@ -1474,13 +1467,16 @@ export default function MarkEntryScreen() {
           <Text style={ms.headerSub}   numberOfLines={1}>{headerSub}</Text>
         </View>
 
-        {step === 3 && (
+        {step === 2 && (
           <TouchableOpacity
-            style={ms.saveBtn}
+            style={[ms.saveBtn, entrySaving && ms.saveBtnDisabled]}
             onPress={() => saveRef.current?.()}
             activeOpacity={0.8}
+            disabled={entrySaving}
           >
-            <Text style={ms.saveBtnText}>Save</Text>
+            {entrySaving
+              ? <ActivityIndicator size="small" color="#FFF" />
+              : <Text style={ms.saveBtnText}>Save</Text>}
           </TouchableOpacity>
         )}
       </View>
@@ -1493,7 +1489,6 @@ export default function MarkEntryScreen() {
             onPress={() => {
               if (!paramExamId) {
                 setSelectedSubject(null);
-                setSelectedClass(null);
                 setSelectedExam(null);
               }
             }}
@@ -1507,18 +1502,15 @@ export default function MarkEntryScreen() {
           <Ionicons name="chevron-forward" size={13} color="#D1D5DB" />
 
           <TouchableOpacity
-            disabled={step <= 1 || !!paramClassId}
+            disabled={step <= 1 || !!paramSubjectId}
             onPress={() => {
-              if (!paramClassId) {
-                setSelectedSubject(null);
-                setSelectedClass(null);
-              }
+              if (!paramSubjectId) setSelectedSubject(null);
             }}
             activeOpacity={0.7}
           >
             <Text style={[
               ms.crumb,
-              step > 1 && !paramClassId && ms.crumbLink,
+              step > 1 && !paramSubjectId && ms.crumbLink,
               step === 1 && ms.crumbActive,
             ]}
               numberOfLines={1}
@@ -1527,30 +1519,7 @@ export default function MarkEntryScreen() {
             </Text>
           </TouchableOpacity>
 
-          {step >= 2 && (
-            <>
-              <Ionicons name="chevron-forward" size={13} color="#D1D5DB" />
-              <TouchableOpacity
-                disabled={step <= 2 || !!paramSubjectId}
-                onPress={() => {
-                  if (!paramSubjectId) setSelectedSubject(null);
-                }}
-                activeOpacity={0.7}
-              >
-                <Text style={[
-                  ms.crumb,
-                  step > 2 && !paramSubjectId && ms.crumbLink,
-                  step === 2 && ms.crumbActive,
-                ]}
-                  numberOfLines={1}
-                >
-                  {displayClass(selectedClass)}
-                </Text>
-              </TouchableOpacity>
-            </>
-          )}
-
-          {step === 3 && (
+          {step === 2 && (
             <>
               <Ionicons name="chevron-forward" size={13} color="#D1D5DB" />
               <Text style={[ms.crumb, ms.crumbActive]} numberOfLines={1}>
@@ -1576,38 +1545,33 @@ export default function MarkEntryScreen() {
       )}
 
       {step === 1 && (
-        <ClassSelector
-          examId={selectedExam._id}
-          examName={selectedExam.name}
+        <ClassSubjectPicker
+          examId={selectedExam?._id}
+          examName={selectedExam?.name}
           schoolId={schoolId}
           role={role}
-          onSelect={(cls) => setSelectedClass(cls)}
-        />
-      )}
-
-      {step === 2 && (
-        <SubjectSelector
-          examId={selectedExam._id}
-          classId={selectedClass.classId}
-          schoolId={schoolId}
-          onSelect={(submission) => {
+          initialClassId={paramClassId || ""}
+          onSelect={(sub) => {
+            setSelectedClass({ classId: sub.classId, className: sub.className });
             setSelectedSubject({
-              subjectId:     String(submission.subjectId),
-              subjectName:   submission.subjectName  || "Subject",
-              examSubjectId: String(submission._id   || submission.id),
-              maxScore:      submission.maxScore      ?? 100,
-              passMark:      submission.passMark      ?? 50,
+              examSubjectId: sub.examSubjectId,
+              subjectId:     sub.subjectId,
+              subjectName:   sub.subjectName,
+              classId:       sub.classId,
+              className:     sub.className,
+              maxScore:      sub.maxScore,
+              passMark:      sub.passMark,
             });
           }}
         />
       )}
 
-      {step === 3 && (
+      {step === 2 && (
         <ScoreEntry
           examId={selectedExam?._id    || paramExamId}
           examSubjectId={selectedSubject.examSubjectId}
           subjectId={selectedSubject.subjectId}
-          classId={selectedClass?.classId || paramClassId}
+          classId={selectedSubject.classId || selectedClass?.classId || paramClassId}
           schoolId={schoolId}
           role={role}
           maxScore={selectedSubject.maxScore ?? 100}
@@ -1615,6 +1579,8 @@ export default function MarkEntryScreen() {
           subjectName={selectedSubject.subjectName}
           onSaved={handleSaved}
           saveRef={saveRef}
+          onSavingChange={setEntrySaving}
+          onDirtyChange={setEntryDirty}
         />
       )}
     </View>
@@ -1649,7 +1615,11 @@ const ms = StyleSheet.create({
     borderRadius:      10,
     paddingVertical:   10,
     paddingHorizontal: 18,
+    minWidth:          72,
+    alignItems:        "center",
+    justifyContent:    "center",
   },
+  saveBtnDisabled: { opacity: 0.6 },
   saveBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
   breadcrumb: {
     flexDirection:     "row",

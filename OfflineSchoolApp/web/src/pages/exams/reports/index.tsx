@@ -7,15 +7,6 @@ import { EXAM_STATUS_META,
          EXAM_TYPE_LABELS }    from "@/constants/exam.constants";
 import type { Exam }           from "@/types/exam.types";
 
-/** One subject line on a printed report card. */
-interface SubjectBreakdownRow {
-  subjectName?:    string;
-  score?:          number | null;
-  normalizedMark?: number | null;
-  grade?:          string;
-  isPassing?:      boolean;
-  isAbsent?:       boolean;
-}
 import api                     from "@/lib/api";
 import { useTranslation } from "react-i18next";
 
@@ -72,141 +63,15 @@ const ExamCard = ({
   );
 };
 
-// ─────────────────────────────────────────────────────────
-// HTML REPORT BUILDER
-// ─────────────────────────────────────────────────────────
-
-function buildReportHtml(data: {
-  studentName:      string;
-  admissionNo:      string | null;
-  className:        string;
-  examName:         string;
-  academicYear:     string;
-  term:             string;
-  percentage:       number;
-  isPassing:        boolean;
-  overallGrade:     string;
-  subjectBreakdown: SubjectBreakdownRow[];
-  schoolName:       string;
-}, t: (key: string) => string) {
-  const esc = (str: string) =>
-    String(str ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-
-  const rows = data.subjectBreakdown.map((s) => `
-    <tr>
-      <td>${esc(s.subjectName || "—")}</td>
-      <td style="text-align:center">
-        ${s.isAbsent ? "ABS" : s.score ?? "—"}
-      </td>
-      <td style="text-align:center">
-        ${s.isAbsent ? "—" : s.normalizedMark?.toFixed(1) ?? "—"}
-      </td>
-      <td style="text-align:center;font-weight:bold;
-                 color:${s.isPassing ? "#059669" : "#DC2626"}">
-        ${s.isAbsent ? "ABS" : s.grade || "—"}
-      </td>
-      <td style="text-align:center;
-                 color:${s.isPassing ? "#059669" : "#DC2626"}">
-        ${s.isAbsent ? "—" : s.isPassing ? "Pass" : "Fail"}
-      </td>
-    </tr>
-  `).join("");
-
-  return `<!DOCTYPE html><html><head>
-    <meta charset="UTF-8">
-    <title>Report Card — ${esc(data.studentName)}</title>
-    <style>
-      * { box-sizing: border-box; margin: 0; padding: 0; }
-      body { font-family: Arial, sans-serif; font-size: 12px;
-             color: #111; padding: 24px; max-width: 800px; margin: 0 auto; }
-      h1 { font-size: 20px; color: #1e40af; text-align: center; }
-      .subtitle { text-align: center; color: #6b7280; margin-bottom: 20px; }
-      .info-grid { display: grid; grid-template-columns: 1fr 1fr;
-                   gap: 4px 24px; margin-bottom: 16px;
-                   background: #f0f4ff; padding: 12px; border-radius: 8px; }
-      .info-row  { display: flex; gap: 6px; font-size: 12px; }
-      .lbl       { font-weight: bold; min-width: 110px; color: #374151; }
-      .val       { color: #111; }
-      table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-      th, td { border: 1px solid #e5e7eb; padding: 6px 8px; }
-      thead  { background: #2563EB; color: #fff; }
-      tr:nth-child(even) { background: #f9fafb; }
-      .result { text-align: center; padding: 12px; border-radius: 8px;
-                font-weight: bold; font-size: 16px; margin-bottom: 16px; }
-      .pass { background: #D1FAE5; color: #059669; }
-      .fail { background: #FEE2E2; color: #DC2626; }
-      .footer { text-align: center; font-size: 10px; color: #9ca3af;
-                border-top: 1px solid #e5e7eb; padding-top: 10px; }
-      @media print { body { padding: 12px; } }
-    </style>
-  </head><body>
-    <h1>${esc(data.schoolName)}</h1>
-    <p class="subtitle">${t("reportCards.academic")}</p>
-
-    <div class="info-grid">
-      <div class="info-row">
-        <span class="lbl">Student:</span>
-        <span class="val">${esc(data.studentName)}</span>
-      </div>
-      <div class="info-row">
-        <span class="lbl">Admission No:</span>
-        <span class="val">${data.admissionNo ? `#${esc(data.admissionNo)}` : "—"}</span>
-      </div>
-      <div class="info-row">
-        <span class="lbl">Class:</span>
-        <span class="val">${esc(data.className)}</span>
-      </div>
-      <div class="info-row">
-        <span class="lbl">Exam:</span>
-        <span class="val">${esc(data.examName)}</span>
-      </div>
-      <div class="info-row">
-        <span class="lbl">Academic Year:</span>
-        <span class="val">${esc(data.academicYear)}</span>
-      </div>
-      <div class="info-row">
-        <span class="lbl">Term:</span>
-        <span class="val">${esc(data.term)}</span>
-      </div>
-    </div>
-
-    ${rows.length > 0 ? `
-    <table>
-      <thead>
-        <tr>
-          <th>${t("academic.subject")}</th>
-          <th style="text-align:center">${t("academic.score")}</th>
-          <th style="text-align:center">/20</th>
-          <th style="text-align:center">${t("academic.grade")}</th>
-          <th style="text-align:center">${t("reportCards.result")}</th>
-        </tr>
-      </thead>
-      <tbody>${rows}</tbody>
-    </table>` : `<p style='color:#9ca3af;margin:16px 0'>${t("reportCards.noScores")}</p>`}
-
-    <div class="result ${data.isPassing ? "pass" : "fail"}">
-      ${data.isPassing ? "✓ PASS" : "✗ FAIL"} —
-      ${data.percentage.toFixed(1)}% — Grade: ${esc(data.overallGrade)}
-    </div>
-
-    <div class="footer">
-      Generated on ${new Date().toLocaleDateString("en-GB", {
-        day: "numeric", month: "long", year: "numeric",
-      })} | ${esc(data.schoolName)}
-    </div>
-  </body></html>`;
-}
-
-// ─────────────────────────────────────────────────────────
+// ─────────────────
 // MAIN PAGE
+//
+// PHASE 2: report HTML now comes from the shared backend renderer
+// GET /results/:examId/student/:studentId/reportcard/html
 // ─────────────────────────────────────────────────────────
 
 export default function ExamReportsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);
 
@@ -286,29 +151,24 @@ export default function ExamReportsPage() {
     for (let i = 0; i < targetStudents.length; i++) {
       const student = targetStudents[i];
       try {
-        const sid = String(student._id);
-        const res = await api.get(
-          `/results/${selectedExam._id}/student/${sid}`,
-          { params: { schoolId } }
-        ).catch(() => null);
+        // Phase 2: fetch pre-rendered HTML from the shared backend engine
+        const sid    = String(student._id);
+        const lang   = i18n?.resolvedLanguage ?? "en";
+        const school = user?.schoolName || user?.school?.name || "";
+        const res2   = await api.get(
+          `/results/${selectedExam._id}/student/${sid}/reportcard/html`,
+          { params: { schoolId, lang, schoolName: school } }
+        );
 
-        const data = res?.data?.data?.summary || res?.data?.data || null;
+        const body  = res2?.data;
+        const html  = typeof res2 === "string"
+          ? res2
+          : body?.data?.html || body?.html || "";
 
-        const html = buildReportHtml({
-          studentName:      data?.studentName  || student.studentName || student.name || "Unknown",
-          admissionNo:      data?.admissionNo  || null,
-          className:        data?.className    || selectedClass.name,
-          examName:         selectedExam.name,
-          academicYear:     selectedExam.academicYear,
-          term:             selectedExam.term,
-          percentage:       data?.percentage   ?? 0,
-          isPassing:        data?.isPassing    ?? false,
-          overallGrade:     data?.overallGrade || "—",
-          subjectBreakdown: data?.subjectBreakdown || [],
-          schoolName:       user?.schoolName ||
-                            user?.school?.name ||
-                            "School",
-        }, t);
+        if (!html) {
+          error++;
+          continue;
+        }
 
         // Open in new tab for printing
         const w = window.open("", "_blank");
@@ -332,7 +192,9 @@ export default function ExamReportsPage() {
       success,
       error,
       message: `${success} report card(s) sent to print.${
-        error > 0 ? ` ${error} failed.` : ""
+        error > 0
+          ? ` ${error} failed — no processed result found. Run Results → Compute for this exam first.`
+          : ""
       }`,
     });
   };

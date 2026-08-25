@@ -10,6 +10,7 @@ import {
 import { Ionicons }    from "@expo/vector-icons";
 import * as Print      from "expo-print";
 import * as Sharing    from "expo-sharing";
+import api             from "../../../src/services/api";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -242,7 +243,29 @@ const SubjectRow = ({ subject, index, maxScore }) => {
 
 // ─────────────────────────────────────────────────────────
 // PDF EXPORT HELPER
+//
+// Phase 2: the canonical printable HTML now comes from the shared
+// backend renderer (GET /results/:examId/student/:studentId/reportcard/html).
+// buildPdfHtml is kept ONLY as an offline fallback when the identifiers or
+// the network are unavailable — online, every platform prints the same HTML.
 // ─────────────────────────────────────────────────────────
+
+const fetchReportCardHtml = async ({ examId, studentId, schoolId, schoolName }) => {
+  try {
+    const res = await api.get(
+      `/results/${examId}/student/${studentId}/reportcard/html`,
+      { params: { schoolId, schoolName } }
+    );
+    const body = res?.data;
+    const html = typeof res === "string"
+      ? res
+      : body?.data?.html || body?.html || res?.html || "";
+    return html || null;
+  } catch (err) {
+    console.warn("[ReportCard] backend HTML fetch failed, falling back to local builder:", err.message);
+    return null;
+  }
+};
 
 function buildPdfHtml({ result, exam, schoolName }) {
   const subjects = result.subjectBreakdown || [];
@@ -413,6 +436,9 @@ export default function ReportCard({
   exam,
   schoolName,
   schoolLogo,           // reserved for future image use
+  examId,               // for the shared backend HTML renderer
+  studentId,            // for the shared backend HTML renderer
+  schoolId,             // for the shared backend HTML renderer
   showRankings  = true,
   showExportBar = true,
   compact       = false,
@@ -425,18 +451,28 @@ export default function ReportCard({
   const subjects   = result.subjectBreakdown || [];
 
   // ── PDF export ──────────────────────────────────────────
+  const resolveHtml = async () => {
+    // Primary: shared backend renderer (canonical, translated, coeff-aware).
+    if (examId && studentId && schoolId) {
+      const html = await fetchReportCardHtml({ examId, studentId, schoolId, schoolName });
+      if (html) return html;
+    }
+    // Fallback: local builder (offline / no identifiers passed down).
+    return buildPdfHtml({ result, exam, schoolName });
+  };
+
   const handlePrint = useCallback(async () => {
     try {
-      const html = buildPdfHtml({ result, exam, schoolName });
+      const html = await resolveHtml();
       await Print.printAsync({ html });
     } catch (err) {
       Alert.alert("Print Error", err.message);
     }
-  }, [result, exam, schoolName]);
+  }, [result, exam, schoolName, examId, studentId, schoolId]);
 
   const handleShare = useCallback(async () => {
     try {
-      const html          = buildPdfHtml({ result, exam, schoolName });
+      const html          = await resolveHtml();
       const { uri }       = await Print.printToFileAsync({ html });
       const canShare      = await Sharing.isAvailableAsync();
       if (!canShare) {
@@ -450,7 +486,7 @@ export default function ReportCard({
     } catch (err) {
       Alert.alert("Share Error", err.message);
     }
-  }, [result, exam, schoolName]);
+  }, [result, exam, schoolName, examId, studentId, schoolId]);
 
   // ─────────────────────────────────────────────────────────
   // RENDER

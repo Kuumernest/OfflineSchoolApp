@@ -39,6 +39,13 @@ router.get(
   ctrl.getStudentReportCard
 );
 
+// Printable HTML — single shared rendering engine (web batch print + mobile PDF)
+router.get(
+  "/:examId/student/:studentId/reportcard/html",
+  adminOrTeacher,
+  ctrl.getStudentReportCardHtml
+);
+
 // ── Write routes ──────────────────────────────────────────
 
 // (Re)calculate a student's report card from raw subject scores

@@ -909,6 +909,7 @@ export default function ExamDetailScreen() {
         subjectName:   subject.subjectName   || "",
         examSubjectId: subject._id || subject.id,
         maxScore:      String(subject.maxScore ?? 100),
+        passMark:      String(subject.passMark ?? 50),
       });
     }
     router.push({ pathname: "/admin/exams/marks", params });

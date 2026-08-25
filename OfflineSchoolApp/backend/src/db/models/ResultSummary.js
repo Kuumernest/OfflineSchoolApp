@@ -11,6 +11,9 @@ const subjectBreakdownSchema = new mongoose.Schema(
     score:          { type: Number,  default: 0      },
     maxScore:       { type: Number,  default: 100    },
     normalizedMark: { type: Number,  default: 0      },
+    // Coefficient-weighted fields — ExamSubject.weight ÷ 100 (default ×1).
+    coefficient:    { type: Number,  default: 1      },
+    weightedMark:   { type: Number,  default: null   },
     grade:          { type: String,  default: null   },
     points:         { type: Number,  default: 0      },
     remark:         { type: String,  default: null   },

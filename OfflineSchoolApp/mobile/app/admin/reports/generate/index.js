@@ -1,4 +1,4 @@
-// app/admin/reports/generate/index.js
+﻿// app/admin/reports/generate/index.js
 "use strict";
 
 import React, { useState, useCallback, useEffect, useMemo } from "react";
@@ -314,103 +314,9 @@ const syncTemplatesFromApi = async (schoolId) => {
   }
 };
 
+// ── Phase 2: all HTML rendering is centralized in the backend
+//    reportHtml.service.js (GET /results/:examId/student/:studentId/reportcard/html)
 // ─────────────────────────────────────────────────────────
-// REPORT HTML BUILDER
-// ─────────────────────────────────────────────────────────
-
-const buildReportHtml = (studentData, options = {}) => {
-  const { term, academicYear, schoolName } = options;
-  const subjects = studentData.subjects || studentData.scores || [];
-
-  const subjectRows = subjects.map((s) => `
-    <tr>
-      <td>${s.subjectName || s.subject || "—"}</td>
-      <td style="text-align:center">${s.score ?? "—"}/${s.maxScore ?? 100}</td>
-      <td style="text-align:center">${s.grade || "—"}</td>
-      <td style="text-align:center;color:${s.isPassing ? "#059669" : "#DC2626"}">
-        ${s.isPassing ? "Pass" : "Fail"}
-      </td>
-    </tr>
-  `).join("");
-
-  const esc = (str) =>
-    String(str ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;");
-
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body { font-family: Arial, sans-serif; font-size: 12px; color: #111; padding: 20px; }
-        h1 { font-size: 18px; text-align: center; margin-bottom: 4px; }
-        .subtitle { text-align: center; color: #6B7280; margin-bottom: 20px; }
-        .info-grid { display: flex; gap: 20px; margin-bottom: 16px; }
-        .info-item { flex: 1; }
-        .label { font-size: 10px; color: #9CA3AF; font-weight: bold; text-transform: uppercase; }
-        .value { font-size: 14px; font-weight: bold; color: #111; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th, td { border: 1px solid #E5E7EB; padding: 8px 10px; text-align: left; }
-        th { background-color: #F3F4F6; font-weight: bold; font-size: 11px; }
-        .result-box { margin-top: 20px; padding: 12px; border-radius: 8px; text-align: center; }
-        .pass { background: #ECFDF5; color: #059669; }
-        .fail { background: #FEF2F2; color: #DC2626; }
-        .footer { margin-top: 30px; font-size: 10px; color: #9CA3AF; text-align: center; }
-      </style>
-    </head>
-    <body>
-      <h1>${esc(schoolName || "School")}</h1>
-      <div class="subtitle">Academic Report Card · ${esc(term || "")} ${esc(academicYear || "")}</div>
-
-      <div class="info-grid">
-        <div class="info-item">
-          <div class="label">Student Name</div>
-          <div class="value">${esc(studentData.studentName || studentData.name || "—")}</div>
-        </div>
-        <div class="info-item">
-          <div class="label">Admission No</div>
-          <div class="value">${studentData.admissionNo ? "#" + esc(studentData.admissionNo) : "—"}</div>
-        </div>
-        <div class="info-item">
-          <div class="label">Class</div>
-          <div class="value">${esc(studentData.className || "—")}</div>
-        </div>
-      </div>
-
-      <table>
-        <thead>
-          <tr>
-            <th>Subject</th>
-            <th style="text-align:center">Score</th>
-            <th style="text-align:center">Grade</th>
-            <th style="text-align:center">Result</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${subjectRows ||
-            "<tr><td colspan='4' style='text-align:center;color:#9CA3AF'>No subjects</td></tr>"}
-        </tbody>
-      </table>
-
-      <div class="result-box ${studentData.isPassing ? "pass" : "fail"}">
-        <strong>${studentData.isPassing ? "&#x2705; PASS" : "&#x274C; FAIL"}</strong>
-        ${studentData.percentage != null ? ` · ${studentData.percentage.toFixed(1)}%` : ""}
-        ${studentData.overallGrade ? ` · Grade: ${esc(studentData.overallGrade)}` : ""}
-      </div>
-
-      <div class="footer">
-        Generated on ${new Date().toLocaleDateString("en-GB", {
-          day: "numeric", month: "long", year: "numeric",
-        })}
-      </div>
-    </body>
-    </html>
-  `;
-};
 
 const generateAndSharePdf = async (html, filename = "report") => {
   const { uri } = await Print.printToFileAsync({ html });
@@ -429,25 +335,21 @@ const generateAndPrintPdf = async (html) => {
   await Print.printAsync({ html });
 };
 
-const fetchStudentResultData = async (studentId, examId, schoolId) => {
+const fetchReportCardHtml = async (studentId, examId, schoolId, schoolName) => {
   try {
-    const endpoints = [
-      `/results/${examId}/student/${studentId}`,
-      `/results?studentId=${studentId}&schoolId=${schoolId}`,
-    ];
-    for (const ep of endpoints) {
-      try {
-        const res  = await api.get(ep, { params: { schoolId }, timeout: 8000 });
-        const data = res.data?.data || res.data?.result || res.data;
-        if (data && (data.studentName || data.summary)) return data;
-      } catch (innerErr) {
-        console.warn(`[fetchStudentResultData] endpoint ${ep} failed:`, innerErr.message);
-      }
-    }
+    const res  = await api.get(
+      `/results/${examId}/student/${studentId}/reportcard/html`,
+      { params: { schoolId, schoolName } }
+    );
+    const body = res?.data;
+    const html = typeof res === "string"
+      ? res
+      : body?.data?.html || body?.html || res?.html || "";
+    return html || null;
   } catch (err) {
-    console.warn("[fetchStudentResultData] unexpected error:", err.message);
+    console.warn("[fetchReportCardHtml] failed:", err.message);
+    return null;
   }
-  return null;
 };
 
 // ─────────────────────────────────────────────────────────
@@ -569,23 +471,18 @@ export default function ReportGeneratorScreen() {
       if (selectedStudent) {
         setTotalStudents(1);
 
-        let studentData = examId
-          ? await fetchStudentResultData(selectedStudent.id, examId, schoolId)
+        const html = examId
+          ? await fetchReportCardHtml(selectedStudent.id, examId, schoolId, schoolName)
           : null;
 
-        if (!studentData) {
-          studentData = {
-            studentName: selectedStudent.name,
-            className:   selectedClass.name,
-            subjects:    [],
-          };
+        if (!html) {
+          Alert.alert(
+            "No Result",
+            "No processed result found for this student. Run Results → Compute for this exam first."
+          );
+          setProgress(1);
+          return;
         }
-
-        const html = buildReportHtml(studentData, {
-          term:         selectedTerm,
-          academicYear: selectedYear,
-          schoolName,
-        });
 
         await generateAndSharePdf(html, selectedStudent.name);
         setProgress(1);
@@ -606,26 +503,21 @@ export default function ReportGeneratorScreen() {
         const successful = [];
         const errors     = [];
 
-        for (let i = 0; i < classStudents.length; i++) {
+                for (let i = 0; i < classStudents.length; i++) {
           const student = classStudents[i];
-          try {
-            let studentData = examId
-              ? await fetchStudentResultData(student.id, examId, schoolId)
+      try {
+            const html = examId
+              ? await fetchReportCardHtml(student.id, examId, schoolId, schoolName)
               : null;
 
-            if (!studentData) {
-              studentData = {
+            if (!html) {
+              errors.push({
                 studentName: student.name,
-                className:   selectedClass.name,
-                subjects:    [],
-              };
+                error: "No processed result found. Run Results → Compute first.",
+              });
+              setProgress(i + 1);
+              continue;
             }
-
-            const html = buildReportHtml(studentData, {
-              term:         selectedTerm,
-              academicYear: selectedYear,
-              schoolName,
-            });
 
             const { uri } = await Print.printToFileAsync({ html });
             successful.push({ studentName: student.name, uri });
@@ -678,23 +570,24 @@ export default function ReportGeneratorScreen() {
       return;
     }
     try {
-      const html = buildReportHtml(
-        {
-          studentName: selectedStudent?.name || selectedClass?.name,
-          className:   selectedClass?.name,
-          subjects:    [],
-        },
-        {
-          term:         selectedTerm,
-          academicYear: selectedYear,
-          schoolName:   user?.schoolName || "School",
-        }
-      );
+      const examId = selectedExam?.id || params.examId;
+      const school  = user?.schoolName || "School";
+      const html    = examId
+        ? await fetchReportCardHtml(
+            selectedStudent?.id || selectedClass?.id,
+            examId, schoolId, school
+          )
+        : null;
+      if (!html) {
+        Alert.alert("No Result", "No processed result found. Run Results → Compute for this exam first.");
+        return;
+      }
+
       await generateAndPrintPdf(html);
     } catch (err) {
       Alert.alert("Print Error", err.message);
     }
-  }, [selectedStudent, selectedClass, selectedTerm, selectedYear, user]);
+  }, [selectedStudent, selectedClass, selectedExam, user]);
 
   // ─────────────────────────────────────────────────────────
   // RENDER — Loading
