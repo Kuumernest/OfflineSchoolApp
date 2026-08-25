@@ -14,6 +14,7 @@ const fs          = require("fs");
 const connectDatabase = require("./config/database");
 const errorHandler    = require("../middleware/errorHandler");
 const auth            = require("../middleware/auth");
+const { ensureStudentGateTokenIndex } = require("./db/ensureStudentIndexes");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -832,6 +833,11 @@ async function startServer() {
     console.log("🔌 Connecting to MongoDB…");
     await connectDatabase();
     console.log("✅ MongoDB connected");
+
+    // Repair a stale non-sparse unique index on students.gateToken (see the
+    // module docstring). Runs every boot, no-ops once the DB is correct.
+    await ensureStudentGateTokenIndex();
+    console.log("✅ Indexes verified");
 
     const server = app.listen(PORT, "0.0.0.0", () => {
       console.log("════════════════════════════════════");
