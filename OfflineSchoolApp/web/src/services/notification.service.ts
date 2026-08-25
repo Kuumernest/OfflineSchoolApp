@@ -150,7 +150,15 @@ export async function fetchNotifications(
     }
   );
 
-  const unreadCount = allNotifications.filter((n) => !n.isRead).length;
+  // NOTE: unreadCount counts only REAL notifications (announcements).
+  // System alerts are derived/live data — they are hardcoded isRead:false
+  // above and can never be marked read (markAsRead skips "alert-" ids,
+  // read-all only touches announcements). Including them here meant the
+  // badge could never reach zero while any alert was active, so opening
+  // the bell appeared to never change the count.
+  const unreadCount = allNotifications.filter(
+    (n) => !n.isRead && n.type !== "alert"
+  ).length;
 
   return {
     notifications: allNotifications,
@@ -160,25 +168,35 @@ export async function fetchNotifications(
 }
 
 // ─── Mark single as read ──────────────────────────────────────────────────────
-export async function markAsRead(notificationId: string): Promise<void> {
+// Returns true when the server confirmed the receipt (or the item needs no
+// receipt). The caller must NOT update its local unread state on false —
+// otherwise the badge optimistically clears and then snaps back on the next
+// reload, which reads as "the count never changes".
+export async function markAsRead(notificationId: string): Promise<boolean> {
   // Alert notifications are derived/live — not stored in DB
-  if (notificationId.startsWith("alert-")) return;
+  if (notificationId.startsWith("alert-")) return true;
 
   try {
     // POST, not PATCH, and /announcements rather than /admin/announcements.
     await api.post(`/announcements/${notificationId}/read`);
+    return true;
   } catch (err) {
     console.warn("[Notifications] Mark as read failed:", err);
+    return false;
   }
 }
 
 // ─── Mark all as read ─────────────────────────────────────────────────────────
-export async function markAllAsRead(schoolId: string): Promise<void> {
+// Returns the number of receipts written (0 = nothing was unread), or -1 when
+// the request failed — the caller should keep its current unread state then.
+export async function markAllAsRead(schoolId: string): Promise<number> {
   try {
     // schoolId must be in the body — the handler destructures req.body and
     // would otherwise 500, or match every school if it got through.
-    await api.post("/announcements/read-all", { schoolId });
+    const { data } = await api.post("/announcements/read-all", { schoolId });
+    return Number((data as Record<string, unknown>)?.marked ?? 0);
   } catch (err) {
     console.warn("[Notifications] Mark all as read failed:", err);
+    return -1;
   }
 }

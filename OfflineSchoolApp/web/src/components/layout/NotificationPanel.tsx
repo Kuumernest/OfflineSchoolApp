@@ -137,13 +137,18 @@ export default function NotificationPanel() {
   // ── Mark single as read ─────────────────────────────────────────────────────
   const handleRead = async (notification: Notification) => {
     if (!notification.isRead) {
-      await markAsRead(notification._id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n._id === notification._id ? { ...n, isRead: true } : n
-        )
-      );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      // Only touch local state when the server actually recorded the receipt.
+      // Updating optimistically on failure made the badge clear and then snap
+      // back on the next reload / poll.
+      const ok = await markAsRead(notification._id);
+      if (ok) {
+        setNotifications((prev) =>
+          prev.map((n) =>
+            n._id === notification._id ? { ...n, isRead: true } : n
+          )
+        );
+        setUnreadCount((prev) => Math.max(0, prev - 1));
+      }
     }
 
     if (notification.link) {
@@ -154,7 +159,11 @@ export default function NotificationPanel() {
 
   // ── Mark all as read ────────────────────────────────────────────────────────
   const handleReadAll = async () => {
-    await markAllAsRead(schoolId);
+    const marked = await markAllAsRead(schoolId);
+    // -1 = the request failed. Keep the current state so the badge doesn't
+    // falsely clear and then reappear on reload.
+    if (marked < 0) return;
+
     setNotifications((prev) =>
       prev.map((n) => ({ ...n, isRead: true }))
     );
