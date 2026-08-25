@@ -12,6 +12,7 @@ import * as Haptics                        from "expo-haptics";
 import { getDatabase }    from "@/db/database";
 import { useAuthStore }   from "@/store/auth.store";
 import StudentService     from "@/services/student.service";
+import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 
 // ─────────────────────────────────────────────────────────
@@ -95,8 +96,12 @@ function ActionButton({ icon, label, description, onPress, variant = "default", 
 // ENROLLMENT CARD
 // ─────────────────────────────────────────────────────────
 
-function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
+function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
   const [copied, setCopied] = useState(false);
+  const [resetting, setResetting]     = useState(false);
+  const [newCreds, setNewCreds]       = useState(null); // { tempPassword }
+  const [resetNote, setResetNote]     = useState(null); // non-secret outcome
+  const [newCopied, setNewCopied]     = useState(false);
 
   const handleCopy = useCallback(() => {
     if (!enrollmentNo) return;
@@ -104,6 +109,61 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [enrollmentNo]);
+
+  // ── Re-issue credentials ─────────────────────────────────
+  //
+  // Mirrors the teacher reset flow: confirm first, then POST /students/:id/
+  // reset-password. When no email went out the new password comes back in
+  // the response and is shown ONCE here — same contract as enrollment.
+  const handleReset = useCallback(() => {
+    if (!studentId || resetting) return;
+    Alert.alert(
+      "Reset password?",
+      "A new temporary password will be generated. The current one stops working immediately.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reset",
+          style: "destructive",
+          onPress: async () => {
+            setResetting(true);
+            setNewCreds(null);
+            setResetNote(null);
+            try {
+              const { data } = await api.post(
+                `/students/${studentId}/reset-password`
+              );
+              if (!data?.success) {
+                throw new Error(data?.message || "Reset failed");
+              }
+              if (data.tempPassword) {
+                setNewCreds({ tempPassword: data.tempPassword });
+              } else {
+                setResetNote(
+                  data.message ||
+                    "Password reset. New credentials were emailed to the student."
+                );
+              }
+            } catch (err) {
+              Alert.alert(
+                "Could not reset",
+                err?.response?.data?.message || err?.message || "Please try again."
+              );
+            } finally {
+              setResetting(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [studentId, resetting]);
+
+  const handleCopyNew = useCallback(() => {
+    if (!newCreds) return;
+    Clipboard.setString(newCreds.tempPassword);
+    setNewCopied(true);
+    setTimeout(() => setNewCopied(false), 2000);
+  }, [newCreds]);
 
   if (!enrollmentNo) return null;
 
@@ -139,6 +199,51 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
           <Text style={styles.resetWarningText}>
             <Text style={{ fontWeight: "700" }}>Password not yet changed.</Text>
             {" "}The student is still using their generated first password.
+          </Text>
+        </View>
+      )}
+
+      {/* ── Reset action + one-time result ── */}
+      {!newCreds && !resetNote && (
+        <TouchableOpacity
+          onPress={handleReset}
+          disabled={resetting || !studentId}
+          style={[styles.resetBtn, (resetting || !studentId) && styles.disabled]}
+          activeOpacity={0.75}
+        >
+          <Ionicons name="key-outline" size={14} color="#92400E" />
+          <Text style={styles.resetBtnText}>
+            {resetting ? "Resetting…" : "Forgot password? Reset it"}
+          </Text>
+        </TouchableOpacity>
+      )}
+
+      {newCreds && (
+        <View style={styles.newCredsBox}>
+          <Text style={styles.newCredsTitle}>New temporary password</Text>
+          <View style={styles.enrollRow}>
+            <Text style={styles.enrollNo} selectable>{newCreds.tempPassword}</Text>
+            <TouchableOpacity onPress={handleCopyNew} style={[
+              styles.copyBtn,
+              newCopied && styles.copyBtnCopied,
+            ]}>
+              <Text style={[styles.copyBtnText, newCopied && styles.copyBtnTextCopied]}>
+                {newCopied ? "✓ Copied" : "Copy"}
+              </Text>
+            </TouchableOpacity>
+          </View>
+          <Text style={styles.newCredsHint}>
+            Shown once — write it down or share it now. The student must set a
+            new password at next login.
+          </Text>
+        </View>
+      )}
+
+      {!!resetNote && (
+        <View style={styles.resetWarning}>
+          <Ionicons name="checkmark-circle-outline" size={14} color="#065F46" />
+          <Text style={[styles.resetWarningText, { color: "#065F46" }]}>
+            {resetNote}
           </Text>
         </View>
       )}
@@ -501,6 +606,7 @@ export default function StudentDetailScreen() {
         <EnrollmentCard
           enrollmentNo={enrollmentNo}
           mustResetPassword={mustReset}
+          studentId={student.id || student._id || null}
         />
 
         {/* Personal info */}
@@ -651,6 +757,15 @@ const styles = StyleSheet.create({
                      backgroundColor: "#FFFBEB", borderRadius: 10, borderWidth: 1,
                      borderColor: "#FDE68A", padding: 10, marginTop: 10 },
   resetWarningText:{ fontSize: 12, color: "#92400E", flex: 1, lineHeight: 17 },
+  resetBtn:        { flexDirection: "row", alignItems: "center", justifyContent: "center",
+                     gap: 6, backgroundColor: "#FFFBEB", borderRadius: 10,
+                     borderWidth: 1, borderColor: "#FDE68A",
+                     paddingVertical: 8, marginTop: 10 },
+  resetBtnText:    { fontSize: 12, fontWeight: "700", color: "#92400E" },
+  newCredsBox:     { backgroundColor: "#ECFDF5", borderRadius: 10, borderWidth: 1,
+                     borderColor: "#A7F3D0", padding: 10, marginTop: 10 },
+  newCredsTitle:   { fontSize: 12, fontWeight: "800", color: "#065F46", marginBottom: 6 },
+  newCredsHint:    { fontSize: 11, color: "#047857", lineHeight: 15, marginTop: 4 },
 
   section:         { backgroundColor: "#fff", borderRadius: 16, borderWidth: 1,
                      borderColor: "#E5E7EB", padding: 16, shadowColor: "#000",

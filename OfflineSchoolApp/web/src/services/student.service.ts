@@ -561,6 +561,28 @@ export async function createStudent(
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// SECTION 16b — RESET PASSWORD (re-issue credentials)
+// POST /students/:id/reset-password  (students.routes.js)
+// Returns { success, enrollmentNo, emailSent, message, tempPassword? } —
+// tempPassword is present ONLY when no email was sent; shown once.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export interface StudentPasswordResetResult {
+  success:      boolean;
+  enrollmentNo?:string | null;
+  emailSent:    boolean;
+  message?:     string;
+  tempPassword?:string;
+}
+
+export async function resetStudentPassword(
+  studentId: string
+): Promise<StudentPasswordResetResult> {
+  const { data } = await api.post(`/students/${studentId}/reset-password`);
+  return data;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // SECTION 16 — UPDATE
 // PUT /admin/students/:id  (admin.routes.js)
 // ═════════════════════════════════════════════════════════════════════════════

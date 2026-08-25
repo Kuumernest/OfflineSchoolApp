@@ -31,6 +31,7 @@ export const API = {
       move:     (id: string): string => `/admin/students/${id}/move`,
       generateEnrollmentNo: (id: string): string =>
         `/admin/students/${id}/enrollment-number`,
+      resetPassword:        (id: string): string => `/students/${id}/reset-password`,
     },
     teachers: {
       list:          "/admin/teachers",

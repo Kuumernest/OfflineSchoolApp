@@ -39,6 +39,9 @@ export const API = {
         `/admin/applications/${id}/reject`,
         `/admin/student-applications/${id}/reject`,
       ],
+
+      // Re-issue a student's login password (admin action, students.routes).
+      resetPassword: (id) => `/students/${id}/reset-password`,
     },
 
     // ── NEW: dedicated applications collection ──────────────────────────

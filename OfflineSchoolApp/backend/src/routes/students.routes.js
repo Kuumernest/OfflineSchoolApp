@@ -1599,6 +1599,73 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
   }, 201);
 }));
 
+// ── Reset password ───────────────────────────────────────────────────────────
+
+// POST /:id/reset-password — re-issue the student's login password.
+//
+// The first password is a random one-time value (never the enrollment
+// number), so once it is lost there is no way to recover the account.
+// This mints a fresh temporary password, forces a change on next login,
+// emails it when the student has an address on file, and otherwise returns
+// it ONCE in the response so the office can hand it over — the same
+// show-once contract as enrollment itself.
+router.post("/:id/reset-password", authenticate, adminOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req);
+
+  const student = await Student.findOne({
+    _id: String(req.params.id),
+    ...(schoolId ? { schoolId } : {}),
+    deletedAt: null,
+  }).lean();
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!student.userId)
+    return sendError(res, 400, "This student has no login account yet");
+
+  const user = await User.findById(student.userId);
+  if (!user) return sendError(res, 404, "Login account not found for this student");
+
+  const tempPassword        = generateTempPassword();
+  user.password          = tempPassword;  // pre-save hook hashes this
+  user.mustResetPassword = true;
+  await user.save();
+
+  const displayName =
+    student.studentName ||
+    student.name        ||
+    [student.firstName, student.lastName].filter(Boolean).join(" ") ||
+    "Student";
+  const enrollmentNo = student.enrollmentNo || null;
+  const to           = String(student.email || user.email || "")
+    .toLowerCase()
+    .trim();
+
+  let emailSent = false;
+  if (to) {
+    const schoolName = await getSchoolName(schoolId);
+    const result     = await sendEmail({
+      to,
+      template: "studentPasswordReset",
+      data: { studentName: displayName, enrollmentNo, tempPassword, schoolName },
+    });
+    emailSent = result?.success === true;
+  }
+
+  console.log(
+    `🔑 Student password reset: ${displayName} (${enrollmentNo ?? "no number"})` +
+    ` | emailed: ${emailSent}`
+  );
+
+  return sendSuccess(res, {
+    enrollmentNo,
+    emailSent,
+    message: emailSent
+      ? `Password reset. New credentials emailed to ${to}.`
+      : "Password reset. Share the new password with the student manually.",
+    // Surfaced only when no email went out — same contract as enrollment.
+    ...(emailSent ? {} : { tempPassword }),
+  });
+}));
+
 // ── Approve ───────────────────────────────────────────────────────────────────
 
 const handleApprove = asyncHandler(async (req, res) => {
