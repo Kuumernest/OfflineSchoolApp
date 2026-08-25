@@ -10,6 +10,7 @@ const Class         = require("../db/models/Class");
 const FeeCharge     = require("../db/models/FeeCharge");
 const FeePayment    = require("../db/models/FeePayment");
 const ResultSummary = require("../db/models/ResultSummary");
+const GeneratedReport = require("../db/models/GeneratedReport");
 // Attendance.js exports TWO models. Importing the module as one silently
 // yields an object with no .find, which fails only when the route is called.
 const { StudentAttendance } = require("../db/models/Attendance");
@@ -259,6 +260,64 @@ router.get("/results", asyncHandler(async (req, res) => {
         grade: s.grade, isPassing: s.isPassing, isAbsent: s.isAbsent,
       })),
     })),
+  });
+}));
+
+/**
+ * GET /api/portal/results/:summaryId/report-card
+ *
+ * The printable card for one published result.
+ *
+ * Serves the FROZEN copy the school issued, never a re-render. A parent
+ * opening this two years from now must see the card as issued, even after the
+ * school has edited its template or corrected another student's marks — which
+ * is the whole reason GeneratedReport stores renderedHtml.
+ *
+ * Scoped to this guardian's own student and to published results, so the
+ * summary id alone cannot be used to read another child's card.
+ */
+router.get("/results/:summaryId/report-card", asyncHandler(async (req, res) => {
+  const { studentId, schoolId } = req.portal;
+
+  const summary = await ResultSummary.findOne({
+    _id:         req.params.summaryId,
+    studentId,
+    schoolId,
+    isPublished: true,
+    deletedAt:   null,
+  }).select("examId term academicYear").lean();
+
+  if (!summary) {
+    return res.status(404).json({
+      success: false,
+      error:   "Result not found",
+    });
+  }
+
+  const report = await GeneratedReport.findOne({
+    examId:    summary.examId,
+    studentId,
+    deletedAt: null,
+  }).select("renderedHtml templateVersion updatedAt").lean();
+
+  if (!report?.renderedHtml) {
+    // Published marks but no issued card: the school has not printed one yet.
+    // Say so plainly rather than inventing a layout the school never approved.
+    return res.status(404).json({
+      success: false,
+      error:   "No report card has been issued for this result yet",
+      code:    "NOT_ISSUED",
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      html:         report.renderedHtml,
+      term:         summary.term,
+      academicYear: summary.academicYear,
+      issuedAt:     report.updatedAt,
+    },
   });
 }));
 

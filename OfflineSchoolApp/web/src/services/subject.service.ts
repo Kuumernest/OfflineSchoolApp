@@ -6,19 +6,22 @@ import api from "@/services/api";
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface CreateSubjectPayload {
-  name:       string;
-  code?:      string;
-  classId:    string;
-  teacherId?: string;
-  schoolId:   string;
+  name:         string;
+  code?:        string;
+  classId:      string;
+  teacherId?:   string;
+  /** Optional weighting toward the average; 1 = normal, 2 = counts double. */
+  coefficient?: number;
+  schoolId:     string;
 }
 
 export interface UpdateSubjectPayload {
-  name?:      string;
-  code?:      string;
-  classId?:   string;
-  teacherId?: string;
-  schoolId?:  string;
+  name?:        string;
+  code?:        string;
+  classId?:     string;
+  teacherId?:   string;
+  coefficient?: number;
+  schoolId?:    string;
 }
 
 export interface Subject {
@@ -26,6 +29,7 @@ export interface Subject {
   id?:          string;
   name:         string;
   code?:        string;
+  coefficient?: number;
   classId:      string;
   teacherId?:   string;
   teacherName?: string;
@@ -39,6 +43,7 @@ export interface RawSubject {
   id?:           unknown;
   name?:         unknown;
   code?:         unknown;
+  coefficient?:  unknown;
   classId?:      unknown;
   class_id?:     unknown;
   class?:        unknown;

@@ -85,6 +85,7 @@ export default function ExamReportsPage() {
   const [classLoading,    setClassLoading]    = useState(false);
   const [studentLoading,  setStudentLoading]  = useState(false);
   const [generating,      setGenerating]      = useState(false);
+  const [reissuing,       setReissuing]       = useState(false);
   const [progress,        setProgress]        = useState({ done: 0, total: 0 });
   const [result,          setResult]          = useState<{
     success: number; error: number; message: string;
@@ -126,6 +127,55 @@ export default function ExamReportsPage() {
   }, [selectedClass, schoolId]);
 
   // ── Generate ────────────────────────────────────────────
+  /**
+   * Replace the frozen copy of an already-issued report card.
+   *
+   * Printing never overwrites an archived card, so a mark corrected after
+   * issue would leave the parent's copy stale forever. Single student only —
+   * replacing a document a parent already holds is a per-child decision, not
+   * something to do to a whole class in one click.
+   */
+  const handleReissue = async () => {
+    if (!selectedExam || !selectedStudent) return;
+
+    const ok = window.confirm(
+      `Reissue the report card for ${selectedStudent.studentName ?? "this student"}?
+
+` +
+      "This replaces the copy already issued to the parent with one built " +
+      "from the current marks and template. The old copy is not kept."
+    );
+    if (!ok) return;
+
+    setReissuing(true);
+    setResult(null);
+    try {
+      const res = await api.post(
+        `/results/${selectedExam._id}/student/${String(selectedStudent._id)}/reportcard/reissue`,
+        { schoolId }
+      );
+      const revived = res.data?.data?.revived;
+      setResult({
+        success: 1,
+        error:   0,
+        message: revived
+          ? "Report card restored and replaced with a fresh copy."
+          : "Report card reissued — the parent's copy now reflects the current marks.",
+      });
+    } catch (err) {
+      const data = (err as {
+        response?: { data?: { error?: string; detail?: string } };
+      })?.response?.data;
+      setResult({
+        success: 0,
+        error:   1,
+        message: data?.detail ?? data?.error ?? "Reissue failed.",
+      });
+    } finally {
+      setReissuing(false);
+    }
+  };
+
   const handleGenerate = async () => {
     if (!selectedExam || !selectedClass) {
       alert("Please select an exam and a class");
@@ -446,6 +496,21 @@ export default function ExamReportsPage() {
                 </>
               )}
             </button>
+
+            {/* Reissue — only meaningful for one student at a time */}
+            {selectedStudent && (
+              <button
+                onClick={handleReissue}
+                disabled={reissuing || generating}
+                className="w-full mt-2 py-2.5 border border-amber-300
+                           hover:bg-amber-50 text-amber-800 rounded-xl
+                           font-semibold text-sm transition-colors
+                           disabled:opacity-50 flex items-center
+                           justify-center gap-2"
+              >
+                {reissuing ? "Reissuing…" : "♻️ Reissue this card"}
+              </button>
+            )}
 
             <p className="text-xs text-gray-400 text-center mt-3">
               {t("reportCards.opensNewTab")}

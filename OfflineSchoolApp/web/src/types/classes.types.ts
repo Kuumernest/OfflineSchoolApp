@@ -138,6 +138,9 @@ export interface Subject {
   /** Short subject code, e.g. "MATH101". Empty string when not set. */
   code:        string;
 
+  /** Weighting toward the average. Defaults to 1 for older subjects. */
+  coefficient: number;
+
   /** Foreign key to the parent Class */
   classId:     EntityId;
 
@@ -198,11 +201,13 @@ export interface UpdateClassPayload {
  * Body sent to POST /admin/subjects.
  */
 export interface CreateSubjectPayload {
-  name:       string;
-  code?:      string;
-  classId:    EntityId;
-  teacherId?: EntityId;
-  schoolId:   EntityId;
+  name:         string;
+  code?:        string;
+  classId:      EntityId;
+  teacherId?:   EntityId;
+  /** Weighting toward the average; 1 = normal, 2 = counts double. */
+  coefficient?: number;
+  schoolId:     EntityId;
 }
 
 /**
@@ -210,11 +215,12 @@ export interface CreateSubjectPayload {
  * All fields optional — send only what changed.
  */
 export interface UpdateSubjectPayload {
-  name?:      string;
-  code?:      string;
-  classId?:   EntityId;
-  teacherId?: EntityId;
-  schoolId?:  EntityId;
+  name?:        string;
+  code?:        string;
+  classId?:     EntityId;
+  teacherId?:   EntityId;
+  coefficient?: number;
+  schoolId?:    EntityId;
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

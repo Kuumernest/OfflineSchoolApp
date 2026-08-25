@@ -10,13 +10,17 @@ const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
 const School          = require("../db/models/School");
+const ReportTemplate  = require("../db/models/ReportTemplate");
+const GeneratedReport = require("../db/models/GeneratedReport");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
   guardResultWrite,
   logResultChange,
   diffField,
 } = require("../services/resultAudit.service");
-const { renderReportCardHtml } = require("../services/reportHtml.service");
+const { renderReportCardHtml, renderReportCard } =
+  require("../services/reportHtml.service");
+const docVerify = require("../services/documentVerify.service");
 
 const {
   computeResults:  computeResultsService,
@@ -263,6 +267,9 @@ const buildStudentReportCardData = async (examId, studentId) => {
             overallRemark:   summary.overallRemark,
             gpa:             summary.gpa,
             isPassing:       summary.isPassing,
+            // Exposed so the archive can freeze only what has actually been
+            // issued to parents, not a draft an admin previewed.
+            isPublished:     summary.isPublished ?? false,
             classPosition:   summary.classPosition,
             gradePosition:   summary.gradePosition,
             schoolPosition:  summary.schoolPosition,
@@ -313,6 +320,92 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 //    ?lang=fr switches label language (default en).
 // ─────────────────────────────────────────────────────────
 
+/**
+ * The template that should drive this school's report cards.
+ *
+ * Resolution order: an explicit ?templateId=, then the school's default
+ * (isDefault), then none — in which case the renderer uses its built-in
+ * layout. ?templateId=builtin forces the built-in layout, which is the
+ * escape hatch when a school's template is misbehaving.
+ *
+ * Never throws: a template lookup failure must not cost the school its
+ * report cards, so it degrades to the built-in layout.
+ */
+const loadReportTemplate = async (schoolId, templateId) => {
+  if (!schoolId || templateId === "builtin") return null;
+  try {
+    const query = { schoolId: String(schoolId), deletedAt: null };
+    if (templateId) query._id = String(templateId);
+    else            query.isDefault = true;
+
+    const tpl = await ReportTemplate.findOne(query)
+      .select("_id name html css version")
+      .lean();
+
+    return tpl?.html ? tpl : null;
+  } catch (err) {
+    console.error("[reportcard] template lookup failed:", err.message);
+    return null;
+  }
+};
+
+/**
+ * Freeze what was just issued.
+ *
+ * GeneratedReport is the legal record: a parent reprinting in two years must
+ * get the card the school issued, not one re-derived from data and a template
+ * that have both moved on since. Upserted on examId + studentId, so
+ * re-issuing replaces rather than accumulates.
+ *
+ * variablePayload stores the report card payload — the canonical input both
+ * render paths consume — rather than the engine's nested view of it, which is
+ * derived from this and reproducible.
+ *
+ * Deliberately fire-and-forget: a failure to archive must never cost the user
+ * the report card they asked for.
+ */
+const archiveGeneratedReport = ({
+  schoolId, examId, studentId, data, html, template, source, userId,
+}) => {
+  if (!schoolId) return;
+
+  // Only freeze what has actually been issued. Before results are published
+  // the card is a draft, and an admin previewing one must not create a record
+  // that later reads as "what the parent received".
+  if (!data.summary?.isPublished) return;
+
+  GeneratedReport.findOneAndUpdate(
+    { examId, studentId },
+    {
+      // Every frozen field is $setOnInsert, never $set: the FIRST issue wins.
+      // Re-reading a card months later must not silently rewrite what a parent
+      // already holds — by then the template may have been edited or a mark
+      // corrected. Reissuing after a genuine correction is a deliberate act;
+      // see POST /:examId/student/:studentId/reportcard/reissue.
+      $setOnInsert: {
+        _id:             uuidv4(),
+        schoolId,
+        examId,
+        studentId,
+        templateId:      source === "template" ? String(template._id) : null,
+        templateVersion: source === "template" ? template.version ?? 1 : 1,
+        renderedHtml:    html,
+        variablePayload: data,
+        term:            data.term         || null,
+        academicYear:    data.academicYear || null,
+        generatedBy:     userId || null,
+        isPublished:     false,
+        deletedAt:       null,
+      },
+    },
+    { upsert: true }
+  )
+    .lean()
+    .catch((err) =>
+      console.error("[reportcard] archive failed:", err.message)
+    );
+};
+
 const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
   const lang =
@@ -335,16 +428,97 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     schoolName = school?.name || null;
   }
 
-  const html = renderReportCardHtml(built.data, {
+  /**
+   * The verification strip: QR + code resolving to a public page that shows
+   * what the school's records say, so a registrar elsewhere can check a paper
+   * bulletin against them. Values are bilingual where they are words — the
+   * verifier's language is unknown, and the page shows both anyway.
+   *
+   * Mirrors the renderer's average arithmetic (weightedAverage is already
+   * /20; summary.average is GPA points ×5) so the page and the paper carry
+   * the same number.
+   */
+  const d = built.data;
+  const avg20 = d.computed?.weightedAverage != null
+    ? Number(d.computed.weightedAverage)
+    : d.summary?.average != null
+      ? Math.round(Number(d.summary.average) * 5 * 100) / 100
+      : null;
+  const isPassing = d.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
+
+  const verify = req.user?.schoolId
+    ? await docVerify.printableBlock({
+        schoolId: String(req.user.schoolId),
+        kind: "report_card",
+        studentId: String(studentId),
+        examId: String(examId),
+        origin: (() => {
+          const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+          const host  = req.headers["x-forwarded-host"]  || req.get("host");
+          return host ? `${proto}://${host}` : null;
+        })(),
+        snapshot: {
+          facts: [
+            { label: { en: "Student", fr: "Élève" },           value: d.studentName },
+            { label: { en: "Admission no.", fr: "Matricule" }, value: d.admissionNo },
+            { label: { en: "Class", fr: "Classe" },            value: d.className },
+            { label: { en: "Exam", fr: "Examen" },             value: d.examName },
+            { label: { en: "Term / year", fr: "Trimestre / année" },
+              value: [d.term, d.academicYear].filter(Boolean).join(" · ") || "—" },
+            { label: { en: "Average /20", fr: "Moyenne /20" },
+              value: avg20 != null ? avg20.toFixed(2) : "—" },
+            { label: { en: "Overall grade", fr: "Mention" },
+              value: d.summary?.overallGrade ?? "—" },
+            { label: { en: "Class position", fr: "Rang" },
+              value: d.summary?.classPosition != null
+                ? `${d.summary.classPosition}${d.summary.totalInClass != null ? ` / ${d.summary.totalInClass}` : ""}`
+                : "—" },
+            { label: { en: "Decision", fr: "Décision" },
+              value: isPassing == null ? "—" : isPassing ? "Passed / Admis(e)" : "Failed / Ajourné(e)" },
+          ],
+        },
+      })
+    : null;
+
+  // Per-school template drives the layout when the school has one; the
+  // built-in layout is the fallback, including when a template fails to render.
+  const template = await loadReportTemplate(
+    req.user?.schoolId,
+    req.query.templateId
+  );
+
+  const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
+    verify,
+    template,
+  });
+
+  archiveGeneratedReport({
+    schoolId:  req.user?.schoolId,
+    examId,
+    studentId,
+    data:      built.data,
+    html:      rendered.html,
+    template,
+    source:    rendered.source,
+    userId:    req.user?._id,
   });
 
   return res.json({
     success: true,
     data: {
-      html,
+      html:     rendered.html,
       filename: `report-${built.data.admissionNo || studentId}-${examId}.html`,
+      // Which layout produced this, so a caller can tell the school their
+      // template was skipped, and so an archived copy is traceable.
+      source:          rendered.source,
+      templateId:      rendered.source === "template" ? String(template._id) : null,
+      templateVersion: rendered.source === "template" ? template.version ?? 1 : null,
+      ...(rendered.error ? { templateError: rendered.error } : {}),
+      // Tokens in the school's template that the engine does not know. The
+      // card still printed; this lets the UI tell the admin to fix the typo.
+      ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
     },
   });
 });
@@ -352,6 +526,104 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 // POST /api/results/:examId/student/:studentId/reportcard/calculate
 // ─────────────────────────────────────────────────────────
+
+/**
+ * POST /api/results/:examId/student/:studentId/reportcard/reissue
+ *
+ * Replace the frozen copy of an already-issued report card.
+ *
+ * The normal render path never overwrites an archived card, so a mark
+ * corrected after issue would leave the parent's copy stale forever. This is
+ * the deliberate act that supersedes it — admin-only, and it records who did
+ * it, because replacing a document a parent already holds is exactly the kind
+ * of change that needs a name against it.
+ */
+const reissueStudentReportCard = asyncHandler(async (req, res) => {
+  const { examId, studentId } = req.params;
+  const schoolId = req.user?.schoolId;
+
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  // Deliberately NOT filtered on deletedAt. The automatic archive matches on
+  // examId + studentId alone and only $setOnInsert, so once a card is soft
+  // deleted a reprint quietly no-ops against the dead row and the unique index
+  // blocks a fresh insert — leaving the card unrecoverable. Reissue is the
+  // explicit admin action, so it is the thing that may revive one.
+  const existing = await GeneratedReport.findOne({
+    examId, studentId,
+  }).select("_id templateVersion deletedAt").lean();
+
+  if (!existing) {
+    return res.status(404).json({
+      success: false,
+      error:   "No issued report card to reissue",
+      detail:  "A card is archived the first time it is printed after results are published.",
+    });
+  }
+
+  const built = await buildStudentReportCardData(examId, studentId);
+  if (!built?.ok) {
+    return res.status(404).json({
+      success: false,
+      error:   "No scores found for this student in this exam",
+    });
+  }
+
+  const lang =
+    String(req.body.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
+
+  let schoolName = req.user?.schoolName || null;
+  if (!schoolName) {
+    const school = await School.findOne({ _id: schoolId }).select("name").lean();
+    schoolName = school?.name || null;
+  }
+
+  const template = await loadReportTemplate(schoolId, req.body.templateId);
+
+  const rendered = renderReportCard(built.data, {
+    lang,
+    schoolName: schoolName || "School",
+    template,
+  });
+
+  await GeneratedReport.updateOne(
+    { _id: existing._id },
+    {
+      $set: {
+        templateId:      rendered.source === "template" ? String(template._id) : null,
+        templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
+        renderedHtml:    rendered.html,
+        variablePayload: built.data,
+        term:            built.data.term         || null,
+        academicYear:    built.data.academicYear || null,
+        generatedBy:     req.user?._id || null,
+        // Revive a soft-deleted card: reissuing is how an admin undoes a
+        // delete, and leaving it set would keep the portal at NOT_ISSUED.
+        deletedAt:       null,
+      },
+    }
+  );
+
+  console.log(
+    `♻️  Report card reissued: exam=${examId} student=${studentId} ` +
+    `by=${req.user?._id || "?"}` +
+    (existing.deletedAt ? " (revived a deleted card)" : "")
+  );
+
+  return res.json({
+    success: true,
+    data: {
+      html:            rendered.html,
+      source:          rendered.source,
+      revived:         Boolean(existing.deletedAt),
+      templateId:      rendered.source === "template" ? String(template._id) : null,
+      templateVersion: rendered.source === "template" ? template.version ?? 1 : null,
+      ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
+    },
+  });
+});
 
 const calculateStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
@@ -866,6 +1138,7 @@ module.exports = {
   getStudentResult,
   getStudentReportCard,
   getStudentReportCardHtml,
+  reissueStudentReportCard,
   calculateStudentReportCard,
   computeResults,
   publishResults,

@@ -90,6 +90,8 @@ export interface Subject {
   _id:        string;
   name:       string;
   code?:      string;
+  /** Weighting toward the average; 1 = normal, 2 = counts double. */
+  coefficient?: number;
   classId:    string;
   teacherId?: string;
   schoolId:   string;

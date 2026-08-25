@@ -332,6 +332,24 @@ function buildReplacementMap(data) {
     isPassing:          (performance.average ?? 0) >= 10,
     isRepeating:        performance.promotionStatus === "Repeated",
 
+    // Exam / aggregate context
+    exam_name:          data.examName                    || "",
+    percentage:         performance.percentage != null
+                          ? Number(performance.percentage).toFixed(1)
+                          : "",
+    total_score:        performance.totalScore != null
+                          ? String(performance.totalScore)
+                          : "",
+    subjects_passed:    String(performance.subjectsPassed ?? 0),
+    subjects_failed:    String(performance.subjectsFailed ?? 0),
+
+    // Coefficient-aware figures. weighted_average is the same /20 number as
+    // {{average}}; both are exposed so a template can name it either way.
+    total_coefficients: performance.totalCoefficients != null
+                          ? String(performance.totalCoefficients)
+                          : "",
+    weighted_average:   Number(performance.average ?? 0).toFixed(2),
+
     // Array for each loops
     subjects:           data.subjects || [],
   };
@@ -342,36 +360,47 @@ function buildReplacementMap(data) {
 function resolveSubjectsTable(html, data) {
   if (!html.includes("{{subjects_table}}")) return html;
 
-  const rows = (data.subjects || []).map((s) => `
+  const rows = (data.subjects || []).map((s) => {
+    const absent = s.isAbsent || s.isExempt;
+    const flag   = s.isAbsent ? "ABS" : s.isExempt ? "EXEMPT" : "";
+    return `
     <tr>
       <td>${escapeHtml(s.subjectName || s.name || "")}</td>
       <td style="text-align:center">${s.caScore   != null ? s.caScore   : "—"}</td>
       <td style="text-align:center">${s.examScore != null ? s.examScore : "—"}</td>
-      <td style="text-align:center">
-        <strong>${s.total != null ? s.total : "—"}</strong>
-      </td>
+      <td style="text-align:center"><strong>${
+        absent ? flag : s.total != null ? s.total : "—"
+      }</strong></td>
+      <td style="text-align:center">${
+        s.normalizedMark != null && !absent
+          ? Number(s.normalizedMark).toFixed(2)
+          : "—"
+      }</td>
+      <td style="text-align:center">${s.coefficient != null ? s.coefficient : 1}</td>
       <td style="text-align:center">${escapeHtml(s.grade  || "—")}</td>
       <td style="text-align:center">${escapeHtml(s.remark || "—")}</td>
       <td style="text-align:center">${formatPosition(s.position)}</td>
     </tr>
-  `).join("");
+  `;
+  }).join("");
 
   const table = `
-    <table class="subjects-table"
-           style="width:100%;border-collapse:collapse;margin-bottom:16px">
+    <table class="subjects-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
           <th style="text-align:left">Subject</th>
           <th style="text-align:center">CA</th>
           <th style="text-align:center">Exam</th>
           <th style="text-align:center">Total</th>
+          <th style="text-align:center">/20</th>
+          <th style="text-align:center">Coeff</th>
           <th style="text-align:center">Grade</th>
           <th style="text-align:center">Remark</th>
           <th style="text-align:center">Position</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || "<tr><td colspan='7' style='text-align:center'>No subjects</td></tr>"}
+        ${rows || "<tr><td colspan='9' style='text-align:center'>No subjects</td></tr>"}
       </tbody>
     </table>
   `;
@@ -456,7 +485,12 @@ function resolveSchoolLogo(html, data) {
 function resolveQrCode(html, data) {
   if (!html.includes("{{qr_code}}")) return html;
 
-  const qrHtml = `
+  // A real verification QR when the caller passed one (the report card route
+  // does), otherwise the inert placeholder box so a template preview still
+  // shows where the code will sit.
+  const qrHtml = data.verify?.qrSvg
+    ? `<div class="qr-code" style="width:64px;height:64px">${data.verify.qrSvg}</div>`
+    : `
     <div
       class="qr-placeholder"
       data-value="${escapeHtml(data.reportId || "")}"
@@ -508,5 +542,67 @@ export function scanVariables(html) {
   while ((match = re.exec(html)) !== null) {
     found.add(match[0].trim());
   }
+  return [...found];
+}
+
+/**
+ * Every token this engine knows how to resolve.
+ *
+ * Derived from buildReplacementMap so it cannot drift from what actually
+ * renders: adding a token to the map automatically lists it here. The
+ * composite and control-flow names are appended because they are handled
+ * outside the map.
+ *
+ * The builder validates a template against this, so a school is told about
+ * {{avg}} before the typo reaches a parent's report card.
+ *
+ * @returns {string[]} bare token names, e.g. ["student_name", "average", …]
+ */
+export function knownTokens() {
+  // Called with empty data purely to enumerate the keys.
+  const mapKeys = Object.keys(buildReplacementMap({}));
+
+  const composites = [
+    "subjects_table",
+    "attendance_table",
+    "student_photo",
+    "school_logo",
+    "qr_code",
+  ];
+
+  // Control flow is matched by the tokenizer, not the replacement map.
+  const control = ["if", "else", "endif", "each"];
+
+  return [...new Set([...mapKeys, ...composites, ...control])].sort();
+}
+
+/**
+ * Tokens in `html` that this engine does not know.
+ *
+ * Ignores the block forms — {{if x}}, {{each xs}}, {{/each}}, {{#raw}} — and
+ * reports only plain {{name}} tokens that would render as literal braces.
+ *
+ * @param {string} html
+ * @returns {string[]} unknown bare names
+ */
+export function unknownTokens(html) {
+  const known = new Set(knownTokens());
+  const found = new Set();
+  const re    = /\{\{\s*([^{}]+?)\s*\}\}/g;
+  let   m;
+
+  while ((m = re.exec(String(html || ""))) !== null) {
+    const raw = m[1].trim();
+
+    // Block openers/closers and raw output are not map lookups.
+    if (/^[/#]/.test(raw)) continue;
+    if (/^(if|each)\s+/.test(raw)) continue;
+    if (raw === "else" || raw === "endif") continue;
+
+    // {{a.b}} resolves by path at render time; only the root must be known.
+    const root = raw.split(".")[0];
+    if (!known.has(root)) found.add(raw);
+  }
+
   return [...found];
 }

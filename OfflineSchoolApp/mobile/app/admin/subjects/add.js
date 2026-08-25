@@ -18,7 +18,7 @@ import api              from "@/services/api";
 const MAX_NAME = 80;
 const MAX_CODE = 20;
 const EXAMPLES = ["Mathematics", "English", "Biology", "History"];
-const INITIAL  = { name: "", code: "", classIds: [], teacherId: "" };
+const INITIAL  = { name: "", code: "", coefficient: "", classIds: [], teacherId: "" };
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -34,6 +34,16 @@ const validate = (form) => {
 
   if (form.classIds.length === 0)
     errors.classIds = "Please select at least one class.";
+
+  // Optional, but a coefficient of 0 or a typo would rescale every average in
+  // the class, so anything present must be a sane positive number.
+  const coeff = form.coefficient.trim();
+  if (coeff !== "") {
+    const n = Number(coeff);
+    if (!Number.isFinite(n))  errors.coefficient = "Coefficient must be a number.";
+    else if (n < 0.1)         errors.coefficient = "Coefficient must be at least 0.1.";
+    else if (n > 20)          errors.coefficient = "Coefficient cannot exceed 20.";
+  }
 
   return errors;
 };
@@ -187,11 +197,14 @@ export default function AddSubjectScreen() {
     for (const cid of form.classIds) {
       const cls = classes.find((c) => c._id === cid);
       try {
-        await api.post("/subjects", {
-          name:      form.name.trim(),
-          code:      form.code.trim() || undefined,
-          classId:   cid,
-          teacherId: form.teacherId || undefined,
+        // "/admin/subjects" — the only route that serves this; the old
+        // "/subjects" had no handler and every create 404'd.
+        await api.post("/admin/subjects", {
+          name:        form.name.trim(),
+          code:        form.code.trim() || undefined,
+          classId:     cid,
+          teacherId:   form.teacherId || undefined,
+          coefficient: form.coefficient.trim() || undefined,
           schoolId,
         });
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: true });
@@ -219,8 +232,9 @@ export default function AddSubjectScreen() {
 
   const handleDiscard = useCallback(() => {
     const isDirty =
-      form.name.trim()    !== "" ||
-      form.code.trim()    !== "" ||
+      form.name.trim()        !== "" ||
+      form.code.trim()        !== "" ||
+      form.coefficient.trim() !== "" ||
       form.classIds.length > 0   ||
       form.teacherId      !== "";
 
@@ -364,6 +378,37 @@ export default function AddSubjectScreen() {
               style={styles.inputStandalone}
             />
             <Text style={styles.hint}>Optional short code.</Text>
+          </View>
+
+          {/* Subject coefficient */}
+          <View style={styles.fieldWrap}>
+            <Text style={styles.fieldLabel}>Coefficient</Text>
+            <TextInput
+              value={form.coefficient}
+              onChangeText={(t) => {
+                setForm((p) => ({ ...p, coefficient: t }));
+                setErrors((p) => ({ ...p, coefficient: undefined }));
+              }}
+              placeholder="e.g. 2 (optional, defaults to 1)"
+              placeholderTextColor="#D1D5DB"
+              keyboardType="decimal-pad"
+              maxLength={5}
+              style={[
+                styles.inputStandalone,
+                errors.coefficient && styles.inputError,
+              ]}
+            />
+            {errors.coefficient ? (
+              <View style={styles.errorRow}>
+                <Ionicons name="alert-circle-outline" size={12} color="#DC2626" />
+                <Text style={styles.errorText}>{errors.coefficient}</Text>
+              </View>
+            ) : (
+              <Text style={styles.hint}>
+                How much this subject counts toward the average. 1 is normal,
+                2 counts double. Leave blank for 1.
+              </Text>
+            )}
           </View>
 
           {/* Classes multi-select */}

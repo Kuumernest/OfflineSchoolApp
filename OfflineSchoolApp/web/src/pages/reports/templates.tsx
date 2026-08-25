@@ -62,6 +62,30 @@ export default function TemplatesPage() {
     load();
   }, [schoolId]);
 
+  // ── Seed the built-in layout ───────────────────────────
+
+  /**
+   * Write the built-in report card layout into an editable template.
+   *
+   * Without this a school has to author one from scratch, so most never do
+   * and per-school templates go unused. The endpoint is idempotent, so
+   * pressing this twice returns the existing row rather than making copies.
+   */
+  const handleSeedDefault = async () => {
+    try {
+      setActionId("__seed__");
+      const res = await api.post("/templates/seed-default", { schoolId });
+      await load();
+      if (res.data?.created === false) {
+        alert(t("templates.seedExists"));
+      }
+    } catch (err) {
+      alert(getErrorMessage(err));
+    } finally {
+      setActionId(null);
+    }
+  };
+
   // ── Set default ────────────────────────────────────────
 
   const handleSetDefault = async (id: string) => {
@@ -126,15 +150,30 @@ export default function TemplatesPage() {
               {t("templates.blurb")}
             </p>
           </div>
-          <button
-            onClick={() => navigate("/reports/builder")}
-            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
-                       text-white text-sm font-semibold px-4 py-2 rounded-lg
-                       transition-colors"
-          >
-            <Plus size={16} />
-            {t("templates.new")}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleSeedDefault}
+              disabled={actionId === "__seed__"}
+              className="flex items-center gap-2 border border-gray-300
+                         hover:bg-gray-50 disabled:opacity-50 text-gray-700
+                         text-sm font-semibold px-4 py-2 rounded-lg
+                         transition-colors"
+            >
+              {actionId === "__seed__"
+                ? <Loader2 size={16} className="animate-spin" />
+                : <FileText size={16} />}
+              {t("templates.startFromDefault")}
+            </button>
+            <button
+              onClick={() => navigate("/reports/builder")}
+              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
+                         text-white text-sm font-semibold px-4 py-2 rounded-lg
+                         transition-colors"
+            >
+              <Plus size={16} />
+              {t("templates.new")}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -188,15 +227,29 @@ export default function TemplatesPage() {
               Create your first report card template by pasting your school's
               HTML layout and using placeholders.
             </p>
-            <button
-              onClick={() => navigate("/reports/builder")}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
-                         text-white text-sm font-semibold px-5 py-2.5 rounded-lg
-                         transition-colors mt-2"
-            >
-              <Plus size={16} />
-              {t("templates.create")}
-            </button>
+            <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
+              <button
+                onClick={handleSeedDefault}
+                disabled={actionId === "__seed__"}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700
+                           disabled:opacity-50 text-white text-sm font-semibold
+                           px-5 py-2.5 rounded-lg transition-colors"
+              >
+                {actionId === "__seed__"
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <FileText size={16} />}
+                {t("templates.startFromDefault")}
+              </button>
+              <button
+                onClick={() => navigate("/reports/builder")}
+                className="flex items-center gap-2 border border-gray-300
+                           hover:bg-gray-50 text-gray-700 text-sm font-semibold
+                           px-5 py-2.5 rounded-lg transition-colors"
+              >
+                <Plus size={16} />
+                {t("templates.create")}
+              </button>
+            </div>
           </div>
         )}
 

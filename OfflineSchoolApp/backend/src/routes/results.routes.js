@@ -55,6 +55,14 @@ router.post(
   ctrl.calculateStudentReportCard
 );
 
+// Replace the frozen copy of an already-issued card, after a correction.
+// Admin-only: it supersedes a document a parent may already hold.
+router.post(
+  "/:examId/student/:studentId/reportcard/reissue",
+  adminOnly,
+  ctrl.reissueStudentReportCard
+);
+
 // Upsert a single score
 router.post("/score",                                 adminOrTeacher, ctrl.upsertScore);
 

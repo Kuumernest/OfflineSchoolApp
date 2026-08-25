@@ -285,6 +285,7 @@ export default function StudentReportCardScreen() {
   const [loading,     setLoading]     = useState(true);
   const [calculating, setCalculating] = useState(false);
   const [sharing,     setSharing]     = useState(false);
+  const [reissuing,   setReissuing]   = useState(false);
   const [error,       setError]       = useState(null);
 
   const [reportData,  setReportData]  = useState(null);
@@ -419,6 +420,55 @@ export default function StudentReportCardScreen() {
       setCalculating(false);
     }
   }, [examId, studentId, subjects, outOf, passMark]);
+
+  // ── Reissue ───────────────────────────────────────────
+
+  /**
+   * Replace the frozen copy of an already-issued report card.
+   *
+   * Printing never overwrites an archived card, so a mark corrected after
+   * issue would leave the parent's copy stale forever. This is the deliberate
+   * act that supersedes it — confirmed first, because it replaces a document
+   * a parent may already be holding.
+   */
+  const handleReissue = useCallback(() => {
+    Alert.alert(
+      "Reissue report card?",
+      "This replaces the copy already issued to the parent with one built " +
+      "from the current marks and template. The old copy is not kept.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Reissue",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              setReissuing(true);
+              const { data } = await api.post(
+                `/results/${examId}/student/${studentId}/reportcard/reissue`,
+                { schoolId }
+              );
+              const revived = data?.data?.revived;
+              Alert.alert(
+                "Reissued",
+                revived
+                  ? "The card was restored and replaced with a fresh copy."
+                  : "The parent's copy now reflects the current marks."
+              );
+            } catch (err) {
+              const res = err?.response?.data;
+              Alert.alert(
+                "Reissue failed",
+                res?.detail || res?.error || err.message
+              );
+            } finally {
+              setReissuing(false);
+            }
+          },
+        },
+      ]
+    );
+  }, [examId, studentId, schoolId]);
 
   // ── Share ─────────────────────────────────────────────
 
@@ -570,19 +620,32 @@ export default function StudentReportCardScreen() {
             </Text>
           </View>
 
-          {/* Share button — hidden on preview tab (ReportCard has its own) */}
+          {/* Share + Reissue — hidden on preview tab (ReportCard has its own) */}
           {activeTab === "setup" && (
-            <TouchableOpacity
-              style={s.shareBtn}
-              onPress={handleShare}
-              disabled={sharing}
-              activeOpacity={0.8}
-            >
-              {sharing
-                ? <ActivityIndicator size="small" color={C.primary} />
-                : <Ionicons name="share-outline" size={22} color={C.primary} />
-              }
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={s.shareBtn}
+                onPress={handleReissue}
+                disabled={reissuing}
+                activeOpacity={0.8}
+              >
+                {reissuing
+                  ? <ActivityIndicator size="small" color={C.primary} />
+                  : <Ionicons name="refresh-outline" size={22} color={C.primary} />
+                }
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={s.shareBtn}
+                onPress={handleShare}
+                disabled={sharing}
+                activeOpacity={0.8}
+              >
+                {sharing
+                  ? <ActivityIndicator size="small" color={C.primary} />
+                  : <Ionicons name="share-outline" size={22} color={C.primary} />
+                }
+              </TouchableOpacity>
+            </>
           )}
         </View>
 

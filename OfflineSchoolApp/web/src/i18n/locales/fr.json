@@ -100,6 +100,7 @@
   },
   "nav": {
     "dashboard": "Tableau de bord",
+    "watchlist": "Élèves à suivre",
     "students": "Élèves",
     "allStudents": "Tous les élèves",
     "admissions": "Admissions",
@@ -398,7 +399,10 @@
     "nameLabel": "Nom de la matière",
     "codeLabel": "Code de la matière",
     "namePh": "ex. Mathématiques",
-    "codePh": "ex. MATH101"
+    "codePh": "ex. MATH101",
+    "coefficientLabel": "Coefficient",
+    "coefficientHint": "Poids de cette matière dans la moyenne. 1 est normal, 2 compte double. Laissez vide pour 1.",
+    "coefficientPh": "ex. 2 (facultatif)"
   },
   "classes": {
     "title": "Classes",
@@ -535,7 +539,8 @@
     "reject": "Rejeter",
     "rejectSubmission": "Rejeter la soumission",
     "rejectReasonPh": "Motif du rejet (obligatoire)…",
-    "absent": "ABSENT"
+    "absent": "ABSENT",
+    "coeff": "Coef"
   },
   "examCreate": {
     "title": "Créer une évaluation",
@@ -553,7 +558,8 @@
     "selectClassFirst": "Choisissez d'abord une classe",
     "noTeacher": "Aucun enseignant",
     "max": "Max",
-    "pass": "Passage"
+    "pass": "Passage",
+    "coefficient": "Coefficient"
   },
   "reportCards": {
     "title": "Bulletins de notes",
@@ -666,7 +672,9 @@
     "new": "Nouveau modèle",
     "none": "Aucun modèle",
     "previewTitle": "Aperçu du bulletin",
-    "goBack": "Retour"
+    "goBack": "Retour",
+    "startFromDefault": "Partir du modèle par défaut",
+    "seedExists": "Votre école possède déjà le modèle par défaut. Il apparaît dans la liste."
   },
   "notifications": {
     "title": "Notifications",
@@ -791,13 +799,13 @@
     "adminEmailPh": "admin@ecole.com",
     "yourEmailPh": "vous@exemple.com",
     "idCardExpiry": "Expiration de la carte",
-    "idCardExpiryBlurb": "La date imprimée sur les cartes d'identité scolaire. Laissez le champ vide et les cartes expirent à la fin de l'année scolaire en cours, afin que toutes les cartes imprimées cette année portent la même date.",
+    "idCardExpiryBlurb": "Quand les cartes d'identité scolaire expirent. Les cartes portent l'année scolaire dans laquelle tombe cette date — « 2025/2026 », pas la date elle-même. Laissez le champ vide et les cartes expirent à la fin de l'année scolaire en cours.",
     "validUntil": "Valable jusqu'au",
     "useDefaultDate": "Utiliser la date par défaut",
     "expiryDefaulting": "Les cartes seront valables jusqu'au {{date}}, fin de l'année scolaire.",
     "expiryOverridden": "Les cartes seront valables jusqu'au {{date}}.",
     "idCardSaved": "Paramètres des cartes enregistrés",
-    "idCardReprint": "Ceci s'applique aux cartes imprimées à partir de maintenant. Les cartes déjà remises conservent la date qui y est imprimée.",
+    "idCardReprint": "Ceci s'applique aux cartes imprimées à partir de maintenant. Les cartes déjà remises conservent l'année qui y est imprimée.",
     "gateMessages": "Messages du portail",
     "gateMessagesBlurb": "Ce qui est communiqué au parent lorsque la carte de son enfant est scannée au portail. Une école de 500 élèves scannant deux fois par jour représente environ 20 000 messages par mois : tout envoyer est rarement le bon choix.",
     "gateNotifyOff": "Jamais",
@@ -1233,6 +1241,55 @@
     "failed": "Impossible d'enregistrer la photo",
     "removeTitle": "Supprimer cette photo ?",
     "removeBody": "La carte s'imprimera avec un cadre photo vide."
+  },
+  "watch": {
+    "title": "Élèves à suivre",
+    "blurb": "Élèves dont les données des {{days}} derniers jours indiquent un possible problème — assiduité, résultats, devoirs et frais, lus ensemble. Chaque signalement affiche ses raisons.",
+    "window": "Période",
+    "lastDays": "{{days}} derniers jours",
+    "allClasses": "Toutes les classes",
+    "signals": "Raisons du signalement",
+    "level": "Niveau",
+    "tier": {
+      "high": "Agir maintenant",
+      "medium": "Intervenir",
+      "low": "Surveiller"
+    },
+    "highHint": "Plusieurs signaux réunis — parler à la famille cette semaine.",
+    "mediumHint": "Une tendance nette — le professeur principal devrait faire un suivi.",
+    "lowHint": "Un premier signe — à garder à l'œil.",
+    "empty": "Aucun élève signalé",
+    "emptyHint": "Aucun élève ne déclenche de signal pour l'instant. Les signalements apparaissent au fil des présences, résultats, devoirs et paiements.",
+    "noMatch": "Aucun élève signalé ne correspond à ces filtres",
+    "footnote": "Construit uniquement à partir des registres que l'école tient déjà — rien ici n'a demandé de saisie supplémentaire. Les seuils se trouvent dans le service early-warning du serveur.",
+    "sig": {
+      "absence": "Absent {{absent}} jours sur {{marked}} pointés",
+      "late": "{{late}} retards",
+      "failed_exam": "Échec au dernier examen ({{percentage}} %)",
+      "grade_drop": "Moyenne passée de {{from}} % à {{to}} %",
+      "subjects_failed": "{{count}} matières échouées",
+      "missing_homework": "{{missing}} devoirs sur {{assigned}} non rendus",
+      "fees_outstanding": "Doit {{balance}}"
+    }
+  },
+  "verif": {
+    "title": "Documents vérifiables",
+    "hint": "Codes de vérification imprimés sur les relevés et bulletins de cet élève. Quiconque détient le document peut le contrôler sur la page publique de vérification ; retirer un code fait répondre cette page « retiré par l'établissement ».",
+    "none": "Aucun code émis pour l'instant — un code est créé à la première impression d'un relevé ou d'un bulletin.",
+    "transcript": "Relevé de notes",
+    "reportCard": "Bulletin",
+    "lastPrinted": "Dernière impression {{date}}",
+    "prints": "{{count}} impression",
+    "prints_other": "{{count}} impressions",
+    "active": "Valide",
+    "revoked": "Retiré",
+    "revoke": "Retirer",
+    "restore": "Rétablir",
+    "reasonPh": "Motif (facultatif — visible par la personne qui vérifie)",
+    "confirm": "Confirmer le retrait",
+    "revokedOk": "Code retiré",
+    "restoredOk": "Code rétabli",
+    "failed": "Impossible de mettre à jour le code"
   },
   "gate": {
     "title": "Portail",

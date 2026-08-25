@@ -24,15 +24,17 @@ import { useTranslation } from "react-i18next";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface FormState {
-  name:       string;
-  code:       string;
-  classIds:   string[];
-  teacherId:  string;
+  name:        string;
+  code:        string;
+  coefficient: string;
+  classIds:    string[];
+  teacherId:   string;
 }
 
 interface FormErrors {
-  name?:     string;
-  classIds?: string;
+  name?:        string;
+  coefficient?: string;
+  classIds?:    string;
 }
 
 interface FieldProps {
@@ -59,10 +61,11 @@ const MAX_NAME_LENGTH = 80;
 const MAX_CODE_LENGTH = 20;
 
 const INITIAL_FORM: FormState = {
-  name:      "",
-  code:      "",
-  classIds:  [],
-  teacherId: "",
+  name:        "",
+  code:        "",
+  coefficient: "",
+  classIds:    [],
+  teacherId:   "",
 };
 
 const EXAMPLES = ["Mathematics", "English", "Biology", "History"] as const;
@@ -85,6 +88,16 @@ const validate = (form: FormState): FormErrors => {
 
   if (form.classIds.length === 0) {
     errors.classIds = "Please select at least one class.";
+  }
+
+  // Optional, but a coefficient of 0 or a typo would rescale every average in
+  // the class, so anything present must be a sane positive number.
+  const coeff = form.coefficient.trim();
+  if (coeff !== "") {
+    const n = Number(coeff);
+    if (!Number.isFinite(n)) errors.coefficient = "Coefficient must be a number.";
+    else if (n < 0.1)        errors.coefficient = "Coefficient must be at least 0.1.";
+    else if (n > 20)         errors.coefficient = "Coefficient cannot exceed 20.";
   }
 
   return errors;
@@ -214,6 +227,7 @@ export default function AddSubjectPage() {
 
   const nameId     = useId();
   const codeId     = useId();
+  const coeffId    = useId();
   const classesId  = useId();
   const teacherId  = useId();
 
@@ -273,10 +287,13 @@ export default function AddSubjectPage() {
         const cls = classes.find((c) => c._id === cid);
         try {
           await createSubject({
-            name:      values.name.trim(),
-            code:      values.code.trim() || undefined,
-            classId:   cid,
-            teacherId: values.teacherId || undefined,
+            name:        values.name.trim(),
+            code:        values.code.trim() || undefined,
+            classId:     cid,
+            teacherId:   values.teacherId || undefined,
+            coefficient: values.coefficient.trim()
+              ? Number(values.coefficient.trim())
+              : undefined,
             schoolId,
           });
           outcomes.push({
@@ -320,7 +337,10 @@ export default function AddSubjectPage() {
   });
 
   const handleChange = useCallback(
-    (field: keyof Pick<FormState, "name" | "code" | "teacherId">, value: string) => {
+    (
+      field: keyof Pick<FormState, "name" | "code" | "coefficient" | "teacherId">,
+      value: string,
+    ) => {
       setForm((prev) => ({ ...prev, [field]: value }));
       if (field === "name") {
         setErrors((prev) => ({ ...prev, name: undefined }));
@@ -347,7 +367,8 @@ export default function AddSubjectPage() {
   const handleDiscard = useCallback(() => {
     const isDirty =
       form.name.trim()     !== "" ||
-      form.code.trim()     !== "" ||
+      form.code.trim()        !== "" ||
+      form.coefficient.trim() !== "" ||
       form.classIds.length  >  0  ||
       form.teacherId       !== "";
 
@@ -509,6 +530,38 @@ export default function AddSubjectPage() {
                   "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
                   "text-gray-900 placeholder-gray-400 outline-none transition-colors",
                   "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                )}
+              />
+            </Field>
+
+            {/* Subject coefficient */}
+            <Field
+              id={coeffId}
+              label={t("subjects.coefficientLabel")}
+              error={errors.coefficient}
+              hint={t("subjects.coefficientHint")}
+            >
+              <input
+                id={coeffId}
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                min="0.1"
+                max="20"
+                value={form.coefficient}
+                onChange={(e) => handleChange("coefficient", e.target.value)}
+                placeholder={t("subjects.coefficientPh")}
+                disabled={isBusy}
+                aria-invalid={!!errors.coefficient}
+                aria-describedby={
+                  errors.coefficient ? `${coeffId}-error` : `${coeffId}-hint`
+                }
+                className={cn(
+                  "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
+                  "text-gray-900 placeholder-gray-400 outline-none transition-colors",
+                  errors.coefficient
+                    ? "border-red-300 focus:border-red-500"
+                    : "border-gray-200 focus:border-indigo-500 focus:bg-white"
                 )}
               />
             </Field>

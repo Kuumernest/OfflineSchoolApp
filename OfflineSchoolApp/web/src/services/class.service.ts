@@ -53,6 +53,7 @@ interface RawSubject {
   id?:           string;
   name?:         string;
   code?:         string;
+  coefficient?:  number | string;
   class?:        RawClass | string | null;
   classId?:      string;
   class_id?:     string;
@@ -158,6 +159,9 @@ function normaliseSubject(raw: RawSubject): Subject {
     id:          subjectId,
     name:        raw.name || "",
     code:        raw.code || "",
+    // Subjects created before the field existed have none; the server
+    // normaliser defaults them to 1, and this mirrors that for safety.
+    coefficient: Number(raw.coefficient) > 0 ? Number(raw.coefficient) : 1,
     classId,
     teacherId,
     teacherName,

@@ -64,7 +64,9 @@ export const TemplateService = {
       css:       css       || "",
       isDefault: isDefault || false,
     });
-    return data.template;
+    // unknownTokens rides along so the builder can warn about placeholders
+    // the render engine cannot resolve. Only builder.js calls this.
+    return { template: data.template, unknownTokens: data.unknownTokens ?? [] };
   },
 
   // ── PUT /api/templates/:id ──────────────────────────────
@@ -72,7 +74,7 @@ export const TemplateService = {
     const { data } = await api.put(`${BASE}/${templateId}`, {
       name, html, css, isDefault,
     });
-    return data.template;
+    return { template: data.template, unknownTokens: data.unknownTokens ?? [] };
   },
 
   // ── PUT /api/templates/:id { isDefault: true } ──────────
@@ -96,6 +98,21 @@ export const TemplateService = {
       { schoolId }
     );
     return data.template;
+  },
+
+  // ── POST /api/templates/seed-default ───────────────────
+  /**
+   * Write the built-in report card layout into an editable template.
+   *
+   * Idempotent server-side: a school that already has one gets that row back
+   * with created:false rather than accumulating copies.
+   */
+  async seedDefault(schoolId) {
+    const { data } = await api.post(`${BASE}/seed-default`, { schoolId });
+    return {
+      template: data?.template ?? null,
+      created:  data?.created  ?? false,
+    };
   },
 
   // ── POST /api/templates/:id/preview ────────────────────

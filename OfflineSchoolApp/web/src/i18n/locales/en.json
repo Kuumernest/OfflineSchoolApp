@@ -100,6 +100,7 @@
   },
   "nav": {
     "dashboard": "Dashboard",
+    "watchlist": "Students to watch",
     "students": "Students",
     "allStudents": "All Students",
     "admissions": "Admissions",
@@ -398,7 +399,10 @@
     "nameLabel": "Subject name",
     "codeLabel": "Subject code",
     "namePh": "e.g. Mathematics",
-    "codePh": "e.g. MATH101"
+    "codePh": "e.g. MATH101",
+    "coefficientLabel": "Coefficient",
+    "coefficientHint": "How much this subject counts toward the average. 1 is normal, 2 counts double. Leave blank for 1.",
+    "coefficientPh": "e.g. 2 (optional)"
   },
   "classes": {
     "title": "Classes",
@@ -535,7 +539,8 @@
     "reject": "Reject",
     "rejectSubmission": "Reject submission",
     "rejectReasonPh": "Enter rejection reason (required)…",
-    "absent": "ABSENT"
+    "absent": "ABSENT",
+    "coeff": "Coeff"
   },
   "examCreate": {
     "title": "Create exam",
@@ -553,7 +558,8 @@
     "selectClassFirst": "Select a class first",
     "noTeacher": "No teacher",
     "max": "Max",
-    "pass": "Pass"
+    "pass": "Pass",
+    "coefficient": "Coefficient"
   },
   "reportCards": {
     "title": "Report cards",
@@ -666,7 +672,9 @@
     "new": "New template",
     "none": "No templates yet",
     "previewTitle": "Report preview",
-    "goBack": "Go back"
+    "goBack": "Go back",
+    "startFromDefault": "Start from the default",
+    "seedExists": "Your school already has the default template. Opening it in the list."
   },
   "notifications": {
     "title": "Notifications",
@@ -791,13 +799,13 @@
     "adminEmailPh": "admin@school.com",
     "yourEmailPh": "your@email.com",
     "idCardExpiry": "Card expiry",
-    "idCardExpiryBlurb": "The date printed on student ID cards. Leave it empty and cards expire at the end of the current academic year, so every card printed this year carries the same date.",
+    "idCardExpiryBlurb": "When student ID cards expire. Cards print the academic year this date falls in — \"2025/2026\", not the date itself. Leave it empty and cards expire at the end of the current academic year.",
     "validUntil": "Valid until",
     "useDefaultDate": "Use the default date",
-    "expiryDefaulting": "Cards will be printed as valid until {{date}}, the end of the academic year.",
-    "expiryOverridden": "Cards will be printed as valid until {{date}}.",
+    "expiryDefaulting": "Cards will be valid until {{date}}, the end of the academic year.",
+    "expiryOverridden": "Cards will be valid until {{date}}.",
     "idCardSaved": "ID card settings saved",
-    "idCardReprint": "This applies to cards printed from now on. Cards already issued keep the date printed on them.",
+    "idCardReprint": "This applies to cards printed from now on. Cards already issued keep the year printed on them.",
     "gateMessages": "Gate messages",
     "gateMessagesBlurb": "What a parent is told when their child's card is scanned at the gate. A school of 500 scanning twice a day is about 20,000 messages a month, so sending every scan is rarely the right choice.",
     "gateNotifyOff": "Never",
@@ -1233,6 +1241,55 @@
     "failed": "Could not save the photo",
     "removeTitle": "Remove this photo?",
     "removeBody": "The ID card will print with a blank photo box instead."
+  },
+  "watch": {
+    "title": "Students to watch",
+    "blurb": "Students whose recorded data over the last {{days}} days says something may be going wrong — attendance, results, homework and fees, read together. Every flag shows its reasons.",
+    "window": "Window",
+    "lastDays": "Last {{days}} days",
+    "allClasses": "All classes",
+    "signals": "Why they are flagged",
+    "level": "Level",
+    "tier": {
+      "high": "Act now",
+      "medium": "Intervene",
+      "low": "Monitor"
+    },
+    "highHint": "Several signals together — talk to the family this week.",
+    "mediumHint": "A clear pattern — the class teacher should follow up.",
+    "lowHint": "One early sign — keep an eye on it.",
+    "empty": "Nobody is flagged",
+    "emptyHint": "No student currently trips any signal. Flags appear as attendance, results, homework and fee records come in.",
+    "noMatch": "No flagged students match these filters",
+    "footnote": "Built only from records the school already keeps — nothing here asked anyone for extra data entry. Thresholds live in the server's early-warning service.",
+    "sig": {
+      "absence": "Absent {{absent}} of {{marked}} marked days",
+      "late": "Late {{late}} times",
+      "failed_exam": "Failed the last exam ({{percentage}}%)",
+      "grade_drop": "Average fell {{from}}% → {{to}}%",
+      "subjects_failed": "{{count}} subjects failed",
+      "missing_homework": "{{missing}} of {{assigned}} assignments not handed in",
+      "fees_outstanding": "Owes {{balance}}"
+    }
+  },
+  "verif": {
+    "title": "Verifiable documents",
+    "hint": "Verification codes printed on this student's transcripts and report cards. Anyone holding the paper can check it at the public verify page; revoking a code makes that page answer \"withdrawn by the school\".",
+    "none": "No codes issued yet — one is created the first time a transcript or report card is printed.",
+    "transcript": "Transcript",
+    "reportCard": "Report card",
+    "lastPrinted": "Last printed {{date}}",
+    "prints": "{{count}} print",
+    "prints_other": "{{count}} prints",
+    "active": "Active",
+    "revoked": "Revoked",
+    "revoke": "Revoke",
+    "restore": "Restore",
+    "reasonPh": "Reason (optional — shown to whoever checks the code)",
+    "confirm": "Confirm revoke",
+    "revokedOk": "Code revoked",
+    "restoredOk": "Code restored",
+    "failed": "Could not update the code"
   },
   "gate": {
     "title": "Gate",

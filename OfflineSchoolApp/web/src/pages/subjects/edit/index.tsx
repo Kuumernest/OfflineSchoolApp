@@ -25,15 +25,17 @@ import { useTranslation } from "react-i18next";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface FormState {
-  name:      string;
-  code:      string;
-  classId:   string;
-  teacherId: string;
+  name:        string;
+  code:        string;
+  coefficient: string;
+  classId:     string;
+  teacherId:   string;
 }
 
 interface FormErrors {
-  name?:    string;
-  classId?: string;
+  name?:        string;
+  coefficient?: string;
+  classId?:     string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ const MAX_NAME_LENGTH = 80;
 const MAX_CODE_LENGTH = 20;
 
 const EMPTY_FORM: FormState = {
-  name: "", code: "", classId: "", teacherId: "",
+  name: "", code: "", coefficient: "", classId: "", teacherId: "",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -65,21 +67,34 @@ const validate = (form: FormState): FormErrors => {
   if (!form.classId)
     errors.classId = "Please select a class.";
 
+  // Optional, but a coefficient of 0 or a typo would rescale every average in
+  // the class, so anything present must be a sane positive number.
+  const coeff = form.coefficient.trim();
+  if (coeff !== "") {
+    const n = Number(coeff);
+    if (!Number.isFinite(n)) errors.coefficient = "Coefficient must be a number.";
+    else if (n < 0.1)        errors.coefficient = "Coefficient must be at least 0.1.";
+    else if (n > 20)         errors.coefficient = "Coefficient cannot exceed 20.";
+  }
+
   return errors;
 };
 
 const subjectToForm = (s: Subject): FormState => ({
   name:      s.name      ?? "",
   code:      s.code      ?? "",
+  // Subjects predating the field come back as 1 from the server's normaliser.
+  coefficient: s.coefficient != null ? String(s.coefficient) : "",
   classId:   s.classId   ?? "",
   teacherId: s.teacherId ?? "",
 });
 
 const formsDiffer = (a: FormState, b: FormState): boolean =>
-  a.name.trim()  !== b.name.trim()  ||
-  a.code.trim()  !== b.code.trim()  ||
-  a.classId      !== b.classId      ||
-  a.teacherId    !== b.teacherId;
+  a.name.trim()        !== b.name.trim()        ||
+  a.code.trim()        !== b.code.trim()        ||
+  a.coefficient.trim() !== b.coefficient.trim() ||
+  a.classId            !== b.classId            ||
+  a.teacherId          !== b.teacherId;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIELD WRAPPER
@@ -184,6 +199,9 @@ export default function EditSubjectPage() {
         code:      form.code.trim() || undefined,
         classId:   form.classId,
         teacherId: form.teacherId   || undefined,
+        coefficient: form.coefficient.trim()
+          ? Number(form.coefficient.trim())
+          : undefined,
       });
     },
     onSuccess: () => {
@@ -405,6 +423,35 @@ export default function EditSubjectPage() {
                   form.code.trim() !== originalForm.code.trim()
                     ? "border-indigo-300 bg-indigo-50"
                     : "border-gray-200 focus:border-indigo-500 focus:bg-white"
+                )}
+              />
+            </Field>
+
+            {/* Subject coefficient */}
+            <Field
+              label={t("subjects.coefficientLabel")}
+              error={errors.coefficient}
+              hint={t("subjects.coefficientHint")}
+            >
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.5"
+                min="0.1"
+                max="20"
+                value={form.coefficient}
+                onChange={(e) => handleChange("coefficient", e.target.value)}
+                placeholder={t("subjects.coefficientPh")}
+                disabled={isBusy}
+                aria-invalid={!!errors.coefficient}
+                className={cn(
+                  "w-full rounded-xl border-2 bg-gray-50 px-3 py-3 text-sm",
+                  "text-gray-900 placeholder-gray-400 outline-none transition-colors",
+                  errors.coefficient
+                    ? "border-red-300 focus:border-red-500"
+                    : form.coefficient.trim() !== originalForm.coefficient.trim()
+                      ? "border-indigo-300 bg-indigo-50"
+                      : "border-gray-200 focus:border-indigo-500 focus:bg-white"
                 )}
               />
             </Field>

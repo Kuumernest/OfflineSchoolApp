@@ -265,6 +265,9 @@ export default function TemplateBuilderPage() {
   const [loading,   setLoading]   = useState(isEditing);
   const [saving,    setSaving]    = useState(false);
   const [error,     setError]     = useState<string | null>(null);
+  // Tokens the render engine does not know. The template saved fine; these
+  // would print as literal braces on a report card.
+  const [unknownTokens, setUnknownTokens] = useState<string[]>([]);
 
   // ── Load existing ──────────────────────────────────────
 
@@ -292,16 +295,22 @@ export default function TemplateBuilderPage() {
 
     setSaving(true);
     setError(null);
+    setUnknownTokens([]);
     try {
-      if (isEditing) {
-        await api.put(`/templates/${templateId}`, {
-          schoolId, name: name.trim(), html, css, isDefault,
-        });
-      } else {
-        await api.post("/templates", {
-          schoolId, name: name.trim(), html, css, isDefault,
-        });
+      const body = { schoolId, name: name.trim(), html, css, isDefault };
+      const res  = isEditing
+        ? await api.put(`/templates/${templateId}`, body)
+        : await api.post("/templates", body);
+
+      // Saved either way. But if the engine cannot resolve a token, keep the
+      // author here so they can fix the typo now — navigating away would hide
+      // the only warning they get before it reaches a parent.
+      const unknown: string[] = res.data?.unknownTokens ?? [];
+      if (unknown.length) {
+        setUnknownTokens(unknown);
+        return;
       }
+
       navigate("/reports/templates");
     } catch (err) {
       setError(getErrorMessage(err));
@@ -415,6 +424,39 @@ export default function TemplateBuilderPage() {
           <button
             onClick={() => setError(null)}
             className="ml-auto text-red-500 hover:text-red-700 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Unknown-token warning */}
+      {unknownTokens.length > 0 && (
+        <div className="bg-amber-50 border-b border-amber-200 px-6 py-2
+                        text-sm text-amber-800 flex items-start gap-2">
+          <span className="font-semibold shrink-0">Saved, but:</span>
+          <span>
+            {unknownTokens.length === 1
+              ? "this placeholder is not recognised and will print as-is: "
+              : "these placeholders are not recognised and will print as-is: "}
+            {unknownTokens.map((tok) => (
+              <code
+                key={tok}
+                className="bg-amber-100 px-1 rounded font-mono text-xs mr-1"
+              >
+                {tok}
+              </code>
+            ))}
+          </span>
+          <button
+            onClick={() => navigate("/reports/templates")}
+            className="ml-auto shrink-0 text-amber-800 underline font-medium"
+          >
+            Continue anyway
+          </button>
+          <button
+            onClick={() => setUnknownTokens([])}
+            className="shrink-0 text-amber-600 hover:text-amber-800 font-bold"
           >
             ✕
           </button>

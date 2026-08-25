@@ -85,6 +85,32 @@ export default function TemplatesScreen() {
     );
   }, [load]);
 
+  // ── Seed the built-in layout ──────────────────────────
+  /**
+   * Write the built-in report card layout into an editable template, so a
+   * school has something to fork instead of authoring one from scratch.
+   * The endpoint is idempotent — pressing twice does not make copies.
+   */
+  const [seeding, setSeeding] = useState(false);
+
+  const handleSeedDefault = useCallback(async () => {
+    try {
+      setSeeding(true);
+      const { created } = await TemplateService.seedDefault(schoolId);
+      if (!created) {
+        Alert.alert(
+          "Already there",
+          "Your school already has the default template — it is in the list below."
+        );
+      }
+      load();
+    } catch (err) {
+      Alert.alert("Error", err?.response?.data?.error || err.message);
+    } finally {
+      setSeeding(false);
+    }
+  }, [schoolId, load]);
+
   // ── Duplicate ─────────────────────────────────────────
   const handleDuplicate = useCallback(async (id) => {
     try {
@@ -161,7 +187,9 @@ export default function TemplatesScreen() {
             tintColor={C.primary}
           />
         }
-        ListEmptyComponent={<EmptyState />}
+        ListEmptyComponent={
+          <EmptyState onSeed={handleSeedDefault} seeding={seeding} />
+        }
         ItemSeparatorComponent={() => <View style={{ height: 12 }} />}
         renderItem={({ item }) => (
           <TemplateCard
@@ -299,7 +327,7 @@ function ActionBtn({ icon, label, color, onPress }) {
   );
 }
 
-function EmptyState() {
+function EmptyState({ onSeed, seeding }) {
   return (
     <View style={s.empty}>
       <View style={s.emptyIcon}>
@@ -312,11 +340,23 @@ function EmptyState() {
       </Text>
       <TouchableOpacity
         style={s.emptyBtn}
+        onPress={onSeed}
+        disabled={seeding}
+        activeOpacity={0.8}
+      >
+        {seeding
+          ? <ActivityIndicator size="small" color={C.white} />
+          : <Ionicons name="sparkles-outline" size={18} color={C.white} />}
+        <Text style={s.emptyBtnText}>Start from the default</Text>
+      </TouchableOpacity>
+
+      <TouchableOpacity
+        style={s.emptyBtnGhost}
         onPress={() => router.push("/admin/reports/templates/builder")}
         activeOpacity={0.8}
       >
-        <Ionicons name="add-circle-outline" size={18} color={C.white} />
-        <Text style={s.emptyBtnText}>Create Template</Text>
+        <Ionicons name="add-circle-outline" size={18} color={C.primary} />
+        <Text style={s.emptyBtnGhostText}>Create from scratch</Text>
       </TouchableOpacity>
     </View>
   );
@@ -467,6 +507,19 @@ const s = StyleSheet.create({
     marginTop:         8,
   },
   emptyBtnText: { fontSize: 14, fontWeight: "700", color: C.white },
+  emptyBtnGhost: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    gap:               8,
+    backgroundColor:   C.white,
+    borderWidth:       1,
+    borderColor:       C.gray200,
+    borderRadius:      12,
+    paddingHorizontal: 20,
+    paddingVertical:   12,
+    marginTop:         8,
+  },
+  emptyBtnGhostText: { fontSize: 14, fontWeight: "700", color: C.primary },
   fab: {
     position:        "absolute",
     bottom:          30,

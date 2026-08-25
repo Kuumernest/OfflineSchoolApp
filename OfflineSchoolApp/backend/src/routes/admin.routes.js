@@ -110,7 +110,29 @@ const getGradingConfig = lazyModel("../db/models/GradingConfig", "GradingConfig"
 const normaliseSubject = (s) => {
   if (!s) return s;
   const classRef = s.class || s.classId || null;
-  return { ...s, class: classRef, classId: classRef };
+  // Subjects created before the coefficient field existed have no value, so
+  // default to 1 here rather than letting the clients each invent a fallback.
+  const coefficient = Number(s.coefficient) > 0 ? Number(s.coefficient) : 1;
+  return { ...s, class: classRef, classId: classRef, coefficient };
+};
+
+/**
+ * Parse an optional subject coefficient from a request body.
+ *
+ * Returns { ok: true, value } when absent (value undefined, meaning
+ * "leave alone") or valid, and { ok: false, error } when present but not a
+ * positive number — a coefficient of 0 or "abc" would silently erase every
+ * average in the class, so it is rejected rather than coerced.
+ */
+const parseCoefficient = (raw) => {
+  if (raw === undefined || raw === null || raw === "") {
+    return { ok: true, value: undefined };
+  }
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0.1 || n > 20) {
+    return { ok: false, error: "coefficient must be a number between 0.1 and 20" };
+  }
+  return { ok: true, value: Math.round(n * 100) / 100 };
 };
 
 /**
@@ -1278,9 +1300,12 @@ router.get("/subjects", asyncHandler(async (req, res) => {
 }));
 
 router.post("/subjects", asyncHandler(async (req, res) => {
-  const { id, name, code, classId, schoolId } = req.body;
+  const { id, name, code, classId, schoolId, coefficient } = req.body;
   if (!name?.trim()) return sendError(res, 400, "name is required");
   if (!classId)      return sendError(res, 400, "classId is required");
+
+  const coeff = parseCoefficient(coefficient);
+  if (!coeff.ok) return sendError(res, 400, coeff.error);
 
   const resolvedSchoolId = resolveSchoolId(req, schoolId);
   const classIdStr       = String(classId).trim();
@@ -1315,6 +1340,8 @@ router.post("/subjects", asyncHandler(async (req, res) => {
     class:    classIdStr,
     classId:  classIdStr,
     schoolId: resolvedSchoolId,
+    // Optional — the schema default (1) applies when the admin leaves it blank.
+    ...(coeff.value !== undefined && { coefficient: coeff.value }),
   });
 
   const populated = {
@@ -1336,7 +1363,10 @@ router.post("/subjects", asyncHandler(async (req, res) => {
 }));
 
 router.put("/subjects/:id", asyncHandler(async (req, res) => {
-  const { name, code, classId } = req.body;
+  const { name, code, classId, coefficient } = req.body;
+
+  const coeff = parseCoefficient(coefficient);
+  if (!coeff.ok) return sendError(res, 400, coeff.error);
 
   if (classId) {
     const classExists = await Class.findOne(
@@ -1355,6 +1385,7 @@ router.put("/subjects/:id", asyncHandler(async (req, res) => {
       ...(name               && { name: name.trim()        }),
       ...(code !== undefined && { code: code?.trim() || "" }),
       ...(classIdStr         && { class: classIdStr, classId: classIdStr }),
+      ...(coeff.value !== undefined && { coefficient: coeff.value }),
     },
     { new: true, runValidators: true }
   ).lean();

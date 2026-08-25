@@ -21,6 +21,16 @@ const subjectSchema = new mongoose.Schema(
     classId: { type: String, ref: "Class", default: null, index: true },
 
     description: { type: String,  default: null },
+
+    // Subject coefficient — the school-wide default weighting for this
+    // subject, in the Cameroon sense: 1 = normal, 2 = counts double.
+    // Optional; omitting it leaves the subject equally weighted.
+    //
+    // ExamSubject.weight is percentage-style (100 = coefficient 1), so
+    // attaching a subject to an exam seeds weight = coefficient * 100.
+    // Kept as a plain multiplier here because that is what an admin types.
+    coefficient: { type: Number, default: 1, min: 0.1, max: 20 },
+
     isActive:    { type: Boolean, default: true },
     deletedAt:   { type: Date,    default: null },
   },

@@ -7,6 +7,14 @@ const { v4: uuidv4 } = require("uuid");
 
 const ReportTemplate  = require("../db/models/ReportTemplate");
 const GeneratedReport = require("../db/models/GeneratedReport");
+const {
+  DEFAULT_TEMPLATE_HTML,
+  DEFAULT_TEMPLATE_CSS,
+} = require("../print/defaultReportTemplate");
+const {
+  knownTokens,
+  unknownTokens,
+} = require("../../engine/placeholder.engine");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -82,6 +90,74 @@ router.get("/default", asyncHandler(async (req, res) => {
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
+// GET /api/templates/tokens
+// The vocabulary the builder validates against. Must be BEFORE /:id.
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.get("/tokens", asyncHandler(async (_req, res) => {
+  return res.json({ success: true, tokens: knownTokens() });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/templates/seed-default
+// Write the built-in layout into an editable ReportTemplate row so a school
+// has something to fork. Must be BEFORE /:id-shaped routes.
+//
+// Idempotent: a school that already has a seeded template gets that one back
+// rather than accumulating copies each time the button is pressed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SEED_TEMPLATE_NAME = "Default Report Card";
+
+router.post("/seed-default", asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const existing = await ReportTemplate.findOne({
+    schoolId,
+    name:      SEED_TEMPLATE_NAME,
+    deletedAt: null,
+  }).lean();
+
+  if (existing) {
+    return res.json({ success: true, created: false, template: existing });
+  }
+
+  // Only claim the default slot if the school has not already chosen one.
+  const hasDefault = await ReportTemplate.exists({
+    schoolId,
+    isDefault: true,
+    deletedAt: null,
+  });
+
+  const template = await ReportTemplate.create({
+    _id:       uuidv4(),
+    schoolId,
+    name:      SEED_TEMPLATE_NAME,
+    html:      DEFAULT_TEMPLATE_HTML,
+    css:       DEFAULT_TEMPLATE_CSS,
+    isDefault: !hasDefault,
+    version:   1,
+    variables: scanVariables(DEFAULT_TEMPLATE_HTML),
+    createdBy: req.user?._id || null,
+    updatedBy: req.user?._id || null,
+  });
+
+  console.log(
+    `⭐ Seeded default template for school ${schoolId} [${template._id}]`
+  );
+
+  return res.status(201).json({
+    success:  true,
+    created:  true,
+    template: template.toObject(),
+  });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
 // GET /api/templates/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -141,7 +217,16 @@ router.post("/", asyncHandler(async (req, res) => {
 
   console.log(`✅ Template created: "${template.name}" [${template._id}]`);
 
-  return res.status(201).json({ success: true, template: template.toObject() });
+  // Saved either way — a typo should not block the admin's work — but the
+  // builder is told, because an unknown token prints literal braces onto a
+  // parent's report card.
+  const unknown = unknownTokens(html);
+
+  return res.status(201).json({
+    success:  true,
+    template: template.toObject(),
+    ...(unknown.length ? { unknownTokens: unknown } : {}),
+  });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -186,7 +271,13 @@ router.put("/:id", asyncHandler(async (req, res) => {
     `✅ Template updated: "${template.name}" v${template.version} [${template._id}]`
   );
 
-  return res.json({ success: true, template: template.toObject() });
+  const unknown = unknownTokens(template.html);
+
+  return res.json({
+    success:  true,
+    template: template.toObject(),
+    ...(unknown.length ? { unknownTokens: unknown } : {}),
+  });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -275,17 +366,38 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
     examSubjects.map((es) => [String(es.subjectId), es])
   );
 
+  // Same weight semantics as the report card renderer: ExamSubject.weight is
+  // percentage-style (100 = coefficient 1). The preview shows real
+  // coefficients so an admin designing a template sees what will print.
+  const resolveCoeff = (es) => {
+    if (!es || es.weight == null) return 1;
+    const c = Math.round((Number(es.weight) / 100) * 100) / 100;
+    return c > 0 ? c : 1;
+  };
+
   const subjects = scores.map((score) => {
-    const es      = subjectMap.get(String(score.subjectId)) || {};
+    const es       = subjectMap.get(String(score.subjectId)) || {};
+    const maxScore = score.maxScore || es.maxScore || 100;
+    const coeff    = resolveCoeff(es);
+
+    const normalizedMark =
+      score.score != null && !score.isAbsent && !score.isExempt
+        ? Math.round((score.score / maxScore) * 20 * 100) / 100
+        : null;
+
     return {
       subjectName: es.subjectName  || String(score.subjectId),
       caScore:     null,
       examScore:   score.score,
       total:       score.score,
+      maxScore,
+      coefficient: coeff,
+      normalizedMark,
       grade:       score.grade    || null,
       remark:      score.remark   || null,
       isPassing:   score.isPassing || false,
       isAbsent:    score.isAbsent  || false,
+      isExempt:    score.isExempt  || false,
     };
   });
 
@@ -329,15 +441,18 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
     nextTermDate:     null,
   };
 
-  const { resolvePlaceholders } = require("../engine/placeholder.engine");
+  const { resolvePlaceholders } = require("../../engine/placeholder.engine");
   const resolvedHtml = resolvePlaceholders(template.html, data);
   const fullHtml     = `<style>${template.css || ""}</style>${resolvedHtml}`;
+
+  const unknown = unknownTokens(template.html);
 
   return res.json({
     success:      true,
     isRaw:        false,
     templateName: template.name,
     renderedHtml: fullHtml,
+    ...(unknown.length ? { unknownTokens: unknown } : {}),
   });
 }));
 

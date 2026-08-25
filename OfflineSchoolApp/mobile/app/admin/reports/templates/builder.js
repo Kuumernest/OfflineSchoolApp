@@ -316,22 +316,31 @@ export default function TemplateBuilderScreen() {
 
     setSaving(true);
     try {
-      if (isEditing) {
-        await TemplateService.update(templateId, {
-          name: name.trim(),
-          html,
-          css,
-          isDefault,
-        });
-      } else {
-        await TemplateService.create({
-          schoolId,
-          name: name.trim(),
-          html,
-          css,
-          isDefault,
-        });
+      const body = { name: name.trim(), html, css, isDefault };
+      const { unknownTokens } = isEditing
+        ? await TemplateService.update(templateId, body)
+        : await TemplateService.create({ schoolId, ...body });
+
+      // Saved either way. But an unresolvable placeholder prints literal
+      // braces onto a parent's report card, so offer to stay and fix it
+      // rather than closing the editor on a silent problem.
+      if (unknownTokens?.length) {
+        const list = unknownTokens.join("\n");
+        const many = unknownTokens.length !== 1;
+        Alert.alert(
+          "Saved, but check your placeholders",
+          "The report engine does not recognise " +
+            (many ? "these placeholders" : "this placeholder") +
+            ", so " + (many ? "they" : "it") +
+            " will print exactly as written:\n\n" + list,
+          [
+            { text: "Let me fix it", style: "cancel" },
+            { text: "Continue anyway", onPress: () => router.back() },
+          ]
+        );
+        return;
       }
+
       Alert.alert(
         "Saved",
         isEditing

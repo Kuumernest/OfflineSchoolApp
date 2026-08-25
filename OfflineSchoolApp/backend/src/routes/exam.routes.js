@@ -735,6 +735,16 @@ router.post("/:examId/subjects", asyncHandler(async (req, res) => {
     });
   }
 
+  // The subject's school-wide coefficient is the default weighting for this
+  // exam. Subject.coefficient is a plain multiplier (1, 2, …) because that is
+  // what the admin types; ExamSubject.weight is percentage-style (100 = ×1),
+  // so it is scaled here. An explicit `weight` in the request still wins —
+  // that is the per-exam override.
+  const subjectCoefficient = Number(subjectDoc?.coefficient) > 0
+    ? Number(subjectDoc.coefficient)
+    : 1;
+  const resolvedWeight = weight ?? Math.round(subjectCoefficient * 100);
+
   const es = await ExamSubject.create({
     _id:         uuidv4(),
     examId,
@@ -746,7 +756,7 @@ router.post("/:examId/subjects", asyncHandler(async (req, res) => {
     teacherName: teacherDoc?.name || null,
     maxScore:    maxScore    ?? 100,
     passMark:    passMark    ?? 50,
-    weight:      weight      ?? 100,
+    weight:      resolvedWeight,
     isPractical: isPractical ?? false,
     isTheory:    isTheory    ?? true,
     isOral:      isOral      ?? false,
@@ -754,6 +764,67 @@ router.post("/:examId/subjects", asyncHandler(async (req, res) => {
 
   return res.status(201).json({ success: true, subject: es });
 }));
+
+/**
+ * PUT /api/exams/:examId/subjects/:id — the settings of one exam subject.
+ *
+ * This is where a subject's COEFFICIENT is set. The stored field is `weight`
+ * (percentage-style: 100 = coefficient 1, 200 = coefficient 2), because that
+ * is what the grading service and the report card renderer already read.
+ *
+ * Admin-only: a coefficient rescales every student's average in the class,
+ * which is a head's decision, not a marker's.
+ */
+router.put(
+  "/:examId/subjects/:id",
+  adminOnly,
+  asyncHandler(async (req, res) => {
+    const schoolId = resolveSchoolId(req, req.body.schoolId);
+    const { maxScore, passMark, weight, teacherId, isPractical, isTheory, isOral } = req.body;
+
+    const updates = {};
+    for (const [key, value] of Object.entries({ maxScore, passMark, weight })) {
+      if (value === undefined) continue;
+      const n = Number(value);
+      if (!Number.isFinite(n) || n <= 0) {
+        return res.status(400).json({ message: `${key} must be a positive number` });
+      }
+      updates[key] = n;
+    }
+    if (teacherId !== undefined) {
+      updates.teacherId = teacherId || null;
+      const teacherDoc = teacherId ? await User.findById(teacherId).lean() : null;
+      updates.teacherName = teacherDoc?.name || null;
+    }
+    if (isPractical !== undefined) updates.isPractical = Boolean(isPractical);
+    if (isTheory    !== undefined) updates.isTheory    = Boolean(isTheory);
+    if (isOral      !== undefined) updates.isOral      = Boolean(isOral);
+
+    if (!Object.keys(updates).length) {
+      return res.status(400).json({ message: "Nothing to update" });
+    }
+
+    const es = await ExamSubject.findOneAndUpdate(
+      { _id: req.params.id, examId: req.params.examId, schoolId, deletedAt: null },
+      updates,
+      { new: true, runValidators: true }
+    ).lean();
+    if (!es) return res.status(404).json({ message: "Exam subject not found" });
+
+    // A changed coefficient or maxScore makes already-computed averages stale.
+    // Recomputing silently would rewrite results an admin may have published,
+    // so the caller is told instead and decides when to reprocess.
+    const hasScores = await StudentScore.exists({
+      examId: req.params.examId, subjectId: es.subjectId, schoolId, deletedAt: null,
+    });
+
+    return res.json({
+      success: true,
+      subject: es,
+      reprocessRequired: Boolean(hasScores && (updates.weight !== undefined || updates.maxScore !== undefined)),
+    });
+  })
+);
 
 router.delete(
   "/:examId/subjects/:subjectId",
