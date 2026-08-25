@@ -331,10 +331,6 @@
     "identifierHint": "Staff enter their email · Students enter their enrolment number",
     "asStaff": "Signing in as staff / admin",
     "asStudent": "Signing in as student",
-    "or": "or",
-    "newStudent": "New student?",
-    "applyBlurb": "Submit an application to join the school. You will receive your enrolment number and login details once your application is approved.",
-    "applyCta": "Apply for admission",
     "copyright": "School Management System © {{year}}"
   },
   "changePassword": {

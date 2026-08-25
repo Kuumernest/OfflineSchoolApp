@@ -181,27 +181,6 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {/* Divider */}
-        <div className="flex items-center gap-3 my-6">
-          <div className="flex-1 h-px bg-white/20" />
-          <span className="text-primary-300 text-sm">{t("login.or")}</span>
-          <div className="flex-1 h-px bg-white/20" />
-        </div>
-
-        {/* Apply CTA */}
-        <div className="bg-white/10 backdrop-blur border border-white/20 rounded-2xl p-6">
-          <h2 className="text-white font-bold text-lg mb-2">{t("login.newStudent")}</h2>
-          <p className="text-primary-200 text-sm leading-relaxed mb-4">
-            {t("login.applyBlurb")}
-          </p>
-          <a
-            href="/apply"
-            className="block w-full text-center bg-white text-primary-700 font-semibold rounded-xl py-3 text-sm hover:bg-primary-50 transition"
-          >
-            {t("login.applyCta")} →
-          </a>
-        </div>
-
         <p className="text-center text-primary-300 text-sm mt-6">
           {t("login.copyright", { year: new Date().getFullYear() })}
         </p>

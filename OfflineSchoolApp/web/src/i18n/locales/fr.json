@@ -331,10 +331,6 @@
     "identifierHint": "Le personnel saisit son e-mail · Les élèves saisissent leur matricule",
     "asStaff": "Connexion en tant que personnel / administrateur",
     "asStudent": "Connexion en tant qu'élève",
-    "or": "ou",
-    "newStudent": "Nouvel élève ?",
-    "applyBlurb": "Déposez une demande d'inscription. Vous recevrez votre matricule et vos identifiants dès que votre demande sera acceptée.",
-    "applyCta": "Demander une inscription",
     "copyright": "Système de gestion scolaire © {{year}}"
   },
   "changePassword": {
