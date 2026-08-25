@@ -243,8 +243,9 @@ function EnrollmentCard({
 
       <p className="text-xs text-indigo-600 mb-3 leading-relaxed">
         The student uses this enrollment number to log in from any device.
-        Their default password is the enrollment number — they should change
-        it on first login.
+        Their first password is generated automatically — it was shown once
+        when the student was enrolled (or sent to their email). They will be
+        asked to set their own password at first login.
       </p>
 
       {/* Enrollment number display */}
@@ -271,7 +272,7 @@ function EnrollmentCard({
           <ShieldAlert className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-800 leading-relaxed">
             <span className="font-semibold">{t("studentDetail.passwordNotChangedYet")}</span>{" "}
-            The student is still using their default password. Ask them to
+            The student is still using their generated first password. Ask them to
             log in and change it.
           </p>
         </div>

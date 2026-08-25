@@ -453,8 +453,9 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
       ) : null}
 
       <Text style={styles.credentialsHint}>
-        📱 Share these details with the student. The default password is their
-        enrollment number — they will be asked to change it on first login.
+        📱 Share these details with the student. The temporary password above
+        works for the first login only — they will set their own password
+        right after signing in.
       </Text>
     </View>
   );

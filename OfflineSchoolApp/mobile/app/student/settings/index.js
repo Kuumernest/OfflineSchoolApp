@@ -233,10 +233,11 @@ const ib = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 // CHANGE PASSWORD MODAL
 // Self-contained — no separate screen needed.
-// Handles the "default password = enrollment number" first-login case.
+// Handles the first-login forced change: mustResetPassword accounts may set a
+// new password without supplying the random one issued at enrollment.
 // ─────────────────────────────────────────────────────────────────────────────
 
-function ChangePasswordModal({ visible, onClose, enrollmentNo, mustReset }) {
+function ChangePasswordModal({ visible, onClose, mustReset }) {
   const updateUser = useAuthStore((s) => s.updateUser);
 
   const [current,     setCurrent]     = useState("");
@@ -349,16 +350,9 @@ function ChangePasswordModal({ visible, onClose, enrollmentNo, mustReset }) {
             keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={false}
           >
-            {/* Hint for first-time / enrollment-number password */}
-            {enrollmentNo && (
-              <View style={cp.hintBox}>
-                <Ionicons name="information-circle-outline" size={16} color="#4338CA" />
-                <Text style={cp.hintText}>
-                  Your default password is your enrollment number:{" "}
-                  <Text style={cp.hintBold}>{enrollmentNo}</Text>
-                </Text>
-              </View>
-            )}
+            {/* First-login guidance. The first password is randomly generated
+                (shown once at enrollment / sent by email) — NOT the enrollment
+                number, so there is nothing useful to echo here. */}
 
             {/* Error */}
             {!!error && (
@@ -375,11 +369,9 @@ function ChangePasswordModal({ visible, onClose, enrollmentNo, mustReset }) {
                 style={cp.input}
                 value={current}
                 onChangeText={setCurrent}
-                placeholder={
-                  enrollmentNo
-                    ? `Default: ${enrollmentNo}`
-                    : "Enter current password"
-                }
+                // No default-password hint here — the first password is a
+                // random value issued at enrollment, never the enrollment no.
+                placeholder="Enter current password"
                 placeholderTextColor={C.gray400}
                 secureTextEntry={!showCurrent}
                 autoCapitalize="none"
@@ -616,14 +608,6 @@ export default function StudentSettingsScreen() {
 
   // mustResetPassword drives the forced-change flow
   const mustReset    = user?.mustResetPassword === true;
-
-  // Enrollment number — used as the default password hint
-  const enrollmentNo =
-    user?.enrollmentNo  ||
-    profile?.enrollmentNo ||
-    profile?.enrollment_no ||
-    profile?.admissionNo  ||
-    null;
 
   // ── Photo ────────────────────────────────────────────────────────────────
 
@@ -1250,7 +1234,6 @@ export default function StudentSettingsScreen() {
       <ChangePasswordModal
         visible={showChangePwd}
         onClose={() => setShowChangePwd(false)}
-        enrollmentNo={resolvedEnrollmentNo}
         mustReset={mustReset}
       />
     </View>

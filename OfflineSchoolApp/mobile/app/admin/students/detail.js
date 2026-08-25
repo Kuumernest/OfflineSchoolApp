@@ -115,8 +115,10 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
       </View>
 
       <Text style={styles.enrollHint}>
-        The student uses this enrollment number to log in. Their default
-        password is the enrollment number — they should change it on first login.
+        The student uses this enrollment number to log in. Their first
+        password is generated automatically — shown once when the student was
+        enrolled (or sent by email). They will set their own password at
+        first login.
       </Text>
 
       <View style={styles.enrollRow}>
@@ -136,7 +138,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword }) {
           <Ionicons name="shield-outline" size={14} color="#92400E" />
           <Text style={styles.resetWarningText}>
             <Text style={{ fontWeight: "700" }}>Password not yet changed.</Text>
-            {" "}The student is still using their default password.
+            {" "}The student is still using their generated first password.
           </Text>
         </View>
       )}

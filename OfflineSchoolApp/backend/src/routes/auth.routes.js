@@ -272,13 +272,12 @@ router.post("/change-password", authenticate, async (req, res) => {
 
       const isMatch = await bcrypt.compare(currentPassword, user.password);
       if (!isMatch) {
-        const hint =
-          user.role === "student" && user.enrollmentNo
-            ? `. Your default password is your enrollment number: ${user.enrollmentNo}`
-            : "";
+        // No hints here. Student first passwords are random (generateTempPassword
+        // in students.routes) — never the enrollment number — and echoing any
+        // credential hint on a failed attempt would leak information anyway.
         return res.status(401).json({
           success: false,
-          message: `Current password is incorrect${hint}`,
+          message: "Current password is incorrect",
         });
       }
     }
