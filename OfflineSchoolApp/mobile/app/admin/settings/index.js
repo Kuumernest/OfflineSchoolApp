@@ -25,6 +25,7 @@ import { useRouter }       from "expo-router";
 import * as ImagePicker    from "expo-image-picker";
 import { toDisplayUri }    from "../../../src/utils/logoUri";
 import { useAuthStore }    from "../../../src/store/auth.store";
+import DateField           from "../../../src/components/DateField";
 import {
   fetchProfile,
   updateProfile,
@@ -580,25 +581,19 @@ const SchoolSection = ({ schoolId }) => {
         </SettingRow>
         <View style={sc.row2}>
           <View style={{ flex: 1 }}>
-            <SettingRow label="Year Start" hint="YYYY-MM-DD">
-              <TextInput
-                style={styles.input}
-                value={academicYearStart}
-                onChangeText={setAcademicYearStart}
-                placeholder="e.g. 2025-09-01"
-              />
-            </SettingRow>
+            <DateField
+              label="Year Start"
+              value={academicYearStart}
+              onChange={setAcademicYearStart}
+            />
           </View>
           <View style={{ width: 10 }} />
           <View style={{ flex: 1 }}>
-            <SettingRow label="Year End" hint="YYYY-MM-DD">
-              <TextInput
-                style={styles.input}
-                value={academicYearEnd}
-                onChangeText={setAcademicYearEnd}
-                placeholder="e.g. 2026-07-31"
-              />
-            </SettingRow>
+            <DateField
+              label="Year End"
+              value={academicYearEnd}
+              onChange={setAcademicYearEnd}
+            />
           </View>
         </View>
         <SettingRow label="School Days">

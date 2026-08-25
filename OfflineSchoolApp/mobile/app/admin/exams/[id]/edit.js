@@ -34,6 +34,15 @@ const TERMS = [
   { value: "third_term",  label: "Third Term"  },
 ];
 
+// Academic years: last year through two years ahead, "YYYY/YYYY+1" — picked,
+// never typed, so records can't end up with mismatched year keys.
+const _ay = new Date().getFullYear();
+const ACADEMIC_YEARS = [
+  `${_ay - 1}/${_ay}`,
+  `${_ay}/${_ay + 1}`,
+  `${_ay + 1}/${_ay + 2}`,
+];
+
 const C = {
   primary:   "#4F46E5",
   primaryBg: "#EEF2FF",
@@ -589,8 +598,16 @@ export default function EditExamScreen() {
           <Field label="Exam Type" required>
             <OptionPicker options={EXAM_TYPES} value={type} onChange={setType} />
           </Field>
-          <Field label="Academic Year" required hint="e.g. 2024/2025">
-            <StyledInput value={academicYear} onChangeText={setAcademicYear} placeholder="2024/2025" maxLength={20} />
+          <Field label="Academic Year" required>
+            <OptionPicker
+              options={
+                !academicYear || ACADEMIC_YEARS.includes(academicYear)
+                  ? ACADEMIC_YEARS
+                  : [academicYear, ...ACADEMIC_YEARS]
+              }
+              value={academicYear}
+              onChange={setAcademicYear}
+            />
           </Field>
           <Field label="Term" required>
             <OptionPicker options={TERMS} value={term} onChange={setTerm} />

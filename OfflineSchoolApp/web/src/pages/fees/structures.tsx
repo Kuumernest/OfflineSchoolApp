@@ -38,6 +38,12 @@ const emptyItem = (): FeeItem => ({
   code: "", label: "", labelFr: "", amount: 0, isOptional: false,
 });
 
+// Academic year options: last year through two years ahead, "YYYY/YYYY+1".
+const ACADEMIC_YEAR_OPTIONS = (() => {
+  const y = new Date().getFullYear();
+  return [-1, 0, 1, 2].map((i) => `${y + i}/${y + i + 1}`);
+})();
+
 export default function FeeStructuresPage() {
   const { t }    = useTranslation();
   const fmt      = useFormat();
@@ -48,7 +54,7 @@ export default function FeeStructuresPage() {
 
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
-    academicYear: "",
+    academicYear: ACADEMIC_YEAR_OPTIONS[1],
     classIds:     [] as string[],
     term:         "",
     items:        [emptyItem()],
@@ -247,11 +253,20 @@ export default function FeeStructuresPage() {
         >
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <FormField label={t("fees.academicYear")} required>
-              <Input
-                placeholder="2025/2026"
+              {/* Picked, not typed — free-text years caused mismatched
+                  "2025/2026" vs "2025/2026 " keys across fee records. */}
+              <select
                 value={form.academicYear}
                 onChange={(e) => setForm((f) => ({ ...f, academicYear: e.target.value }))}
-              />
+                className="w-full px-3 py-2 rounded-lg border border-gray-300 bg-white text-sm outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                {(ACADEMIC_YEAR_OPTIONS.includes(form.academicYear)
+                  ? ACADEMIC_YEAR_OPTIONS
+                  : [form.academicYear, ...ACADEMIC_YEAR_OPTIONS]
+                ).map((y) => (
+                  <option key={y} value={y}>{y}</option>
+                ))}
+              </select>
             </FormField>
 
             <FormField label={t("academic.term")}>

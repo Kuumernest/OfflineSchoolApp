@@ -597,11 +597,11 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
               <FieldLabel hint="YYYY-MM-DD">{t("settings.yearStart")}</FieldLabel>
-              <Input value={form.academicYearStart} onChange={(v) => set("academicYearStart", v)} placeholder={t("settings.yearStartPh")} />
+              <Input type="date" value={form.academicYearStart} onChange={(v) => set("academicYearStart", v)} placeholder={t("settings.yearStartPh")} />
             </div>
             <div>
               <FieldLabel hint="YYYY-MM-DD">{t("settings.yearEnd")}</FieldLabel>
-              <Input value={form.academicYearEnd} onChange={(v) => set("academicYearEnd", v)} placeholder={t("settings.yearEndPh")} />
+              <Input type="date" value={form.academicYearEnd} onChange={(v) => set("academicYearEnd", v)} placeholder={t("settings.yearEndPh")} />
             </div>
           </div>
 
