@@ -13,6 +13,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
+import DateField        from "../../../src/components/DateField";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -57,13 +58,6 @@ const STEPS = [
 // DATE HELPER
 // ─────────────────────────────────────────────────────────
 
-function formatDateInput(raw) {
-  const digits = raw.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-}
-
 function isValidDate(str) {
   if (!str) return true;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(str)) return false;
@@ -97,29 +91,7 @@ const FieldInput = ({ label, required, error, ...props }) => (
   </View>
 );
 
-const DateInput = ({ label, value, onChange }) => {
-  const invalid = value.length > 0 && !isValidDate(value);
-  return (
-    <View style={fs.field}>
-      {label && <FieldLabel label={label} />}
-      <TextInput
-        style={[
-          fs.input,
-          invalid && { borderColor: "#DC2626", borderWidth: 1.5 },
-        ]}
-        value={value}
-        onChangeText={(t) => onChange(formatDateInput(t))}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor="#9CA3AF"
-        keyboardType="numeric"
-        maxLength={10}
-      />
-      {invalid && (
-        <Text style={fs.errorText}>Invalid date — use YYYY-MM-DD</Text>
-      )}
-    </View>
-  );
-};
+const DateInput = DateField; // shared native calendar picker (YYYY-MM-DD in/out)
 
 const PickerRow = ({ label, required, options, value, onChange }) => (
   <View style={fs.field}>

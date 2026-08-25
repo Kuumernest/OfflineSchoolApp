@@ -11,6 +11,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
 import api              from "../../../../src/services/api";
+import DateField        from "../../../../src/components/DateField";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -53,13 +54,6 @@ const C = {
 // ─────────────────────────────────────────────────────────
 // DATE HELPERS
 // ─────────────────────────────────────────────────────────
-
-function formatDateInput(raw) {
-  const digits = raw.replace(/\D/g, "").slice(0, 8);
-  if (digits.length <= 4) return digits;
-  if (digits.length <= 6) return `${digits.slice(0, 4)}-${digits.slice(4)}`;
-  return `${digits.slice(0, 4)}-${digits.slice(4, 6)}-${digits.slice(6)}`;
-}
 
 function isValidDate(str) {
   if (!str) return true;
@@ -109,27 +103,7 @@ const StyledInput = ({
   />
 );
 
-const DateInput = ({ label, value, onChange, required }) => {
-  const invalid = value.length > 0 && !isValidDate(value);
-  return (
-    <Field label={label} required={required} hint="YYYY-MM-DD">
-      <TextInput
-        style={[s.input, invalid && { borderColor: C.error, borderWidth: 1.5 }]}
-        value={value}
-        onChangeText={(t) => onChange(formatDateInput(t))}
-        placeholder="2024-01-15"
-        placeholderTextColor={C.gray400}
-        keyboardType="numeric"
-        maxLength={10}
-      />
-      {invalid && (
-        <Text style={[s.fieldHint, { color: C.error }]}>
-          Invalid date — use YYYY-MM-DD
-        </Text>
-      )}
-    </Field>
-  );
-};
+const DateInput = DateField; // shared native calendar picker (YYYY-MM-DD in/out)
 
 const OptionPicker = ({ options, value, onChange }) => (
   <View style={s.optionGrid}>

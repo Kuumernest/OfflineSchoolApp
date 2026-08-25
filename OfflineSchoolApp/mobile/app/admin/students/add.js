@@ -21,6 +21,7 @@ import NetInfo from "@react-native-community/netinfo";
 import * as Clipboard from "expo-clipboard";
 import { ClassService } from "../../../src/services/class.service";
 import { useAuthStore } from "../../../src/store/auth.store";
+import DateField        from "../../../src/components/DateField";
 import {
   enrollStudentLocally,
   pushEnrollments,
@@ -795,13 +796,12 @@ export default function AddStudentScreen() {
               />
             </View>
 
-            <FormField
+            <DateField
               label="Date of Birth"
               value={form.dateOfBirth}
-              onChangeText={(v) => handleChange("dateOfBirth", v)}
-              placeholder="YYYY-MM-DD"
-              keyboardType="numeric"
-              maxLength={10}
+              onChange={(ymd) => handleChange("dateOfBirth", ymd)}
+              maximumDate={new Date()}
+              hint="Tap to pick the student's birthday"
             />
           </View>
 
