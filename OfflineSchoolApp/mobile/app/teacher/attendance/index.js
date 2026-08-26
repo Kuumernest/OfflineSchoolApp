@@ -40,6 +40,7 @@ const formatDate = (d) => {
 // ─────────────────────────────────────────────────────────────
 
 const getTeacherAssignedClasses = async (teacherId, schoolId) => {
+  const { t } = useTranslation();
   try {
     const db = await getDatabase();
 
@@ -84,11 +85,13 @@ const getTeacherAssignedClasses = async (teacherId, schoolId) => {
       )
       .catch(() => []);
 
-    return rows.map((r) => ({
+    return rows.map((r) => {
+                      return ({
       id:   r.id,
-      name: r.name || "Unnamed Class",
+      name: r.name || t("attTeacher.unnamedClass"),
       sub:  [r.level, r.section].filter(Boolean).join(" · "),
-    }));
+    });
+                    });
   } catch (err) {
     console.warn("[getTeacherAssignedClasses] failed:", err?.message);
     return [];
@@ -117,6 +120,7 @@ const pillS = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────
 
 const ClassCard = ({ cls, summary, onMark, onReport }) => {
+  const { t } = useTranslation();
   const rate  = summary?.rate  ?? 0;
   const color = rate >= 75 ? "#059669" : rate >= 50 ? "#D97706" : "#DC2626";
 
@@ -147,10 +151,10 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
       </View>
 
       <View style={cardS.pills}>
-        <StatPill label="Present"  value={summary?.present  ?? 0} color="#059669" />
-        <StatPill label="Absent"   value={summary?.absent   ?? 0} color="#DC2626" />
-        <StatPill label="Late"     value={summary?.late     ?? 0} color="#D97706" />
-        <StatPill label="Unmarked" value={summary?.unmarked ?? 0} color="#9CA3AF" />
+        <StatPill label={t("attStatus.present")}  value={summary?.present  ?? 0} color="#059669" />
+        <StatPill label={t("attStatus.absent")}   value={summary?.absent   ?? 0} color="#DC2626" />
+        <StatPill label={t("attStatus.late")}     value={summary?.late     ?? 0} color="#D97706" />
+        <StatPill label={t("attStatus.unmarked")} value={summary?.unmarked ?? 0} color="#9CA3AF" />
       </View>
 
       <View style={cardS.actions}>
@@ -160,7 +164,7 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           activeOpacity={0.8}
         >
           <Ionicons name="create-outline" size={15} color="#FFF" />
-          <Text style={cardS.btnText}>Mark Attendance</Text>
+          <Text style={cardS.btnText}>{t("attTeacher.markAttendance")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -169,7 +173,7 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           activeOpacity={0.8}
         >
           <Ionicons name="bar-chart-outline" size={15} color="#4F46E5" />
-          <Text style={[cardS.btnText, { color: "#4F46E5" }]}>Report</Text>
+          <Text style={[cardS.btnText, { color: "#4F46E5" }]}>{t("attTeacher.report")}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -231,6 +235,7 @@ const cardS = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────
 
 export default function TeacherAttendanceScreen() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId;
@@ -304,7 +309,7 @@ export default function TeacherAttendanceScreen() {
       setSummaries(summaryMap);
     } catch (err) {
       console.error("[TeacherAttendance] loadData failed:", err?.message);
-      setError("Failed to load attendance data. Pull down to retry.");
+      setError(t("attTeacher.loadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -351,7 +356,7 @@ export default function TeacherAttendanceScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading attendance…</Text>
+        <Text style={styles.loadingText}>{t("attTeacher.loading")}</Text>
       </View>
     );
   }
@@ -372,7 +377,7 @@ export default function TeacherAttendanceScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Attendance</Text>
+          <Text style={styles.headerTitle}>{t("attTeacher.title")}</Text>
           <Text style={styles.headerSub}>{formatDate(today)}</Text>
         </View>
 
@@ -413,10 +418,10 @@ export default function TeacherAttendanceScreen() {
             </Text>
 
             <View style={styles.overallPills}>
-              <StatPill label="Total"   value={totals.total}   color="#6B7280" />
-              <StatPill label="Present" value={totals.present} color="#059669" />
-              <StatPill label="Absent"  value={totals.absent}  color="#DC2626" />
-              <StatPill label="Late"    value={totals.late}    color="#D97706" />
+              <StatPill label={t("common.total")}   value={totals.total}   color="#6B7280" />
+              <StatPill label={t("attStatus.present")} value={totals.present} color="#059669" />
+              <StatPill label={t("attStatus.absent")}  value={totals.absent}  color="#DC2626" />
+              <StatPill label={t("attStatus.late")}    value={totals.late}    color="#D97706" />
             </View>
 
             <View style={styles.overallBarBg}>
@@ -446,14 +451,14 @@ export default function TeacherAttendanceScreen() {
         {classes.length === 0 ? (
           <View style={styles.empty}>
             <Ionicons name="school-outline" size={56} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No classes assigned</Text>
+            <Text style={styles.emptyTitle}>{t("attTeacher.noClasses")}</Text>
             <Text style={styles.emptySub}>
-              Contact your administrator to assign classes to your account
+              {t("attTeacher.noClassesHint")}
             </Text>
           </View>
         ) : (
           <>
-            <Text style={styles.sectionTitle}>Your Classes</Text>
+            <Text style={styles.sectionTitle}>{t("attTeacher.yourClasses")}</Text>
             {classes.map((cls) => (
               <ClassCard
                 key={cls.id}
@@ -559,3 +564,4 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 16, fontWeight: "600", color: "#374151", textAlign: "center" },
   emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

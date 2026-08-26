@@ -28,7 +28,8 @@ import {
   getClassesList,
   deleteAssignment,
   backfillTeacherNames,   // ✅ import the backfill so existing rows get names
-} from "../../../src/services/assignment.service";
+} from "../../../src/services/assignment.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -47,17 +48,19 @@ const normalizeList = (list) => (list || []).map(normalizeId).filter(Boolean);
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FILTER_TABS = [
-  { id: "all",        label: "All"        },
-  { id: "by-teacher", label: "By Teacher" },
-  { id: "by-class",   label: "By Class"   },
-  { id: "unassigned", label: "Unassigned" },
+  { id: "all",        labelKey: "assignList.filterAll" },
+  { id: "by-teacher", labelKey: "assignList.byTeacher" },
+  { id: "by-class",   labelKey: "assignList.byClass"   },
+  { id: "unassigned", labelKey: "assignList.unassigned" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => (
+const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => {
+                                    const { t } = useTranslation();
+                                    return (
   <View style={styles.assignmentCard}>
     <View style={styles.assignmentLeft}>
       <View style={styles.assignmentIconWrap}>
@@ -65,7 +68,7 @@ const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => (
       </View>
       <View style={styles.assignmentInfo}>
         <Text style={styles.assignmentTeacher} numberOfLines={1}>
-          {assignment.teacher?.name || "Unknown Teacher"}
+          {assignment.teacher?.name || t("assignList.unknownTeacher")}
         </Text>
         <View style={styles.assignmentMeta}>
           <View style={styles.metaChip}>
@@ -98,7 +101,8 @@ const AssignmentCard = React.memo(({ assignment, onRemove, isDeleting }) => (
       )}
     </TouchableOpacity>
   </View>
-));
+);
+                                  });
 
 const GroupHeader = React.memo(
   ({
@@ -152,7 +156,9 @@ const GroupHeader = React.memo(
   )
 );
 
-const UnassignedCard = React.memo(({ teacher, onAssign }) => (
+const UnassignedCard = React.memo(({ teacher, onAssign }) => {
+                                    const { t } = useTranslation();
+                                    return (
   <View style={styles.unassignedCard}>
     <View style={styles.unassignedLeft}>
       <View style={styles.unassignedAvatar}>
@@ -165,7 +171,7 @@ const UnassignedCard = React.memo(({ teacher, onAssign }) => (
           {teacher.name}
         </Text>
         <Text style={styles.unassignedEmail} numberOfLines={1}>
-          {teacher.email || "No email"}
+          {teacher.email || t("assignList.noEmail")}
         </Text>
       </View>
     </View>
@@ -174,11 +180,12 @@ const UnassignedCard = React.memo(({ teacher, onAssign }) => (
       onPress={() => onAssign(teacher)}
       activeOpacity={0.7}
     >
-      <Text style={styles.assignNowText}>Assign</Text>
+      <Text style={styles.assignNowText}>{t("assignList.assign")}</Text>
       <Ionicons name="arrow-forward" size={14} color="#4F46E5" />
     </TouchableOpacity>
   </View>
-));
+);
+                                  });
 
 const EmptyState = React.memo(
   ({ icon, title, subtitle, color = "#374151" }) => (
@@ -195,6 +202,7 @@ const EmptyState = React.memo(
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AssignmentsIndex() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const [assignments,    setAssignments]    = useState([]);
@@ -225,7 +233,7 @@ export default function AssignmentsIndex() {
       setError(null);
 
       // ✅ Repair any existing rows that have null teacher_json before
-      //    reading them — fixes "Unknown Teacher" for already-synced data.
+      //    reading them — fixes t("assignList.unknownTeacher") for already-synced data.
       //    backfillTeacherNames() is fast (no-op when all rows are already
       //    populated) so calling it on every load is safe.
       await backfillTeacherNames().catch((err) =>
@@ -246,7 +254,7 @@ export default function AssignmentsIndex() {
     } catch (err) {
       console.error("[assignments] Failed to load:", err);
       if (isMountedRef.current) {
-        setError("Failed to load assignment data. Pull down to retry.");
+        setError(t("assignList.loadFailed"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -278,14 +286,14 @@ export default function AssignmentsIndex() {
   // ── Delete handler ────────────────────────────────────────────────────────
   const handleRemoveAssignment = useCallback((assignment) => {
     Alert.alert(
-      "Remove Assignment",
+      t("assignList.removeTitle"),
       `Remove ${assignment.teacher?.name || "this teacher"} from ` +
       `${assignment.subject?.name || "this subject"} in ` +
       `${assignment.class?.name || "this class"}?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Remove",
+          text:  t("common.remove"),
           style: "destructive",
           onPress: async () => {
             const id = assignment._id;
@@ -294,13 +302,13 @@ export default function AssignmentsIndex() {
               await deleteAssignment(id);
               if (!isMountedRef.current) return;
               setAssignments((prev) => prev.filter((a) => a._id !== id));
-              Alert.alert("Removed", "Assignment removed successfully.");
+              Alert.alert(t("assignList.removedTitle"), t("assignList.removedBody"));
             } catch (err) {
               console.error("[assignments] Remove failed:", err);
               if (isMountedRef.current) {
                 Alert.alert(
-                  "Error",
-                  "Failed to remove assignment. Please try again."
+                  t("assignList.errTitle"),
+                  t("assignList.removeFailed")
                 );
               }
             } finally {
@@ -333,7 +341,7 @@ export default function AssignmentsIndex() {
   }, [assignments]);
 
   const unassignedTeachers = useMemo(
-    () => teachers.filter((t) => !assignedTeacherIdSet.has(t._id)),
+    () => teachers.filter((tc) => !assignedTeacherIdSet.has(tc._id)),
     [teachers, assignedTeacherIdSet]
   );
 
@@ -348,46 +356,50 @@ export default function AssignmentsIndex() {
   );
 
   const statCards = useMemo(
-    () => [
-      { icon: "git-branch",       color: "#4F46E5", bg: "#EEF2FF", value: stats.totalAssignments,   label: "Assignments" },
-      { icon: "checkmark-circle", color: "#059669", bg: "#ECFDF5", value: stats.assignedTeachers,   label: "Assigned"    },
-      { icon: "alert-circle",     color: "#D97706", bg: "#FEF3C7", value: stats.unassignedTeachers, label: "Unassigned"  },
-      { icon: "school",           color: "#7C3AED", bg: "#EDE9FE", value: stats.totalClasses,       label: "Classes"     },
-    ],
+    () => {
+      return [
+      { icon: "git-branch",       color: "#4F46E5", bg: "#EEF2FF", value: stats.totalAssignments,   labelKey: "assignList.countLabel" },
+      { icon: "checkmark-circle", color: "#059669", bg: "#ECFDF5", value: stats.assignedTeachers,   labelKey: "assignList.assigned"    },
+      { icon: "alert-circle",     color: "#D97706", bg: "#FEF3C7", value: stats.unassignedTeachers, labelKey: "assignList.unassigned"  },
+      { icon: "school",           color: "#7C3AED", bg: "#EDE9FE", value: stats.totalClasses,       labelKey: "assignList.classes"     },
+    ];
+    },
     [stats]
   );
 
   const groupedByTeacher = useMemo(
-    () =>
-      assignments.reduce((acc, assignment) => {
+    () => {
+      return assignments.reduce((acc, assignment) => {
         const tid = assignment.teacher?._id || assignment.teacher?.id || "unknown";
         if (!acc[tid]) {
           acc[tid] = {
             teacher:     assignment.teacher,
-            teacherName: assignment.teacher?.name || "Unknown Teacher",
+            teacherName: assignment.teacher?.name || t("assignList.unknownTeacher"),
             assignments: [],
           };
         }
         acc[tid].assignments.push(assignment);
         return acc;
-      }, {}),
+      }, {});
+    },
     [assignments]
   );
 
   const groupedByClass = useMemo(
-    () =>
-      assignments.reduce((acc, assignment) => {
+    () => {
+      return assignments.reduce((acc, assignment) => {
         const cid = assignment.class?._id || assignment.class?.id || "unknown";
         if (!acc[cid]) {
           acc[cid] = {
             class:     assignment.class,
-            className: assignment.class?.name || "Unknown Class",
+            className: assignment.class?.name || t("assignList.unknownClass"),
             assignments: [],
           };
         }
         acc[cid].assignments.push(assignment);
         return acc;
-      }, {}),
+      }, {});
+    },
     [assignments]
   );
 
@@ -412,15 +424,15 @@ export default function AssignmentsIndex() {
   // ── Tab renderers ─────────────────────────────────────────────────────────
 
   const renderAllTab = useCallback(
-    () =>
-      filteredAssignments.length === 0 ? (
+    () => {
+      return filteredAssignments.length === 0 ? (
         <EmptyState
           icon={searchQuery ? "search-outline" : "git-branch-outline"}
-          title={searchQuery ? "No Matches" : "No Assignments Found"}
+          title={searchQuery ? t("assignList.noMatch") : t("assignList.noneFound")}
           subtitle={
             searchQuery
-              ? "Try a different search term"
-              : "Start by assigning teachers to subjects"
+              ? t("assignList.noMatchSub")
+              : t("assignList.noneFoundSub")
           }
         />
       ) : (
@@ -434,7 +446,8 @@ export default function AssignmentsIndex() {
             />
           ))}
         </>
-      ),
+      );
+    },
     [filteredAssignments, searchQuery, handleRemoveAssignment, deletingId]
   );
 
@@ -444,8 +457,8 @@ export default function AssignmentsIndex() {
       return (
         <EmptyState
           icon="people-outline"
-          title="No Teacher Assignments"
-          subtitle="Assign teachers to subjects to see them here"
+          title={t("assignList.emptyTitle")}
+          subtitle={t("assignList.emptySub")}
         />
       );
     }
@@ -514,8 +527,8 @@ export default function AssignmentsIndex() {
       return (
         <EmptyState
           icon="search-outline"
-          title="No Matches"
-          subtitle="Try a different search term"
+          title={t("assignList.noMatch")}
+          subtitle={t("assignList.noMatchSub")}
         />
       );
     }
@@ -536,8 +549,8 @@ export default function AssignmentsIndex() {
       return (
         <EmptyState
           icon="school-outline"
-          title="No Class Assignments"
-          subtitle="Assign teachers to class subjects first"
+          title={t("assignList.emptyClass")}
+          subtitle={t("assignList.emptyClassSub")}
         />
       );
     }
@@ -606,8 +619,8 @@ export default function AssignmentsIndex() {
       return (
         <EmptyState
           icon="search-outline"
-          title="No Matches"
-          subtitle="Try a different search term"
+          title={t("assignList.noMatch")}
+          subtitle={t("assignList.noMatchSub")}
         />
       );
     }
@@ -623,12 +636,12 @@ export default function AssignmentsIndex() {
   ]);
 
   const renderUnassignedTab = useCallback(
-    () =>
-      unassignedTeachers.length === 0 ? (
+    () => {
+      return unassignedTeachers.length === 0 ? (
         <EmptyState
           icon="checkmark-circle-outline"
-          title="All Teachers Assigned!"
-          subtitle="Every teacher has at least one subject assignment"
+          title={t("assignList.allAssigned")}
+          subtitle={t("assignList.allAssignedSub")}
           color="#059669"
         />
       ) : (
@@ -649,7 +662,8 @@ export default function AssignmentsIndex() {
             />
           ))}
         </View>
-      ),
+      );
+    },
     [unassignedTeachers, handleAssignTeacher]
   );
 
@@ -676,7 +690,7 @@ export default function AssignmentsIndex() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading assignments…</Text>
+        <Text style={styles.loadingText}>{t("assignList.loading")}</Text>
       </View>
     );
   }
@@ -695,8 +709,8 @@ export default function AssignmentsIndex() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Teacher Assignments</Text>
-          <Text style={styles.headerSubtitle}>Manage subject-teacher mapping</Text>
+          <Text style={styles.headerTitle}>{t("assignList.title")}</Text>
+          <Text style={styles.headerSubtitle}>{t("assignList.blurb")}</Text>
         </View>
         <TouchableOpacity
           style={styles.addButton}
@@ -726,7 +740,7 @@ export default function AssignmentsIndex() {
             <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => loadData()} activeOpacity={0.75}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -747,7 +761,7 @@ export default function AssignmentsIndex() {
           <Ionicons name="search-outline" size={18} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search teacher, subject, or class…"
+            placeholder={t("assignList.searchPh")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -789,7 +803,7 @@ export default function AssignmentsIndex() {
                   activeTab === tab.id && styles.tabTextActive,
                 ]}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
               {tab.id === "unassigned" && unassignedTeachers.length > 0 && (
                 <View style={styles.tabBadge}>

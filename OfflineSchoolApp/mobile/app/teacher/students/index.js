@@ -583,6 +583,11 @@ function StudentRow({ student }) {
 }
 
 function EmptyState({ hasSearch, onClear }) {
+  // Its own hook: this is a sibling of the screen component, not a child, so
+  // the screen's `t` was never in scope here. Every render of the empty state
+  // threw "t is not defined" before this.
+  const { t } = useTranslation();
+
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIcon}>
@@ -592,13 +597,13 @@ function EmptyState({ hasSearch, onClear }) {
           color={C.gray300}
         />
       </View>
-            <Text style={styles.emptyTitle}>
+      <Text style={styles.emptyTitle}>
         {hasSearch ? t("teacher.students.noMatches") : t("teacher.students.noResults")}
       </Text>
       <Text style={styles.emptyBody}>
         {hasSearch
-          ? "Try a different search term or clear the filter."
-          : "This class doesn't have any students yet. They will appear here once enrolled."}
+          ? t("teacher.students.noMatchesHint")
+          : t("teacher.students.noneEnrolledHint")}
       </Text>
       {hasSearch && (
         <TouchableOpacity
@@ -607,7 +612,7 @@ function EmptyState({ hasSearch, onClear }) {
           activeOpacity={0.8}
         >
           <Ionicons name="close-circle-outline" size={16} color={C.white} />
-              <Text style={styles.emptyBtnText}>{t("teacher.students.clearSearch")}</Text>
+          <Text style={styles.emptyBtnText}>{t("teacher.students.clearSearch")}</Text>
         </TouchableOpacity>
       )}
     </View>

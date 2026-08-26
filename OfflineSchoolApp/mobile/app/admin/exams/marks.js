@@ -15,6 +15,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -35,24 +36,26 @@ const sanitizeScore = (v) => {
   return parts.length <= 2 ? cleaned : `${parts[0]}.${parts.slice(1).join("")}`;
 };
 
+// The status/type maps hold translation KEYS, not text: they live at module
+// scope where the hook cannot run, so the component resolves them at render.
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", label: "Draft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", label: "Scheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", label: "Ongoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", label: "Completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", label: "Published" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", label: "Archived"  },
+  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
+  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
+  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
+  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
+  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
+  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
 };
 
-const EXAM_TYPE_LABELS = {
-  first_test:            "First Test",
-  second_test:           "Second Test",
-  mid_term:              "Mid-Term",
-  practical:             "Practical",
-  final_exam:            "Final Exam",
-  mock_exam:             "Mock Exam",
-  promotion_exam:        "Promotion Exam",
-  continuous_assessment: "CA",
+const EXAM_TYPE_KEYS = {
+  first_test:            "examType.first_test",
+  second_test:           "examType.second_test",
+  mid_term:              "examType.mid_term",
+  practical:             "examType.practical",
+  final_exam:            "examType.final_exam",
+  mock_exam:             "examType.mock_exam",
+  promotion_exam:        "examType.promotion_exam",
+  continuous_assessment: "examType.continuous_assessment",
 };
 
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
@@ -61,11 +64,14 @@ const isAdminRole = (role) => ADMIN_ROLES.includes(role);
 const extractClassId = (s) =>
   s.classId || s.class_id || s.class?._id || s.class?.id || null;
 
-const displayClass = (cls) => {
-  if (!cls) return "Class";
-  if (cls.className && cls.className !== "Unknown Class") return cls.className;
-  if (cls.classId) return `Class …${String(cls.classId).slice(-4)}`;
-  return "Class";
+const displayClass = (cls, t) => {
+  if (!cls) return t("examDetail.classFallback");
+  if (cls.className && cls.className !== t("marksEntry.unknownClass")) return cls.className;
+  if (cls.classId)
+    return t("teacherExamSubjects.classShort", {
+      suffix: String(cls.classId).slice(-4),
+    });
+  return t("examDetail.classFallback");
 };
 
 // ─────────────────────────────────────────────────────────
@@ -81,7 +87,7 @@ const displayClass = (cls) => {
 // not even reach the mark sheet offline.
 // ─────────────────────────────────────────────────────────
 
-const classesFromCache = async (schoolId) => {
+const classesFromCache = async (schoolId, t) => {
   try {
     const db  = await getDatabase();
     const rows = await db.getAllAsync(
@@ -93,7 +99,9 @@ const classesFromCache = async (schoolId) => {
     );
     return (rows ?? []).map((c) => ({
       id:   String(c.id),
-      name: c.name || `Class …${String(c.id).slice(-4)}`,
+      name: c.name || t("teacherExamSubjects.classShort", {
+        suffix: String(c.id).slice(-4),
+      }),
     }));
   } catch (err) {
     console.warn("[classesFromCache] failed:", err.message);
@@ -101,7 +109,7 @@ const classesFromCache = async (schoolId) => {
   }
 };
 
-const studentsFromCache = async (classId) => {
+const studentsFromCache = async (classId, t) => {
   try {
     const db = await getDatabase();
     const rows = await db.getAllAsync(
@@ -114,7 +122,7 @@ const studentsFromCache = async (classId) => {
     );
     return (rows ?? []).map((s) => ({
       _id:         String(s.id),
-      studentName: s.studentName || s.name || "Unknown",
+      studentName: s.studentName || s.name || t("teacherExamSubjects.unknownStudent"),
       admissionNo: s.admissionNo || s.admissionNumber || null,
       email:       s.email || null,
       classId:     String(s.classId || s.class_id || classId),
@@ -125,7 +133,7 @@ const studentsFromCache = async (classId) => {
   }
 };
 
-const fetchClasses = async (schoolId, role) => {
+const fetchClasses = async (schoolId, role, t) => {
   try {
     const res = isAdminRole(role)
       ? await api.get("/admin/classes", { params: { schoolId } })
@@ -136,13 +144,15 @@ const fetchClasses = async (schoolId, role) => {
       (Array.isArray(res.data) ? res.data : []);
     const list = raw.map((c) => ({
       id:   String(c._id || c.id),
-      name: c.name || c.className || `Class …${String(c._id || c.id).slice(-4)}`,
+      name: c.name || c.className || t("teacherExamSubjects.classShort", {
+        suffix: String(c._id || c.id).slice(-4),
+      }),
     }));
     if (list.length) return list;
-    return classesFromCache(schoolId);
+    return classesFromCache(schoolId, t);
   } catch (err) {
     console.warn("[fetchClasses] network failed, using cache:", err.message);
-    return classesFromCache(schoolId);
+    return classesFromCache(schoolId, t);
   }
 };
 
@@ -150,7 +160,7 @@ const fetchClasses = async (schoolId, role) => {
 // ROLE-AWARE STUDENT FETCHER
 // ─────────────────────────────────────────────────────────
 
-const fetchStudentsForClass = async (schoolId, classId, role) => {
+const fetchStudentsForClass = async (schoolId, classId, role, t) => {
   if (!classId) {
     console.warn("[fetchStudents] classId is missing");
     return [];
@@ -174,7 +184,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
     if (raw.length > 0) {
       return raw.map((s) => ({
         _id:         String(s._id || s.id),
-        studentName: s.studentName || s.name || "Unknown",
+        studentName: s.studentName || s.name || t("teacherExamSubjects.unknownStudent"),
         admissionNo: s.admissionNo || s.admissionNumber || null,
         email:       s.email || null,
         classId:     String(s.classId || classId),
@@ -199,7 +209,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
     if (raw.length > 0) {
       return raw.map((s) => ({
         _id:         String(s._id || s.id),
-        studentName: s.studentName || s.name || "Unknown",
+        studentName: s.studentName || s.name || t("teacherExamSubjects.unknownStudent"),
         admissionNo: s.admissionNo || null,
         email:       s.email || null,
         classId:     String(s.classId || classId),
@@ -210,7 +220,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
   }
 
   // Last resort: the locally synced roster.
-  return studentsFromCache(classId);
+  return studentsFromCache(classId, t);
 };
 
 // ─────────────────────────────────────────────────────────
@@ -218,6 +228,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
 // ─────────────────────────────────────────────────────────
 
 const ExamSelector = ({ schoolId, role, onSelect }) => {
+  const { t } = useTranslation();
   const [exams,      setExams]      = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -236,7 +247,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
       setExams(list || []);
     } catch (err) {
       console.error("ExamSelector load failed:", err.message);
-      setError("Failed to load exams");
+      setError(t("marksEntry.loadExamsFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -265,7 +276,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
     return (
       <View style={ex.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={ex.loadingText}>Loading exams…</Text>
+        <Text style={ex.loadingText}>{t("marksEntry.loadingExams")}</Text>
       </View>
     );
   }
@@ -276,7 +287,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
         <Text style={ex.errorText}>{error}</Text>
         <TouchableOpacity style={ex.retryBtn} onPress={() => load()}>
-          <Text style={ex.retryText}>Retry</Text>
+          <Text style={ex.retryText}>{t("common.retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -289,7 +300,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
             style={ex.searchInput}
-            placeholder="Search exams…"
+            placeholder={t("exams.searchPh")}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -310,11 +321,11 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
         contentContainerStyle={ex.filterRow}
       >
         {[
-          { key: "all",       label: "All Exams" },
-          { key: "ongoing",   label: "Ongoing"   },
-          { key: "scheduled", label: "Scheduled" },
-          { key: "draft",     label: "Draft"     },
-          { key: "completed", label: "Completed" },
+          { key: "all",       labelKey: "marksEntry.filterAllExams" },
+          { key: "ongoing",   labelKey: "examStatus.ongoing"        },
+          { key: "scheduled", labelKey: "examStatus.scheduled"      },
+          { key: "draft",     labelKey: "examStatus.draft"          },
+          { key: "completed", labelKey: "examStatus.completed"      },
         ].map((f) => (
           <TouchableOpacity
             key={f.key}
@@ -326,7 +337,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
               ex.filterChipText,
               filter === f.key && ex.filterChipTextActive,
             ]}>
-              {f.label}
+              {t(f.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -350,13 +361,13 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
             <Ionicons name="document-outline" size={48} color="#D1D5DB" />
             <Text style={ex.emptyTitle}>
               {search || filter !== "all"
-                ? "No exams match your filter"
-                : "No exams created yet"}
+                ? t("marksEntry.emptyFiltered")
+                : t("marksEntry.emptyNone")}
             </Text>
             <Text style={ex.emptySub}>
               {search || filter !== "all"
-                ? "Try a different search or filter"
-                : "Create an exam first from the Exams screen"}
+                ? t("marksEntry.emptyFilteredSub")
+                : t("marksEntry.emptyNoneSub")}
             </Text>
           </View>
         }
@@ -376,7 +387,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
                   <Text style={ex.cardName} numberOfLines={2}>{item.name}</Text>
                   <View style={[ex.statusBadge, { backgroundColor: meta.bg }]}>
                     <Text style={[ex.statusText, { color: meta.color }]}>
-                      {meta.label}
+                      {t(meta.labelKey)}
                     </Text>
                   </View>
                 </View>
@@ -384,7 +395,9 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
                   <View style={ex.cardMetaItem}>
                     <Ionicons name="grid-outline" size={12} color="#9CA3AF" />
                     <Text style={ex.cardMetaText}>
-                      {EXAM_TYPE_LABELS[item.type] || item.type}
+                      {EXAM_TYPE_KEYS[item.type]
+                        ? t(EXAM_TYPE_KEYS[item.type])
+                        : item.type}
                     </Text>
                   </View>
                   <View style={ex.cardMetaItem}>
@@ -404,11 +417,13 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
                 </View>
                 <View style={ex.cardFooter}>
                   <Text style={ex.cardFooterText}>
-                    Max: {item.totalMarks} · Pass: {item.passMark}
+                    {t("examDetail.maxLabel", { value: item.totalMarks })}
+                    {" · "}
+                    {t("examDetail.passLabel", { value: item.passMark })}
                   </Text>
                   <View style={ex.enterBtn}>
                     <Ionicons name="create-outline" size={13} color="#4F46E5" />
-                    <Text style={ex.enterBtnText}>Enter Marks</Text>
+                    <Text style={ex.enterBtnText}>{t("exams.enterMarks")}</Text>
                   </View>
                 </View>
               </View>
@@ -525,16 +540,17 @@ const ex = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const SUB_STATUS_META = {
-  pending:   { color: "#D97706", bg: "#FEF3C7", label: "Pending",   },
-  submitted: { color: "#4F46E5", bg: "#EEF2FF", label: "Submitted", },
-  approved:  { color: "#059669", bg: "#ECFDF5", label: "Approved",  },
-  rejected:  { color: "#DC2626", bg: "#FEF2F2", label: "Rejected",  },
+  pending:   { color: "#D97706", bg: "#FEF3C7", labelKey: "results.pending",   },
+  submitted: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "results.submitted", },
+  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "results.approved",  },
+  rejected:  { color: "#DC2626", bg: "#FEF2F2", labelKey: "results.rejected",  },
 };
 
 const ClassSubjectPicker = ({
   examId, examName, schoolId, role,
   initialClassId = "", onSelect,
 }) => {
+  const { t } = useTranslation();
   const [sections,   setSections]   = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -572,10 +588,10 @@ const ClassSubjectPicker = ({
           id:                 String(s._id || s.id),
           examSubjectId:      String(s._id || s.id),
           subjectId:          String(s.subjectId || ""),
-          subjectName:        s.subjectName  || "Unknown Subject",
+          subjectName:        s.subjectName  || t("marksEntry.unknownSubject"),
           className:          grouped[cidStr].className,
           classId:            cidStr,
-          teacherName:        s.teacherName || "No teacher",
+          teacherName:        s.teacherName || t("marksEntry.noTeacher"),
           maxScore:           s.maxScore ?? 100,
           passMark:           s.passMark ?? 50,
           submissionStatus:   s.submissionStatus || "pending",
@@ -591,7 +607,7 @@ const ClassSubjectPicker = ({
       setSections(list);
     } catch (err) {
       console.error("ClassSubjectPicker load failed:", err.message);
-      setError("Failed to load classes & subjects");
+      setError(t("marksEntry.loadClassesFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -621,7 +637,7 @@ const ClassSubjectPicker = ({
     return (
       <View style={cs.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={cs.loadingText}>Loading classes & subjects…</Text>
+        <Text style={cs.loadingText}>{t("marksEntry.loadingClasses")}</Text>
       </View>
     );
   }
@@ -632,7 +648,7 @@ const ClassSubjectPicker = ({
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
         <Text style={cs.errorText}>{error}</Text>
         <TouchableOpacity style={cs.retryBtn} onPress={() => load()}>
-          <Text style={cs.retryText}>Retry</Text>
+          <Text style={cs.retryText}>{t("common.retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -642,7 +658,7 @@ const ClassSubjectPicker = ({
     return (
       <View style={cs.centered}>
         <Ionicons name="school-outline" size={48} color="#D1D5DB" />
-        <Text style={cs.emptyTitle}>No Subjects Assigned</Text>
+        <Text style={cs.emptyTitle}>{t("marksEntry.noSubjectsTitle")}</Text>
         <Text style={cs.emptyText}>
           This exam has no subjects assigned to a class yet.{"\n"}
           Add subjects from the exam detail screen.
@@ -658,7 +674,7 @@ const ClassSubjectPicker = ({
         <Ionicons name="search-outline" size={16} color="#9CA3AF" />
         <TextInput
           style={cs.searchInput}
-          placeholder="Search subject or class…"
+          placeholder={t("marksEntry.searchSubjectClass")}
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
@@ -746,7 +762,7 @@ const ClassSubjectPicker = ({
                   </View>
                   <View style={cs.cardRight}>
                     <View style={[cs.statusBadge, { backgroundColor: meta.bg }]}>
-                      <Text style={[cs.statusText, { color: meta.color }]}>{meta.label}</Text>
+                      <Text style={[cs.statusText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
                     </View>
                     {!isApproved && (
                       <Ionicons name="chevron-forward" size={18} color="#D1D5DB" />
@@ -850,6 +866,7 @@ const ScoreEntry = ({
   onSavingChange,
   onDirtyChange,
 }) => {
+  const { t } = useTranslation();
   const [students,   setStudents]   = useState([]);
   const [scores,     setScores]     = useState({});
   const [loading,    setLoading]    = useState(true);
@@ -864,11 +881,11 @@ const ScoreEntry = ({
       else           setLoading(true);
 
       if (!classId) {
-        Alert.alert("Error", "No class selected. Please go back and select a class.");
+        Alert.alert(t("marksEntry.errTitle"), t("marksEntry.noClassSelected"));
         return;
       }
       if (!examId) {
-        Alert.alert("Error", "No exam selected. Please go back and select an exam.");
+        Alert.alert(t("marksEntry.errTitle"), t("marksEntry.noExamSelected"));
         return;
       }
 
@@ -892,7 +909,7 @@ const ScoreEntry = ({
       setDirty(false);
     } catch (err) {
       console.error("ScoreEntry load failed:", err.message);
-      Alert.alert("Load Failed", "Could not load students. Please try again.");
+      Alert.alert(t("marksEntry.loadFailedTitle"), t("marksEntry.loadStudentsFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -938,7 +955,7 @@ const ScoreEntry = ({
   const handleSave = useCallback(async () => {
     if (saving) return;
     if (students.length === 0) {
-      Alert.alert("No Students", "There are no students to save scores for.");
+      Alert.alert(t("marksEntry.noStudentsTitle"), t("marksEntry.noStudentsToSave"));
       return;
     }
 
@@ -970,7 +987,7 @@ const ScoreEntry = ({
         .slice(0, 3)
         .join(", ");
       Alert.alert(
-        "Invalid Scores",
+        t("marksEntry.invalidTitle"),
         `${invalid.length} score(s) must be a number between 0 and ${maxScore}.` +
         (names ? `
 
@@ -990,18 +1007,18 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
         });
         setDirty(false);
         Alert.alert(
-          saveRes?.queued ? "Saved Offline" : "Saved",
+          saveRes?.queued ? t("marksEntry.savedOffline") : t("marksEntry.saved"),
           `Scores saved for ${records.length} student(s).` +
           (saveRes?.queued
             ? "\n\nStored on this device — they will upload automatically when you're back online."
             : ""),
           [
-            { text: "Enter Another Subject", onPress: () => onSaved("back") },
-            { text: "Done", style: "cancel", onPress: () => onSaved("exit") },
+            { text: t("marksEntry.enterAnother"), onPress: () => onSaved("back") },
+            { text: t("common.done"), style: "cancel", onPress: () => onSaved("exit") },
           ]
         );
       } catch (err) {
-        Alert.alert("Save Failed", err.message || "Please try again");
+        Alert.alert(t("marksEntry.saveFailed"), err.message || t("marksEntry.tryAgain"));
       } finally {
         setSaving(false);
       }
@@ -1009,11 +1026,11 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
 
     if (unentered.length > 0) {
       Alert.alert(
-        "Unentered Scores",
+        t("marksEntry.unenteredTitle"),
         `${unentered.length} student(s) have no score entered. They will be saved as blank. Continue?`,
         [
-          { text: "Cancel",      style: "cancel" },
-          { text: "Save Anyway", onPress: doSave },
+          { text: t("common.cancel"),      style: "cancel" },
+          { text: t("marksEntry.saveAnyway"), onPress: doSave },
         ]
       );
     } else {
@@ -1057,7 +1074,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
     return (
       <View style={se.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={se.loadingText}>Loading students…</Text>
+        <Text style={se.loadingText}>{t("marksEntry.loadingStudents")}</Text>
       </View>
     );
   }
@@ -1085,7 +1102,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
               {subjectName} · Max: {maxScore} · Pass: {passMark}
             </Text>
             <TouchableOpacity onPress={markAllPresent}>
-              <Text style={se.markAllText}>Mark All Present</Text>
+              <Text style={se.markAllText}>{t("marksEntry.markAllPresent")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -1095,7 +1112,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
             style={se.searchInput}
-            placeholder="Search student…"
+            placeholder={t("marksEntry.searchStudent")}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -1154,7 +1171,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
                   activeOpacity={0.7}
                 >
                   <Text style={[se.absentBtnText, entry.isAbsent && se.absentBtnTextActive]}>
-                    ABS
+                    {t("marksEntry.abs")}
                   </Text>
                 </TouchableOpacity>
                 <View style={se.scoreBox}>
@@ -1167,7 +1184,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
                         borderWidth: 1.5,
                       },
                     ]}
-                    value={entry.isAbsent ? "ABS" : rawScore}
+                    value={entry.isAbsent ? t("marksEntry.abs") : rawScore}
                     onChangeText={(v) => {
                       if (!entry.isAbsent) {
                         updateScore(item._id, "score", sanitizeScore(v));
@@ -1191,11 +1208,11 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
             <View style={se.empty}>
               <Ionicons name="people-outline" size={48} color="#D1D5DB" />
               <Text style={se.emptyTitle}>
-                {search ? "No students match your search" : "No students found in this class"}
+                {search ? t("marksEntry.noStudentsMatch") : t("marksEntry.noStudentsInClass")}
               </Text>
               {!search && (
                 <Text style={se.emptySub}>
-                  Make sure students are enrolled and assigned to this class
+                  {t("marksEntry.noStudentsHint")}
                 </Text>
               )}
             </View>
@@ -1313,6 +1330,7 @@ const se = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 export default function MarkEntryScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     examId:        paramExamId,
@@ -1332,7 +1350,7 @@ export default function MarkEntryScreen() {
 
   const [selectedExam, setSelectedExam] = useState(
     paramExamId
-      ? { _id: paramExamId, name: paramExamName || "Exam" }
+      ? { _id: paramExamId, name: paramExamName || t("marksEntry.exam") }
       : null
   );
 
@@ -1346,7 +1364,7 @@ export default function MarkEntryScreen() {
     paramSubjectId
       ? {
           subjectId:     paramSubjectId,
-          subjectName:   paramSubjectName   || "Subject",
+          subjectName:   paramSubjectName   || t("marksEntry.subject"),
           examSubjectId: paramExamSubjectId || null,
           maxScore:      Number(paramMaxScore)  || 100,
           passMark:      Number(paramPassMark)  || 50,
@@ -1396,12 +1414,12 @@ export default function MarkEntryScreen() {
 
     if (step === 2 && entryDirty) {
       Alert.alert(
-        "Unsaved marks",
-        "You have entered marks on this sheet that have not been saved yet.",
+        t("marksEntry.unsavedTitle"),
+        t("marksEntry.unsavedBody"),
         [
-          { text: "Keep Editing", style: "cancel" },
-          { text: "Save Now",     onPress: () => saveRef.current?.() },
-          { text: "Discard",      style: "destructive", onPress: leaveStep },
+          { text: t("marksEntry.keepEditing"), style: "cancel" },
+          { text: t("marksEntry.saveNow"),     onPress: () => saveRef.current?.() },
+          { text: t("common.discard"),      style: "destructive", onPress: leaveStep },
         ]
       );
       return;
@@ -1435,18 +1453,18 @@ export default function MarkEntryScreen() {
   const headerTitle =
     step === 2 ? selectedSubject?.subjectName :
     step === 1 ? selectedExam?.name           :
-                 "Mark Entry";
+                 t("marksEntry.title");
 
   const headerSub =
     step === 2
-      ? `${selectedExam?.name || "Exam"} · ${
+      ? `${selectedExam?.name || t("marksEntry.exam")} · ${
           selectedSubject?.className ||
           selectedClass?.className ||
           displayClass(selectedClass)
         }` :
     step === 1
-      ? "Choose a subject for a class"                                     :
-      "Select an exam to start";
+      ? t("marksEntry.subChooseSubject")                                     :
+      t("marksEntry.subSelectExam");
 
   return (
     <View style={ms.container}>
@@ -1476,7 +1494,7 @@ export default function MarkEntryScreen() {
           >
             {entrySaving
               ? <ActivityIndicator size="small" color="#FFF" />
-              : <Text style={ms.saveBtnText}>Save</Text>}
+              : <Text style={ms.saveBtnText}>{t("common.save")}</Text>}
           </TouchableOpacity>
         )}
       </View>
@@ -1495,7 +1513,7 @@ export default function MarkEntryScreen() {
             activeOpacity={0.7}
           >
             <Text style={[ms.crumb, !paramExamId && ms.crumbLink]}>
-              Exams
+              {t("marksEntry.exams")}
             </Text>
           </TouchableOpacity>
 
@@ -1515,7 +1533,7 @@ export default function MarkEntryScreen() {
             ]}
               numberOfLines={1}
             >
-              {selectedExam?.name || "Exam"}
+              {selectedExam?.name || t("marksEntry.exam")}
             </Text>
           </TouchableOpacity>
 

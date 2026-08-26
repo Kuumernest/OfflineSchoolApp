@@ -25,6 +25,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { PeriodsService } from "../../../src/services/periods.service";
 
 export default function EditPeriod() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { id } = useLocalSearchParams();
   const isMountedRef = useRef(true);
@@ -51,7 +52,7 @@ export default function EditPeriod() {
         const period = all.find((p) => p.id === id);
 
         if (!period) {
-          Alert.alert("Error", "Period not found", [
+          Alert.alert(t("periodsAdmin.errorTitle"), t("periodsAdmin.notFound"), [
             { text: "OK", onPress: () => router.back() },
           ]);
           return;
@@ -65,7 +66,7 @@ export default function EditPeriod() {
         setIsBreak(period.isBreak);
       } catch (err) {
         console.error("Failed to load period:", err);
-        Alert.alert("Error", "Failed to load period data");
+        Alert.alert(t("periodsAdmin.errorTitle"), t("periodsAdmin.loadPeriodFailed"));
       } finally {
         if (isMountedRef.current) setLoading(false);
       }
@@ -84,17 +85,17 @@ export default function EditPeriod() {
     const e = {};
     const timeRegex = /^\d{2}:\d{2}$/;
 
-    if (!name.trim()) e.name = "Period name is required";
-    if (!startTime) e.startTime = "Start time is required";
-    else if (!timeRegex.test(startTime)) e.startTime = "Use HH:MM format";
-    if (!endTime) e.endTime = "End time is required";
-    else if (!timeRegex.test(endTime)) e.endTime = "Use HH:MM format";
+    if (!name.trim()) e.name = t("periodsAdmin.nameRequired");
+    if (!startTime) e.startTime = t("periodsAdmin.startRequired");
+    else if (!timeRegex.test(startTime)) e.startTime = t("periodsAdmin.timeFormat");
+    if (!endTime) e.endTime = t("periodsAdmin.endRequired");
+    else if (!timeRegex.test(endTime)) e.endTime = t("periodsAdmin.timeFormat");
 
     if (startTime && endTime && timeRegex.test(startTime) && timeRegex.test(endTime)) {
       const [sh, sm] = startTime.split(":").map(Number);
       const [eh, em] = endTime.split(":").map(Number);
       if (eh * 60 + em <= sh * 60 + sm) {
-        e.endTime = "End time must be after start time";
+        e.endTime = t("periodsAdmin.endAfterStart");
       }
     }
 
@@ -115,14 +116,14 @@ export default function EditPeriod() {
       });
 
       if (!isMountedRef.current) return;
-      Alert.alert("Updated", `"${name.trim()}" has been updated.`, [
+      Alert.alert(t("periodsAdmin.updatedTitle"), `"${name.trim()}" has been updated.`, [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;
       Alert.alert(
-        "Error",
-        err.response?.data?.message || err.message || "Failed to update period"
+        t("periodsAdmin.errorTitle"),
+        err.response?.data?.message || err.message || t("periodsAdmin.updateFailed")
       );
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -131,12 +132,12 @@ export default function EditPeriod() {
 
   const handleDelete = useCallback(() => {
     Alert.alert(
-      "Delete Period",
+      t("periodsAdmin.deleteTitle"),
       `Delete "${name}"? This cannot be undone if the period is not used in any timetable.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Delete",
+          text: t("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -147,8 +148,8 @@ export default function EditPeriod() {
             } catch (err) {
               if (!isMountedRef.current) return;
               Alert.alert(
-                "Cannot Delete",
-                err.message || "Failed to delete period"
+                t("periodsAdmin.cannotDelete"),
+                err.message || t("periodsAdmin.deleteFailed")
               );
             } finally {
               if (isMountedRef.current) setDeleting(false);
@@ -163,7 +164,7 @@ export default function EditPeriod() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading period…</Text>
+        <Text style={styles.loadingText}>{t("periodsAdmin.loadingPeriod")}</Text>
       </View>
     );
   }
@@ -186,7 +187,7 @@ export default function EditPeriod() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Edit Period</Text>
+          <Text style={styles.headerTitle}>{t("periodsAdmin.editTitle")}</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
             {name}
           </Text>
@@ -213,15 +214,15 @@ export default function EditPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Period Name <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.periodName")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
               <Ionicons name="bookmark-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 value={name}
-                onChangeText={(t) => {
-                  setName(t);
+                onChangeText={(v) => {
+                  setName(v);
                   if (errors.name) setErrors((e) => ({ ...e, name: null }));
                 }}
                 autoCapitalize="words"
@@ -233,15 +234,15 @@ export default function EditPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Start Time <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.startTime")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.startTime && styles.inputError]}>
               <Ionicons name="play-circle-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 value={startTime}
-                onChangeText={(t) => {
-                  setStartTime(formatTimeInput(t));
+                onChangeText={(v) => {
+                  setStartTime(formatTimeInput(v));
                   if (errors.startTime) setErrors((e) => ({ ...e, startTime: null }));
                 }}
                 keyboardType="numeric"
@@ -256,15 +257,15 @@ export default function EditPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              End Time <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.endTime")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.endTime && styles.inputError]}>
               <Ionicons name="stop-circle-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 value={endTime}
-                onChangeText={(t) => {
-                  setEndTime(formatTimeInput(t));
+                onChangeText={(v) => {
+                  setEndTime(formatTimeInput(v));
                   if (errors.endTime) setErrors((e) => ({ ...e, endTime: null }));
                 }}
                 keyboardType="numeric"
@@ -279,8 +280,8 @@ export default function EditPeriod() {
 
           <View style={styles.switchRow}>
             <View style={styles.switchInfo}>
-              <Text style={styles.label}>Mark as Break</Text>
-              <Text style={styles.hint}>Break periods display differently</Text>
+              <Text style={styles.label}>{t("periodsAdmin.markAsBreak")}</Text>
+              <Text style={styles.hint}>{t("periodsAdmin.breakHintShort")}</Text>
             </View>
             <Switch
               value={isBreak}
@@ -303,7 +304,7 @@ export default function EditPeriod() {
           ) : (
             <>
               <Ionicons name="checkmark-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.saveText}>Save Changes</Text>
+              <Text style={styles.saveText}>{t("periodsAdmin.saveChanges")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -314,7 +315,7 @@ export default function EditPeriod() {
           disabled={saving || deleting}
           activeOpacity={0.7}
         >
-          <Text style={styles.discardText}>Discard Changes</Text>
+          <Text style={styles.discardText}>{t("periodsAdmin.discardChanges")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -392,3 +393,4 @@ const styles = StyleSheet.create({
   discardButton: { alignItems: "center", paddingVertical: 14, marginTop: 4 },
   discardText: { fontSize: 14, color: "#9CA3AF", fontWeight: "500" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

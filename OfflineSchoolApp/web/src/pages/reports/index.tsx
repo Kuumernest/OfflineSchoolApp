@@ -152,7 +152,7 @@ export default function ReportsOverviewPage() {
             description="Design the layout parents receive. Set one as the default and every exam uses it."
           />
           <ToolLink
-            to="/exams/reports"
+            to="/reports/cards"
             icon={FileText}
             title={t("reports.generateCards")}
             description="Pick an exam and a class, then produce and print each student's card."

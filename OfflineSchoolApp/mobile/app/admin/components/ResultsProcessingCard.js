@@ -9,6 +9,7 @@ import {
 import { router }      from "expo-router";
 import { Ionicons }    from "@expo/vector-icons";
 import { ExamService } from "../../../src/services/exam.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -42,6 +43,8 @@ export default function ResultsProcessingCard({
   exam,
   onProcessed,
 }) {
+  const { t } = useTranslation();
+
   const [processing,     setProcessing]     = useState(false);
   const [publishLoading, setPublishLoading] = useState(false);
   const [processSuccess, setProcessSuccess] = useState(false);
@@ -66,7 +69,7 @@ export default function ResultsProcessingCard({
       setProcessData(res);
       if (onProcessed) onProcessed();
     } catch (err) {
-      setProcessError(err.message || "Processing failed");
+      setProcessError(err.message || t("resultsCard.processingFailed"));
     } finally {
       setProcessing(false);
     }
@@ -74,12 +77,12 @@ export default function ResultsProcessingCard({
 
   const handlePublish = () => {
     Alert.alert(
-      "Publish Results",
-      "Students and parents will be able to see these results. Continue?",
+      t("examDetail.publishTitle"),
+      t("resultsCard.publishBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:    "Publish",
+          text:    t("examDetail.publish"),
           style:   "destructive",
           onPress: async () => {
             try {
@@ -89,7 +92,7 @@ export default function ResultsProcessingCard({
               );
               if (onProcessed) onProcessed();
             } catch (err) {
-              Alert.alert("Error", err.message);
+              Alert.alert(t("examDetail.errorTitle"), err.message);
             } finally {
               setPublishLoading(false);
             }
@@ -135,9 +138,9 @@ export default function ResultsProcessingCard({
           <Ionicons name="calculator-outline" size={22} color={C.primary} />
         </View>
         <View style={s.headerText}>
-          <Text style={s.headerTitle}>Results Processing</Text>
+          <Text style={s.headerTitle}>{t("resultsCard.title")}</Text>
           <Text style={s.headerSub}>
-            Calculate grades, rankings and generate result summaries
+            {t("resultsCard.subtitle")}
           </Text>
         </View>
       </View>
@@ -147,25 +150,39 @@ export default function ResultsProcessingCard({
         <View style={s.successBox}>
           <View style={s.successHeader}>
             <Ionicons name="checkmark-circle" size={20} color={C.success} />
-            <Text style={s.successTitle}>Processing Complete</Text>
+            <Text style={s.successTitle}>{t("resultsCard.complete")}</Text>
             <TouchableOpacity onPress={handleDismiss} style={s.dismissBtn}>
               <Ionicons name="close" size={18} color={C.gray400} />
             </TouchableOpacity>
           </View>
 
           <View style={s.statsGrid}>
-            <StatItem label="Processed" value={processData.processed ?? 0} />
-            <StatItem label="Passed"    value={processData.stats?.passed   ?? 0} color={C.success} />
-            <StatItem label="Failed"    value={processData.stats?.failed   ?? 0} color={C.error}   />
-            <StatItem label="Pass Rate" value={`${processData.stats?.passRate ?? 0}%`} color={C.primary} />
+            <StatItem
+              label={t("resultsCard.statProcessed")}
+              value={processData.processed ?? 0}
+            />
+            <StatItem
+              label={t("examResults.passed")}
+              value={processData.stats?.passed ?? 0}
+              color={C.success}
+            />
+            <StatItem
+              label={t("examResults.failed")}
+              value={processData.stats?.failed ?? 0}
+              color={C.error}
+            />
+            <StatItem
+              label={t("exams.passRate")}
+              value={`${processData.stats?.passRate ?? 0}%`}
+              color={C.primary}
+            />
           </View>
 
           {processData.isPartial && (
             <View style={s.warningBox}>
               <Ionicons name="warning" size={16} color={C.warning} />
               <Text style={s.warningText}>
-                {processData.warnings?.[0] ||
-                  "Results are partial — not all subjects approved"}
+                {processData.warnings?.[0] || t("resultsCard.partial")}
               </Text>
             </View>
           )}
@@ -183,7 +200,7 @@ export default function ResultsProcessingCard({
               activeOpacity={0.8}
             >
               <Ionicons name="trophy-outline" size={15} color={C.primary} />
-              <Text style={s.outlineBtnText}>View Rankings</Text>
+              <Text style={s.outlineBtnText}>{t("resultsCard.viewRankings")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -197,7 +214,9 @@ export default function ResultsProcessingCard({
               ) : (
                 <>
                   <Ionicons name="globe-outline" size={15} color={C.white} />
-                  <Text style={s.solidBtnText}>Publish Results</Text>
+                  <Text style={s.solidBtnText}>
+                    {t("resultsCard.publishResults")}
+                  </Text>
                 </>
               )}
             </TouchableOpacity>
@@ -210,7 +229,7 @@ export default function ResultsProcessingCard({
           >
             <Ionicons name="print-outline" size={15} color={C.success} />
             <Text style={s.reportCardsBtnText}>
-              Generate Report Cards (PDF)
+              {t("resultsCard.reportCards")}
             </Text>
             <Ionicons name="chevron-forward" size={14} color={C.success} />
           </TouchableOpacity>
@@ -222,8 +241,7 @@ export default function ResultsProcessingCard({
               color={C.primary}
             />
             <Text style={s.hintText}>
-              Tap any student in the Rankings tab to view their individual
-              report card
+              {t("resultsCard.hint")}
             </Text>
           </View>
         </View>
@@ -235,7 +253,7 @@ export default function ResultsProcessingCard({
           <Ionicons name="alert-circle" size={20} color={C.error} />
           <Text style={s.errorText}>{processError}</Text>
           <TouchableOpacity onPress={handleDismiss}>
-            <Text style={s.dismissText}>Dismiss</Text>
+            <Text style={s.dismissText}>{t("common.dismiss")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -243,20 +261,19 @@ export default function ResultsProcessingCard({
       {/* ── Confirm dialog ── */}
       {showConfirm && (
         <View style={s.confirmBox}>
-          <Text style={s.confirmTitle}>Process Results?</Text>
+          <Text style={s.confirmTitle}>{t("resultsCard.confirmTitle")}</Text>
           <Text style={s.confirmText}>
-            This will calculate grades, averages and rankings for all students
-            in this exam. Existing results will be overwritten.
+            {t("resultsCard.confirmBody")}
           </Text>
           <View style={s.confirmActions}>
             <TouchableOpacity
               style={s.cancelBtn}
               onPress={() => setShowConfirm(false)}
             >
-              <Text style={s.cancelBtnText}>Cancel</Text>
+              <Text style={s.cancelBtnText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity style={s.confirmBtn} onPress={confirmProcess}>
-              <Text style={s.confirmBtnText}>Process Now</Text>
+              <Text style={s.confirmBtnText}>{t("resultsCard.processNow")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -273,12 +290,12 @@ export default function ResultsProcessingCard({
           {processing ? (
             <>
               <ActivityIndicator size="small" color={C.white} />
-              <Text style={s.processBtnText}>Processing…</Text>
+              <Text style={s.processBtnText}>{t("resultsCard.processing")}</Text>
             </>
           ) : (
             <>
               <Ionicons name="play-circle" size={20} color={C.white} />
-              <Text style={s.processBtnText}>Process Results</Text>
+              <Text style={s.processBtnText}>{t("examDetail.processResults")}</Text>
             </>
           )}
         </TouchableOpacity>

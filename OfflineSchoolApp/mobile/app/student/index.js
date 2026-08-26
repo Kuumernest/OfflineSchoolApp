@@ -27,16 +27,17 @@ import {
 } from "../../src/services/quiz.service";
 import { isStudentProfileComplete } from "./profile/setup";
 import { toDisplayUri }             from "../../src/utils/logoUri";
+import { useTranslation }           from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const getGreeting = () => {
+const getGreetingKey = () => {
   const h = new Date().getHours();
-  if (h < 12) return "Good Morning";
-  if (h < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (h < 12) return "studentHome.greetingMorning";
+  if (h < 17) return "studentHome.greetingAfternoon";
+  return "studentHome.greetingEvening";
 };
 
 const formatTime = (timeStr) => {
@@ -62,7 +63,7 @@ const getDateString = () =>
 
 const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (!dueDateStr)
-    return { label: "No deadline", color: "#6B7280", bg: "#F3F4F6", urgent: false };
+    return { labelKey: "studentHome.dueNoDeadline", color: "#6B7280", bg: "#F3F4F6", urgent: false };
 
   const due  = new Date(dueDateStr);
   const now  = new Date();
@@ -71,14 +72,15 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (submittedAt) {
     const wasLate = new Date(submittedAt) > due;
     return wasLate
-      ? { label: "Submitted late",    color: "#D97706", bg: "#FEF3C7", urgent: false }
-      : { label: "Submitted on time", color: "#059669", bg: "#ECFDF5", urgent: false };
+      ? { labelKey: "studentHome.dueSubmittedLate",   color: "#D97706", bg: "#FEF3C7", urgent: false }
+      : { labelKey: "studentHome.dueSubmittedOnTime", color: "#059669", bg: "#ECFDF5", urgent: false };
   }
 
   if (diff < 0) {
     const daysAgo = Math.floor(Math.abs(diff) / 86400000);
     return {
-      label:  daysAgo > 0 ? `${daysAgo}d overdue` : "Overdue",
+      labelKey:    daysAgo > 0 ? "studentHome.dueOverdueDays" : "studentHome.dueOverdue",
+      labelParams: daysAgo > 0 ? { count: daysAgo } : undefined,
       color:  "#DC2626", bg: "#FEE2E2",
       urgent: true, isPast: true,
     };
@@ -87,11 +89,11 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   const hours = Math.floor(diff / 3600000);
   const days  = Math.floor(diff / 86400000);
 
-  if (hours < 6)  return { label: `${hours}h left`, color: "#DC2626", bg: "#FEE2E2", urgent: true  };
-  if (hours < 24) return { label: "Due today",       color: "#D97706", bg: "#FEF3C7", urgent: true  };
-  if (days === 1) return { label: "Due tomorrow",    color: "#D97706", bg: "#FEF3C7", urgent: false };
-  if (days < 7)   return { label: `${days}d left`,   color: "#059669", bg: "#ECFDF5", urgent: false };
-  return              { label: `${Math.floor(days / 7)}w left`, color: "#059669", bg: "#ECFDF5", urgent: false };
+  if (hours < 6)  return { labelKey: "studentHome.dueHoursLeft", labelParams: { count: hours }, color: "#DC2626", bg: "#FEE2E2", urgent: true  };
+  if (hours < 24) return { labelKey: "studentHome.dueToday",     color: "#D97706", bg: "#FEF3C7", urgent: true  };
+  if (days === 1) return { labelKey: "studentHome.dueTomorrow",  color: "#D97706", bg: "#FEF3C7", urgent: false };
+  if (days < 7)   return { labelKey: "studentHome.dueDaysLeft",  labelParams: { count: days }, color: "#059669", bg: "#ECFDF5", urgent: false };
+  return              { labelKey: "studentHome.dueWeeksLeft", labelParams: { count: Math.floor(days / 7) }, color: "#059669", bg: "#ECFDF5", urgent: false };
 };
 
 const getHomeworkSubmissionStatus = (hw) => {
@@ -99,20 +101,21 @@ const getHomeworkSubmissionStatus = (hw) => {
     const pct = hw.max_score > 0
       ? Math.round((hw.submission_score / hw.max_score) * 100) : 0;
     return {
-      type:  "graded",
-      label: `${hw.submission_score}/${hw.max_score} (${pct}%)`,
+      type:     "graded",
+      labelKey: "studentHome.hwGraded",
+      labelParams: { score: hw.submission_score, max: hw.max_score, pct },
       color: pct >= 70 ? "#059669" : "#DC2626",
       icon:  "ribbon-outline",
     };
   }
   if (hw.submission_id)
-    return { type: "submitted", label: "Submitted", color: "#4F46E5", icon: "checkmark-circle-outline" };
+    return { type: "submitted", labelKey: "studentHome.hwSubmitted", color: "#4F46E5", icon: "checkmark-circle-outline" };
 
   const due    = hw.due_date ? new Date(hw.due_date) : null;
   const isPast = due && new Date() > due;
   return {
     type:  "pending",
-    label: isPast ? "Late" : "Pending",
+    labelKey: isPast ? "studentHome.hwLate" : "studentHome.hwPending",
     color: isPast ? "#D97706" : "#6B7280",
     icon:  "document-outline",
   };
@@ -135,13 +138,14 @@ const getQuizStatus = (quiz, attempts = []) => {
       canStart: false, canAttempt: false,
       attempts: submitted.length, best,
       isPassed: submitted.some((a) => a.is_passed),
-      label:    `Completed · ${best.toFixed(1)}%`,
+      labelKey:    "studentHome.quizCompleted",
+      labelParams: { score: best.toFixed(1) },
     };
   }
   if (!quiz.is_published)
-    return { canStart: false, canAttempt: false, attempts: 0, label: "Unavailable" };
+    return { canStart: false, canAttempt: false, attempts: 0, labelKey: "studentHome.quizUnavailable" };
   if (quiz.available_from && now < new Date(quiz.available_from))
-    return { canStart: false, canAttempt: false, attempts: 0, label: "Not open yet" };
+    return { canStart: false, canAttempt: false, attempts: 0, labelKey: "studentHome.quizNotOpen" };
   if (quiz.available_until && now > new Date(quiz.available_until)) {
     if (submitted.length > 0) {
       const best = Math.max(...submitted.map((a) => a.percentage || 0));
@@ -149,10 +153,11 @@ const getQuizStatus = (quiz, attempts = []) => {
         canStart: false, canAttempt: false,
         attempts: submitted.length, best,
         isPassed: submitted.some((a) => a.is_passed),
-        label:    `Completed · ${best.toFixed(1)}%`,
+        labelKey:    "studentHome.quizCompleted",
+        labelParams: { score: best.toFixed(1) },
       };
     }
-    return { canStart: false, canAttempt: false, attempts: 0, label: "Closed" };
+    return { canStart: false, canAttempt: false, attempts: 0, labelKey: "studentHome.quizClosed" };
   }
   if (quiz.max_attempts != null && submitted.length >= quiz.max_attempts) {
     const best = submitted.length > 0
@@ -161,7 +166,8 @@ const getQuizStatus = (quiz, attempts = []) => {
       canStart: false, canAttempt: false,
       attempts: submitted.length, best,
       isPassed: submitted.some((a) => a.is_passed),
-      label:    `Completed · ${best.toFixed(1)}%`,
+      labelKey:    "studentHome.quizCompleted",
+      labelParams: { score: best.toFixed(1) },
     };
   }
   const inProgress = quizAttempts.find((a) => a.status === "in_progress");
@@ -170,12 +176,12 @@ const getQuizStatus = (quiz, attempts = []) => {
       canStart: true, canAttempt: true,
       attempts: submitted.length,
       resumeId: inProgress.id || inProgress._id,
-      label:    "In Progress",
+      labelKey: "studentHome.quizInProgress",
     };
   return {
     canStart: true, canAttempt: true,
     attempts: submitted.length,
-    label:    submitted.length > 0 ? "Retake" : "Not Started",
+    labelKey: submitted.length > 0 ? "studentHome.quizRetake" : "studentHome.quizNotStarted",
   };
 };
 
@@ -457,6 +463,7 @@ const EmptyCard = ({ icon, title, subtitle }) => (
 
 export default function StudentDashboard() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   // Primitive IDs — stable deps, no infinite loop
   const userId   = useAuthStore((st) => st.user?._id  || st.user?.id  || st.user?.userId || null);
@@ -637,23 +644,23 @@ export default function StudentDashboard() {
 
   // ── Quick actions ─────────────────────────────────────────────────────────
   const QUICK_ACTIONS = useMemo(() => [
-    { id: "timetable",     title: "Timetable",     icon: "time-outline",          color: "#7C3AED", route: "/student/timetable"       },
-    { id: "quizzes",       title: "Quizzes",       icon: "help-circle-outline",   color: "#4F46E5", route: "/student/quizzes"         },
-    { id: "homework",      title: "Homework",      icon: "document-text-outline", color: "#059669", route: "/student/homework"        },
-    { id: "subjects",      title: "Subjects",      icon: "book-outline",          color: "#D97706", route: "/student/subjects"        },
-    { id: "attendance",    title: "Attendance",    icon: "calendar-outline",      color: "#DC2626", route: "/student/attendance"      },
-    { id: "announcements", title: "Announcements", icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
-    { id: "messages",      title: "Messages",      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
-    { id: "results",       title: "Results",       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
-    { id: "settings",      title: "Settings",      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
-  ], []);
+    { id: "timetable",     title: t("studentHome.qaTimetable"),     icon: "time-outline",          color: "#7C3AED", route: "/student/timetable"       },
+    { id: "quizzes",       title: t("studentHome.qaQuizzes"),       icon: "help-circle-outline",   color: "#4F46E5", route: "/student/quizzes"         },
+    { id: "homework",      title: t("studentHome.qaHomework"),      icon: "document-text-outline", color: "#059669", route: "/student/homework"        },
+    { id: "subjects",      title: t("studentHome.qaSubjects"),      icon: "book-outline",          color: "#D97706", route: "/student/subjects"        },
+    { id: "attendance",    title: t("studentHome.qaAttendance"),    icon: "calendar-outline",      color: "#DC2626", route: "/student/attendance"      },
+    { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
+    { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
+    { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
+    { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
+  ], [t]);
 
   // ── Loading screen ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={s.loadingText}>Loading dashboard…</Text>
+        <Text style={s.loadingText}>{t("studentHome.loading")}</Text>
       </View>
     );
   }
@@ -668,9 +675,9 @@ export default function StudentDashboard() {
       {/* HEADER */}
       <View style={s.header}>
         <View style={{ flex: 1 }}>
-          <Text style={s.greeting}>{getGreeting()},</Text>
+          <Text style={s.greeting}>{t(getGreetingKey())},</Text>
           <Text style={s.userName} numberOfLines={1}>
-            {user?.name || user?.fullName || user?.studentName || "Student"}
+            {user?.name || user?.fullName || user?.studentName || t("studentHome.studentFallback")}
           </Text>
         </View>
 
@@ -747,9 +754,9 @@ export default function StudentDashboard() {
               <Ionicons name="person-add-outline" size={20} color="#FFF" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.profileSetupTitle}>Complete Your Profile</Text>
+              <Text style={s.profileSetupTitle}>{t("studentHome.profileBannerTitle")}</Text>
               <Text style={s.profileSetupSub}>
-                Your school needs your full details — tap to complete setup
+                {t("studentHome.profileBannerSub")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#FFF" />
@@ -773,21 +780,21 @@ export default function StudentDashboard() {
                   ? `${attendance.percentage}%`
                   : "—"
             }
-            label="Attendance"
+            label={t("studentHome.statAttendance")}
             bg="#EEF2FF"
             color="#4F46E5"
           />
           <StatCard
             icon="document-text"
             value={homeworkStats.pending > 0 ? `${homeworkStats.pending}` : homeworkStats.total}
-            label={homeworkStats.pending > 0 ? "HW Pending" : "Homework"}
+            label={homeworkStats.pending > 0 ? t("studentHome.statHwPending") : t("studentHome.statHomework")}
             bg={homeworkStats.urgent > 0 ? "#FEE2E2" : "#ECFDF5"}
             color={homeworkStats.urgent > 0 ? "#DC2626" : "#059669"}
           />
           <StatCard
             icon="trophy"
             value={quizStats.avgScore != null ? `${quizStats.avgScore}%` : "—"}
-            label="Avg Score"
+            label={t("studentHome.statAvgScore")}
             bg="#FFFBEB"
             color="#D97706"
           />
@@ -803,9 +810,9 @@ export default function StudentDashboard() {
             >
               <Ionicons name="warning" size={18} color="#DC2626" />
               <Text style={s.urgentBannerText}>
-                {homeworkStats.urgent} assignment{homeworkStats.urgent !== 1 ? "s" : ""} due very soon!
+                {t("studentHome.urgentHomework", { count: homeworkStats.urgent })}
               </Text>
-              <Text style={s.urgentBannerLink}>View →</Text>
+              <Text style={s.urgentBannerLink}>{t("studentHome.urgentView")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -814,8 +821,8 @@ export default function StudentDashboard() {
         {pinnedAnnouncements.length > 0 && (
           <View style={s.section}>
             <SectionHead
-              title="📌 Pinned"
-              action="All Announcements"
+              title={t("studentHome.sectionPinned")}
+              action={t("studentHome.actionAllAnnouncements")}
               onAction={() => router.push("/student/announcements")}
             />
             {pinnedAnnouncements.map((ann) => (
@@ -841,12 +848,16 @@ export default function StudentDashboard() {
         {/* Today's schedule */}
         <View style={s.section}>
           <SectionHead
-            title="Today's Schedule"
-            action="Full Timetable"
+            title={t("studentHome.sectionTodaySchedule")}
+            action={t("studentHome.actionFullTimetable")}
             onAction={() => router.push("/student/timetable")}
           />
           {todayClasses.length === 0 ? (
-            <EmptyCard icon="calendar-outline" title="No classes today" subtitle="Enjoy your free day!" />
+            <EmptyCard
+              icon="calendar-outline"
+              title={t("studentHome.emptyClassesTitle")}
+              subtitle={t("studentHome.emptyClassesSub")}
+            />
           ) : (
             todayClasses.slice(0, 7).map((item, idx) => {
               const isBreak = item.isbreak === 1 || item.isbreak === "1" || item.isBreak === true;
@@ -860,7 +871,7 @@ export default function StudentDashboard() {
                   <View style={s.ttDivider} />
                   <View style={{ flex: 1 }}>
                     <Text style={[s.ttSubject, isBreak && s.ttSubjectBreak]} numberOfLines={1}>
-                      {item.subjectName || item.periodName || (isBreak ? "Break" : "—")}
+                      {item.subjectName || item.periodName || (isBreak ? t("studentHome.breakLabel") : "—")}
                     </Text>
                     {!isBreak && (
                       <Text style={s.ttMeta} numberOfLines={1}>
@@ -881,7 +892,7 @@ export default function StudentDashboard() {
 
         {/* Quick access */}
         <View style={s.section}>
-          <Text style={s.sectionTitle}>Quick Access</Text>
+          <Text style={s.sectionTitle}>{t("studentHome.sectionQuickAccess")}</Text>
           <View style={s.actionsGrid}>
             {QUICK_ACTIONS.map((a) => {
               const hwBadge  = a.id === "homework"      && homeworkStats.pending > 0;
@@ -914,12 +925,16 @@ export default function StudentDashboard() {
 
         {/* Homework */}
         <View style={s.section}>
-          <SectionHead title="Homework" action="View All" onAction={() => router.push("/student/homework")} />
+          <SectionHead
+            title={t("studentHome.sectionHomework")}
+            action={t("studentHome.actionViewAll")}
+            onAction={() => router.push("/student/homework")}
+          />
           {homework.length === 0 ? (
             <EmptyCard
               icon="document-text-outline"
-              title="No homework assigned"
-              subtitle="Check back when your teacher assigns work"
+              title={t("studentHome.emptyHomeworkTitle")}
+              subtitle={t("studentHome.emptyHomeworkSub")}
             />
           ) : (
             [...homework]
@@ -954,10 +969,10 @@ export default function StudentDashboard() {
                       <View style={s.hwChipRow}>
                         <View style={[s.hwChip, { backgroundColor: due.bg }]}>
                           <Ionicons name="calendar-outline" size={10} color={due.color} />
-                          <Text style={[s.hwChipText, { color: due.color }]}>{due.label}</Text>
+                          <Text style={[s.hwChipText, { color: due.color }]}>{t(due.labelKey, due.labelParams)}</Text>
                         </View>
                         <View style={[s.hwChip, { backgroundColor: status.color + "18" }]}>
-                          <Text style={[s.hwChipText, { color: status.color }]}>{status.label}</Text>
+                          <Text style={[s.hwChipText, { color: status.color }]}>{t(status.labelKey, status.labelParams)}</Text>
                         </View>
                         {hw.submission_score != null && (
                           <View style={[s.hwChip, { backgroundColor: "#EEF2FF" }]}>
@@ -971,7 +986,7 @@ export default function StudentDashboard() {
                     </View>
                     <View style={s.hwScoreBox}>
                       <Text style={s.hwScoreValue}>{hw.max_score ?? 100}</Text>
-                      <Text style={s.hwScoreLabel}>pts</Text>
+                      <Text style={s.hwScoreLabel}>{t("studentHome.hwPoints")}</Text>
                     </View>
                   </TouchableOpacity>
                 );
@@ -984,7 +999,7 @@ export default function StudentDashboard() {
               activeOpacity={0.7}
             >
               <Text style={s.seeMoreText}>
-                +{homework.length - 4} more assignment{homework.length - 4 !== 1 ? "s" : ""}
+                {t("studentHome.hwMoreAssignments", { count: homework.length - 4 })}
               </Text>
               <Ionicons name="chevron-forward" size={14} color="#4F46E5" />
             </TouchableOpacity>
@@ -994,12 +1009,16 @@ export default function StudentDashboard() {
         {/* Available quizzes */}
         <View style={s.section}>
           <SectionHead
-            title="Available Quizzes"
-            action="See All"
+            title={t("studentHome.sectionAvailableQuizzes")}
+            action={t("studentHome.actionSeeAll")}
             onAction={() => router.push("/student/quizzes")}
           />
           {availableQuizzes.length === 0 ? (
-            <EmptyCard icon="help-circle-outline" title="No quizzes available" subtitle="Check back later for new quizzes" />
+            <EmptyCard
+              icon="help-circle-outline"
+              title={t("studentHome.emptyQuizzesTitle")}
+              subtitle={t("studentHome.emptyQuizzesSub")}
+            />
           ) : (
             availableQuizzes.map(({ quiz, status }) => (
               <TouchableOpacity
@@ -1028,19 +1047,23 @@ export default function StudentDashboard() {
                   <Text style={s.quizMeta}  numberOfLines={1}>
                     {[
                       quiz.subject_name,
-                      quiz.question_count     ? `${quiz.question_count} Q`       : null,
-                      quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min`  : null,
+                      quiz.question_count     ? t("studentHome.quizQuestionsShort", { count: quiz.question_count })     : null,
+                      quiz.time_limit_minutes ? t("studentHome.quizMinutesShort",   { count: quiz.time_limit_minutes }) : null,
                     ].filter(Boolean).join(" · ")}
                   </Text>
                   {quiz.max_attempts != null && (
                     <Text style={s.quizAttemptInfo}>
-                      {status.attempts}/{quiz.max_attempts} attempts
-                      {status.best != null ? `  ·  Best: ${Math.round(status.best)}%` : ""}
+                      {t("studentHome.quizAttemptsCount", { done: status.attempts, max: quiz.max_attempts })}
+                      {status.best != null
+                        ? `  ·  ${t("studentHome.quizBest", { score: Math.round(status.best) })}`
+                        : ""}
                     </Text>
                   )}
                 </View>
                 <View style={s.quizStartBtn}>
-                  <Text style={s.quizStartText}>{status.resumeId ? "Resume" : "Start"}</Text>
+                  <Text style={s.quizStartText}>
+                    {status.resumeId ? t("studentHome.quizResume") : t("studentHome.quizStart")}
+                  </Text>
                   <Ionicons name="play" size={12} color="#FFF" />
                 </View>
               </TouchableOpacity>
@@ -1051,12 +1074,16 @@ export default function StudentDashboard() {
         {/* My subjects */}
         <View style={s.section}>
           <SectionHead
-            title="My Subjects"
-            action="View All"
+            title={t("studentHome.sectionMySubjects")}
+            action={t("studentHome.actionViewAll")}
             onAction={() => router.push("/student/subjects")}
           />
           {subjects.length === 0 ? (
-            <EmptyCard icon="book-outline" title="No subjects found" subtitle="Subjects will appear after sync" />
+            <EmptyCard
+              icon="book-outline"
+              title={t("studentHome.emptySubjectsTitle")}
+              subtitle={t("studentHome.emptySubjectsSub")}
+            />
           ) : (
             <View style={s.subjectsGrid}>
               {subjects.slice(0, 6).map((subj, idx) => {
@@ -1093,8 +1120,8 @@ export default function StudentDashboard() {
         {quizHistory.length > 0 && (
           <View style={s.section}>
             <SectionHead
-              title="Recent Quiz Results"
-              action="History"
+              title={t("studentHome.sectionRecentQuizResults")}
+              action={t("studentHome.actionHistory")}
               onAction={() => router.push("/student/quizzes/history")}
             />
             {quizHistory.slice(0, 4).map((attempt) => (
@@ -1117,7 +1144,7 @@ export default function StudentDashboard() {
                   <Text style={s.resultMeta}>
                     {[
                       attempt.subjectName || attempt.subject_name,
-                      attempt.is_passed ? "Passed ✓" : "Not passed",
+                      attempt.is_passed ? t("studentHome.resultPassed") : t("studentHome.resultNotPassed"),
                     ].filter(Boolean).join(" · ")}
                   </Text>
                 </View>
@@ -1129,8 +1156,8 @@ export default function StudentDashboard() {
         {/* ── Results section — links to /student/results ───────────────── */}
         <View style={s.section}>
           <SectionHead
-            title="Exam Results"
-            action="View All"
+            title={t("studentHome.sectionExamResults")}
+            action={t("studentHome.actionViewAll")}
             onAction={() => router.push("/student/results")}
           />
           <TouchableOpacity
@@ -1142,9 +1169,9 @@ export default function StudentDashboard() {
               <Ionicons name="document-text-outline" size={24} color="#2563EB" />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={s.resultsCardTitle}>My Report Cards</Text>
+              <Text style={s.resultsCardTitle}>{t("studentHome.reportCardsTitle")}</Text>
               <Text style={s.resultsCardSub}>
-                View your exam results and report cards
+                {t("studentHome.reportCardsSub")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color="#9CA3AF" />
@@ -1155,8 +1182,8 @@ export default function StudentDashboard() {
         {recentAnnouncements.length > 0 && (
           <View style={s.section}>
             <SectionHead
-              title="Announcements"
-              action="See All"
+              title={t("studentHome.sectionAnnouncements")}
+              action={t("studentHome.actionSeeAll")}
               onAction={() => router.push("/student/announcements")}
             />
             {recentAnnouncements.map((ann) => (
@@ -1187,7 +1214,7 @@ export default function StudentDashboard() {
                 activeOpacity={0.7}
               >
                 <Text style={s.seeMoreText}>
-                  +{storeInbox.filter((a) => !a.isPinned).length - 3} more
+                  {t("studentHome.annMore", { count: storeInbox.filter((a) => !a.isPinned).length - 3 })}
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color="#4F46E5" />
               </TouchableOpacity>
@@ -1202,7 +1229,7 @@ export default function StudentDashboard() {
           activeOpacity={0.7}
         >
           <Ionicons name="log-out-outline" size={18} color="#DC2626" />
-          <Text style={s.logoutText}>Logout</Text>
+          <Text style={s.logoutText}>{t("studentHome.logout")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 32 }} />

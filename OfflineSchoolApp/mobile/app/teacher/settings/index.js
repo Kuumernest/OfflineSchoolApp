@@ -19,6 +19,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -207,6 +208,8 @@ const av = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 function ProfileProgress({ profile }) {
+  const { t } = useTranslation();
+
   const fields = [
     profile?.firstName,
     profile?.lastName,
@@ -226,7 +229,7 @@ function ProfileProgress({ profile }) {
   return (
     <View style={pp.wrap}>
       <View style={pp.labelRow}>
-        <Text style={pp.label}>Profile Completeness</Text>
+        <Text style={pp.label}>{t("teacherSettings.profileCompleteness")}</Text>
         <Text style={[pp.pct, { color: complete ? C.success : C.warning }]}>
           {pct}%
         </Text>
@@ -244,7 +247,9 @@ function ProfileProgress({ profile }) {
       </View>
       {!complete && (
         <Text style={pp.hint}>
-          {total - filled} field{total - filled !== 1 ? "s" : ""} missing — tap Edit Profile to complete
+          {total - filled === 1
+            ? t("teacherSettings.fieldMissing",  { count: total - filled })
+            : t("teacherSettings.fieldsMissing", { count: total - filled })}
         </Text>
       )}
     </View>
@@ -275,6 +280,7 @@ const pp = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 export default function TeacherSettingsScreen() {
+  const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const userId = String(user?._id || user?.id || "");
@@ -362,12 +368,12 @@ export default function TeacherSettingsScreen() {
   // ── Logout ───────────────────────────────────────────
   const handleLogout = useCallback(() => {
     Alert.alert(
-      "Logout",
-      "Are you sure you want to logout?",
+      t("teacherSettings.logout"),
+      t("teacherSettings.logoutConfirm"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("teacherSettings.cancel"), style: "cancel" },
         {
-          text:  "Logout",
+          text:  t("teacherSettings.logout"),
           style: "destructive",
           onPress: async () => {
             try { await logout(); } catch { /* ignore */ }
@@ -376,21 +382,21 @@ export default function TeacherSettingsScreen() {
         },
       ]
     );
-  }, [logout]);
+  }, [logout, t]);
 
   // ── Derived display values ────────────────────────────
   const displayName = profile
     ? `${profile.firstName || ""} ${profile.lastName || ""}`.trim() ||
-      user?.name || "Teacher"
-    : user?.name || "Teacher";
+      user?.name || t("teacherSettings.teacher")
+    : user?.name || t("teacherSettings.teacher");
 
   const profileSubtitle =
     [
-      profile?.staffId ? `ID: ${profile.staffId}` : null,
+      profile?.staffId ? t("teacherSettings.idLabel", { id: profile.staffId }) : null,
       profile?.qualification || null,
     ]
       .filter(Boolean)
-      .join("  ·  ") || "Teacher";
+      .join("  ·  ") || t("teacherSettings.teacher");
 
   // ── Loading state ─────────────────────────────────────
   if (loading) {
@@ -413,7 +419,7 @@ export default function TeacherSettingsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t("teacherSettings.title")}</Text>
         <TouchableOpacity
           onPress={loadProfile}
           style={styles.refreshBtn}
@@ -439,7 +445,7 @@ export default function TeacherSettingsScreen() {
               {profileComplete && (
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={14} color={C.success} />
-                  <Text style={styles.verifiedText}>Complete</Text>
+                  <Text style={styles.verifiedText}>{t("teacherSettings.complete")}</Text>
                 </View>
               )}
             </View>
@@ -464,9 +470,11 @@ export default function TeacherSettingsScreen() {
               <Ionicons name="person-add-outline" size={20} color={C.white} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.setupPromptTitle}>Complete Your Profile</Text>
+              <Text style={styles.setupPromptTitle}>
+                {t("teacherSettings.completeYourProfile")}
+              </Text>
               <Text style={styles.setupPromptSub}>
-                The school needs your full information
+                {t("teacherSettings.schoolNeedsInfo")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={C.white} />
@@ -474,35 +482,39 @@ export default function TeacherSettingsScreen() {
         )}
 
         {/* ── Account ── */}
-        <Section title="Account">
+        <Section title={t("teacherSettings.accountSection")}>
           <SettingRow
             icon="person-outline"
             iconBg={C.primaryBg}
             iconColor={C.primary}
-            title="Edit Profile"
-            subtitle={profileComplete ? "Profile complete ✓" : "Tap to complete setup"}
+            title={t("teacherSettings.editProfile")}
+            subtitle={
+              profileComplete
+                ? t("teacherSettings.profileCompleteCheck")
+                : t("teacherSettings.tapToCompleteSetup")
+            }
             onPress={() => router.push("/teacher/profile/setup")}
           />
           <SettingRow
             icon="lock-closed-outline"
             iconBg={C.warningBg}
             iconColor={C.warning}
-            title="Change Password"
-            subtitle="Update your login password"
-            onPress={() => router.push("/auth/change-password")}
+            title={t("teacherSettings.changePassword")}
+            subtitle={t("teacherSettings.updateLoginPassword")}
+            onPress={() => router.push("/auth/set-password")}
             last
           />
         </Section>
 
         {/* ── My Details (shown once profile has data) ── */}
         {profile && (
-          <Section title="My Details">
+          <Section title={t("teacherSettings.myDetails")}>
             {!!profile.staffId && (
               <SettingRow
                 icon="id-card-outline"
                 iconBg="#EDE9FE"
                 iconColor="#7C3AED"
-                title="Staff ID"
+                title={t("teacherSettings.staffId")}
                 type="value"
                 value={profile.staffId}
               />
@@ -512,7 +524,7 @@ export default function TeacherSettingsScreen() {
                 icon="ribbon-outline"
                 iconBg={C.primaryBg}
                 iconColor={C.primary}
-                title="Qualification"
+                title={t("teacherSettings.qualification")}
                 type="value"
                 value={profile.qualification}
               />
@@ -522,7 +534,7 @@ export default function TeacherSettingsScreen() {
                 icon="briefcase-outline"
                 iconBg="#FFF7ED"
                 iconColor="#EA580C"
-                title="Employment"
+                title={t("teacherSettings.employment")}
                 type="value"
                 value={profile.employmentType.replace(/_/g, " ")}
               />
@@ -532,7 +544,7 @@ export default function TeacherSettingsScreen() {
                 icon="call-outline"
                 iconBg={C.successBg}
                 iconColor={C.success}
-                title="Phone"
+                title={t("teacherSettings.phone")}
                 type="value"
                 value={profile.phone}
               />
@@ -542,7 +554,7 @@ export default function TeacherSettingsScreen() {
                 icon="water-outline"
                 iconBg={C.errorBg}
                 iconColor={C.error}
-                title="Blood Group"
+                title={t("teacherSettings.bloodGroup")}
                 type="value"
                 value={profile.bloodGroup}
               />
@@ -552,7 +564,7 @@ export default function TeacherSettingsScreen() {
                 icon="medical-outline"
                 iconBg={C.warningBg}
                 iconColor={C.warning}
-                title="Emergency Contact"
+                title={t("teacherSettings.emergencyContact")}
                 subtitle={profile.emergencyRelation || undefined}
                 type="value"
                 value={profile.emergencyPhone || profile.emergencyName}
@@ -563,14 +575,14 @@ export default function TeacherSettingsScreen() {
         )}
 
         {/* ── Preferences ── */}
-        <Section title="Preferences">
+        <Section title={t("teacherSettings.preferences")}>
           {/* ✅ Fix 2 + Fix 5 — persisted toggle, renders as View not TouchableOpacity */}
           <SettingRow
             icon="notifications-outline"
             iconBg={C.warningBg}
             iconColor={C.warning}
-            title="Push Notifications"
-            subtitle="Marks, homework and announcement alerts"
+            title={t("teacherSettings.pushNotifications")}
+            subtitle={t("teacherSettings.pushNotificationsHint")}
             type="toggle"
             value={notifEnabled}
             onToggle={handleNotifToggle}
@@ -579,16 +591,16 @@ export default function TeacherSettingsScreen() {
         </Section>
 
         {/* ── Support ── */}
-        <Section title="Support">
+        <Section title={t("teacherSettings.support")}>
           <SettingRow
             icon="help-circle-outline"
             iconBg={C.primaryBg}
             iconColor={C.primary}
-            title="Help & FAQs"
+            title={t("teacherSettings.helpFaqs")}
             onPress={() =>
               Alert.alert(
-                "Need Help?",
-                "Contact your school administrator for support."
+                t("teacherSettings.needHelpTitle"),
+                t("teacherSettings.needHelpBody")
               )
             }
           />
@@ -597,34 +609,34 @@ export default function TeacherSettingsScreen() {
             icon="document-text-outline"
             iconBg={C.gray100}
             iconColor={C.gray500}
-            title="Terms of Service"
+            title={t("teacherSettings.terms")}
             onPress={() => Linking.openURL("https://yourapp.com/terms")}
           />
           <SettingRow
             icon="shield-outline"
             iconBg={C.gray100}
             iconColor={C.gray500}
-            title="Privacy Policy"
+            title={t("teacherSettings.privacy")}
             onPress={() => Linking.openURL("https://yourapp.com/privacy")}
             last
           />
         </Section>
 
         {/* ── Session ── */}
-        <Section title="Session">
+        <Section title={t("teacherSettings.session")}>
           <SettingRow
             icon="log-out-outline"
             iconBg={C.errorBg}
             iconColor={C.error}
-            title="Logout"
-            subtitle="Sign out of your account"
+            title={t("teacherSettings.logout")}
+            subtitle={t("teacherSettings.signOutHint")}
             destructive
             onPress={handleLogout}
             last
           />
         </Section>
 
-        <Text style={styles.version}>Teaching Hub  ·  v1.0.0</Text>
+        <Text style={styles.version}>{t("teacherSettings.hubName")}{"  ·  v1.0.0"}</Text>
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>

@@ -7,10 +7,12 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassService } from "../../../src/services/class.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const MAX_CLASS_NAME_LENGTH = 50;
 
 export default function EditClass() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams();
   const isMountedRef = useRef(true);
@@ -31,7 +33,7 @@ export default function EditClass() {
 
   useEffect(() => {
     if (!classId) {
-      Alert.alert("Error", "No class ID provided.", [{ text: "OK", onPress: () => router.back() }]);
+      Alert.alert(t("classesAdmin.errTitle"), t("classesAdmin.errNoId"), [{ text: "OK", onPress: () => router.back() }]);
       return;
     }
 
@@ -46,14 +48,14 @@ export default function EditClass() {
           setClassName(data.name);
           setOriginalName(data.name);
         } else {
-          Alert.alert("Not Found", "This class could not be found.", [
+          Alert.alert(t("classesAdmin.notFoundTitle"), t("classesAdmin.notFoundBody"), [
             { text: "OK", onPress: () => router.back() },
           ]);
         }
       } catch (err) {
         if (!active || !isMountedRef.current) return;
         console.error("Load class error:", err);
-        Alert.alert("Error", "Failed to load class details.", [
+        Alert.alert(t("classesAdmin.errTitle"), t("classesAdmin.errLoadDetails"), [
           { text: "OK", onPress: () => router.back() },
         ]);
       } finally {
@@ -68,12 +70,12 @@ export default function EditClass() {
 
   const validate = useCallback((value) => {
     const trimmed = value.trim();
-    if (!trimmed) return "Class name is required.";
-    if (trimmed.length < 2) return "Class name must be at least 2 characters.";
+    if (!trimmed) return t("classesAdmin.errNameRequired");
+    if (trimmed.length < 2) return t("classesAdmin.errNameShort");
     if (trimmed.length > MAX_CLASS_NAME_LENGTH) {
       return `Class name cannot exceed ${MAX_CLASS_NAME_LENGTH} characters.`;
     }
-    if (/^\d+$/.test(trimmed)) return "Class name cannot be purely numeric.";
+    if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";
   }, []);
 
@@ -108,13 +110,13 @@ export default function EditClass() {
       await ClassService.update(classId, trimmedValue);
       if (!isMountedRef.current) return;
 
-      Alert.alert("Class Updated", `"${trimmedValue}" has been saved successfully.`, [
-        { text: "Done", onPress: () => router.back() },
+      Alert.alert(t("classesAdmin.updatedTitle"), t("classesAdmin.savedBody", { name: trimmedValue }), [
+        { text: t("common.done"), onPress: () => router.back() },
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;
-      const message = err.response?.data?.message || err.message || "Failed to update class.";
-      Alert.alert("Error", message);
+      const message = err.response?.data?.message || err.message || t("classesAdmin.errUpdate");
+      Alert.alert(t("classesAdmin.errTitle"), message);
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
@@ -123,11 +125,11 @@ export default function EditClass() {
   const handleDiscard = useCallback(() => {
     if (hasChanges) {
       Alert.alert(
-        "Discard Changes",
-        "You have unsaved changes. Are you sure you want to go back?",
+        t("classesAdmin.discardTitle"),
+        t("classesAdmin.discardBody"),
         [
-          { text: "Keep Editing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: () => router.back() },
+          { text: t("classesAdmin.keepEditing"), style: "cancel" },
+          { text: t("common.discard"), style: "destructive", onPress: () => router.back() },
         ]
       );
     } else {
@@ -139,7 +141,7 @@ export default function EditClass() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading class…</Text>
+        <Text style={styles.loadingText}>{t("classesAdmin.loadingOne")}</Text>
       </View>
     );
   }
@@ -156,9 +158,9 @@ export default function EditClass() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Edit Class</Text>
+          <Text style={styles.headerTitle}>{t("classesAdmin.editTitle")}</Text>
           <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {originalName || "Update class details"}
+            {originalName || t("classesAdmin.editSub")}
           </Text>
         </View>
         {hasChanges && (
@@ -171,7 +173,7 @@ export default function EditClass() {
             {saving ? (
               <ActivityIndicator size="small" color="#4F46E5" />
             ) : (
-              <Text style={styles.headerSaveText}>Save</Text>
+              <Text style={styles.headerSaveText}>{t("common.save")}</Text>
             )}
           </TouchableOpacity>
         )}
@@ -186,7 +188,7 @@ export default function EditClass() {
           <View style={styles.originalBanner}>
             <Ionicons name="create-outline" size={16} color="#2563EB" />
             <Text style={styles.originalBannerText}>
-              Editing: <Text style={styles.originalBannerName}>"{originalName}"</Text>
+              {t("classesAdmin.editingLabel")} <Text style={styles.originalBannerName}>"{originalName}"</Text>
             </Text>
           </View>
         ) : null}
@@ -194,7 +196,7 @@ export default function EditClass() {
         <View style={styles.formCard}>
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Class Name <Text style={styles.required}>*</Text>
+              {t("classesAdmin.nameLabel")} <Text style={styles.required}>*</Text>
             </Text>
 
             <View style={[
@@ -211,7 +213,7 @@ export default function EditClass() {
               <TextInput
                 ref={inputRef}
                 style={styles.input}
-                placeholder="e.g. Form 1, Grade 10, Class A"
+                placeholder={t("classesAdmin.namePh")}
                 placeholderTextColor="#9CA3AF"
                 value={className}
                 onChangeText={handleChangeText}
@@ -240,11 +242,11 @@ export default function EditClass() {
                   <Text style={styles.fieldErrorText}>{fieldError}</Text>
                 </View>
               ) : isNoChange ? (
-                <Text style={styles.noChangeHint}>This is already the current name.</Text>
+                <Text style={styles.noChangeHint}>{t("classesAdmin.sameName")}</Text>
               ) : hasChanges ? (
                 <Text style={styles.changedHint}>✎ Unsaved changes</Text>
               ) : (
-                <Text style={styles.hint}>Use a clear, recognisable name for this class.</Text>
+                <Text style={styles.hint}>{t("classesAdmin.nameHint")}</Text>
               )}
               <Text style={[
                 styles.charCount,
@@ -268,7 +270,7 @@ export default function EditClass() {
           ) : (
             <>
               <Ionicons name="save-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Save Changes</Text>
+              <Text style={styles.submitButtonText}>{t("classesAdmin.saveChanges")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -280,7 +282,7 @@ export default function EditClass() {
           disabled={saving}
         >
           <Text style={[styles.discardText, hasChanges && styles.discardTextDanger]}>
-            {hasChanges ? "Discard Changes" : "Go Back"}
+            {hasChanges ? t("classesAdmin.discardTitle") : t("common.goBack")}
           </Text>
         </TouchableOpacity>
       </ScrollView>

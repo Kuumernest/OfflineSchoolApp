@@ -6,7 +6,8 @@ import {
   Info,
   ChevronRight,
 } from "lucide-react";
-import { type SystemHealthStats } from "@/services/dashboard.service";
+import { type SystemHealthStats } from "@/services/dashboard.service";
+import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -17,7 +18,9 @@ type AlertSeverity = "danger" | "warning" | "info";
 export interface DashAlert {
   id:      string;
   type:    AlertSeverity;
-  message: string;
+  /** Resolved by AlertsPanel so the text follows the active language. */
+  messageKey: string;
+  params?: Record<string, unknown>;
   route:   string;
 }
 
@@ -34,7 +37,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     list.push({
       id:      "stale",
       type:    "danger",
-      message: `${n} application${n > 1 ? "s" : ""} pending over 3 days`,
+      messageKey: "alerts.appsPending", params: { count: n },
       // The admissions page is mounted under /students, not at the root. The
       // bare "/admissions" this used to point at matched no route, so acting
       // on the most urgent alert on the dashboard landed on the 404 page.
@@ -47,7 +50,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     list.push({
       id:      "unassigned",
       type:    "warning",
-      message: `${n} teacher${n > 1 ? "s" : ""} not yet assigned`,
+      messageKey: "alerts.teachersUnassigned", params: { count: n },
       route:   "/teachers/assignments",
     });
   }
@@ -57,7 +60,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     list.push({
       id:      "missing-subjects",
       type:    "warning",
-      message: `${n} class${n > 1 ? "es" : ""} missing subjects`,
+      messageKey: "alerts.classesNoSubjects", params: { count: n },
       route:   "/classes?tab=subjects",
     });
   }
@@ -67,7 +70,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     list.push({
       id:      "conflicts",
       type:    "danger",
-      message: `${n} timetable conflict${n > 1 ? "s" : ""} detected`,
+      messageKey: "alerts.timetableConflicts", params: { count: n },
       route:   "/timetable",
     });
   }
@@ -81,7 +84,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
       list.push({
         id:      "timetable-incomplete",
         type:    "info",
-        message: `${n} class${n > 1 ? "es" : ""} without timetable (${pct}%)`,
+        messageKey: "alerts.classesNoTimetable", params: { count: n, pct },
         route:   "/timetable",
       });
     }
@@ -101,7 +104,7 @@ export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
     list.push({
       id:      "no-assignments",
       type:    "warning",
-      message: "No teacher assignments yet — assign teachers to subjects",
+      messageKey: "alerts.noAssignments",
       route:   "/teachers/assignments",
     });
   }
@@ -157,6 +160,7 @@ function AlertRow({
   alert:   DashAlert;
   onClick: () => void;
 }) {
+  const { t } = useTranslation();
   const s = SEVERITY_STYLES[alert.type];
 
   return (
@@ -175,7 +179,7 @@ function AlertRow({
         aria-hidden="true"
       />
       <span className={`flex-1 text-sm ${s.text}`}>
-        {alert.message}
+        {t(alert.messageKey, alert.params)}
       </span>
       <ChevronRight
         className={`h-4 w-4 shrink-0 ${s.chevron}`}
@@ -192,6 +196,7 @@ function AlertRow({
 // ─────────────────────────────────────────────────────────
 
 export default function AlertsPanel({ alerts }: { alerts: DashAlert[] }) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
 
   if (alerts.length === 0) return null;

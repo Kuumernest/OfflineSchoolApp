@@ -21,7 +21,9 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { PeriodsService } from "../../../src/services/periods.service";
 
-const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown, isFirst, isLast }) => (
+const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown, isFirst, isLast }) => {
+                                const { t } = useTranslation();
+                                return (
   <View style={[styles.card, !period.isActive && styles.cardInactive]}>
     <View style={[styles.cardAccent, !period.isActive && styles.cardAccentInactive]} />
 
@@ -32,12 +34,12 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
         </Text>
         {period.isBreak && (
           <View style={styles.breakBadge}>
-            <Text style={styles.breakBadgeText}>Break</Text>
+            <Text style={styles.breakBadgeText}>{t("timetable.break")}</Text>
           </View>
         )}
         {!period.isActive && (
           <View style={styles.inactiveBadge}>
-            <Text style={styles.inactiveBadgeText}>Inactive</Text>
+            <Text style={styles.inactiveBadgeText}>{t("common.inactive")}</Text>
           </View>
         )}
       </View>
@@ -98,9 +100,11 @@ const PeriodCard = React.memo(({ period, onEdit, onToggle, onMoveUp, onMoveDown,
       </TouchableOpacity>
     </View>
   </View>
-));
+);
+                              });
 
 export default function PeriodsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const isMountedRef = useRef(true);
 
@@ -126,7 +130,7 @@ export default function PeriodsScreen() {
     } catch (err) {
       console.error("Failed to load periods:", err);
       if (isMountedRef.current) {
-        setError("Failed to load periods. Pull down to retry.");
+        setError(t("periodsAdmin.loadFailed"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -142,21 +146,21 @@ export default function PeriodsScreen() {
 
   const handleToggle = useCallback(async (id, currentlyActive) => {
     Alert.alert(
-      currentlyActive ? "Deactivate Period" : "Activate Period",
+      currentlyActive ? t("periodsAdmin.deactivateTitle") : t("periodsAdmin.activateTitle"),
       currentlyActive
-        ? "This period will be hidden from the timetable builder."
-        : "This period will appear in the timetable builder.",
+        ? t("periodsAdmin.deactivateBody")
+        : t("periodsAdmin.activateBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: currentlyActive ? "Deactivate" : "Activate",
+          text: currentlyActive ? t("periodsAdmin.deactivate") : t("periodsAdmin.activate"),
           style: currentlyActive ? "destructive" : "default",
           onPress: async () => {
             try {
               await PeriodsService.toggleActive(id);
               if (isMountedRef.current) loadPeriods();
             } catch (err) {
-              Alert.alert("Error", err.message || "Failed to update period");
+              Alert.alert(t("periodsAdmin.errorTitle"), err.message || t("periodsAdmin.updateFailed"));
             }
           },
         },
@@ -169,7 +173,7 @@ export default function PeriodsScreen() {
       await PeriodsService.reorder(id, direction);
       if (isMountedRef.current) loadPeriods();
     } catch (err) {
-      Alert.alert("Error", "Failed to reorder period");
+      Alert.alert(t("periodsAdmin.errorTitle"), t("periodsAdmin.reorderFailed"));
     }
   }, [loadPeriods]);
 
@@ -184,7 +188,7 @@ export default function PeriodsScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading periods…</Text>
+        <Text style={styles.loadingText}>{t("periodsAdmin.loadingPeriods")}</Text>
       </View>
     );
   }
@@ -202,7 +206,7 @@ export default function PeriodsScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Periods</Text>
+          <Text style={styles.headerTitle}>{t("periodsAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>
             {periods.filter((p) => p.isActive).length} active
             {periods.length > 0 ? ` of ${periods.length}` : ""}
@@ -239,8 +243,7 @@ export default function PeriodsScreen() {
         <View style={styles.infoBanner}>
           <Ionicons name="information-circle-outline" size={16} color="#4F46E5" />
           <Text style={styles.infoBannerText}>
-            Periods define the time slots available in the timetable builder.
-            Drag to reorder, tap the eye to hide from the builder.
+            {t("periodsAdmin.infoBanner")}
           </Text>
         </View>
 
@@ -249,9 +252,9 @@ export default function PeriodsScreen() {
             <View style={styles.emptyIconWrap}>
               <Ionicons name="time-outline" size={36} color="#9CA3AF" />
             </View>
-            <Text style={styles.emptyTitle}>No periods yet</Text>
+            <Text style={styles.emptyTitle}>{t("periodsAdmin.noPeriodsYet")}</Text>
             <Text style={styles.emptySubtitle}>
-              Add your first period to start building timetables.
+              {t("periodsAdmin.noPeriodsHint")}
             </Text>
             <TouchableOpacity
               style={styles.emptyButton}
@@ -259,7 +262,7 @@ export default function PeriodsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.emptyButtonText}>Add First Period</Text>
+              <Text style={styles.emptyButtonText}>{t("periodsAdmin.addFirst")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -283,7 +286,7 @@ export default function PeriodsScreen() {
               activeOpacity={0.8}
             >
               <Ionicons name="add-circle-outline" size={20} color="#4F46E5" />
-              <Text style={styles.addMoreText}>Add Another Period</Text>
+              <Text style={styles.addMoreText}>{t("periodsAdmin.addAnother")}</Text>
             </TouchableOpacity>
           </>
         )}
@@ -530,3 +533,4 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

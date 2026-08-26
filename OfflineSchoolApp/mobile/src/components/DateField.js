@@ -26,6 +26,7 @@ import {
 } from "react-native";
 import DateTimePicker      from "@react-native-community/datetimepicker";
 import { Ionicons }        from "@expo/vector-icons";
+import { useTranslation } from "../i18n/useTranslation";
 
 const C = {
   primary: "#4F46E5",
@@ -73,6 +74,7 @@ export default function DateField({
   maximumDate,
   minimumDate,
 }) {
+  const { t } = useTranslation();
   const [show,     setShow]     = useState(false);
   const [tempDate, setTempDate] = useState(() =>
     value ? parseYMD(value) : new Date()
@@ -167,11 +169,11 @@ export default function DateField({
         <View style={dp.modalSheet}>
           <View style={dp.sheetHeader}>
             <TouchableOpacity onPress={dismiss} hitSlop={8}>
-              <Text style={dp.cancelText}>Cancel</Text>
+              <Text style={dp.cancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <Text style={dp.sheetTitle}>{label}</Text>
             <TouchableOpacity onPress={confirmIOS} hitSlop={8}>
-              <Text style={dp.doneText}>Done</Text>
+              <Text style={dp.doneText}>{t("common.done")}</Text>
             </TouchableOpacity>
           </View>
           <DateTimePicker

@@ -4,13 +4,15 @@ import { Stack } from "expo-router";
 import { Alert, View, StyleSheet } from "react-native";
 import { useUploadQueue } from "../../src/hooks/useUploadQueue";
 import SyncStatusBar from "../../src/components/SyncStatusBar";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 export default function TeacherLayout() {
+  const { t } = useTranslation();
   useUploadQueue({
     onComplete: (summary) => {
       if (summary.succeeded > 0) {
         Alert.alert(
-          "Uploads Complete",
+          t("teacherLayout.uploadsDone"),
           `${summary.succeeded} queued upload${
             summary.succeeded > 1 ? "s" : ""
           } synced successfully.`
@@ -19,7 +21,7 @@ export default function TeacherLayout() {
 
       if (summary.failed > 0) {
         Alert.alert(
-          "Some Uploads Failed",
+          t("teacherLayout.uploadsFailed"),
           `${summary.failed} upload${
             summary.failed > 1 ? "s" : ""
           } could not be synced. They will retry next time.`

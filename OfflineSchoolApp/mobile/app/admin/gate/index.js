@@ -96,7 +96,7 @@ export default function GateScannerScreen() {
 
       if (!r.ok) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        setResult({ kind: "unknown" });
+        setResult({ kind: "unknown", queued: r.queued === true });
       } else if (r.duplicate) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
         setResult({ kind: "duplicate", name: r.student.student_name, direction: r.direction });
@@ -200,7 +200,10 @@ export default function GateScannerScreen() {
               </Text>
             ) : null}
             {result.kind === "unknown" && (
-              <Text style={styles.resultMeta}>{t("gate.unknownHint")}</Text>
+              <Text style={styles.resultMeta}>
+                {t("gate.unknownHint")}
+                {result.queued ? ` ${t("gate.unknownQueued")}` : ""}
+              </Text>
             )}
           </View>
         )}

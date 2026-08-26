@@ -36,11 +36,14 @@ const ALERT_PRIORITY_MAP: Record<string, Notification["priority"]> = {
 };
 
 // ─── Alert → Notification ─────────────────────────────────────────────────────
-function alertToNotification(alert: DashAlert): Notification {
+function alertToNotification(
+  alert: DashAlert,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): Notification {
   return {
     _id:       `alert-${alert.id}`,
-    title:     getAlertTitle(alert),
-    body:      alert.message,
+    title:     getAlertTitle(alert, t),
+    body:      t(alert.messageKey, alert.params),
     type:      "alert",
     priority:  ALERT_PRIORITY_MAP[alert.type] ?? "normal",
     isRead:    false, // Alerts are always live — never "read"
@@ -49,15 +52,15 @@ function alertToNotification(alert: DashAlert): Notification {
   };
 }
 
-function getAlertTitle(alert: DashAlert): string {
+function getAlertTitle(alert: DashAlert, t: (key: string, params?: Record<string, unknown>) => string): string {
   switch (alert.id) {
-    case "stale":                return "Pending Applications";
-    case "unassigned":           return "Unassigned Teachers";
-    case "missing-subjects":     return "Missing Subjects";
-    case "conflicts":            return "Timetable Conflicts";
-    case "timetable-incomplete": return "Incomplete Timetables";
-    case "no-assignments":       return "No Teacher Assignments";
-    default:                     return "System Alert";
+    case "stale":                return t("alerts.titleAppsPending");
+    case "unassigned":           return t("alerts.titleUnassigned");
+    case "missing-subjects":     return t("alerts.titleMissingSubjects");
+    case "conflicts":            return t("alerts.titleConflicts");
+    case "timetable-incomplete": return t("alerts.titleNoTimetable");
+    case "no-assignments":       return t("alerts.titleNoAssignments");
+    default:                     return t("alerts.titleGeneric");
   }
 }
 
@@ -77,11 +80,14 @@ function normaliseNotification(raw: Record<string, unknown>): Notification {
 }
 
 // ─── Fetch system alerts ──────────────────────────────────────────────────────
-async function fetchSystemAlerts(schoolId: string): Promise<Notification[]> {
+async function fetchSystemAlerts(
+  schoolId: string,
+  t: (key: string, params?: Record<string, unknown>) => string,
+): Promise<Notification[]> {
   try {
     const stats: SystemHealthStats = await fetchSystemHealth(schoolId);
     const alerts: DashAlert[]      = deriveAlerts(stats);
-    return alerts.map(alertToNotification);
+    return alerts.map((a) => alertToNotification(a, t));
   } catch (err) {
     console.warn("[Notifications] System alerts fetch failed:", err);
     return [];
@@ -130,11 +136,13 @@ const PRIORITY_WEIGHT: Record<Notification["priority"], number> = {
 export async function fetchNotifications(
   schoolId: string,
   limit = 20,
+  /** Optional so the service stays usable outside React. */
+  t: (key: string, params?: Record<string, unknown>) => string = (k) => k,
 ): Promise<NotificationListResponse> {
   // Fetch all sources in parallel
   const [announcementNotifs, alertNotifs] = await Promise.all([
     fetchAnnouncementNotifications(schoolId, limit),
-    fetchSystemAlerts(schoolId),
+    fetchSystemAlerts(schoolId, t),
   ]);
 
   // Merge: alerts first, then announcements

@@ -99,6 +99,15 @@ const lookup = async (db, token) =>
     .catch(() => null);
 
 /**
+ * Unknown tokens already queued this session, so an operator holding an
+ * unrecognised card to the camera queues one scan, not one per re-arm. Kept in
+ * memory rather than in gate_events: an unknown scan has no student to hang a
+ * row on, and a guessed direction written locally would be asserted to the
+ * server by the backfill as though this device had derived it.
+ */
+const unknownQueuedAt = new Map();
+
+/**
  * Record a scan.
  *
  * @returns {Promise<{ok, student, direction, at, duplicate, reason}>}
@@ -113,10 +122,24 @@ export const scan = async ({ schoolId, token, station = null }) => {
   const known = await lookup(db, value);
   if (!known) {
     // Not refused outright: a card issued after this device last synced is
-    // unknown here but valid at the server. The scan is still recorded and
-    // sent, and the screen says the name is unavailable rather than turning
-    // the child away.
-    return { ok: false, reason: "unknown", token: value };
+    // unknown here but valid at the server. The scan is queued and sent —
+    // with no direction, so the server derives it from the history this
+    // device could not see — and the screen says the name is unavailable
+    // rather than turning the child away.
+    const lastQueued = unknownQueuedAt.get(value);
+    if (lastQueued && Date.now() - lastQueued < DEBOUNCE_SECONDS * 1000) {
+      return { ok: false, reason: "unknown", queued: true, token: value };
+    }
+    unknownQueuedAt.set(value, Date.now());
+
+    const id = generateUUID();
+    await MutationQueue.enqueue({
+      entityKey: `gateScan:${id}`,
+      method:    "POST",
+      endpoint:  "/gate/scan",
+      payload:   { _id: id, schoolId, token: value, at: new Date().toISOString(), station },
+    });
+    return { ok: false, reason: "unknown", queued: true, token: value };
   }
 
   const now  = new Date();

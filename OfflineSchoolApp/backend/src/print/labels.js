@@ -83,6 +83,10 @@ const LABELS = {
       cheque: "Cheque", waiver: "Waiver", other: "Other",
     },
 
+    // ── Verification ──
+    verifyTitle: "Verify this document",
+    verifyHint:  "Scan the code, or enter",
+
     // ── ID card ──
     idCard:      "Student identity card",
     affixPhoto:  "Affix photo here",
@@ -152,6 +156,9 @@ const LABELS = {
       cash: "Espèces", mobile_money: "Mobile money", bank: "Virement bancaire",
       cheque: "Chèque", waiver: "Remise", other: "Autre",
     },
+
+    verifyTitle: "Vérifier ce document",
+    verifyHint:  "Scannez le code, ou saisissez",
 
     idCard:      "Carte d'identité scolaire",
     affixPhoto:  "Coller la photo ici",

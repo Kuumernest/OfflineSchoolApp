@@ -83,10 +83,10 @@ const PRIORITY_VARIANT: Record<Priority, "default" | "info" | "warning" | "dange
 };
 
 const LIFECYCLE_LABEL = {
-  live:      { label: "Live",      variant: "success" as const },
-  scheduled: { label: "Scheduled", variant: "info" as const },
-  expired:   { label: "Expired",   variant: "default" as const },
-  inactive:  { label: "Inactive",  variant: "default" as const },
+  live:      { labelKey: "annLifecycle.live",      variant: "success" as const },
+  scheduled: { labelKey: "annLifecycle.scheduled", variant: "info" as const },
+  expired:   { labelKey: "annLifecycle.expired",   variant: "default" as const },
+  inactive:  { labelKey: "common.inactive",        variant: "default" as const },
 };
 
 interface ComposerState {
@@ -367,7 +367,7 @@ export default function AnnouncementsPage() {
                           {a.title}
                         </h3>
                         <Badge label={PRIORITY_LABELS[a.priority]} variant={PRIORITY_VARIANT[a.priority]} />
-                        <Badge label={meta.label} variant={meta.variant} />
+                        <Badge label={t(meta.labelKey)} variant={meta.variant} />
                       </div>
 
                       <p className="mt-1.5 text-sm text-gray-600 line-clamp-2">

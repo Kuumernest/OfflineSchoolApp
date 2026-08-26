@@ -56,13 +56,14 @@ const rateColor = (rate) => {
 };
 
 const DATE_PRESETS = [
-  { label: "Today",      start: todayStr(),    end: todayStr()    },
-  { label: "This Month", start: monthStart(0), end: monthEnd(0)   },
-  { label: "Last Month", start: monthStart(1), end: monthEnd(1)   },
-  { label: "Last 3 Mo",  start: monthStart(2), end: monthEnd(0)   },
+  { labelKey: "attAdmin.today",      start: todayStr(),    end: todayStr()    },
+  { labelKey: "attAdmin.repThisMonth", start: monthStart(0), end: monthEnd(0)   },
+  { labelKey: "attAdmin.repLastMonth", start: monthStart(1), end: monthEnd(1)   },
+  { labelKey: "attAdmin.repLast3Mo",  start: monthStart(2), end: monthEnd(0)   },
 ];
 
 const buildTeacherSummaries = (records, teacherMap) => {
+  const { t } = useTranslation();
   const byTeacher = {};
 
   for (const r of records) {
@@ -96,7 +97,7 @@ const buildTeacherSummaries = (records, teacherMap) => {
           : null)             ||
         r.firstName           ||
         r.first_name          ||
-        "Unknown Teacher";
+        t("attAdmin.unknownTeacher");
 
       const email =
         info.email      ||
@@ -160,6 +161,7 @@ const chipS = StyleSheet.create({
 });
 
 const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
+  const { t } = useTranslation();
   const { summary, rate } = teacher;
   const color = rateColor(rate);
 
@@ -181,7 +183,7 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
             {teacher.teacherName}
           </Text>
           <Text style={cardS.email} numberOfLines={1}>
-            {teacher.teacherEmail || "No email"}
+            {teacher.teacherEmail || t("attAdmin.noEmail")}
           </Text>
         </View>
 
@@ -199,11 +201,11 @@ const TeacherReportCard = React.memo(({ teacher, isExpanded, onPress }) => {
       </View>
 
       <View style={cardS.stats}>
-        <StatChip label="Present"  value={summary?.present  ?? 0} color="#059669" />
-        <StatChip label="Absent"   value={summary?.absent   ?? 0} color="#DC2626" />
-        <StatChip label="Late"     value={summary?.late     ?? 0} color="#D97706" />
-        <StatChip label="Leave"    value={summary?.on_leave ?? 0} color="#6B7280" />
-        <StatChip label="Total"    value={summary?.total    ?? 0} color="#4F46E5" />
+        <StatChip label={t("attStatus.present")}  value={summary?.present  ?? 0} color="#059669" />
+        <StatChip label={t("attStatus.absent")}   value={summary?.absent   ?? 0} color="#DC2626" />
+        <StatChip label={t("attStatus.late")}     value={summary?.late     ?? 0} color="#D97706" />
+        <StatChip label={t("attAdmin.leaveShort")}    value={summary?.on_leave ?? 0} color="#6B7280" />
+        <StatChip label={t("common.total")}    value={summary?.total    ?? 0} color="#4F46E5" />
       </View>
 
       <View style={cardS.barBg}>
@@ -281,11 +283,12 @@ const STATUS_COLORS = {
 };
 
 const TeacherDetailPanel = React.memo(({ teacher }) => {
+  const { t } = useTranslation();
   if (!teacher?.records?.length) {
     return (
       <View style={detailS.empty}>
         <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
-        <Text style={detailS.emptyText}>No records in this period</Text>
+        <Text style={detailS.emptyText}>{t("attAdmin.noRecordsPeriod")}</Text>
       </View>
     );
   }
@@ -363,6 +366,7 @@ const detailS = StyleSheet.create({
 });
 
 const SummaryBar = ({ teachers }) => {
+  const { t } = useTranslation();
   const totals = useMemo(() => {
     const t = { present: 0, absent: 0, late: 0, on_leave: 0, total: 0 };
     for (const teacher of teachers) {
@@ -393,18 +397,18 @@ const SummaryBar = ({ teachers }) => {
 
       <View style={summaryS.pills}>
         {[
-          { label: "Present",  val: totals.present,  color: "#059669" },
-          { label: "Absent",   val: totals.absent,   color: "#DC2626" },
-          { label: "Late",     val: totals.late,     color: "#D97706" },
-          { label: "Leave",    val: totals.on_leave, color: "#6B7280" },
-          { label: "Total",    val: totals.total,    color: "#4F46E5" },
+          { labelKey: "attStatus.present",  val: totals.present,  color: "#059669" },
+          { labelKey: "attStatus.absent",   val: totals.absent,   color: "#DC2626" },
+          { labelKey: "attStatus.late",     val: totals.late,     color: "#D97706" },
+          { labelKey: "attAdmin.leaveShort",    val: totals.on_leave, color: "#6B7280" },
+          { labelKey: "common.total",    val: totals.total,    color: "#4F46E5" },
         ].map((p) => (
           <View
-            key={p.label}
+            key={p.labelKey}
             style={[summaryS.pill, { backgroundColor: p.color + "10" }]}
           >
             <Text style={[summaryS.pillVal, { color: p.color }]}>{p.val}</Text>
-            <Text style={summaryS.pillLbl}>{p.label}</Text>
+            <Text style={summaryS.pillLbl}>{t(p.labelKey)}</Text>
           </View>
         ))}
       </View>
@@ -468,6 +472,7 @@ const summaryS = StyleSheet.create({
 });
 
 export default function TeacherAttendanceReportScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -532,7 +537,7 @@ export default function TeacherAttendanceReportScreen() {
 
     } catch (err) {
       console.error("Teacher report load failed:", err.message);
-      setError("Failed to load report. Pull down to retry.");
+      setError(t("attAdmin.reportLoadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -574,7 +579,7 @@ export default function TeacherAttendanceReportScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={styles.loadingText}>Loading teacher report…</Text>
+        <Text style={styles.loadingText}>{t("attAdmin.loadingTeacherReport")}</Text>
       </View>
     );
   }
@@ -593,9 +598,9 @@ export default function TeacherAttendanceReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Teacher Report</Text>
+          <Text style={styles.headerTitle}>{t("attAdmin.teacherReportTitle")}</Text>
           <Text style={styles.headerSub}>
-            {selectedPreset.label} · {filtered.length} teacher
+            {t(selectedPreset.labelKey)} · {filtered.length} teacher
             {filtered.length !== 1 ? "s" : ""}
           </Text>
         </View>
@@ -617,7 +622,7 @@ export default function TeacherAttendanceReportScreen() {
         >
           {DATE_PRESETS.map((p, i) => (
             <TouchableOpacity
-              key={p.label}
+              key={p.labelKey}
               style={[
                 styles.presetBtn,
                 preset === i && styles.presetBtnActive,
@@ -631,7 +636,7 @@ export default function TeacherAttendanceReportScreen() {
                   preset === i && styles.presetTextActive,
                 ]}
               >
-                {p.label}
+                {t(p.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -643,7 +648,7 @@ export default function TeacherAttendanceReportScreen() {
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search teacher name or email…"
+            placeholder={t("attAdmin.searchTeacherReport")}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -661,8 +666,8 @@ export default function TeacherAttendanceReportScreen() {
       <View style={styles.sortRow}>
         {[
           { key: "name",   label: "A – Z"      },
-          { key: "rate",   label: "By Rate"     },
-          { key: "absent", label: "Most Absent" },
+          { key: "rate",   labelKey: "attAdmin.sortByRate"     },
+          { key: "absent", labelKey: "attAdmin.sortMostAbsent" },
         ].map((s) => (
           <TouchableOpacity
             key={s.key}
@@ -679,7 +684,7 @@ export default function TeacherAttendanceReportScreen() {
                 sortBy === s.key && styles.sortTextActive,
               ]}
             >
-              {s.label}
+              {t(s.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -720,14 +725,14 @@ export default function TeacherAttendanceReportScreen() {
             <Ionicons name="person-outline" size={56} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>
               {error
-                ? "Failed to load report"
+                ? t("attAdmin.reportLoadFailedShort")
                 : search
-                ? "No teachers match your search"
-                : "No attendance records found"}
+                ? t("attAdmin.noTeachersMatch")
+                : t("attAdmin.noRecords")}
             </Text>
             <Text style={styles.emptySub}>
               {!error && !search
-                ? "Mark teacher attendance first, then check back here"
+                ? t("attAdmin.markTeachersFirst")
                 : ""}
             </Text>
             {!!error && (
@@ -736,7 +741,7 @@ export default function TeacherAttendanceReportScreen() {
                 onPress={() => loadReport()}
                 activeOpacity={0.8}
               >
-                <Text style={styles.retryText}>Try Again</Text>
+                <Text style={styles.retryText}>{t("attAdmin.tryAgain")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -877,3 +882,4 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 });
+import { useTranslation } from "../../../../src/i18n/useTranslation";

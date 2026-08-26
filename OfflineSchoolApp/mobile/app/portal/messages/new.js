@@ -19,6 +19,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const C = {
   ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
@@ -26,6 +27,7 @@ const C = {
 };
 
 export default function PortalNewMessageScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const [query,   setQuery]   = useState("");
@@ -43,8 +45,8 @@ export default function PortalNewMessageScreen() {
       setPeople([]);
       setError(
         err?.response
-          ? err.response.data?.message || "Could not load the list."
-          : "Starting a new conversation needs a connection."
+          ? err.response.data?.message || t("msgMobile.couldNotLoadList")
+          : t("msgMobile.needsConnection")
       );
     } finally {
       setLoading(false);
@@ -53,8 +55,8 @@ export default function PortalNewMessageScreen() {
 
   // Debounced so a fast typist does not fire a request per keystroke.
   useEffect(() => {
-    const t = setTimeout(() => load(query.trim()), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => load(query.trim()), 250);
+    return () => clearTimeout(timer);
   }, [query, load]);
 
   const pick = useCallback(async (r) => {
@@ -67,8 +69,8 @@ export default function PortalNewMessageScreen() {
       // A 403 carries the policy's own words — show them, because they
       // usually name a school setting rather than a fault.
       Alert.alert(
-        "Cannot start that conversation",
-        err?.response?.data?.message || "Please try again."
+        t("msgMobile.cannotStart"),
+        err?.response?.data?.message || t("msgMobile.tryAgain")
       );
     } finally {
       setOpening(null);
@@ -110,7 +112,7 @@ export default function PortalNewMessageScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="close" size={23} color={C.ink} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>New message</Text>
+        <Text style={s.headerTitle}>{t("msgMobile.newMessage")}</Text>
         <View style={s.iconBtn} />
       </View>
 
@@ -119,7 +121,7 @@ export default function PortalNewMessageScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search teachers or the office…"
+          placeholder={t("msgMobile.searchStaffPh")}
           placeholderTextColor={C.inkFaint}
           style={s.search}
           autoFocus
@@ -140,8 +142,8 @@ export default function PortalNewMessageScreen() {
             !error ? (
               <Text style={s.empty}>
                 {query.trim()
-                  ? "Nobody matches that name."
-                  : "There is nobody available to write to."}
+                  ? t("msgMobile.noMatch")
+                  : t("msgMobile.nobodyToWrite")}
               </Text>
             ) : null
           }

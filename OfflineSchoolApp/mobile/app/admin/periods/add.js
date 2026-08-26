@@ -26,6 +26,7 @@ import { PeriodsService } from "../../../src/services/periods.service";
 import { useAuthStore } from "../../../src/store/auth.store";
 
 export default function AddPeriod() {
+  const { t } = useTranslation();
   const router = useRouter();
   const isMountedRef = useRef(true);
   const schoolId = useAuthStore((s) => s.user?.schoolId);
@@ -54,28 +55,28 @@ export default function AddPeriod() {
     const timeRegex = /^\d{2}:\d{2}$/;
 
     if (!name.trim()) {
-      e.name = "Period name is required";
+      e.name = t("periodsAdmin.nameRequired");
     } else if (name.trim().length < 2) {
-      e.name = "Name must be at least 2 characters";
+      e.name = t("periodsAdmin.nameTooShort");
     }
 
     if (!startTime) {
-      e.startTime = "Start time is required";
+      e.startTime = t("periodsAdmin.startRequired");
     } else if (!timeRegex.test(startTime)) {
-      e.startTime = "Use HH:MM format (e.g. 08:00)";
+      e.startTime = t("periodsAdmin.timeFormatStart");
     }
 
     if (!endTime) {
-      e.endTime = "End time is required";
+      e.endTime = t("periodsAdmin.endRequired");
     } else if (!timeRegex.test(endTime)) {
-      e.endTime = "Use HH:MM format (e.g. 08:45)";
+      e.endTime = t("periodsAdmin.timeFormatEnd");
     }
 
     if (startTime && endTime && timeRegex.test(startTime) && timeRegex.test(endTime)) {
       const [sh, sm] = startTime.split(":").map(Number);
       const [eh, em] = endTime.split(":").map(Number);
       if (eh * 60 + em <= sh * 60 + sm) {
-        e.endTime = "End time must be after start time";
+        e.endTime = t("periodsAdmin.endAfterStart");
       }
     }
 
@@ -99,11 +100,11 @@ export default function AddPeriod() {
       if (!isMountedRef.current) return;
 
       Alert.alert(
-        "Period Created",
+        t("periodsAdmin.createdTitle"),
         `"${name.trim()}" (${startTime}–${endTime}) has been added.`,
         [
           {
-            text: "Add Another",
+            text: t("periodsAdmin.addAnotherBtn"),
             onPress: () => {
               setName("");
               setStartTime("");
@@ -113,7 +114,7 @@ export default function AddPeriod() {
             },
           },
           {
-            text: "Done",
+            text: t("common.done"),
             style: "default",
             onPress: () => router.back(),
           },
@@ -122,8 +123,8 @@ export default function AddPeriod() {
     } catch (err) {
       if (!isMountedRef.current) return;
       Alert.alert(
-        "Error",
-        err.response?.data?.message || err.message || "Failed to create period"
+        t("periodsAdmin.errorTitle"),
+        err.response?.data?.message || err.message || t("periodsAdmin.createFailed")
       );
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -148,8 +149,8 @@ export default function AddPeriod() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Add Period</Text>
-          <Text style={styles.headerSubtitle}>Define a new time slot</Text>
+          <Text style={styles.headerTitle}>{t("periodsAdmin.addTitle")}</Text>
+          <Text style={styles.headerSubtitle}>{t("periodsAdmin.addSubtitle")}</Text>
         </View>
       </View>
 
@@ -162,17 +163,17 @@ export default function AddPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Period Name <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.periodName")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.name && styles.inputError]}>
               <Ionicons name="bookmark-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Period 1, Morning Break, Lunch"
+                placeholder={t("periodsAdmin.namePh")}
                 placeholderTextColor="#9CA3AF"
                 value={name}
-                onChangeText={(t) => {
-                  setName(t);
+                onChangeText={(v) => {
+                  setName(v);
                   if (errors.name) setErrors((e) => ({ ...e, name: null }));
                 }}
                 autoCapitalize="words"
@@ -186,7 +187,7 @@ export default function AddPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Start Time <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.startTime")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.startTime && styles.inputError]}>
               <Ionicons name="play-circle-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
@@ -195,8 +196,8 @@ export default function AddPeriod() {
                 placeholder="08:00"
                 placeholderTextColor="#9CA3AF"
                 value={startTime}
-                onChangeText={(t) => {
-                  setStartTime(formatTimeInput(t));
+                onChangeText={(v) => {
+                  setStartTime(formatTimeInput(v));
                   if (errors.startTime) setErrors((e) => ({ ...e, startTime: null }));
                 }}
                 keyboardType="numeric"
@@ -213,7 +214,7 @@ export default function AddPeriod() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              End Time <Text style={styles.required}>*</Text>
+              {t("periodsAdmin.endTime")} <Text style={styles.required}>*</Text>
             </Text>
             <View style={[styles.inputWrapper, errors.endTime && styles.inputError]}>
               <Ionicons name="stop-circle-outline" size={18} color="#9CA3AF" style={styles.inputIcon} />
@@ -222,8 +223,8 @@ export default function AddPeriod() {
                 placeholder="08:45"
                 placeholderTextColor="#9CA3AF"
                 value={endTime}
-                onChangeText={(t) => {
-                  setEndTime(formatTimeInput(t));
+                onChangeText={(v) => {
+                  setEndTime(formatTimeInput(v));
                   if (errors.endTime) setErrors((e) => ({ ...e, endTime: null }));
                 }}
                 keyboardType="numeric"
@@ -234,15 +235,15 @@ export default function AddPeriod() {
             </View>
             {errors.endTime
               ? <Text style={styles.errorText}>{errors.endTime}</Text>
-              : <Text style={styles.hint}>Must be after start time</Text>
+              : <Text style={styles.hint}>{t("periodsAdmin.endHint")}</Text>
             }
           </View>
 
           <View style={styles.switchRow}>
             <View style={styles.switchInfo}>
-              <Text style={styles.label}>Mark as Break</Text>
+              <Text style={styles.label}>{t("periodsAdmin.markAsBreak")}</Text>
               <Text style={styles.hint}>
-                Break periods are shown differently in the timetable
+                {t("periodsAdmin.breakHint")}
               </Text>
             </View>
             <Switch
@@ -280,7 +281,7 @@ export default function AddPeriod() {
           ) : (
             <>
               <Ionicons name="add-circle-outline" size={20} color="#FFFFFF" />
-              <Text style={styles.submitText}>Create Period</Text>
+              <Text style={styles.submitText}>{t("periodsAdmin.createPeriod")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -291,7 +292,7 @@ export default function AddPeriod() {
           disabled={saving}
           activeOpacity={0.7}
         >
-          <Text style={styles.discardText}>Discard & Go Back</Text>
+          <Text style={styles.discardText}>{t("periodsAdmin.discardBack")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -387,3 +388,4 @@ const styles = StyleSheet.create({
   discardButton: { alignItems: "center", paddingVertical: 14, marginTop: 4 },
   discardText: { fontSize: 14, color: "#9CA3AF", fontWeight: "500" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

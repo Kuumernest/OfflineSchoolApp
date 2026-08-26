@@ -80,6 +80,45 @@ export const useRejectSubmission = (examId: string) => {
   });
 };
 
+// ─── UPDATE EXAM SUBJECT (coefficient, max score, pass mark) ─────────────────
+
+export const useUpdateExamSubject = (examId: string) => {
+  const qc        = useQueryClient();
+  const { toast } = useToast();
+  const schoolId  = useAuthStore((s) => s.user?.schoolId ?? "");
+
+  return useMutation({
+    mutationFn: (vars: {
+      examSubjectId: string;
+      weight?: number;
+      maxScore?: number;
+      passMark?: number;
+    }) =>
+      ExamService.updateExamSubject(examId, vars.examSubjectId, {
+        weight:   vars.weight,
+        maxScore: vars.maxScore,
+        passMark: vars.passMark,
+        schoolId,
+      }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["submissions", examId] });
+      // Marks already exist for this subject, so every computed average is now
+      // stale — say so, rather than letting the change look free.
+      toast(
+        data.reprocessRequired
+          ? {
+              title: "Saved — results need reprocessing",
+              message: "Marks exist for this subject. Run “Process results” so averages use the new setting.",
+              kind: "warning",
+            }
+          : { title: "Subject updated", kind: "success" }
+      );
+    },
+    onError: (e: Error) =>
+      toast({ title: e.message || "Failed to update subject", kind: "error" }),
+  });
+};
+
 // ─── SCORES ───────────────────────────────────────────────────────────────────
 
 export const useScores = (

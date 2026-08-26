@@ -24,6 +24,7 @@ import {
 import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
   getQuizzes,
   deleteQuiz,
@@ -41,9 +42,9 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "quizzes",   label: "Quizzes",   icon: "help-circle-outline" },
-  { id: "questions", label: "Questions", icon: "list-outline"         },
-  { id: "analytics", label: "Analytics", icon: "bar-chart-outline"    },
+  { id: "quizzes",   labelKey: "quizzes",   icon: "help-circle-outline" },
+  { id: "questions", labelKey: "questions", icon: "list-outline"         },
+  { id: "analytics", labelKey: "analytics", icon: "bar-chart-outline"    },
 ];
 
 const DIFFICULTY_COLORS = {
@@ -52,13 +53,16 @@ const DIFFICULTY_COLORS = {
   hard:   { bg: "#FEE2E2", text: "#DC2626" },
 };
 
-const QUESTION_TYPE_LABELS = {
-  multiple_choice:   "MCQ",
-  multiple_select:   "Multi",
-  true_false:        "T/F",
-  fill_in_the_blank: "Fill",
-  matching:          "Match",
+/** Question type → translation key under `quizList.questionType`. */
+const QUESTION_TYPE_KEYS = {
+  multiple_choice:   "mcq",
+  multiple_select:   "multi",
+  true_false:        "trueFalse",
+  fill_in_the_blank: "fill",
+  matching:          "matching",
 };
+
+const DIFFICULTIES = ["easy", "medium", "hard"];
 
 // ─────────────────────────────────────────────────────────────
 // UTILITIES
@@ -87,32 +91,36 @@ const formatDuration = (secs) => {
 // SMALL PURE COMPONENTS
 // ─────────────────────────────────────────────────────────────
 
-const TabBar = memo(({ active, onChange }) => (
-  <View style={styles.tabBar}>
-    {TABS.map((tab) => (
-      <TouchableOpacity
-        key={tab.id}
-        style={[styles.tab, active === tab.id && styles.tabActive]}
-        onPress={() => onChange(tab.id)}
-        activeOpacity={0.7}
-      >
-        <Ionicons
-          name={tab.icon}
-          size={16}
-          color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
-        />
-        <Text
-          style={[
-            styles.tabLabel,
-            active === tab.id && styles.tabLabelActive,
-          ]}
+const TabBar = memo(({ active, onChange }) => {
+  const { t } = useTranslation();
+
+  return (
+    <View style={styles.tabBar}>
+      {TABS.map((tab) => (
+        <TouchableOpacity
+          key={tab.id}
+          style={[styles.tab, active === tab.id && styles.tabActive]}
+          onPress={() => onChange(tab.id)}
+          activeOpacity={0.7}
         >
-          {tab.label}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-));
+          <Ionicons
+            name={tab.icon}
+            size={16}
+            color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
+          />
+          <Text
+            style={[
+              styles.tabLabel,
+              active === tab.id && styles.tabLabelActive,
+            ]}
+          >
+            {t(`quizList.tabs.${tab.labelKey}`)}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+});
 
 const SearchBar = memo(({ value, onChange, placeholder }) => (
   <View style={styles.searchBar}>
@@ -156,7 +164,10 @@ const QuizCard = memo(({
   onAnalytics,
   onDelete,
   onTogglePublish,
-}) => (
+}) => {
+  const { t } = useTranslation();
+
+  return (
   <View style={styles.quizCard}>
     <View style={styles.quizCardHeader}>
       <View style={{ flex: 1 }}>
@@ -169,7 +180,7 @@ const QuizCard = memo(({
         </Text>
         {!quiz.class_id && (
           <Text style={styles.quizMissingClass}>
-            ⚠ No class assigned — tap Edit to fix
+            {t("quizList.card.noClass")}
           </Text>
         )}
       </View>
@@ -194,7 +205,9 @@ const QuizCard = memo(({
             { color: quiz.is_published ? "#059669" : "#6B7280" },
           ]}
         >
-          {quiz.is_published ? "Live" : "Draft"}
+          {quiz.is_published
+            ? t("quizList.card.live")
+            : t("quizList.card.draft")}
         </Text>
       </TouchableOpacity>
     </View>
@@ -202,29 +215,33 @@ const QuizCard = memo(({
     <View style={styles.quizStats}>
       {[
         {
+          id:    "questions",
           icon:  "help-circle-outline",
           value: quiz.question_count ?? 0,
-          label: "Questions",
+          label: t("quizList.card.statQuestions"),
         },
         {
+          id:    "time",
           icon:  "time-outline",
           value: quiz.time_limit_minutes
             ? `${quiz.time_limit_minutes}m`
             : "—",
-          label: "Time",
+          label: t("quizList.card.statTime"),
         },
         {
+          id:    "responses",
           icon:  "people-outline",
           value: quiz.total_attempts ?? 0,
-          label: "Responses",
+          label: t("quizList.card.statResponses"),
         },
         {
+          id:    "avgScore",
           icon:  "stats-chart-outline",
           value: quiz.avg_score ? `${quiz.avg_score}%` : "—",
-          label: "Avg Score",
+          label: t("quizList.card.statAvgScore"),
         },
       ].map((stat) => (
-        <View key={stat.label} style={styles.quizStat}>
+        <View key={stat.id} style={styles.quizStat}>
           <Ionicons name={stat.icon} size={13} color="#9CA3AF" />
           <Text style={styles.quizStatValue}>{stat.value}</Text>
           <Text style={styles.quizStatLabel}>{stat.label}</Text>
@@ -240,7 +257,7 @@ const QuizCard = memo(({
         >
           <Ionicons name="create-outline" size={15} color="#4F46E5" />
           <Text style={[styles.quizActionText, { color: "#4F46E5" }]}>
-            Edit
+            {t("common.edit")}
           </Text>
         </TouchableOpacity>
 
@@ -250,10 +267,11 @@ const QuizCard = memo(({
         >
           <Ionicons name="people-outline" size={15} color="#7C3AED" />
           <Text style={[styles.quizActionText, { color: "#7C3AED" }]}>
-            Responses
             {(quiz.total_attempts ?? 0) > 0
-              ? ` (${quiz.total_attempts})`
-              : ""}
+              ? t("quizList.card.responsesCount", {
+                  count: quiz.total_attempts,
+                })
+              : t("quizList.card.responses")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -265,7 +283,7 @@ const QuizCard = memo(({
         >
           <Ionicons name="bar-chart-outline" size={15} color="#059669" />
           <Text style={[styles.quizActionText, { color: "#059669" }]}>
-            Analytics
+            {t("quizList.card.analytics")}
           </Text>
         </TouchableOpacity>
 
@@ -275,21 +293,29 @@ const QuizCard = memo(({
         >
           <Ionicons name="trash-outline" size={15} color="#DC2626" />
           <Text style={[styles.quizActionText, { color: "#DC2626" }]}>
-            Delete
+            {t("common.delete")}
           </Text>
         </TouchableOpacity>
       </View>
     </View>
   </View>
-));
+  );
+});
 
 // ─────────────────────────────────────────────────────────────
 // QUESTION CARD
 // ─────────────────────────────────────────────────────────────
 
 const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
+  const { t }  = useTranslation();
   const diff   = DIFFICULTY_COLORS[q.difficulty] || DIFFICULTY_COLORS.medium;
-  const tLabel = QUESTION_TYPE_LABELS[q.question_type] || q.question_type;
+  const typeKey = QUESTION_TYPE_KEYS[q.question_type];
+  const tLabel = typeKey
+    ? t(`quizList.questionType.${typeKey}`)
+    : q.question_type;
+  const diffLabel = DIFFICULTIES.includes(q.difficulty)
+    ? t(`quizList.difficulty.${q.difficulty}`)
+    : q.difficulty;
 
   return (
     <View style={styles.questionCard}>
@@ -301,7 +327,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
         </View>
         <View style={[styles.typeBadge, { backgroundColor: diff.bg }]}>
           <Text style={[styles.typeBadgeText, { color: diff.text }]}>
-            {q.difficulty}
+            {diffLabel}
           </Text>
         </View>
         {q.category_name && (
@@ -337,7 +363,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
       ))}
       {(q.options?.length || 0) > 3 && (
         <Text style={styles.moreOptions}>
-          +{q.options.length - 3} more options
+          {t("quizList.card.moreOptions", { count: q.options.length - 3 })}
         </Text>
       )}
 
@@ -345,7 +371,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
         <View style={styles.questionPoints}>
           <Ionicons name="star-outline" size={13} color="#D97706" />
           <Text style={styles.questionPointsText}>
-            {q.points ?? 1} pt{(q.points ?? 1) !== 1 ? "s" : ""}
+            {t("quizList.card.points", { count: q.points ?? 1 })}
           </Text>
         </View>
 
@@ -355,7 +381,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
         >
           <Ionicons name="create-outline" size={15} color="#4F46E5" />
           <Text style={[styles.questionActionText, { color: "#4F46E5" }]}>
-            Edit
+            {t("common.edit")}
           </Text>
         </TouchableOpacity>
 
@@ -365,7 +391,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
         >
           <Ionicons name="trash-outline" size={15} color="#DC2626" />
           <Text style={[styles.questionActionText, { color: "#DC2626" }]}>
-            Delete
+            {t("common.delete")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -378,6 +404,7 @@ const QuestionCard = memo(({ question: q, onEdit, onDelete }) => {
 // ─────────────────────────────────────────────────────────────
 
 const ResponsesModal = memo(({ quiz, onClose }) => {
+  const { t } = useTranslation();
   const [attempts, setAttempts] = useState([]);
   const [loading,  setLoading]  = useState(true);
 
@@ -432,9 +459,15 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
               {quiz?.title}
             </Text>
             <Text style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2 }}>
-              {attempts.length} response{attempts.length !== 1 ? "s" : ""}
-              {avgScore != null ? `  ·  avg ${avgScore}%` : ""}
-              {attempts.length > 0 ? `  ·  ${passCount} passed` : ""}
+              {t("quizList.responses.count", { count: attempts.length })}
+              {avgScore != null
+                ? `  ·  ${t("quizList.avgScoreInline", { score: avgScore })}`
+                : ""}
+              {attempts.length > 0
+                ? `  ·  ${t("quizList.responses.passed", {
+                    count: passCount,
+                  })}`
+                : ""}
             </Text>
           </View>
           <TouchableOpacity onPress={onClose} style={styles.modalClose}>
@@ -445,13 +478,15 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
         {loading ? (
           <View style={styles.centered}>
             <ActivityIndicator size="large" color="#4F46E5" />
-            <Text style={styles.loadingText}>Loading responses…</Text>
+            <Text style={styles.loadingText}>
+              {t("quizList.responses.loading")}
+            </Text>
           </View>
         ) : attempts.length === 0 ? (
           <EmptyState
             icon="people-outline"
-            title="No responses yet"
-            subtitle="Students haven't submitted this quiz yet"
+            title={t("quizList.responses.emptyTitle")}
+            subtitle={t("quizList.responses.emptySubtitle")}
           />
         ) : (
           <FlatList
@@ -475,7 +510,8 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       style={responsesStyles.studentName}
                       numberOfLines={1}
                     >
-                      {attempt.student_name || "Unknown Student"}
+                      {attempt.student_name ||
+                        t("quizList.responses.unknownStudent")}
                     </Text>
                     <Text
                       style={responsesStyles.studentMeta}
@@ -484,7 +520,9 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                       {[
                         attempt.student_email,
                         attempt.student_class,
-                        `Attempt ${attempt.attempt_number || 1}`,
+                        t("quizList.responses.attempt", {
+                          number: attempt.attempt_number || 1,
+                        }),
                       ]
                         .filter(Boolean)
                         .join("  ·  ")}
@@ -561,7 +599,9 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
                         color:      attempt.is_passed ? "#059669" : "#DC2626",
                       }}
                     >
-                      {attempt.is_passed ? "PASSED" : "FAILED"}
+                      {attempt.is_passed
+                        ? t("quizList.responses.passedBadge")
+                        : t("quizList.responses.failedBadge")}
                     </Text>
                   </View>
                 </View>
@@ -579,6 +619,7 @@ const ResponsesModal = memo(({ quiz, onClose }) => {
 // ─────────────────────────────────────────────────────────────
 
 const AnalyticsModal = memo(({ quiz, onClose }) => {
+  const { t } = useTranslation();
   const [data,    setData]    = useState(null);
   const [loading, setLoading] = useState(true);
 
@@ -621,8 +662,8 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
         ) : !data ? (
           <EmptyState
             icon="bar-chart-outline"
-            title="No analytics yet"
-            subtitle="Analytics will appear once students start taking this quiz"
+            title={t("quizList.analytics.emptyTitle")}
+            subtitle={t("quizList.analytics.emptySubtitle")}
           />
         ) : (
           <ScrollView
@@ -632,14 +673,16 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
             <View style={styles.analyticsGrid}>
               {[
                 {
-                  label: "Total Attempts",
+                  id:    "totalAttempts",
+                  label: t("quizList.analytics.totalAttempts"),
                   value: data.summary?.total_attempts ?? 0,
                   icon:  "people-outline",
                   color: "#4F46E5",
                   bg:    "#EEF2FF",
                 },
                 {
-                  label: "Pass Rate",
+                  id:    "passRate",
+                  label: t("quizList.analytics.passRate"),
                   value:
                     data.summary?.total_completions > 0
                       ? `${Math.round(
@@ -653,7 +696,8 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                   bg:    "#ECFDF5",
                 },
                 {
-                  label: "Avg Score",
+                  id:    "avgScore",
+                  label: t("quizList.analytics.avgScore"),
                   value: data.summary?.avg_score
                     ? `${data.summary.avg_score}%`
                     : "—",
@@ -662,7 +706,8 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                   bg:    "#FEF3C7",
                 },
                 {
-                  label: "Avg Time",
+                  id:    "avgTime",
+                  label: t("quizList.analytics.avgTime"),
                   value: data.summary?.avg_time_secs
                     ? `${Math.round(data.summary.avg_time_secs / 60)}m`
                     : "—",
@@ -672,7 +717,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                 },
               ].map((card) => (
                 <View
-                  key={card.label}
+                  key={card.id}
                   style={[styles.analyticsCard, { backgroundColor: card.bg }]}
                 >
                   <Ionicons name={card.icon} size={20} color={card.color} />
@@ -689,7 +734,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
             {data.summary?.highest_score !== undefined && (
               <View style={styles.scoreRange}>
                 <View style={styles.scoreRangeItem}>
-                  <Text style={styles.scoreRangeLabel}>Highest</Text>
+                  <Text style={styles.scoreRangeLabel}>
+                    {t("quizList.analytics.highest")}
+                  </Text>
                   <Text
                     style={[styles.scoreRangeValue, { color: "#059669" }]}
                   >
@@ -698,7 +745,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                 </View>
                 <View style={styles.scoreRangeDivider} />
                 <View style={styles.scoreRangeItem}>
-                  <Text style={styles.scoreRangeLabel}>Lowest</Text>
+                  <Text style={styles.scoreRangeLabel}>
+                    {t("quizList.analytics.lowest")}
+                  </Text>
                   <Text
                     style={[styles.scoreRangeValue, { color: "#DC2626" }]}
                   >
@@ -707,7 +756,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                 </View>
                 <View style={styles.scoreRangeDivider} />
                 <View style={styles.scoreRangeItem}>
-                  <Text style={styles.scoreRangeLabel}>Passing</Text>
+                  <Text style={styles.scoreRangeLabel}>
+                    {t("quizList.analytics.passing")}
+                  </Text>
                   <Text
                     style={[styles.scoreRangeValue, { color: "#4F46E5" }]}
                   >
@@ -719,7 +770,9 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
 
             {data.hardestQuestions?.length > 0 && (
               <View style={styles.hardestSection}>
-                <Text style={styles.hardestTitle}>Hardest Questions</Text>
+                <Text style={styles.hardestTitle}>
+                  {t("quizList.analytics.hardestTitle")}
+                </Text>
                 {data.hardestQuestions.map((q, i) => (
                   <View key={i} style={styles.hardestCard}>
                     <View style={styles.hardestRank}>
@@ -734,17 +787,23 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
                       </Text>
                       <View style={styles.hardestMeta}>
                         <Text style={styles.hardestStat}>
-                          {q.times_shown} seen
+                          {t("quizList.analytics.seen", {
+                            count: q.times_shown,
+                          })}
                         </Text>
                         <Text style={styles.hardestStat}>
-                          {q.times_correct} correct
+                          {t("quizList.analytics.correct", {
+                            count: q.times_correct,
+                          })}
                         </Text>
                         <Text
                           style={[styles.hardestStat, { color: "#DC2626" }]}
                         >
-                          {Math.round(
-                            (1 - (q.difficulty_score || 0)) * 100
-                          )}% miss rate
+                          {t("quizList.analytics.missRate", {
+                            rate: Math.round(
+                              (1 - (q.difficulty_score || 0)) * 100
+                            ),
+                          })}
                         </Text>
                       </View>
                     </View>
@@ -764,6 +823,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
 // ─────────────────────────────────────────────────────────────
 
 function useQuizData(schoolId, teacherId) {
+  const { t } = useTranslation();
   const [quizzes,    setQuizzes]    = useState([]);
   const [questions,  setQuestions]  = useState([]);
   const [categories, setCategories] = useState([]);
@@ -775,8 +835,8 @@ function useQuizData(schoolId, teacherId) {
       if (!schoolId || !teacherId) {
         setLoading(false);
         Alert.alert(
-          "Session Error",
-          "Could not identify your account. Please log out and back in."
+          t("quizList.alerts.sessionErrorTitle"),
+          t("quizList.alerts.sessionErrorBody")
         );
         return;
       }
@@ -802,12 +862,19 @@ function useQuizData(schoolId, teacherId) {
         setCategories(categoryData || []);
       } catch (err) {
         console.warn("Failed to load quiz data:", err?.message);
-        Alert.alert("Error", "Could not load data. Pull to refresh.");
+        Alert.alert(
+          t("quizList.alerts.errorTitle"),
+          t("quizList.alerts.loadFailed")
+        );
       } finally {
         setLoading(false);
         setRefreshing(false);
       }
     },
+    // `t` is intentionally not a dependency: i18n.t() reads the live locale at
+    // call time, so a stale identity still translates correctly — and listing
+    // it here would refetch every quiz on a language switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [schoolId, teacherId]
   );
 
@@ -831,6 +898,7 @@ function useQuizData(schoolId, teacherId) {
 
 export default function TeacherQuizzesScreen() {
   const router = useRouter();
+  const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
 
   const schoolId  = user?.schoolId;
@@ -913,10 +981,13 @@ export default function TeacherQuizzesScreen() {
               : q
           )
         );
-        Alert.alert("Error", "Could not update quiz status");
+        Alert.alert(
+          t("quizList.alerts.errorTitle"),
+          t("quizList.alerts.statusFailed")
+        );
       }
     },
-    [setQuizzes]
+    [setQuizzes, t]
   );
 
   const handleEditQuiz = useCallback(
@@ -932,12 +1003,12 @@ export default function TeacherQuizzesScreen() {
   const handleDeleteQuiz = useCallback(
     (quiz) => {
       Alert.alert(
-        "Delete Quiz",
-        `Are you sure you want to delete "${quiz.title}"?`,
+        t("quizList.alerts.deleteQuizTitle"),
+        t("quizList.alerts.deleteQuizBody", { title: quiz.title }),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text:  "Delete",
+            text:  t("common.delete"),
             style: "destructive",
             onPress: async () => {
               try {
@@ -946,14 +1017,17 @@ export default function TeacherQuizzesScreen() {
                   prev.filter((q) => q.id !== quiz.id)
                 );
               } catch {
-                Alert.alert("Error", "Could not delete quiz");
+                Alert.alert(
+                  t("quizList.alerts.errorTitle"),
+                  t("quizList.alerts.deleteQuizFailed")
+                );
               }
             },
           },
         ]
       );
     },
-    [setQuizzes]
+    [setQuizzes, t]
   );
 
   const handleEditQuestion = useCallback(
@@ -969,12 +1043,12 @@ export default function TeacherQuizzesScreen() {
   const handleDeleteQuestion = useCallback(
     (question) => {
       Alert.alert(
-        "Delete Question",
-        "Are you sure you want to delete this question?",
+        t("quizList.alerts.deleteQuestionTitle"),
+        t("quizList.alerts.deleteQuestionBody"),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text:  "Delete",
+            text:  t("common.delete"),
             style: "destructive",
             onPress: async () => {
               try {
@@ -983,14 +1057,17 @@ export default function TeacherQuizzesScreen() {
                   prev.filter((q) => q.id !== question.id)
                 );
               } catch {
-                Alert.alert("Error", "Could not delete question");
+                Alert.alert(
+                  t("quizList.alerts.errorTitle"),
+                  t("quizList.alerts.deleteQuestionFailed")
+                );
               }
             },
           },
         ]
       );
     },
-    [setQuestions]
+    [setQuestions, t]
   );
 
   const renderQuizItem = useCallback(
@@ -1030,9 +1107,12 @@ export default function TeacherQuizzesScreen() {
             {quiz.title}
           </Text>
           <Text style={styles.analyticsListMeta}>
-            {quiz.total_attempts} attempt
-            {quiz.total_attempts !== 1 ? "s" : ""}
-            {quiz.avg_score ? `  ·  avg ${quiz.avg_score}%` : ""}
+            {t("quizList.attemptCount", { count: quiz.total_attempts })}
+            {quiz.avg_score
+              ? `  ·  ${t("quizList.avgScoreInline", {
+                  score: quiz.avg_score,
+                })}`
+              : ""}
           </Text>
         </View>
         <TouchableOpacity
@@ -1045,7 +1125,7 @@ export default function TeacherQuizzesScreen() {
         <Ionicons name="chevron-forward" size={16} color="#D1D5DB" />
       </TouchableOpacity>
     ),
-    []
+    [t]
   );
 
   const renderQuizzesTab = () => (
@@ -1053,7 +1133,7 @@ export default function TeacherQuizzesScreen() {
       <SearchBar
         value={quizSearch}
         onChange={setQuizSearch}
-        placeholder="Search quizzes..."
+        placeholder={t("quizList.searchQuizzes")}
       />
 
       {brokenQuizzes.length > 0 && (
@@ -1070,9 +1150,11 @@ export default function TeacherQuizzesScreen() {
           <Ionicons name="warning-outline" size={16} color="#D97706" />
           <Text style={styles.warningText}>
             {brokenQuizzes.length === 1
-              ? `"${brokenQuizzes[0].title}" needs a class assigned. `
-              : `${brokenQuizzes.length} quizzes need a class assigned. `}
-            <Text style={{ fontWeight: "700" }}>Tap to fix →</Text>
+              ? t("quizList.warnOne", { title: brokenQuizzes[0].title })
+              : t("quizList.warnMany", { count: brokenQuizzes.length })}
+            <Text style={{ fontWeight: "700" }}>
+              {t("quizList.warnFix")}
+            </Text>
           </Text>
         </TouchableOpacity>
       )}
@@ -1080,10 +1162,10 @@ export default function TeacherQuizzesScreen() {
       {filteredQuizzes.length === 0 ? (
         <EmptyState
           icon="help-circle-outline"
-          title="No quizzes yet"
-          subtitle="Create your first quiz to get started"
+          title={t("quizList.empty.quizzesTitle")}
+          subtitle={t("quizList.empty.quizzesSubtitle")}
           action={() => router.push("/teacher/quizzes/create")}
-          actionLabel="Create Quiz"
+          actionLabel={t("quizList.empty.quizzesAction")}
         />
       ) : (
         <FlatList
@@ -1109,7 +1191,7 @@ export default function TeacherQuizzesScreen() {
       <SearchBar
         value={questionSearch}
         onChange={setQuestionSearch}
-        placeholder="Search questions..."
+        placeholder={t("quizList.searchQuestions")}
       />
 
       <ScrollView
@@ -1117,7 +1199,7 @@ export default function TeacherQuizzesScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterChips}
       >
-        {Object.entries(QUESTION_TYPE_LABELS).map(([type, label]) => (
+        {Object.entries(QUESTION_TYPE_KEYS).map(([type, labelKey]) => (
           <TouchableOpacity
             key={type}
             style={[styles.chip, filterType === type && styles.chipActive]}
@@ -1131,14 +1213,14 @@ export default function TeacherQuizzesScreen() {
                 filterType === type && styles.chipTextActive,
               ]}
             >
-              {label}
+              {t(`quizList.questionType.${labelKey}`)}
             </Text>
           </TouchableOpacity>
         ))}
 
         <View style={styles.chipDivider} />
 
-        {["easy", "medium", "hard"].map((diff) => (
+        {DIFFICULTIES.map((diff) => (
           <TouchableOpacity
             key={diff}
             style={[
@@ -1161,7 +1243,7 @@ export default function TeacherQuizzesScreen() {
                 },
               ]}
             >
-              {diff.charAt(0).toUpperCase() + diff.slice(1)}
+              {t(`quizList.difficulty.${diff}`)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -1170,15 +1252,15 @@ export default function TeacherQuizzesScreen() {
       {filteredQuestions.length === 0 ? (
         <EmptyState
           icon="list-outline"
-          title="No questions yet"
-          subtitle="Build your question bank"
+          title={t("quizList.empty.questionsTitle")}
+          subtitle={t("quizList.empty.questionsSubtitle")}
           action={() =>
             router.push({
               pathname: "/teacher/quizzes/create",
               params:   { tab: "question" },
             })
           }
-          actionLabel="Add Question"
+          actionLabel={t("quizList.empty.questionsAction")}
         />
       ) : (
         <FlatList
@@ -1217,8 +1299,8 @@ export default function TeacherQuizzesScreen() {
       ListEmptyComponent={
         <EmptyState
           icon="bar-chart-outline"
-          title="No data yet"
-          subtitle="Analytics will appear once students complete quizzes"
+          title={t("quizList.empty.analyticsTitle")}
+          subtitle={t("quizList.empty.analyticsSubtitle")}
         />
       }
       renderItem={renderAnalyticsItem}
@@ -1229,7 +1311,7 @@ export default function TeacherQuizzesScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading quizzes…</Text>
+        <Text style={styles.loadingText}>{t("quizList.loading")}</Text>
       </View>
     );
   }
@@ -1246,11 +1328,11 @@ export default function TeacherQuizzesScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Quizzes</Text>
+          <Text style={styles.headerTitle}>{t("quizList.title")}</Text>
           <Text style={styles.headerSub}>
-            {quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""}
+            {t("quizList.quizCount", { count: quizzes.length })}
             {" · "}
-            {questions.length} question{questions.length !== 1 ? "s" : ""}
+            {t("quizList.questionCount", { count: questions.length })}
           </Text>
         </View>
         <TouchableOpacity
@@ -1259,7 +1341,7 @@ export default function TeacherQuizzesScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.createBtnText}>New</Text>
+          <Text style={styles.createBtnText}>{t("quizList.new")}</Text>
         </TouchableOpacity>
       </View>
 

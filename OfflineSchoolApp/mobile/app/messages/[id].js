@@ -24,6 +24,7 @@ import * as DocumentPicker from "expo-document-picker";
 
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -45,7 +46,7 @@ const timeLabel = (iso) => {
  * The little state marker on an outgoing bubble.
  *
  * Only three states are shown, and none of them claims anything about the
- * recipient's device. "Delivered" and "read" are the recipient's business
+ * recipient's device. t("msgMobile.delivered") and "read" are the recipient's business
  * and arrive late or never on this kind of link, so promising them here
  * would be a lie the UI cannot keep.
  */
@@ -56,6 +57,7 @@ function StateMark({ state }) {
 }
 
 export default function ThreadScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
   const user   = useAuthStore((s) => s.user);
   const myId   = String(user?._id ?? "");
@@ -99,8 +101,8 @@ export default function ThreadScreen() {
   // Poll while the thread is open. There is no socket layer, and a message
   // arriving unseen is worse than a request every fifteen seconds.
   useEffect(() => {
-    const t = setInterval(refresh, 15000);
-    return () => clearInterval(t);
+    const poll = setInterval(refresh, 15000);
+    return () => clearInterval(poll);
   }, [refresh]);
 
   // ── Attach ────────────────────────────────────────────────────────────────
@@ -135,9 +137,9 @@ export default function ThreadScreen() {
       if (attachment) setPending((p) => [...p, attachment]);
     } catch (err) {
       Alert.alert(
-        "Could not attach that file",
+        t("msgMobile.attachFailTitle"),
         err?.response?.data?.error ||
-          "Attaching a file needs a connection. The message itself can wait."
+          t("msgMobile.attachFailBody")
       );
     } finally {
       setAttaching(false);
@@ -171,7 +173,7 @@ export default function ThreadScreen() {
       // already-uploaded attachments back so neither is lost.
       setDraft(body);
       setPending(attachments);
-      Alert.alert("Could not save message", err.message);
+      Alert.alert(t("msgMobile.saveFailTitle"), err.message);
     } finally {
       setSending(false);
     }
@@ -193,7 +195,7 @@ export default function ThreadScreen() {
           ]}
         >
           {!mine && !item.isDeleted && (
-            <Text style={s.senderName}>{item.sender?.name || "Unknown"}</Text>
+            <Text style={s.senderName}>{item.sender?.name || t("msgMobile.unknownSender")}</Text>
           )}
 
           <Text
@@ -203,7 +205,7 @@ export default function ThreadScreen() {
               item.isDeleted && s.bubbleTextDeleted,
             ]}
           >
-            {item.isDeleted ? "This message was deleted" : item.body}
+            {item.isDeleted ? t("msgMobile.deletedMessage") : item.body}
           </Text>
 
           {!item.isDeleted && (item.attachments?.length ?? 0) > 0 && (
@@ -237,7 +239,7 @@ export default function ThreadScreen() {
           </View>
 
           {item.state === "failed" && (
-            <Text style={s.failedNote}>Not sent — pull down to retry</Text>
+            <Text style={s.failedNote}>{t("msgMobile.failedNote")}</Text>
           )}
         </View>
       </View>
@@ -256,7 +258,7 @@ export default function ThreadScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>Conversation</Text>
+        <Text style={s.headerTitle} numberOfLines={1}>{t("msgMobile.conversation")}</Text>
         <View style={s.backBtn} />
       </View>
 
@@ -274,7 +276,7 @@ export default function ThreadScreen() {
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
             <View style={s.empty}>
-              <Text style={s.emptyText}>No messages yet. Say something.</Text>
+              <Text style={s.emptyText}>{t("msgMobile.emptyThread")}</Text>
             </View>
           }
         />
@@ -318,7 +320,7 @@ export default function ThreadScreen() {
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder="Write a message…"
+          placeholder={t("msgMobile.writeMessagePh")}
           placeholderTextColor={C.gray400}
           style={s.input}
           multiline

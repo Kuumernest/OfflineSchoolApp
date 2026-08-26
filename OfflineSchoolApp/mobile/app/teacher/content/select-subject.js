@@ -18,7 +18,8 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { getTeacherSubjectsForUpload } from "../../../src/services/content.service";
+import { getTeacherSubjectsForUpload } from "../../../src/services/content.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -27,7 +28,7 @@ import { getTeacherSubjectsForUpload } from "../../../src/services/content.servi
 const CONTENT_TYPES = [
   {
     id:    "syllabus",
-    label: "Syllabus",
+    labelKey: "studentSubj.tabSyllabus",
     icon:  "list-outline",
     color: "#7C3AED",
     bg:    "#EDE9FE",
@@ -36,7 +37,7 @@ const CONTENT_TYPES = [
   },
   {
     id:    "notes",
-    label: "Notes",
+    labelKey: "studentSubj.tabNotes",
     icon:  "document-text-outline",
     color: "#4F46E5",
     bg:    "#EEF2FF",
@@ -45,7 +46,7 @@ const CONTENT_TYPES = [
   },
   {
     id:    "image",
-    label: "Image",
+    labelKey: "teacherContent.kImage",
     icon:  "image-outline",
     color: "#059669",
     bg:    "#ECFDF5",
@@ -54,7 +55,7 @@ const CONTENT_TYPES = [
   },
   {
     id:    "audio",
-    label: "Audio",
+    labelKey: "studentSubj.tabAudio",
     icon:  "musical-notes-outline",
     color: "#D97706",
     bg:    "#FEF3C7",
@@ -63,7 +64,7 @@ const CONTENT_TYPES = [
   },
   {
     id:    "video",
-    label: "Video",
+    labelKey: "studentSubj.tabVideo",
     icon:  "videocam-outline",
     color: "#DC2626",
     bg:    "#FEE2E2",
@@ -72,7 +73,7 @@ const CONTENT_TYPES = [
   },
   {
     id:    "document",
-    label: "Document",
+    labelKey: "teacherContent.kDocument",
     icon:  "attach-outline",
     color: "#059669",
     bg:    "#ECFDF5",
@@ -81,7 +82,7 @@ const CONTENT_TYPES = [
   },
 ];
 
-const STEPS = ["Type", "Subject", "Class"];
+const STEP_KEYS = ["teacherContent.type", "teacherContent.subject", "teacherContent.klass"];
 
 // ─────────────────────────────────────────────────────────────
 // STEP INDICATOR
@@ -90,11 +91,11 @@ const STEPS = ["Type", "Subject", "Class"];
 function StepIndicator({ currentStep }) {
   return (
     <View style={stepStyles.container}>
-      {STEPS.map((label, index) => {
+      {STEP_KEYS.map((stepKey, index) => {
         const done   = index < currentStep;
         const active = index === currentStep;
         return (
-          <React.Fragment key={label}>
+          <React.Fragment key={stepKey}>
             <View style={stepStyles.step}>
               <View
                 style={[
@@ -123,10 +124,10 @@ function StepIndicator({ currentStep }) {
                   done   && stepStyles.labelDone,
                 ]}
               >
-                {label}
+                {t(stepKey)}
               </Text>
             </View>
-            {index < STEPS.length - 1 && (
+            {index < STEP_KEYS.length - 1 && (
               <View
                 style={[stepStyles.line, done && stepStyles.lineDone]}
               />
@@ -143,6 +144,7 @@ function StepIndicator({ currentStep }) {
 // ─────────────────────────────────────────────────────────────
 
 function SelectSubjectPage() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const user      = useAuthStore((s) => s.user);
   const teacherId = user?._id || user?.id || user?.userId || null;
@@ -169,7 +171,7 @@ function SelectSubjectPage() {
       setSubjects(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("SelectSubjectPage load error:", err);
-      setLoadError("Could not load subjects. Please try again.");
+      setLoadError(t("teacherContent.loadSubjectsFailed"));
     } finally {
       setLoading(false);
     }
@@ -274,9 +276,9 @@ function SelectSubjectPage() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerInfo}>
-          <Text style={styles.headerTitle}>Upload Content</Text>
+          <Text style={styles.headerTitle}>{t("teacherContent.uploadTitle")}</Text>
           <Text style={styles.headerSub}>
-            Step {step + 1} of {STEPS.length} — {STEPS[step]}
+            {t("teacherContent.stepOf", { current: step + 1, total: STEP_KEYS.length, name: t(STEP_KEYS[step]) })}
           </Text>
         </View>
       </View>
@@ -305,7 +307,7 @@ function SelectSubjectPage() {
                   { color: selectedType.color },
                 ]}
               >
-                {selectedType.label}
+                {t(selectedType.labelKey)}
               </Text>
             </View>
           )}
@@ -354,10 +356,10 @@ function SelectSubjectPage() {
           showsVerticalScrollIndicator={false}
         >
           <Text style={styles.stepHeading}>
-            What do you want to upload?
+            {t("teacherContent.pickTypeTitle")}
           </Text>
           <Text style={styles.stepSubHeading}>
-            Choose a content type to continue
+            {t("teacherContent.pickTypeSub")}
           </Text>
 
           <View style={styles.typeGrid}>
@@ -376,7 +378,7 @@ function SelectSubjectPage() {
                 >
                   <Ionicons name={type.icon} size={26} color={type.color} />
                 </View>
-                <Text style={styles.typeLabel}>{type.label}</Text>
+                <Text style={styles.typeLabel}>{t(type.labelKey)}</Text>
                 <Text style={styles.typeHint}>{type.hint}</Text>
                 <Text style={styles.typeSize}>Max {type.maxMB} MB</Text>
                 <View
@@ -403,7 +405,7 @@ function SelectSubjectPage() {
             <Ionicons name="search-outline" size={16} color="#9CA3AF" />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search subjects…"
+              placeholder={t("teacherContent.searchSubjectPh")}
               placeholderTextColor="#9CA3AF"
               value={subjectSearch}
               onChangeText={setSubjectSearch}
@@ -420,7 +422,7 @@ function SelectSubjectPage() {
           {loading ? (
             <View style={styles.centered}>
               <ActivityIndicator size="large" color="#4F46E5" />
-              <Text style={styles.loadingText}>Loading your subjects…</Text>
+              <Text style={styles.loadingText}>{t("teacherContent.loadingSubjects")}</Text>
             </View>
           ) : loadError ? (
             <View style={styles.centered}>
@@ -435,19 +437,19 @@ function SelectSubjectPage() {
                 onPress={loadSubjects}
                 activeOpacity={0.8}
               >
-                <Text style={styles.retryBtnText}>Retry</Text>
+                <Text style={styles.retryBtnText}>{t("common.retry")}</Text>
               </TouchableOpacity>
             </View>
           ) : filteredSubjects.length === 0 ? (
             <View style={styles.centered}>
               <Ionicons name="book-outline" size={40} color="#9CA3AF" />
               <Text style={styles.emptyTitle}>
-                {subjectSearch ? "No subjects found" : "No subjects assigned"}
+                {subjectSearch ? t("teacherContent.noSubjectMatch") : t("teacherContent.noSubjects")}
               </Text>
               <Text style={styles.emptySubtitle}>
                 {subjectSearch
                   ? `No results for "${subjectSearch}"`
-                  : "Contact admin to get subjects assigned"}
+                  : t("teacherContent.noSubjectsSub")}
               </Text>
             </View>
           ) : (
@@ -517,7 +519,7 @@ function SelectSubjectPage() {
                 <Ionicons name="book" size={16} color="#4F46E5" />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={styles.subjectRecapLabel}>Subject</Text>
+                <Text style={styles.subjectRecapLabel}>{t("teacherContent.subject")}</Text>
                 <Text style={styles.subjectRecapName}>
                   {selectedSubject?.subjectName}
                 </Text>
@@ -526,23 +528,23 @@ function SelectSubjectPage() {
                 onPress={() => { setSelectedClasses([]); setStep(1); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.changeBtn}>Change</Text>
+                <Text style={styles.changeBtn}>{t("teacherContent.change")}</Text>
               </TouchableOpacity>
             </View>
 
             <Text style={styles.stepHeading}>
-              Which classes get access?
+              {t("teacherContent.pickClasses")}
             </Text>
             <Text style={styles.stepSubHeading}>
-              Select one or more classes for this content
+              {t("teacherContent.pickClassesSub")}
             </Text>
 
             {availableClasses.length === 0 ? (
               <View style={styles.emptyClasses}>
                 <Ionicons name="school-outline" size={36} color="#9CA3AF" />
-                <Text style={styles.emptyTitle}>No classes found</Text>
+                <Text style={styles.emptyTitle}>{t("teacherContent.noClasses")}</Text>
                 <Text style={styles.emptySubtitle}>
-                  No classes are linked to this subject
+                  {t("teacherContent.noLinkedClasses")}
                 </Text>
               </View>
             ) : (
@@ -564,7 +566,7 @@ function SelectSubjectPage() {
                   </View>
                   <Text style={styles.selectAllText}>
                     {allClassesSelected
-                      ? "Deselect all"
+                      ? t("teacherContent.deselectAll")
                       : `Select all (${availableClasses.length})`}
                   </Text>
                 </TouchableOpacity>
@@ -634,9 +636,9 @@ function SelectSubjectPage() {
           {selectedClasses.length > 0 && (
             <View style={styles.continueBar}>
               <View style={styles.continueInfo}>
-                <Text style={styles.continueInfoTitle}>Ready to upload</Text>
+                <Text style={styles.continueInfoTitle}>{t("teacherContent.readyToUpload")}</Text>
                 <Text style={styles.continueInfoSub}>
-                  {selectedType?.label}{"  ·  "}{selectedSubject?.subjectName}
+                  {selectedType ? t(selectedType.labelKey) : ""}{"  ·  "}{selectedSubject?.subjectName}
                   {"\n"}
                   {selectedClasses.length} class
                   {selectedClasses.length > 1 ? "es" : ""} selected
@@ -647,7 +649,7 @@ function SelectSubjectPage() {
                 onPress={handleContinue}
                 activeOpacity={0.85}
               >
-                <Text style={styles.continueBtnText}>Continue</Text>
+                <Text style={styles.continueBtnText}>{t("teacherContent.continueCta")}</Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFF" />
               </TouchableOpacity>
             </View>

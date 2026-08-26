@@ -15,6 +15,7 @@ import * as Print       from "expo-print";
 import * as Sharing     from "expo-sharing";
 
 import { tableExists as _tableExists } from "../../../../src/db/dbHelpers";
+import { useTranslation } from "../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -43,7 +44,15 @@ const C = {
 const TERMS       = ["First Term", "Second Term", "Third Term"];
 const currentYear = new Date().getFullYear();
 const YEARS       = Array.from({ length: 5 }, (_, i) => String(currentYear - 2 + i));
-const TERM_ITEMS  = TERMS.map((t) => ({ id: t, name: t }));
+/** The id is the stored value the API expects and stays English; only the
+ *  displayed name is localised, via termLabel() below. */
+const TERM_KEYS = {
+  "First Term":  "reportGen.termFirst",
+  "Second Term": "reportGen.termSecond",
+  "Third Term":  "reportGen.termThird",
+};
+const termLabel = (t, term) => (TERM_KEYS[term] ? t(TERM_KEYS[term]) : term);
+const termItems = (t) => TERMS.map((term) => ({ id: term, name: termLabel(t, term) }));
 const YEAR_ITEMS  = YEARS.map((y) => ({ id: y, name: y }));
 
 // ─────────────────────────────────────────────────────────
@@ -289,8 +298,8 @@ const syncTemplatesFromApi = async (schoolId) => {
       `).catch(() => {});
     }
 
-    for (const t of rows) {
-      const id = t._id || t.id;
+    for (const tpl of rows) {
+      const id = tpl._id || tpl.id;
       if (!id) continue;
       await dbRun(
         `INSERT OR REPLACE INTO report_templates
@@ -298,13 +307,13 @@ const syncTemplatesFromApi = async (schoolId) => {
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`,
         [
           id, schoolId, schoolId,
-          t.name || "Template",
-          t.html || "",
-          t.css  || "",
-          (t.isDefault || t.is_default) ? 1 : 0,
-          t.version || 1,
-          t.updatedAt || t.updated_at || new Date().toISOString(),
-          t.createdAt || t.created_at || new Date().toISOString(),
+          tpl.name || "Template",
+          tpl.html || "",
+          tpl.css  || "",
+          (tpl.isDefault || tpl.is_default) ? 1 : 0,
+          tpl.version || 1,
+          tpl.updatedAt || tpl.updated_at || new Date().toISOString(),
+          tpl.createdAt || tpl.created_at || new Date().toISOString(),
         ]
       );
     }
@@ -318,7 +327,7 @@ const syncTemplatesFromApi = async (schoolId) => {
 //    reportHtml.service.js (GET /results/:examId/student/:studentId/reportcard/html)
 // ─────────────────────────────────────────────────────────
 
-const generateAndSharePdf = async (html, filename = "report") => {
+const generateAndSharePdf = async (html, filename = "report", t) => {
   const { uri } = await Print.printToFileAsync({ html });
   if (await Sharing.isAvailableAsync()) {
     await Sharing.shareAsync(uri, {
@@ -326,7 +335,7 @@ const generateAndSharePdf = async (html, filename = "report") => {
       dialogTitle: `Share ${filename}`,
     });
   } else {
-    Alert.alert("PDF Saved", `Report saved to: ${uri}`);
+    Alert.alert(t("reportGen.pdfSaved"), t("reportGen.savedTo", { uri }));
   }
   return uri;
 };
@@ -357,6 +366,7 @@ const fetchReportCardHtml = async (studentId, examId, schoolId, schoolName) => {
 // ─────────────────────────────────────────────────────────
 
 export default function ReportGeneratorScreen() {
+  const { t } = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
   const params   = useLocalSearchParams();
@@ -369,7 +379,7 @@ export default function ReportGeneratorScreen() {
   const [selectedClass,    setSelectedClass]    = useState(null);
   const [selectedStudent,  setSelectedStudent]  = useState(null);
   const [selectedExam,     setSelectedExam]     = useState(
-    params.examId ? { id: params.examId, name: params.examName || "Exam" } : null
+    params.examId ? { id: params.examId, name: params.examName || t("reportGen.examFallback") } : null
   );
   const [selectedTerm,     setSelectedTerm]     = useState(params.term        || "First Term");
   const [selectedYear,     setSelectedYear]     = useState(params.academicYear || String(currentYear));
@@ -384,12 +394,12 @@ export default function ReportGeneratorScreen() {
   const [picker, setPicker] = useState(null);
 
   const templateItems = useMemo(() => [
-    { id: "__builtin__", name: "📄 Default / Built-in Template" },
-    ...templates.map((t) => ({
-      ...t,
-      name: t.name + (t.is_default ? " ⭐" : ""),
+    { id: "__builtin__", name: `📄 ${t("reportGen.builtinTemplate")}` },
+    ...templates.map((tpl) => ({
+      ...tpl,
+      name: tpl.name + (tpl.is_default ? " ⭐" : ""),
     })),
-  ], [templates]);
+  ], [templates, t]);
 
   // ── Initial load ──────────────────────────────────────
   useEffect(() => {
@@ -414,7 +424,7 @@ export default function ReportGeneratorScreen() {
         }
       } catch (err) {
         console.error("[ReportGenerator] load error:", err.message);
-        if (mounted) Alert.alert("Load Error", err.message);
+        if (mounted) Alert.alert(t("reportGen.loadError"), err.message);
       } finally {
         if (mounted) setDataLoading(false);
       }
@@ -451,11 +461,11 @@ export default function ReportGeneratorScreen() {
   // ── Generate ───────────────────────────────────────────
   const handleGenerate = useCallback(async () => {
     if (!selectedClass) {
-      Alert.alert("Missing", "Please select a class.");
+      Alert.alert(t("reportGen.missing"), t("reportGen.pickClass"));
       return;
     }
     if (!selectedTerm || !selectedYear) {
-      Alert.alert("Missing", "Please select a term and year.");
+      Alert.alert(t("reportGen.missing"), t("reportGen.pickTermYear"));
       return;
     }
 
@@ -465,7 +475,7 @@ export default function ReportGeneratorScreen() {
     setProgress(0);
 
     try {
-      const schoolName = user?.schoolName || user?.school?.name || "School";
+      const schoolName = user?.schoolName || user?.school?.name || t("reportGen.schoolFallback");
       const examId     = selectedExam?.id || params.examId;
 
       if (selectedStudent) {
@@ -477,14 +487,14 @@ export default function ReportGeneratorScreen() {
 
         if (!html) {
           Alert.alert(
-            "No Result",
-            "No processed result found for this student. Run Results → Compute for this exam first."
+            t("reportGen.noResult"),
+            t("reportGen.noResultStudent")
           );
           setProgress(1);
           return;
         }
 
-        await generateAndSharePdf(html, selectedStudent.name);
+        await generateAndSharePdf(html, selectedStudent.name, t);
         setProgress(1);
         setLastReport({ studentName: selectedStudent.name });
 
@@ -496,7 +506,7 @@ export default function ReportGeneratorScreen() {
         setTotalStudents(classStudents.length);
 
         if (classStudents.length === 0) {
-          Alert.alert("No Students", "No students found in this class.");
+          Alert.alert(t("reportGen.noStudents"), t("reportGen.noStudentsBody"));
           return;
         }
 
@@ -537,16 +547,19 @@ export default function ReportGeneratorScreen() {
 
         if (successful.length > 0 && (await Sharing.isAvailableAsync())) {
           Alert.alert(
-            "Reports Generated",
-            `${successful.length} of ${classStudents.length} reports created. Share the first one?`,
+            t("reportGen.generated"),
+            t("reportGen.generatedBody", {
+              done:  successful.length,
+              total: classStudents.length,
+            }),
             [
-              { text: "Skip", style: "cancel" },
+              { text: t("reportGen.skip"), style: "cancel" },
               {
-                text:    "Share",
+                text:    t("reportGen.share"),
                 onPress: () =>
                   Sharing.shareAsync(successful[0].uri, {
                     mimeType:    "application/pdf",
-                    dialogTitle: "Share Report Card",
+                    dialogTitle: t("reportGen.shareTitle"),
                   }),
               },
             ]
@@ -554,7 +567,7 @@ export default function ReportGeneratorScreen() {
         }
       }
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("reportGen.errTitle"), err.message);
     } finally {
       setGenerating(false);
     }
@@ -566,12 +579,12 @@ export default function ReportGeneratorScreen() {
   // ── Print single ───────────────────────────────────────
   const handlePrintSingle = useCallback(async () => {
     if (!selectedStudent && !selectedClass) {
-      Alert.alert("", "Select a class or student first.");
+      Alert.alert("", t("reportGen.pickClassOrStudent"));
       return;
     }
     try {
       const examId = selectedExam?.id || params.examId;
-      const school  = user?.schoolName || "School";
+      const school  = user?.schoolName || t("reportGen.schoolFallback");
       const html    = examId
         ? await fetchReportCardHtml(
             selectedStudent?.id || selectedClass?.id,
@@ -579,13 +592,13 @@ export default function ReportGeneratorScreen() {
           )
         : null;
       if (!html) {
-        Alert.alert("No Result", "No processed result found. Run Results → Compute for this exam first.");
+        Alert.alert(t("reportGen.noResult"), t("reportGen.noResultExam"));
         return;
       }
 
       await generateAndPrintPdf(html);
     } catch (err) {
-      Alert.alert("Print Error", err.message);
+      Alert.alert(t("reportGen.printError"), err.message);
     }
   }, [selectedStudent, selectedClass, selectedExam, user]);
 
@@ -602,13 +615,13 @@ export default function ReportGeneratorScreen() {
             <Ionicons name="arrow-back" size={24} color={C.gray900} />
           </TouchableOpacity>
           <View style={s.headerCenter}>
-            <Text style={s.headerTitle}>Generate Reports</Text>
-            <Text style={s.headerSub}>Report Card Generator</Text>
+            <Text style={s.headerTitle}>{t("reportGen.headerTitle")}</Text>
+            <Text style={s.headerSub}>{t("reportGen.headerSub")}</Text>
           </View>
         </View>
         <View style={s.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={s.loadingText}>Loading school data…</Text>
+          <Text style={s.loadingText}>{t("reportGen.loadingSchool")}</Text>
         </View>
       </View>
     );
@@ -627,8 +640,8 @@ export default function ReportGeneratorScreen() {
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>Generate Reports</Text>
-          <Text style={s.headerSub}>Report Card Generator</Text>
+          <Text style={s.headerTitle}>{t("reportGen.headerTitle")}</Text>
+          <Text style={s.headerSub}>{t("reportGen.headerSub")}</Text>
         </View>
         <TouchableOpacity onPress={handlePrintSingle} style={s.printBtn} activeOpacity={0.7}>
           <Ionicons name="print-outline" size={20} color={C.primary} />
@@ -654,21 +667,21 @@ export default function ReportGeneratorScreen() {
         )}
 
         {/* Step 1: Class */}
-        <StepCard step={1} title="Select Class">
+        <StepCard step={1} title={t("reportGen.stepClass")}>
           <Selector
-            label={selectedClass?.name || "Tap to select class"}
+            label={selectedClass?.name || t("reportGen.tapClass")}
             hasValue={!!selectedClass}
             onPress={() => setPicker("class")}
           />
           {classes.length === 0 && (
             <Text style={s.warnText}>
-              ⚠️ No classes found. Add classes in the admin panel first.
+              ⚠️ {t("reportGen.noClassesWarn")}
             </Text>
           )}
         </StepCard>
 
         {/* Step 2: Student */}
-        <StepCard step={2} title="Select Student (Optional)">
+        <StepCard step={2} title={t("reportGen.stepStudent")}>
           <View style={s.row}>
             <View style={{ flex: 1 }}>
               <Selector
@@ -677,13 +690,13 @@ export default function ReportGeneratorScreen() {
                   (students.length > 0
                     ? `All ${students.length} students`
                     : selectedClass
-                      ? "Loading students…"
-                      : "Select class first")
+                      ? t("reportGen.loadingStudents")
+                      : t("reportGen.selectClassFirst"))
                 }
                 hasValue={!!selectedStudent}
                 onPress={() => {
                   if (!selectedClass) {
-                    Alert.alert("", "Select a class first.");
+                    Alert.alert("", t("reportGen.pickClassFirst"));
                     return;
                   }
                   setPicker("student");
@@ -700,7 +713,7 @@ export default function ReportGeneratorScreen() {
               </TouchableOpacity>
             )}
           </View>
-          <Text style={s.hint}>Leave empty to generate reports for the whole class</Text>
+          <Text style={s.hint}>{t("reportGen.wholeClassHint")}</Text>
           {selectedClass && students.length > 0 && !selectedStudent && (
             <View style={s.studentCountBadge}>
               <Ionicons name="people-outline" size={12} color={C.success} />
@@ -712,11 +725,11 @@ export default function ReportGeneratorScreen() {
         </StepCard>
 
         {/* Step 3: Term & Year */}
-        <StepCard step={3} title="Term & Academic Year">
+        <StepCard step={3} title={t("reportGen.stepTerm")}>
           <View style={s.row}>
             <View style={{ flex: 1 }}>
               <Selector
-                label={selectedTerm}
+                label={termLabel(t, selectedTerm)}
                 hasValue
                 onPress={() => setPicker("term")}
               />
@@ -733,20 +746,20 @@ export default function ReportGeneratorScreen() {
         </StepCard>
 
         {/* Step 4: Template */}
-        <StepCard step={4} title="Report Template">
+        <StepCard step={4} title={t("reportGen.stepTemplate")}>
           <Selector
             label={
               selectedTemplate?.name ||
               (templates.length
                 ? `Built-in (${templates.length} custom available)`
-                : "Built-in template")
+                : t("reportGen.builtinShort"))
             }
             hasValue={!!selectedTemplate}
             onPress={() => setPicker("template")}
           />
           <Text style={s.hint}>
             {templates.length === 0
-              ? "Using built-in template"
+              ? t("reportGen.usingBuiltin")
               : `${templates.length} custom template(s) available`}
           </Text>
           <TouchableOpacity
@@ -756,7 +769,9 @@ export default function ReportGeneratorScreen() {
           >
             <Ionicons name="color-palette-outline" size={14} color={C.primary} />
             <Text style={s.designerLinkText}>
-              {templates.length === 0 ? "Create a Template" : "Manage Templates"}
+              {templates.length === 0
+                ? t("reportGen.createTemplate")
+                : t("reportGen.manageTemplates")}
             </Text>
           </TouchableOpacity>
         </StepCard>
@@ -788,7 +803,7 @@ export default function ReportGeneratorScreen() {
                 Report generated for {lastReport.studentName}
               </Text>
             </View>
-            <Text style={s.resultInfo}>PDF shared or saved to device.</Text>
+            <Text style={s.resultInfo}>{t("reportGen.pdfShared")}</Text>
           </View>
         )}
 
@@ -829,13 +844,13 @@ export default function ReportGeneratorScreen() {
                   onPress={() =>
                     Sharing.shareAsync(result.successful[0].uri, {
                       mimeType:    "application/pdf",
-                      dialogTitle: "Share Report Card",
+                      dialogTitle: t("reportGen.shareTitle"),
                     })
                   }
                   activeOpacity={0.7}
                 >
                   <Ionicons name="share-outline" size={16} color={C.primary} />
-                  <Text style={s.resultBtnText}>Share First PDF</Text>
+                  <Text style={s.resultBtnText}>{t("reportGen.shareFirst")}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={s.resultBtn}
@@ -843,7 +858,7 @@ export default function ReportGeneratorScreen() {
                   activeOpacity={0.7}
                 >
                   <Ionicons name="print-outline" size={16} color={C.primary} />
-                  <Text style={s.resultBtnText}>Print</Text>
+                  <Text style={s.resultBtnText}>{t("reportGen.print")}</Text>
                 </TouchableOpacity>
               </View>
             )}
@@ -871,7 +886,7 @@ export default function ReportGeneratorScreen() {
                   ? `Generate Report for ${selectedStudent.name}`
                   : students.length > 0
                     ? `Generate All ${students.length} Reports`
-                    : "Generate Reports"}
+                    : t("reportGen.generateCta")}
               </Text>
             </>
           )}
@@ -881,37 +896,37 @@ export default function ReportGeneratorScreen() {
       {/* Picker Modals */}
       <PickerModal
         visible={picker === "class"}
-        title="Select Class"
+        title={t("reportGen.stepClass")}
         items={classes}
         onSelect={(item) => { setSelectedClass(item); setPicker(null); }}
         onClose={() => setPicker(null)}
-        emptyText="No classes found. Add classes in the admin panel."
+        emptyText={t("reportGen.noClasses")}
       />
       <PickerModal
         visible={picker === "student"}
-        title="Select Student"
+        title={t("reportGen.pickerStudent")}
         items={students}
         onSelect={(item) => { setSelectedStudent(item); setPicker(null); }}
         onClose={() => setPicker(null)}
-        emptyText="No students found in this class"
+        emptyText={t("reportGen.noStudentsInClass")}
       />
       <PickerModal
         visible={picker === "term"}
-        title="Select Term"
-        items={TERM_ITEMS}
+        title={t("reportGen.pickerTerm")}
+        items={termItems(t)}
         onSelect={(item) => { setSelectedTerm(item.name); setPicker(null); }}
         onClose={() => setPicker(null)}
       />
       <PickerModal
         visible={picker === "year"}
-        title="Select Year"
+        title={t("reportGen.pickerYear")}
         items={YEAR_ITEMS}
         onSelect={(item) => { setSelectedYear(item.name); setPicker(null); }}
         onClose={() => setPicker(null)}
       />
       <PickerModal
         visible={picker === "template"}
-        title="Select Template"
+        title={t("reportGen.pickerTemplate")}
         items={templateItems}
         onSelect={(item) => {
           setSelectedTemplate(item.id === "__builtin__" ? null : item);
@@ -964,6 +979,7 @@ function Selector({ label, hasValue, onPress }) {
 }
 
 function PickerModal({ visible, title, items, onSelect, onClose, emptyText }) {
+  const { t } = useTranslation();
   return (
     <Modal
       visible={visible}
@@ -986,7 +1002,7 @@ function PickerModal({ visible, title, items, onSelect, onClose, emptyText }) {
           {items.length === 0 ? (
             <View style={pm.empty}>
               <Ionicons name="folder-open-outline" size={36} color={C.gray300} />
-              <Text style={pm.emptyText}>{emptyText || "No items available"}</Text>
+              <Text style={pm.emptyText}>{emptyText || t("reportGen.noItems")}</Text>
             </View>
           ) : (
             <FlatList
@@ -1002,7 +1018,7 @@ function PickerModal({ visible, title, items, onSelect, onClose, emptyText }) {
                   <Text style={pm.itemText}>{item.name}</Text>
                   {item.is_default ? (
                     <View style={pm.defaultBadge}>
-                      <Text style={pm.defaultBadgeText}>Default</Text>
+                      <Text style={pm.defaultBadgeText}>{t("reportGen.default")}</Text>
                     </View>
                   ) : null}
                 </TouchableOpacity>

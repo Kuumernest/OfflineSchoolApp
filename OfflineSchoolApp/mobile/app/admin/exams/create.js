@@ -14,31 +14,36 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
 import DateField        from "../../../src/components/DateField";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
-const EXAM_TYPES = [
-  { value: "first_test",            label: "First Test"            },
-  { value: "second_test",           label: "Second Test"           },
-  { value: "mid_term",              label: "Mid-Term Exam"         },
-  { value: "practical",             label: "Practical Exam"        },
-  { value: "final_exam",            label: "Final Exam"            },
-  { value: "mock_exam",             label: "Mock Exam"             },
-  { value: "promotion_exam",        label: "Promotion Exam"        },
-  { value: "continuous_assessment", label: "Continuous Assessment" },
+const examTypeOptions = (t) => [
+  { value: "first_test",            label: t("examNew.typeFirstTest")            },
+  { value: "second_test",           label: t("examNew.typeSecondTest")           },
+  { value: "mid_term",              label: t("examNew.typeMidTerm")              },
+  { value: "practical",             label: t("examNew.typePractical")            },
+  { value: "final_exam",            label: t("examNew.typeFinalExam")            },
+  { value: "mock_exam",             label: t("examNew.typeMockExam")             },
+  { value: "promotion_exam",        label: t("examNew.typePromotionExam")        },
+  { value: "continuous_assessment", label: t("examNew.typeContinuousAssessment") },
 ];
 
-const TERMS = [
-  "Term 1", "Term 2", "Term 3",
-  "Semester 1", "Semester 2",
-  "First Half", "Second Half",
+const termOptions = (t) => [
+  { value: "Term 1",     label: t("examNew.term1")      },
+  { value: "Term 2",     label: t("examNew.term2")      },
+  { value: "Term 3",     label: t("examNew.term3")      },
+  { value: "Semester 1", label: t("examNew.semester1")  },
+  { value: "Semester 2", label: t("examNew.semester2")  },
+  { value: "First Half", label: t("examNew.firstHalf")  },
+  { value: "Second Half", label: t("examNew.secondHalf") },
 ];
 
-const STATUSES = [
-  { value: "draft",     label: "Draft"     },
-  { value: "scheduled", label: "Scheduled" },
+const statusOptions = (t) => [
+  { value: "draft",     label: t("examNew.statusDraft")     },
+  { value: "scheduled", label: t("examNew.statusScheduled") },
 ];
 
 const currentYear    = new Date().getFullYear();
@@ -48,10 +53,10 @@ const ACADEMIC_YEARS = [
   `${currentYear + 1}/${currentYear + 2}`,
 ];
 
-const STEPS = [
-  { key: "details",  label: "Details",  icon: "document-text-outline"    },
-  { key: "subjects", label: "Subjects", icon: "book-outline"             },
-  { key: "review",   label: "Review",   icon: "checkmark-circle-outline" },
+const stepList = (t) => [
+  { key: "details",  label: t("examNew.stepDetails"),  icon: "document-text-outline"    },
+  { key: "subjects", label: t("examNew.stepSubjects"), icon: "book-outline"             },
+  { key: "review",   label: t("examNew.stepReview"),   icon: "checkmark-circle-outline" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -239,34 +244,37 @@ const si = StyleSheet.create({
 // STEP 1 — EXAM DETAILS
 // ─────────────────────────────────────────────────────────
 
-const StepDetails = ({ form, onChange, errors }) => (
+const StepDetails = ({ form, onChange, errors }) => {
+  const { t } = useTranslation();
+
+  return (
   <ScrollView
     showsVerticalScrollIndicator={false}
     contentContainerStyle={styles.scroll}
     keyboardShouldPersistTabs="handled"
   >
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Basic Information</Text>
+      <Text style={styles.sectionTitle}>{t("examNew.sectionBasic")}</Text>
 
       <FieldInput
-        label="Exam Name"
+        label={t("examNew.labelExamName")}
         required
-        placeholder="e.g. First Term Examination 2026"
+        placeholder={t("examNew.phExamName")}
         value={form.name}
         onChangeText={(v) => onChange("name", v)}
         error={errors.name}
       />
 
       <PickerRow
-        label="Exam Type"
+        label={t("examNew.labelExamType")}
         required
-        options={EXAM_TYPES}
+        options={examTypeOptions(t)}
         value={form.type}
         onChange={(v) => onChange("type", v)}
       />
 
       <PickerRow
-        label="Academic Year"
+        label={t("examNew.labelAcademicYear")}
         required
         options={ACADEMIC_YEARS}
         value={form.academicYear}
@@ -274,20 +282,20 @@ const StepDetails = ({ form, onChange, errors }) => (
       />
 
       <PickerRow
-        label="Term / Semester"
+        label={t("examNew.labelTerm")}
         required
-        options={TERMS}
+        options={termOptions(t)}
         value={form.term}
         onChange={(v) => onChange("term", v)}
       />
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Schedule</Text>
+      <Text style={styles.sectionTitle}>{t("examNew.sectionSchedule")}</Text>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <DateInput
-            label="Start Date"
+            label={t("examNew.labelStartDate")}
             value={form.startDate}
             onChange={(v) => onChange("startDate", v)}
           />
@@ -295,7 +303,7 @@ const StepDetails = ({ form, onChange, errors }) => (
         <View style={{ width: 12 }} />
         <View style={{ flex: 1 }}>
           <DateInput
-            label="End Date"
+            label={t("examNew.labelEndDate")}
             value={form.endDate}
             onChange={(v) => onChange("endDate", v)}
           />
@@ -304,11 +312,11 @@ const StepDetails = ({ form, onChange, errors }) => (
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Scoring</Text>
+      <Text style={styles.sectionTitle}>{t("examNew.sectionScoring")}</Text>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <FieldInput
-            label="Total Marks"
+            label={t("examNew.labelTotalMarks")}
             required
             placeholder="100"
             value={form.totalMarks}
@@ -320,7 +328,7 @@ const StepDetails = ({ form, onChange, errors }) => (
         <View style={{ width: 12 }} />
         <View style={{ flex: 1 }}>
           <FieldInput
-            label="Pass Mark"
+            label={t("examNew.labelPassMark")}
             required
             placeholder="50"
             value={form.passMark}
@@ -335,34 +343,35 @@ const StepDetails = ({ form, onChange, errors }) => (
         <View style={styles.passPreview}>
           <Ionicons name="information-circle-outline" size={14} color="#4F46E5" />
           <Text style={styles.passPreviewText}>
-            Pass rate:{" "}
-            {((Number(form.passMark) / Number(form.totalMarks)) * 100).toFixed(1)}%
+            {t("examNew.passRate", {
+              rate: ((Number(form.passMark) / Number(form.totalMarks)) * 100).toFixed(1),
+            })}
           </Text>
         </View>
       )}
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Initial Status</Text>
+      <Text style={styles.sectionTitle}>{t("examNew.sectionInitialStatus")}</Text>
       <PickerRow
-        options={STATUSES}
+        options={statusOptions(t)}
         value={form.status}
         onChange={(v) => onChange("status", v)}
       />
     </View>
 
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Additional Details</Text>
+      <Text style={styles.sectionTitle}>{t("examNew.sectionAdditional")}</Text>
       <FieldInput
-        label="Description"
-        placeholder="Brief description of the exam (optional)"
+        label={t("examNew.labelDescription")}
+        placeholder={t("examNew.phDescription")}
         value={form.description}
         onChangeText={(v) => onChange("description", v)}
         multiline
       />
       <FieldInput
-        label="Instructions"
-        placeholder="Instructions for students (optional)"
+        label={t("examNew.labelInstructions")}
+        placeholder={t("examNew.phInstructions")}
         value={form.instructions}
         onChangeText={(v) => onChange("instructions", v)}
         multiline
@@ -371,13 +380,16 @@ const StepDetails = ({ form, onChange, errors }) => (
 
     <View style={{ height: 40 }} />
   </ScrollView>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // STEP 2 — ASSIGN SUBJECTS + CLASSES
 // ─────────────────────────────────────────────────────────
 
 const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
+  const { t } = useTranslation();
+
   const [classes,          setClasses]          = useState([]);
   const [filteredSubjects, setFilteredSubjects] = useState([]);
   const [teachers,         setTeachers]         = useState([]);
@@ -405,13 +417,16 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
         );
       } catch (err) {
         console.error("StepSubjects load error:", err.message);
-        Alert.alert("Error", "Failed to load school data.");
+        Alert.alert(
+          t("examNew.alertErrorTitle"),
+          t("examNew.errLoadSchoolData")
+        );
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useEffect(() => {
     if (!selectedClass) { setFilteredSubjects([]); return; }
@@ -486,6 +501,8 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
               teacherId:   null,
               maxScore:    String(form.totalMarks || "100"),
               passMark:    String(form.passMark   || "50"),
+              // Report-card coefficient — sent to the API as weight = coeff × 100.
+              coefficient: "1",
             },
           },
         },
@@ -525,7 +542,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     return (
       <View style={st.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={st.loadingText}>Loading school data…</Text>
+        <Text style={st.loadingText}>{t("examNew.loadingSchoolData")}</Text>
       </View>
     );
   }
@@ -535,27 +552,27 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
       <View style={st.summaryBar}>
         <View style={st.summaryItem}>
           <Text style={st.summaryNum}>{Object.keys(assignments).length}</Text>
-          <Text style={st.summaryLabel}>Classes</Text>
+          <Text style={st.summaryLabel}>{t("examNew.classes")}</Text>
         </View>
         <View style={st.summaryDivider} />
         <View style={st.summaryItem}>
           <Text style={st.summaryNum}>{totalAssignments}</Text>
-          <Text style={st.summaryLabel}>Subjects</Text>
+          <Text style={st.summaryLabel}>{t("examNew.subjects")}</Text>
         </View>
         <View style={st.summaryDivider} />
         <Text style={st.summaryHint}>
-          Pick a class → tick subjects → set teacher & scores
+          {t("examNew.summaryHint")}
         </Text>
       </View>
 
       <View style={{ flex: 1, flexDirection: "row" }}>
         {/* Class list */}
         <View style={st.classList}>
-          <Text style={st.sideTitle}>Classes</Text>
+          <Text style={st.sideTitle}>{t("examNew.classes")}</Text>
           {classes.length === 0 ? (
             <View style={st.emptySide}>
               <Ionicons name="school-outline" size={28} color="#D1D5DB" />
-              <Text style={st.emptySmall}>No classes</Text>
+              <Text style={st.emptySmall}>{t("examNew.noClasses")}</Text>
             </View>
           ) : (
             <ScrollView showsVerticalScrollIndicator={false}>
@@ -597,18 +614,18 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
           {!selectedClass ? (
             <View style={st.centered}>
               <Ionicons name="arrow-back" size={32} color="#D1D5DB" />
-              <Text style={st.emptyText}>Select a class first</Text>
+              <Text style={st.emptyText}>{t("examNew.selectClassFirst")}</Text>
             </View>
           ) : (
             <>
               <Text style={st.sideTitle} numberOfLines={1}>
-                {selectedClass.name} — Subjects
+                {t("examNew.classSubjects", { name: selectedClass.name })}
               </Text>
               <View style={st.searchBox}>
                 <Ionicons name="search-outline" size={14} color="#9CA3AF" />
                 <TextInput
                   style={st.searchInput}
-                  placeholder="Search subject…"
+                  placeholder={t("examNew.phSearchSubject")}
                   placeholderTextColor="#9CA3AF"
                   value={search}
                   onChangeText={setSearch}
@@ -625,13 +642,15 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
               {subjectsLoading ? (
                 <View style={st.centered}>
                   <ActivityIndicator size="small" color="#4F46E5" />
-                  <Text style={st.loadingText}>Loading subjects…</Text>
+                  <Text style={st.loadingText}>{t("examNew.loadingSubjects")}</Text>
                 </View>
               ) : displaySubjects.length === 0 ? (
                 <View style={st.emptySide}>
                   <Ionicons name="book-outline" size={28} color="#D1D5DB" />
                   <Text style={st.emptySmall}>
-                    {search ? "No subjects match" : "No subjects for this class"}
+                    {search
+                      ? t("examNew.noSubjectsMatch")
+                      : t("examNew.noSubjectsForClass")}
                   </Text>
                 </View>
               ) : (
@@ -662,17 +681,17 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
 
                         {assigned && (
                           <View style={st.subjectConfig}>
-                            <Text style={st.configLabel}>Teacher</Text>
+                            <Text style={st.configLabel}>{t("examNew.labelTeacher")}</Text>
                             {teachers.length === 0 ? (
-                              <Text style={st.emptySmall}>No teachers found</Text>
+                              <Text style={st.emptySmall}>{t("examNew.noTeachers")}</Text>
                             ) : (
                               <ScrollView
                                 horizontal
                                 showsHorizontalScrollIndicator={false}
                                 contentContainerStyle={{ gap: 6, paddingBottom: 4 }}
                               >
-                                {teachers.map((t) => {
-                                  const tid      = String(t._id || t.id);
+                                {teachers.map((teacher) => {
+                                  const tid      = String(teacher._id || teacher.id);
                                   const isActive = subjectEntry?.teacherId === tid;
                                   return (
                                     <TouchableOpacity
@@ -692,7 +711,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                                         st.teacherChipText,
                                         isActive && { color: "#FFF" },
                                       ]}>
-                                        {t.name || t.email}
+                                        {teacher.name || teacher.email}
                                       </Text>
                                     </TouchableOpacity>
                                   );
@@ -702,7 +721,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
 
                             <View style={{ flexDirection: "row", gap: 8, marginTop: 8 }}>
                               <View style={{ flex: 1 }}>
-                                <Text style={st.configLabel}>Max Score</Text>
+                                <Text style={st.configLabel}>{t("examNew.labelMaxScore")}</Text>
                                 <TextInput
                                   style={st.configInput}
                                   value={subjectEntry?.maxScore}
@@ -715,7 +734,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                                 />
                               </View>
                               <View style={{ flex: 1 }}>
-                                <Text style={st.configLabel}>Pass Score</Text>
+                                <Text style={st.configLabel}>{t("examNew.labelPassScore")}</Text>
                                 <TextInput
                                   style={st.configInput}
                                   value={subjectEntry?.passMark}
@@ -724,6 +743,19 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
                                   }
                                   keyboardType="numeric"
                                   placeholder="50"
+                                  placeholderTextColor="#9CA3AF"
+                                />
+                              </View>
+                              <View style={{ flex: 1 }}>
+                                <Text style={st.configLabel}>{t("examNew.labelCoefficient")}</Text>
+                                <TextInput
+                                  style={st.configInput}
+                                  value={subjectEntry?.coefficient}
+                                  onChangeText={(v) =>
+                                    updateSubjectField(classId, subjectId, "coefficient", v)
+                                  }
+                                  keyboardType="numeric"
+                                  placeholder="1"
                                   placeholderTextColor="#9CA3AF"
                                 />
                               </View>
@@ -882,6 +914,8 @@ const st = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const StepReview = ({ form, assignments }) => {
+  const { t } = useTranslation();
+
   const totalSubjects = useMemo(
     () => Object.values(assignments).reduce(
       (acc, cls) => acc + Object.keys(cls.subjects).length, 0
@@ -895,17 +929,17 @@ const StepReview = ({ form, assignments }) => {
       contentContainerStyle={styles.scroll}
     >
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>Exam Details</Text>
+        <Text style={styles.sectionTitle}>{t("examNew.sectionExamDetails")}</Text>
         {[
-          { label: "Name",          value: form.name },
-          { label: "Type",          value: EXAM_TYPES.find((t) => t.value === form.type)?.label || form.type },
-          { label: "Academic Year", value: form.academicYear },
-          { label: "Term",          value: form.term },
-          { label: "Status",        value: form.status },
-          { label: "Start Date",    value: form.startDate || "—" },
-          { label: "End Date",      value: form.endDate   || "—" },
-          { label: "Total Marks",   value: form.totalMarks },
-          { label: "Pass Mark",     value: form.passMark  },
+          { label: t("examNew.reviewName"),        value: form.name },
+          { label: t("examNew.reviewType"),        value: examTypeOptions(t).find((o) => o.value === form.type)?.label || form.type },
+          { label: t("examNew.labelAcademicYear"), value: form.academicYear },
+          { label: t("examNew.reviewTerm"),        value: termOptions(t).find((o) => o.value === form.term)?.label || form.term },
+          { label: t("examNew.reviewStatus"),      value: statusOptions(t).find((o) => o.value === form.status)?.label || form.status },
+          { label: t("examNew.labelStartDate"),    value: form.startDate || "—" },
+          { label: t("examNew.labelEndDate"),      value: form.endDate   || "—" },
+          { label: t("examNew.labelTotalMarks"),   value: form.totalMarks },
+          { label: t("examNew.labelPassMark"),     value: form.passMark  },
         ].map(({ label, value }) => (
           <View key={label} style={rv.row}>
             <Text style={rv.rowLabel}>{label}</Text>
@@ -916,12 +950,12 @@ const StepReview = ({ form, assignments }) => {
 
       <View style={styles.section}>
         <View style={rv.sectionHeader}>
-          <Text style={styles.sectionTitle}>Subject Assignments</Text>
+          <Text style={styles.sectionTitle}>{t("examNew.sectionSubjectAssignments")}</Text>
           <View style={rv.badge}>
             <Text style={rv.badgeText}>
-              {Object.keys(assignments).length} class
-              {Object.keys(assignments).length !== 1 ? "es" : ""},{" "}
-              {totalSubjects} subject{totalSubjects !== 1 ? "s" : ""}
+              {t("examNew.classCount", { count: Object.keys(assignments).length })}
+              {", "}
+              {t("examNew.subjectCount", { count: totalSubjects })}
             </Text>
           </View>
         </View>
@@ -930,8 +964,8 @@ const StepReview = ({ form, assignments }) => {
           <View style={rv.emptyAssign}>
             <Ionicons name="alert-circle-outline" size={32} color="#F59E0B" />
             <Text style={rv.emptyAssignText}>
-              No subjects assigned yet.{"\n"}
-              You can add them later from the exam detail screen.
+              {t("examNew.noAssignmentsTitle")}{"\n"}
+              {t("examNew.noAssignmentsHint")}
             </Text>
           </View>
         ) : (
@@ -941,7 +975,7 @@ const StepReview = ({ form, assignments }) => {
                 <Ionicons name="school-outline" size={14} color="#4F46E5" />
                 <Text style={rv.classBlockTitle}>{clsData.className}</Text>
                 <Text style={rv.classBlockCount}>
-                  {Object.keys(clsData.subjects).length} subject(s)
+                  {t("examNew.subjectCount", { count: Object.keys(clsData.subjects).length })}
                 </Text>
               </View>
               {Object.entries(clsData.subjects).map(([subjectId, sub]) => (
@@ -949,7 +983,7 @@ const StepReview = ({ form, assignments }) => {
                   <Ionicons name="book-outline" size={12} color="#6B7280" />
                   <Text style={rv.subjectRowName}>{sub.subjectName}</Text>
                   <Text style={rv.subjectRowMeta}>
-                    Max {sub.maxScore} · Pass {sub.passMark}
+                    {t("examNew.subjectMeta", { max: sub.maxScore, pass: sub.passMark })}
                   </Text>
                   {sub.teacherId ? (
                     <View style={rv.teacherTag}>
@@ -957,7 +991,7 @@ const StepReview = ({ form, assignments }) => {
                     </View>
                   ) : (
                     <View style={rv.teacherTagWarn}>
-                      <Text style={rv.teacherTagWarnText}>No teacher</Text>
+                      <Text style={rv.teacherTagWarnText}>{t("examNew.noTeacher")}</Text>
                     </View>
                   )}
                 </View>
@@ -1054,6 +1088,7 @@ const rv = StyleSheet.create({
 
 export default function CreateExamScreen() {
   const router   = useRouter();
+  const { t }    = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
 
@@ -1084,36 +1119,36 @@ export default function CreateExamScreen() {
     const e  = {};
     const tm = Number(form.totalMarks);
     const pm = Number(form.passMark);
-    if (!form.name.trim())          e.name       = "Exam name is required";
-    if (isNaN(tm) || tm <= 0)       e.totalMarks = "Must be a positive number";
+    if (!form.name.trim())          e.name       = t("examNew.errNameRequired");
+    if (isNaN(tm) || tm <= 0)       e.totalMarks = t("examNew.errPositiveNumber");
     if (isNaN(pm) || pm < 0 || pm > tm)
-      e.passMark = `Must be between 0 and ${tm}`;
+      e.passMark = t("examNew.errPassRange", { max: tm });
     if (form.startDate && !isValidDate(form.startDate))
-      e.startDate = "Invalid start date";
+      e.startDate = t("examNew.errInvalidStartDate");
     if (form.endDate && !isValidDate(form.endDate))
-      e.endDate = "Invalid end date";
+      e.endDate = t("examNew.errInvalidEndDate");
     if (
       form.startDate && form.endDate &&
       isValidDate(form.startDate) && isValidDate(form.endDate) &&
       new Date(form.startDate) > new Date(form.endDate)
     )
-      e.endDate = "End date must be after start date";
+      e.endDate = t("examNew.errEndBeforeStart");
     return e;
-  }, [form]);
+  }, [form, t]);
 
   const detailsValid = Object.keys(detailErrors).length === 0;
 
   const goNext = useCallback(() => {
     if (currentStep === "details") {
       if (!detailsValid) {
-        Alert.alert("Fix Errors", Object.values(detailErrors)[0]);
+        Alert.alert(t("examNew.alertFixErrors"), Object.values(detailErrors)[0]);
         return;
       }
       setCurrentStep("subjects");
     } else if (currentStep === "subjects") {
       setCurrentStep("review");
     }
-  }, [currentStep, detailsValid, detailErrors]);
+  }, [currentStep, detailsValid, detailErrors, t]);
 
   const goBack = useCallback(() => {
     if (currentStep === "subjects") setCurrentStep("details");
@@ -1150,7 +1185,7 @@ export default function CreateExamScreen() {
         examResult?._id       ||
         examResult?.id;
 
-      if (!examId) throw new Error("Exam created but ID was not returned");
+      if (!examId) throw new Error(t("examNew.errNoExamId"));
 
       let totalAssigned = 0;
       let totalQueued   = 0;
@@ -1159,6 +1194,7 @@ export default function CreateExamScreen() {
           try {
             // Goes through ExamService so an assignment made offline is
             // stored locally and queued, instead of being silently lost.
+            const coeff = Number(subData.coefficient);
             const res = await ExamService.assignExamSubject({
               examId,
               subjectId,
@@ -1167,6 +1203,8 @@ export default function CreateExamScreen() {
               subjectName: subData.subjectName || null,
               maxScore:    Number(subData.maxScore) || Number(form.totalMarks),
               passMark:    Number(subData.passMark) || Number(form.passMark),
+              // The API stores percentage-style weight: coefficient 2 → 200.
+              weight:      Number.isFinite(coeff) && coeff > 0 ? Math.round(coeff * 100) : 100,
               schoolId,
             });
             totalAssigned++;
@@ -1181,16 +1219,21 @@ export default function CreateExamScreen() {
       }
 
       Alert.alert(
-        examResult?.queued || totalQueued > 0 ? "Exam Saved Offline" : "Exam Created",
-        `"${form.name}" created${
-          totalAssigned > 0 ? ` with ${totalAssigned} subject assignment(s)` : ""
-        }.` +
+        examResult?.queued || totalQueued > 0
+          ? t("examNew.alertSavedOffline")
+          : t("examNew.alertCreated"),
+        (totalAssigned > 0
+          ? t("examNew.createdMsgWithSubjects", {
+              name:  form.name,
+              count: totalAssigned,
+            })
+          : t("examNew.createdMsg", { name: form.name })) +
         (examResult?.queued || totalQueued > 0
-          ? "\n\nSaved on this device — it will upload automatically when you're back online."
+          ? "\n\n" + t("examNew.offlineNote")
           : ""),
         [
           {
-            text:    "Enter Marks Now",
+            text:    t("examNew.btnEnterMarks"),
             onPress: () =>
               router.replace({
                 pathname: "/admin/exams/marks",
@@ -1198,7 +1241,7 @@ export default function CreateExamScreen() {
               }),
           },
           {
-            text:    "View Exam",
+            text:    t("examNew.btnViewExam"),
             onPress: () =>
               router.replace({
                 pathname: "/admin/exams/[id]",
@@ -1206,7 +1249,7 @@ export default function CreateExamScreen() {
               }),
           },
           {
-            text:    "Done",
+            text:    t("examNew.btnDone"),
             style:   "cancel",
             onPress: () => router.back(),
           },
@@ -1214,11 +1257,14 @@ export default function CreateExamScreen() {
       );
     } catch (err) {
       console.error("Create exam failed:", err.message);
-      Alert.alert("Error", err.message || "Failed to create exam");
+      Alert.alert(
+        t("examNew.alertErrorTitle"),
+        err.message || t("examNew.errCreateFailed")
+      );
     } finally {
       setSaving(false);
     }
-  }, [form, assignments, schoolId, user, router]);
+  }, [form, assignments, schoolId, user, router, t]);
 
   const isLastStep = currentStep === "review";
 
@@ -1231,13 +1277,13 @@ export default function CreateExamScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Create Exam</Text>
+          <Text style={styles.headerTitle}>{t("examNew.createExam")}</Text>
           <Text style={styles.headerSub}>
             {currentStep === "details"
-              ? "Fill in exam details"
+              ? t("examNew.subDetails")
               : currentStep === "subjects"
-              ? "Assign subjects & classes"
-              : "Review & confirm"}
+              ? t("examNew.subSubjects")
+              : t("examNew.subReview")}
           </Text>
         </View>
         <TouchableOpacity
@@ -1252,12 +1298,14 @@ export default function CreateExamScreen() {
         >
           {saving
             ? <ActivityIndicator size="small" color="#FFF" />
-            : <Text style={styles.saveBtnText}>{isLastStep ? "Create" : "Next"}</Text>
+            : <Text style={styles.saveBtnText}>
+                {isLastStep ? t("examNew.btnCreate") : t("examNew.btnNext")}
+              </Text>
           }
         </TouchableOpacity>
       </View>
 
-      <StepIndicator steps={STEPS} currentStep={currentStep} />
+      <StepIndicator steps={stepList(t)} currentStep={currentStep} />
 
       <View style={{ flex: 1 }}>
         {currentStep === "details"  && <StepDetails  form={form} onChange={onChange} errors={detailErrors} />}
@@ -1273,7 +1321,7 @@ export default function CreateExamScreen() {
         >
           <Ionicons name="arrow-back" size={16} color="#4F46E5" />
           <Text style={styles.bottomNavBackText}>
-            {currentStep === "details" ? "Cancel" : "Back"}
+            {currentStep === "details" ? t("examNew.btnCancel") : t("examNew.btnBack")}
           </Text>
         </TouchableOpacity>
 
@@ -1292,7 +1340,7 @@ export default function CreateExamScreen() {
           ) : (
             <>
               <Text style={styles.bottomNavNextText}>
-                {isLastStep ? "Create Exam" : "Next Step"}
+                {isLastStep ? t("examNew.createExam") : t("examNew.btnNextStep")}
               </Text>
               <Ionicons
                 name={isLastStep ? "checkmark-circle" : "arrow-forward"}

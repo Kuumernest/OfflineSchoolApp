@@ -9,6 +9,8 @@ import { useAuthStore }         from "@/store/auth.store";
 export interface SearchResult {
   id:        string;
   label:     string;
+  /** Set on static page items so the label can follow the active language. */
+  labelKey?: string;
   sublabel?: string;
   path:      string;
   type:      "page" | "student" | "teacher" | "class" | "subject";
@@ -16,25 +18,25 @@ export interface SearchResult {
 
 // ─── Static page items ────────────────────────────────────────────────────────
 const PAGE_ITEMS: SearchResult[] = [
-  { id: "dashboard",          label: "Dashboard",          path: "/dashboard",          type: "page" },
-  { id: "students",           label: "Students",           path: "/students",           type: "page" },
-  { id: "teachers",           label: "Teachers",           path: "/teachers",           type: "page" },
-  { id: "classes",            label: "Classes",            path: "/classes",            type: "page" },
-  { id: "subjects",           label: "Subjects",           path: "/subjects",           type: "page" },
-  { id: "attendance",         label: "Attendance",         path: "/attendance",         type: "page" },
-  { id: "attendance-reports", label: "Attendance Reports", path: "/attendance/reports", type: "page" },
-  { id: "timetable",          label: "Timetable",          path: "/timetable",          type: "page" },
-  { id: "periods",            label: "Periods",            path: "/periods",            type: "page" },
-  { id: "exams",              label: "Exams",              path: "/exams",              type: "page" },
-  { id: "exam-results",       label: "Exam Results",       path: "/exams/results",      type: "page" },
-  { id: "exam-reports",       label: "Exam Reports",       path: "/exams/reports",      type: "page" },
-  { id: "admissions",         label: "Admissions",         path: "/students/admissions",   type: "page" },
-  { id: "applications",       label: "Applications",       path: "/students/applications", type: "page" },
-  { id: "assignments",        label: "Teacher Assignments", path: "/teachers/assignments", type: "page" },
-  { id: "announcements",      label: "Announcements",      path: "/announcements",      type: "page" },
-  { id: "reports",            label: "Reports",            path: "/reports",            type: "page" },
-  { id: "report-templates",   label: "Report Templates",   path: "/reports/templates",  type: "page" },
-  { id: "settings",           label: "Settings",           path: "/settings",           type: "page" },
+  { id: "dashboard",          label: "Dashboard", labelKey: "nav.dashboard",          path: "/dashboard",          type: "page" },
+  { id: "students",           label: "Students", labelKey: "nav.allStudents",           path: "/students",           type: "page" },
+  { id: "teachers",           label: "Teachers", labelKey: "nav.allTeachers",           path: "/teachers",           type: "page" },
+  { id: "classes",            label: "Classes", labelKey: "nav.classes",            path: "/classes",            type: "page" },
+  { id: "subjects",           label: "Subjects", labelKey: "nav.subjects",           path: "/subjects",           type: "page" },
+  { id: "attendance",         label: "Attendance", labelKey: "nav.attendance",         path: "/attendance",         type: "page" },
+  { id: "attendance-reports", label: "Attendance Reports", labelKey: "search.attendanceReports", path: "/attendance/reports", type: "page" },
+  { id: "timetable",          label: "Timetable", labelKey: "nav.timetable",          path: "/timetable",          type: "page" },
+  { id: "periods",            label: "Periods", labelKey: "nav.periods",            path: "/periods",            type: "page" },
+  { id: "exams",              label: "Exams", labelKey: "nav.exams",              path: "/exams",              type: "page" },
+  { id: "exam-results",       label: "Exam Results", labelKey: "nav.results",       path: "/exams/results",      type: "page" },
+  { id: "report-cards",       label: "Report Cards", labelKey: "reportCards.title",       path: "/reports/cards",      type: "page" },
+  { id: "admissions",         label: "Admissions", labelKey: "nav.admissions",         path: "/students/admissions",   type: "page" },
+  { id: "applications",       label: "Applications", labelKey: "nav.applications",       path: "/students/applications", type: "page" },
+  { id: "assignments",        label: "Teacher Assignments", labelKey: "nav.assignments", path: "/teachers/assignments", type: "page" },
+  { id: "announcements",      label: "Announcements", labelKey: "nav.announcements",      path: "/announcements",      type: "page" },
+  { id: "reports",            label: "Reports", labelKey: "nav.reports",            path: "/reports",            type: "page" },
+  { id: "report-templates",   label: "Report Templates", labelKey: "nav.templates",   path: "/reports/templates",  type: "page" },
+  { id: "settings",           label: "Settings", labelKey: "nav.settings",           path: "/settings",           type: "page" },
 ];
 
 // "Grades" and "Finance" were listed here and are not pages in this app —
@@ -204,7 +206,10 @@ async function getSubjectResults(schoolId: string): Promise<SearchResult[]> {
 }
 
 // ─── MAIN SEARCH FUNCTION ─────────────────────────────────────────────────────
-export async function globalSearch(query: string): Promise<SearchResult[]> {
+export async function globalSearch(
+  query: string,
+  t?: (key: string) => string,
+): Promise<SearchResult[]> {
   if (!query.trim()) return [];
 
   // Get schoolId from auth store
@@ -226,9 +231,10 @@ export async function globalSearch(query: string): Promise<SearchResult[]> {
     ]);
 
   // Filter pages
-  const pageResults = PAGE_ITEMS.filter((p) =>
-    p.label.toLowerCase().includes(q)
-  );
+  // Resolve first, then match: the user searches the words they can see.
+  const pageResults = PAGE_ITEMS
+    .map((p) => (t && p.labelKey ? { ...p, label: t(p.labelKey) } : p))
+    .filter((p) => p.label.toLowerCase().includes(q));
 
   // Filter dynamic results — matches on label OR sublabel
   const filter = (items: SearchResult[]) =>

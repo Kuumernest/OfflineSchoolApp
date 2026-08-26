@@ -18,7 +18,8 @@ import {
 import { Stack, useRouter, useFocusEffect } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { MutationQueue } from "../../src/services/mutationQueue.service";
-import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+import { useSyncStatus } from "../../src/hooks/useSyncStatus";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 const C = {
   bg: "#F9FAFB", card: "#FFFFFF", border: "#E5E7EB",
@@ -32,22 +33,25 @@ const C = {
 const describe = (row) => {
   const key = String(row.entity_key || "");
   const [kind, ...rest] = key.split(":");
+  // Keys are the stored entity kinds; only the label is localised. An
+  // unrecognised kind falls through to its raw value, as before.
   const map = {
-    attendance: "Attendance register",
-    homework: "Homework",
-    homework_submission: "Homework submission",
-    exam: "Exam",
-    "exam-scores": "Exam marks",
-    "exam-subject": "Exam subject",
-    "exam-status": "Exam status",
-    "exam-subject-status": "Marks submission",
+    attendance: "syncScreens.kAttendance",
+    homework: "syncScreens.kHomework",
+    homework_submission: "syncScreens.kHomeworkSubmission",
+    exam: "syncScreens.kExam",
+    "exam-scores": "syncScreens.kExamMarks",
+    "exam-subject": "syncScreens.kExamSubject",
+    "exam-status": "syncScreens.kExamStatus",
+    "exam-subject-status": "syncScreens.kMarksSubmission",
   };
-  const label = map[kind] || kind || "Change";
+  const labelKey = map[kind] || null;
   const detail = rest.join(":");
-  return { label, detail };
+  return { labelKey, rawKind: kind, detail };
 };
 
 const StatusChip = ({ status }) => {
+  const { t } = useTranslation();
   const isConflict = status === "conflict";
   return (
     <View style={[
@@ -58,13 +62,14 @@ const StatusChip = ({ status }) => {
         styles.chipText,
         { color: isConflict ? C.conflict : C.failed },
       ]}>
-        {isConflict ? "Conflict" : "Failed"}
+        {isConflict ? t("syncScreens.chipConflict") : t("syncScreens.chipFailed")}
       </Text>
     </View>
   );
 };
 
 export default function PendingChangesScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -114,15 +119,16 @@ export default function PendingChangesScreen() {
   }, [runSync, load]);
 
   const discardOne = useCallback((row) => {
-    const { label } = describe(row);
+    const { labelKey, rawKind } = describe(row);
+    const label = labelKey ? t(labelKey) : (rawKind || t("syncScreens.kChange"));
     Alert.alert(
-      "Discard this change?",
+      t("syncScreens.discardTitle"),
       `"${label}" will be permanently removed from the upload queue. ` +
       `The change stays on this device but will never reach the server.`,
       [
-        { text: "Keep", style: "cancel" },
+        { text: t("syncScreens.keep"), style: "cancel" },
         {
-          text: "Discard",
+          text: t("common.discard"),
           style: "destructive",
           onPress: async () => {
             await MutationQueue.discard(row.id);
@@ -135,7 +141,8 @@ export default function PendingChangesScreen() {
   }, [load, refreshStats]);
 
   const renderItem = ({ item }) => {
-    const { label, detail } = describe(item);
+    const { labelKey, rawKind, detail } = describe(item);
+    const label = labelKey ? t(labelKey) : (rawKind || t("syncScreens.kChange"));
     const attempts = item.retry_count || 0;
 
     return (
@@ -160,8 +167,7 @@ export default function PendingChangesScreen() {
 
         {item.status === "conflict" && (
           <Text style={styles.hint}>
-            The server has a newer version of this record. Retrying will
-            overwrite it with your copy.
+            {t("syncScreens.conflictNote")}
           </Text>
         )}
 
@@ -172,7 +178,7 @@ export default function PendingChangesScreen() {
             disabled={busy}
           >
             <Ionicons name="refresh" size={14} color="#FFF" />
-            <Text style={styles.btnPrimaryText}>Retry</Text>
+            <Text style={styles.btnPrimaryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -181,7 +187,7 @@ export default function PendingChangesScreen() {
             disabled={busy}
           >
             <Ionicons name="trash-outline" size={14} color={C.failed} />
-            <Text style={styles.btnGhostText}>Discard</Text>
+            <Text style={styles.btnGhostText}>{t("common.discard")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -195,7 +201,7 @@ export default function PendingChangesScreen() {
       <Stack.Screen
         options={{
           headerShown: true,
-          title: "Pending changes",
+          title: t("syncScreens.pendingTitle"),
           headerTintColor: C.text,
           headerStyle: { backgroundColor: C.card },
         }}
@@ -212,7 +218,7 @@ export default function PendingChangesScreen() {
           {busy
             ? <ActivityIndicator size="small" color={C.primary} />
             : <Ionicons name="sync" size={16} color={C.primary} />}
-          <Text style={styles.syncBtnText}>Sync now</Text>
+          <Text style={styles.syncBtnText}>{t("syncScreens.syncNow")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -230,13 +236,12 @@ export default function PendingChangesScreen() {
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="checkmark-circle-outline" size={44} color={C.success} />
-              <Text style={styles.emptyTitle}>Nothing stuck</Text>
+              <Text style={styles.emptyTitle}>{t("syncScreens.nothingStuck")}</Text>
               <Text style={styles.emptyText}>
-                Every change on this device has either uploaded or is waiting
-                its turn.
+                {t("syncScreens.nothingStuckSub")}
               </Text>
               <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-                <Text style={styles.backBtnText}>Go back</Text>
+                <Text style={styles.backBtnText}>{t("common.goBack")}</Text>
               </TouchableOpacity>
             </View>
           }

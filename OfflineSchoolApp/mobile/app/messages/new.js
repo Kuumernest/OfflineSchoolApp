@@ -21,6 +21,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -30,6 +31,7 @@ const C = {
 };
 
 export default function NewConversationScreen() {
+  const { t } = useTranslation();
   const user = useAuthStore((s) => s.user);
   const myId = String(user?._id ?? "");
 
@@ -50,7 +52,7 @@ export default function NewConversationScreen() {
       setError(
         err?.response
           ? msg
-          : "Starting a new conversation needs a connection."
+          : t("msgMobile.needsConnection")
       );
       setRecipients([]);
     } finally {
@@ -59,8 +61,8 @@ export default function NewConversationScreen() {
   }, []);
 
   useEffect(() => {
-    const t = setTimeout(() => load(query.trim()), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => load(query.trim()), 250);
+    return () => clearTimeout(timer);
   }, [query, load]);
 
   const handlePick = useCallback(async (r) => {
@@ -79,7 +81,7 @@ export default function NewConversationScreen() {
       // A 403 here carries a plain reason from the policy — show it, because
       // it usually names a setting somebody can change.
       Alert.alert(
-        "Cannot start that conversation",
+        t("msgMobile.cannotStart"),
         err?.response?.data?.error || err.message
       );
     } finally {
@@ -124,7 +126,7 @@ export default function NewConversationScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="close" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>New conversation</Text>
+        <Text style={s.headerTitle}>{t("msgMobile.newConversation")}</Text>
         <View style={s.backBtn} />
       </View>
 
@@ -133,7 +135,7 @@ export default function NewConversationScreen() {
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search staff, students or parents…"
+          placeholder={t("msgMobile.searchPeoplePh")}
           placeholderTextColor={C.gray400}
           style={s.searchInput}
           autoFocus
@@ -167,8 +169,8 @@ export default function NewConversationScreen() {
               <View style={s.empty}>
                 <Text style={s.emptyText}>
                   {query.trim()
-                    ? "Nobody matches that name."
-                    : "There is nobody you can start a conversation with."}
+                    ? t("msgMobile.noMatch")
+                    : t("msgMobile.nobodyAvailable")}
                 </Text>
               </View>
             ) : null

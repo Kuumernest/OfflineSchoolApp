@@ -5,7 +5,8 @@ import { useParams, useNavigate,
 import { useAuthStore }                      from "@/store/auth.store";
 import { useExamDetail, useSubmissions,
          useApproveSubmission,
-         useRejectSubmission }               from "@/hooks/useExamDetail";
+         useRejectSubmission,
+         useUpdateExamSubject }              from "@/hooks/useExamDetail";
 import { useExamResults, useExamStats,
          useProcessResults,
          usePublishResults }                 from "@/hooks/useExamResults";
@@ -18,7 +19,7 @@ import { getErrorMessage }                   from "@/lib/api";
 import { useTranslation } from "react-i18next";
 import {
   EXAM_STATUS_META,
-  EXAM_TYPE_LABELS,
+  examTypeLabel,
 }                                            from "@/constants/exam.constants";
 
 // ─────────────────────────────────────────────────────────
@@ -80,12 +81,12 @@ const NEXT_STATUSES: Record<string, ExamStatus[]> = {
 };
 
 const SUBMISSION_META: Record<string, {
-  color: string; bg: string; label: string; icon: string;
+  color: string; bg: string; labelKey: string; icon: string;
 }> = {
-  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  label: "Not Submitted",     icon: "⏳" },
-  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", label: "Awaiting Approval", icon: "📬" },
-  approved:  { color: "text-green-600",  bg: "bg-green-50",  label: "Approved",           icon: "✅" },
-  rejected:  { color: "text-red-600",    bg: "bg-red-50",    label: "Rejected",            icon: "❌" },
+  pending:   { color: "text-amber-600",  bg: "bg-amber-50",  labelKey: "examSubmission.notSubmitted",     icon: "⏳" },
+  submitted: { color: "text-indigo-600", bg: "bg-indigo-50", labelKey: "examSubmission.awaitingApproval", icon: "📬" },
+  approved:  { color: "text-green-600",  bg: "bg-green-50",  labelKey: "results.approved",                icon: "✅" },
+  rejected:  { color: "text-red-600",    bg: "bg-red-50",    labelKey: "results.rejected",                icon: "❌" },
 };
 
 const EMPTY_SCORE: ScoreEntry = {
@@ -97,12 +98,13 @@ const EMPTY_SCORE: ScoreEntry = {
 // ─────────────────────────────────────────────────────────
 
 const StatusBadge = ({ status }: { status: ExamStatus }) => {
+  const { t } = useTranslation();
   const meta = EXAM_STATUS_META[status] ?? EXAM_STATUS_META.draft;
   return (
     <span className={`inline-flex items-center gap-1.5 px-3 py-1.5
       rounded-full text-xs font-bold ${meta.color} ${meta.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${meta.dot}`} />
-      {meta.label}
+      {t(meta.labelKey)}
     </span>
   );
 };
@@ -186,7 +188,7 @@ const DetailsTab = ({
                       <Spinner size="sm" /> Updating…
                     </span>
                   ) : (
-                    `→ ${EXAM_STATUS_META[s].label}`
+                    `→ ${t(EXAM_STATUS_META[s].labelKey)}`
                   )}
                 </button>
               ))}
@@ -200,7 +202,7 @@ const DetailsTab = ({
         <h3 className="font-semibold text-gray-900 mb-4">{t("exams.information")}</h3>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           {[
-            { label: "Type",          value: EXAM_TYPE_LABELS[exam.type as keyof typeof EXAM_TYPE_LABELS] ?? exam.type },
+            { label: "Type",          value: examTypeLabel(t, exam.type)},
             { label: "Academic Year", value: exam.academicYear  },
             { label: "Term",          value: exam.term          },
             { label: "Classes",       value: exam.classNames || exam.className || "All" },
@@ -265,7 +267,7 @@ const DetailsTab = ({
                     </span>
                     <span className={`text-xs font-bold px-2 py-0.5
                       rounded-full ${meta.color} ${meta.bg}`}>
-                      {meta.label}
+                      {t(meta.labelKey)}
                     </span>
                   </div>
                 </div>
@@ -634,6 +636,26 @@ const MarksTab = ({
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
 
+  // Coefficient editing. Admin-only, matching the API: a coefficient rescales
+  // every student's average, which is a head's decision, not a marker's.
+  const role = useAuthStore((s) => s.user?.role ?? "");
+  const canEditCoeff = ["admin", "school_admin", "super_admin"].includes(role);
+  const [editingCoeff, setEditingCoeff] = useState<string | null>(null);
+  const [coeffValue,   setCoeffValue]   = useState("");
+  const updateSubjectMut = useUpdateExamSubject(examId);
+
+  const coeffOf = (sub: ExamSubject) =>
+    Math.round(((sub.weight ?? 100) / 100) * 100) / 100;
+
+  const saveCoeff = (sub: ExamSubject) => {
+    const n = Number(coeffValue);
+    if (!Number.isFinite(n) || n <= 0) return;
+    updateSubjectMut.mutate(
+      { examSubjectId: sub._id, weight: Math.round(n * 100) },
+      { onSuccess: () => setEditingCoeff(null) }
+    );
+  };
+
   const approve = useApproveSubmission(examId);
   const reject  = useRejectSubmission(examId);
 
@@ -748,7 +770,7 @@ const MarksTab = ({
                       </span>
                       <span className={`text-xs font-bold px-2 py-0.5
                         rounded-full ${meta.color} ${meta.bg}`}>
-                        {meta.label}
+                        {t(meta.labelKey)}
                       </span>
                     </div>
 
@@ -760,6 +782,68 @@ const MarksTab = ({
                       <span className="text-xs text-gray-400">
                         {entered}/{total} scores entered
                       </span>
+                      <span className="text-xs text-gray-300">·</span>
+                      {editingCoeff === sub._id ? (
+                        <span
+                          className="flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <span className="text-xs text-gray-400">
+                            {t("exams.coeff")}
+                          </span>
+                          <input
+                            type="number"
+                            min={0.5}
+                            step={0.5}
+                            value={coeffValue}
+                            onChange={(e) => setCoeffValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") saveCoeff(sub);
+                              if (e.key === "Escape") setEditingCoeff(null);
+                            }}
+                            autoFocus
+                            className="w-14 px-1.5 py-0.5 text-xs border
+                                       border-indigo-300 rounded-md
+                                       focus:outline-none"
+                          />
+                          <button
+                            onClick={() => saveCoeff(sub)}
+                            disabled={updateSubjectMut.isPending}
+                            className="text-xs font-bold text-green-600
+                                       hover:text-green-700 px-1"
+                            title="Save"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            onClick={() => setEditingCoeff(null)}
+                            className="text-xs font-bold text-gray-400
+                                       hover:text-gray-600 px-1"
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </span>
+                      ) : (
+                        <span
+                          className="text-xs text-gray-400 flex items-center gap-1"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {t("exams.coeff")} {coeffOf(sub)}
+                          {canEditCoeff && (
+                            <button
+                              onClick={() => {
+                                setEditingCoeff(sub._id);
+                                setCoeffValue(String(coeffOf(sub)));
+                              }}
+                              className="text-indigo-400 hover:text-indigo-600"
+                              title={t("examCreate.coefficient")}
+                            >
+                              ✎
+                            </button>
+                          )}
+                        </span>
+                      )}
                     </div>
 
                     <div className="mt-2 h-1 bg-gray-100 rounded-full w-48">
@@ -1153,7 +1237,7 @@ export default function ExamDetailPage() {
   const handleStatusChange = (status: ExamStatus) => {
     if (!id) return;
     if (!window.confirm(
-      `Change exam status to "${EXAM_STATUS_META[status].label}"?`
+      `Change exam status to "${t(EXAM_STATUS_META[status].labelKey)}"?`
     )) return;
     updateStatus.mutate({ examId: id, status });
   };
@@ -1200,7 +1284,7 @@ export default function ExamDetailPage() {
           </button>
           <h1 className="text-2xl font-bold text-gray-900">{exam.name}</h1>
           <p className="text-gray-500 text-sm mt-1">
-            {EXAM_TYPE_LABELS[exam.type as keyof typeof EXAM_TYPE_LABELS] ?? exam.type}
+            {examTypeLabel(t, exam.type)}
             {exam.academicYear ? ` · ${exam.academicYear}` : ""}
             {exam.term         ? ` · ${exam.term}`         : ""}
           </p>

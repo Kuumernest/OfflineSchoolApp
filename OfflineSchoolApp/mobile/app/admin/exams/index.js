@@ -12,30 +12,37 @@ import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
+// Object keys are the stored status/type values and must not change - only the
+// labels are localised.
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", label: "Draft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", label: "Scheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", label: "Ongoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", label: "Completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", label: "Published" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", label: "Archived"  },
+  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
+  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
+  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
+  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
+  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
+  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
 };
 
-const EXAM_TYPE_LABELS = {
-  first_test:            "First Test",
-  second_test:           "Second Test",
-  mid_term:              "Mid-Term",
-  practical:             "Practical",
-  final_exam:            "Final Exam",
-  mock_exam:             "Mock Exam",
-  promotion_exam:        "Promotion Exam",
-  continuous_assessment: "CA",
+const EXAM_TYPE_KEYS = {
+  first_test:            "examType.first_test",
+  second_test:           "examType.second_test",
+  mid_term:              "examType.mid_term",
+  practical:             "examType.practical",
+  final_exam:            "examType.final_exam",
+  mock_exam:             "examType.mock_exam",
+  promotion_exam:        "examType.promotion_exam",
+  continuous_assessment: "examType.continuous_assessment",
 };
+
+/** Localised exam-type label, falling back to the raw stored value. */
+const examTypeLabel = (t, type) =>
+  EXAM_TYPE_KEYS[type] ? t(EXAM_TYPE_KEYS[type]) : (type || "");
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -105,10 +112,11 @@ const sc = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
+  const { t }     = useTranslation();
   const status    = safe(exam.status, "draft");
   const meta      = STATUS_META[status] || STATUS_META.draft;
-  const typeLabel = safe(EXAM_TYPE_LABELS[exam.type] || exam.type);
-  const examName  = safe(exam.name, "Untitled Exam");
+  const typeLabel = safe(examTypeLabel(t, exam.type));
+  const examName  = safe(exam.name, t("examsDash.untitledExam"));
   const className = safe(exam.className || exam.class_name);
   const startDate = safe(exam.startDate || exam.start_date);
   const endDate   = safe(exam.endDate   || exam.end_date);
@@ -138,7 +146,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
           {!!className && <Text style={ec.cls} numberOfLines={1}>{className}</Text>}
         </View>
         <View style={[ec.badge, { backgroundColor: meta.bg }]}>
-          <Text style={[ec.badgeText, { color: meta.color }]}>{meta.label}</Text>
+          <Text style={[ec.badgeText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
         </View>
       </View>
 
@@ -152,7 +160,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
       {!!exam.resultsPublished && (
         <View style={ec.publishedBadge}>
           <Ionicons name="checkmark-circle" size={12} color="#7C3AED" />
-          <Text style={ec.publishedText}>Results Published</Text>
+          <Text style={ec.publishedText}>{t("examsDash.resultsPublished")}</Text>
         </View>
       )}
 
@@ -163,7 +171,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
           activeOpacity={0.7}
         >
           <Ionicons name="swap-horizontal-outline" size={14} color="#4F46E5" />
-          <Text style={ec.actionText}>Status</Text>
+          <Text style={ec.actionText}>{t("common.status")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -172,7 +180,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
           activeOpacity={0.7}
         >
           <Ionicons name="eye-outline" size={14} color="#059669" />
-          <Text style={[ec.actionText, { color: "#059669" }]}>View</Text>
+          <Text style={[ec.actionText, { color: "#059669" }]}>{t("common.view")}</Text>
         </TouchableOpacity>
 
         {hasResults && (
@@ -182,7 +190,7 @@ const ExamCard = ({ exam, onPress, onStatusChange, onViewResults }) => {
             activeOpacity={0.7}
           >
             <Ionicons name="trophy-outline" size={14} color="#2563EB" />
-            <Text style={[ec.actionText, { color: "#2563EB" }]}>Rankings</Text>
+            <Text style={[ec.actionText, { color: "#2563EB" }]}>{t("examsDash.rankings")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -248,6 +256,7 @@ const ec = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 export default function ExamsDashboardScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -301,27 +310,30 @@ export default function ExamsDashboardScreen() {
 
   const handleStatusChange = useCallback((exam) => {
     const currentStatus = safe(exam.status, "draft");
+    const currentLabel = STATUS_META[currentStatus]?.labelKey
+      ? t(STATUS_META[currentStatus].labelKey)
+      : currentStatus;
     Alert.alert(
-      "Change Exam Status",
-      `Current: ${STATUS_META[currentStatus]?.label || currentStatus}`,
+      t("examsDash.changeStatus"),
+      t("examsDash.currentStatus", { status: currentLabel }),
       [
         ...Object.entries(STATUS_META)
           .filter(([s]) => s !== currentStatus)
           .map(([s, m]) => ({
-            text:    m.label,
+            text:    t(m.labelKey),
             onPress: async () => {
               try {
                 await ExamService.updateExamStatus(exam._id || exam.id, s, schoolId);
                 loadData(true);
               } catch (err) {
-                Alert.alert("Error", err.message || "Status update failed");
+                Alert.alert(t("examsDash.errTitle"), err.message || t("examsDash.errStatusUpdate"));
               }
             },
           })),
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
       ]
     );
-  }, [schoolId, loadData]);
+  }, [schoolId, loadData, t]);
 
   const handleViewResults = useCallback((exam) => {
     router.push({
@@ -331,14 +343,14 @@ export default function ExamsDashboardScreen() {
   }, [router]);
 
   const handleResultsQuickAction = useCallback(() => {
-    router.push("/admin/exams/reports");
+    router.push("/admin/reports");
   }, [router]);
 
   if (loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading exams…</Text>
+        <Text style={styles.loadingText}>{t("examsDash.loading")}</Text>
       </View>
     );
   }
@@ -359,7 +371,7 @@ export default function ExamsDashboardScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Exams & Results</Text>
+          <Text style={styles.headerTitle}>{t("examsDash.title")}</Text>
           <Text style={styles.headerSub}>
             {safe(d.total, "0")} exam{d.total !== 1 ? "s" : ""} total
           </Text>
@@ -370,7 +382,7 @@ export default function ExamsDashboardScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.createBtnText}>New</Text>
+          <Text style={styles.createBtnText}>{t("examsDash.new")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -389,14 +401,14 @@ export default function ExamsDashboardScreen() {
         {/* Stats grid */}
         <View style={styles.statsGrid}>
           <View style={styles.statsRow}>
-            <StatCard label="Draft"     value={d.draft     ?? 0} color="#6B7280" icon="document-outline"          onPress={() => setActiveTab("draft")}     />
-            <StatCard label="Scheduled" value={d.scheduled ?? 0} color="#4F46E5" icon="calendar-outline"          onPress={() => setActiveTab("scheduled")} />
-            <StatCard label="Ongoing"   value={d.ongoing   ?? 0} color="#D97706" icon="time-outline"              onPress={() => setActiveTab("ongoing")}   />
+            <StatCard label={t("examStatus.draft")}     value={d.draft     ?? 0} color="#6B7280" icon="document-outline"          onPress={() => setActiveTab("draft")}     />
+            <StatCard label={t("examStatus.scheduled")} value={d.scheduled ?? 0} color="#4F46E5" icon="calendar-outline"          onPress={() => setActiveTab("scheduled")} />
+            <StatCard label={t("examStatus.ongoing")}   value={d.ongoing   ?? 0} color="#D97706" icon="time-outline"              onPress={() => setActiveTab("ongoing")}   />
           </View>
           <View style={styles.statsRow}>
-            <StatCard label="Completed" value={d.completed ?? 0} color="#059669" icon="checkmark-circle-outline"  onPress={() => setActiveTab("completed")} />
-            <StatCard label="Published" value={d.published ?? 0} color="#7C3AED" icon="megaphone-outline"         onPress={() => setActiveTab("published")} />
-            <StatCard label="Total"     value={d.total     ?? 0} color="#111827" icon="list-outline"              onPress={() => setActiveTab("all")}       />
+            <StatCard label={t("examStatus.completed")} value={d.completed ?? 0} color="#059669" icon="checkmark-circle-outline"  onPress={() => setActiveTab("completed")} />
+            <StatCard label={t("examStatus.published")} value={d.published ?? 0} color="#7C3AED" icon="megaphone-outline"         onPress={() => setActiveTab("published")} />
+            <StatCard label={t("common.total")}     value={d.total     ?? 0} color="#111827" icon="list-outline"              onPress={() => setActiveTab("all")}       />
           </View>
         </View>
 
@@ -404,14 +416,14 @@ export default function ExamsDashboardScreen() {
         {!!dashboard?.results && (
           <View style={styles.resultsCard}>
             <View style={styles.resultsCardHeader}>
-              <Text style={styles.sectionTitle}>Results Overview</Text>
+              <Text style={styles.sectionTitle}>{t("examsDash.resultsOverview")}</Text>
               {counts.completedOrPublished > 0 && (
                 <TouchableOpacity
                   style={styles.viewAllBtn}
-                  onPress={() => router.push("/admin/exams/reports")}
+                  onPress={() => router.push("/admin/reports")}
                   activeOpacity={0.7}
                 >
-                  <Text style={styles.viewAllText}>View Reports</Text>
+                  <Text style={styles.viewAllText}>{t("examsDash.viewReports")}</Text>
                   <Ionicons name="chevron-forward" size={14} color="#2563EB" />
                 </TouchableOpacity>
               )}
@@ -420,13 +432,13 @@ export default function ExamsDashboardScreen() {
             <View style={styles.resultsPills}>
               {[
                 { label: "Published", val: dashboard.results.published,          color: "#7C3AED" },
-                { label: "Pending",   val: dashboard.results.pending,            color: "#D97706" },
-                { label: "Missing",   val: dashboard.results.missingGrades,      color: "#DC2626" },
-                { label: "Avg Score", val: `${dashboard.results.averagePerformance ?? 0}%`, color: "#059669" },
-                { label: "Pass Rate", val: `${dashboard.results.passRate ?? 0}%`,            color: "#4F46E5" },
+                { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       color: "#D97706" },
+                { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, color: "#DC2626" },
+                { id: "avg",      label: t("examsDash.avgScore"),      val: `${dashboard.results.averagePerformance ?? 0}%`, color: "#059669" },
+                { id: "passRate", label: t("examsDash.passRate"),      val: `${dashboard.results.passRate ?? 0}%`,           color: "#4F46E5" },
               ].map((p) => (
                 <View
-                  key={p.label}
+                  key={p.id}
                   style={[styles.pill, { backgroundColor: p.color + "10" }]}
                 >
                   <Text style={[styles.pillVal, { color: p.color }]}>
@@ -456,43 +468,48 @@ export default function ExamsDashboardScreen() {
 
         {/* Quick Actions */}
         <View style={styles.quickActions}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t("examsDash.quickActions")}</Text>
           {[
             {
-              label:   "Create Exam",
-              sub:     "Set up a new examination",
+              id:      "createExam",
+              label:   t("examsDash.qaCreate"),
+              sub:     t("examsDash.qaCreateSub"),
               icon:    "add-circle-outline",
               color:   "#4F46E5",
               onPress: () => router.push("/admin/exams/create"),
               badge:   null,
             },
             {
-              label:   "Mark Entry",
-              sub:     "Enter student scores",
+              id:      "markEntry",
+              label:   t("examsDash.qaMarks"),
+              sub:     t("examsDash.qaMarksSub"),
               icon:    "create-outline",
               color:   "#059669",
               onPress: () => router.push("/admin/exams/marks"),
               badge:   null,
             },
             {
-              label:   "Results & Rankings",
-              sub:     "View rankings, grades, statistics",
+              id:      "results",
+              label:   t("examsDash.qaResults"),
+              sub:     t("examsDash.qaResultsSub"),
               icon:    "trophy-outline",
               color:   "#2563EB",
               onPress: handleResultsQuickAction,
               badge:   counts.completedOrPublished > 0 ? counts.completedOrPublished : null,
             },
             {
-              label:   "Report Cards",
-              sub:     "Generate student report cards",
+              id:      "reportCards",
+              label:   t("examsDash.qaReportCards"),
+              sub:     t("examsDash.qaReportCardsSub"),
               icon:    "document-text-outline",
               color:   "#D97706",
               onPress: () => router.push("/admin/reports/generate"),
               badge:   null,
             },
             {
-              label:   "Submissions",
-              sub:     "Monitor teacher mark submissions",
+              id:      "submissions",
+              label:   t("examsDash.qaSubmissions"),
+              sub:     t("examsDash.qaSubmissionsSub"),
               icon:    "cloud-upload-outline",
               color:   "#DC2626",
               onPress: () => router.push("/admin/exams/monitor"),
@@ -500,7 +517,7 @@ export default function ExamsDashboardScreen() {
             },
           ].map((a) => (
             <TouchableOpacity
-              key={a.label}
+              key={a.id}
               style={styles.actionRow}
               onPress={a.onPress}
               activeOpacity={0.7}
@@ -526,12 +543,12 @@ export default function ExamsDashboardScreen() {
         <View style={styles.tabsRow}>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {[
-              { key: "all",       label: "All"       },
-              { key: "draft",     label: "Draft"     },
-              { key: "scheduled", label: "Scheduled" },
-              { key: "ongoing",   label: "Ongoing"   },
-              { key: "completed", label: "Completed" },
-              { key: "published", label: "Published" },
+              { key: "all",       labelKey: "examsDash.tabAll"      },
+              { key: "draft",     labelKey: "examStatus.draft"     },
+              { key: "scheduled", labelKey: "examStatus.scheduled" },
+              { key: "ongoing",   labelKey: "examStatus.ongoing"   },
+              { key: "completed", labelKey: "examStatus.completed" },
+              { key: "published", labelKey: "examStatus.published" },
             ].map((tab) => (
               <TouchableOpacity
                 key={tab.key}
@@ -543,7 +560,7 @@ export default function ExamsDashboardScreen() {
                   styles.tabText,
                   activeTab === tab.key && styles.tabTextActive,
                 ]}>
-                  {tab.label}
+                  {t(tab.labelKey)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -554,8 +571,12 @@ export default function ExamsDashboardScreen() {
         <View style={styles.examList}>
           <Text style={styles.sectionTitle}>
             {activeTab === "all"
-              ? "All Exams"
-              : `${STATUS_META[activeTab]?.label ?? activeTab} Exams`}
+              ? t("examsDash.allExams")
+              : t("examsDash.statusExams", {
+                  status: STATUS_META[activeTab]?.labelKey
+                    ? t(STATUS_META[activeTab].labelKey)
+                    : activeTab,
+                })}
             {filtered.length > 0 ? (
               <Text style={styles.count}>{`  (${filtered.length})`}</Text>
             ) : null}
@@ -564,14 +585,14 @@ export default function ExamsDashboardScreen() {
           {filtered.length === 0 ? (
             <View style={styles.empty}>
               <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No exams found</Text>
-              <Text style={styles.emptySub}>Tap "New" to create your first exam</Text>
+              <Text style={styles.emptyTitle}>{t("examsDash.noneFound")}</Text>
+              <Text style={styles.emptySub}>{t("examsDash.noneFoundHint")}</Text>
               <TouchableOpacity
                 style={styles.emptyBtn}
                 onPress={() => router.push("/admin/exams/create")}
                 activeOpacity={0.7}
               >
-                <Text style={styles.emptyBtnText}>Create Exam</Text>
+                <Text style={styles.emptyBtnText}>{t("examsDash.qaCreate")}</Text>
               </TouchableOpacity>
             </View>
           ) : (

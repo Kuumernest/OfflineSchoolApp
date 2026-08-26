@@ -9,6 +9,7 @@ import {
   ScrollView,
   TouchableOpacity,
   Switch,
+  Image,
   Alert,
   ActivityIndicator,
   Modal,
@@ -22,6 +23,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import * as ImagePicker from "expo-image-picker";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -159,6 +161,8 @@ const av = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ProfileProgress({ profile }) {
+  const { t } = useTranslation();
+
   const fields = [
     profile?.firstName,
     profile?.lastName,
@@ -177,7 +181,7 @@ function ProfileProgress({ profile }) {
   return (
     <View style={pp.wrap}>
       <View style={pp.labelRow}>
-        <Text style={pp.label}>Profile Completeness</Text>
+        <Text style={pp.label}>{t("studentSettings.profileCompleteness")}</Text>
         <Text style={[pp.pct, { color: complete ? C.success : C.warning }]}>{pct}%</Text>
       </View>
       <View style={pp.track}>
@@ -190,7 +194,9 @@ function ProfileProgress({ profile }) {
       </View>
       {!complete && (
         <Text style={pp.hint}>
-          {total - filled} field{total - filled !== 1 ? "s" : ""} missing — tap Edit Profile to complete
+          {total - filled === 1
+            ? t("studentSettings.fieldMissing",  { count: total - filled })
+            : t("studentSettings.fieldsMissing", { count: total - filled })}
         </Text>
       )}
     </View>
@@ -239,6 +245,7 @@ const ib = StyleSheet.create({
 
 function ChangePasswordModal({ visible, onClose, mustReset }) {
   const updateUser = useAuthStore((s) => s.updateUser);
+  const { t }      = useTranslation();
 
   const [current,     setCurrent]     = useState("");
   const [next,        setNext]        = useState("");
@@ -263,19 +270,19 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
     setError(null);
 
     if (!current.trim()) {
-      setError("Please enter your current password.");
+      setError(t("studentSettings.errCurrentRequired"));
       return;
     }
     if (next.length < 8) {
-      setError("New password must be at least 8 characters.");
+      setError(t("studentSettings.errMinLength"));
       return;
     }
     if (next !== confirm) {
-      setError("Passwords do not match.");
+      setError(t("studentSettings.errMismatch"));
       return;
     }
     if (next === current) {
-      setError("New password must be different from your current password.");
+      setError(t("studentSettings.errSameAsCurrent"));
       return;
     }
 
@@ -293,15 +300,15 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
       }
 
       Alert.alert(
-        "Password Changed ✅",
-        "Your password has been updated successfully.",
-        [{ text: "OK", onPress: onClose }]
+        t("studentSettings.pwdChangedTitle"),
+        t("studentSettings.pwdChangedBody"),
+        [{ text: t("studentSettings.ok"), onPress: onClose }]
       );
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
         err?.message                 ||
-        "Failed to change password. Please try again.";
+        t("studentSettings.errChangeFailed");
       setError(msg);
     } finally {
       setSaving(false);
@@ -326,11 +333,11 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
           {/* Header */}
           <View style={cp.header}>
             <View style={{ flex: 1 }}>
-              <Text style={cp.title}>Change Password</Text>
+              <Text style={cp.title}>{t("studentSettings.changePassword")}</Text>
               <Text style={cp.subtitle}>
                 {mustReset
-                  ? "You must set a new password before continuing."
-                  : "Update your login password below."}
+                  ? t("studentSettings.mustSetNewPassword")
+                  : t("studentSettings.updateLoginPasswordBelow")}
               </Text>
             </View>
             {!mustReset && (
@@ -363,7 +370,7 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
             )}
 
             {/* Current password */}
-            <Text style={cp.label}>Current Password</Text>
+            <Text style={cp.label}>{t("studentSettings.currentPassword")}</Text>
             <View style={cp.inputRow}>
               <TextInput
                 style={cp.input}
@@ -371,7 +378,7 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
                 onChangeText={setCurrent}
                 // No default-password hint here — the first password is a
                 // random value issued at enrollment, never the enrollment no.
-                placeholder="Enter current password"
+                placeholder={t("studentSettings.enterCurrentPassword")}
                 placeholderTextColor={C.gray400}
                 secureTextEntry={!showCurrent}
                 autoCapitalize="none"
@@ -390,13 +397,13 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
             </View>
 
             {/* New password */}
-            <Text style={cp.label}>New Password</Text>
+            <Text style={cp.label}>{t("studentSettings.newPassword")}</Text>
             <View style={cp.inputRow}>
               <TextInput
                 style={cp.input}
                 value={next}
                 onChangeText={setNext}
-                placeholder="Min 8 characters"
+                placeholder={t("studentSettings.min8Chars")}
                 placeholderTextColor={C.gray400}
                 secureTextEntry={!showNext}
                 autoCapitalize="none"
@@ -420,13 +427,13 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
             )}
 
             {/* Confirm */}
-            <Text style={cp.label}>Confirm New Password</Text>
+            <Text style={cp.label}>{t("studentSettings.confirmNewPassword")}</Text>
             <View style={cp.inputRow}>
               <TextInput
                 style={cp.input}
                 value={confirm}
                 onChangeText={setConfirm}
-                placeholder="Re-enter new password"
+                placeholder={t("studentSettings.reenterNewPassword")}
                 placeholderTextColor={C.gray400}
                 secureTextEntry={!showConfirm}
                 autoCapitalize="none"
@@ -452,7 +459,9 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
                   { color: next === confirm ? C.success : C.error },
                 ]}
               >
-                {next === confirm ? "✓ Passwords match" : "✗ Passwords do not match"}
+                {next === confirm
+                  ? t("studentSettings.passwordsMatch")
+                  : t("studentSettings.passwordsNoMatch")}
               </Text>
             )}
 
@@ -468,7 +477,7 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
               ) : (
                 <>
                   <Ionicons name="checkmark-circle-outline" size={18} color={C.white} />
-                  <Text style={cp.saveBtnText}>Save New Password</Text>
+                  <Text style={cp.saveBtnText}>{t("studentSettings.saveNewPassword")}</Text>
                 </>
               )}
             </TouchableOpacity>
@@ -484,6 +493,8 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
 // ── Password strength meter ────────────────────────────────────────────────
 
 function PasswordStrength({ password }) {
+  const { t } = useTranslation();
+
   const checks = [
     password.length >= 8,
     /[A-Z]/.test(password),
@@ -491,7 +502,13 @@ function PasswordStrength({ password }) {
     /[^A-Za-z0-9]/.test(password),
   ];
   const score  = checks.filter(Boolean).length;
-  const labels = ["Too short", "Weak", "Fair", "Good", "Strong"];
+  const labels = [
+    t("studentSettings.strengthTooShort"),
+    t("studentSettings.strengthWeak"),
+    t("studentSettings.strengthFair"),
+    t("studentSettings.strengthGood"),
+    t("studentSettings.strengthStrong"),
+  ];
   const colors = [C.error, C.error, C.warning, C.warning, C.success];
 
   return (
@@ -592,6 +609,7 @@ const cp = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function StudentSettingsScreen() {
+  const { t }      = useTranslation();
   const user       = useAuthStore((s) => s.user);
   const logout     = useAuthStore((s) => s.logout);
   const updateUser = useAuthStore((s) => s.updateUser);
@@ -622,7 +640,10 @@ export default function StudentSettingsScreen() {
     try {
       const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!perm.granted) {
-        Alert.alert("Permission needed", "Allow photo access to choose a picture.");
+        Alert.alert(
+          t("studentSettings.permissionNeededTitle"),
+          t("studentSettings.permissionNeededBody")
+        );
         return;
       }
 
@@ -648,8 +669,8 @@ export default function StudentSettingsScreen() {
       // The server's message names the real problem — too large, not an image —
       // so it is shown rather than replaced with something generic.
       Alert.alert(
-        "Could not save photo",
-        err?.response?.data?.message || err.message || "Please try again."
+        t("studentSettings.photoSaveFailedTitle"),
+        err?.response?.data?.message || err.message || t("studentSettings.tryAgain")
       );
     } finally {
       setPhotoBusy(false);
@@ -657,23 +678,27 @@ export default function StudentSettingsScreen() {
   };
 
   const removePhoto = () => {
-    Alert.alert("Remove photo?", "Your ID card will print with a blank photo box.", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(
+      t("studentSettings.removePhotoTitle"),
+      t("studentSettings.removePhotoBody"),
+      [
+      { text: t("studentSettings.cancel"), style: "cancel" },
       {
-        text: "Remove", style: "destructive",
+        text: t("studentSettings.remove"), style: "destructive",
         onPress: async () => {
           setPhotoBusy(true);
           try {
             await api.delete("/students/photo");
             setPhotoUrl(null);
           } catch (err) {
-            Alert.alert("Could not remove photo", err.message);
+            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), err.message);
           } finally {
             setPhotoBusy(false);
           }
         },
       },
-    ]);
+      ]
+    );
   };
 
   // ── Load profile ─────────────────────────────────────────────────────────
@@ -788,10 +813,10 @@ export default function StudentSettingsScreen() {
   // ── Logout ────────────────────────────────────────────────────────────────
 
   const handleLogout = () => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("studentSettings.logout"), t("studentSettings.logoutConfirm"), [
+      { text: t("studentSettings.cancel"), style: "cancel" },
       {
-        text: "Logout", style: "destructive",
+        text: t("studentSettings.logout"), style: "destructive",
         onPress: async () => {
           try { await logout(); } catch { /* ignore */ }
           router.replace("/auth/login");
@@ -804,18 +829,18 @@ export default function StudentSettingsScreen() {
 
   const displayName = profile
     ? `${profile.firstName || ""} ${profile.lastName || ""}`.trim()
-    : user?.name || "Student";
+    : user?.name || t("studentSettings.student");
 
   const resolvedEnrollmentNo =
-    enrollmentNo ||
+    user?.enrollmentNo ||
     profile?.enrollmentNo ||
     profile?.admissionNo  ||
     null;
 
   const profileSubtitle = [
-    profile?.className        ? `Class: ${profile.className}` : null,
-    resolvedEnrollmentNo      ? `No: ${resolvedEnrollmentNo}` : null,
-  ].filter(Boolean).join("  ·  ") || "Student";
+    profile?.className   ? t("studentSettings.classLabel", { name: profile.className })      : null,
+    resolvedEnrollmentNo ? t("studentSettings.noLabel",    { number: resolvedEnrollmentNo }) : null,
+  ].filter(Boolean).join("  ·  ") || t("studentSettings.student");
 
   const fullAddress = [
     profile?.address,
@@ -852,7 +877,7 @@ export default function StudentSettingsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={styles.headerTitle}>{t("studentSettings.title")}</Text>
         <TouchableOpacity
           onPress={loadProfile}
           style={styles.refreshBtn}
@@ -871,8 +896,8 @@ export default function StudentSettingsScreen() {
         >
           <Ionicons name="warning-outline" size={18} color="#92400E" />
           <Text style={styles.mustResetText}>
-            You must change your password before using the app.{" "}
-            <Text style={styles.mustResetLink}>Tap here →</Text>
+            {t("studentSettings.mustChangeBanner")}{" "}
+            <Text style={styles.mustResetLink}>{t("studentSettings.tapHere")}</Text>
           </Text>
         </TouchableOpacity>
       )}
@@ -888,12 +913,12 @@ export default function StudentSettingsScreen() {
           <View style={styles.profileCardRight}>
             <View style={styles.profileNameRow}>
               <Text style={styles.profileName} numberOfLines={1}>
-                {displayName || "Your Name"}
+                {displayName || t("studentSettings.yourName")}
               </Text>
               {profileComplete && (
                 <View style={styles.verifiedBadge}>
                   <Ionicons name="checkmark-circle" size={14} color={C.success} />
-                  <Text style={styles.verifiedText}>Complete</Text>
+                  <Text style={styles.verifiedText}>{t("studentSettings.complete")}</Text>
                 </View>
               )}
             </View>
@@ -907,10 +932,18 @@ export default function StudentSettingsScreen() {
             {/* Quick info badges */}
             <View style={styles.badgeRow}>
               {isRepeating && (
-                <InfoBadge label="Status" value="Repeating" color={C.warning} bg={C.warningBg} />
+                <InfoBadge
+                  label={t("studentSettings.statusLabel")}
+                  value={t("studentSettings.repeating")}
+                  color={C.warning} bg={C.warningBg}
+                />
               )}
               {!!profile?.bloodGroup && (
-                <InfoBadge label="Blood" value={profile.bloodGroup} color={C.error} bg={C.errorBg} />
+                <InfoBadge
+                  label={t("studentSettings.bloodLabel")}
+                  value={profile.bloodGroup}
+                  color={C.error} bg={C.errorBg}
+                />
               )}
               {!!genderDisplay && (
                 <InfoBadge label="" value={genderDisplay} color={C.primary} bg={C.primaryBg} />
@@ -932,9 +965,11 @@ export default function StudentSettingsScreen() {
               <Ionicons name="person-add-outline" size={20} color={C.white} />
             </View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.setupPromptTitle}>Complete Your Profile</Text>
+              <Text style={styles.setupPromptTitle}>
+                {t("studentSettings.completeYourProfile")}
+              </Text>
               <Text style={styles.setupPromptSub}>
-                Your school needs your full information
+                {t("studentSettings.schoolNeedsInfo")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={C.white} />
@@ -945,7 +980,7 @@ export default function StudentSettingsScreen() {
             This is the picture that goes on the student's ID card, which is
             why it sits at the top of their own settings rather than being
             something only the office can set. */}
-        <Section title="Photo">
+        <Section title={t("studentSettings.photoSection")}>
           <View style={styles.photoRow}>
             <View style={styles.photoFrame}>
               {photoUrl ? (
@@ -956,10 +991,9 @@ export default function StudentSettingsScreen() {
             </View>
 
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.photoTitle}>ID card photo</Text>
+              <Text style={styles.photoTitle}>{t("studentSettings.idCardPhoto")}</Text>
               <Text style={styles.photoHint}>
-                A clear head-and-shoulders picture. This is printed on your
-                student ID card.
+                {t("studentSettings.idCardPhotoHint")}
               </Text>
 
               <View style={styles.photoBtns}>
@@ -973,7 +1007,9 @@ export default function StudentSettingsScreen() {
                     ? <ActivityIndicator color="#fff" size="small" />
                     : (
                       <Text style={styles.photoBtnText}>
-                        {photoUrl ? "Change" : "Add photo"}
+                        {photoUrl
+                          ? t("studentSettings.changePhoto")
+                          : t("studentSettings.addPhoto")}
                       </Text>
                     )}
                 </TouchableOpacity>
@@ -984,7 +1020,7 @@ export default function StudentSettingsScreen() {
                     onPress={removePhoto}
                     activeOpacity={0.85}
                   >
-                    <Text style={styles.photoBtnGhostText}>Remove</Text>
+                    <Text style={styles.photoBtnGhostText}>{t("studentSettings.remove")}</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -993,21 +1029,25 @@ export default function StudentSettingsScreen() {
         </Section>
 
         {/* ── ACCOUNT ── */}
-        <Section title="Account">
+        <Section title={t("studentSettings.accountSection")}>
           <SettingRow
             icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
-            title="Edit Profile"
-            subtitle={profileComplete ? "Profile complete ✓" : "Tap to complete setup"}
+            title={t("studentSettings.editProfile")}
+            subtitle={
+              profileComplete
+                ? t("studentSettings.profileCompleteCheck")
+                : t("studentSettings.tapToCompleteSetup")
+            }
             type="arrow"
             onPress={() => router.push("/student/profile/setup")}
           />
           <SettingRow
             icon="lock-closed-outline" iconBg="#FEF3C7" iconColor={C.warning}
-            title="Change Password"
+            title={t("studentSettings.changePassword")}
             subtitle={
               mustReset
-                ? "⚠️ Password change required"
-                : "Update your login password"
+                ? t("studentSettings.passwordChangeRequired")
+                : t("studentSettings.updateLoginPassword")
             }
             type="arrow"
             onPress={() => setShowChangePwd(true)}
@@ -1017,17 +1057,17 @@ export default function StudentSettingsScreen() {
 
         {/* ── ENROLLMENT NUMBER (read-only) ── */}
         {!!resolvedEnrollmentNo && (
-          <Section title="Login Credentials">
+          <Section title={t("studentSettings.loginCredentials")}>
             <View style={styles.enrollmentNote}>
               <Ionicons name="information-circle-outline" size={14} color="#4338CA" />
               <Text style={styles.enrollmentNoteText}>
-                Use your enrollment number to log in from any device
+                {t("studentSettings.enrollmentNote")}
               </Text>
             </View>
             <SettingRow
               icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
-              title="Enrollment Number"
-              subtitle="Your unique login identifier"
+              title={t("studentSettings.enrollmentNumber")}
+              subtitle={t("studentSettings.uniqueLoginId")}
               type="value"
               value={resolvedEnrollmentNo}
               disabled
@@ -1038,49 +1078,49 @@ export default function StudentSettingsScreen() {
 
         {/* ── PERSONAL DETAILS ── */}
         {profile && (
-          <Section title="Personal Details">
+          <Section title={t("studentSettings.personalDetails")}>
             {!!genderDisplay && (
               <SettingRow
                 icon="person-outline" iconBg={C.primaryBg} iconColor={C.primary}
-                title="Gender" type="value" value={genderDisplay}
+                title={t("studentSettings.gender")} type="value" value={genderDisplay}
               />
             )}
             {!!profile.dateOfBirth && (
               <SettingRow
                 icon="calendar-outline" iconBg={C.gray100} iconColor={C.gray500}
-                title="Date of Birth" type="value" value={profile.dateOfBirth}
+                title={t("studentSettings.dateOfBirth")} type="value" value={profile.dateOfBirth}
               />
             )}
             {!!profile.placeOfBirth && (
               <SettingRow
                 icon="location-outline" iconBg="#DBEAFE" iconColor="#2563EB"
-                title="Place of Birth" type="value" value={profile.placeOfBirth}
+                title={t("studentSettings.placeOfBirth")} type="value" value={profile.placeOfBirth}
               />
             )}
             {!!profile.nationalId && (
               <SettingRow
                 icon="card-outline" iconBg={C.gray100} iconColor={C.gray500}
-                title="National ID / Birth Cert." type="value" value={profile.nationalId}
+                title={t("studentSettings.nationalId")} type="value" value={profile.nationalId}
               />
             )}
             {!!profile.bloodGroup && (
               <SettingRow
                 icon="water-outline" iconBg={C.errorBg} iconColor={C.error}
-                title="Blood Group" type="value" value={profile.bloodGroup}
+                title={t("studentSettings.bloodGroup")} type="value" value={profile.bloodGroup}
               />
             )}
             {!!profile.bio && (
               <SettingRow
                 icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
-                title="About Me" type="value" value={profile.bio}
+                title={t("studentSettings.aboutMe")} type="value" value={profile.bio}
                 last={!profile.medicalConditions && !isRepeating}
               />
             )}
             {!!profile.medicalConditions && (
               <SettingRow
                 icon="medical-outline" iconBg={C.errorBg} iconColor={C.error}
-                title="Health / Medical"
-                subtitle="Known conditions or disabilities"
+                title={t("studentSettings.healthMedical")}
+                subtitle={t("studentSettings.healthMedicalHint")}
                 type="value" value={profile.medicalConditions}
                 last={!isRepeating}
               />
@@ -1088,7 +1128,8 @@ export default function StudentSettingsScreen() {
             {isRepeating && (
               <SettingRow
                 icon="repeat-outline" iconBg={C.warningBg} iconColor={C.warning}
-                title="Academic Status" type="value" value="Repeating"
+                title={t("studentSettings.academicStatus")} type="value"
+                value={t("studentSettings.repeating")}
                 last
               />
             )}
@@ -1097,23 +1138,23 @@ export default function StudentSettingsScreen() {
 
         {/* ── CONTACT & ADDRESS ── */}
         {profile && (profile.phone || profile.alternatePhone || fullAddress) && (
-          <Section title="Contact & Address">
+          <Section title={t("studentSettings.contactAddress")}>
             {!!profile.phone && (
               <SettingRow
                 icon="call-outline" iconBg={C.successBg} iconColor={C.success}
-                title="Phone" type="value" value={profile.phone}
+                title={t("studentSettings.phone")} type="value" value={profile.phone}
               />
             )}
             {!!profile.alternatePhone && (
               <SettingRow
                 icon="call-outline" iconBg={C.gray100} iconColor={C.gray500}
-                title="Alternate Phone" type="value" value={profile.alternatePhone}
+                title={t("studentSettings.alternatePhone")} type="value" value={profile.alternatePhone}
               />
             )}
             {!!fullAddress && (
               <SettingRow
                 icon="home-outline" iconBg="#DBEAFE" iconColor="#2563EB"
-                title="Address" type="value" value={fullAddress}
+                title={t("studentSettings.address")} type="value" value={fullAddress}
                 last
               />
             )}
@@ -1122,11 +1163,11 @@ export default function StudentSettingsScreen() {
 
         {/* ── GUARDIAN / PARENT ── */}
         {profile && (profile.guardianName || profile.guardianPhone) && (
-          <Section title="Guardian / Parent">
+          <Section title={t("studentSettings.guardianParent")}>
             {!!profile.guardianName && (
               <SettingRow
                 icon="people-outline" iconBg="#FFF7ED" iconColor="#EA580C"
-                title="Guardian Name"
+                title={t("studentSettings.guardianName")}
                 subtitle={
                   profile.guardianRelation
                     ? profile.guardianRelation.charAt(0).toUpperCase() +
@@ -1139,13 +1180,13 @@ export default function StudentSettingsScreen() {
             {!!profile.guardianPhone && (
               <SettingRow
                 icon="call-outline" iconBg="#FFF7ED" iconColor="#EA580C"
-                title="Guardian Phone" type="value" value={profile.guardianPhone}
+                title={t("studentSettings.guardianPhone")} type="value" value={profile.guardianPhone}
               />
             )}
             {!!profile.guardianEmail && (
               <SettingRow
                 icon="mail-outline" iconBg="#FFF7ED" iconColor="#EA580C"
-                title="Guardian Email" type="value" value={profile.guardianEmail}
+                title={t("studentSettings.guardianEmail")} type="value" value={profile.guardianEmail}
                 last
               />
             )}
@@ -1154,31 +1195,31 @@ export default function StudentSettingsScreen() {
 
         {/* ── SCHOOL INFO (read-only) ── */}
         {profile && (profile.admissionNo || profile.className || profile.grade) && (
-          <Section title="School Info">
+          <Section title={t("studentSettings.schoolInfo")}>
             <View style={styles.schoolInfoNote}>
               <Ionicons name="information-circle-outline" size={14} color={C.gray400} />
               <Text style={styles.schoolInfoNoteText}>
-                These details are managed by your school and cannot be edited
+                {t("studentSettings.schoolInfoNote")}
               </Text>
             </View>
             {!!profile.admissionNo && (
               <SettingRow
                 icon="id-card-outline" iconBg="#EDE9FE" iconColor="#7C3AED"
-                title="Admission No." type="value" value={profile.admissionNo}
+                title={t("studentSettings.admissionNo")} type="value" value={profile.admissionNo}
                 disabled
               />
             )}
             {!!profile.className && (
               <SettingRow
                 icon="school-outline" iconBg={C.primaryBg} iconColor={C.primary}
-                title="Class" type="value" value={profile.className}
+                title={t("studentSettings.classTitle")} type="value" value={profile.className}
                 disabled
               />
             )}
             {!!profile.grade && profile.grade !== profile.className && (
               <SettingRow
                 icon="ribbon-outline" iconBg={C.successBg} iconColor={C.success}
-                title="Grade / Year" type="value" value={profile.grade}
+                title={t("studentSettings.gradeYear")} type="value" value={profile.grade}
                 disabled last
               />
             )}
@@ -1186,47 +1227,48 @@ export default function StudentSettingsScreen() {
         )}
 
         {/* ── PREFERENCES ── */}
-        <Section title="Preferences">
+        <Section title={t("studentSettings.preferences")}>
           <SettingRow
             icon="notifications-outline" iconBg="#FEF3C7" iconColor={C.warning}
-            title="Push Notifications"
-            subtitle="Marks, homework and announcements"
+            title={t("studentSettings.pushNotifications")}
+            subtitle={t("studentSettings.pushNotificationsHint")}
             type="toggle" value={notifEnabled} onToggle={setNotifEnabled} last
           />
         </Section>
 
         {/* ── SUPPORT ── */}
-        <Section title="Support">
+        <Section title={t("studentSettings.support")}>
           <SettingRow
             icon="help-circle-outline" iconBg={C.primaryBg} iconColor={C.primary}
-            title="Help & FAQs" type="arrow"
+            title={t("studentSettings.helpFaqs")} type="arrow"
             onPress={() =>
               Alert.alert(
-                "Need Help?",
-                "Contact your school administrator for assistance."
+                t("studentSettings.needHelpTitle"),
+                t("studentSettings.needHelpBody")
               )
             }
           />
           <SettingRow
             icon="document-text-outline" iconBg={C.gray100} iconColor={C.gray500}
-            title="Terms of Service" type="arrow" onPress={() => {}}
+            title={t("studentSettings.terms")} type="arrow" onPress={() => {}}
           />
           <SettingRow
             icon="shield-outline" iconBg={C.gray100} iconColor={C.gray500}
-            title="Privacy Policy" type="arrow" onPress={() => {}} last
+            title={t("studentSettings.privacy")} type="arrow" onPress={() => {}} last
           />
         </Section>
 
         {/* ── SESSION ── */}
-        <Section title="Session">
+        <Section title={t("studentSettings.session")}>
           <SettingRow
             icon="log-out-outline" iconBg={C.errorBg} iconColor={C.error}
-            title="Logout" subtitle="Sign out of your account"
+            title={t("studentSettings.logout")}
+            subtitle={t("studentSettings.signOutHint")}
             type="arrow" destructive onPress={handleLogout} last
           />
         </Section>
 
-        <Text style={styles.version}>Student Hub  ·  v1.0.0</Text>
+        <Text style={styles.version}>{t("studentSettings.hubName")}{"  ·  v1.0.0"}</Text>
         <View style={{ height: 32 }} />
       </ScrollView>
 

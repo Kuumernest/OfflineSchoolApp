@@ -22,11 +22,11 @@ import { getAnnouncementById }             from "../../../src/services/announcem
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const PRIORITY_CONFIG = {
-  urgent: { color: "#DC2626", bg: "#FEE2E2", label: "Urgent", icon: "warning"       },
-  high:   { color: "#DC2626", bg: "#FEE2E2", label: "High",   icon: "warning"       },
-  normal: { color: "#D97706", bg: "#FEF3C7", label: "Normal", icon: "alert-circle"  },
-  medium: { color: "#D97706", bg: "#FEF3C7", label: "Normal", icon: "alert-circle"  },
-  low:    { color: "#059669", bg: "#ECFDF5", label: "Low",    icon: "remove-circle" },
+  urgent: { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioUrgent", icon: "warning"       },
+  high:   { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioHigh",   icon: "warning"       },
+  normal: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
+  medium: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal", icon: "alert-circle"  },
+  low:    { color: "#059669", bg: "#ECFDF5", labelKey: "annTeacher.prioLow",    icon: "remove-circle" },
 };
 
 const formatFull = (d) => {
@@ -59,6 +59,7 @@ const InfoRow = ({ icon, label, value, color = "#4F46E5" }) => (
 // ─── Main screen ──────────────────────────────────────────────────────────────
 
 export default function AnnouncementDetailScreen() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const { id }    = useLocalSearchParams();
   const user      = useAuthStore((s) => s.user);
@@ -123,21 +124,21 @@ export default function AnnouncementDetailScreen() {
       setItem((prev) =>
         prev ? { ...prev, isAcknowledged: true, isRead: true } : prev
       );
-      Alert.alert("Acknowledged ✓", "You have acknowledged this announcement.");
+      Alert.alert(t("annTeacher.ackedTitle"), t("annTeacher.ackedBody"));
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("annTeacher.errorTitle"), err.message);
     }
   }, [id, acknowledge]);
 
   // ── Delete ─────────────────────────────────────────────────────────────
   const handleDelete = useCallback(() => {
     Alert.alert(
-      "Delete Announcement",
-      "This will permanently remove the announcement. Continue?",
+      t("annTeacher.deleteTitle"),
+      t("annTeacher.deleteConfirmBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             setDeleting(true);
@@ -145,7 +146,7 @@ export default function AnnouncementDetailScreen() {
               await remove(String(id));
               router.back();
             } catch (err) {
-              Alert.alert("Error", err.message);
+              Alert.alert(t("annTeacher.errorTitle"), err.message);
               setDeleting(false);
             }
           },
@@ -160,7 +161,7 @@ export default function AnnouncementDetailScreen() {
     try {
       await Share.share({
         title:   item.title,
-        message: `📢 ${item.title}\n\n${item.body}\n\n— ${item.authorName || "School"}`,
+        message: `📢 ${item.title}\n\n${item.body}\n\n— ${item.authorName || t("annTeacher.shareFallback")}`,
       });
     } catch { /* ignore */ }
   }, [item]);
@@ -184,9 +185,9 @@ export default function AnnouncementDetailScreen() {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={44} color="#DC2626" />
-        <Text style={styles.errorMsg}>{error || "Announcement not found"}</Text>
+        <Text style={styles.errorMsg}>{error || t("annTeacher.notFound")}</Text>
         <TouchableOpacity style={styles.backBtnLarge} onPress={() => router.back()}>
-          <Text style={styles.backBtnLargeText}>Go Back</Text>
+          <Text style={styles.backBtnLargeText}>{t("common.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -206,7 +207,7 @@ export default function AnnouncementDetailScreen() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle} numberOfLines={1}>Announcement</Text>
+        <Text style={styles.headerTitle} numberOfLines={1}>{t("annTeacher.announcement")}</Text>
 
         <View style={styles.headerRight}>
           <TouchableOpacity
@@ -251,12 +252,12 @@ export default function AnnouncementDetailScreen() {
             styles.priorityLabel,
             { color: expired ? "#9CA3AF" : priority.color },
           ]}>
-            {expired ? "Expired" : `${priority.label} Priority`}
+            {expired ? t("annTeacher.expired") : t("annTeacher.priorityBanner", { label: t(priority.labelKey) })}
           </Text>
           {item.isPinned && (
             <View style={styles.pinnedChip}>
               <Ionicons name="pin" size={11} color="#7C3AED" />
-              <Text style={styles.pinnedChipText}>Pinned</Text>
+              <Text style={styles.pinnedChipText}>{t("annTeacher.pinned")}</Text>
             </View>
           )}
         </View>
@@ -268,46 +269,46 @@ export default function AnnouncementDetailScreen() {
 
         {/* ── META CARD ── */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Details</Text>
+          <Text style={styles.sectionTitle}>{t("annTeacher.details")}</Text>
           <InfoRow
             icon="person-outline"
-            label="From"
-            value={item.authorName || "Admin"}
+            label={t("annTeacher.from")}
+            value={item.authorName || t("annTeacher.adminFallback")}
             color="#4F46E5"
           />
           <InfoRow
             icon="shield-half-outline"
-            label="Role"
+            label={t("annTeacher.roleLabel")}
             value={
-              item.authorRole === "super_admin"  ? "Super Admin"  :
-              item.authorRole === "school_admin" ? "School Admin" :
-              item.authorRole === "teacher"      ? "Teacher"      :
+              item.authorRole === "super_admin"  ? t("annTeacher.roleSuperAdmin")  :
+              item.authorRole === "school_admin" ? t("annTeacher.roleSchoolAdmin") :
+              item.authorRole === "teacher"      ? t("annTeacher.roleTeacher")      :
                                                    item.authorRole || "—"
             }
             color="#7C3AED"
           />
           <InfoRow
             icon="calendar-outline"
-            label="Sent"
+            label={t("annTeacher.sent")}
             value={formatFull(item.createdAt)}
             color="#2563EB"
           />
           {item.expiresAt && (
             <InfoRow
               icon="timer-outline"
-              label="Expires"
+              label={t("annTeacher.expires")}
               value={formatFull(item.expiresAt)}
               color={expired ? "#9CA3AF" : "#D97706"}
             />
           )}
           <InfoRow
             icon="megaphone-outline"
-            label="Audience"
+            label={t("annTeacher.audience")}
             value={
-              item.audience === "all"      ? "Whole School"     :
-              item.audience === "teachers" ? "Teachers"         :
-              item.audience === "students" ? "Students"         :
-              item.audience === "class"    ? "Specific Classes" :
+              item.audience === "all"      ? t("annTeacher.wholeSchool")     :
+              item.audience === "teachers" ? t("annTeacher.audTeachers")         :
+              item.audience === "students" ? t("annTeacher.audStudents")         :
+              item.audience === "class"    ? t("annTeacher.audClasses") :
                                              item.audience || "—"
             }
             color="#059669"
@@ -315,7 +316,7 @@ export default function AnnouncementDetailScreen() {
           {item.targetClasses?.length > 0 && (
             <InfoRow
               icon="school-outline"
-              label="Classes"
+              label={t("annTeacher.classesLabel")}
               value={item.targetClasses.map((c) => c?.name || c).join(", ")}
               color="#D97706"
             />
@@ -324,14 +325,14 @@ export default function AnnouncementDetailScreen() {
 
         {/* ── MESSAGE CARD ── */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Message</Text>
+          <Text style={styles.sectionTitle}>{t("common.message")}</Text>
           <Text style={styles.bodyText}>{item.body}</Text>
         </View>
 
         {/* ── STATUS CARD (inbox only — not own announcements) ── */}
         {!isMine && (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Your Status</Text>
+            <Text style={styles.sectionTitle}>{t("annTeacher.yourStatus")}</Text>
             <View style={styles.statusRow}>
               <View style={[
                 styles.statusChip,
@@ -346,7 +347,7 @@ export default function AnnouncementDetailScreen() {
                   styles.statusText,
                   { color: item.isRead ? "#059669" : "#9CA3AF" },
                 ]}>
-                  {item.isRead ? "Read" : "Unread"}
+                  {item.isRead ? t("annTeacher.read") : t("annTeacher.unread")}
                 </Text>
               </View>
 
@@ -363,7 +364,7 @@ export default function AnnouncementDetailScreen() {
                   styles.statusText,
                   { color: item.isAcknowledged ? "#059669" : "#D97706" },
                 ]}>
-                  {item.isAcknowledged ? "Acknowledged" : "Not acknowledged"}
+                  {item.isAcknowledged ? t("annTeacher.acknowledged") : t("annTeacher.notAcknowledged")}
                 </Text>
               </View>
             </View>
@@ -376,7 +377,7 @@ export default function AnnouncementDetailScreen() {
               >
                 <Ionicons name="checkmark-done" size={18} color="#FFF" />
                 <Text style={styles.acknowledgeBtnText}>
-                  Acknowledge This Announcement
+                  {t("annTeacher.ackCta")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -392,7 +393,7 @@ export default function AnnouncementDetailScreen() {
             activeOpacity={0.8}
           >
             <Ionicons name="trash-outline" size={18} color="#DC2626" />
-            <Text style={styles.deleteBtnText}>Delete Announcement</Text>
+            <Text style={styles.deleteBtnText}>{t("annTeacher.deleteTitle")}</Text>
           </TouchableOpacity>
         )}
 
@@ -554,3 +555,4 @@ const styles = StyleSheet.create({
   },
   backBtnLargeText: { color: "#FFF", fontWeight: "600" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

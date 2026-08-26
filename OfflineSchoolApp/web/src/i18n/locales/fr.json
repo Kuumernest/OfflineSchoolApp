@@ -286,7 +286,10 @@
     "draft": "Brouillon",
     "scheduled": "Programmée",
     "ongoing": "En cours",
-    "completed": "Terminée"
+    "completed": "Terminée",
+    "published": "Publiée",
+    "approved": "Approuvée",
+    "archived": "Archivée"
   },
   "notFound": {
     "title": "Cette page n'existe pas",
@@ -1332,5 +1335,86 @@
     "notifyAllHint": "Deux messages par élève et par jour. Sur un canal payant, c'est le coût principal.",
     "lateAfter": "En retard après",
     "earlyBefore": "Départ anticipé avant"
+  },
+  "messages": {
+    "title": "Messages",
+    "blurb": "Conversations avec le personnel, les élèves et les parents.",
+    "newConversation": "Nouvelle conversation",
+    "noneYet": "Aucune conversation pour le moment.",
+    "noMessagesYet": "Aucun message",
+    "selectOne": "Sélectionnez une conversation",
+    "readOnly": "LECTURE SEULE",
+    "unknownSender": "Inconnu",
+    "deleted": "Ce message a été supprimé",
+    "deleteMessage": "Supprimer le message",
+    "attach": "Joindre un fichier",
+    "writePh": "Écrire un message…",
+    "searchPh": "Rechercher un personnel, un élève ou un parent…",
+    "noMatch": "Personne ne correspond à ce nom.",
+    "nobodyAvailable": "Il n'y a personne avec qui démarrer une conversation.",
+    "genericError": "Une erreur est survenue",
+    "conversation": "Conversation",
+    "audit": {
+      "title": "Audit des messages",
+      "blurb": "Recherchez les conversations de l'école. Chaque lecture est enregistrée.",
+      "adminOnly": "L'audit des messages est réservé aux administrateurs.",
+      "seq": "N°",
+      "sender": "Expéditeur",
+      "sent": "Envoyé",
+      "message": "Message",
+      "deleted": "SUPPRIMÉ",
+      "noText": "(aucun texte)",
+      "noMessages": "Cette conversation n'a aucun message.",
+      "participantPh": "Identifiant du participant — laisser vide pour toute l'école",
+      "noneFound": "Aucune conversation trouvée.",
+      "conversation": "Conversation",
+      "kind": "Type",
+      "people": "Personnes",
+      "lastActivity": "Dernière activité",
+      "directConversation": "Conversation directe",
+      "read": "Lire"
+    }
+  },
+  "examType": {
+    "first_test": "Première interrogation",
+    "second_test": "Deuxième interrogation",
+    "mid_term": "Devoir surveillé",
+    "practical": "Travaux pratiques",
+    "final_exam": "Examen final",
+    "mock_exam": "Examen blanc",
+    "promotion_exam": "Examen de passage",
+    "continuous_assessment": "Contrôle continu"
+  },
+  "examSubmission": {
+    "notSubmitted": "Non soumis",
+    "awaitingApproval": "En attente d’approbation"
+  },
+  "annLifecycle": {
+    "live": "En ligne",
+    "scheduled": "Programmée",
+    "expired": "Expirée"
+  },
+  "search": {
+    "attendanceReports": "Rapports de présence"
+  },
+  "alerts": {
+    "appsPending": "{{count}} candidature en attente depuis plus de 3 jours",
+    "appsPending_other": "{{count}} candidatures en attente depuis plus de 3 jours",
+    "teachersUnassigned": "{{count}} enseignant non encore attribué",
+    "teachersUnassigned_other": "{{count}} enseignants non encore attribués",
+    "classesNoSubjects": "{{count}} classe sans matière",
+    "classesNoSubjects_other": "{{count}} classes sans matière",
+    "timetableConflicts": "{{count}} conflit d’emploi du temps détecté",
+    "timetableConflicts_other": "{{count}} conflits d’emploi du temps détectés",
+    "classesNoTimetable": "{{count}} classe sans emploi du temps ({{pct}} %)",
+    "classesNoTimetable_other": "{{count}} classes sans emploi du temps ({{pct}} %)",
+    "noAssignments": "Aucune attribution — attribuez des matières aux enseignants",
+    "titleAppsPending": "Candidatures en attente",
+    "titleUnassigned": "Enseignants non attribués",
+    "titleMissingSubjects": "Matières manquantes",
+    "titleConflicts": "Conflits d’emploi du temps",
+    "titleNoTimetable": "Emplois du temps incomplets",
+    "titleNoAssignments": "Aucune attribution",
+    "titleGeneric": "Alerte système"
   }
 }

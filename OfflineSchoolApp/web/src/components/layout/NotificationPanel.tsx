@@ -112,7 +112,7 @@ export default function NotificationPanel() {
     if (!schoolId) return;
     setIsLoading(true);
     try {
-      const data = await fetchNotifications(schoolId);
+      const data = await fetchNotifications(schoolId, 20, t);
       setNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
     } catch (err) {

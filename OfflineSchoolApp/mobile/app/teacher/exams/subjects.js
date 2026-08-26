@@ -13,6 +13,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import AsyncStorage     from "@react-native-async-storage/async-storage";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import api              from "../../../src/services/api";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
@@ -41,18 +42,18 @@ const C = {
 };
 
 const STATUS_META = {
-  pending:   { color: C.warning, bg: C.warningBg, label: "Pending",   icon: "time-outline"             },
-  submitted: { color: C.primary, bg: C.primaryBg, label: "Submitted", icon: "cloud-upload-outline"     },
-  approved:  { color: C.success, bg: C.successBg, label: "Approved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: C.error,   bg: C.errorBg,   label: "Rejected",  icon: "close-circle-outline"     },
+  pending:   { color: C.warning, bg: C.warningBg, labelKey: "teacherExamSubjects.statusPending",   icon: "time-outline"             },
+  submitted: { color: C.primary, bg: C.primaryBg, labelKey: "teacherExamSubjects.statusSubmitted", icon: "cloud-upload-outline"     },
+  approved:  { color: C.success, bg: C.successBg, labelKey: "teacherExamSubjects.statusApproved",  icon: "checkmark-circle-outline" },
+  rejected:  { color: C.error,   bg: C.errorBg,   labelKey: "teacherExamSubjects.statusRejected",  icon: "close-circle-outline"     },
 };
 
 const SUBJECT_FILTERS = [
-  { id: "all",       label: "All",       icon: "apps-outline"             },
-  { id: "pending",   label: "Pending",   icon: "time-outline"             },
-  { id: "rejected",  label: "Rejected",  icon: "close-circle-outline"     },
-  { id: "submitted", label: "Submitted", icon: "cloud-upload-outline"     },
-  { id: "approved",  label: "Approved",  icon: "checkmark-circle-outline" },
+  { id: "all",       labelKey: "teacherExamSubjects.filterAll",        icon: "apps-outline"             },
+  { id: "pending",   labelKey: "teacherExamSubjects.statusPending",    icon: "time-outline"             },
+  { id: "rejected",  labelKey: "teacherExamSubjects.statusRejected",   icon: "close-circle-outline"     },
+  { id: "submitted", labelKey: "teacherExamSubjects.statusSubmitted",  icon: "cloud-upload-outline"     },
+  { id: "approved",  labelKey: "teacherExamSubjects.statusApproved",   icon: "checkmark-circle-outline" },
 ];
 
 const CLASS_COLORS = [
@@ -233,7 +234,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
       if (localStudents.length > 0) {
         return localStudents.map((s) => ({
           _id:         String(s._id || s.id || ""),
-          studentName: s.studentName || s.name || s.fullName || "Unknown",
+          studentName: s.studentName || s.name || s.fullName || "",
           admissionNo: s.admissionNo || s.admissionNumber || s.regNo || null,
           email:       s.email || null,
         }));
@@ -281,7 +282,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
       if (students.length > 0) {
         return students.map((s) => ({
           _id:         String(s._id || s.id),
-          studentName: s.studentName || s.name || s.fullName || "Unknown",
+          studentName: s.studentName || s.name || s.fullName || "",
           admissionNo: s.admissionNo || s.admissionNumber || s.regNo || null,
           email:       s.email || null,
         }));
@@ -303,6 +304,7 @@ const fetchStudentsForClass = async (schoolId, classId, role) => {
 // ─────────────────────────────────────────────────────────
 
 function useStableLoader(asyncFn, deps) {
+  const { t } = useTranslation();
   const [state, setState] = useState({
     data:       [],
     loading:    true,
@@ -345,7 +347,7 @@ function useStableLoader(asyncFn, deps) {
             data:       [],
             loading:    false,
             refreshing: false,
-            error:      err?.message || "Something went wrong",
+            error:      err?.message || t("teacherExamSubjects.genericError"),
           });
         }
       })
@@ -374,6 +376,8 @@ function ScoreEntry({
   subjectName, onSaved,
   saveRef, saving, setSaving, dirtyRef,
 }) {
+  const { t } = useTranslation();
+
   const [scores,       setScores]       = useState({});
   const [isDirty,      setIsDirty]      = useState(false);
   const [search,       setSearch]       = useState("");
@@ -437,11 +441,11 @@ function ScoreEntry({
           const draft = JSON.parse(rawDraft);
           if (draft && typeof draft === "object" && Object.keys(draft).length) {
             Alert.alert(
-              "Draft Found",
-              "You have unsaved scores from a previous session. Restore them?",
+              t("teacherExamSubjects.draftFoundTitle"),
+              t("teacherExamSubjects.draftFoundBody"),
               [
                 {
-                  text:  "Discard",
+                  text:  t("teacherExamSubjects.discard"),
                   style: "destructive",
                   onPress: async () => {
                     await AsyncStorage.removeItem(
@@ -451,7 +455,7 @@ function ScoreEntry({
                   },
                 },
                 {
-                  text: "Restore",
+                  text: t("teacherExamSubjects.restore"),
                   onPress: () => {
                     setScores({ ...(serverScores ?? {}), ...draft });
                     setIsDirty(true);
@@ -467,7 +471,7 @@ function ScoreEntry({
     };
 
     applyScores();
-  }, [scoresLoading, serverScores, draftHandled, examId, subjectId]);
+  }, [scoresLoading, serverScores, draftHandled, examId, subjectId, t]);
 
   const updateScore = useCallback((sid, value) => {
     setIsDirty(true);
@@ -502,22 +506,28 @@ function ScoreEntry({
 
   useEffect(() => {
     if (!isDirty || !examId || !subjectId) return;
-    const t = setTimeout(() => {
+    const timer = setTimeout(() => {
       AsyncStorage.setItem(
         draftKey(examId, subjectId),
         JSON.stringify(scores)
       ).catch(() => {});
     }, 30_000);
-    return () => clearTimeout(t);
+    return () => clearTimeout(timer);
   }, [scores, isDirty, examId, subjectId]);
 
   const handleSave = useCallback(async () => {
     if (!safeStudents.length) {
-      Alert.alert("No Students", "No students to save scores for.");
+      Alert.alert(
+        t("teacherExamSubjects.noStudentsAlertTitle"),
+        t("teacherExamSubjects.noStudentsAlertBody")
+      );
       return;
     }
     if (!examId) {
-      Alert.alert("Error", "Exam ID is missing.");
+      Alert.alert(
+        t("teacherExamSubjects.errorTitle"),
+        t("teacherExamSubjects.examIdMissing")
+      );
       return;
     }
 
@@ -540,8 +550,11 @@ function ScoreEntry({
     );
     if (invalid.length) {
       Alert.alert(
-        "Invalid Scores",
-        `${invalid.length} score(s) out of range (0–${maxScore}).`
+        t("teacherExamSubjects.invalidScoresTitle"),
+        t("teacherExamSubjects.invalidScoresBody", {
+          count: invalid.length,
+          max:   maxScore,
+        })
       );
       return;
     }
@@ -562,22 +575,25 @@ function ScoreEntry({
         ).catch(() => {});
         setIsDirty(false);
         Alert.alert(
-          "✅ Saved",
-          `Scores saved for ${records.length} student(s).`,
+          t("teacherExamSubjects.savedTitle"),
+          t("teacherExamSubjects.savedBody", { count: records.length }),
           [
             {
-              text:    "Enter Another Subject",
+              text:    t("teacherExamSubjects.enterAnotherSubject"),
               onPress: () => onSaved("back"),
             },
             {
-              text:    "Done",
+              text:    t("teacherExamSubjects.done"),
               style:   "cancel",
               onPress: () => onSaved("exit"),
             },
           ]
         );
       } catch (err) {
-        Alert.alert("Save Failed", err.message || "Please try again");
+        Alert.alert(
+          t("teacherExamSubjects.saveFailedTitle"),
+          err.message || t("teacherExamSubjects.tryAgain")
+        );
       } finally {
         setSaving(false);
       }
@@ -585,11 +601,17 @@ function ScoreEntry({
 
     if (unentered.length) {
       Alert.alert(
-        "Unentered Scores",
-        `${unentered.length} student(s) have no score. Save anyway?`,
+        t("teacherExamSubjects.unenteredTitle"),
+        t("teacherExamSubjects.unenteredBody", { count: unentered.length }),
         [
-          { text: "Cancel",      style: "cancel" },
-          { text: "Save Anyway", onPress: doSave },
+          {
+            text:  t("teacherExamSubjects.cancel"),
+            style: "cancel",
+          },
+          {
+            text:    t("teacherExamSubjects.saveAnyway"),
+            onPress: doSave,
+          },
         ]
       );
     } else {
@@ -598,7 +620,7 @@ function ScoreEntry({
   }, [
     safeStudents, scores, maxScore,
     examId, classId, subjectId, examSubjectId,
-    schoolId, onSaved, setSaving,
+    schoolId, onSaved, setSaving, t,
   ]);
 
   useEffect(() => {
@@ -647,7 +669,9 @@ function ScoreEntry({
     return (
       <View style={se.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={se.hint}>Loading students…</Text>
+        <Text style={se.hint}>
+          {t("teacherExamSubjects.loadingStudents")}
+        </Text>
       </View>
     );
   }
@@ -658,7 +682,9 @@ function ScoreEntry({
         <Ionicons name="alert-circle-outline" size={48} color={C.error} />
         <Text style={[se.hint, { color: C.error }]}>{studentsError}</Text>
         <TouchableOpacity style={se.retryBtn} onPress={refreshStudents}>
-          <Text style={se.retryText}>Retry</Text>
+          <Text style={se.retryText}>
+            {t("teacherExamSubjects.retry")}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -669,14 +695,15 @@ function ScoreEntry({
       <View style={se.centered}>
         <Ionicons name="people-outline" size={48} color={C.gray200} />
         <Text style={[se.hint, { fontWeight: "700", color: C.gray700 }]}>
-          No Students Found
+          {t("teacherExamSubjects.noStudentsTitle")}
         </Text>
         <Text style={[se.hint, { textAlign: "center" }]}>
-          No students were found for this class.{"\n"}
-          Class ID: {classId}
+          {t("teacherExamSubjects.noStudentsBody", { classId })}
         </Text>
         <TouchableOpacity style={se.retryBtn} onPress={refreshStudents}>
-          <Text style={se.retryText}>Retry</Text>
+          <Text style={se.retryText}>
+            {t("teacherExamSubjects.retry")}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -693,12 +720,17 @@ function ScoreEntry({
         <View style={se.progress}>
           <View style={se.progressTop}>
             <Text style={se.progressText}>
-              {enteredCount} / {safeStudents.length} entered
+              {t("teacherExamSubjects.enteredCount", {
+                entered: enteredCount,
+                total:   safeStudents.length,
+              })}
             </Text>
             <View style={se.progressRight}>
               {isDirty && (
                 <View style={se.dirtyDot}>
-                  <Text style={se.dirtyText}>UNSAVED</Text>
+                  <Text style={se.dirtyText}>
+                    {t("teacherExamSubjects.unsavedBadge")}
+                  </Text>
                 </View>
               )}
               <Text style={se.progressPct}>{pct}%</Text>
@@ -709,10 +741,16 @@ function ScoreEntry({
           </View>
           <View style={se.progressBottom}>
             <Text style={se.subLabel}>
-              {subjectName} · Max: {maxScore} · Pass: {passMark}
+              {t("teacherExamSubjects.scoreMeta", {
+                subject: subjectName,
+                max:     maxScore,
+                pass:    passMark,
+              })}
             </Text>
             <TouchableOpacity onPress={markAllPresent}>
-              <Text style={se.markAll}>Mark All Present</Text>
+              <Text style={se.markAll}>
+                {t("teacherExamSubjects.markAllPresent")}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -722,7 +760,7 @@ function ScoreEntry({
           <Ionicons name="search-outline" size={16} color={C.gray400} />
           <TextInput
             style={se.searchInput}
-            placeholder="Search student…"
+            placeholder={t("teacherExamSubjects.searchPlaceholder")}
             placeholderTextColor={C.gray400}
             value={search}
             onChangeText={setSearch}
@@ -765,8 +803,8 @@ function ScoreEntry({
               <Ionicons name="people-outline" size={48} color={C.gray200} />
               <Text style={se.emptyText}>
                 {search
-                  ? "No students match your search"
-                  : "No students found"}
+                  ? t("teacherExamSubjects.emptySearch")
+                  : t("teacherExamSubjects.emptyStudents")}
               </Text>
             </View>
           }
@@ -792,7 +830,8 @@ function ScoreEntry({
                 </View>
                 <View style={se.info}>
                   <Text style={se.name} numberOfLines={1}>
-                    {item.studentName}
+                    {item.studentName ||
+                      t("teacherExamSubjects.unknownStudent")}
                   </Text>
                   <Text style={se.sub}>
                     {item.admissionNo
@@ -811,7 +850,7 @@ function ScoreEntry({
                       entry.isAbsent && se.absBtnTextActive,
                     ]}
                   >
-                    ABS
+                    {t("teacherExamSubjects.absShort")}
                   </Text>
                 </TouchableOpacity>
                 <View style={se.scoreWrap}>
@@ -825,7 +864,11 @@ function ScoreEntry({
                         borderWidth: 1.5,
                       },
                     ]}
-                    value={entry.isAbsent ? "ABS" : raw}
+                    value={
+                      entry.isAbsent
+                        ? t("teacherExamSubjects.absShort")
+                        : raw
+                    }
                     onChangeText={(v) => {
                       if (!entry.isAbsent) updateScore(item._id, v);
                     }}
@@ -947,6 +990,7 @@ const se = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
+  const { t } = useTranslation();
   const [subjectFilter, setSubjectFilter] = useState("all");
 
   const loadSubjects = useCallback(async () => {
@@ -1066,10 +1110,12 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
       className:
         classNameMap[s.classId] ||
         (s.classId
-          ? `Class …${String(s.classId).slice(-6)}`
-          : "Unknown Class"),
+          ? t("teacherExamSubjects.classShort", {
+              suffix: String(s.classId).slice(-6),
+            })
+          : t("teacherExamSubjects.unknownClass")),
     }));
-  }, [examId, schoolId, teacherId]);
+  }, [examId, schoolId, teacherId, t]);
 
   const {
     data:       subjects,
@@ -1092,14 +1138,14 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
   const sections = useMemo(() => {
     const classMap = {};
     for (const sub of filteredSubjects) {
-      const key = sub.className || "Unknown Class";
+      const key = sub.className || t("teacherExamSubjects.unknownClass");
       if (!classMap[key]) classMap[key] = { title: key, data: [] };
       classMap[key].data.push(sub);
     }
     return Object.values(classMap).sort((a, b) =>
       a.title.localeCompare(b.title)
     );
-  }, [filteredSubjects]);
+  }, [filteredSubjects, t]);
 
   const filterCounts = useMemo(() => ({
     all:       safeSubjects.length,
@@ -1121,7 +1167,9 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
     return (
       <View style={sv.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={sv.loadingText}>Loading subjects…</Text>
+        <Text style={sv.loadingText}>
+          {t("teacherExamSubjects.loadingSubjects")}
+        </Text>
       </View>
     );
   }
@@ -1132,7 +1180,9 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
         <Ionicons name="alert-circle-outline" size={48} color={C.error} />
         <Text style={sv.errorText}>{error}</Text>
         <TouchableOpacity style={sv.retryBtn} onPress={refresh}>
-          <Text style={sv.retryText}>Retry</Text>
+          <Text style={sv.retryText}>
+            {t("teacherExamSubjects.retry")}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -1142,12 +1192,16 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
     return (
       <View style={sv.centered}>
         <Ionicons name="book-outline" size={48} color={C.gray200} />
-        <Text style={sv.emptyTitle}>No Subjects Found</Text>
+        <Text style={sv.emptyTitle}>
+          {t("teacherExamSubjects.noSubjectsTitle")}
+        </Text>
         <Text style={sv.emptyText}>
-          No subjects are assigned to you for this exam
+          {t("teacherExamSubjects.noSubjectsBody")}
         </Text>
         <TouchableOpacity style={sv.retryBtn} onPress={refresh}>
-          <Text style={sv.retryText}>Refresh</Text>
+          <Text style={sv.retryText}>
+            {t("teacherExamSubjects.refresh")}
+          </Text>
         </TouchableOpacity>
       </View>
     );
@@ -1184,7 +1238,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                     isActive && sv.filterChipTextActive,
                   ]}
                 >
-                  {f.label}
+                  {t(f.labelKey)}
                 </Text>
                 {count > 0 && (
                   <View
@@ -1213,13 +1267,15 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
         <View style={sv.filterEmpty}>
           <Ionicons name="funnel-outline" size={40} color={C.gray200} />
           <Text style={sv.filterEmptyText}>
-            No subjects match this filter
+            {t("teacherExamSubjects.noFilterMatch")}
           </Text>
           <TouchableOpacity
             style={sv.filterEmptyBtn}
             onPress={() => setSubjectFilter("all")}
           >
-            <Text style={sv.filterEmptyBtnText}>Show All</Text>
+            <Text style={sv.filterEmptyBtnText}>
+              {t("teacherExamSubjects.showAll")}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -1253,8 +1309,9 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 <View style={sv.sectionHeaderText}>
                   <Text style={sv.sectionTitle}>{section.title}</Text>
                   <Text style={sv.sectionMeta}>
-                    {section.data.length} subject
-                    {section.data.length !== 1 ? "s" : ""}
+                    {t("teacherExamSubjects.subjectCount", {
+                      count: section.data.length,
+                    })}
                   </Text>
                 </View>
                 <View
@@ -1310,15 +1367,21 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                 </View>
                 <View style={sv.cardInfo}>
                   <Text style={sv.cardName}>
-                    {sub.subjectName || "Unknown Subject"}
+                    {sub.subjectName ||
+                      t("teacherExamSubjects.unknownSubject")}
                   </Text>
                   <Text style={sv.cardSub}>
-                    {[`Max: ${sub.maxScore}`, `Pass: ${sub.passMark}`]
+                    {[
+                      t("teacherExamSubjects.maxLabel", { max: sub.maxScore }),
+                      t("teacherExamSubjects.passLabel", { pass: sub.passMark }),
+                    ]
                       .filter(Boolean)
                       .join("  ·  ")}
                   </Text>
                   <Text style={sv.scoresText}>
-                    {sub.totalScoresEntered ?? 0} score(s) entered
+                    {t("teacherExamSubjects.scoresEntered", {
+                      count: sub.totalScoresEntered ?? 0,
+                    })}
                   </Text>
                   {isRejected && sub.rejectionReason && (
                     <View style={sv.rejectionBox}>
@@ -1334,7 +1397,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                   )}
                   {isApproved && (
                     <Text style={sv.approvedText}>
-                      ✓ Approved — no further changes allowed
+                      {t("teacherExamSubjects.approvedLocked")}
                     </Text>
                   )}
                 </View>
@@ -1343,7 +1406,7 @@ function SubjectListView({ examId, schoolId, teacherId, onSelect }) {
                     style={[sv.statusBadge, { backgroundColor: meta.bg }]}
                   >
                     <Text style={[sv.statusText, { color: meta.color }]}>
-                      {meta.label}
+                      {t(meta.labelKey)}
                     </Text>
                   </View>
                   {!isApproved && (
@@ -1488,6 +1551,7 @@ const sv = StyleSheet.create({
 
 export default function TeacherExamSubjectsScreen() {
   const { examId, examName } = useLocalSearchParams();
+  const { t }     = useTranslation();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId;
   const teacherId = String(user?._id || user?.id || "");
@@ -1510,17 +1574,24 @@ export default function TeacherExamSubjectsScreen() {
 
     if (step === 1 && dirtyRef.current) {
       Alert.alert(
-        "Unsaved Changes",
-        "You have unsaved scores. Discard them?",
+        t("teacherExamSubjects.unsavedTitle"),
+        t("teacherExamSubjects.unsavedBody"),
         [
-          { text: "Keep Editing", style: "cancel" },
-          { text: "Discard", style: "destructive", onPress: goBack },
+          {
+            text:  t("teacherExamSubjects.keepEditing"),
+            style: "cancel",
+          },
+          {
+            text:    t("teacherExamSubjects.discard"),
+            style:   "destructive",
+            onPress: goBack,
+          },
         ]
       );
     } else {
       goBack();
     }
-  }, [step]);
+  }, [step, t]);
 
   const handleSaved = useCallback((action) => {
     dirtyRef.current = false;
@@ -1531,12 +1602,15 @@ export default function TeacherExamSubjectsScreen() {
   const confirmDiscard = useCallback((onConfirm) => {
     if (step === 1 && dirtyRef.current) {
       Alert.alert(
-        "Unsaved Changes",
-        "You have unsaved scores. Discard them?",
+        t("teacherExamSubjects.unsavedTitle"),
+        t("teacherExamSubjects.unsavedBody"),
         [
-          { text: "Keep Editing", style: "cancel" },
           {
-            text:    "Discard",
+            text:  t("teacherExamSubjects.keepEditing"),
+            style: "cancel",
+          },
+          {
+            text:    t("teacherExamSubjects.discard"),
             style:   "destructive",
             onPress: () => {
               dirtyRef.current = false;
@@ -1548,17 +1622,22 @@ export default function TeacherExamSubjectsScreen() {
     } else {
       onConfirm();
     }
-  }, [step]);
+  }, [step, t]);
 
   const headerTitle =
     step === 1
       ? selectedSubject?.subjectName
-      : examName || "Exam Subjects";
+      : examName || t("teacherExamSubjects.screenTitle");
 
   const headerSub =
     step === 1
-      ? `${examName || "Exam"} · ${selectedSubject?.className || ""}`
-      : `${examName || "Exam"} — select a subject`;
+      ? t("teacherExamSubjects.headerSubEntry", {
+          exam:  examName || t("teacherExamSubjects.examFallback"),
+          class: selectedSubject?.className || "",
+        })
+      : t("teacherExamSubjects.headerSubList", {
+          exam: examName || t("teacherExamSubjects.examFallback"),
+        });
 
   return (
     <View style={ms.container}>
@@ -1590,7 +1669,9 @@ export default function TeacherExamSubjectsScreen() {
           >
             {saving
               ? <ActivityIndicator size="small" color={C.white} />
-              : <Text style={ms.saveBtnText}>Save</Text>
+              : <Text style={ms.saveBtnText}>
+                  {t("teacherExamSubjects.save")}
+                </Text>
             }
           </TouchableOpacity>
         )}
@@ -1602,7 +1683,9 @@ export default function TeacherExamSubjectsScreen() {
           onPress={() => confirmDiscard(() => router.back())}
           activeOpacity={0.7}
         >
-          <Text style={ms.crumbLink}>My Exams</Text>
+          <Text style={ms.crumbLink}>
+            {t("teacherExamSubjects.myExams")}
+          </Text>
         </TouchableOpacity>
         <Ionicons name="chevron-forward" size={13} color={C.gray200} />
         <TouchableOpacity
@@ -1618,7 +1701,7 @@ export default function TeacherExamSubjectsScreen() {
             ]}
             numberOfLines={1}
           >
-            {examName || "Exam"}
+            {examName || t("teacherExamSubjects.examFallback")}
           </Text>
         </TouchableOpacity>
         {step === 1 && (
@@ -1640,7 +1723,8 @@ export default function TeacherExamSubjectsScreen() {
           onSelect={(sub) =>
             setSelectedSubject({
               subjectId:     String(sub.subjectId || sub._id),
-              subjectName:   sub.subjectName  || "Subject",
+              subjectName:   sub.subjectName  ||
+                             t("teacherExamSubjects.subjectFallback"),
               examSubjectId: String(sub._id   || sub.id),
               classId:       String(sub.classId || ""),
               className:     sub.className    || "",

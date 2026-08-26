@@ -286,7 +286,10 @@
     "draft": "Draft",
     "scheduled": "Scheduled",
     "ongoing": "Ongoing",
-    "completed": "Completed"
+    "completed": "Completed",
+    "published": "Published",
+    "approved": "Approved",
+    "archived": "Archived"
   },
   "notFound": {
     "title": "There's nothing at this address",
@@ -1332,5 +1335,86 @@
     "notifyAllHint": "Two messages per student per day. On a paid channel this is the largest cost.",
     "lateAfter": "Late after",
     "earlyBefore": "Early before"
+  },
+  "messages": {
+    "title": "Messages",
+    "blurb": "Conversations with staff, students and parents.",
+    "newConversation": "New conversation",
+    "noneYet": "No conversations yet.",
+    "noMessagesYet": "No messages yet",
+    "selectOne": "Select a conversation",
+    "readOnly": "READ ONLY",
+    "unknownSender": "Unknown",
+    "deleted": "This message was deleted",
+    "deleteMessage": "Delete message",
+    "attach": "Attach a file",
+    "writePh": "Write a message…",
+    "searchPh": "Search staff, students or parents…",
+    "noMatch": "Nobody matches that name.",
+    "nobodyAvailable": "There is nobody you can start a conversation with.",
+    "genericError": "Something went wrong",
+    "conversation": "Conversation",
+    "audit": {
+      "title": "Message audit",
+      "blurb": "Find conversations across the school. Reading one is recorded.",
+      "adminOnly": "Message auditing is limited to administrators.",
+      "seq": "Seq",
+      "sender": "Sender",
+      "sent": "Sent",
+      "message": "Message",
+      "deleted": "DELETED",
+      "noText": "(no text)",
+      "noMessages": "This conversation has no messages.",
+      "participantPh": "Participant id — leave blank for the whole school",
+      "noneFound": "No conversations found.",
+      "conversation": "Conversation",
+      "kind": "Kind",
+      "people": "People",
+      "lastActivity": "Last activity",
+      "directConversation": "Direct conversation",
+      "read": "Read"
+    }
+  },
+  "examType": {
+    "first_test": "First Test",
+    "second_test": "Second Test",
+    "mid_term": "Mid-Term",
+    "practical": "Practical",
+    "final_exam": "Final Exam",
+    "mock_exam": "Mock Exam",
+    "promotion_exam": "Promotion Exam",
+    "continuous_assessment": "Continuous Assessment"
+  },
+  "examSubmission": {
+    "notSubmitted": "Not Submitted",
+    "awaitingApproval": "Awaiting Approval"
+  },
+  "annLifecycle": {
+    "live": "Live",
+    "scheduled": "Scheduled",
+    "expired": "Expired"
+  },
+  "search": {
+    "attendanceReports": "Attendance Reports"
+  },
+  "alerts": {
+    "appsPending": "{{count}} application pending over 3 days",
+    "appsPending_other": "{{count}} applications pending over 3 days",
+    "teachersUnassigned": "{{count}} teacher not yet assigned",
+    "teachersUnassigned_other": "{{count}} teachers not yet assigned",
+    "classesNoSubjects": "{{count}} class missing subjects",
+    "classesNoSubjects_other": "{{count}} classes missing subjects",
+    "timetableConflicts": "{{count}} timetable conflict detected",
+    "timetableConflicts_other": "{{count}} timetable conflicts detected",
+    "classesNoTimetable": "{{count}} class without timetable ({{pct}}%)",
+    "classesNoTimetable_other": "{{count}} classes without timetable ({{pct}}%)",
+    "noAssignments": "No teacher assignments yet — assign teachers to subjects",
+    "titleAppsPending": "Pending Applications",
+    "titleUnassigned": "Unassigned Teachers",
+    "titleMissingSubjects": "Missing Subjects",
+    "titleConflicts": "Timetable Conflicts",
+    "titleNoTimetable": "Incomplete Timetables",
+    "titleNoAssignments": "No Teacher Assignments",
+    "titleGeneric": "System Alert"
   }
 }

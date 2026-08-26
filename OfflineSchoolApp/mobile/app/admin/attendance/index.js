@@ -21,6 +21,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const STATUS_COLORS = {
   present:  { bg: "#ECFDF5", text: "#059669", icon: "checkmark-circle" },
@@ -30,18 +31,14 @@ const STATUS_COLORS = {
   on_leave: { bg: "#F3F4F6", text: "#6B7280", icon: "calendar"         },
 };
 
-const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-const MONTHS = [
-  "Jan","Feb","Mar","Apr","May","Jun",
-  "Jul","Aug","Sep","Oct","Nov","Dec",
-];
+const dayKey   = (d) => `attAdmin.day${d.getDay()}`;
+const monthKey = (d) => `attAdmin.mon${d.getMonth()}`;
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const formatDate = (dateStr) => {
+const formatDate = (dateStr, t) => {
   const d = new Date(dateStr);
-  return `${DAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+  return `${t(dayKey(d))}, ${t(monthKey(d))} ${d.getDate()}`;
 };
 
 const pct = (n, total) =>
@@ -97,6 +94,8 @@ const AttendanceSummaryCard = ({
   onMarkAll,
   onViewDetail,
 }) => {
+  const { t } = useTranslation();
+
   const { total, marked, present, absent, late, unmarked, rate } =
     summary || {};
 
@@ -108,7 +107,10 @@ const AttendanceSummaryCard = ({
           <View>
             <Text style={cardStyles.title}>{title}</Text>
             <Text style={cardStyles.sub}>
-              {marked ?? 0} of {total ?? 0} marked today
+              {t("attAdmin.markedOfTotalToday", {
+                marked: marked ?? 0,
+                total:  total  ?? 0,
+              })}
             </Text>
           </View>
         </View>
@@ -116,10 +118,10 @@ const AttendanceSummaryCard = ({
       </View>
 
       <View style={cardStyles.pillRow}>
-        <StatPill label="Present" value={present ?? 0} color="#059669" />
-        <StatPill label="Absent"  value={absent  ?? 0} color="#DC2626" />
-        <StatPill label="Late"    value={late    ?? 0} color="#D97706" />
-        <StatPill label="Unmarked"value={unmarked?? 0} color="#9CA3AF" />
+        <StatPill label={t("academic.present")}     value={present ?? 0} color="#059669" />
+        <StatPill label={t("academic.absent")}      value={absent  ?? 0} color="#DC2626" />
+        <StatPill label={t("academic.late")}        value={late    ?? 0} color="#D97706" />
+        <StatPill label={t("attendance.unmarked")}  value={unmarked?? 0} color="#9CA3AF" />
       </View>
 
       <View style={cardStyles.actions}>
@@ -129,7 +131,7 @@ const AttendanceSummaryCard = ({
           activeOpacity={0.8}
         >
           <Ionicons name="create-outline" size={16} color="#FFF" />
-          <Text style={cardStyles.btnText}>Mark Attendance</Text>
+          <Text style={cardStyles.btnText}>{t("attAdmin.markAttendance")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -138,7 +140,7 @@ const AttendanceSummaryCard = ({
           activeOpacity={0.8}
         >
           <Ionicons name="bar-chart-outline" size={16} color={color} />
-          <Text style={[cardStyles.btnText, { color }]}>View Report</Text>
+          <Text style={[cardStyles.btnText, { color }]}>{t("attAdmin.viewReport")}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -185,20 +187,22 @@ const cardStyles = StyleSheet.create({
 });
 
 const WeeklyChart = ({ trend }) => {
+  const { t } = useTranslation();
+
   if (!trend?.length) return null;
 
   return (
     <View style={chartStyles.container}>
-      <Text style={chartStyles.title}>7-Day Attendance Trend</Text>
+      <Text style={chartStyles.title}>{t("attAdmin.trend7d")}</Text>
 
       <View style={chartStyles.legend}>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: "#4F46E5" }]} />
-          <Text style={chartStyles.legendText}>Students</Text>
+          <Text style={chartStyles.legendText}>{t("academic.student_other")}</Text>
         </View>
         <View style={chartStyles.legendItem}>
           <View style={[chartStyles.legendDot, { backgroundColor: "#059669" }]} />
-          <Text style={chartStyles.legendText}>Teachers</Text>
+          <Text style={chartStyles.legendText}>{t("academic.teacher_other")}</Text>
         </View>
       </View>
 
@@ -207,7 +211,7 @@ const WeeklyChart = ({ trend }) => {
           const sRate = day.students?.rate ?? 0;
           const tRate = day.teachers?.rate ?? 0;
           const d     = new Date(day.date);
-          const label = DAYS[d.getDay()];
+          const label = t(dayKey(d));
 
           return (
             <View key={day.date} style={chartStyles.bar}>
@@ -297,6 +301,7 @@ const chartStyles = StyleSheet.create({
 
 export default function AttendanceReportScreen() {
   const router   = useRouter();
+  const { t }    = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
 
@@ -343,12 +348,12 @@ export default function AttendanceReportScreen() {
       setWeekly(weeklyData);
     } catch (err) {
       console.error("Attendance report load failed:", err.message);
-      setError("Failed to load attendance data. Pull down to retry.");
+      setError(t("attAdmin.loadFailedPull"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, today]);
+  }, [schoolId, today, t]);
 
   useEffect(() => {
     loadData();
@@ -374,7 +379,7 @@ export default function AttendanceReportScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading attendance data…</Text>
+        <Text style={styles.loadingText}>{t("attAdmin.loadingOverview")}</Text>
       </View>
     );
   }
@@ -393,8 +398,8 @@ export default function AttendanceReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Attendance</Text>
-          <Text style={styles.headerSub}>{formatDate(today)}</Text>
+          <Text style={styles.headerTitle}>{t("attendance.title")}</Text>
+          <Text style={styles.headerSub}>{formatDate(today, t)}</Text>
         </View>
 
         <TouchableOpacity
@@ -408,8 +413,8 @@ export default function AttendanceReportScreen() {
 
       <View style={styles.tabBar}>
         {[
-          { key: "overview", label: "Today",  icon: "today-outline"    },
-          { key: "weekly",   label: "Weekly", icon: "bar-chart-outline" },
+          { key: "overview", label: t("attAdmin.today"),  icon: "today-outline"     },
+          { key: "weekly",   label: t("attAdmin.weekly"), icon: "bar-chart-outline" },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -465,7 +470,7 @@ export default function AttendanceReportScreen() {
                   color="#4F46E5"
                   size={80}
                 />
-                <Text style={styles.rateLabel}>Student{"\n"}Attendance</Text>
+                <Text style={styles.rateLabel}>{t("attAdmin.rateStudents")}</Text>
               </View>
               <View style={styles.rateDivider} />
               <View style={styles.rateCard}>
@@ -474,12 +479,12 @@ export default function AttendanceReportScreen() {
                   color="#059669"
                   size={80}
                 />
-                <Text style={styles.rateLabel}>Teacher{"\n"}Attendance</Text>
+                <Text style={styles.rateLabel}>{t("attAdmin.rateTeachers")}</Text>
               </View>
             </View>
 
             <AttendanceSummaryCard
-              title="Students"
+              title={t("academic.student_other")}
               emoji="🎒"
               color="#4F46E5"
               summary={overview?.students}
@@ -488,7 +493,7 @@ export default function AttendanceReportScreen() {
             />
 
             <AttendanceSummaryCard
-              title="Teachers"
+              title={t("academic.teacher_other")}
               emoji="👩‍🏫"
               color="#059669"
               summary={overview?.teachers}
@@ -497,33 +502,33 @@ export default function AttendanceReportScreen() {
             />
 
             <View style={styles.quickActions}>
-              <Text style={styles.sectionTitle}>Quick Actions</Text>
+              <Text style={styles.sectionTitle}>{t("attAdmin.quickActions")}</Text>
 
               {[
                 {
-                  label:  "Mark Student Attendance",
-                  sub:    "Take register for a class",
+                  label:  t("attAdmin.qaMarkStudents"),
+                  sub:    t("attAdmin.qaMarkStudentsSub"),
                   icon:   "people-outline",
                   color:  "#4F46E5",
                   route:  "/admin/attendance/students",
                 },
                 {
-                  label:  "Mark Teacher Attendance",
-                  sub:    "Record staff attendance for today",
+                  label:  t("attAdmin.qaMarkTeachers"),
+                  sub:    t("attAdmin.qaMarkTeachersSub"),
                   icon:   "person-outline",
                   color:  "#059669",
                   route:  "/admin/attendance/teachers",
                 },
                 {
-                  label:  "Student Reports",
-                  sub:    "View per-class or per-student history",
+                  label:  t("attAdmin.qaStudentReports"),
+                  sub:    t("attAdmin.qaStudentReportsSub"),
                   icon:   "document-text-outline",
                   color:  "#7C3AED",
                   route:  "/admin/attendance/report/students",
                 },
                 {
-                  label:  "Teacher Reports",
-                  sub:    "View teacher attendance history",
+                  label:  t("attAdmin.qaTeacherReports"),
+                  sub:    t("attAdmin.qaTeacherReportsSub"),
                   icon:   "bar-chart-outline",
                   color:  "#D97706",
                   route:  "/admin/attendance/report/teachers",
@@ -563,14 +568,16 @@ export default function AttendanceReportScreen() {
             <WeeklyChart trend={weekly?.trend} />
 
             <View style={styles.tableCard}>
-              <Text style={styles.sectionTitle}>Daily Breakdown</Text>
+              <Text style={styles.sectionTitle}>{t("attAdmin.dailyBreakdown")}</Text>
 
               <View style={[styles.tableRow, styles.tableHeader]}>
-                <Text style={[styles.tableCell, styles.tableCellDay]}>Day</Text>
-                <Text style={styles.tableCell}>S.Present</Text>
-                <Text style={styles.tableCell}>S.Rate</Text>
-                <Text style={styles.tableCell}>T.Present</Text>
-                <Text style={styles.tableCell}>T.Rate</Text>
+                <Text style={[styles.tableCell, styles.tableCellDay]}>
+                  {t("attAdmin.colDay")}
+                </Text>
+                <Text style={styles.tableCell}>{t("attAdmin.colSPresent")}</Text>
+                <Text style={styles.tableCell}>{t("attAdmin.colSRate")}</Text>
+                <Text style={styles.tableCell}>{t("attAdmin.colTPresent")}</Text>
+                <Text style={styles.tableCell}>{t("attAdmin.colTRate")}</Text>
               </View>
 
               {(weekly?.trend || []).map((day) => {
@@ -584,10 +591,10 @@ export default function AttendanceReportScreen() {
                     ]}
                   >
                     <Text style={[styles.tableCell, styles.tableCellDay]}>
-                      {DAYS[d.getDay()]}
+                      {t(dayKey(d))}
                       {"\n"}
                       <Text style={styles.tableCellSub}>
-                        {d.getDate()} {MONTHS[d.getMonth()]}
+                        {d.getDate()} {t(monthKey(d))}
                       </Text>
                     </Text>
                     <Text style={styles.tableCell}>

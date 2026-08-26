@@ -39,28 +39,28 @@ const C = {
 const STATUS_META = {
   pending: {
     color: C.warning, bg: C.warningBg,
-    label: "Pending",   icon: "time-outline",
+    labelKey: "results.pending",   icon: "time-outline",
   },
   submitted: {
     color: C.primary, bg: C.primaryBg,
-    label: "Submitted", icon: "cloud-upload-outline",
+    labelKey: "results.submitted", icon: "cloud-upload-outline",
   },
   approved: {
     color: C.success, bg: C.successBg,
-    label: "Approved",  icon: "checkmark-circle-outline",
+    labelKey: "results.approved",  icon: "checkmark-circle-outline",
   },
   rejected: {
     color: C.error, bg: C.errorBg,
-    label: "Rejected",  icon: "close-circle-outline",
+    labelKey: "results.rejected",  icon: "close-circle-outline",
   },
 };
 
 const FILTERS = [
-  { key: "all",       label: "All"       },
-  { key: "pending",   label: "Pending"   },
-  { key: "submitted", label: "Submitted" },
-  { key: "approved",  label: "Approved"  },
-  { key: "rejected",  label: "Rejected"  },
+  { key: "all",       labelKey: "examMonitor.filterAll" },
+  { key: "pending",   labelKey: "results.pending"   },
+  { key: "submitted", labelKey: "results.submitted" },
+  { key: "approved",  labelKey: "results.approved"  },
+  { key: "rejected",  labelKey: "results.rejected"  },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -68,6 +68,7 @@ const FILTERS = [
 // ─────────────────────────────────────────────────────────
 
 function RejectModal({ visible, subject, onConfirm, onCancel, loading }) {
+  const { t } = useTranslation();
   const [reason, setReason] = useState("");
 
   useEffect(() => {
@@ -83,7 +84,7 @@ function RejectModal({ visible, subject, onConfirm, onCancel, loading }) {
     >
       <View style={rm.overlay}>
         <View style={rm.box}>
-          <Text style={rm.title}>Reject Submission</Text>
+          <Text style={rm.title}>{t("examMonitor.rejectTitle")}</Text>
           {!!subject?.subjectName && (
             <Text style={rm.sub}>
               {subject.subjectName}
@@ -92,7 +93,7 @@ function RejectModal({ visible, subject, onConfirm, onCancel, loading }) {
           )}
           <TextInput
             style={rm.input}
-            placeholder="Enter rejection reason (required)"
+            placeholder={t("examMonitor.reasonPh")}
             placeholderTextColor={C.gray400}
             value={reason}
             onChangeText={setReason}
@@ -106,13 +107,13 @@ function RejectModal({ visible, subject, onConfirm, onCancel, loading }) {
               onPress={onCancel}
               disabled={loading}
             >
-              <Text style={rm.cancelText}>Cancel</Text>
+              <Text style={rm.cancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[rm.rejectBtn, (!reason.trim() || loading) && { opacity: 0.4 }]}
               onPress={() => {
                 if (!reason.trim()) {
-                  Alert.alert("Required", "Please enter a rejection reason.");
+                  Alert.alert(t("examMonitor.requiredTitle"), t("examMonitor.reasonRequired"));
                   return;
                 }
                 onConfirm(reason.trim());
@@ -121,7 +122,7 @@ function RejectModal({ visible, subject, onConfirm, onCancel, loading }) {
             >
               {loading
                 ? <ActivityIndicator size="small" color={C.white} />
-                : <Text style={rm.rejectText}>Reject</Text>
+                : <Text style={rm.rejectText}>{t("examMonitor.reject")}</Text>
               }
             </TouchableOpacity>
           </View>
@@ -209,6 +210,7 @@ const mc = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 export default function SubmissionMonitorScreen() {
+  const { t } = useTranslation();
   const { examId, examName } = useLocalSearchParams();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -284,12 +286,12 @@ export default function SubmissionMonitorScreen() {
   // ── Approve ────────────────────────────────────────────
   const handleApprove = useCallback(async (subject) => {
     Alert.alert(
-      "Approve Submission",
+      t("examMonitor.approveTitle"),
       `Approve marks for ${subject.subjectName}?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:    "Approve",
+          text:    t("examMonitor.approve"),
           onPress: async () => {
             try {
               setActionLoading(subject._id);
@@ -300,7 +302,7 @@ export default function SubmissionMonitorScreen() {
               });
               await loadSubmissions(true);
             } catch (err) {
-              Alert.alert("Error", err.message);
+              Alert.alert(t("examMonitor.errTitle"), err.message);
             } finally {
               setActionLoading(null);
             }
@@ -324,7 +326,7 @@ export default function SubmissionMonitorScreen() {
       setRejectModal(null);
       await loadSubmissions(true);
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("examMonitor.errTitle"), err.message);
     } finally {
       setRejectLoading(false);
     }
@@ -358,13 +360,13 @@ export default function SubmissionMonitorScreen() {
           <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={24} color={C.gray900} />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>Submission Monitor</Text>
+          <Text style={s.headerTitle}>{t("examMonitor.title")}</Text>
         </View>
 
         {loading ? (
           <View style={s.centered}>
             <ActivityIndicator size="large" color={C.primary} />
-            <Text style={s.loadingText}>Loading exams…</Text>
+            <Text style={s.loadingText}>{t("examMonitor.loadingExams")}</Text>
           </View>
         ) : (
           <FlatList
@@ -373,14 +375,14 @@ export default function SubmissionMonitorScreen() {
             contentContainerStyle={s.list}
             ListHeaderComponent={
               <Text style={s.listHint}>
-                Select an exam to monitor teacher submissions
+                {t("examMonitor.pickExam")}
               </Text>
             }
             ListEmptyComponent={
               <View style={s.empty}>
                 <Ionicons name="document-outline" size={48} color={C.gray200} />
-                <Text style={s.emptyTitle}>No Exams Found</Text>
-                <Text style={s.emptyText}>Create an exam first</Text>
+                <Text style={s.emptyTitle}>{t("examMonitor.noExams")}</Text>
+                <Text style={s.emptyText}>{t("examMonitor.createFirst")}</Text>
               </View>
             }
             renderItem={({ item }) => (
@@ -434,7 +436,7 @@ export default function SubmissionMonitorScreen() {
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle} numberOfLines={1}>Submission Monitor</Text>
+          <Text style={s.headerTitle} numberOfLines={1}>{t("examMonitor.title")}</Text>
           <Text style={s.headerSub} numberOfLines={1}>{selectedExam.name}</Text>
         </View>
         <TouchableOpacity
@@ -448,20 +450,20 @@ export default function SubmissionMonitorScreen() {
       {/* Summary row */}
       <View style={s.summaryRow}>
         {[
-          { label: "Total",     count: counts.total,     color: C.primary },
-          { label: "Pending",   count: counts.pending,   color: C.warning },
-          { label: "Submitted", count: counts.submitted, color: C.primary },
-          { label: "Approved",  count: counts.approved,  color: C.success },
-          { label: "Rejected",  count: counts.rejected,  color: C.error   },
+          { labelKey: "common.total",     count: counts.total,     color: C.primary },
+          { labelKey: "results.pending",   count: counts.pending,   color: C.warning },
+          { labelKey: "results.submitted", count: counts.submitted, color: C.primary },
+          { labelKey: "results.approved",  count: counts.approved,  color: C.success },
+          { labelKey: "results.rejected",  count: counts.rejected,  color: C.error   },
         ].map((item) => (
           <View
-            key={item.label}
+            key={item.labelKey}
             style={[s.summaryChip, { borderColor: item.color + "30" }]}
           >
             <Text style={[s.summaryCount, { color: item.color }]}>
               {item.count}
             </Text>
-            <Text style={s.summaryLabel}>{item.label}</Text>
+            <Text style={s.summaryLabel}>{t(item.labelKey)}</Text>
           </View>
         ))}
       </View>
@@ -487,7 +489,7 @@ export default function SubmissionMonitorScreen() {
                   s.filterChipText,
                   filter === f.key && s.filterChipTextActive,
                 ]}>
-                  {f.label}
+                  {t(f.labelKey)}
                   {f.key !== "all" && counts[f.key] > 0
                     ? ` (${counts[f.key]})`
                     : ""}
@@ -501,7 +503,7 @@ export default function SubmissionMonitorScreen() {
         {loading && !refreshing ? (
           <View style={s.centered}>
             <ActivityIndicator size="large" color={C.primary} />
-            <Text style={s.loadingText}>Loading submissions…</Text>
+            <Text style={s.loadingText}>{t("examMonitor.loadingSubs")}</Text>
           </View>
         ) : (
           <FlatList
@@ -520,12 +522,12 @@ export default function SubmissionMonitorScreen() {
               <View style={s.empty}>
                 <Ionicons name="cloud-upload-outline" size={48} color={C.gray200} />
                 <Text style={s.emptyTitle}>
-                  {filter === "all" ? "No Submissions Yet" : `No ${filter} submissions`}
+                  {filter === "all" ? t("examMonitor.noneYet") : `No ${filter} submissions`}
                 </Text>
                 <Text style={s.emptyText}>
                   {filter === "all"
-                    ? "Teachers haven't submitted any marks yet"
-                    : "Try a different filter"}
+                    ? t("examMonitor.noneYetHint")
+                    : t("examMonitor.tryFilter")}
                 </Text>
               </View>
             }
@@ -547,15 +549,15 @@ export default function SubmissionMonitorScreen() {
                     </View>
                     <View style={s.cardHeaderText}>
                       <Text style={s.subjectName} numberOfLines={1}>
-                        {item.subjectName || "Unknown Subject"}
+                        {item.subjectName || t("examMonitor.unknownSubject")}
                       </Text>
                       <Text style={s.teacherName}>
-                        {item.teacherName || "No teacher assigned"}
+                        {item.teacherName || t("examMonitor.noTeacher")}
                       </Text>
                     </View>
                     <View style={[s.statusBadge, { backgroundColor: meta.bg }]}>
                       <Text style={[s.statusText, { color: meta.color }]}>
-                        {meta.label}
+                        {t(meta.labelKey)}
                       </Text>
                     </View>
                   </View>
@@ -596,7 +598,7 @@ export default function SubmissionMonitorScreen() {
                       activeOpacity={0.8}
                     >
                       <Ionicons name="eye-outline" size={15} color={C.primary} />
-                      <Text style={s.viewBtnText}>View Scores</Text>
+                      <Text style={s.viewBtnText}>{t("examMonitor.viewScores")}</Text>
                     </TouchableOpacity>
 
                     {isSubmitted && (
@@ -611,7 +613,7 @@ export default function SubmissionMonitorScreen() {
                             ? <ActivityIndicator size="small" color={C.white} />
                             : <>
                                 <Ionicons name="checkmark-circle-outline" size={15} color={C.white} />
-                                <Text style={s.approveBtnText}>Approve</Text>
+                                <Text style={s.approveBtnText}>{t("examMonitor.approve")}</Text>
                               </>
                           }
                         </TouchableOpacity>
@@ -622,7 +624,7 @@ export default function SubmissionMonitorScreen() {
                           activeOpacity={0.8}
                         >
                           <Ionicons name="close-circle-outline" size={15} color={C.white} />
-                          <Text style={s.rejectBtnText}>Reject</Text>
+                          <Text style={s.rejectBtnText}>{t("examMonitor.reject")}</Text>
                         </TouchableOpacity>
                       </>
                     )}
@@ -814,3 +816,4 @@ const s = StyleSheet.create({
   },
   rejectBtnText: { fontSize: 13, fontWeight: "700", color: C.white },
 });
+import { useTranslation } from "../../../../src/i18n/useTranslation";

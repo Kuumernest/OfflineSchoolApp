@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const C = {
   ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
@@ -33,6 +34,7 @@ const timeLabel = (iso) => {
 };
 
 export default function PortalThreadScreen() {
+  const { t } = useTranslation();
   const { id } = useLocalSearchParams();
   const router = useRouter();
 
@@ -57,7 +59,7 @@ export default function PortalThreadScreen() {
       setTitle(
         c?.title ||
         (c?.participants || []).map((p) => p.name).filter(Boolean).join(", ") ||
-        "Conversation"
+        t("msgMobile.conversation")
       );
 
       const newest = (payload.messages ?? [])
@@ -68,8 +70,8 @@ export default function PortalThreadScreen() {
     } catch (err) {
       setError(
         err?.response?.status === 401
-          ? "Your session has expired. Sign in again."
-          : "Could not load this conversation."
+          ? t("msgMobile.sessionExpired")
+          : t("msgMobile.couldNotLoadThread")
       );
     } finally {
       setLoading(false);
@@ -81,8 +83,8 @@ export default function PortalThreadScreen() {
   // Polled while open. There is no socket layer, and a reply arriving unseen
   // matters more here than the extra request does.
   useEffect(() => {
-    const t = setInterval(load, 20000);
-    return () => clearInterval(t);
+    const poll = setInterval(load, 20000);
+    return () => clearInterval(poll);
   }, [load]);
 
   const send = useCallback(async () => {
@@ -102,7 +104,7 @@ export default function PortalThreadScreen() {
       setDraft(body);
       setError(
         err?.response?.data?.message ||
-        "Could not send. Check your connection and try again."
+        t("msgMobile.sendFailed")
       );
     } finally {
       setSending(false);
@@ -111,11 +113,12 @@ export default function PortalThreadScreen() {
 
   const ordered = [...messages].sort((a, b) => a.seq - b.seq);
 
-  const renderItem = ({ item }) => (
+  const renderItem = ({ item }) => {
+                       return (
     <View style={s.bubble}>
-      <Text style={s.sender}>{item.sender?.name || "School"}</Text>
+      <Text style={s.sender}>{item.sender?.name || t("msgMobile.schoolSender")}</Text>
       <Text style={s.body}>
-        {item.isDeleted ? "This message was deleted" : item.body}
+        {item.isDeleted ? t("msgMobile.deletedMessage") : item.body}
       </Text>
       {(item.attachments?.length ?? 0) > 0 && (
         <View style={{ marginTop: 4 }}>
@@ -129,6 +132,7 @@ export default function PortalThreadScreen() {
       <Text style={s.time}>{timeLabel(item.createdAt)}</Text>
     </View>
   );
+                     };
 
   return (
     <KeyboardAvoidingView
@@ -141,14 +145,14 @@ export default function PortalThreadScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.iconBtn}>
           <Ionicons name="chevron-back" size={24} color={C.ink} />
         </TouchableOpacity>
-        <Text style={s.headerTitle} numberOfLines={1}>{title || "Conversation"}</Text>
+        <Text style={s.headerTitle} numberOfLines={1}>{title || t("msgMobile.conversation")}</Text>
         <View style={s.iconBtn} />
       </View>
 
       {stale && (
         <View style={s.note}>
           <Ionicons name="cloud-offline-outline" size={13} color={C.inkMuted} />
-          <Text style={s.noteText}>Showing a saved copy — no connection</Text>
+          <Text style={s.noteText}>{t("msgMobile.savedCopy")}</Text>
         </View>
       )}
 
@@ -163,7 +167,7 @@ export default function PortalThreadScreen() {
           contentContainerStyle={s.list}
           onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: false })}
           ListEmptyComponent={
-            <Text style={s.empty}>No messages yet.</Text>
+            <Text style={s.empty}>{t("msgMobile.noMessages")}</Text>
           }
         />
       )}
@@ -174,7 +178,7 @@ export default function PortalThreadScreen() {
         <TextInput
           value={draft}
           onChangeText={setDraft}
-          placeholder="Write a message…"
+          placeholder={t("msgMobile.writeMessagePh")}
           placeholderTextColor={C.inkFaint}
           style={s.input}
           multiline

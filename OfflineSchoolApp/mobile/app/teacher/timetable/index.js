@@ -69,6 +69,7 @@ const normDay = (raw) =>
  * FIXED (Issue 7): wraps table existence check before any query.
  */
 const fetchPeriods = async (db, schoolId) => {
+  const { t } = useTranslation();
   try {
     // FIXED (Issue 7): check table exists before querying
     const tableCheck = await db.getFirstAsync(
@@ -124,15 +125,17 @@ const fetchPeriods = async (db, schoolId) => {
       const raw = res.data?.periods ||
                   res.data?.data    ||
                   (Array.isArray(res.data) ? res.data : []);
-      return raw.map((p) => ({
+      return raw.map((p) => {
+                       return ({
         // FIXED (Issue 8): always string id
         id:        String(p._id || p.id),
-        name:      p.name      || "Period",
+        name:      p.name      || t("ttTeacher.periodFallback"),
         startTime: p.startTime || p.starttime || null,
         endTime:   p.endTime   || p.endtime   || null,
         sortOrder: p.sortOrder || p.sortorder || 0,
         isBreak:   p.isBreak   || p.isbreak   || false,
-      }));
+      });
+                     });
     } catch {
       return [];
     }
@@ -295,6 +298,7 @@ const fetchTeacherSchedule = async (db, teacherId, schoolId) => {
 // ─────────────────────────────────────────────────────────
 
 export default function TeacherTimetable() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const user      = useAuthStore((s) => s.user);
   const teacherId = user?._id || user?.id || user?.userId || null;
@@ -329,7 +333,7 @@ export default function TeacherTimetable() {
 
     } catch (err) {
       console.error("Failed to load timetable:", err);
-      setError("Failed to load timetable. Pull down to retry.");
+      setError(t("ttTeacher.loadFailedBody"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -356,7 +360,7 @@ export default function TeacherTimetable() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading schedule…</Text>
+        <Text style={styles.loadingText}>{t("ttTeacher.loading")}</Text>
       </View>
     );
   }
@@ -366,7 +370,7 @@ export default function TeacherTimetable() {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
-        <Text style={styles.emptyTitle}>Could not load timetable</Text>
+        <Text style={styles.emptyTitle}>{t("ttTeacher.loadFailedTitle")}</Text>
         <Text style={styles.emptyText}>{error}</Text>
       </View>
     );
@@ -377,9 +381,9 @@ export default function TeacherTimetable() {
     return (
       <View style={styles.centered}>
         <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
-        <Text style={styles.emptyTitle}>No Periods Configured</Text>
+        <Text style={styles.emptyTitle}>{t("timetable.noPeriodsTitle")}</Text>
         <Text style={styles.emptyText}>
-          Contact admin to set up timetable periods
+          {t("ttTeacher.noPeriodsBody")}
         </Text>
       </View>
     );
@@ -390,9 +394,9 @@ export default function TeacherTimetable() {
     return (
       <View style={styles.centered}>
         <Ionicons name="time-outline" size={48} color="#D1D5DB" />
-        <Text style={styles.emptyTitle}>No Classes Scheduled</Text>
+        <Text style={styles.emptyTitle}>{t("timetable.noScheduleTitle")}</Text>
         <Text style={styles.emptyText}>
-          You have no timetable entries yet
+          {t("ttTeacher.noScheduleBody")}
         </Text>
       </View>
     );
@@ -412,7 +416,7 @@ export default function TeacherTimetable() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.pageTitle}>My Teaching Schedule</Text>
+          <Text style={styles.pageTitle}>{t("ttTeacher.title")}</Text>
           <Text style={styles.pageSub}>
             {schedule.length} slot{schedule.length !== 1 ? "s" : ""} this week
           </Text>
@@ -423,7 +427,7 @@ export default function TeacherTimetable() {
       {isOffline && (
         <View style={styles.offlineBanner}>
           <Ionicons name="cloud-offline-outline" size={14} color="#92400E" />
-          <Text style={styles.offlineText}>Viewing offline cached schedule</Text>
+          <Text style={styles.offlineText}>{t("ttTeacher.offlineNote")}</Text>
         </View>
       )}
 
@@ -450,7 +454,7 @@ export default function TeacherTimetable() {
             <View style={styles.row}>
               <View style={[styles.timeCell, styles.cornerCell]}>
                 <Ionicons name="time-outline" size={16} color="#E0E7FF" />
-                <Text style={styles.cornerText}>Time</Text>
+                <Text style={styles.cornerText}>{t("timetable.timeCol")}</Text>
               </View>
 
               {DAYS.map((day, i) => {
@@ -481,7 +485,7 @@ export default function TeacherTimetable() {
                 return (
                   <View key={period.id} style={styles.row}>
                     <View style={[styles.timeCell, styles.breakTimeCell]}>
-                      <Text style={styles.breakLabel}>{period.name || "Break"}</Text>
+                      <Text style={styles.breakLabel}>{period.name || t("timetable.break")}</Text>
                       {period.startTime ? (
                         <Text style={styles.breakTime}>
                           {formatTime(period.startTime)}
@@ -565,11 +569,11 @@ export default function TeacherTimetable() {
         <View style={styles.legend}>
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, styles.slotFilled]} />
-            <Text style={styles.legendText}>Teaching</Text>
+            <Text style={styles.legendText}>{t("ttTeacher.teaching")}</Text>
           </View>
           <View style={styles.legendItem}>
             <View style={[styles.legendSwatch, styles.slotEmpty]} />
-            <Text style={styles.legendText}>Free</Text>
+            <Text style={styles.legendText}>{t("timetable.freeLegend")}</Text>
           </View>
           {todayIndex >= 0 && (
             <View style={styles.legendItem}>
@@ -577,7 +581,7 @@ export default function TeacherTimetable() {
                 styles.legendSwatch,
                 { backgroundColor: "#EEF2FF", borderWidth: 2, borderColor: "#4F46E5" },
               ]} />
-              <Text style={styles.legendText}>Today</Text>
+              <Text style={styles.legendText}>{t("timetable.todayLegend")}</Text>
             </View>
           )}
         </View>
@@ -705,3 +709,4 @@ const styles = StyleSheet.create({
   legendSwatch:{ width: 14, height: 14, borderRadius: 4 },
   legendText:  { fontSize: 12, color: "#6B7280", fontWeight: "500" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

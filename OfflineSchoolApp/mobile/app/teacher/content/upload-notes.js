@@ -23,6 +23,7 @@ import { Ionicons }        from "@expo/vector-icons";
 import * as DocumentPicker from "expo-document-picker";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { uploadContent }   from "../../../src/services/content.service";
+import { useTranslation }  from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -31,7 +32,7 @@ import { uploadContent }   from "../../../src/services/content.service";
 const CONTENT_TYPES = [
   {
     id:     "syllabus",
-    label:  "Syllabus",
+    labelKey: "uploadNotes.typeSyllabus",
     icon:   "list-outline",
     color:  "#7C3AED",
     bg:     "#EDE9FE",
@@ -45,7 +46,7 @@ const CONTENT_TYPES = [
   },
   {
     id:     "notes",
-    label:  "Notes",
+    labelKey: "uploadNotes.typeNotes",
     icon:   "document-text-outline",
     color:  "#4F46E5",
     bg:     "#EEF2FF",
@@ -59,7 +60,7 @@ const CONTENT_TYPES = [
   },
   {
     id:     "image",
-    label:  "Image",
+    labelKey: "uploadNotes.typeImage",
     icon:   "image-outline",
     color:  "#059669",
     bg:     "#ECFDF5",
@@ -69,7 +70,7 @@ const CONTENT_TYPES = [
   },
   {
     id:     "audio",
-    label:  "Audio",
+    labelKey: "uploadNotes.typeAudio",
     icon:   "musical-notes-outline",
     color:  "#D97706",
     bg:     "#FEF3C7",
@@ -79,7 +80,7 @@ const CONTENT_TYPES = [
   },
   {
     id:     "video",
-    label:  "Video",
+    labelKey: "uploadNotes.typeVideo",
     icon:   "videocam-outline",
     color:  "#DC2626",
     bg:     "#FEE2E2",
@@ -89,7 +90,7 @@ const CONTENT_TYPES = [
   },
   {
     id:     "document",
-    label:  "Document",
+    labelKey: "uploadNotes.typeDocument",
     icon:   "attach-outline",
     color:  "#059669",
     bg:     "#ECFDF5",
@@ -104,7 +105,7 @@ const CONTENT_TYPES = [
 ];
 
 const DEFAULT_TYPE = CONTENT_TYPES[1]; // notes
-const STEPS        = ["File", "Review"];
+const STEPS        = ["uploadNotes.stepFile", "uploadNotes.stepReview"];
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -138,13 +139,14 @@ const safeParseJSON = (str, fallback) => {
 // ─────────────────────────────────────────────────────────────
 
 function StepIndicator({ currentStep }) {
+  const { t } = useTranslation();
   return (
     <View style={stepStyles.container}>
-      {STEPS.map((label, index) => {
+      {STEPS.map((stepKey, index) => {
         const done   = index < currentStep;
         const active = index === currentStep;
         return (
-          <React.Fragment key={label}>
+          <React.Fragment key={stepKey}>
             <View style={stepStyles.step}>
               <View
                 style={[
@@ -173,7 +175,7 @@ function StepIndicator({ currentStep }) {
                   done   && stepStyles.labelDone,
                 ]}
               >
-                {label}
+                {t(stepKey)}
               </Text>
             </View>
             {index < STEPS.length - 1 && (
@@ -264,6 +266,7 @@ function SuccessDetail({ icon, label, value }) {
 
 function UploadNotesPage() {
   const router = useRouter();
+  const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
   const params = useLocalSearchParams();
 
@@ -272,7 +275,7 @@ function UploadNotesPage() {
   // ── Parse presets from select-subject ────────────────────
   const rawPresetType = String(params.presetType || "").toLowerCase().trim();
   const currentType   =
-    CONTENT_TYPES.find((t) => t.id === rawPresetType) || DEFAULT_TYPE;
+    CONTENT_TYPES.find((opt) => opt.id === rawPresetType) || DEFAULT_TYPE;
 
   const presetSubject = params.presetSubjectId
     ? {
@@ -305,21 +308,24 @@ function UploadNotesPage() {
   useEffect(() => {
     if (!hasPresets) {
       Alert.alert(
-        "Missing Selection",
-        "Please select a subject and class first.",
+        t("uploadNotes.missingSelectionTitle"),
+        t("uploadNotes.missingSelectionBody"),
         [{
-          text:    "OK",
+          text:    t("uploadNotes.ok"),
           onPress: () =>
             router.replace("/teacher/content/select-subject"),
         }]
       );
     }
-  }, [hasPresets, router]);
+  }, [hasPresets, router, t]);
 
   // ── File picker ───────────────────────────────────────────
   const handlePickFile = useCallback(async () => {
     if (!currentType) {
-      Alert.alert("Error", "Content type not set. Please go back and try again.");
+      Alert.alert(
+        t("uploadNotes.errorTitle"),
+        t("uploadNotes.typeNotSetBody")
+      );
       return;
     }
     try {
@@ -337,18 +343,23 @@ function UploadNotesPage() {
       const maxBytes = currentType.maxMB * 1024 * 1024;
       if (file.size && file.size > maxBytes) {
         Alert.alert(
-          "File Too Large",
-          `Maximum size for ${currentType.label} is ${currentType.maxMB} MB.\n` +
-          `Your file is ${formatBytes(file.size)}.`
+          t("uploadNotes.fileTooLargeTitle"),
+          t("uploadNotes.fileTooLargeBody", {
+            type: t(currentType.labelKey),
+            max:  currentType.maxMB,
+            size: formatBytes(file.size),
+          })
         );
         return;
       }
 
       if (file.mimeType && !currentType.accept.includes(file.mimeType)) {
         Alert.alert(
-          "Invalid File Type",
-          `Please select a valid ${currentType.label} file.\n` +
-          `Accepted formats: ${currentType.hint}`
+          t("uploadNotes.invalidTypeTitle"),
+          t("uploadNotes.invalidTypeBody", {
+            type:    t(currentType.labelKey),
+            formats: currentType.hint,
+          })
         );
         return;
       }
@@ -362,35 +373,44 @@ function UploadNotesPage() {
       }
     } catch (err) {
       console.error("File pick error:", err);
-      Alert.alert("Error", "Could not open file picker. Please try again.");
+      Alert.alert(
+        t("uploadNotes.errorTitle"),
+        t("uploadNotes.pickerErrorBody")
+      );
     }
-  }, [currentType, title]);
+  }, [currentType, title, t]);
 
   const handleRemoveFile = useCallback(() => {
-    Alert.alert("Remove File", "Remove the selected file?", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text:    "Remove",
-        style:   "destructive",
-        onPress: () => setPickedFile(null),
-      },
-    ]);
-  }, []);
+    Alert.alert(
+      t("uploadNotes.removeFileTitle"),
+      t("uploadNotes.removeFileBody"),
+      [
+        { text: t("uploadNotes.cancel"), style: "cancel" },
+        {
+          text:    t("uploadNotes.remove"),
+          style:   "destructive",
+          onPress: () => setPickedFile(null),
+        },
+      ]
+    );
+  }, [t]);
 
   // ── Navigation ────────────────────────────────────────────
   const handleNext = useCallback(() => {
     const newErrors = {};
-    if (!pickedFile)            newErrors.file  = "Please select a file to upload";
-    if (!title.trim())          newErrors.title = "Title is required";
+    if (!pickedFile)
+      newErrors.file = t("uploadNotes.errFileRequired");
+    if (!title.trim())
+      newErrors.title = t("uploadNotes.errTitleRequired");
     else if (title.trim().length < 3)
-      newErrors.title = "Title must be at least 3 characters";
+      newErrors.title = t("uploadNotes.errTitleTooShort");
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
       return;
     }
     setStep(1);
-  }, [pickedFile, title]);
+  }, [pickedFile, title, t]);
 
   const handleBack = useCallback(() => {
     if (step > 0) setStep((s) => s - 1);
@@ -424,13 +444,13 @@ function UploadNotesPage() {
       const msg =
         err?.response?.data?.message ||
         err?.message                 ||
-        "Upload failed. Please try again.";
+        t("uploadNotes.uploadFailedFallback");
       setUploadError(msg);
       setUploading(false);
     }
   }, [
     pickedFile, title, description, teacherId,
-    presetSubject, presetClasses, currentType,
+    presetSubject, presetClasses, currentType, t,
   ]);
 
   const handleUploadAnother = useCallback(() => {
@@ -465,27 +485,30 @@ function UploadNotesPage() {
           <View style={styles.successIcon}>
             <Ionicons name="checkmark-circle" size={72} color="#059669" />
           </View>
-          <Text style={styles.successTitle}>Upload Successful!</Text>
+          <Text style={styles.successTitle}>
+            {t("uploadNotes.successTitle")}
+          </Text>
           <Text style={styles.successMsg}>
-            "{title}" has been uploaded and is now available to{" "}
-            {presetClasses.length} class
-            {presetClasses.length !== 1 ? "es" : ""}.
+            {t("uploadNotes.successMsg", {
+              count: presetClasses.length,
+              title,
+            })}
           </Text>
 
           <View style={styles.successDetails}>
             <SuccessDetail
               icon="book-outline"
-              label="Subject"
+              label={t("uploadNotes.labelSubject")}
               value={presetSubject?.subjectName}
             />
             <SuccessDetail
               icon="folder-outline"
-              label="Type"
-              value={currentType?.label}
+              label={t("uploadNotes.labelType")}
+              value={currentType ? t(currentType.labelKey) : ""}
             />
             <SuccessDetail
               icon="document-outline"
-              label="File"
+              label={t("uploadNotes.labelFile")}
               value={pickedFile?.name}
             />
           </View>
@@ -496,7 +519,9 @@ function UploadNotesPage() {
             activeOpacity={0.8}
           >
             <Ionicons name="cloud-upload-outline" size={18} color="#FFF" />
-            <Text style={styles.successPrimaryText}>Upload Another</Text>
+            <Text style={styles.successPrimaryText}>
+              {t("uploadNotes.uploadAnother")}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -505,7 +530,7 @@ function UploadNotesPage() {
             activeOpacity={0.7}
           >
             <Text style={styles.successSecondaryText}>
-              View Content Library
+              {t("uploadNotes.viewLibrary")}
             </Text>
           </TouchableOpacity>
 
@@ -514,7 +539,9 @@ function UploadNotesPage() {
             onPress={() => router.replace("/teacher/dashboard")}
             activeOpacity={0.7}
           >
-            <Text style={styles.successBackText}>Back to Dashboard</Text>
+            <Text style={styles.successBackText}>
+              {t("uploadNotes.backToDashboard")}
+            </Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -537,10 +564,16 @@ function UploadNotesPage() {
         </TouchableOpacity>
         <View style={styles.headerTitle}>
           <Text style={styles.headerText}>
-            Upload {currentType?.label}
+            {t("uploadNotes.headerTitle", {
+              type: currentType ? t(currentType.labelKey) : "",
+            })}
           </Text>
           <Text style={styles.headerSub}>
-            Step {step + 1} of {STEPS.length} — {STEPS[step]}
+            {t("uploadNotes.headerSub", {
+              step:  step + 1,
+              total: STEPS.length,
+              name:  t(STEPS[step]),
+            })}
           </Text>
         </View>
       </View>
@@ -567,7 +600,7 @@ function UploadNotesPage() {
               { color: currentType?.color || "#4F46E5" },
             ]}
           >
-            {currentType?.label}
+            {currentType ? t(currentType.labelKey) : ""}
           </Text>
         </View>
 
@@ -588,8 +621,7 @@ function UploadNotesPage() {
         <View style={[styles.recapChip, { backgroundColor: "#ECFDF5" }]}>
           <Ionicons name="school-outline" size={12} color="#059669" />
           <Text style={[styles.recapChipText, { color: "#059669" }]}>
-            {presetClasses.length} class
-            {presetClasses.length > 1 ? "es" : ""}
+            {t("uploadNotes.classCount", { count: presetClasses.length })}
           </Text>
         </View>
       </View>
@@ -609,7 +641,7 @@ function UploadNotesPage() {
           {step === 0 && (
             <View>
               <SectionCard
-                title="Select File"
+                title={t("uploadNotes.selectFile")}
                 icon={currentType?.icon || "attach-outline"}
                 iconColor={currentType?.color || "#4F46E5"}
               >
@@ -635,7 +667,7 @@ function UploadNotesPage() {
                     </Text>
                   </View>
                   <Text style={styles.fileMaxSize}>
-                    Max {currentType?.maxMB} MB
+                    {t("uploadNotes.maxSize", { max: currentType?.maxMB })}
                   </Text>
                 </View>
 
@@ -663,7 +695,9 @@ function UploadNotesPage() {
                         activeOpacity={0.7}
                       >
                         <Ionicons name="refresh" size={14} color="#4F46E5" />
-                        <Text style={styles.fileChangeBtnText}>Change</Text>
+                        <Text style={styles.fileChangeBtnText}>
+                          {t("uploadNotes.change")}
+                        </Text>
                       </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.fileRemoveBtn}
@@ -699,9 +733,14 @@ function UploadNotesPage() {
                         color={currentType?.color || "#4F46E5"}
                       />
                     </View>
-                    <Text style={styles.dropZoneTitle}>Tap to select file</Text>
+                    <Text style={styles.dropZoneTitle}>
+                      {t("uploadNotes.tapToSelect")}
+                    </Text>
                     <Text style={styles.dropZoneSub}>
-                      {currentType?.hint} · Max {currentType?.maxMB} MB
+                      {t("uploadNotes.dropZoneSub", {
+                        formats: currentType?.hint,
+                        max:     currentType?.maxMB,
+                      })}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -711,17 +750,19 @@ function UploadNotesPage() {
 
               {/* Title */}
               <SectionCard
-                title="Title *"
+                title={t("uploadNotes.titleFieldLabel")}
                 icon="pencil-outline"
                 iconColor="#4F46E5"
               >
                 <TextInput
                   style={[styles.input, errors.title && styles.inputError]}
-                  placeholder={`e.g., Chapter 3 — ${currentType?.label}`}
+                  placeholder={t("uploadNotes.titlePlaceholder", {
+                    type: currentType ? t(currentType.labelKey) : "",
+                  })}
                   placeholderTextColor="#9CA3AF"
                   value={title}
-                  onChangeText={(t) => {
-                    setTitle(t);
+                  onChangeText={(value) => {
+                    setTitle(value);
                     if (errors.title)
                       setErrors((e) => ({ ...e, title: undefined }));
                   }}
@@ -734,13 +775,13 @@ function UploadNotesPage() {
 
               {/* Description */}
               <SectionCard
-                title="Description"
+                title={t("uploadNotes.descriptionFieldLabel")}
                 icon="text-outline"
                 iconColor="#6B7280"
               >
                 <TextInput
                   style={[styles.input, styles.textArea]}
-                  placeholder="Optional — what is this content about?"
+                  placeholder={t("uploadNotes.descriptionPlaceholder")}
                   placeholderTextColor="#9CA3AF"
                   value={description}
                   onChangeText={setDescription}
@@ -754,15 +795,17 @@ function UploadNotesPage() {
 
               {/* Tips */}
               <View style={styles.tipsCard}>
-                <Text style={styles.tipsTitle}>📌 Upload Tips</Text>
+                <Text style={styles.tipsTitle}>
+                  {t("uploadNotes.tipsTitle")}
+                </Text>
                 {[
-                  "Ensure the file is clearly named and readable",
-                  "Compress large files before uploading if possible",
-                  "Double-check the subject and class are correct",
-                ].map((tip) => (
-                  <View key={tip} style={styles.tipRow}>
+                  "uploadNotes.tip1",
+                  "uploadNotes.tip2",
+                  "uploadNotes.tip3",
+                ].map((tipKey) => (
+                  <View key={tipKey} style={styles.tipRow}>
                     <View style={styles.tipDot} />
-                    <Text style={styles.tipText}>{tip}</Text>
+                    <Text style={styles.tipText}>{t(tipKey)}</Text>
                   </View>
                 ))}
               </View>
@@ -774,39 +817,39 @@ function UploadNotesPage() {
             <View>
               {!uploading && !uploadError && (
                 <SectionCard
-                  title="Review & Confirm"
+                  title={t("uploadNotes.reviewConfirm")}
                   icon="eye-outline"
                   iconColor="#4F46E5"
                 >
                   <ReviewRow
-                    label="Type"
-                    value={currentType?.label}
+                    label={t("uploadNotes.labelType")}
+                    value={currentType ? t(currentType.labelKey) : ""}
                     icon="layers-outline"
                   />
                   <ReviewRow
-                    label="Title"
+                    label={t("uploadNotes.labelTitle")}
                     value={title}
                     icon="pencil-outline"
                   />
                   {description ? (
                     <ReviewRow
-                      label="Description"
+                      label={t("uploadNotes.labelDescription")}
                       value={description}
                       icon="text-outline"
                     />
                   ) : null}
                   <ReviewRow
-                    label="Subject"
+                    label={t("uploadNotes.labelSubject")}
                     value={presetSubject?.subjectName}
                     icon="book-outline"
                   />
                   <ReviewRow
-                    label="Classes"
+                    label={t("uploadNotes.labelClasses")}
                     value={presetClasses.map((c) => c.className).join(", ")}
                     icon="school-outline"
                   />
                   <ReviewRow
-                    label="File"
+                    label={t("uploadNotes.labelFile")}
                     value={`${pickedFile?.name} (${formatBytes(pickedFile?.size)})`}
                     icon="document-outline"
                   />
@@ -820,13 +863,15 @@ function UploadNotesPage() {
                     size={40}
                     color="#4F46E5"
                   />
-                  <Text style={styles.uploadingTitle}>Uploading…</Text>
+                  <Text style={styles.uploadingTitle}>
+                    {t("uploadNotes.uploading")}
+                  </Text>
                   <Text style={styles.uploadingFile} numberOfLines={1}>
                     {pickedFile?.name}
                   </Text>
                   <UploadProgressBar progress={progress} />
                   <Text style={styles.uploadingHint}>
-                    Please keep the app open
+                    {t("uploadNotes.uploadingHint")}
                   </Text>
                 </View>
               )}
@@ -834,7 +879,9 @@ function UploadNotesPage() {
               {uploadError && !uploading && (
                 <View style={styles.errorCard}>
                   <Ionicons name="alert-circle" size={36} color="#DC2626" />
-                  <Text style={styles.errorTitle}>Upload Failed</Text>
+                  <Text style={styles.errorTitle}>
+                    {t("uploadNotes.uploadFailedTitle")}
+                  </Text>
                   <Text style={styles.errorMsg}>{uploadError}</Text>
                   <TouchableOpacity
                     style={styles.retryBtn}
@@ -842,7 +889,9 @@ function UploadNotesPage() {
                     activeOpacity={0.8}
                   >
                     <Ionicons name="refresh" size={16} color="#FFF" />
-                    <Text style={styles.retryBtnText}>Try Again</Text>
+                    <Text style={styles.retryBtnText}>
+                      {t("uploadNotes.tryAgain")}
+                    </Text>
                   </TouchableOpacity>
                 </View>
               )}
@@ -858,7 +907,9 @@ function UploadNotesPage() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="arrow-back" size={18} color="#4F46E5" />
-                <Text style={styles.navBackText}>Back</Text>
+                <Text style={styles.navBackText}>
+                  {t("uploadNotes.back")}
+                </Text>
               </TouchableOpacity>
             )}
 
@@ -868,7 +919,9 @@ function UploadNotesPage() {
                 onPress={handleNext}
                 activeOpacity={0.8}
               >
-                <Text style={styles.navNextText}>Review</Text>
+                <Text style={styles.navNextText}>
+                  {t("uploadNotes.review")}
+                </Text>
                 <Ionicons name="arrow-forward" size={18} color="#FFF" />
               </TouchableOpacity>
             )}
@@ -884,7 +937,9 @@ function UploadNotesPage() {
                   size={20}
                   color="#FFF"
                 />
-                <Text style={styles.uploadBtnText}>Upload Now</Text>
+                <Text style={styles.uploadBtnText}>
+                  {t("uploadNotes.uploadNow")}
+                </Text>
               </TouchableOpacity>
             )}
           </View>

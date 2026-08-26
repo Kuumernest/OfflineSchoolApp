@@ -30,13 +30,15 @@ import {
   type Message,
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
+import { useTranslation } from "react-i18next";
+
 import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const errorText = (err: unknown): string => {
+const errorText = (err: unknown, t: (key: string) => string): string => {
   const res = (err as { response?: { data?: { error?: string } } })?.response?.data;
-  return res?.error ?? (err as Error)?.message ?? "Something went wrong";
+  return res?.error ?? (err as Error)?.message ?? t("messages.genericError");
 };
 
 const stamp = (iso?: string | null): string => {
@@ -50,6 +52,7 @@ const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MessageAuditPage() {
+  const { t }   = useTranslation();
   const user    = useUser();
   const isAdmin = ADMIN_ROLES.includes(String(user?.role ?? ""));
 
@@ -79,7 +82,7 @@ export default function MessageAuditPage() {
         <div className="flex max-w-sm items-start gap-3 rounded-xl border
                         border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
           <ShieldAlert size={18} className="mt-0.5 shrink-0" />
-          <span>Message auditing is limited to administrators.</span>
+          <span>{t("messages.audit.adminOnly")}</span>
         </div>
       </div>
     );
@@ -129,17 +132,17 @@ export default function MessageAuditPage() {
             <div className="flex items-start gap-2 rounded-lg border border-red-200
                             bg-red-50 p-3 text-sm text-red-700">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <span>{errorText(threadQuery.error)}</span>
+              <span>{errorText(threadQuery.error, t)}</span>
             </div>
           )}
 
           <table className="w-full border-collapse overflow-hidden rounded-xl bg-white text-sm">
             <thead>
               <tr className="bg-gray-100 text-left text-xs uppercase text-gray-600">
-                <th className="px-3 py-2 w-14">Seq</th>
-                <th className="px-3 py-2 w-48">Sender</th>
-                <th className="px-3 py-2 w-40">Sent</th>
-                <th className="px-3 py-2">Message</th>
+                <th className="px-3 py-2 w-14">{t("messages.audit.seq")}</th>
+                <th className="px-3 py-2 w-48">{t("messages.audit.sender")}</th>
+                <th className="px-3 py-2 w-40">{t("messages.audit.sent")}</th>
+                <th className="px-3 py-2">{t("messages.audit.message")}</th>
               </tr>
             </thead>
             <tbody>
@@ -154,7 +157,7 @@ export default function MessageAuditPage() {
                   <td className="px-3 py-2 font-mono text-xs text-gray-400">{m.seq}</td>
                   <td className="px-3 py-2">
                     <div className="font-semibold text-gray-900">
-                      {m.sender?.name || "Unknown"}
+                      {m.sender?.name || t("messages.unknownSender")}
                     </div>
                     <div className="text-xs text-gray-500">
                       {m.sender?.role || m.sender?.kind}
@@ -177,11 +180,15 @@ export default function MessageAuditPage() {
                     {m.isDeleted && (
                       <span className="mr-2 rounded bg-red-100 px-1.5 py-0.5
                                        text-[10px] font-bold text-red-700">
-                        DELETED
+                        {t("messages.audit.deleted")}
                       </span>
                     )}
                     <span className="whitespace-pre-wrap break-words">
-                      {m.body || <span className="text-gray-400">(no text)</span>}
+                      {m.body || (
+                        <span className="text-gray-400">
+                          {t("messages.audit.noText")}
+                        </span>
+                      )}
                     </span>
                     {(m.attachments?.length ?? 0) > 0 && (
                       <ul className="mt-1 space-y-0.5">
@@ -205,7 +212,7 @@ export default function MessageAuditPage() {
               {!threadQuery.isLoading && messages.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-3 py-8 text-center text-gray-500">
-                    This conversation has no messages.
+                    {t("messages.audit.noMessages")}
                   </td>
                 </tr>
               )}
@@ -222,9 +229,9 @@ export default function MessageAuditPage() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-gray-200 bg-white px-6 py-4">
-        <h1 className="text-xl font-bold text-gray-900">Message audit</h1>
+        <h1 className="text-xl font-bold text-gray-900">{t("messages.audit.title")}</h1>
         <p className="mt-0.5 text-sm text-gray-500">
-          Find conversations across the school. Reading one is recorded.
+          {t("messages.audit.blurb")}
         </p>
       </div>
 
@@ -238,7 +245,7 @@ export default function MessageAuditPage() {
               value={participantId}
               onChange={(e) => setParticipantId(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-              placeholder="Participant id — leave blank for the whole school"
+              placeholder={t("messages.audit.participantPh")}
               className="flex-1 bg-transparent text-sm outline-none"
             />
           </div>
@@ -247,7 +254,7 @@ export default function MessageAuditPage() {
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold
                        text-white transition-colors hover:bg-blue-700"
           >
-            Search
+            {t("common.search")}
           </button>
         </div>
       </div>
@@ -263,13 +270,13 @@ export default function MessageAuditPage() {
           <div className="flex items-start gap-2 rounded-xl border border-red-200
                           bg-red-50 p-4 text-sm text-red-700">
             <AlertCircle size={16} className="mt-0.5 shrink-0" />
-            <span>{errorText(listQuery.error)}</span>
+            <span>{errorText(listQuery.error, t)}</span>
           </div>
         )}
 
         {!listQuery.isLoading && !listQuery.isError && rows.length === 0 && (
           <p className="py-12 text-center text-sm text-gray-500">
-            No conversations found.
+            {t("messages.audit.noneFound")}
           </p>
         )}
 
@@ -278,10 +285,10 @@ export default function MessageAuditPage() {
                             bg-white text-sm shadow-sm">
             <thead>
               <tr className="bg-gray-100 text-left text-xs uppercase text-gray-600">
-                <th className="px-4 py-2.5">Conversation</th>
-                <th className="px-4 py-2.5 w-24">Kind</th>
-                <th className="px-4 py-2.5 w-24">People</th>
-                <th className="px-4 py-2.5 w-44">Last activity</th>
+                <th className="px-4 py-2.5">{t("messages.audit.conversation")}</th>
+                <th className="px-4 py-2.5 w-24">{t("messages.audit.kind")}</th>
+                <th className="px-4 py-2.5 w-24">{t("messages.audit.people")}</th>
+                <th className="px-4 py-2.5 w-44">{t("messages.audit.lastActivity")}</th>
                 <th className="px-4 py-2.5 w-24" />
               </tr>
             </thead>
@@ -290,7 +297,7 @@ export default function MessageAuditPage() {
                 <tr key={c._id} className="border-t border-gray-100">
                   <td className="px-4 py-2.5">
                     <div className="font-semibold text-gray-900">
-                      {c.title || "Direct conversation"}
+                      {c.title || t("messages.audit.directConversation")}
                     </div>
                     <div className="truncate text-xs text-gray-500">
                       {(c.participants ?? [])
@@ -314,7 +321,7 @@ export default function MessageAuditPage() {
                                  hover:bg-gray-50"
                     >
                       <Eye size={13} />
-                      Read
+                      {t("messages.audit.read")}
                     </button>
                   </td>
                 </tr>

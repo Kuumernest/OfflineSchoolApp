@@ -28,10 +28,10 @@ import { AttendanceService } from "../../../src/services/attendance.service";
 // ─────────────────────────────────────────────────────────────
 
 const STATUS_OPTIONS = [
-  { value: "present", label: "Present", color: "#059669", icon: "checkmark-circle" },
-  { value: "absent",  label: "Absent",  color: "#DC2626", icon: "close-circle"     },
-  { value: "late",    label: "Late",    color: "#D97706", icon: "time"             },
-  { value: "excused", label: "Excused", color: "#4F46E5", icon: "shield-checkmark" },
+  { value: "present", labelKey: "attStatus.present", color: "#059669", icon: "checkmark-circle" },
+  { value: "absent",  labelKey: "attStatus.absent",  color: "#DC2626", icon: "close-circle"     },
+  { value: "late",    labelKey: "attStatus.late",    color: "#D97706", icon: "time"             },
+  { value: "excused", labelKey: "attStatus.excused", color: "#4F46E5", icon: "shield-checkmark" },
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -48,6 +48,7 @@ const formatDate = (d) => {
 // ─────────────────────────────────────────────────────────────
 
 const StudentRow = React.memo(({ item, currentStatus, wasMarked, onToggle }) => {
+  const { t } = useTranslation();
   const statusColor = STATUS_OPTIONS.find(
     (o) => o.value === currentStatus
   )?.color;
@@ -80,7 +81,7 @@ const StudentRow = React.memo(({ item, currentStatus, wasMarked, onToggle }) => 
       <View style={rowS.info}>
         <View style={rowS.nameRow}>
           <Text style={rowS.name} numberOfLines={1}>
-            {item.student.studentName || item.student.name || "Unknown"}
+            {item.student.studentName || item.student.name || t("attTeacher.unknown")}
           </Text>
           {wasMarked && (
             <View style={rowS.savedBadge}>
@@ -171,13 +172,14 @@ const rowS = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────
 
 export default function TeacherMarkAttendanceScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams();
   const user   = useAuthStore((s) => s.user);
 
   const schoolId  = user?.schoolId;
   const classId   = params.classId;
-  const className = params.className || "Class";
+  const className = params.className || t("attTeacher.klass");
   const today     = useMemo(() => todayStr(), []);
 
   const [roster,     setRoster]     = useState([]);
@@ -221,7 +223,7 @@ export default function TeacherMarkAttendanceScreen() {
       setAttendance(existing);
     } catch (err) {
       console.error("[TeacherMark] loadRoster failed:", err?.message);
-      setError("Failed to load students. Pull down to retry.");
+      setError(t("attTeacher.loadStudentsPull"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -256,8 +258,8 @@ export default function TeacherMarkAttendanceScreen() {
 
     if (!records.length) {
       Alert.alert(
-        "Nothing to Save",
-        "Please mark at least one student before saving."
+        t("attTeacher.nothingTitle"),
+        t("attTeacher.markOneFirst")
       );
       return;
     }
@@ -275,7 +277,7 @@ export default function TeacherMarkAttendanceScreen() {
         });
 
         Alert.alert(
-          "✅ Attendance Saved",
+          t("attTeacher.savedTitle"),
           `Saved for ${records.length} student${records.length !== 1 ? "s" : ""}.` +
           (unmarked > 0
             ? `\n${unmarked} student${unmarked !== 1 ? "s" : ""} not marked.`
@@ -283,7 +285,7 @@ export default function TeacherMarkAttendanceScreen() {
           [{ text: "OK", onPress: () => router.back() }]
         );
       } catch (err) {
-        Alert.alert("Save Failed", err?.message || "Please try again.");
+        Alert.alert(t("attTeacher.saveFailedTitle"), err?.message || t("attTeacher.tryAgain"));
       } finally {
         setSaving(false);
       }
@@ -291,11 +293,11 @@ export default function TeacherMarkAttendanceScreen() {
 
     if (unmarked > 0) {
       Alert.alert(
-        "Unmarked Students",
+        t("attTeacher.unmarkedTitle"),
         `${unmarked} student${unmarked !== 1 ? "s" : ""} have not been marked.\nSave anyway?`,
         [
-          { text: "Cancel",      style: "cancel" },
-          { text: "Save Anyway", onPress: doSave  },
+          { text: t("common.cancel"),      style: "cancel" },
+          { text: t("attTeacher.saveAnyway"), onPress: doSave  },
         ]
       );
     } else {
@@ -327,7 +329,7 @@ export default function TeacherMarkAttendanceScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading students…</Text>
+        <Text style={styles.loadingText}>{t("attTeacher.loadingStudents")}</Text>
       </View>
     );
   }
@@ -362,7 +364,7 @@ export default function TeacherMarkAttendanceScreen() {
           {saving ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
+            <Text style={styles.saveBtnText}>{t("common.save")}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -373,7 +375,7 @@ export default function TeacherMarkAttendanceScreen() {
           <Ionicons name="alert-circle" size={16} color="#DC2626" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadRoster()}>
-            <Text style={styles.errorRetry}>Retry</Text>
+            <Text style={styles.errorRetry}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -397,11 +399,11 @@ export default function TeacherMarkAttendanceScreen() {
             { label: "E", value: excusedCount, color: "#4F46E5" },
           ].map((s) => (
             <View
-              key={s.label}
+              key={s.value}
               style={[styles.countChip, { backgroundColor: s.color + "15" }]}
             >
               <Text style={[styles.countVal, { color: s.color }]}>{s.value}</Text>
-              <Text style={[styles.countLbl, { color: s.color }]}>{s.label}</Text>
+              <Text style={[styles.countLbl, { color: s.color }]}>{t(s.labelKey)}</Text>
             </View>
           ))}
         </View>
@@ -409,7 +411,7 @@ export default function TeacherMarkAttendanceScreen() {
 
       {/* Mark all row */}
       <View style={styles.markAllRow}>
-        <Text style={styles.markAllLabel}>Mark all:</Text>
+        <Text style={styles.markAllLabel}>{t("attTeacher.markAllColon")}</Text>
         {STATUS_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
@@ -422,7 +424,7 @@ export default function TeacherMarkAttendanceScreen() {
           >
             <Ionicons name={opt.icon} size={12} color={opt.color} />
             <Text style={[styles.markAllBtnText, { color: opt.color }]}>
-              {opt.label}
+              {t(opt.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -433,7 +435,7 @@ export default function TeacherMarkAttendanceScreen() {
         <Ionicons name="search-outline" size={16} color="#9CA3AF" />
         <TextInput
           style={styles.searchInput}
-          placeholder="Search student…"
+          placeholder={t("attTeacher.searchStudentPh")}
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
@@ -475,14 +477,14 @@ export default function TeacherMarkAttendanceScreen() {
             <Ionicons name="people-outline" size={48} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>
               {error
-                ? "Failed to load students"
+                ? t("attTeacher.loadStudentsFailed")
                 : search
-                ? "No students match your search"
-                : "No students in this class"}
+                ? t("attTeacher.noStudentMatch")
+                : t("attTeacher.noStudents")}
             </Text>
             {!error && !search && (
               <Text style={styles.emptySub}>
-                Students need to be enrolled in this class first
+                {t("attTeacher.enrolFirst")}
               </Text>
             )}
           </View>
@@ -615,3 +617,4 @@ const styles = StyleSheet.create({
   emptyTitle: { fontSize: 15, fontWeight: "600", color: "#374151", textAlign: "center" },
   emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

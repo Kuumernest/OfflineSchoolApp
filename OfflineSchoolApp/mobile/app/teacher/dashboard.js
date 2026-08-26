@@ -27,32 +27,33 @@ import { getSchoolInfo }        from "../../src/services/school.service";
 import { isTeacherProfileComplete } from "./profile/setup";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { toDisplayUri }        from "../../src/utils/logoUri";
+import { useTranslation }      from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
 // ─────────────────────────────────────────────────────────────────────────────
 
-const QUICK_ACTIONS = [
-  { id: "my-exams",        title: "My Exams",     icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams"                     },
-  { id: "enter-marks",     title: "Enter Marks",  icon: "create-outline",        color: "#DC2626", route: "/teacher/exams?filter=pending-marks" },
-  { id: "upload-notes",    title: "Upload Notes", icon: "document-text-outline", color: "#7C3AED", route: "/teacher/content/upload-notes"       },
-  { id: "create-quiz",     title: "Create Quiz",  icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes/create"             },
-  { id: "assign-homework", title: "Assign HW",    icon: "clipboard-outline",     color: "#D97706", route: "/teacher/homework/create"            },
-  { id: "mark-attendance", title: "Attendance",   icon: "checkbox-outline",      color: "#DB2777", route: "/teacher/attendance"                 },
-  { id: "announce",        title: "Announce",     icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements/create"       },
-  { id: "messages",        title: "Messages",     icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                           },
+const buildQuickActions = (t) => [
+  { id: "my-exams",        title: t("teacherHome.qaMyExams"),        icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams"                     },
+  { id: "enter-marks",     title: t("teacherHome.qaEnterMarks"),     icon: "create-outline",        color: "#DC2626", route: "/teacher/exams?filter=pending-marks" },
+  { id: "upload-notes",    title: t("teacherHome.qaUploadNotes"),    icon: "document-text-outline", color: "#7C3AED", route: "/teacher/content/upload-notes"       },
+  { id: "create-quiz",     title: t("teacherHome.qaCreateQuiz"),     icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes/create"             },
+  { id: "assign-homework", title: t("teacherHome.qaAssignHomework"), icon: "clipboard-outline",     color: "#D97706", route: "/teacher/homework/create"            },
+  { id: "mark-attendance", title: t("teacherHome.qaAttendance"),     icon: "checkbox-outline",      color: "#DB2777", route: "/teacher/attendance"                 },
+  { id: "announce",        title: t("teacherHome.qaAnnounce"),       icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements/create"       },
+  { id: "messages",        title: t("teacherHome.qaMessages"),       icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                           },
 ];
 
-const MODULES = [
-  { id: "exams",         title: "My Exams & Marks",      icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams",         description: "View exams and enter marks",       badge: "marks"         },
-  { id: "subjects",      title: "My Subjects & Classes", icon: "book-outline",          color: "#7C3AED", route: "/teacher/subjects",      description: "View assigned subjects and classes"                        },
-  { id: "content",       title: "Content Library",       icon: "folder-outline",        color: "#059669", route: "/teacher/content",       description: "Notes, videos & audio uploads"                             },
-  { id: "quizzes",       title: "Quizzes",               icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes",       description: "Create & manage quizzes"                                   },
-  { id: "homework",      title: "Homework",              icon: "create-outline",        color: "#D97706", route: "/teacher/homework",      description: "Assign and track homework"                                 },
-  { id: "results",       title: "Results",               icon: "bar-chart-outline",     color: "#059669", route: "/teacher/results",       description: "View student results"                                      },
-  { id: "attendance",    title: "Attendance",            icon: "calendar-outline",      color: "#DB2777", route: "/teacher/attendance",    description: "Track student attendance"                                  },
-  { id: "timetable",     title: "My Timetable",          icon: "time-outline",          color: "#2563EB", route: "/teacher/timetable",     description: "View your weekly schedule"                                 },
-  { id: "announcements", title: "Announcements",         icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements", description: "Send & receive announcements",     badge: "announcements" },
+const buildModules = (t) => [
+  { id: "exams",         title: t("teacherHome.modExamsTitle"),         icon: "trophy-outline",        color: "#4F46E5", route: "/teacher/exams",         description: t("teacherHome.modExamsDesc"),         badge: "marks"         },
+  { id: "subjects",      title: t("teacherHome.modSubjectsTitle"),      icon: "book-outline",          color: "#7C3AED", route: "/teacher/subjects",      description: t("teacherHome.modSubjectsDesc")                              },
+  { id: "content",       title: t("teacherHome.modContentTitle"),       icon: "folder-outline",        color: "#059669", route: "/teacher/content",       description: t("teacherHome.modContentDesc")                               },
+  { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
+  { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        color: "#D97706", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
+  { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     color: "#059669", route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
+  { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      color: "#DB2777", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
+  { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          color: "#2563EB", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
+  { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
 ];
 
 const ALERT_STYLES = {
@@ -66,11 +67,11 @@ const ALERT_STYLES = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const getGreeting = () => {
+const getGreeting = (t) => {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (hour < 12) return t("teacherHome.greetingMorning");
+  if (hour < 17) return t("teacherHome.greetingAfternoon");
+  return t("teacherHome.greetingEvening");
 };
 
 const computeSlotStatus = (startTime, endTime) => {
@@ -175,6 +176,7 @@ const sb = StyleSheet.create({
 
 export default function TeacherDashboard() {
   const router = useRouter();
+  const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
 
@@ -239,12 +241,12 @@ export default function TeacherDashboard() {
       if (schoolData) setSchool(schoolData);
     } catch (err) {
       console.error("Failed to load teacher stats:", err);
-      setError("Failed to load dashboard data");
+      setError(t("teacherHome.loadError"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [teacherId, schoolId]);
+  }, [teacherId, schoolId, t]);
 
   // ── Load stats on mount ───────────────────────────────────────────────────
   useEffect(() => {
@@ -325,21 +327,24 @@ export default function TeacherDashboard() {
     const list = [];
 
     if (stats) {
-      if (stats.pendingMarksEntry > 0)     list.push({ id: "pending-marks",      type: "danger",  icon: "create-outline",           message: `${stats.pendingMarksEntry} subject${stats.pendingMarksEntry > 1 ? "s" : ""} need marks entered`,                route: "/teacher/exams?filter=pending-marks" });
-      if (stats.rejectedSubmissions > 0)   list.push({ id: "rejected-marks",     type: "danger",  icon: "alert-circle-outline",     message: `${stats.rejectedSubmissions} submission${stats.rejectedSubmissions > 1 ? "s" : ""} rejected — re-enter marks`,  route: "/teacher/exams?filter=rejected"      });
-      if (stats.pendingGrading > 0)        list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: `${stats.pendingGrading} submissions pending grading`,                                                             route: "/teacher/results"                    });
-      if (stats.upcomingDeadlines > 0)     list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: `${stats.upcomingDeadlines} homework deadlines this week`,                                                         route: "/teacher/homework"                   });
-      if (stats.upcomingExams > 0)         list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: `${stats.upcomingExams} exams scheduled this week`,                                                                route: "/teacher/exams"                      });
-      if (stats.todayAttendanceMissing > 0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: `Attendance not marked for ${stats.todayAttendanceMissing} classes today`,                                         route: "/teacher/attendance/mark"            });
-      if (stats.newSubmissions > 0)        list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: `${stats.newSubmissions} new homework submission${stats.newSubmissions > 1 ? "s" : ""} awaiting grading`,           route: "/teacher/homework"                   });
+      if (stats.pendingMarksEntry > 0)     list.push({ id: "pending-marks",      type: "danger",  icon: "create-outline",           message: t("teacherHome.alertPendingMarks", { count: stats.pendingMarksEntry }),                route: "/teacher/exams?filter=pending-marks" });
+      if (stats.rejectedSubmissions > 0)   list.push({ id: "rejected-marks",     type: "danger",  icon: "alert-circle-outline",     message: t("teacherHome.alertRejectedMarks", { count: stats.rejectedSubmissions }),  route: "/teacher/exams?filter=rejected"      });
+      if (stats.pendingGrading > 0)        list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: t("teacherHome.alertPendingGrading", { count: stats.pendingGrading }),                                                             route: "/teacher/results"                    });
+      if (stats.upcomingDeadlines > 0)     list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: t("teacherHome.alertDeadlines", { count: stats.upcomingDeadlines }),                                                         route: "/teacher/homework"                   });
+      if (stats.upcomingExams > 0)         list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: t("teacherHome.alertUpcomingExams", { count: stats.upcomingExams }),                                                                route: "/teacher/exams"                      });
+      if (stats.todayAttendanceMissing > 0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: t("teacherHome.alertMissingAttendance", { count: stats.todayAttendanceMissing }),                                         route: "/teacher/attendance/mark"            });
+      if (stats.newSubmissions > 0)        list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: t("teacherHome.alertNewSubmissions", { count: stats.newSubmissions }),           route: "/teacher/homework"                   });
     }
 
-    if (isProfileIncomplete)    list.push({ id: "profile-incomplete",   type: "warning", icon: "person-outline",    message: "Your profile is incomplete — tap to complete setup",                                                                       route: "/teacher/profile/setup" });
-    if (urgentUnack > 0)        list.push({ id: "urgent-announcements", type: "danger",  icon: "megaphone-outline", message: `${urgentUnack} urgent announcement${urgentUnack > 1 ? "s" : ""} need${urgentUnack === 1 ? "s" : ""} acknowledgement`,     route: "/teacher/announcements" });
-    if (announcementUnread > 0) list.push({ id: "unread-announcements", type: "info",    icon: "megaphone-outline", message: `${announcementUnread} unread announcement${announcementUnread > 1 ? "s" : ""}`,                                            route: "/teacher/announcements" });
+    if (isProfileIncomplete)    list.push({ id: "profile-incomplete",   type: "warning", icon: "person-outline",    message: t("teacherHome.alertProfileIncomplete"),                                                                       route: "/teacher/profile/setup" });
+    if (urgentUnack > 0)        list.push({ id: "urgent-announcements", type: "danger",  icon: "megaphone-outline", message: t("teacherHome.alertUrgentAnnouncements", { count: urgentUnack }),     route: "/teacher/announcements" });
+    if (announcementUnread > 0) list.push({ id: "unread-announcements", type: "info",    icon: "megaphone-outline", message: t("teacherHome.alertUnreadAnnouncements", { count: announcementUnread }),                                            route: "/teacher/announcements" });
 
     return list;
-  }, [stats, isProfileIncomplete, announcementUnread, urgentUnack]);
+  }, [stats, isProfileIncomplete, announcementUnread, urgentUnack, t]);
+
+  const quickActions = useMemo(() => buildQuickActions(t), [t]);
+  const modules      = useMemo(() => buildModules(t),      [t]);
 
   // ── Navigation ────────────────────────────────────────────────────────────
   const handleNav = useCallback((route) => {
@@ -365,7 +370,7 @@ export default function TeacherDashboard() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading your classroom…</Text>
+        <Text style={styles.loadingText}>{t("teacherHome.loading")}</Text>
       </View>
     );
   }
@@ -385,9 +390,9 @@ export default function TeacherDashboard() {
       {/* ── HEADER ── */}
       <View style={styles.header}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.greeting}>{getGreeting()},</Text>
-          <Text style={styles.userName} numberOfLines={1}>{user?.name || "Teacher"}</Text>
-          <Text style={styles.subtitle}>Teaching Hub</Text>
+          <Text style={styles.greeting}>{getGreeting(t)},</Text>
+          <Text style={styles.userName} numberOfLines={1}>{user?.name || t("teacherHome.teacherFallback")}</Text>
+          <Text style={styles.subtitle}>{t("teacherHome.subtitle")}</Text>
         </View>
 
         <View style={styles.headerActions}>
@@ -462,7 +467,7 @@ export default function TeacherDashboard() {
             <Ionicons name="alert-circle-outline" size={18} color="#DC2626" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => loadStats()}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("teacherHome.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -478,9 +483,9 @@ export default function TeacherDashboard() {
               <Ionicons name="person-add-outline" size={22} color="#FFF" />
             </View>
             <View style={styles.profileSetupText}>
-              <Text style={styles.profileSetupTitle}>Complete Your Profile</Text>
+              <Text style={styles.profileSetupTitle}>{t("teacherHome.profileBannerTitle")}</Text>
               <Text style={styles.profileSetupSub}>
-                The school needs your full details — tap to complete setup
+                {t("teacherHome.profileBannerSub")}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#FFF" />
@@ -505,12 +510,14 @@ export default function TeacherDashboard() {
             </View>
             <View style={styles.announcementBannerText}>
               <Text style={styles.announcementBannerTitle}>
-                {urgentUnack > 0 ? "Urgent Announcement" : "New Announcements"}
+                {urgentUnack > 0
+                  ? t("teacherHome.annBannerUrgentTitle")
+                  : t("teacherHome.annBannerNewTitle")}
               </Text>
               <Text style={styles.announcementBannerSub}>
                 {urgentUnack > 0
-                  ? `${urgentUnack} urgent message${urgentUnack > 1 ? "s" : ""} need acknowledgement`
-                  : `${announcementUnread} unread message${announcementUnread > 1 ? "s" : ""}`}
+                  ? t("teacherHome.annBannerUrgentSub", { count: urgentUnack })
+                  : t("teacherHome.annBannerUnreadSub", { count: announcementUnread })}
               </Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color="#FFF" />
@@ -527,13 +534,13 @@ export default function TeacherDashboard() {
               <Ionicons name="create" size={24} color="#FFF" />
             </View>
             <View style={styles.marksBannerText}>
-              <Text style={styles.marksBannerTitle}>Marks Entry Required</Text>
+              <Text style={styles.marksBannerTitle}>{t("teacherHome.marksBannerTitle")}</Text>
               <Text style={styles.marksBannerSub}>
                 {stats?.pendingMarksEntry > 0
-                  ? `${stats.pendingMarksEntry} subject${stats.pendingMarksEntry > 1 ? "s" : ""} pending`
+                  ? t("teacherHome.marksBannerPending", { count: stats.pendingMarksEntry })
                   : ""}
                 {stats?.rejectedSubmissions > 0
-                  ? ` · ${stats.rejectedSubmissions} rejected`
+                  ? ` · ${t("teacherHome.marksBannerRejected", { count: stats.rejectedSubmissions })}`
                   : ""}
               </Text>
             </View>
@@ -543,28 +550,28 @@ export default function TeacherDashboard() {
 
         {/* ── TEACHING OVERVIEW ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Teaching Overview</Text>
+          <Text style={styles.sectionTitle}>{t("teacherHome.sectionOverview")}</Text>
 
           <View style={styles.statsRow}>
             <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
               <Ionicons name="book"   size={20} color="#4F46E5" />
               <Text style={styles.statNumber}>{stats?.assignedSubjects ?? 0}</Text>
-              <Text style={styles.statLabel}>Subjects</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statSubjects")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#EDE9FE" }]}>
               <Ionicons name="school" size={20} color="#7C3AED" />
               <Text style={styles.statNumber}>{stats?.assignedClasses  ?? 0}</Text>
-              <Text style={styles.statLabel}>Classes</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statClasses")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
               <Ionicons name="people" size={20} color="#059669" />
               <Text style={styles.statNumber}>{stats?.totalStudents    ?? 0}</Text>
-              <Text style={styles.statLabel}>Students</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statStudents")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
               <Ionicons name="time"   size={20} color="#D97706" />
               <Text style={styles.statNumber}>{stats?.todayClassCount  ?? 0}</Text>
-              <Text style={styles.statLabel}>Today</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statToday")}</Text>
             </View>
           </View>
 
@@ -572,7 +579,7 @@ export default function TeacherDashboard() {
             <View style={[styles.statCard, { backgroundColor: "#EEF2FF" }]}>
               <Ionicons name="trophy" size={20} color="#4F46E5" />
               <Text style={styles.statNumber}>{stats?.activeExams      ?? 0}</Text>
-              <Text style={styles.statLabel}>Active Exams</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statActiveExams")}</Text>
             </View>
             <TouchableOpacity
               style={[
@@ -596,17 +603,17 @@ export default function TeacherDashboard() {
               ]}>
                 {stats?.pendingMarksEntry ?? 0}
               </Text>
-              <Text style={styles.statLabel}>Pending Marks</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statPendingMarks")}</Text>
             </TouchableOpacity>
             <View style={[styles.statCard, { backgroundColor: "#FEF3C7" }]}>
               <Ionicons name="time"             size={20} color="#D97706" />
               <Text style={styles.statNumber}>{stats?.submittedMarks   ?? 0}</Text>
-              <Text style={styles.statLabel}>Submitted</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statSubmitted")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#ECFDF5" }]}>
               <Ionicons name="checkmark-circle" size={20} color="#059669" />
               <Text style={styles.statNumber}>{stats?.approvedMarks    ?? 0}</Text>
-              <Text style={styles.statLabel}>Approved</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statApproved")}</Text>
             </View>
           </View>
 
@@ -614,22 +621,22 @@ export default function TeacherDashboard() {
             <View style={[styles.statCard, { backgroundColor: "#F0FDF4" }]}>
               <Ionicons name="folder"       size={20} color="#059669" />
               <Text style={styles.statNumber}>{stats?.contentUploads  ?? 0}</Text>
-              <Text style={styles.statLabel}>Content</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statContent")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#DBEAFE" }]}>
               <Ionicons name="help-circle"  size={20} color="#2563EB" />
               <Text style={styles.statNumber}>{stats?.activeQuizzes   ?? 0}</Text>
-              <Text style={styles.statLabel}>Quizzes</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statQuizzes")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#FFF1F2" }]}>
               <Ionicons name="create"       size={20} color="#DB2777" />
               <Text style={styles.statNumber}>{stats?.activeHomework  ?? 0}</Text>
-              <Text style={styles.statLabel}>Homework</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statHomework")}</Text>
             </View>
             <View style={[styles.statCard, { backgroundColor: "#FEE2E2" }]}>
               <Ionicons name="alert-circle" size={20} color="#DC2626" />
               <Text style={styles.statNumber}>{stats?.pendingGrading  ?? 0}</Text>
-              <Text style={styles.statLabel}>To Grade</Text>
+              <Text style={styles.statLabel}>{t("teacherHome.statToGrade")}</Text>
             </View>
           </View>
 
@@ -643,15 +650,15 @@ export default function TeacherDashboard() {
                 <Ionicons name="megaphone-outline" size={20} color="#7C3AED" />
               </View>
               <View>
-                <Text style={styles.announcementStatTitle}>Announcements</Text>
-                <Text style={styles.announcementStatSub}>Inbox & outbox</Text>
+                <Text style={styles.announcementStatTitle}>{t("teacherHome.annCardTitle")}</Text>
+                <Text style={styles.announcementStatSub}>{t("teacherHome.annCardSub")}</Text>
               </View>
             </View>
             <View style={styles.announcementStatRight}>
               {announcementUnread > 0 && (
                 <View style={styles.announcementUnreadBadge}>
                   <Text style={styles.announcementUnreadText}>
-                    {announcementUnread} unread
+                    {t("teacherHome.annUnreadBadge", { count: announcementUnread })}
                   </Text>
                 </View>
               )}
@@ -659,12 +666,12 @@ export default function TeacherDashboard() {
                 <View style={styles.announcementUrgentBadge}>
                   <Ionicons name="warning" size={11} color="#FFF" />
                   <Text style={styles.announcementUrgentText}>
-                    {urgentUnack} urgent
+                    {t("teacherHome.annUrgentBadge", { count: urgentUnack })}
                   </Text>
                 </View>
               )}
               {announcementUnread === 0 && urgentUnack === 0 && (
-                <Text style={styles.announcementAllClear}>All read ✓</Text>
+                <Text style={styles.announcementAllClear}>{t("teacherHome.annAllRead")}</Text>
               )}
               <Ionicons name="chevron-forward" size={16} color="#7C3AED" />
             </View>
@@ -678,7 +685,7 @@ export default function TeacherDashboard() {
               <View style={[styles.sectionIcon, { backgroundColor: "#FEE2E2" }]}>
                 <Ionicons name="notifications" size={18} color="#DC2626" />
               </View>
-              <Text style={styles.sectionTitle}>Notifications</Text>
+              <Text style={styles.sectionTitle}>{t("teacherHome.sectionNotifications")}</Text>
               <View style={styles.alertCountBadge}>
                 <Text style={styles.alertCountText}>{alerts.length}</Text>
               </View>
@@ -709,12 +716,12 @@ export default function TeacherDashboard() {
             <View style={[styles.sectionIcon, { backgroundColor: "#DBEAFE" }]}>
               <Ionicons name="calendar" size={18} color="#2563EB" />
             </View>
-            <Text style={styles.sectionTitle}>Today's Classes</Text>
+            <Text style={styles.sectionTitle}>{t("teacherHome.sectionTodayClasses")}</Text>
             {todayClasses.length > 0 && (
               <Text style={styles.scheduleSummary}>
-                {pastCount     > 0 && `${pastCount} done`}
+                {pastCount     > 0 && t("teacherHome.scheduleDone", { count: pastCount })}
                 {pastCount     > 0 && upcomingCount > 0 && " · "}
-                {upcomingCount > 0 && `${upcomingCount} upcoming`}
+                {upcomingCount > 0 && t("teacherHome.scheduleUpcoming", { count: upcomingCount })}
               </Text>
             )}
           </View>
@@ -722,8 +729,8 @@ export default function TeacherDashboard() {
           {todayClasses.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="cafe-outline" size={32} color="#9CA3AF" />
-              <Text style={styles.emptyText}>No classes scheduled today</Text>
-              <Text style={styles.emptySubtext}>Enjoy your free day! ☕</Text>
+              <Text style={styles.emptyText}>{t("teacherHome.emptyClassesTitle")}</Text>
+              <Text style={styles.emptySubtext}>{t("teacherHome.emptyClassesSub")}</Text>
             </View>
           ) : (
             todayClasses.map((cls, index) => {
@@ -764,12 +771,12 @@ export default function TeacherDashboard() {
                         style={[styles.scheduleSubject, isPast && styles.scheduleTextPast]}
                         numberOfLines={1}
                       >
-                        {cls.subjectName || "Subject"}
+                        {cls.subjectName || t("teacherHome.subjectFallback")}
                       </Text>
                       {isCurrent && (
                         <View style={styles.currentBadge}>
                           <View style={styles.currentDot} />
-                          <Text style={styles.currentBadgeText}>NOW</Text>
+                          <Text style={styles.currentBadgeText}>{t("teacherHome.nowBadge")}</Text>
                         </View>
                       )}
                       {isPast && (
@@ -777,8 +784,8 @@ export default function TeacherDashboard() {
                       )}
                     </View>
                     <Text style={[styles.scheduleClass, isPast && styles.scheduleTextPast]}>
-                      {cls.className || "Class"}
-                      {cls.room ? `  ·  Room ${cls.room}` : ""}
+                      {cls.className || t("teacherHome.classFallback")}
+                      {cls.room ? `  ·  ${t("teacherHome.roomLabel", { room: cls.room })}` : ""}
                     </Text>
                   </View>
                   <Ionicons
@@ -794,9 +801,9 @@ export default function TeacherDashboard() {
 
         {/* ── QUICK ACTIONS ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t("teacherHome.sectionQuickActions")}</Text>
           <View style={styles.actionsGrid}>
-            {QUICK_ACTIONS.map((action) => (
+            {quickActions.map((action) => (
               <TouchableOpacity
                 key={action.id}
                 style={styles.actionButton}
@@ -814,8 +821,8 @@ export default function TeacherDashboard() {
 
         {/* ── ALL MODULES ── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>My Tools</Text>
-          {MODULES.map((mod) => {
+          <Text style={styles.sectionTitle}>{t("teacherHome.sectionMyTools")}</Text>
+          {modules.map((mod) => {
             const marksBadgeCount =
               (stats?.pendingMarksEntry ?? 0) + (stats?.rejectedSubmissions ?? 0);
             const badgeValue =
@@ -866,7 +873,7 @@ export default function TeacherDashboard() {
           activeOpacity={0.7}
         >
           <Ionicons name="settings-outline" size={18} color="#4F46E5" />
-          <Text style={styles.settingsShortcutText}>Settings & Profile</Text>
+          <Text style={styles.settingsShortcutText}>{t("teacherHome.settingsShortcut")}</Text>
           <Ionicons name="chevron-forward" size={16} color="#4F46E5" />
         </TouchableOpacity>
 
@@ -876,7 +883,7 @@ export default function TeacherDashboard() {
           activeOpacity={0.7}
         >
           <Ionicons name="log-out-outline" size={18} color="#DC2626" />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>{t("teacherHome.logout")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 24 }} />

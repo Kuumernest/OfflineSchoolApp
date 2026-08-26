@@ -26,6 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSyncStatus } from "../hooks/useSyncStatus";
+import { useTranslation } from "../i18n/useTranslation";
 
 const C = {
   offline:  "#6B7280",
@@ -48,6 +49,7 @@ const useBottomInset = () => {
 };
 
 export const SyncStatusBar = ({ style }) => {
+  const { t } = useTranslation();
   const router = useRouter();
   const bottomInset = useBottomInset();
   const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked } = useSyncStatus();
@@ -68,7 +70,7 @@ export const SyncStatusBar = ({ style }) => {
   } else if (isOfflineSession) {
     tone = C.pending;
     icon = "log-in-outline";
-    label = "Signed in offline — sign in again while connected to upload";
+    label = t("sync.offlineSession");
   } else if (!isConnected) {
     tone = C.offline;
     icon = "cloud-offline-outline";

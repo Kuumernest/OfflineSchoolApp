@@ -1,5 +1,5 @@
 // app/admin/students/approved.js
-// Renamed conceptually to "All Students" but kept at same path for routing compat.
+// Renamed conceptually to t("approvedStudents.tabAll") but kept at same path for routing compat.
 // Now mirrors the web StudentsPage: status tabs, class filter, honest count label.
 
 import React, {
@@ -25,7 +25,8 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons }  from "@expo/vector-icons";
 import { StudentService } from "../../../src/services/student.service";
-import { getStudentStatusConfig } from "../../../src/utils/studentStatus";
+import { getStudentStatusConfig } from "../../../src/utils/studentStatus";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS  (unchanged)
@@ -68,28 +69,28 @@ const STATUS_FILTERS = [
   },
   {
     key:   "approved",
-    label: "Active",
+    labelKey: "common.active",
     icon:  "checkmark-circle-outline",
     color: C.success,
     bg:    C.successBg,
   },
   {
     key:   "pending",
-    label: "Pending",
+    labelKey: "common.pending",
     icon:  "time-outline",
     color: C.warning,
     bg:    C.warningBg,
   },
   {
     key:   "suspended",
-    label: "Suspended",
+    labelKey: "approvedStudents.suspended",
     icon:  "ban-outline",
     color: C.error,
     bg:    C.errorBg,
   },
   {
     key:   "rejected",
-    label: "Rejected",
+    labelKey: "approvedStudents.rejected",
     icon:  "close-circle-outline",
     color: C.purple,
     bg:    C.purpleBg,
@@ -103,10 +104,12 @@ const MAX_PAGES  = 20;
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const getDisplayName = (student) =>
-  student.name ||
+const getDisplayName = (student) => {
+                         const { t } = useTranslation();
+                         return student.name ||
   [student.firstName, student.lastName].filter(Boolean).join(" ") ||
-  "Unknown Student";
+  t("approvedStudents.unknownStudent");
+                       };
 
 /**
  * Maps a status value → { label, color, bg }
@@ -118,8 +121,10 @@ const getStatusConfig = getStudentStatusConfig;
  * Mirrors web resolveClassName():
  * prefers nested `class.name`, falls back to flat `className`.
  */
-const resolveClassName = (student) =>
-  student?.class?.name ?? student?.className ?? "Unassigned";
+const resolveClassName = (student) => {
+                           const { t } = useTranslation();
+                           return student?.class?.name ?? student?.className ?? t("approvedStudents.unassigned");
+                         };
 
 /**
  * Mirrors web countLabel(): honest, filter-aware count string.
@@ -237,6 +242,7 @@ const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => (
 // ─────────────────────────────────────────────────────────
 
 const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
+  const { t } = useTranslation();
   if (classes.length === 0) return null;
 
   return (
@@ -246,7 +252,7 @@ const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
       style={styles.pillsScroll}
       contentContainerStyle={styles.pillsContent}
     >
-      {/* "All Classes" reset pill */}
+      {/* t("approvedStudents.allClasses") reset pill */}
       <TouchableOpacity
         style={[
           styles.classPillBtn,
@@ -261,7 +267,7 @@ const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
             !activeClass && styles.classPillBtnTextActive,
           ]}
         >
-          All Classes
+          {t("approvedStudents.allClasses")}
         </Text>
       </TouchableOpacity>
 
@@ -294,6 +300,7 @@ const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
 // ─────────────────────────────────────────────────────────
 
 const StudentCard = React.memo(({ student, onPress }) => {
+  const { t } = useTranslation();
   const displayName  = getDisplayName(student);
   const firstLetter  = displayName.charAt(0).toUpperCase() || "?";
   const statusConfig = getStatusConfig(student.status);
@@ -369,7 +376,7 @@ const StudentCard = React.memo(({ student, onPress }) => {
           ) : null}
 
           {/* Class pill (only when a real class is assigned) */}
-          {className !== "Unassigned" && (
+          {className !== t("approvedStudents.unassigned") && (
             <View style={styles.classPill}>
               <Ionicons name="school-outline" size={10} color={C.primary} />
               <Text style={styles.classPillText} numberOfLines={1}>
@@ -419,7 +426,9 @@ const SectionHeader = React.memo(({ title, count }) => (
 // EMPTY STATE  (unchanged)
 // ─────────────────────────────────────────────────────────
 
-const EmptyState = React.memo(({ searchQuery }) => (
+const EmptyState = React.memo(({ searchQuery }) => {
+                                const { t } = useTranslation();
+                                return (
   <View style={styles.emptyState}>
     <View style={styles.emptyIconWrap}>
       <Ionicons
@@ -429,21 +438,23 @@ const EmptyState = React.memo(({ searchQuery }) => (
       />
     </View>
     <Text style={styles.emptyTitle}>
-      {searchQuery ? "No matches found" : "No students found"}
+      {searchQuery ? t("approvedStudents.noMatch") : t("approvedStudents.emptyTitle")}
     </Text>
     <Text style={styles.emptySubtitle}>
       {searchQuery
-        ? "Try adjusting your search or filter"
-        : "Students will appear here once added."}
+        ? t("approvedStudents.noMatchSub")
+        : t("approvedStudents.emptySub")}
     </Text>
   </View>
-));
+);
+                              });
 
 // ─────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────
 
 export default function ApprovedStudents() {
+  const { t } = useTranslation();
   const router       = useRouter();
   const isMountedRef = useRef(true);
 
@@ -478,7 +489,7 @@ export default function ApprovedStudents() {
     } catch (err) {
       console.error("Failed to load students:", err);
       if (isMountedRef.current)
-        Alert.alert("Error", "Failed to load students. Please try again.");
+        Alert.alert(t("approvedStudents.errTitle"), t("approvedStudents.loadFailed"));
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -494,7 +505,7 @@ export default function ApprovedStudents() {
   const handleStudentPress = useCallback((student) => {
     const studentId = String(student._id || student.id || "");
     if (!studentId) {
-      Alert.alert("Error", "Cannot open student — ID missing.");
+      Alert.alert(t("approvedStudents.errTitle"), t("approvedStudents.idMissing"));
       return;
     }
     router.push({
@@ -519,7 +530,9 @@ export default function ApprovedStudents() {
     const set = new Set(
       allStudents
         .map(resolveClassName)
-        .filter((n) => n !== "Unassigned")
+        .filter((n) => {
+                  return n !== t("approvedStudents.unassigned");
+                })
     );
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [allStudents]);
@@ -567,8 +580,8 @@ export default function ApprovedStudents() {
 
     return Object.keys(grouped)
       .sort((a, b) => {
-        if (a === "Unassigned") return  1;
-        if (b === "Unassigned") return -1;
+        if (a === t("approvedStudents.unassigned")) return  1;
+        if (b === t("approvedStudents.unassigned")) return -1;
         return a.localeCompare(b);
       })
       .map((className) => ({
@@ -592,7 +605,7 @@ export default function ApprovedStudents() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={styles.loadingText}>Loading students…</Text>
+        <Text style={styles.loadingText}>{t("approvedStudents.loading")}</Text>
       </View>
     );
   }
@@ -617,7 +630,7 @@ export default function ApprovedStudents() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Students</Text>
+          <Text style={styles.headerTitle}>{t("approvedStudents.title")}</Text>
           {/* Mirrors web countLabel() under the page heading */}
           <Text style={styles.headerSubtitle}>
             {countLabel}
@@ -662,7 +675,7 @@ export default function ApprovedStudents() {
           />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search by name, email, class or admission no…"
+            placeholder={t("approvedStudents.searchPh")}
             placeholderTextColor={C.gray400}
             value={searchQuery}
             onChangeText={setSearchQuery}

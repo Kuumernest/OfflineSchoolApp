@@ -16,7 +16,8 @@
  */
 
 const {
-  buildDocument, renderHeading, renderFacts, renderSignatures, esc, orDash,
+  buildDocument, renderHeading, renderFacts, renderSignatures, renderVerify,
+  esc, orDash,
 } = require("./document");
 
 const num = (v) =>
@@ -90,7 +91,7 @@ const yearBlock = (y, labels) => {
   `;
 };
 
-const buildTranscriptHtml = ({ data, labels, printedOn, origin }) => {
+const buildTranscriptHtml = ({ data, labels, printedOn, origin, verify }) => {
   const { school, student, years, overall } = data;
 
   const body = `
@@ -117,6 +118,8 @@ const buildTranscriptHtml = ({ data, labels, printedOn, origin }) => {
         : years.map((y) => yearBlock(y, labels)).join("")}
 
       ${renderSignatures([labels.registrar, labels.headTeacher])}
+
+      ${renderVerify(verify, labels)}
 
       <p class="muted" style="margin-top:12px;font-size:8.5px">${esc(labels.disclaimer)}</p>
     </div>

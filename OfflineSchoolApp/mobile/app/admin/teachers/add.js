@@ -18,10 +18,9 @@ const MAX_NAME  = 60;
 const EMAIL_RGX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const NEXT_STEPS = [
-  { icon: "key-outline",  color: "#4F46E5", text: "A secure temporary password is generated automatically" },
-  { icon: "mail-outline", color: "#0891B2", text: "Login credentials are emailed to the teacher immediately" },
-  { icon: "lock-closed-outline", color: "#059669",
-    text: "Teacher sets a personal password on their first login" },
+  { icon: "key-outline",  color: "#4F46E5", textKey: "teachersAdd.next0" },
+  { icon: "mail-outline", color: "#0891B2", textKey: "teachersAdd.next1" },
+  { icon: "lock-closed-outline", color: "#059669", textKey: "teachersAdd.next2" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -29,6 +28,7 @@ const NEXT_STEPS = [
 // ─────────────────────────────────────────────────────────
 
 export default function AddTeacherScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const nameRef  = useRef(null);
@@ -53,17 +53,17 @@ export default function AddTeacherScreen() {
     const next = {};
 
     if (!trimName) {
-      next.name = "Teacher name is required.";
+      next.name = t("teachersAdd.errNameRequired");
     } else if (trimName.length < 2) {
-      next.name = "Name must be at least 2 characters.";
+      next.name = t("teachersAdd.errNameShort");
     } else if (trimName.length > MAX_NAME) {
       next.name = `Name cannot exceed ${MAX_NAME} characters.`;
     }
 
     if (!trimEmail) {
-      next.email = "Email address is required.";
+      next.email = t("teachersAdd.errEmailRequired");
     } else if (!EMAIL_RGX.test(trimEmail)) {
-      next.email = "Please enter a valid email address.";
+      next.email = t("teachersAdd.errEmailInvalid");
     }
 
     setErrors(next);
@@ -100,20 +100,18 @@ export default function AddTeacherScreen() {
         message:      null,
       });
     } catch (err) {
-      const message = err?.message ?? "Something went wrong. Please try again.";
+      const message = err?.message ?? t("teachersAdd.errGeneric");
 
       if (
         message.toLowerCase().includes("already exists") ||
         message.toLowerCase().includes("already registered")
       ) {
         setErrors({
-          email:
-            "This email is already registered. " +
-            "Check if the teacher already has an account or use a different email.",
+          email: t("teachersAdd.errEmailTaken"),
         });
         emailRef.current?.focus();
       } else {
-        Alert.alert("Failed to Create", message);
+        Alert.alert(t("teachersAdd.failedTitle"), message);
       }
     } finally {
       setSaving(false);
@@ -126,11 +124,11 @@ export default function AddTeacherScreen() {
     const isDirty = trimName || trimEmail;
     if (!isDirty) { router.back(); return; }
     Alert.alert(
-      "Discard Changes",
-      "Are you sure you want to discard unsaved changes?",
+      t("teachersAdd.discardTitle"),
+      t("teachersAdd.discardBody"),
       [
-        { text: "Keep Editing", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: () => router.back() },
+        { text: t("teachersAdd.keepEditing"), style: "cancel" },
+        { text: t("common.discard"), style: "destructive", onPress: () => router.back() },
       ]
     );
   }, [trimName, trimEmail, router]);
@@ -162,7 +160,7 @@ export default function AddTeacherScreen() {
     return (
       <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
         <ScreenHeader
-          title="Teacher Added"
+          title={t("teachersAdd.addedTitle")}
           onBack={() =>
             success.teacherId
               ? router.push(`/admin/teachers/${success.teacherId}`)
@@ -188,7 +186,7 @@ export default function AddTeacherScreen() {
             </View>
 
             <Text style={styles.successTitle}>
-              {success.emailSent ? "Teacher Added!" : "Teacher Created"}
+              {success.emailSent ? t("teachersAdd.addedBang") : t("teachersAdd.createdTitle")}
             </Text>
 
             <Text style={styles.successMessage}>
@@ -202,7 +200,7 @@ export default function AddTeacherScreen() {
             {/* Manual credentials — only shown when emailSent is false */}
             {!success.emailSent && success.tempPassword && (
               <View style={styles.credCard}>
-                <Text style={styles.credTitle}>Share these credentials manually</Text>
+                <Text style={styles.credTitle}>{t("teachersAdd.shareManually")}</Text>
 
                 <View style={styles.credRow}>
                   <Text style={styles.credLabel}>📧 Email</Text>
@@ -227,14 +225,14 @@ export default function AddTeacherScreen() {
                         color="#4F46E5"
                       />
                       <Text style={styles.credCopyText}>
-                        {copied ? "Copied" : "Copy"}
+                        {copied ? t("teachersAdd.copied") : "Copy"}
                       </Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
                 <Text style={styles.credNote}>
-                  The teacher must change this password on first login.
+                  {t("teachersAdd.mustChange")}
                 </Text>
               </View>
             )}
@@ -244,7 +242,7 @@ export default function AddTeacherScreen() {
               onPress={handleAddAnother}
               style={styles.primaryBtn}
             >
-              <Text style={styles.primaryBtnText}>Add Another Teacher</Text>
+              <Text style={styles.primaryBtnText}>{t("teachersAdd.another")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -256,7 +254,7 @@ export default function AddTeacherScreen() {
               style={styles.secondaryBtn}
             >
               <Text style={styles.secondaryBtnText}>
-                {success.teacherId ? "View Teacher Profile" : "Back to Teachers"}
+                {success.teacherId ? t("teachersAdd.viewProfile") : t("teachersAdd.back")}
               </Text>
             </TouchableOpacity>
 
@@ -276,8 +274,8 @@ export default function AddTeacherScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScreenHeader
-        title="Add Teacher"
-        subtitle="Create a new teacher profile"
+        title={t("teachersAdd.title")}
+        subtitle={t("teachersAdd.blurb")}
         onBack={handleDiscard}
       />
 
@@ -301,7 +299,7 @@ export default function AddTeacherScreen() {
           {/* Name */}
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>
-              Teacher Name <Text style={{ color: "#EF4444" }}>*</Text>
+              {t("teachersAdd.nameLabel")} <Text style={{ color: "#EF4444" }}>*</Text>
             </Text>
             <View style={[
               styles.inputWrap,
@@ -319,7 +317,7 @@ export default function AddTeacherScreen() {
                   setName(t);
                   if (errors.name) setErrors((p) => ({ ...p, name: undefined }));
                 }}
-                placeholder="e.g. Mr John Doe"
+                placeholder={t("teachersAdd.namePh")}
                 placeholderTextColor="#D1D5DB"
                 autoFocus
                 maxLength={MAX_NAME + 5}
@@ -336,7 +334,7 @@ export default function AddTeacherScreen() {
                 </View>
               ) : (
                 <Text style={styles.hint}>
-                  Full name as it will appear across the system.
+                  {t("teachersAdd.nameHint")}
                 </Text>
               )}
               <Text style={[
@@ -352,7 +350,7 @@ export default function AddTeacherScreen() {
           {/* Email */}
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>
-              Email Address <Text style={{ color: "#EF4444" }}>*</Text>
+              {t("teachersAdd.emailLabel")} <Text style={{ color: "#EF4444" }}>*</Text>
             </Text>
             <View style={[
               styles.inputWrap,
@@ -370,7 +368,7 @@ export default function AddTeacherScreen() {
                   setEmail(t);
                   if (errors.email) setErrors((p) => ({ ...p, email: undefined }));
                 }}
-                placeholder="teacher@school.com"
+                placeholder={t("teachersAdd.emailPh")}
                 placeholderTextColor="#D1D5DB"
                 keyboardType="email-address"
                 autoCapitalize="none"
@@ -387,7 +385,7 @@ export default function AddTeacherScreen() {
               </View>
             ) : (
               <Text style={styles.hint}>
-                Must be unique. Used for login and receiving credentials.
+                {t("teachersAdd.emailHint")}
               </Text>
             )}
           </View>
@@ -402,12 +400,12 @@ export default function AddTeacherScreen() {
             {saving ? (
               <>
                 <ActivityIndicator size="small" color="#fff" />
-                <Text style={styles.submitText}>Creating…</Text>
+                <Text style={styles.submitText}>{t("teachersAdd.creating")}</Text>
               </>
             ) : (
               <>
                 <Ionicons name="person-add-outline" size={18} color="#fff" />
-                <Text style={styles.submitText}>Create Teacher</Text>
+                <Text style={styles.submitText}>{t("teachersAdd.submit")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -425,13 +423,13 @@ export default function AddTeacherScreen() {
 
         {/* What happens next */}
         <View style={styles.card}>
-          <Text style={styles.nextTitle}>What happens next?</Text>
-          {NEXT_STEPS.map(({ icon, color, text }) => (
-            <View key={text} style={styles.nextRow}>
+          <Text style={styles.nextTitle}>{t("teachersAdd.whatNext")}</Text>
+          {NEXT_STEPS.map(({ icon, color, textKey }) => (
+            <View key={textKey} style={styles.nextRow}>
               <View style={[styles.nextIcon, { backgroundColor: "#F3F4F6" }]}>
                 <Ionicons name={icon} size={16} color={color} />
               </View>
-              <Text style={styles.nextText}>{text}</Text>
+              <Text style={styles.nextText}>{t(textKey)}</Text>
             </View>
           ))}
         </View>
@@ -549,3 +547,4 @@ const styles = StyleSheet.create({
                       paddingVertical: 14, alignItems: "center", width: "100%" },
   secondaryBtnText: { fontSize: 15, fontWeight: "700", color: "#374151" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

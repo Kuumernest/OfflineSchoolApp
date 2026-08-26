@@ -33,7 +33,8 @@ import {
 } from "../../../src/services/homework.service";
 import {
   resolveStudentClassId,
-} from "../../../src/services/student.service";
+} from "../../../src/services/student.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -70,8 +71,9 @@ const formatDateTime = (dateStr) => {
 };
 
 const getDueStatus = (dueDateStr, submittedAt = null) => {
+  const { t } = useTranslation();
   if (!dueDateStr) {
-    return { label: "No deadline", color: "#6B7280", bg: "#F3F4F6", urgent: false };
+    return { label: t("studentHome.dueNoDeadline"), color: "#6B7280", bg: "#F3F4F6", urgent: false };
   }
 
   const due  = new Date(dueDateStr);
@@ -81,8 +83,8 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   if (submittedAt) {
     const wasLate = new Date(submittedAt) > due;
     return wasLate
-      ? { label: "Submitted late",    color: "#D97706", bg: "#FEF3C7", urgent: false }
-      : { label: "Submitted on time", color: "#059669", bg: "#ECFDF5", urgent: false };
+      ? { label: t("studentHome.dueSubmittedLate"),    color: "#D97706", bg: "#FEF3C7", urgent: false }
+      : { label: t("studentHome.dueSubmittedOnTime"), color: "#059669", bg: "#ECFDF5", urgent: false };
   }
 
   if (diff < 0) {
@@ -101,8 +103,8 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   const days  = Math.floor(diff / 86400000);
 
   if (hours < 6)  return { label: `${hours}h left`,  color: "#DC2626", bg: "#FEE2E2", urgent: true  };
-  if (hours < 24) return { label: "Due today",        color: "#D97706", bg: "#FEF3C7", urgent: true  };
-  if (days === 1) return { label: "Due tomorrow",     color: "#D97706", bg: "#FEF3C7", urgent: false };
+  if (hours < 24) return { label: t("studentHome.dueToday"),        color: "#D97706", bg: "#FEF3C7", urgent: true  };
+  if (days === 1) return { label: t("studentHome.dueTomorrow"),     color: "#D97706", bg: "#FEF3C7", urgent: false };
   if (days < 7)   return { label: `${days}d left`,   color: "#059669", bg: "#ECFDF5", urgent: false };
 
   const weeks = Math.floor(days / 7);
@@ -110,6 +112,7 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
 };
 
 const getSubmissionStatus = (hw) => {
+  const { t } = useTranslation();
   const hasSubmission = !!hw.submission_id;
   const isGraded      = hasSubmission && hw.submission_score != null;
 
@@ -129,7 +132,7 @@ const getSubmissionStatus = (hw) => {
   if (hasSubmission) {
     return {
       type:  "submitted",
-      label: "Submitted — awaiting grade",
+      label: t("studentHw.awaitingGrade"),
       color: "#4F46E5",
       bg:    "#EEF2FF",
       icon:  "checkmark-circle-outline",
@@ -143,7 +146,7 @@ const getSubmissionStatus = (hw) => {
   if (isPast && noLate) {
     return {
       type:  "closed",
-      label: "Deadline passed",
+      label: t("studentHw.deadlinePassed"),
       color: "#DC2626",
       bg:    "#FEE2E2",
       icon:  "lock-closed-outline",
@@ -152,7 +155,7 @@ const getSubmissionStatus = (hw) => {
 
   return {
     type:  "pending",
-    label: isPast ? "Not submitted (late)" : "Not submitted",
+    label: isPast ? t("studentHw.notSubmittedLate") : t("studentHw.notSubmitted"),
     color: isPast ? "#D97706" : "#6B7280",
     bg:    isPast ? "#FEF3C7" : "#F3F4F6",
     icon:  "document-outline",
@@ -169,6 +172,7 @@ const SubmitModal = memo(({
   onClose,
   onSubmitted,
 }) => {
+  const { t } = useTranslation();
   const [text,       setText]       = useState(homework?.submission_text || "");
   const [submitting, setSubmitting] = useState(false);
 
@@ -186,19 +190,19 @@ const SubmitModal = memo(({
 
   const handleSubmit = async () => {
     if (!text.trim()) {
-      Alert.alert("Required", "Please write your response before submitting.");
+      Alert.alert(t("studentHw.requiredTitle"), t("studentHw.writeFirst"));
       return;
     }
 
     Alert.alert(
-      isResubmit ? "Resubmit?" : "Submit Assignment",
+      isResubmit ? t("studentHw.resubmitTitle") : t("studentHw.submitTitle"),
       isResubmit
-        ? "This will replace your previous submission. Continue?"
-        : "Are you sure you want to submit?",
+        ? t("studentHw.resubmitBody")
+        : t("studentHw.submitBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:    isResubmit ? "Resubmit" : "Submit",
+          text:    isResubmit ? t("studentHw.resubmit") : t("studentHw.submit"),
           style:   "default",
           onPress: async () => {
             setSubmitting(true);
@@ -210,9 +214,9 @@ const SubmitModal = memo(({
               });
               onSubmitted(homework.id, text.trim());
               onClose();
-              Alert.alert("✅ Submitted!", "Your assignment has been submitted successfully.");
+              Alert.alert(t("studentHw.submittedTitle"), t("studentHw.submittedBody"));
             } catch (err) {
-              Alert.alert("Error", err.message || "Could not submit. Please try again.");
+              Alert.alert(t("studentHw.errTitle"), err.message || t("studentHw.submitFailed"));
             } finally {
               setSubmitting(false);
             }
@@ -256,25 +260,25 @@ const SubmitModal = memo(({
               {[
                 {
                   icon:  "school-outline",
-                  label: "Subject",
+                  label: t("studentHw.subject"),
                   value: homework.subject_name || "—",
                   color: "#4F46E5", bg: "#EEF2FF",
                 },
                 {
                   icon:  "star-outline",
-                  label: "Max Score",
+                  label: t("studentHw.maxScore"),
                   value: homework.max_score ?? 100,
                   color: "#D97706", bg: "#FEF3C7",
                 },
                 {
                   icon:  "calendar-outline",
-                  label: "Due Date",
-                  value: homework.due_date ? formatDate(homework.due_date) : "No deadline",
+                  label: t("studentHw.dueDate"),
+                  value: homework.due_date ? formatDate(homework.due_date) : t("studentHome.dueNoDeadline"),
                   color: due.color, bg: due.bg,
                 },
                 {
                   icon:  "time-outline",
-                  label: "Due Time",
+                  label: t("studentHw.dueTime"),
                   value: homework.due_date ? formatTime(homework.due_date) : "—",
                   color: due.color, bg: due.bg,
                 },
@@ -298,7 +302,7 @@ const SubmitModal = memo(({
             {/* Description */}
             {homework.description ? (
               <View style={modalStyles.descBox}>
-                <Text style={modalStyles.descLabel}>Description</Text>
+                <Text style={modalStyles.descLabel}>{t("common.description")}</Text>
                 <Text style={modalStyles.descText}>{homework.description}</Text>
               </View>
             ) : null}
@@ -308,7 +312,7 @@ const SubmitModal = memo(({
               <View style={modalStyles.instructBox}>
                 <View style={modalStyles.instructHeader}>
                   <Ionicons name="information-circle-outline" size={16} color="#4F46E5" />
-                  <Text style={modalStyles.instructTitle}>Instructions</Text>
+                  <Text style={modalStyles.instructTitle}>{t("studentHw.instructions")}</Text>
                 </View>
                 <Text style={modalStyles.instructText}>{homework.instructions}</Text>
               </View>
@@ -338,7 +342,7 @@ const SubmitModal = memo(({
                   <View style={modalStyles.feedbackBox}>
                     <View style={modalStyles.feedbackHeader}>
                       <Ionicons name="chatbubble-outline" size={14} color="#059669" />
-                      <Text style={modalStyles.feedbackTitle}>Teacher Feedback</Text>
+                      <Text style={modalStyles.feedbackTitle}>{t("studentHw.feedback")}</Text>
                     </View>
                     <Text style={modalStyles.feedbackText}>
                       {homework.submission_feedback}
@@ -352,7 +356,7 @@ const SubmitModal = memo(({
             {homework.submission_text && !isGraded ? (
               <View style={modalStyles.prevSubmission}>
                 <Text style={modalStyles.prevSubmissionLabel}>
-                  Your previous response:
+                  {t("studentHw.prevResponse")}
                 </Text>
                 <Text style={modalStyles.prevSubmissionText}>
                   {homework.submission_text}
@@ -370,14 +374,14 @@ const SubmitModal = memo(({
             {!isGraded && !isClosed && (
               <View style={modalStyles.responseSection}>
                 <Text style={modalStyles.responseLabel}>
-                  {isResubmit ? "Update your response" : "Your Response"}
+                  {isResubmit ? t("studentHw.updatePh") : t("studentHw.yourResponse")}
                   <Text style={{ color: "#DC2626" }}> *</Text>
                 </Text>
 
                 {due.urgent && !due.isPast && (
                   <View style={modalStyles.warnBanner}>
                     <Ionicons name="warning-outline" size={14} color="#DC2626" />
-                    <Text style={modalStyles.warnText}>Deadline is very soon!</Text>
+                    <Text style={modalStyles.warnText}>{t("studentHw.soonWarn")}</Text>
                   </View>
                 )}
 
@@ -385,7 +389,7 @@ const SubmitModal = memo(({
                   <View style={[modalStyles.warnBanner, { backgroundColor: "#FEF3C7", borderColor: "#FDE68A" }]}>
                     <Ionicons name="warning-outline" size={14} color="#D97706" />
                     <Text style={[modalStyles.warnText, { color: "#92400E" }]}>
-                      Deadline passed — this will be marked as late
+                      {t("studentHw.lateWarn")}
                     </Text>
                   </View>
                 )}
@@ -394,7 +398,7 @@ const SubmitModal = memo(({
                   style={modalStyles.responseInput}
                   value={text}
                   onChangeText={setText}
-                  placeholder="Write your answer here..."
+                  placeholder={t("studentHw.answerPh")}
                   placeholderTextColor="#9CA3AF"
                   multiline
                   numberOfLines={8}
@@ -429,7 +433,7 @@ const SubmitModal = memo(({
                       color="#FFF"
                     />
                     <Text style={modalStyles.submitBtnText}>
-                      {isResubmit ? "Update Submission" : "Submit Assignment"}
+                      {isResubmit ? t("studentHw.updateCta") : t("studentHw.submitTitle")}
                     </Text>
                   </>
                 )}
@@ -442,7 +446,7 @@ const SubmitModal = memo(({
               <View style={modalStyles.gradedFooter}>
                 <Ionicons name="ribbon" size={20} color="#059669" />
                 <Text style={modalStyles.gradedFooterText}>
-                  This assignment has been graded
+                  {t("studentHw.gradedNote")}
                 </Text>
               </View>
             </View>
@@ -470,6 +474,7 @@ const SubmitModal = memo(({
 
 const HomeworkCard = memo(
   ({ item, onPress }) => {
+    const { t } = useTranslation();
     const subStatus = getSubmissionStatus(item);
     const due       = getDueStatus(item.due_date, item.submission_submitted_at);
 
@@ -524,12 +529,12 @@ const HomeworkCard = memo(
           {item.allow_late ? (
             <View style={[styles.bottomChip, { backgroundColor: "#F0FDF4" }]}>
               <Ionicons name="checkmark-outline" size={12} color="#059669" />
-              <Text style={[styles.bottomChipText, { color: "#059669" }]}>Late OK</Text>
+              <Text style={[styles.bottomChipText, { color: "#059669" }]}>{t("studentHw.lateOk")}</Text>
             </View>
           ) : (
             <View style={[styles.bottomChip, { backgroundColor: "#FEF2F2" }]}>
               <Ionicons name="close-outline" size={12} color="#DC2626" />
-              <Text style={[styles.bottomChipText, { color: "#DC2626" }]}>No late</Text>
+              <Text style={[styles.bottomChipText, { color: "#DC2626" }]}>{t("studentHw.noLate")}</Text>
             </View>
           )}
 
@@ -539,10 +544,10 @@ const HomeworkCard = memo(
               {subStatus.type === "graded"
                 ? `${item.submission_score}/${item.max_score ?? 100}`
                 : subStatus.type === "submitted"
-                ? "Submitted"
+                ? t("studentHome.hwSubmitted")
                 : subStatus.type === "closed"
-                ? "Closed"
-                : "Pending"}
+                ? t("studentHw.closed")
+                : t("studentHome.hwPending")}
             </Text>
           </View>
         </View>
@@ -550,12 +555,12 @@ const HomeworkCard = memo(
         {/* Tap hint */}
         <Text style={styles.tapHint}>
           {subStatus.type === "graded"
-            ? "Tap to view grade →"
+            ? t("studentHw.tapGrade")
             : subStatus.type === "submitted"
-            ? "Tap to view or update →"
+            ? t("studentHw.tapUpdate")
             : subStatus.type === "closed"
-            ? "Deadline passed — no submissions"
-            : "Tap to submit →"}
+            ? t("studentHw.tapClosed")
+            : t("studentHw.tapSubmit")}
         </Text>
       </TouchableOpacity>
     );
@@ -573,6 +578,7 @@ const HomeworkCard = memo(
 // ─────────────────────────────────────────────────────────────
 
 export default function StudentHomeworkScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const schoolId = useAuthStore((s) => s.user?.schoolId);
@@ -722,7 +728,7 @@ export default function StudentHomeworkScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading homework…</Text>
+        <Text style={styles.loadingText}>{t("studentHw.loading")}</Text>
       </View>
     );
   }
@@ -737,7 +743,7 @@ export default function StudentHomeworkScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Homework</Text>
+          <Text style={styles.headerTitle}>{t("studentHw.listTitle")}</Text>
           <Text style={styles.headerSub}>
             {stats.pending > 0
               ? `${stats.pending} pending · ${stats.submitted} submitted`
@@ -757,17 +763,17 @@ export default function StudentHomeworkScreen() {
           <Text style={styles.urgentBannerText}>
             {stats.urgent} assignment{stats.urgent !== 1 ? "s" : ""} due very soon!
           </Text>
-          <Text style={styles.urgentBannerLink}>View →</Text>
+          <Text style={styles.urgentBannerLink}>{t("studentHw.viewArrow")}</Text>
         </TouchableOpacity>
       )}
 
       {/* Stats row */}
       <View style={styles.statsRow}>
         {[
-          { label: "Total",     value: stats.total,     color: "#4F46E5", bg: "#EEF2FF" },
-          { label: "Pending",   value: stats.pending,   color: "#D97706", bg: "#FEF3C7" },
-          { label: "Submitted", value: stats.submitted, color: "#059669", bg: "#ECFDF5" },
-          { label: "Graded",    value: stats.graded,    color: "#7C3AED", bg: "#F5F3FF" },
+          { label: t("common.total"),     value: stats.total,     color: "#4F46E5", bg: "#EEF2FF" },
+          { label: t("studentHome.hwPending"),   value: stats.pending,   color: "#D97706", bg: "#FEF3C7" },
+          { label: t("studentHome.hwSubmitted"), value: stats.submitted, color: "#059669", bg: "#ECFDF5" },
+          { label: t("studentHw.graded"),    value: stats.graded,    color: "#7C3AED", bg: "#F5F3FF" },
         ].map((s) => (
           <View key={s.label} style={[styles.statCard, { backgroundColor: s.bg }]}>
             <Text style={[styles.statValue, { color: s.color }]}>{s.value}</Text>
@@ -783,7 +789,7 @@ export default function StudentHomeworkScreen() {
           style={styles.searchInput}
           value={search}
           onChangeText={setSearch}
-          placeholder="Search homework..."
+          placeholder={t("studentHw.searchPh")}
           placeholderTextColor="#9CA3AF"
           returnKeyType="search"
         />
@@ -859,8 +865,8 @@ export default function StudentHomeworkScreen() {
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "all"
-                ? "Your teacher hasn't assigned any homework yet"
-                : "Check the other filters or pull to refresh"}
+                ? t("studentHw.emptySub")
+                : t("studentHw.emptyFilterSub")}
             </Text>
           </View>
         }

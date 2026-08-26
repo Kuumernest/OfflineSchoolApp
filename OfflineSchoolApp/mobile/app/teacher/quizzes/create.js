@@ -24,6 +24,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
   createQuiz,
   updateQuiz,
@@ -46,25 +47,25 @@ import {
 // ─────────────────────────────────────────────────────────────
 
 const TABS = [
-  { id: "details",   label: "Details",   icon: "information-circle-outline" },
-  { id: "questions", label: "Questions", icon: "list-outline"                },
-  { id: "settings",  label: "Settings",  icon: "settings-outline"            },
+  { id: "details",   icon: "information-circle-outline" },
+  { id: "questions", icon: "list-outline"               },
+  { id: "settings",  icon: "settings-outline"           },
 ];
 
 const QUESTION_TYPES = [
-  { value: "multiple_choice",   label: "Multiple Choice",   icon: "radio-button-on-outline"  },
-  { value: "multiple_select",   label: "Multiple Select",   icon: "checkbox-outline"          },
-  { value: "true_false",        label: "True / False",      icon: "swap-horizontal-outline"   },
-  { value: "fill_in_the_blank", label: "Fill in the Blank", icon: "create-outline"            },
+  { value: "multiple_choice",   icon: "radio-button-on-outline" },
+  { value: "multiple_select",   icon: "checkbox-outline"        },
+  { value: "true_false",        icon: "swap-horizontal-outline" },
+  { value: "fill_in_the_blank", icon: "create-outline"          },
 ];
 
 const DIFFICULTIES = ["easy", "medium", "hard"];
 
 const FEEDBACK_OPTIONS = [
-  { value: "immediately",    label: "After each question" },
-  { value: "on_completion",  label: "After submitting"    },
-  { value: "after_deadline", label: "After deadline"      },
-  { value: "never",          label: "Never"               },
+  { value: "immediately"    },
+  { value: "on_completion"  },
+  { value: "after_deadline" },
+  { value: "never"          },
 ];
 
 const DEFAULT_QUIZ = {
@@ -104,6 +105,21 @@ const DEFAULT_QUESTION = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
+/** Screen labels for the question-type enum. The enum values never change. */
+const questionTypeLabels = (t) => ({
+  multiple_choice:   t("quizCreate.typeMultipleChoice"),
+  multiple_select:   t("quizCreate.typeMultipleSelect"),
+  true_false:        t("quizCreate.typeTrueFalse"),
+  fill_in_the_blank: t("quizCreate.typeFillBlank"),
+});
+
+/** Screen labels for the difficulty enum. */
+const difficultyLabels = (t) => ({
+  easy:   t("quizCreate.diffEasy"),
+  medium: t("quizCreate.diffMedium"),
+  hard:   t("quizCreate.diffHard"),
+});
+
 const normaliseQuestionForForm = (q) => {
   if (!q) return { ...DEFAULT_QUESTION };
 
@@ -137,27 +153,37 @@ const normaliseQuestionForForm = (q) => {
 // SMALL COMPONENTS
 // ─────────────────────────────────────────────────────────────
 
-const TabBar = ({ active, onChange, tabs }) => (
-  <View style={styles.tabBar}>
-    {tabs.map((tab) => (
-      <TouchableOpacity
-        key={tab.id}
-        style={[styles.tab, active === tab.id && styles.tabActive]}
-        onPress={() => onChange(tab.id)}
-        activeOpacity={0.7}
-      >
-        <Ionicons
-          name={tab.icon}
-          size={16}
-          color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
-        />
-        <Text style={[styles.tabLabel, active === tab.id && styles.tabLabelActive]}>
-          {tab.label}
-        </Text>
-      </TouchableOpacity>
-    ))}
-  </View>
-);
+const TabBar = ({ active, onChange, tabs }) => {
+  const { t } = useTranslation();
+
+  const tabLabels = {
+    details:   t("quizCreate.tabDetails"),
+    questions: t("quizCreate.tabQuestions"),
+    settings:  t("quizCreate.tabSettings"),
+  };
+
+  return (
+    <View style={styles.tabBar}>
+      {tabs.map((tab) => (
+        <TouchableOpacity
+          key={tab.id}
+          style={[styles.tab, active === tab.id && styles.tabActive]}
+          onPress={() => onChange(tab.id)}
+          activeOpacity={0.7}
+        >
+          <Ionicons
+            name={tab.icon}
+            size={16}
+            color={active === tab.id ? "#4F46E5" : "#9CA3AF"}
+          />
+          <Text style={[styles.tabLabel, active === tab.id && styles.tabLabelActive]}>
+            {tabLabels[tab.id]}
+          </Text>
+        </TouchableOpacity>
+      ))}
+    </View>
+  );
+};
 
 const Field = ({
   label,
@@ -216,6 +242,10 @@ const SectionHeader = ({ title }) => (
 // ─────────────────────────────────────────────────────────────
 
 const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
+  const { t }      = useTranslation();
+  const typeLabels = questionTypeLabels(t);
+  const diffLabels = difficultyLabels(t);
+
   const [form, setForm] = useState(() => normaliseQuestionForForm(initial));
 
   useEffect(() => {
@@ -279,28 +309,31 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
 
   const handleSave = useCallback(() => {
     if (!form.question_text.trim()) {
-      Alert.alert("Validation", "Question text is required");
+      Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errQuestionText"));
       return;
     }
     if (form.question_type === "fill_in_the_blank") {
       if (!form.options[0]?.option_text?.trim()) {
-        Alert.alert("Validation", "Correct answer is required");
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errCorrectAnswer"));
         return;
       }
     } else {
       const hasCorrect = form.options.some((o) => o.is_correct);
       if (!hasCorrect) {
-        Alert.alert("Validation", "At least one correct answer is required");
+        Alert.alert(
+          t("quizCreate.validationTitle"),
+          t("quizCreate.errAtLeastOneCorrect")
+        );
         return;
       }
       const hasText = form.options.every((o) => o.option_text.trim());
       if (!hasText) {
-        Alert.alert("Validation", "All options must have text");
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errAllOptionsText"));
         return;
       }
     }
     onSave(form);
-  }, [form, onSave]);
+  }, [form, onSave, t]);
 
   const isTrueFalse   = form.question_type === "true_false";
   const isFillInBlank = form.question_type === "fill_in_the_blank";
@@ -308,55 +341,55 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
 
   return (
     <View style={styles.questionForm}>
-      <Text style={styles.fieldLabel}>Question Type</Text>
+      <Text style={styles.fieldLabel}>{t("quizCreate.questionTypeLabel")}</Text>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.typeRow}
       >
-        {QUESTION_TYPES.map((t) => (
+        {QUESTION_TYPES.map((qt) => (
           <TouchableOpacity
-            key={t.value}
+            key={qt.value}
             style={[
               styles.typeChip,
-              form.question_type === t.value && styles.typeChipActive,
+              form.question_type === qt.value && styles.typeChipActive,
             ]}
-            onPress={() => set("question_type", t.value)}
+            onPress={() => set("question_type", qt.value)}
           >
             <Ionicons
-              name={t.icon}
+              name={qt.icon}
               size={14}
-              color={form.question_type === t.value ? "#4F46E5" : "#9CA3AF"}
+              color={form.question_type === qt.value ? "#4F46E5" : "#9CA3AF"}
             />
             <Text
               style={[
                 styles.typeChipText,
-                form.question_type === t.value && styles.typeChipTextActive,
+                form.question_type === qt.value && styles.typeChipTextActive,
               ]}
             >
-              {t.label}
+              {typeLabels[qt.value]}
             </Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
       <Field
-        label="Question"
+        label={t("quizCreate.questionLabel")}
         value={form.question_text}
         onChange={(v) => set("question_text", v)}
-        placeholder="Enter your question..."
+        placeholder={t("quizCreate.questionPlaceholder")}
         multiline
         required
       />
 
       {isFillInBlank && (
         <Field
-          label="Correct Answer"
+          label={t("quizCreate.correctAnswerLabel")}
           value={form.options[0]?.option_text || ""}
           onChange={(v) =>
             set("options", [{ option_text: v, is_correct: true }])
           }
-          placeholder="Enter the correct answer..."
+          placeholder={t("quizCreate.correctAnswerPlaceholder")}
           required
         />
       )}
@@ -364,9 +397,11 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
       {showOptions && (
         <View style={styles.optionsSection}>
           <Text style={styles.fieldLabel}>
-            Answer Options
+            {t("quizCreate.answerOptionsLabel")}
             {form.question_type === "multiple_select" && (
-              <Text style={styles.fieldHint}> (check all that apply)</Text>
+              <Text style={styles.fieldHint}>
+                {" " + t("quizCreate.checkAllHint")}
+              </Text>
             )}
           </Text>
 
@@ -397,7 +432,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                 ]}
                 value={opt.option_text}
                 onChangeText={(v) => setOption(i, "option_text", v)}
-                placeholder={`Option ${i + 1}`}
+                placeholder={t("quizCreate.optionPlaceholder", { number: i + 1 })}
                 placeholderTextColor="#9CA3AF"
                 editable={!isTrueFalse}
               />
@@ -417,7 +452,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
           {!isTrueFalse && form.options.length < 6 && (
             <TouchableOpacity style={styles.addOptionBtn} onPress={addOption}>
               <Ionicons name="add-circle-outline" size={18} color="#4F46E5" />
-              <Text style={styles.addOptionText}>Add Option</Text>
+              <Text style={styles.addOptionText}>{t("quizCreate.addOption")}</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -425,7 +460,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
 
       <View style={styles.metaRow}>
         <View style={[styles.field, { flex: 1 }]}>
-          <Text style={styles.fieldLabel}>Difficulty</Text>
+          <Text style={styles.fieldLabel}>{t("quizCreate.difficultyLabel")}</Text>
           <View style={styles.diffRow}>
             {DIFFICULTIES.map((d) => (
               <TouchableOpacity
@@ -442,7 +477,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                     form.difficulty === d && styles.diffChipTextActive,
                   ]}
                 >
-                  {d.charAt(0).toUpperCase() + d.slice(1)}
+                  {diffLabels[d]}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -450,7 +485,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
         </View>
 
         <View style={[styles.field, { width: 70 }]}>
-          <Text style={styles.fieldLabel}>Points</Text>
+          <Text style={styles.fieldLabel}>{t("quizCreate.pointsLabel")}</Text>
           <TextInput
             style={styles.fieldInput}
             value={String(form.points)}
@@ -461,16 +496,16 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
       </View>
 
       <Field
-        label="Explanation (shown after quiz)"
+        label={t("quizCreate.explanationLabel")}
         value={form.explanation}
         onChange={(v) => set("explanation", v)}
-        placeholder="Why is this answer correct? (optional)"
+        placeholder={t("quizCreate.explanationPlaceholder")}
         multiline
       />
 
       {categories.length > 0 && (
         <View style={styles.field}>
-          <Text style={styles.fieldLabel}>Category</Text>
+          <Text style={styles.fieldLabel}>{t("quizCreate.categoryLabel")}</Text>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
@@ -486,7 +521,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
                   !form.category_id && styles.typeChipTextActive,
                 ]}
               >
-                None
+                {t("quizCreate.categoryNone")}
               </Text>
             </TouchableOpacity>
             {categories.map((cat) => (
@@ -518,7 +553,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
           onPress={onCancel}
           disabled={saving}
         >
-          <Text style={styles.cancelBtnText}>Cancel</Text>
+          <Text style={styles.cancelBtnText}>{t("quizCreate.cancel")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -531,7 +566,7 @@ const QuestionForm = ({ initial, categories, onSave, onCancel, saving }) => {
           ) : (
             <>
               <Ionicons name="checkmark" size={18} color="#FFF" />
-              <Text style={styles.saveBtnText}>Save Question</Text>
+              <Text style={styles.saveBtnText}>{t("quizCreate.saveQuestion")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -549,7 +584,12 @@ const QuestionListItem = React.memo(({
   index,
   onEdit,
   onRemove,
-}) => (
+}) => {
+  const { t }      = useTranslation();
+  const typeLabels = questionTypeLabels(t);
+  const diffLabels = difficultyLabels(t);
+
+  return (
   <View style={styles.quizQuestionCard}>
     <View style={styles.quizQuestionNum}>
       <Text style={styles.quizQuestionNumText}>{index + 1}</Text>
@@ -561,13 +601,16 @@ const QuestionListItem = React.memo(({
       </Text>
       <View style={styles.quizQuestionMeta}>
         <Text style={styles.quizQuestionMetaText}>
-          {item.question_type?.replace(/_/g, " ")}
+          {typeLabels[item.question_type] ??
+            item.question_type?.replace(/_/g, " ")}
         </Text>
         <Text style={styles.quizQuestionMetaDot}>·</Text>
-        <Text style={styles.quizQuestionMetaText}>{item.difficulty}</Text>
+        <Text style={styles.quizQuestionMetaText}>
+          {diffLabels[item.difficulty] ?? item.difficulty}
+        </Text>
         <Text style={styles.quizQuestionMetaDot}>·</Text>
         <Text style={styles.quizQuestionMetaText}>
-          {item.points_override ?? item.points ?? 1} pt
+          {item.points_override ?? item.points ?? 1} {t("quizCreate.ptShort")}
         </Text>
       </View>
     </View>
@@ -589,33 +632,41 @@ const QuestionListItem = React.memo(({
       </TouchableOpacity>
     </View>
   </View>
-));
+  );
+});
 
 // ─────────────────────────────────────────────────────────────
 // BANK QUESTION LIST ITEM
 // ─────────────────────────────────────────────────────────────
 
-const BankQuestionItem = React.memo(({ item, onAdd }) => (
-  <TouchableOpacity
-    style={styles.bankQuestionCard}
-    onPress={() => onAdd(item)}
-    activeOpacity={0.7}
-  >
-    <View style={{ flex: 1 }}>
-      <Text style={styles.bankQuestionText} numberOfLines={2}>
-        {item.question_text}
-      </Text>
-      <Text style={styles.bankQuestionMeta}>
-        {item.question_type.replace(/_/g, " ")}
-        {" · "}{item.difficulty}
-        {" · "}{item.points} pt
-      </Text>
-    </View>
-    <View style={styles.addFromBankBtn}>
-      <Ionicons name="add" size={18} color="#4F46E5" />
-    </View>
-  </TouchableOpacity>
-));
+const BankQuestionItem = React.memo(({ item, onAdd }) => {
+  const { t }      = useTranslation();
+  const typeLabels = questionTypeLabels(t);
+  const diffLabels = difficultyLabels(t);
+
+  return (
+    <TouchableOpacity
+      style={styles.bankQuestionCard}
+      onPress={() => onAdd(item)}
+      activeOpacity={0.7}
+    >
+      <View style={{ flex: 1 }}>
+        <Text style={styles.bankQuestionText} numberOfLines={2}>
+          {item.question_text}
+        </Text>
+        <Text style={styles.bankQuestionMeta}>
+          {typeLabels[item.question_type] ??
+            item.question_type.replace(/_/g, " ")}
+          {" · "}{diffLabels[item.difficulty] ?? item.difficulty}
+          {" · "}{item.points} {t("quizCreate.ptShort")}
+        </Text>
+      </View>
+      <View style={styles.addFromBankBtn}>
+        <Ionicons name="add" size={18} color="#4F46E5" />
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 // ─────────────────────────────────────────────────────────────
 // MAIN SCREEN
@@ -624,6 +675,7 @@ const BankQuestionItem = React.memo(({ item, onAdd }) => (
 export default function CreateQuizScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
+  const { t }  = useTranslation();
   const user   = useAuthStore((s) => s.user);
 
   const schoolId  = user?.schoolId;
@@ -775,15 +827,15 @@ export default function CreateQuizScreen() {
       const currentSubjectId = quizForm.subject_id;
 
       if (!quizForm.title.trim()) {
-        Alert.alert("Validation", "Quiz title is required");
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errQuizTitle"));
         return;
       }
       if (!currentClassId) {
-        Alert.alert("Validation", "Please select a class");
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errSelectClass"));
         return;
       }
       if (!currentSubjectId) {
-        Alert.alert("Validation", "Please select a subject");
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errSelectSubject"));
         return;
       }
 
@@ -835,21 +887,26 @@ export default function CreateQuizScreen() {
         }
 
         Alert.alert(
-          "Saved",
-          andPublish ? "Quiz published!" : "Quiz saved as draft",
+          t("quizCreate.savedTitle"),
+          andPublish
+            ? t("quizCreate.quizPublished")
+            : t("quizCreate.quizSavedDraft"),
           [{
-            text: "OK",
+            text: t("quizCreate.ok"),
             onPress: () => { if (andPublish) router.back(); },
           }]
         );
       } catch (err) {
         console.warn("Save quiz error:", err.message);
-        Alert.alert("Error", err.message || "Could not save quiz. Please try again.");
+        Alert.alert(
+          t("quizCreate.errorTitle"),
+          err.message || t("quizCreate.errSaveQuiz")
+        );
       } finally {
         setSaving(false);
       }
     },
-    [quizForm, quizId, schoolId, teacherId, router]
+    [quizForm, quizId, schoolId, teacherId, router, t]
   );
 
   // ── Save question ─────────────────────────────────────────
@@ -902,12 +959,15 @@ export default function CreateQuizScreen() {
         setEditingQuestion(null);
       } catch (err) {
         console.warn("Save question error:", err.message);
-        Alert.alert("Error", err.message || "Could not save question. Please try again.");
+        Alert.alert(
+          t("quizCreate.errorTitle"),
+          err.message || t("quizCreate.errSaveQuestion")
+        );
       } finally {
         setSavingQuestion(false);
       }
     },
-    [editingQuestion, quizId, schoolId, teacherId, savingQuestion]
+    [editingQuestion, quizId, schoolId, teacherId, savingQuestion, t]
   );
 
   // ── Add from bank ─────────────────────────────────────────
@@ -915,14 +975,17 @@ export default function CreateQuizScreen() {
     async (question) => {
       if (!quizId) {
         Alert.alert(
-          "Save Quiz First",
-          "Please save the quiz details before adding questions."
+          t("quizCreate.saveFirstTitle"),
+          t("quizCreate.saveFirstBody")
         );
         return;
       }
 
       if (quizQuestions.some((q) => q.id === question.id)) {
-        Alert.alert("Already Added", "This question is already in the quiz.");
+        Alert.alert(
+          t("quizCreate.alreadyAddedTitle"),
+          t("quizCreate.alreadyAddedBody")
+        );
         return;
       }
 
@@ -933,22 +996,22 @@ export default function CreateQuizScreen() {
           return [...prev, question];
         });
       } catch {
-        Alert.alert("Error", "Could not add question.");
+        Alert.alert(t("quizCreate.errorTitle"), t("quizCreate.errAddQuestion"));
       }
     },
-    [quizId, quizQuestions]
+    [quizId, quizQuestions, t]
   );
 
   const handleRemoveFromQuiz = useCallback(
     async (question) => {
       if (!quizId) return;
       Alert.alert(
-        "Remove Question",
-        "Remove this question from the quiz?",
+        t("quizCreate.removeQuestionTitle"),
+        t("quizCreate.removeQuestionBody"),
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("quizCreate.cancel"), style: "cancel" },
           {
-            text:  "Remove",
+            text:  t("quizCreate.remove"),
             style: "destructive",
             onPress: async () => {
               try {
@@ -957,14 +1020,17 @@ export default function CreateQuizScreen() {
                   prev.filter((q) => q.id !== question.id)
                 );
               } catch {
-                Alert.alert("Error", "Could not remove question.");
+                Alert.alert(
+                  t("quizCreate.errorTitle"),
+                  t("quizCreate.errRemoveQuestion")
+                );
               }
             },
           },
         ]
       );
     },
-    [quizId]
+    [quizId, t]
   );
 
   const openEditQuestion  = useCallback((q) => {
@@ -1005,12 +1071,12 @@ export default function CreateQuizScreen() {
       contentContainerStyle={styles.tabContent}
       keyboardShouldPersistTaps="handled"
     >
-      <SectionHeader title="Basic Information" />
+      <SectionHeader title={t("quizCreate.sectionBasic")} />
 
       {/* CLASS PICKER */}
       <View style={styles.field}>
         <Text style={styles.fieldLabel}>
-          Class <Text style={{ color: "#DC2626" }}>*</Text>
+          {t("quizCreate.classLabel")} <Text style={{ color: "#DC2626" }}>*</Text>
         </Text>
         {__DEV__ && quizForm.class_id && (
           <Text style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>
@@ -1018,7 +1084,7 @@ export default function CreateQuizScreen() {
           </Text>
         )}
         {classes.length === 0 ? (
-          <Text style={styles.pickerEmpty}>No classes assigned to you</Text>
+          <Text style={styles.pickerEmpty}>{t("quizCreate.noClasses")}</Text>
         ) : (
           <ScrollView
             horizontal
@@ -1052,7 +1118,7 @@ export default function CreateQuizScreen() {
       {quizForm.class_id && (
         <View style={styles.field}>
           <Text style={styles.fieldLabel}>
-            Subject <Text style={{ color: "#DC2626" }}>*</Text>
+            {t("quizCreate.subjectLabel")} <Text style={{ color: "#DC2626" }}>*</Text>
           </Text>
           {__DEV__ && quizForm.subject_id && (
             <Text style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 4 }}>
@@ -1061,7 +1127,7 @@ export default function CreateQuizScreen() {
           )}
           {subjects.length === 0 ? (
             <Text style={styles.pickerEmpty}>
-              No subjects assigned to you for this class
+              {t("quizCreate.noSubjects")}
             </Text>
           ) : (
             <ScrollView
@@ -1094,36 +1160,36 @@ export default function CreateQuizScreen() {
       )}
 
       <Field
-        label="Quiz Title"
+        label={t("quizCreate.quizTitleLabel")}
         value={quizForm.title}
         onChange={(v) => setQuizField("title", v)}
-        placeholder="e.g. Chapter 5 Review"
+        placeholder={t("quizCreate.quizTitlePlaceholder")}
         required
       />
 
       <Field
-        label="Description"
+        label={t("quizCreate.descriptionLabel")}
         value={quizForm.description}
         onChange={(v) => setQuizField("description", v)}
-        placeholder="Brief description of the quiz..."
+        placeholder={t("quizCreate.descriptionPlaceholder")}
         multiline
       />
 
       <Field
-        label="Instructions"
+        label={t("quizCreate.instructionsLabel")}
         value={quizForm.instructions}
         onChange={(v) => setQuizField("instructions", v)}
-        placeholder="Instructions shown to students before starting..."
+        placeholder={t("quizCreate.instructionsPlaceholder")}
         multiline
       />
 
-      <SectionHeader title="Timing" />
+      <SectionHeader title={t("quizCreate.sectionTiming")} />
 
       <Field
-        label="Time Limit (minutes)"
+        label={t("quizCreate.timeLimitLabel")}
         value={quizForm.time_limit_minutes}
         onChange={(v) => setQuizField("time_limit_minutes", v)}
-        placeholder="Leave blank for no limit"
+        placeholder={t("quizCreate.timeLimitPlaceholder")}
         keyboardType="number-pad"
       />
 
@@ -1138,7 +1204,7 @@ export default function CreateQuizScreen() {
         ) : (
           <>
             <Ionicons name="save-outline" size={18} color="#FFF" />
-            <Text style={styles.primaryBtnText}>Save Draft</Text>
+            <Text style={styles.primaryBtnText}>{t("quizCreate.saveDraft")}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -1158,7 +1224,7 @@ export default function CreateQuizScreen() {
         ) : (
           <>
             <Ionicons name="globe-outline" size={18} color="#FFF" />
-            <Text style={styles.primaryBtnText}>Save & Publish</Text>
+            <Text style={styles.primaryBtnText}>{t("quizCreate.savePublish")}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -1179,12 +1245,14 @@ export default function CreateQuizScreen() {
         >
           <View style={styles.formHeaderRow}>
             <Text style={styles.formHeaderTitle}>
-              {editingQuestion ? "Edit Question" : "New Question"}
+              {editingQuestion
+                ? t("quizCreate.editQuestion")
+                : t("quizCreate.newQuestion")}
             </Text>
             {editingQuestion && (
               <View style={styles.editingBadge}>
                 <Ionicons name="create-outline" size={12} color="#4F46E5" />
-                <Text style={styles.editingBadgeText}>Editing</Text>
+                <Text style={styles.editingBadgeText}>{t("quizCreate.editingBadge")}</Text>
               </View>
             )}
           </View>
@@ -1211,19 +1279,19 @@ export default function CreateQuizScreen() {
         <View style={styles.questionTabContainer}>
           <View style={styles.bankPickerHeader}>
             <Text style={styles.bankPickerTitle}>
-              Question Bank ({notAdded.length})
+              {t("quizCreate.bankTitle", { count: notAdded.length })}
             </Text>
             <TouchableOpacity onPress={() => setShowBankPicker(false)}>
-              <Text style={styles.bankPickerClose}>Done</Text>
+              <Text style={styles.bankPickerClose}>{t("quizCreate.done")}</Text>
             </TouchableOpacity>
           </View>
 
           {notAdded.length === 0 ? (
             <View style={styles.emptyState}>
               <Ionicons name="list-outline" size={40} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>No more questions</Text>
+              <Text style={styles.emptyTitle}>{t("quizCreate.bankEmptyTitle")}</Text>
               <Text style={styles.emptySubtitle}>
-                All bank questions are already added
+                {t("quizCreate.bankEmptySub")}
               </Text>
             </View>
           ) : (
@@ -1255,7 +1323,7 @@ export default function CreateQuizScreen() {
             activeOpacity={0.8}
           >
             <Ionicons name="add-circle-outline" size={18} color="#4F46E5" />
-            <Text style={styles.questionTabBtnText}>New Question</Text>
+            <Text style={styles.questionTabBtnText}>{t("quizCreate.newQuestion")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -1268,7 +1336,7 @@ export default function CreateQuizScreen() {
           >
             <Ionicons name="library-outline" size={18} color="#059669" />
             <Text style={[styles.questionTabBtnText, { color: "#059669" }]}>
-              From Bank
+              {t("quizCreate.fromBank")}
             </Text>
           </TouchableOpacity>
         </View>
@@ -1276,12 +1344,15 @@ export default function CreateQuizScreen() {
         {/* ── Fixed: question count ── */}
         <View style={styles.questionCountRow}>
           <Text style={styles.questionCount}>
-            {quizQuestions.length} question
-            {quizQuestions.length !== 1 ? "s" : ""} in this quiz
+            {quizQuestions.length === 1
+              ? t("quizCreate.questionCountOne")
+              : t("quizCreate.questionCountMany", {
+                  count: quizQuestions.length,
+                })}
           </Text>
           {!quizId && (
             <Text style={styles.questionCountHint}>
-              Save quiz details first to attach questions
+              {t("quizCreate.attachHint")}
             </Text>
           )}
         </View>
@@ -1290,9 +1361,9 @@ export default function CreateQuizScreen() {
         {quizQuestions.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="help-circle-outline" size={48} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No questions yet</Text>
+            <Text style={styles.emptyTitle}>{t("quizCreate.noQuestionsTitle")}</Text>
             <Text style={styles.emptySubtitle}>
-              Create a new question or pick from your question bank
+              {t("quizCreate.noQuestionsSub")}
             </Text>
           </View>
         ) : (
@@ -1312,15 +1383,22 @@ export default function CreateQuizScreen() {
   };
 
   // ── Tab: Settings ─────────────────────────────────────────
+  const feedbackLabels = {
+    immediately:    t("quizCreate.feedbackImmediately"),
+    on_completion:  t("quizCreate.feedbackOnCompletion"),
+    after_deadline: t("quizCreate.feedbackAfterDeadline"),
+    never:          t("quizCreate.feedbackNever"),
+  };
+
   const renderSettingsTab = () => (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.tabContent}
     >
-      <SectionHeader title="Attempt Settings" />
+      <SectionHeader title={t("quizCreate.sectionAttempts")} />
 
       <Field
-        label="Max Attempts"
+        label={t("quizCreate.maxAttemptsLabel")}
         value={quizForm.max_attempts}
         onChange={(v) => setQuizField("max_attempts", v)}
         placeholder="1"
@@ -1328,37 +1406,37 @@ export default function CreateQuizScreen() {
       />
 
       <Field
-        label="Passing Score (%)"
+        label={t("quizCreate.passingScoreLabel")}
         value={quizForm.passing_score}
         onChange={(v) => setQuizField("passing_score", v)}
         placeholder="70"
         keyboardType="decimal-pad"
       />
 
-      <SectionHeader title="Delivery" />
+      <SectionHeader title={t("quizCreate.sectionDelivery")} />
 
       <ToggleRow
-        label="Shuffle Questions"
-        subtitle="Randomize question order for each student"
+        label={t("quizCreate.shuffleQuestions")}
+        subtitle={t("quizCreate.shuffleQuestionsSub")}
         value={quizForm.shuffle_questions}
         onChange={(v) => setQuizField("shuffle_questions", v)}
       />
 
       <ToggleRow
-        label="Shuffle Answer Options"
-        subtitle="Randomize option order for each student"
+        label={t("quizCreate.shuffleOptions")}
+        subtitle={t("quizCreate.shuffleOptionsSub")}
         value={quizForm.shuffle_options}
         onChange={(v) => setQuizField("shuffle_options", v)}
       />
 
       <ToggleRow
-        label="Allow Back Navigation"
-        subtitle="Students can go back to previous questions"
+        label={t("quizCreate.allowBacktrack")}
+        subtitle={t("quizCreate.allowBacktrackSub")}
         value={quizForm.allow_backtrack}
         onChange={(v) => setQuizField("allow_backtrack", v)}
       />
 
-      <SectionHeader title="Feedback" />
+      <SectionHeader title={t("quizCreate.sectionFeedback")} />
 
       {FEEDBACK_OPTIONS.map((opt) => (
         <TouchableOpacity
@@ -1377,20 +1455,20 @@ export default function CreateQuizScreen() {
               <View style={styles.radioInner} />
             )}
           </View>
-          <Text style={styles.radioLabel}>Show answers {opt.label}</Text>
+          <Text style={styles.radioLabel}>{feedbackLabels[opt.value]}</Text>
         </TouchableOpacity>
       ))}
 
       <ToggleRow
-        label="Show Score"
-        subtitle="Show the student their final score"
+        label={t("quizCreate.showScore")}
+        subtitle={t("quizCreate.showScoreSub")}
         value={quizForm.show_score}
         onChange={(v) => setQuizField("show_score", v)}
       />
 
       <ToggleRow
-        label="Show Explanations"
-        subtitle="Show explanations alongside answers"
+        label={t("quizCreate.showExplanations")}
+        subtitle={t("quizCreate.showExplanationsSub")}
         value={quizForm.show_explanation}
         onChange={(v) => setQuizField("show_explanation", v)}
       />
@@ -1406,7 +1484,7 @@ export default function CreateQuizScreen() {
         ) : (
           <>
             <Ionicons name="save-outline" size={18} color="#FFF" />
-            <Text style={styles.primaryBtnText}>Save Settings</Text>
+            <Text style={styles.primaryBtnText}>{t("quizCreate.saveSettings")}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -1420,7 +1498,7 @@ export default function CreateQuizScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading…</Text>
+        <Text style={styles.loadingText}>{t("quizCreate.loading")}</Text>
       </View>
     );
   }
@@ -1447,8 +1525,12 @@ export default function CreateQuizScreen() {
 
         <Text style={styles.headerTitle}>
           {showQuestionForm
-            ? editingQuestion ? "Edit Question" : "New Question"
-            : isEditing       ? "Edit Quiz"     : "Create Quiz"}
+            ? editingQuestion
+              ? t("quizCreate.editQuestion")
+              : t("quizCreate.newQuestion")
+            : isEditing
+              ? t("quizCreate.editQuiz")
+              : t("quizCreate.createQuiz")}
         </Text>
 
         {quizId && !showQuestionForm && !showBankPicker && (
@@ -1459,7 +1541,7 @@ export default function CreateQuizScreen() {
             activeOpacity={0.8}
           >
             <Ionicons name="globe-outline" size={16} color="#FFF" />
-            <Text style={styles.publishBtnText}>Publish</Text>
+            <Text style={styles.publishBtnText}>{t("quizCreate.publish")}</Text>
           </TouchableOpacity>
         )}
       </View>

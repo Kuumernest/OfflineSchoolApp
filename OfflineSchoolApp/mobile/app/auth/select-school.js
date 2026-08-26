@@ -349,7 +349,7 @@ export default function SelectSchoolScreen() {
             style={styles.retryBtn}
             onPress={() => fetchSchools(1, debouncedQuery, true)}
             accessibilityRole="button"
-            accessibilityLabel="Retry loading schools"
+            accessibilityLabel={t("selectSchool.a11yRetry")}
           >
             <Text style={styles.retryBtnText}>{t("selectSchool.retry")}</Text>
           </TouchableOpacity>
@@ -374,7 +374,7 @@ export default function SelectSchoolScreen() {
               setDebouncedQuery("");
             }}
             accessibilityRole="button"
-            accessibilityLabel="Clear search"
+            accessibilityLabel={t("selectSchool.a11yClear")}
           >
             <Text style={styles.retryBtnText}>{t("selectSchool.clearSearch")}</Text>
           </TouchableOpacity>
@@ -420,7 +420,7 @@ export default function SelectSchoolScreen() {
           style={styles.backArrow}
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("common.goBack")}
         >
           <Ionicons name="arrow-back" size={20} color="#4F46E5" />
           <Text style={styles.backArrowText}>{t("selectSchool.back")}</Text>
@@ -444,14 +444,14 @@ export default function SelectSchoolScreen() {
             autoCorrect={false}
             autoCapitalize="none"
             clearButtonMode="while-editing"
-            accessibilityLabel="Search schools"
+            accessibilityLabel={t("selectSchool.a11ySearch")}
           />
           {query.length > 0 && Platform.OS === "android" && (
             <TouchableOpacity
               onPress={() => setQuery("")}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               accessibilityRole="button"
-              accessibilityLabel="Clear search"
+              accessibilityLabel={t("selectSchool.a11yClear")}
             >
               <Ionicons name="close-circle" size={18} color="#9CA3AF" />
             </TouchableOpacity>

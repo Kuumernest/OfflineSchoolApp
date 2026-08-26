@@ -11,30 +11,44 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import { getDatabase } from "../../src/db/database";
 import api from "../../src/services/api";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "daily",   label: "Daily"   },
-  { key: "weekly",  label: "Weekly"  },
-  { key: "monthly", label: "Monthly" },
-  { key: "overall", label: "Overall" },
+  { key: "daily",   labelKey: "studentAttendance.tabDaily"   },
+  { key: "weekly",  labelKey: "studentAttendance.tabWeekly"  },
+  { key: "monthly", labelKey: "studentAttendance.tabMonthly" },
+  { key: "overall", labelKey: "studentAttendance.tabOverall" },
 ];
 
 const STATUS_META = {
-  present: { label: "Present", color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle"  },
-  absent:  { label: "Absent",  color: "#DC2626", bg: "#FEE2E2", icon: "close-circle"      },
-  late:    { label: "Late",    color: "#D97706", bg: "#FEF3C7", icon: "time"               },
-  excused: { label: "Excused", color: "#7C3AED", bg: "#EDE9FE", icon: "information-circle" },
+  present: { labelKey: "studentAttendance.statusPresent", color: "#059669", bg: "#ECFDF5", icon: "checkmark-circle"  },
+  absent:  { labelKey: "studentAttendance.statusAbsent",  color: "#DC2626", bg: "#FEE2E2", icon: "close-circle"      },
+  late:    { labelKey: "studentAttendance.statusLate",    color: "#D97706", bg: "#FEF3C7", icon: "time"               },
+  excused: { labelKey: "studentAttendance.statusExcused", color: "#7C3AED", bg: "#EDE9FE", icon: "information-circle" },
 };
 
-const MONTH_NAMES = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+const MONTH_KEYS = [
+  "studentAttendance.monthJanuary",  "studentAttendance.monthFebruary",
+  "studentAttendance.monthMarch",    "studentAttendance.monthApril",
+  "studentAttendance.monthMay",      "studentAttendance.monthJune",
+  "studentAttendance.monthJuly",     "studentAttendance.monthAugust",
+  "studentAttendance.monthSeptember","studentAttendance.monthOctober",
+  "studentAttendance.monthNovember", "studentAttendance.monthDecember",
 ];
-const DAY_NAMES = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+const DAY_KEYS = [
+  "studentAttendance.daySun", "studentAttendance.dayMon", "studentAttendance.dayTue",
+  "studentAttendance.dayWed", "studentAttendance.dayThu", "studentAttendance.dayFri",
+  "studentAttendance.daySat",
+];
+const CAL_DAY_KEYS = [
+  "studentAttendance.calSu", "studentAttendance.calMo", "studentAttendance.calTu",
+  "studentAttendance.calWe", "studentAttendance.calTh", "studentAttendance.calFr",
+  "studentAttendance.calSa",
+];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -73,14 +87,14 @@ const getWeekRange = (offsetWeeks = 0) => {
   };
 };
 
-const getMonthRange = (offsetMonths = 0) => {
+const getMonthRange = (offsetMonths = 0, t = (k) => k) => {
   const now   = new Date();
   const start = new Date(now.getFullYear(), now.getMonth() + offsetMonths, 1);
   const end   = new Date(now.getFullYear(), now.getMonth() + offsetMonths + 1, 0);
   return {
     start: start.toISOString().slice(0, 10),
     end:   end.toISOString().slice(0, 10),
-    label: `${MONTH_NAMES[start.getMonth()]} ${start.getFullYear()}`,
+    label: `${t(MONTH_KEYS[start.getMonth()])} ${start.getFullYear()}`,
     month: start.getMonth(),
     year:  start.getFullYear(),
   };
@@ -335,13 +349,14 @@ const loadAttendanceRecords = async ({ userId, schoolId, startDate, endDate }) =
 // ─────────────────────────────────────────────────────────────────────────────
 
 const StatCard = ({ status, count, total }) => {
+  const { t } = useTranslation();
   const meta = STATUS_META[status] || STATUS_META.present;
   const pct  = total > 0 ? Math.round((count / total) * 100) : 0;
   return (
     <View style={[sc.card, { backgroundColor: meta.bg }]}>
       <Ionicons name={meta.icon} size={22} color={meta.color} />
       <Text style={[sc.count, { color: meta.color }]}>{count}</Text>
-      <Text style={[sc.label, { color: meta.color }]}>{meta.label}</Text>
+      <Text style={[sc.label, { color: meta.color }]}>{t(meta.labelKey)}</Text>
       <Text style={[sc.pct,   { color: meta.color }]}>{pct}%</Text>
     </View>
   );
@@ -354,12 +369,13 @@ const sc = StyleSheet.create({
 });
 
 const RateRing = ({ rate, label }) => {
+  const { t } = useTranslation();
   const color = getRateColor(rate);
   return (
     <View style={rr.container}>
       <View style={[rr.ring, { borderColor: color }]}>
         <Text style={[rr.rate, { color }]}>{rate}%</Text>
-        <Text style={rr.sub}>rate</Text>
+        <Text style={rr.sub}>{t("studentAttendance.rateSub")}</Text>
       </View>
       {!!label && <Text style={rr.label}>{label}</Text>}
     </View>
@@ -374,6 +390,7 @@ const rr = StyleSheet.create({
 });
 
 const RecordRow = ({ record }) => {
+  const { t } = useTranslation();
   const status = (record.status || "").toLowerCase();
   const meta   = STATUS_META[status] || STATUS_META.absent;
   return (
@@ -386,7 +403,7 @@ const RecordRow = ({ record }) => {
       </View>
       <View style={[row.badge, { backgroundColor: meta.bg }]}>
         <Ionicons name={meta.icon} size={12} color={meta.color} />
-        <Text style={[row.badgeText, { color: meta.color }]}>{meta.label}</Text>
+        <Text style={[row.badgeText, { color: meta.color }]}>{t(meta.labelKey)}</Text>
       </View>
     </View>
   );
@@ -405,6 +422,7 @@ const row = StyleSheet.create({
 });
 
 const WeekBar = ({ records, weekStart }) => {
+  const { t } = useTranslation();
   const days = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart + "T00:00:00");
     d.setDate(d.getDate() + i);
@@ -412,7 +430,7 @@ const WeekBar = ({ records, weekStart }) => {
     const record  = records.find((r) => r.date === dateStr);
     const status  = record?.status || null;
     return {
-      day: DAY_NAMES[d.getDay()], date: dateStr,
+      dayKey: DAY_KEYS[d.getDay()], date: dateStr,
       meta: status ? STATUS_META[status] : null,
       isToday: dateStr === todayStr(),
     };
@@ -432,7 +450,7 @@ const WeekBar = ({ records, weekStart }) => {
             }
           </View>
           <Text style={[wb.dayLabel, d.isToday && { color: "#4F46E5", fontWeight: "700" }]}>
-            {d.day}
+            {t(d.dayKey)}
           </Text>
           <Text style={wb.dateLabel}>{formatDateShort(d.date)}</Text>
         </View>
@@ -450,6 +468,7 @@ const wb = StyleSheet.create({
 });
 
 const MonthCalendar = ({ records, month, year }) => {
+  const { t } = useTranslation();
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const recordMap   = Object.fromEntries(
@@ -475,8 +494,8 @@ const MonthCalendar = ({ records, month, year }) => {
   return (
     <View>
       <View style={cal.headerRow}>
-        {["Su","Mo","Tu","We","Th","Fr","Sa"].map((day) => (
-          <Text key={day} style={cal.headerCell}>{day}</Text>
+        {CAL_DAY_KEYS.map((dayKey) => (
+          <Text key={dayKey} style={cal.headerCell}>{t(dayKey)}</Text>
         ))}
       </View>
       <View style={cal.grid}>
@@ -517,10 +536,11 @@ const cal = StyleSheet.create({
 });
 
 const SourceBadge = ({ source }) => {
+  const { t } = useTranslation();
   const map = {
-    sqlite:     { label: "Cached",   color: "#D97706", bg: "#FEF3C7" },
-    "api-empty":{ label: "No Data",  color: "#6B7280", bg: "#F3F4F6" },
-    none:       { label: "Offline",  color: "#DC2626", bg: "#FEE2E2" },
+    sqlite:     { labelKey: "studentAttendance.sourceCached",  color: "#D97706", bg: "#FEF3C7" },
+    "api-empty":{ labelKey: "studentAttendance.sourceNoData",  color: "#6B7280", bg: "#F3F4F6" },
+    none:       { labelKey: "studentAttendance.sourceOffline", color: "#DC2626", bg: "#FEE2E2" },
   };
   const v = map[source];
   if (!v) return null;
@@ -531,7 +551,7 @@ const SourceBadge = ({ source }) => {
       backgroundColor: v.bg,
     }}>
       <Ionicons name="cloud-offline-outline" size={11} color={v.color} />
-      <Text style={{ fontSize: 10, fontWeight: "700", color: v.color }}>{v.label}</Text>
+      <Text style={{ fontSize: 10, fontWeight: "700", color: v.color }}>{t(v.labelKey)}</Text>
     </View>
   );
 };
@@ -546,22 +566,27 @@ const EmptyCard = ({ title, sub }) => (
   </View>
 );
 
-const RatePill = ({ rate }) => (
-  <View style={s.ratePill}>
-    <Text style={[s.ratePillText, { color: getRateColor(rate) }]}>
-      {rate}% attendance
-    </Text>
-  </View>
-);
+const RatePill = ({ rate }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={s.ratePill}>
+      <Text style={[s.ratePillText, { color: getRateColor(rate) }]}>
+        {t("studentAttendance.ratePill", { rate })}
+      </Text>
+    </View>
+  );
+};
 
-const ProgressBars = ({ summary }) => (
+const ProgressBars = ({ summary }) => {
+  const { t } = useTranslation();
+  return (
   <View style={s.progressSection}>
     {["present","absent","late","excused"].map((st) => {
       const meta = STATUS_META[st];
       const pct  = summary.total > 0 ? (summary[st] / summary.total) * 100 : 0;
       return (
         <View key={st} style={s.progressRow}>
-          <Text style={s.progressLabel}>{meta.label}</Text>
+          <Text style={s.progressLabel}>{t(meta.labelKey)}</Text>
           <View style={s.progressTrack}>
             <View style={[s.progressFill, { width: `${pct}%`, backgroundColor: meta.color }]} />
           </View>
@@ -570,7 +595,8 @@ const ProgressBars = ({ summary }) => (
       );
     })}
   </View>
-);
+  );
+};
 
 const Navigator = ({ label, onPrev, onNext, nextDisabled }) => (
   <View style={s.navigator}>
@@ -599,6 +625,7 @@ const Navigator = ({ label, onPrev, onNext, nextDisabled }) => (
 
 export default function StudentAttendanceScreen() {
   const router  = useRouter();
+  const { t }   = useTranslation();
   const user    = useAuthStore((s) => s.user);
 
   const userId = useMemo(() =>
@@ -619,12 +646,12 @@ export default function StudentAttendanceScreen() {
   const [error,       setError]       = useState(null);
 
   const weekRange  = useMemo(() => getWeekRange(weekOffset),   [weekOffset]);
-  const monthRange = useMemo(() => getMonthRange(monthOffset), [monthOffset]);
+  const monthRange = useMemo(() => getMonthRange(monthOffset, t), [monthOffset, t]);
 
   // ── Load ─────────────────────────────────────────────────────────────────────
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) {
-      setError("Could not identify your account. Please log out and sign in again.");
+      setError(t("studentAttendance.errorNoAccount"));
       setLoading(false);
       return;
     }
@@ -683,7 +710,7 @@ export default function StudentAttendanceScreen() {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={s.loadingText}>Loading attendance…</Text>
+        <Text style={s.loadingText}>{t("studentAttendance.loading")}</Text>
       </View>
     );
   }
@@ -701,9 +728,9 @@ export default function StudentAttendanceScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>My Attendance</Text>
+          <Text style={s.headerTitle}>{t("studentAttendance.title")}</Text>
           <Text style={s.headerSub}>
-            {user?.name || user?.fullName || user?.studentName || "Student"}
+            {user?.name || user?.fullName || user?.studentName || t("studentAttendance.studentFallback")}
           </Text>
         </View>
         <SourceBadge source={source} />
@@ -720,7 +747,7 @@ export default function StudentAttendanceScreen() {
               onPress={() => setActiveTab(tab.key)}
               activeOpacity={0.7}
             >
-              <Text style={[s.tabLabel, active && s.tabLabelActive]}>{tab.label}</Text>
+              <Text style={[s.tabLabel, active && s.tabLabelActive]}>{t(tab.labelKey)}</Text>
             </TouchableOpacity>
           );
         })}
@@ -744,7 +771,7 @@ export default function StudentAttendanceScreen() {
             <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
             <Text style={s.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => load(true)}>
-              <Text style={s.retryText}>Retry</Text>
+              <Text style={s.retryText}>{t("studentAttendance.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -755,15 +782,18 @@ export default function StudentAttendanceScreen() {
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="calendar" size={18} color="#4F46E5" />
-                <Text style={s.cardTitle}>Today</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.today")}</Text>
                 <Text style={s.cardSub}>{formatDate(todayStr())}</Text>
               </View>
               {todayRecords.length === 0
-                ? <EmptyCard title="No record today" sub="Attendance hasn't been marked yet for today." />
+                ? <EmptyCard
+                    title={t("studentAttendance.emptyTodayTitle")}
+                    sub={t("studentAttendance.emptyTodaySub")}
+                  />
                 : (
                   <>
                     <View style={s.rateRow}>
-                      <RateRing rate={todaySummary.rate} label="Today" />
+                      <RateRing rate={todaySummary.rate} label={t("studentAttendance.today")} />
                       <View style={s.statCardsWrap}>
                         {["present","absent","late","excused"].map((st) => (
                           <StatCard key={st} status={st} count={todaySummary[st]} total={todaySummary.total} />
@@ -779,11 +809,14 @@ export default function StudentAttendanceScreen() {
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="time-outline" size={18} color="#059669" />
-                <Text style={s.cardTitle}>Recent Records</Text>
-                <Text style={s.cardSub}>{allRecords.length} total</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.cardRecentRecords")}</Text>
+                <Text style={s.cardSub}>{t("studentAttendance.totalCount", { count: allRecords.length })}</Text>
               </View>
               {allRecords.length === 0
-                ? <EmptyCard title="No records found" sub="Pull down to refresh." />
+                ? <EmptyCard
+                    title={t("studentAttendance.emptyNoRecordsTitle")}
+                    sub={t("studentAttendance.emptyNoRecordsSub")}
+                  />
                 : allRecords.slice(0, 10).map((r, i) => (
                     <RecordRow key={r.id || i} record={r} />
                   ))
@@ -804,22 +837,22 @@ export default function StudentAttendanceScreen() {
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="bar-chart-outline" size={18} color="#4F46E5" />
-                <Text style={s.cardTitle}>Week Overview</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.cardWeekOverview")}</Text>
               </View>
               <WeekBar records={weekRecords} weekStart={weekRange.start} />
             </View>
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="stats-chart" size={18} color="#7C3AED" />
-                <Text style={s.cardTitle}>Week Summary</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.cardWeekSummary")}</Text>
                 <RatePill rate={weekSummary.rate} />
               </View>
               {weekSummary.total === 0
                 ? <EmptyCard
-                    title="No records this week"
+                    title={t("studentAttendance.emptyWeekTitle")}
                     sub={allRecords.length > 0
-                      ? `You have ${allRecords.length} record(s) — try another week.`
-                      : "No attendance data found yet."}
+                      ? t("studentAttendance.tryAnotherWeek", { count: allRecords.length })
+                      : t("studentAttendance.emptyNoData")}
                   />
                 : (
                   <>
@@ -859,15 +892,15 @@ export default function StudentAttendanceScreen() {
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="stats-chart" size={18} color="#059669" />
-                <Text style={s.cardTitle}>Month Summary</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.cardMonthSummary")}</Text>
                 <RatePill rate={monthSummary.rate} />
               </View>
               {monthSummary.total === 0
                 ? <EmptyCard
-                    title="No records this month"
+                    title={t("studentAttendance.emptyMonthTitle")}
                     sub={allRecords.length > 0
-                      ? `You have ${allRecords.length} record(s) — try another month.`
-                      : "No attendance data found yet."}
+                      ? t("studentAttendance.tryAnotherMonth", { count: allRecords.length })
+                      : t("studentAttendance.emptyNoData")}
                   />
                 : (
                   <>
@@ -888,15 +921,15 @@ export default function StudentAttendanceScreen() {
         {activeTab === "overall" && (
           <>
             <View style={[s.card, s.overallCard]}>
-              <Text style={s.overallTitle}>Overall Attendance Rate</Text>
+              <Text style={s.overallTitle}>{t("studentAttendance.overallTitle")}</Text>
               <RateRing rate={overallSummary.rate} />
               <Text style={s.overallTotal}>
-                {overallSummary.total} total record{overallSummary.total !== 1 ? "s" : ""}
+                {t("studentAttendance.overallTotal", { count: overallSummary.total })}
               </Text>
               <Text style={s.overallRange}>
                 {allRecords.length > 0
                   ? `${formatDate(allRecords[allRecords.length-1]?.date)} — ${formatDate(allRecords[0]?.date)}`
-                  : "No records yet"}
+                  : t("studentAttendance.overallNoRecords")}
               </Text>
             </View>
 
@@ -905,7 +938,7 @@ export default function StudentAttendanceScreen() {
                 <View style={s.card}>
                   <View style={s.cardHeader}>
                     <Ionicons name="stats-chart" size={18} color="#4F46E5" />
-                    <Text style={s.cardTitle}>Breakdown</Text>
+                    <Text style={s.cardTitle}>{t("studentAttendance.cardBreakdown")}</Text>
                   </View>
                   <View style={s.statRow}>
                     {["present","absent","late","excused"].map((st) => (
@@ -918,10 +951,10 @@ export default function StudentAttendanceScreen() {
                 <View style={s.card}>
                   <View style={s.cardHeader}>
                     <Ionicons name="trending-up-outline" size={18} color="#059669" />
-                    <Text style={s.cardTitle}>Monthly Trend</Text>
+                    <Text style={s.cardTitle}>{t("studentAttendance.cardMonthlyTrend")}</Text>
                   </View>
                   {[-5,-4,-3,-2,-1,0].map((offset) => {
-                    const range   = getMonthRange(offset);
+                    const range   = getMonthRange(offset, t);
                     const recs    = allRecords.filter(
                       (r) => r.date >= range.start && r.date <= range.end
                     );
@@ -959,13 +992,13 @@ export default function StudentAttendanceScreen() {
             <View style={s.card}>
               <View style={s.cardHeader}>
                 <Ionicons name="list-outline" size={18} color="#6B7280" />
-                <Text style={s.cardTitle}>All Records</Text>
-                <Text style={s.cardSub}>{allRecords.length} total</Text>
+                <Text style={s.cardTitle}>{t("studentAttendance.cardAllRecords")}</Text>
+                <Text style={s.cardSub}>{t("studentAttendance.totalCount", { count: allRecords.length })}</Text>
               </View>
               {allRecords.length === 0
                 ? <EmptyCard
-                    title="No attendance records"
-                    sub="Your attendance will appear here once your teacher marks it."
+                    title={t("studentAttendance.emptyAllTitle")}
+                    sub={t("studentAttendance.emptyAllSub")}
                   />
                 : (
                   <>
@@ -974,7 +1007,7 @@ export default function StudentAttendanceScreen() {
                     ))}
                     {allRecords.length > 30 && (
                       <Text style={s.moreText}>
-                        + {allRecords.length - 30} more records
+                        {t("studentAttendance.moreRecords", { count: allRecords.length - 30 })}
                       </Text>
                     )}
                   </>

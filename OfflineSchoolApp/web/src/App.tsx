@@ -63,13 +63,13 @@ const ExamsPage        = lazy(() => import("@/pages/exams/index"));
 const CreateExamPage   = lazy(() => import("@/pages/exams/create/index"));
 const ExamDetailPage   = lazy(() => import("@/pages/exams/[id]/index"));
 const ExamResultsPage  = lazy(() => import("@/pages/exams/results/index"));
-const ExamReportsPage  = lazy(() => import("@/pages/exams/reports/index"));
 
 const AnnouncementsPage = lazy(() => import("@/pages/announcements/index"));
 const MessagesPage      = lazy(() => import("@/pages/messages/index"));
 const MessageAuditPage  = lazy(() => import("@/pages/messages/audit"));
 
 const ReportsOverview  = lazy(() => import("@/pages/reports/index"));
+const ReportCardsPage  = lazy(() => import("@/pages/reports/cards"));
 const TemplatesPage    = lazy(() => import("@/pages/reports/templates"));
 const TemplateBuilder  = lazy(() => import("@/pages/reports/builder"));
 const TemplatePreview  = lazy(() => import("@/pages/reports/preview"));
@@ -191,7 +191,9 @@ export default function App() {
           <Route path="/exams"         element={page(<ExamsPage />)} />
           <Route path="/exams/new"     element={page(<CreateExamPage />)} />
           <Route path="/exams/results" element={page(<ExamResultsPage />)} />
-          <Route path="/exams/reports" element={page(<ExamReportsPage />)} />
+          {/* Report cards used to live here. They are one section under
+              /reports now; this keeps old links and bookmarks working. */}
+          <Route path="/exams/reports" element={<Navigate to="/reports/cards" replace />} />
           <Route path="/exams/:id"     element={page(<ExamDetailPage />)} />
 
           {/* ── Announcements ──────────────────────────────────────────── */}
@@ -203,6 +205,7 @@ export default function App() {
 
           {/* ── Reports ────────────────────────────────────────────────── */}
           <Route path="/reports"           element={page(<ReportsOverview />)} />
+          <Route path="/reports/cards"     element={page(<ReportCardsPage />)} />
           <Route path="/reports/templates" element={page(<TemplatesPage />)} />
           <Route path="/reports/builder"   element={page(<TemplateBuilder />)} />
           <Route path="/reports/preview"   element={page(<TemplatePreview />)} />

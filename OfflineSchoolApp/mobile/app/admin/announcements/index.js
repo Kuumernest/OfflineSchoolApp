@@ -23,13 +23,13 @@ import { Ionicons }        from "@expo/vector-icons";
 import AnnouncementService from "../../../src/services/announcement.service";
 
 const FILTERS = [
-  { key: "all",          label: "All",           icon: "megaphone-outline"  },
-  { key: "from_teachers",label: "From Teachers",  icon: "people-outline"    },
-  { key: "teachers",     label: "To Teachers",    icon: "person-outline"    },
-  { key: "students",     label: "To Students",    icon: "school-outline"    },
-  { key: "class",        label: "By Class",       icon: "layers-outline"    },
-  { key: "urgent",       label: "Urgent",         icon: "warning-outline"   },
-  { key: "unread",       label: "Unread",         icon: "mail-unread-outline"},
+  { key: "all",          labelKey: "annAdmin.filterAll",           icon: "megaphone-outline"  },
+  { key: "from_teachers",labelKey: "annAdmin.filterFromTeachers",  icon: "people-outline"    },
+  { key: "teachers",     labelKey: "annAdmin.filterToTeachers",    icon: "person-outline"    },
+  { key: "students",     labelKey: "annAdmin.filterToStudents",    icon: "school-outline"    },
+  { key: "class",        labelKey: "annAdmin.filterByClass",       icon: "layers-outline"    },
+  { key: "urgent",       labelKey: "annAdmin.filterUrgent",         icon: "warning-outline"   },
+  { key: "unread",       labelKey: "annAdmin.filterUnread",         icon: "mail-unread-outline"},
 ];
 
 const PRIORITY_COLORS = {
@@ -39,20 +39,21 @@ const PRIORITY_COLORS = {
 };
 
 const AUDIENCE_LABELS = {
-  all:      { label: "Everyone",  icon: "globe-outline",  color: "#4F46E5" },
-  teachers: { label: "Teachers",  icon: "people-outline", color: "#0891B2" },
-  students: { label: "Students",  icon: "school-outline", color: "#7C3AED" },
-  class:    { label: "Class",     icon: "layers-outline", color: "#EA580C" },
+  all:      { labelKey: "annAdmin.audAll",  icon: "globe-outline",  color: "#4F46E5" },
+  teachers: { labelKey: "annAdmin.audTeachersShort",  icon: "people-outline", color: "#0891B2" },
+  students: { labelKey: "annAdmin.audStudentsShort",  icon: "school-outline", color: "#7C3AED" },
+  class:    { labelKey: "annAdmin.audClassShort",     icon: "layers-outline", color: "#EA580C" },
 };
 
 const AUTHOR_ROLE_COLORS = {
-  super_admin:  { label: "Super Admin",   color: "#4F46E5", bg: "#EEF2FF" },
-  school_admin: { label: "School Admin",  color: "#4F46E5", bg: "#EEF2FF" },
-  admin:        { label: "Admin",         color: "#4F46E5", bg: "#EEF2FF" },
-  teacher:      { label: "Teacher",       color: "#0891B2", bg: "#E0F2FE" },
+  super_admin:  { labelKey: "annAdmin.roleSuperAdmin",   color: "#4F46E5", bg: "#EEF2FF" },
+  school_admin: { labelKey: "annAdmin.roleSchoolAdmin",  color: "#4F46E5", bg: "#EEF2FF" },
+  admin:        { labelKey: "annAdmin.roleAdmin",         color: "#4F46E5", bg: "#EEF2FF" },
+  teacher:      { labelKey: "annAdmin.roleTeacher",       color: "#0891B2", bg: "#E0F2FE" },
 };
 
 const formatDate = (dateStr) => {
+  const { t } = useTranslation();
   if (!dateStr) return "";
   const d       = new Date(dateStr);
   const now     = new Date();
@@ -61,7 +62,7 @@ const formatDate = (dateStr) => {
   const diffHr  = Math.floor(diffMs / 3600000);
   const diffDay = Math.floor(diffMs / 86400000);
 
-  if (diffMin < 1)  return "Just now";
+  if (diffMin < 1)  return t("annAdmin.justNow");
   if (diffMin < 60) return `${diffMin}m ago`;
   if (diffHr  < 24) return `${diffHr}h ago`;
   if (diffDay < 7)  return `${diffDay}d ago`;
@@ -81,6 +82,7 @@ function StatCard({ icon, label, value, color }) {
 }
 
 export default function AdminAnnouncementsScreen() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const isMounted = useRef(true);
 
@@ -154,12 +156,12 @@ export default function AdminAnnouncementsScreen() {
 
   const handleDelete = useCallback((id, title) => {
     Alert.alert(
-      "Delete Announcement",
+      t("annAdmin.deleteTitle"),
       `Delete "${title}"?\n\nThis will remove it for all recipients.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -170,7 +172,7 @@ export default function AdminAnnouncementsScreen() {
               const s = await AnnouncementService.getAnnouncementStats();
               if (isMounted.current) setStats(s);
             } catch (err) {
-              Alert.alert("Error", err.message || "Failed to delete");
+              Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.deleteFailed"));
             }
           },
         },
@@ -187,7 +189,7 @@ export default function AdminAnnouncementsScreen() {
         )
       );
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("annAdmin.errorTitle"), err.message);
     }
   }, []);
 
@@ -203,7 +205,7 @@ export default function AdminAnnouncementsScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading announcements…</Text>
+        <Text style={styles.loadingText}>{t("annAdmin.loadingAnnouncements")}</Text>
       </View>
     );
   }
@@ -222,7 +224,7 @@ export default function AdminAnnouncementsScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Announcements</Text>
+          <Text style={styles.headerTitle}>{t("annAdmin.listTitle")}</Text>
           <Text style={styles.headerSub}>
             {stats?.unread ?? 0} unread · {stats?.total ?? 0} total
             {stats?.fromTeachers > 0
@@ -249,19 +251,19 @@ export default function AdminAnnouncementsScreen() {
         >
           <StatCard
             icon="mail-unread-outline"
-            label="Unread"
+            label={t("annAdmin.filterUnread")}
             value={stats.unread}
             color="#DC2626"
           />
           <StatCard
             icon="warning-outline"
-            label="Urgent"
+            label={t("annAdmin.filterUrgent")}
             value={stats.urgentUnack}
             color="#EA580C"
           />
           <StatCard
             icon="pin-outline"
-            label="Pinned"
+            label={t("annAdmin.pinned")}
             value={stats.pinned}
             color="#4F46E5"
           />
@@ -271,14 +273,14 @@ export default function AdminAnnouncementsScreen() {
           >
             <StatCard
               icon="people-outline"
-              label="From Teachers"
+              label={t("annAdmin.filterFromTeachers")}
               value={stats.fromTeachers}
               color="#0891B2"
             />
           </TouchableOpacity>
           <StatCard
             icon="list-outline"
-            label="Total"
+            label={t("common.total")}
             value={stats.total}
             color="#059669"
           />
@@ -298,7 +300,7 @@ export default function AdminAnnouncementsScreen() {
             onPress={() => setActiveFilter("all")}
             style={styles.filterBannerClear}
           >
-            <Text style={styles.filterBannerClearText}>Clear</Text>
+            <Text style={styles.filterBannerClearText}>{t("annAdmin.clear")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -328,7 +330,7 @@ export default function AdminAnnouncementsScreen() {
               styles.filterText,
               activeFilter === f.key && styles.filterTextActive,
             ]}>
-              {f.label}
+              {t(f.labelKey)}
             </Text>
             {f.key === "from_teachers" && (stats?.fromTeachers ?? 0) > 0 && (
               <View style={styles.filterBadge}>
@@ -366,22 +368,22 @@ export default function AdminAnnouncementsScreen() {
             />
             <Text style={styles.emptyTitle}>
               {activeFilter === "from_teachers"
-                ? "No teacher announcements"
-                : "No announcements"}
+                ? t("annAdmin.emptyNoTeacherAnns")
+                : t("annAdmin.emptyNone")}
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "from_teachers"
-                ? "Teachers haven't sent any announcements yet"
+                ? t("annAdmin.emptyTeachersSub")
                 : activeFilter === "all"
-                ? "Tap + to create your first announcement"
-                : "No announcements match this filter"}
+                ? t("annAdmin.emptyAllSub")
+                : t("annAdmin.emptyFilterSub")}
             </Text>
             {activeFilter !== "all" && (
               <TouchableOpacity
                 style={styles.clearFilterBtn}
                 onPress={() => setActiveFilter("all")}
               >
-                <Text style={styles.clearFilterText}>Clear filter</Text>
+                <Text style={styles.clearFilterText}>{t("annAdmin.clearFilter")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -430,7 +432,7 @@ export default function AdminAnnouncementsScreen() {
                         styles.authorRoleText,
                         { color: role.color },
                       ]}>
-                        {role.label}
+                        {t(role.labelKey)}
                       </Text>
                     </View>
                   )}
@@ -438,14 +440,14 @@ export default function AdminAnnouncementsScreen() {
                   {item.isPinned && (
                     <View style={styles.pinBadge}>
                       <Ionicons name="pin" size={10} color="#4F46E5" />
-                      <Text style={styles.pinText}>Pinned</Text>
+                      <Text style={styles.pinText}>{t("annAdmin.pinned")}</Text>
                     </View>
                   )}
 
                   {expired && (
                     <View style={styles.expiredBadge}>
                       <Ionicons name="time-outline" size={10} color="#6B7280" />
-                      <Text style={styles.expiredBadgeText}>Expired</Text>
+                      <Text style={styles.expiredBadgeText}>{t("annAdmin.expired")}</Text>
                     </View>
                   )}
 
@@ -520,7 +522,7 @@ export default function AdminAnnouncementsScreen() {
                       styles.badgeText,
                       { color: aud.color, marginLeft: 3 },
                     ]}>
-                      {aud.label}
+                      {t(aud.labelKey)}
                     </Text>
                   </View>
 
@@ -547,7 +549,7 @@ export default function AdminAnnouncementsScreen() {
                         size={10}
                         color="#F59E0B"
                       />
-                      <Text style={styles.syncBadgeText}>Offline</Text>
+                      <Text style={styles.syncBadgeText}>{t("annAdmin.offline")}</Text>
                     </View>
                   )}
                 </View>
@@ -567,7 +569,7 @@ export default function AdminAnnouncementsScreen() {
                       styles.authorText,
                       fromTeacher && { color: "#0891B2", fontWeight: "600" },
                     ]}>
-                      {item.authorName || "Unknown"}
+                      {item.authorName || t("annAdmin.unknown")}
                       {fromTeacher ? " (Teacher)" : ""}
                     </Text>
                   </View>
@@ -879,3 +881,4 @@ const styles = StyleSheet.create({
   },
   clearFilterText: { color: "#4F46E5", fontWeight: "600", fontSize: 13 },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

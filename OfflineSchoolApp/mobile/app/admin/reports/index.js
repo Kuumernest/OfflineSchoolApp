@@ -6,11 +6,13 @@ import {
   View, Text, StyleSheet, FlatList,
   TouchableOpacity, ActivityIndicator, RefreshControl, StatusBar,
 } from "react-native";
-import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
+import { router }       from "expo-router";
+import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
-import api from "../../../src/services/api";
-import { getDatabase } from "../../../src/db/database";
+import api              from "../../../src/services/api";
+import { getDatabase }  from "../../../src/db/database";
+import { useTranslation } from "../../../src/i18n/useTranslation";
+import { currentLocale }   from "../../../src/i18n";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -33,26 +35,32 @@ const COLORS = {
   gray900:   "#111827",
 };
 
+// Keys are the stored status values and must not change; only the label is
+// localised, via the shared examStatus namespace.
 const STATUS_META = {
-  completed: { color: "#059669", bg: "#ECFDF5", label: "Completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", label: "Published" },
-  approved:  { color: "#059669", bg: "#ECFDF5", label: "Approved"  },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", label: "Ongoing"   },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", label: "Scheduled" },
-  draft:     { color: "#6B7280", bg: "#F3F4F6", label: "Draft"     },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", label: "Archived"  },
+  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.completed" },
+  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examStatus.published" },
+  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "examStatus.approved"  },
+  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examStatus.ongoing"   },
+  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examStatus.scheduled" },
+  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examStatus.draft"     },
+  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examStatus.archived"  },
 };
 
-const REPORTABLE_STATUSES = new Set(["completed", "published", "approved", "ongoing"]);
+const REPORTABLE_STATUSES = new Set([
+  "completed", "published", "approved", "ongoing",
+]);
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return "No date";
+const formatDate = (dateStr, t) => {
+  if (!dateStr) return t("reportList.noDate");
   try {
-    return new Date(dateStr).toLocaleDateString("en-GB", {
+    // currentLocale(), not "en-GB": the date has to follow the language the
+    // user picked, or half the card stays English after a switch.
+    return new Date(dateStr).toLocaleDateString(currentLocale(), {
       day: "numeric", month: "short", year: "numeric",
     });
   } catch { return dateStr; }
@@ -80,9 +88,9 @@ const loadExamsFromSQLite = async (schoolId) => {
     const cols   = await db.getAllAsync(`PRAGMA table_info(exams)`).catch(() => []);
     const colSet = new Set(cols.map((c) => c.name));
 
-    const schoolCol  = colSet.has("schoolId")  ? "schoolId"  : colSet.has("school_id") ? "school_id" : null;
-    const deletedCol = colSet.has("deleted_at") ? "deleted_at": colSet.has("deletedAt") ? "deletedAt" : null;
-    const createdCol = colSet.has("created_at") ? "created_at": colSet.has("createdAt") ? "createdAt" : "rowid";
+    const schoolCol  = colSet.has("schoolId")   ? "schoolId"   : colSet.has("school_id")  ? "school_id"  : null;
+    const deletedCol = colSet.has("deleted_at")  ? "deleted_at" : colSet.has("deletedAt")  ? "deletedAt"  : null;
+    const createdCol = colSet.has("created_at")  ? "created_at" : colSet.has("createdAt")  ? "createdAt"  : "rowid";
 
     const classTableCheck = await db
       .getFirstAsync(
@@ -94,7 +102,12 @@ const loadExamsFromSQLite = async (schoolId) => {
     const params = [];
 
     if (classTableCheck) {
-      const classIdCol = colSet.has("classId") ? "e.classId" : colSet.has("class_id") ? "e.class_id" : null;
+      const classIdCol = colSet.has("classId")
+        ? "e.classId"
+        : colSet.has("class_id")
+          ? "e.class_id"
+          : null;
+
       if (classIdCol) {
         query = `
           SELECT e.*, c.name AS className
@@ -149,9 +162,9 @@ const loadExamsFromSQLite = async (schoolId) => {
 // ─────────────────────────────────────────────────────────
 
 const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
+  const { t } = useTranslation();
   const statusKey  = (item.status || "completed").toLowerCase();
   const statusMeta = STATUS_META[statusKey] ?? STATUS_META.completed;
-  const examId     = item._id || item.id;
 
   const metaParts = [
     item.academicYear,
@@ -161,6 +174,7 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
 
   return (
     <View style={styles.card}>
+      {/* Header */}
       <View style={styles.cardHeader}>
         <View style={styles.cardIconBg}>
           <Ionicons name="document-text-outline" size={18} color={COLORS.primary} />
@@ -175,27 +189,28 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
         </View>
         <View style={[styles.statusBadge, { backgroundColor: statusMeta.bg }]}>
           <Text style={[styles.statusText, { color: statusMeta.color }]}>
-            {statusMeta.label}
+            {t(statusMeta.labelKey)}
           </Text>
         </View>
       </View>
 
+      {/* Stats row */}
       <View style={styles.statsRow}>
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{item.totalMarks ?? 100}</Text>
-          <Text style={styles.statLabel}>Total Marks</Text>
+          <Text style={styles.statLabel}>{t("reportList.totalMarks")}</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
           <Text style={styles.statValue}>{item.passMark ?? 50}</Text>
-          <Text style={styles.statLabel}>Pass Mark</Text>
+          <Text style={styles.statLabel}>{t("reportList.passMark")}</Text>
         </View>
         {item.totalStudents != null && (
           <>
             <View style={styles.statDivider} />
             <View style={styles.statItem}>
               <Text style={styles.statValue}>{item.totalStudents}</Text>
-              <Text style={styles.statLabel}>Students</Text>
+              <Text style={styles.statLabel}>{t("reportList.students")}</Text>
             </View>
           </>
         )}
@@ -208,16 +223,19 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
               }]}>
                 {item.passRate}%
               </Text>
-              <Text style={styles.statLabel}>Pass Rate</Text>
+              <Text style={styles.statLabel}>{t("reportList.passRate")}</Text>
             </View>
           </>
         )}
       </View>
 
+      {/* Footer */}
       <View style={styles.cardFooter}>
         <View style={styles.footerStat}>
           <Ionicons name="calendar-outline" size={12} color={COLORS.gray500} />
-          <Text style={styles.footerStatText}>{formatDate(item.startDate)}</Text>
+          <Text style={styles.footerStatText}>
+            {formatDate(item.startDate, t)}
+          </Text>
         </View>
         <View style={styles.footerActions}>
           <TouchableOpacity
@@ -226,14 +244,14 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
             activeOpacity={0.7}
           >
             <Ionicons name="print-outline" size={12} color={COLORS.success} />
-            <Text style={styles.generateChipText}>Report Cards</Text>
+            <Text style={styles.generateChipText}>{t("reportList.reportCardsChip")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.viewBtn}
             onPress={() => onViewResults(item)}
             activeOpacity={0.7}
           >
-            <Text style={styles.viewBtnText}>Results</Text>
+            <Text style={styles.viewBtnText}>{t("reportList.results")}</Text>
             <Ionicons name="chevron-forward" size={14} color={COLORS.primary} />
           </TouchableOpacity>
         </View>
@@ -247,13 +265,15 @@ const ExamCard = ({ item, onViewResults, onGenerateReports }) => {
 // ─────────────────────────────────────────────────────────
 
 const FILTERS = [
-  { key: "all",       label: "All"       },
-  { key: "published", label: "Published" },
-  { key: "completed", label: "Completed" },
-  { key: "ongoing",   label: "Ongoing"   },
+  { key: "all",       labelKey: "reportList.filterAll"        },
+  { key: "published", labelKey: "examStatus.published" },
+  { key: "completed", labelKey: "examStatus.completed" },
+  { key: "ongoing",   labelKey: "examStatus.ongoing"   },
 ];
 
-const FilterBar = ({ active, onChange }) => (
+const FilterBar = ({ active, onChange }) => {
+  const { t } = useTranslation();
+  return (
   <View style={styles.filterBar}>
     {FILTERS.map((f) => (
       <TouchableOpacity
@@ -262,19 +282,24 @@ const FilterBar = ({ active, onChange }) => (
         onPress={() => onChange(f.key)}
         activeOpacity={0.7}
       >
-        <Text style={[styles.filterText, active === f.key && styles.filterTextActive]}>
-          {f.label}
+        <Text style={[
+          styles.filterText,
+          active === f.key && styles.filterTextActive,
+        ]}>
+          {t(f.labelKey)}
         </Text>
       </TouchableOpacity>
     ))}
   </View>
-);
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────
 
 export default function ExamReportsScreen() {
+  const { t }    = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
 
@@ -373,11 +398,11 @@ export default function ExamReportsScreen() {
           >
             <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Exam Reports</Text>
+          <Text style={styles.headerTitle}>{t("reportList.title")}</Text>
         </View>
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={COLORS.primary} />
-          <Text style={styles.loadingText}>Loading reports…</Text>
+          <Text style={styles.loadingText}>{t("reportList.loading")}</Text>
         </View>
       </View>
     );
@@ -397,9 +422,9 @@ export default function ExamReportsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.headerTitle}>Exam Reports</Text>
+          <Text style={styles.headerTitle}>{t("reportList.title")}</Text>
           {source === "sqlite" && (
-            <Text style={styles.headerSourceBadge}>Cached</Text>
+            <Text style={styles.headerSourceBadge}>{t("reportList.cached")}</Text>
           )}
         </View>
         <TouchableOpacity
@@ -418,7 +443,8 @@ export default function ExamReportsScreen() {
       {allExams.length > 0 && (
         <View style={styles.countBar}>
           <Text style={styles.countText}>
-            {exams.length} of {allExams.length} exam{allExams.length !== 1 ? "s" : ""}
+            {exams.length} of {allExams.length} exam
+            {allExams.length !== 1 ? "s" : ""}
           </Text>
           <TouchableOpacity
             style={styles.countBarAction}
@@ -426,7 +452,9 @@ export default function ExamReportsScreen() {
             activeOpacity={0.7}
           >
             <Ionicons name="print-outline" size={14} color={COLORS.primary} />
-            <Text style={styles.countBarActionText}>Generate Report Cards</Text>
+            <Text style={styles.countBarActionText}>
+              {t("reportList.generate")}
+            </Text>
           </TouchableOpacity>
         </View>
       )}
@@ -437,7 +465,7 @@ export default function ExamReportsScreen() {
           <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => fetchReports()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -467,12 +495,14 @@ export default function ExamReportsScreen() {
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={56} color={COLORS.gray200} />
             <Text style={styles.emptyTitle}>
-              {filter !== "all" ? `No ${filter} exams` : "No Exam Reports Yet"}
+              {filter !== "all"
+                ? t("reportList.noFilteredExams", { status: t(`examStatus.${filter}`) })
+                : t("reportList.emptyTitle")}
             </Text>
             <Text style={styles.emptyText}>
               {filter !== "all"
-                ? `Try switching to "All" to see all exams`
-                : "Completed and published exams will appear here"}
+                ? t("reportList.switchToAllHint")
+                : t("reportList.emptyBody")}
             </Text>
             {filter === "all" ? (
               <TouchableOpacity
@@ -481,7 +511,9 @@ export default function ExamReportsScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="print-outline" size={16} color={COLORS.white} />
-                <Text style={styles.emptyActionText}>Generate Report Cards</Text>
+                <Text style={styles.emptyActionText}>
+                  {t("reportList.generate")}
+                </Text>
               </TouchableOpacity>
             ) : (
               <TouchableOpacity
@@ -489,7 +521,7 @@ export default function ExamReportsScreen() {
                 onPress={() => setFilter("all")}
                 activeOpacity={0.7}
               >
-                <Text style={styles.emptyActionText}>Show All Exams</Text>
+                <Text style={styles.emptyActionText}>{t("reportList.showAll")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -499,10 +531,15 @@ export default function ExamReportsScreen() {
   );
 }
 
+// ─────────────────────────────────────────────────────────
+// STYLES
+// ─────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   screen:      { flex: 1, backgroundColor: COLORS.gray50 },
   centered:    { flex: 1, justifyContent: "center", alignItems: "center", gap: 12 },
   loadingText: { fontSize: 14, color: COLORS.gray500 },
+
   header: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -539,6 +576,7 @@ const styles = StyleSheet.create({
     borderRadius:      6,
   },
   refreshBtn: { padding: 8 },
+
   filterBar: {
     flexDirection:     "row",
     paddingHorizontal: 16,
@@ -548,10 +586,11 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: COLORS.gray100,
   },
-  filterBtn:       { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.gray100 },
-  filterBtnActive: { backgroundColor: COLORS.primaryBg },
-  filterText:      { fontSize: 13, fontWeight: "600", color: COLORS.gray500 },
-  filterTextActive:{ color: COLORS.primary },
+  filterBtn:        { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20, backgroundColor: COLORS.gray100 },
+  filterBtnActive:  { backgroundColor: COLORS.primaryBg },
+  filterText:       { fontSize: 13, fontWeight: "600", color: COLORS.gray500 },
+  filterTextActive: { color: COLORS.primary },
+
   countBar: {
     flexDirection:     "row",
     alignItems:        "center",
@@ -565,6 +604,7 @@ const styles = StyleSheet.create({
   countText:          { fontSize: 13, color: COLORS.gray500, fontWeight: "500" },
   countBarAction:     { flexDirection: "row", alignItems: "center", gap: 5 },
   countBarActionText: { fontSize: 13, fontWeight: "600", color: COLORS.primary },
+
   errorBanner: {
     flexDirection:   "row",
     alignItems:      "center",
@@ -578,7 +618,9 @@ const styles = StyleSheet.create({
   },
   errorText: { flex: 1, fontSize: 13, color: "#DC2626" },
   retryText: { fontSize: 13, fontWeight: "700", color: COLORS.primary },
-  list:      { padding: 16, gap: 12, paddingBottom: 40 },
+
+  list: { padding: 16, gap: 12, paddingBottom: 40 },
+
   card: {
     backgroundColor: COLORS.white,
     borderRadius:    16,
@@ -610,6 +652,7 @@ const styles = StyleSheet.create({
     paddingVertical:   4,
   },
   statusText: { fontSize: 11, fontWeight: "700" },
+
   statsRow: {
     flexDirection:   "row",
     alignItems:      "center",
@@ -619,8 +662,15 @@ const styles = StyleSheet.create({
   },
   statItem:   { flex: 1, alignItems: "center" },
   statValue:  { fontSize: 16, fontWeight: "800", color: COLORS.gray900 },
-  statLabel:  { fontSize: 9, fontWeight: "600", color: COLORS.gray400, textTransform: "uppercase", marginTop: 2 },
-  statDivider:{ width: 1, height: 30, backgroundColor: COLORS.gray200 },
+  statLabel: {
+    fontSize:      9,
+    fontWeight:    "600",
+    color:         COLORS.gray400,
+    textTransform: "uppercase",
+    marginTop:     2,
+  },
+  statDivider: { width: 1, height: 30, backgroundColor: COLORS.gray200 },
+
   cardFooter: {
     flexDirection:  "row",
     alignItems:     "center",
@@ -653,6 +703,7 @@ const styles = StyleSheet.create({
     backgroundColor:   COLORS.primaryBg,
   },
   viewBtnText: { fontSize: 12, fontWeight: "700", color: COLORS.primary },
+
   empty: {
     alignItems:        "center",
     paddingTop:        80,
@@ -660,8 +711,13 @@ const styles = StyleSheet.create({
     gap:               14,
     paddingHorizontal: 32,
   },
-  emptyTitle:  { fontSize: 17, fontWeight: "700", color: COLORS.gray700 },
-  emptyText:   { fontSize: 13, color: COLORS.gray500, textAlign: "center", lineHeight: 20 },
+  emptyTitle: { fontSize: 17, fontWeight: "700", color: COLORS.gray700 },
+  emptyText: {
+    fontSize:   13,
+    color:      COLORS.gray500,
+    textAlign:  "center",
+    lineHeight: 20,
+  },
   emptyAction: {
     flexDirection:     "row",
     alignItems:        "center",

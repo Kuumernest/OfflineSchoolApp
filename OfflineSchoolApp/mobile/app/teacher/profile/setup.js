@@ -26,6 +26,7 @@ import DateField                from "../../../src/components/DateField";
 //    not app/utils/withRetry.js
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
+import { useTranslation }       from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -56,10 +57,10 @@ const C = {
 // STEPS
 // ─────────────────────────────────────────────────────────
 const STEPS = [
-  { id: "personal",     title: "Personal Info", icon: "person-outline",    desc: "Basic personal details"     },
-  { id: "professional", title: "Professional",  icon: "briefcase-outline", desc: "Employment & qualification"  },
-  { id: "contact",      title: "Contact",       icon: "call-outline",      desc: "How to reach you"            },
-  { id: "emergency",    title: "Emergency",     icon: "medical-outline",   desc: "Emergency contact info"     },
+  { id: "personal",     icon: "person-outline",    titleKey: "profileTeacher.stepPersonal",     descKey: "profileTeacher.stepPersonalDesc"     },
+  { id: "professional", icon: "briefcase-outline", titleKey: "profileTeacher.stepProfessional", descKey: "profileTeacher.stepProfessionalDesc" },
+  { id: "contact",      icon: "call-outline",      titleKey: "profileTeacher.stepContact",      descKey: "profileTeacher.stepContactDesc"      },
+  { id: "emergency",    icon: "medical-outline",   titleKey: "profileTeacher.stepEmergency",    descKey: "profileTeacher.stepEmergencyDesc"    },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -130,6 +131,7 @@ const f = StyleSheet.create({
 // SELECT
 // ─────────────────────────────────────────────────────────
 function SelectField({ label, value, options, onSelect, required, error }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
   return (
@@ -143,7 +145,7 @@ function SelectField({ label, value, options, onSelect, required, error }) {
         activeOpacity={0.7}
       >
         <Text style={[sf.selectorText, !selected && sf.placeholder]}>
-          {selected?.label || `Select ${label}`}
+          {selected?.label || t("profileTeacher.selectPlaceholder", { label })}
         </Text>
         <Ionicons name={open ? "chevron-up" : "chevron-down"} size={18} color={C.gray400} />
       </TouchableOpacity>
@@ -190,27 +192,31 @@ const sf = StyleSheet.create({
 // OPTION LISTS
 // ─────────────────────────────────────────────────────────
 
+/** Options carry a translation key; labels are resolved at render time. */
+const withLabels = (options, t) =>
+  options.map((o) => ({ value: o.value, label: t(o.labelKey) }));
+
 const GENDERS = [
-  { value: "male",   label: "Male"   },
-  { value: "female", label: "Female" },
-  { value: "other",  label: "Other / Prefer not to say" },
+  { value: "male",   labelKey: "profileTeacher.genderMale"   },
+  { value: "female", labelKey: "profileTeacher.genderFemale" },
+  { value: "other",  labelKey: "profileTeacher.genderOther"  },
 ];
 
 const EMPLOYMENT_TYPES = [
-  { value: "full_time",  label: "Full-Time"  },
-  { value: "part_time",  label: "Part-Time"  },
-  { value: "contract",   label: "Contract"   },
-  { value: "substitute", label: "Substitute" },
-  { value: "volunteer",  label: "Volunteer"  },
+  { value: "full_time",  labelKey: "profileTeacher.empFullTime"   },
+  { value: "part_time",  labelKey: "profileTeacher.empPartTime"   },
+  { value: "contract",   labelKey: "profileTeacher.empContract"   },
+  { value: "substitute", labelKey: "profileTeacher.empSubstitute" },
+  { value: "volunteer",  labelKey: "profileTeacher.empVolunteer"  },
 ];
 
 const QUALIFICATION_LEVELS = [
-  { value: "diploma",   label: "Diploma / Certificate" },
-  { value: "bachelors", label: "Bachelor's Degree"      },
-  { value: "pgde",      label: "PGDE / PGCE"            },
-  { value: "masters",   label: "Master's Degree"        },
-  { value: "phd",       label: "PhD / Doctorate"        },
-  { value: "other",     label: "Other"                  },
+  { value: "diploma",   labelKey: "profileTeacher.qualDiploma"   },
+  { value: "bachelors", labelKey: "profileTeacher.qualBachelors" },
+  { value: "pgde",      labelKey: "profileTeacher.qualPgde"      },
+  { value: "masters",   labelKey: "profileTeacher.qualMasters"   },
+  { value: "phd",       labelKey: "profileTeacher.qualPhd"       },
+  { value: "other",     labelKey: "profileTeacher.qualOther"     },
 ];
 
 const BLOOD_GROUPS = [
@@ -224,33 +230,33 @@ const BLOOD_GROUPS = [
 // VALIDATION
 // ─────────────────────────────────────────────────────────
 
-const validateStep = (step, form) => {
+const validateStep = (step, form, t) => {
   const errors = {};
   if (step === 0) {
-    if (!form.firstName?.trim())   errors.firstName   = "First name is required";
-    if (!form.lastName?.trim())    errors.lastName    = "Last name is required";
-    if (!form.gender)              errors.gender      = "Please select your gender";
-    if (!form.dateOfBirth?.trim()) errors.dateOfBirth = "Date of birth is required";
-    if (!form.nationalId?.trim())  errors.nationalId  = "National ID is required";
+    if (!form.firstName?.trim())   errors.firstName   = t("profileTeacher.errFirstName");
+    if (!form.lastName?.trim())    errors.lastName    = t("profileTeacher.errLastName");
+    if (!form.gender)              errors.gender      = t("profileTeacher.errGender");
+    if (!form.dateOfBirth?.trim()) errors.dateOfBirth = t("profileTeacher.errDob");
+    if (!form.nationalId?.trim())  errors.nationalId  = t("profileTeacher.errNationalId");
   }
   if (step === 1) {
-    if (!form.staffId?.trim())   errors.staffId        = "Staff ID is required";
-    if (!form.qualification)     errors.qualification  = "Please select your qualification";
-    if (!form.employmentType)    errors.employmentType = "Please select employment type";
-    if (!form.joinDate?.trim())  errors.joinDate       = "Join date is required";
+    if (!form.staffId?.trim())   errors.staffId        = t("profileTeacher.errStaffId");
+    if (!form.qualification)     errors.qualification  = t("profileTeacher.errQualification");
+    if (!form.employmentType)    errors.employmentType = t("profileTeacher.errEmploymentType");
+    if (!form.joinDate?.trim())  errors.joinDate       = t("profileTeacher.errJoinDate");
   }
   if (step === 2) {
-    if (!form.phone?.trim())   errors.phone   = "Phone number is required";
-    if (!form.address?.trim()) errors.address = "Address is required";
+    if (!form.phone?.trim())   errors.phone   = t("profileTeacher.errPhone");
+    if (!form.address?.trim()) errors.address = t("profileTeacher.errAddress");
     if (
       form.email?.trim() &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)
-    ) errors.email = "Invalid email address";
+    ) errors.email = t("profileTeacher.errEmail");
   }
   if (step === 3) {
-    if (!form.emergencyName?.trim())     errors.emergencyName     = "Emergency contact name is required";
-    if (!form.emergencyPhone?.trim())    errors.emergencyPhone    = "Emergency contact phone is required";
-    if (!form.emergencyRelation?.trim()) errors.emergencyRelation = "Relationship is required";
+    if (!form.emergencyName?.trim())     errors.emergencyName     = t("profileTeacher.errEmergencyName");
+    if (!form.emergencyPhone?.trim())    errors.emergencyPhone    = t("profileTeacher.errEmergencyPhone");
+    if (!form.emergencyRelation?.trim()) errors.emergencyRelation = t("profileTeacher.errRelation");
   }
   return errors;
 };
@@ -464,6 +470,7 @@ export const isTeacherProfileComplete = async (userId) => {
 // ─────────────────────────────────────────────────────────
 
 export default function TeacherProfileSetup() {
+  const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
   const setUser             = useAuthStore((s) => s.setUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
@@ -589,22 +596,22 @@ export default function TeacherProfileSetup() {
   //    that called replace in both branches which could fire twice.
   const handleSkip = useCallback(() => {
     Alert.alert(
-      "Skip for Now?",
-      "You can complete your profile later from Settings.",
+      t("profileTeacher.skipTitle"),
+      t("profileTeacher.skipBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("profileTeacher.cancel"), style: "cancel" },
         {
-          text:  "Skip for Now",
+          text:  t("profileTeacher.skipConfirm"),
           style: "destructive",
           onPress: () => router.replace("/teacher/dashboard"),
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   // ── Navigation ────────────────────────────────────────
   const goNext = () => {
-    const errs = validateStep(step, form);
+    const errs = validateStep(step, form, t);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     setErrors({});
     if (step < STEPS.length - 1) setStep((p) => p + 1);
@@ -619,7 +626,7 @@ export default function TeacherProfileSetup() {
 
   // ── Submit ────────────────────────────────────────────
   const handleSubmit = async () => {
-    const errs = validateStep(step, form);
+    const errs = validateStep(step, form, t);
     if (Object.keys(errs).length > 0) { setErrors(errs); return; }
     try {
       setSaving(true);
@@ -631,15 +638,15 @@ export default function TeacherProfileSetup() {
       if (user) setUser?.({ ...user, name: fullName, profileCompleted: true });
 
       Alert.alert(
-        "Profile Saved! 🎉",
-        "Your profile has been updated successfully.",
+        t("profileTeacher.savedTitle"),
+        t("profileTeacher.savedBody"),
         [{
-          text: "Continue",
+          text: t("profileTeacher.continueBtn"),
           onPress: () => router.replace("/teacher/dashboard"),
         }]
       );
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to save profile. Please try again.");
+      Alert.alert(t("profileTeacher.errorTitle"), err.message || t("profileTeacher.saveFailedBody"));
     } finally {
       setSaving(false);
     }
@@ -662,10 +669,10 @@ export default function TeacherProfileSetup() {
             <View style={ss.row}>
               <View style={{ flex: 1 }}>
                 <Field
-                  label="First Name" required
+                  label={t("profileTeacher.labelFirstName")} required
                   value={form.firstName}
                   onChangeText={(v) => set("firstName", v)}
-                  placeholder="e.g. John"
+                  placeholder={t("profileTeacher.phFirstName")}
                   icon="person-outline"
                   error={errors.firstName}
                 />
@@ -673,25 +680,25 @@ export default function TeacherProfileSetup() {
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
                 <Field
-                  label="Last Name" required
+                  label={t("profileTeacher.labelLastName")} required
                   value={form.lastName}
                   onChangeText={(v) => set("lastName", v)}
-                  placeholder="e.g. Doe"
+                  placeholder={t("profileTeacher.phLastName")}
                   error={errors.lastName}
                 />
               </View>
             </View>
 
             <SelectField
-              label="Gender" required
+              label={t("profileTeacher.labelGender")} required
               value={form.gender}
-              options={GENDERS}
+              options={withLabels(GENDERS, t)}
               onSelect={(v) => set("gender", v)}
               error={errors.gender}
             />
 
             <DateField
-              label="Date of Birth" required
+              label={t("profileTeacher.labelDob")} required
               value={form.dateOfBirth}
               onChange={(ymd) => set("dateOfBirth", ymd)}
               maximumDate={maxBirthday}
@@ -700,26 +707,26 @@ export default function TeacherProfileSetup() {
             />
 
             <Field
-              label="National ID / Passport Number" required
+              label={t("profileTeacher.labelNationalId")} required
               value={form.nationalId}
               onChangeText={(v) => set("nationalId", v)}
-              placeholder="e.g. A1234567"
+              placeholder={t("profileTeacher.phNationalId")}
               icon="card-outline"
               error={errors.nationalId}
             />
 
             <SelectField
-              label="Blood Group"
+              label={t("profileTeacher.labelBloodGroup")}
               value={form.bloodGroup}
               options={BLOOD_GROUPS}
               onSelect={(v) => set("bloodGroup", v)}
             />
 
             <Field
-              label="Brief Bio"
+              label={t("profileTeacher.labelBio")}
               value={form.bio}
               onChangeText={(v) => set("bio", v)}
-              placeholder="A short introduction about yourself…"
+              placeholder={t("profileTeacher.phBio")}
               multiline
               icon="document-text-outline"
             />
@@ -732,68 +739,67 @@ export default function TeacherProfileSetup() {
             <View style={ss.infoBox}>
               <Ionicons name="information-circle-outline" size={20} color={C.info} />
               <Text style={ss.infoText}>
-                Subject assignments are managed by your school administrator.
-                Fill in your employment and qualification details below.
+                {t("profileTeacher.infoProfessional")}
               </Text>
             </View>
 
             <Field
-              label="Staff ID / Employee Number" required
+              label={t("profileTeacher.labelStaffId")} required
               value={form.staffId}
               onChangeText={(v) => set("staffId", v)}
-              placeholder="e.g. TCH-2024-001"
+              placeholder={t("profileTeacher.phStaffId")}
               icon="id-card-outline"
               error={errors.staffId}
             />
 
             <SelectField
-              label="Highest Qualification" required
+              label={t("profileTeacher.labelQualification")} required
               value={form.qualification}
-              options={QUALIFICATION_LEVELS}
+              options={withLabels(QUALIFICATION_LEVELS, t)}
               onSelect={(v) => set("qualification", v)}
               error={errors.qualification}
             />
 
             <SelectField
-              label="Employment Type" required
+              label={t("profileTeacher.labelEmploymentType")} required
               value={form.employmentType}
-              options={EMPLOYMENT_TYPES}
+              options={withLabels(EMPLOYMENT_TYPES, t)}
               onSelect={(v) => set("employmentType", v)}
               error={errors.employmentType}
             />
 
             <DateField
-              label="Join Date" required
+              label={t("profileTeacher.labelJoinDate")} required
               value={form.joinDate}
               onChange={(ymd) => set("joinDate", ymd)}
               maximumDate={today}
               minimumDate={new Date(1980, 0, 1)}
-              hint="Date you joined this school"
+              hint={t("profileTeacher.hintJoinDate")}
               error={errors.joinDate}
             />
 
             <Field
-              label="Years of Teaching Experience"
+              label={t("profileTeacher.labelYearsExperience")}
               value={form.yearsOfExperience}
               onChangeText={(v) => set("yearsOfExperience", v)}
-              placeholder="e.g. 5"
+              placeholder={t("profileTeacher.phYearsExperience")}
               keyboardType="numeric"
               icon="time-outline"
             />
 
             <Field
-              label="Previous School / Institution"
+              label={t("profileTeacher.labelPreviousSchool")}
               value={form.previousSchool}
               onChangeText={(v) => set("previousSchool", v)}
-              placeholder="Where you taught before (optional)"
+              placeholder={t("profileTeacher.phPreviousSchool")}
               icon="business-outline"
             />
 
             <Field
-              label="Medical Conditions / Disabilities (optional)"
+              label={t("profileTeacher.labelMedical")}
               value={form.medicalConditions}
               onChangeText={(v) => set("medicalConditions", v)}
-              placeholder="Helps the school support you"
+              placeholder={t("profileTeacher.phMedical")}
               multiline
               icon="medical-outline"
             />
@@ -804,41 +810,41 @@ export default function TeacherProfileSetup() {
         return (
           <>
             <Field
-              label="Primary Phone" required
+              label={t("profileTeacher.labelPhone")} required
               value={form.phone}
               onChangeText={(v) => set("phone", v)}
-              placeholder="e.g. +233 20 000 0000"
+              placeholder={t("profileTeacher.phPhone")}
               keyboardType="phone-pad"
               icon="call-outline"
               error={errors.phone}
             />
 
             <Field
-              label="Alternate Phone"
+              label={t("profileTeacher.labelAltPhone")}
               value={form.alternatePhone}
               onChangeText={(v) => set("alternatePhone", v)}
-              placeholder="Optional"
+              placeholder={t("profileTeacher.phOptional")}
               keyboardType="phone-pad"
               icon="call-outline"
             />
 
             <Field
-              label="Email Address"
+              label={t("profileTeacher.labelEmail")}
               value={form.email || user?.email || ""}
               onChangeText={(v) => set("email", v)}
-              placeholder="your@email.com"
+              placeholder={t("profileTeacher.phEmail")}
               keyboardType="email-address"
               icon="mail-outline"
-              hint="Used for notifications and login"
+              hint={t("profileTeacher.hintEmail")}
               error={errors.email}
               editable={!user?.email}
             />
 
             <Field
-              label="Residential Address" required
+              label={t("profileTeacher.labelAddress")} required
               value={form.address}
               onChangeText={(v) => set("address", v)}
-              placeholder="House / Street address"
+              placeholder={t("profileTeacher.phAddress")}
               icon="home-outline"
               multiline
               error={errors.address}
@@ -847,19 +853,19 @@ export default function TeacherProfileSetup() {
             <View style={ss.row}>
               <View style={{ flex: 1 }}>
                 <Field
-                  label="City / Town"
+                  label={t("profileTeacher.labelCity")}
                   value={form.city}
                   onChangeText={(v) => set("city", v)}
-                  placeholder="e.g. Accra"
+                  placeholder={t("profileTeacher.phCity")}
                 />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
                 <Field
-                  label="State / Region"
+                  label={t("profileTeacher.labelState")}
                   value={form.state}
                   onChangeText={(v) => set("state", v)}
-                  placeholder="e.g. Greater Accra"
+                  placeholder={t("profileTeacher.phState")}
                 />
               </View>
             </View>
@@ -872,34 +878,34 @@ export default function TeacherProfileSetup() {
             <View style={ss.infoBox}>
               <Ionicons name="information-circle-outline" size={20} color={C.info} />
               <Text style={ss.infoText}>
-                This information is only used in case of emergency at school.
+                {t("profileTeacher.infoEmergency")}
               </Text>
             </View>
 
             <Field
-              label="Emergency Contact Name" required
+              label={t("profileTeacher.labelEmergencyName")} required
               value={form.emergencyName}
               onChangeText={(v) => set("emergencyName", v)}
-              placeholder="Full name"
+              placeholder={t("profileTeacher.phFullName")}
               icon="person-outline"
               error={errors.emergencyName}
             />
 
             <Field
-              label="Emergency Contact Phone" required
+              label={t("profileTeacher.labelEmergencyPhone")} required
               value={form.emergencyPhone}
               onChangeText={(v) => set("emergencyPhone", v)}
-              placeholder="e.g. +233 20 000 0000"
+              placeholder={t("profileTeacher.phPhone")}
               keyboardType="phone-pad"
               icon="call-outline"
               error={errors.emergencyPhone}
             />
 
             <Field
-              label="Relationship to You" required
+              label={t("profileTeacher.labelRelation")} required
               value={form.emergencyRelation}
               onChangeText={(v) => set("emergencyRelation", v)}
-              placeholder="e.g. Spouse, Parent, Sibling"
+              placeholder={t("profileTeacher.phRelation")}
               icon="heart-outline"
               error={errors.emergencyRelation}
             />
@@ -930,8 +936,10 @@ export default function TeacherProfileSetup() {
             <Ionicons name="arrow-back" size={22} color={C.gray700} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={ss.topTitle}>Profile Setup</Text>
-            <Text style={ss.topSub}>Step {step + 1} of {STEPS.length}</Text>
+            <Text style={ss.topTitle}>{t("profileTeacher.title")}</Text>
+            <Text style={ss.topSub}>
+              {t("profileTeacher.stepOf", { current: step + 1, total: STEPS.length })}
+            </Text>
           </View>
           <TouchableOpacity
             style={ss.skipBtn}
@@ -939,7 +947,7 @@ export default function TeacherProfileSetup() {
             hitSlop={8}
             activeOpacity={0.7}
           >
-            <Text style={ss.skipBtnText}>Skip</Text>
+            <Text style={ss.skipBtnText}>{t("profileTeacher.skip")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -975,7 +983,7 @@ export default function TeacherProfileSetup() {
                   isCurrent && ss.stepLabelActive,
                   isDone    && ss.stepLabelDone,
                 ]}>
-                  {s.title}
+                  {t(s.titleKey)}
                 </Text>
               </View>
             );
@@ -984,8 +992,8 @@ export default function TeacherProfileSetup() {
 
         {/* Step header */}
         <View style={ss.stepHeader}>
-          <Text style={ss.stepTitle}>{STEPS[step].title}</Text>
-          <Text style={ss.stepDesc}>{STEPS[step].desc}</Text>
+          <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
         </View>
 
         {/* Form */}
@@ -1004,7 +1012,7 @@ export default function TeacherProfileSetup() {
           {step > 0 && (
             <TouchableOpacity style={ss.backAction} onPress={goBack}>
               <Ionicons name="arrow-back" size={18} color={C.primary} />
-              <Text style={ss.backActionText}>Back</Text>
+              <Text style={ss.backActionText}>{t("profileTeacher.back")}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -1017,7 +1025,9 @@ export default function TeacherProfileSetup() {
               ? <ActivityIndicator size="small" color={C.white} />
               : <>
                   <Text style={ss.nextBtnText}>
-                    {step === STEPS.length - 1 ? "Save Profile" : "Next"}
+                    {step === STEPS.length - 1
+                      ? t("profileTeacher.save")
+                      : t("profileTeacher.next")}
                   </Text>
                   <Ionicons
                     name={step === STEPS.length - 1 ? "checkmark-circle" : "arrow-forward"}

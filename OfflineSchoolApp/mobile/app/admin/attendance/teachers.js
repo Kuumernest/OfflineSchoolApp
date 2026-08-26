@@ -23,15 +23,16 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 
 const STATUS_OPTIONS = [
-  { value: "present",  label: "Present",  color: "#059669", icon: "checkmark-circle" },
-  { value: "absent",   label: "Absent",   color: "#DC2626", icon: "close-circle"     },
-  { value: "late",     label: "Late",     color: "#D97706", icon: "time"             },
-  { value: "on_leave", label: "On Leave", color: "#6B7280", icon: "calendar"         },
+  { value: "present",  labelKey: "attStatus.present",  color: "#059669", icon: "checkmark-circle" },
+  { value: "absent",   labelKey: "attStatus.absent",   color: "#DC2626", icon: "close-circle"     },
+  { value: "late",     labelKey: "attStatus.late",     color: "#D97706", icon: "time"             },
+  { value: "on_leave", labelKey: "attAdmin.onLeave", color: "#6B7280", icon: "calendar"         },
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
 export default function MarkTeacherAttendanceScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -60,7 +61,7 @@ export default function MarkTeacherAttendanceScreen() {
       }
       setAttendance(existing);
     } catch (err) {
-      Alert.alert("Error", "Failed to load teacher roster");
+      Alert.alert(t("attAdmin.errorTitle"), t("attAdmin.teacherRosterFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -88,7 +89,7 @@ export default function MarkTeacherAttendanceScreen() {
     }));
 
     if (!records.length) {
-      Alert.alert("Nothing to save", "Please mark at least one teacher.");
+      Alert.alert(t("attAdmin.nothingToSave"), t("attAdmin.markOneTeacher"));
       return;
     }
 
@@ -101,12 +102,12 @@ export default function MarkTeacherAttendanceScreen() {
       });
 
       Alert.alert(
-        "✅ Saved",
+        t("attAdmin.savedTitle"),
         `Attendance saved for ${records.length} teacher(s).`,
         [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (err) {
-      Alert.alert("Save Failed", err.message || "Please try again.");
+      Alert.alert(t("attAdmin.saveFailed"), err.message || t("attAdmin.pleaseTryAgain"));
     } finally {
       setSaving(false);
     }
@@ -118,7 +119,7 @@ export default function MarkTeacherAttendanceScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={styles.loadingText}>Loading teacher roster…</Text>
+        <Text style={styles.loadingText}>{t("attAdmin.loadingTeacherRoster")}</Text>
       </View>
     );
   }
@@ -136,7 +137,7 @@ export default function MarkTeacherAttendanceScreen() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Teacher Attendance</Text>
+          <Text style={styles.headerTitle}>{t("attAdmin.teacherAttendanceTitle")}</Text>
           <Text style={styles.headerSub}>
             {markedCount} of {roster.length} marked
           </Text>
@@ -150,13 +151,13 @@ export default function MarkTeacherAttendanceScreen() {
           {saving ? (
             <ActivityIndicator size="small" color="#FFF" />
           ) : (
-            <Text style={styles.saveBtnText}>Save</Text>
+            <Text style={styles.saveBtnText}>{t("common.save")}</Text>
           )}
         </TouchableOpacity>
       </View>
 
       <View style={styles.markAllRow}>
-        <Text style={styles.markAllLabel}>Mark all as:</Text>
+        <Text style={styles.markAllLabel}>{t("attAdmin.markAllAsColon")}</Text>
         {STATUS_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
@@ -168,7 +169,7 @@ export default function MarkTeacherAttendanceScreen() {
             activeOpacity={0.7}
           >
             <Text style={[styles.markAllBtnText, { color: opt.color }]}>
-              {opt.label}
+              {t(opt.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -239,7 +240,7 @@ export default function MarkTeacherAttendanceScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={40} color="#D1D5DB" />
-            <Text style={styles.emptyText}>No teachers found</Text>
+            <Text style={styles.emptyText}>{t("attAdmin.noTeachers")}</Text>
           </View>
         }
       />
@@ -344,3 +345,4 @@ const styles = StyleSheet.create({
   },
   emptyText: { fontSize: 14, color: "#9CA3AF" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

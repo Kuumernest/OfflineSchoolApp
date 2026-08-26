@@ -7,10 +7,12 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassService } from "../../../src/services/class.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const MAX_CLASS_NAME_LENGTH = 50;
 
 export default function AddClass() {
+  const { t } = useTranslation();
   const router = useRouter();
   const isMountedRef = useRef(true);
   const inputRef = useRef(null);
@@ -26,12 +28,12 @@ export default function AddClass() {
 
   const validate = useCallback((value) => {
     const trimmed = value.trim();
-    if (!trimmed) return "Class name is required.";
-    if (trimmed.length < 2) return "Class name must be at least 2 characters.";
+    if (!trimmed) return t("classesAdmin.errNameRequired");
+    if (trimmed.length < 2) return t("classesAdmin.errNameShort");
     if (trimmed.length > MAX_CLASS_NAME_LENGTH) {
       return `Class name cannot exceed ${MAX_CLASS_NAME_LENGTH} characters.`;
     }
-    if (/^\d+$/.test(trimmed)) return "Class name cannot be purely numeric.";
+    if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";
   }, []);
 
@@ -57,9 +59,9 @@ export default function AddClass() {
       await ClassService.create(trimmed);
       if (!isMountedRef.current) return;
 
-      Alert.alert("Class Created", `"${trimmed}" has been added successfully.`, [
+      Alert.alert(t("classesAdmin.createdTitle"), t("classesAdmin.createdBody", { name: trimmed }), [
         {
-          text: "Add Another",
+          text: t("classesAdmin.addAnother"),
           onPress: () => {
             setClassName("");
             setFieldError("");
@@ -70,8 +72,8 @@ export default function AddClass() {
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;
-      const message = err.response?.data?.message || err.message || "Failed to create class. Please try again.";
-      Alert.alert("Error", message);
+      const message = err.response?.data?.message || err.message || t("classesAdmin.errCreate");
+      Alert.alert(t("classesAdmin.errTitle"), message);
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
@@ -94,8 +96,8 @@ export default function AddClass() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Add Class</Text>
-          <Text style={styles.headerSubtitle}>Create a new class</Text>
+          <Text style={styles.headerTitle}>{t("classesAdmin.addTitle")}</Text>
+          <Text style={styles.headerSubtitle}>{t("classesAdmin.addSub")}</Text>
         </View>
       </View>
 
@@ -114,7 +116,7 @@ export default function AddClass() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>
-              Class Name <Text style={styles.required}>*</Text>
+              {t("classesAdmin.nameLabel")} <Text style={styles.required}>*</Text>
             </Text>
 
             <View style={[styles.inputWrapper, fieldError ? styles.inputWrapperError : null]}>
@@ -127,7 +129,7 @@ export default function AddClass() {
               <TextInput
                 ref={inputRef}
                 style={styles.input}
-                placeholder="e.g. Form 1, Grade 10, Class A"
+                placeholder={t("classesAdmin.namePh")}
                 placeholderTextColor="#9CA3AF"
                 value={className}
                 onChangeText={handleChangeText}
@@ -148,7 +150,7 @@ export default function AddClass() {
                   <Text style={styles.fieldErrorText}>{fieldError}</Text>
                 </View>
               ) : (
-                <Text style={styles.hint}>Use a clear, recognisable name for this class.</Text>
+                <Text style={styles.hint}>{t("classesAdmin.nameHint")}</Text>
               )}
               <Text style={[
                 styles.charCount,
@@ -161,15 +163,15 @@ export default function AddClass() {
           </View>
 
           <View style={styles.examplesRow}>
-            <Text style={styles.examplesLabel}>Examples: </Text>
-            {["Form 1A", "Grade 10", "Class Maple"].map((ex) => (
+            <Text style={styles.examplesLabel}>{t("classesAdmin.examples")} </Text>
+            {["classesAdmin.ex1", "classesAdmin.ex2", "classesAdmin.ex3"].map((exKey) => (
               <TouchableOpacity
-                key={ex}
+                key={exKey}
                 style={styles.exampleChip}
-                onPress={() => { setClassName(ex); setFieldError(""); }}
+                onPress={() => { setClassName(t(exKey)); setFieldError(""); }}
                 activeOpacity={0.7}
               >
-                <Text style={styles.exampleChipText}>{ex}</Text>
+                <Text style={styles.exampleChipText}>{t(exKey)}</Text>
               </TouchableOpacity>
             ))}
           </View>
@@ -186,7 +188,7 @@ export default function AddClass() {
           ) : (
             <>
               <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-              <Text style={styles.submitButtonText}>Create Class</Text>
+              <Text style={styles.submitButtonText}>{t("classesAdmin.createBtn")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -197,7 +199,7 @@ export default function AddClass() {
           activeOpacity={0.7}
           disabled={loading}
         >
-          <Text style={styles.discardText}>Discard & Go Back</Text>
+          <Text style={styles.discardText}>{t("classesAdmin.discardGoBack")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

@@ -61,3 +61,44 @@ export async function deleteStudentPhoto(
 ): Promise<void> {
   await api.delete(`${BASE}/student-photo/${studentId}`, { params: { schoolId } });
 }
+
+// ─── Document verification (office side) ──────────────────────────────────────
+
+export interface DocumentVerificationRow {
+  _id:          string;
+  kind:         "transcript" | "report_card";
+  code:         string;
+  examId:       string | null;
+  examName:     string | null;
+  term:         string | null;
+  academicYear: string | null;
+  issuedAt:     string;
+  refreshedAt:  string;
+  printCount:   number;
+  revokedAt:    string | null;
+  revokeReason: string | null;
+}
+
+/** Every verification code issued for one student's printed documents. */
+export async function fetchVerifications(
+  studentId: string, schoolId: string
+): Promise<DocumentVerificationRow[]> {
+  const { data } = await api.get(`${BASE}/verifications`, {
+    params: { studentId, schoolId },
+  });
+  return (data as { data: DocumentVerificationRow[] }).data;
+}
+
+/** Withdraw a code — the public page then answers "withdrawn by the school". */
+export async function revokeVerification(
+  id: string, schoolId: string, reason: string
+): Promise<void> {
+  await api.post(`${BASE}/verifications/${id}/revoke`, { schoolId, reason });
+}
+
+/** Reinstate a code revoked by mistake. */
+export async function restoreVerification(
+  id: string, schoolId: string
+): Promise<void> {
+  await api.post(`${BASE}/verifications/${id}/restore`, { schoolId });
+}

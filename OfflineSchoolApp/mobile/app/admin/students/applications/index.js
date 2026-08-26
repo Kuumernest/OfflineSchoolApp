@@ -32,6 +32,7 @@ import { Ionicons }   from "@expo/vector-icons";
 import { StudentApplicationsService } from "../../../../src/services/studentApplications.service";
 import { StudentService }             from "../../../../src/services/student.service";
 import { ClassService }               from "../../../../src/services/class.service";
+import { useTranslation }             from "../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -52,11 +53,11 @@ const isStaleApplication = (created_at) => {
   return !Number.isNaN(t) && t < Date.now() - STALE_MS;
 };
 
-const formatDate = (value) => {
-  if (!value) return "Unknown date";
+const formatDate = (value, t) => {
+  if (!value) return t("appsReview.unknownDate");
   const d = new Date(value);
   return Number.isNaN(d.getTime())
-    ? "Unknown date"
+    ? t("appsReview.unknownDate")
     : d.toLocaleDateString(undefined, {
         year:  "numeric",
         month: "short",
@@ -267,6 +268,7 @@ const SummaryCard = React.memo(({ bg, icon, iconColor, value, label }) => (
 ));
 
 const ApplicationCard = React.memo(({ application, onReview }) => {
+  const { t }    = useTranslation();
   const stale    = isStaleApplication(application.created_at);
   const docCount = application.documents?.length ?? 0;
 
@@ -286,7 +288,7 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
             {application.name}
           </Text>
           <Text style={styles.studentEmail} numberOfLines={1}>
-            {application.email || "No email provided"}
+            {application.email || t("appsReview.noEmail")}
           </Text>
         </View>
 
@@ -298,7 +300,7 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
             styles.statusBadgeText,
             stale ? styles.staleBadgeText : styles.pendingBadgeText,
           ]}>
-            {stale ? "Stale" : "Pending"}
+            {stale ? t("appsReview.stale") : t("appsReview.pending")}
           </Text>
         </View>
       </View>
@@ -307,18 +309,18 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
         <View style={styles.metaItem}>
           <Ionicons name="school-outline" size={14} color="#4F46E5" />
           <Text style={styles.metaText} numberOfLines={1}>
-            {application.className || "No class selected"}
+            {application.className || t("appsReview.noClass")}
           </Text>
         </View>
         <View style={styles.metaItem}>
           <Ionicons name="people-outline" size={14} color="#6B7280" />
           <Text style={styles.metaText} numberOfLines={1}>
-            {application.guardianName || "No guardian provided"}
+            {application.guardianName || t("appsReview.noGuardian")}
           </Text>
         </View>
         <View style={styles.metaItem}>
           <Ionicons name="calendar-outline" size={14} color="#6B7280" />
-          <Text style={styles.metaText}>{formatDate(application.created_at)}</Text>
+          <Text style={styles.metaText}>{formatDate(application.created_at, t)}</Text>
         </View>
         {application.phone ? (
           <View style={styles.metaItem}>
@@ -329,7 +331,7 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
         <View style={styles.metaItem}>
           <Ionicons name="document-attach-outline" size={14} color="#059669" />
           <Text style={styles.metaText}>
-            {docCount} {docCount === 1 ? "document" : "documents"}
+            {t("appsReview.docCount", { count: docCount })}
           </Text>
         </View>
       </View>
@@ -340,42 +342,50 @@ const ApplicationCard = React.memo(({ application, onReview }) => {
         activeOpacity={0.7}
       >
         <Ionicons name="eye-outline" size={18} color="#FFFFFF" />
-        <Text style={styles.reviewButtonText}>Review Application</Text>
+        <Text style={styles.reviewButtonText}>{t("appsReview.reviewApplication")}</Text>
       </TouchableOpacity>
     </View>
   );
 });
 
-const DetailRow = React.memo(({ icon, iconColor, label, value }) => (
-  <View style={styles.detailRow}>
-    <Ionicons name={icon} size={18} color={iconColor} />
-    <View style={styles.detailTextBox}>
-      <Text style={styles.detailLabel}>{label}</Text>
-      <Text style={styles.detailValue}>{value || "Not provided"}</Text>
-    </View>
-  </View>
-));
+const DetailRow = React.memo(({ icon, iconColor, label, value }) => {
+  const { t } = useTranslation();
 
-const DocumentCard = React.memo(({ doc, index, onOpen }) => (
-  <TouchableOpacity
-    style={styles.documentCard}
-    onPress={() => onOpen(doc)}
-    activeOpacity={0.7}
-  >
-    <View style={styles.documentIcon}>
-      <Ionicons name="document-attach-outline" size={18} color="#059669" />
+  return (
+    <View style={styles.detailRow}>
+      <Ionicons name={icon} size={18} color={iconColor} />
+      <View style={styles.detailTextBox}>
+        <Text style={styles.detailLabel}>{label}</Text>
+        <Text style={styles.detailValue}>{value || t("appsReview.notProvided")}</Text>
+      </View>
     </View>
-    <View style={{ flex: 1 }}>
-      <Text style={styles.documentTitle} numberOfLines={1}>
-        {doc.title || doc.name || `Document ${index + 1}`}
-      </Text>
-      <Text style={styles.documentSubtitle} numberOfLines={1}>
-        {doc.type || doc.mimeType || "Attached document"}
-      </Text>
-    </View>
-    <Ionicons name="open-outline" size={18} color="#9CA3AF" />
-  </TouchableOpacity>
-));
+  );
+});
+
+const DocumentCard = React.memo(({ doc, index, onOpen }) => {
+  const { t } = useTranslation();
+
+  return (
+    <TouchableOpacity
+      style={styles.documentCard}
+      onPress={() => onOpen(doc)}
+      activeOpacity={0.7}
+    >
+      <View style={styles.documentIcon}>
+        <Ionicons name="document-attach-outline" size={18} color="#059669" />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.documentTitle} numberOfLines={1}>
+          {doc.title || doc.name || t("appsReview.documentN", { n: index + 1 })}
+        </Text>
+        <Text style={styles.documentSubtitle} numberOfLines={1}>
+          {doc.type || doc.mimeType || t("appsReview.attachedDocument")}
+        </Text>
+      </View>
+      <Ionicons name="open-outline" size={18} color="#9CA3AF" />
+    </TouchableOpacity>
+  );
+});
 
 const ClassOption = React.memo(({ classItem, isSelected, onSelect }) => (
   <TouchableOpacity
@@ -403,31 +413,33 @@ const ClassOption = React.memo(({ classItem, isSelected, onSelect }) => (
 ));
 
 const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
+  const { t } = useTranslation();
+
   if (!enrollmentNo && !tempPassword) return null;
 
   return (
     <View style={styles.credentialsCard}>
       <View style={styles.credentialsHeader}>
         <Ionicons name="key-outline" size={16} color="#4F46E5" />
-        <Text style={styles.credentialsTitle}>Student Login Credentials</Text>
+        <Text style={styles.credentialsTitle}>{t("appsReview.credentialsTitle")}</Text>
       </View>
 
       {enrollmentNo ? (
         <View style={styles.credentialRow}>
           <View style={styles.credentialLabelBox}>
             <Ionicons name="id-card-outline" size={14} color="#6B7280" />
-            <Text style={styles.credentialLabel}>Enrollment No.</Text>
+            <Text style={styles.credentialLabel}>{t("appsReview.labelEnrollmentNo")}</Text>
           </View>
           <Text style={styles.credentialValue} numberOfLines={1}>
             {enrollmentNo}
           </Text>
           <TouchableOpacity
             style={styles.copyChip}
-            onPress={() => onCopy(enrollmentNo, "Enrollment number")}
+            onPress={() => onCopy(enrollmentNo, t("appsReview.copyLabelEnrollment"))}
             activeOpacity={0.7}
           >
             <Ionicons name="copy-outline" size={13} color="#4F46E5" />
-            <Text style={styles.copyChipText}>Copy</Text>
+            <Text style={styles.copyChipText}>{t("appsReview.btnCopy")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
@@ -436,26 +448,24 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
         <View style={styles.credentialRow}>
           <View style={styles.credentialLabelBox}>
             <Ionicons name="lock-closed-outline" size={14} color="#6B7280" />
-            <Text style={styles.credentialLabel}>Temp Password</Text>
+            <Text style={styles.credentialLabel}>{t("appsReview.labelTempPassword")}</Text>
           </View>
           <Text style={styles.credentialValue} numberOfLines={1}>
             {tempPassword}
           </Text>
           <TouchableOpacity
             style={styles.copyChip}
-            onPress={() => onCopy(tempPassword, "Password")}
+            onPress={() => onCopy(tempPassword, t("appsReview.copyLabelPassword"))}
             activeOpacity={0.7}
           >
             <Ionicons name="copy-outline" size={13} color="#4F46E5" />
-            <Text style={styles.copyChipText}>Copy</Text>
+            <Text style={styles.copyChipText}>{t("appsReview.btnCopy")}</Text>
           </TouchableOpacity>
         </View>
       ) : null}
 
       <Text style={styles.credentialsHint}>
-        📱 Share these details with the student. The temporary password above
-        works for the first login only — they will set their own password
-        right after signing in.
+        {t("appsReview.credentialsHint")}
       </Text>
     </View>
   );
@@ -467,6 +477,7 @@ const CredentialsCard = React.memo(({ enrollmentNo, tempPassword, onCopy }) => {
 
 export default function StudentApplicationsScreen() {
   const router       = useRouter();
+  const { t }        = useTranslation();
   const isMountedRef = useRef(true);
 
   // ── State ──────────────────────────────────────────────────────────────────
@@ -555,7 +566,7 @@ export default function StudentApplicationsScreen() {
     } catch (err) {
       console.error("[Applications] loadData failed:", err);
       if (isMountedRef.current) {
-        setError("Failed to load applications. Pull down to retry.");
+        setError(t("appsReview.errLoadFailed"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -563,7 +574,7 @@ export default function StudentApplicationsScreen() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -611,11 +622,17 @@ export default function StudentApplicationsScreen() {
   const handleCopy = useCallback(async (text, label) => {
     try {
       await Clipboard.setStringAsync(String(text));
-      Alert.alert("Copied!", `${label} copied to clipboard.`);
+      Alert.alert(
+        t("appsReview.copiedTitle"),
+        t("appsReview.copiedMsg", { label })
+      );
     } catch {
-      Alert.alert("Copy Failed", `Could not copy. Value: ${text}`);
+      Alert.alert(
+        t("appsReview.copyFailedTitle"),
+        t("appsReview.copyFailedMsg", { value: text })
+      );
     }
-  }, []);
+  }, [t]);
 
   // ── Approve ────────────────────────────────────────────────────────────────
 
@@ -624,21 +641,24 @@ export default function StudentApplicationsScreen() {
 
     if (!selectedClassId) {
       Alert.alert(
-        "Class Required",
-        "Please select a class before approving this application."
+        t("appsReview.classRequiredTitle"),
+        t("appsReview.classRequiredMsg")
       );
       return;
     }
 
-    const className = selectedClass?.name ?? "the selected class";
+    const className = selectedClass?.name ?? t("appsReview.theSelectedClass");
 
     Alert.alert(
-      "Approve Application",
-      `Approve ${selectedApplication.name} and assign them to "${className}"?`,
+      t("appsReview.approveTitle"),
+      t("appsReview.approveConfirm", {
+        name:  selectedApplication.name,
+        class: className,
+      }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("appsReview.btnCancel"), style: "cancel" },
         {
-          text:    "Approve",
+          text:    t("appsReview.btnApprove"),
           onPress: async () => {
             const appId   = selectedApplication.id;
             const appName = selectedApplication.name;
@@ -666,10 +686,10 @@ export default function StudentApplicationsScreen() {
             } catch (err) {
               if (!isMountedRef.current) return;
               Alert.alert(
-                "Approval Failed",
+                t("appsReview.approvalFailedTitle"),
                 err?.response?.data?.message ||
                 err?.message                 ||
-                "Failed to approve application"
+                t("appsReview.errApproveFailed")
               );
               loadData(true);
             } finally {
@@ -679,7 +699,7 @@ export default function StudentApplicationsScreen() {
         },
       ]
     );
-  }, [selectedApplication, selectedClassId, selectedClass, loadData]);
+  }, [selectedApplication, selectedClassId, selectedClass, loadData, t]);
 
   // ── Reject ─────────────────────────────────────────────────────────────────
 
@@ -687,12 +707,12 @@ export default function StudentApplicationsScreen() {
     if (!selectedApplication) return;
 
     Alert.alert(
-      "Reject Application",
-      `Reject ${selectedApplication.name}'s application? This cannot be undone.`,
+      t("appsReview.rejectTitle"),
+      t("appsReview.rejectConfirm", { name: selectedApplication.name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("appsReview.btnCancel"), style: "cancel" },
         {
-          text:  "Reject",
+          text:  t("appsReview.btnReject"),
           style: "destructive",
           onPress: async () => {
             const appId   = selectedApplication.id;
@@ -713,14 +733,17 @@ export default function StudentApplicationsScreen() {
               setShowClassPicker(false);
               setApprovalCredentials(null);
 
-              Alert.alert("Rejected", `${appName}'s application has been rejected.`);
+              Alert.alert(
+                t("appsReview.rejectedTitle"),
+                t("appsReview.rejectedMsg", { name: appName })
+              );
             } catch (err) {
               if (!isMountedRef.current) return;
               Alert.alert(
-                "Rejection Failed",
+                t("appsReview.rejectionFailedTitle"),
                 err?.response?.data?.message ||
                 err?.message                 ||
-                "Failed to reject"
+                t("appsReview.errRejectFailed")
               );
               loadData(true);
             } finally {
@@ -730,7 +753,7 @@ export default function StudentApplicationsScreen() {
         },
       ]
     );
-  }, [selectedApplication, rejectReason, loadData]);
+  }, [selectedApplication, rejectReason, loadData, t]);
 
   // ── Document opener ────────────────────────────────────────────────────────
 
@@ -738,21 +761,30 @@ export default function StudentApplicationsScreen() {
     const uri = doc?.uri || doc?.url || doc?.fileUrl || doc?.path || null;
 
     if (!uri) {
-      Alert.alert("Unavailable", "No document link is available.");
+      Alert.alert(
+        t("appsReview.unavailableTitle"),
+        t("appsReview.noDocumentLink")
+      );
       return;
     }
 
     try {
       const supported = await Linking.canOpenURL(uri);
       if (!supported) {
-        Alert.alert("Cannot Open", "This document type cannot be opened on this device.");
+        Alert.alert(
+          t("appsReview.cannotOpenTitle"),
+          t("appsReview.cannotOpenMsg")
+        );
         return;
       }
       await Linking.openURL(uri);
     } catch {
-      Alert.alert("Error", "Unable to open this document.");
+      Alert.alert(
+        t("appsReview.errorTitle"),
+        t("appsReview.errOpenDocument")
+      );
     }
-  }, []);
+  }, [t]);
 
   // ── Loading ────────────────────────────────────────────────────────────────
 
@@ -760,7 +792,7 @@ export default function StudentApplicationsScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading applications…</Text>
+        <Text style={styles.loadingText}>{t("appsReview.loading")}</Text>
       </View>
     );
   }
@@ -784,12 +816,9 @@ export default function StudentApplicationsScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Applications</Text>
+          <Text style={styles.headerTitle}>{t("appsReview.title")}</Text>
           <Text style={styles.headerSubtitle}>
-            {applications.length}{" "}
-            {applications.length === 1
-              ? "pending application"
-              : "pending applications"}
+            {t("appsReview.pendingCount", { count: applications.length })}
           </Text>
         </View>
 
@@ -809,21 +838,21 @@ export default function StudentApplicationsScreen() {
           icon="person-add-outline"
           iconColor="#D97706"
           value={applications.length}
-          label="Pending"
+          label={t("appsReview.pending")}
         />
         <SummaryCard
           bg="#FEE2E2"
           icon="alert-circle-outline"
           iconColor="#DC2626"
           value={staleCount}
-          label={`Over ${STALE_DAYS}d`}
+          label={t("appsReview.overDays", { days: STALE_DAYS })}
         />
         <SummaryCard
           bg="#EEF2FF"
           icon="school-outline"
           iconColor="#4F46E5"
           value={classes.length}
-          label="Classes"
+          label={t("appsReview.classes")}
         />
       </View>
 
@@ -850,7 +879,7 @@ export default function StudentApplicationsScreen() {
               activeOpacity={0.75}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("appsReview.btnRetry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -858,10 +887,9 @@ export default function StudentApplicationsScreen() {
         {applications.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="checkmark-circle-outline" size={48} color="#059669" />
-            <Text style={styles.emptyTitle}>All caught up!</Text>
+            <Text style={styles.emptyTitle}>{t("appsReview.emptyTitle")}</Text>
             <Text style={styles.emptySubtitle}>
-              No pending applications at the moment. New submissions will
-              appear here for review.
+              {t("appsReview.emptySubtitle")}
             </Text>
           </View>
         ) : (
@@ -892,13 +920,13 @@ export default function StudentApplicationsScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.modalTitle}>
                   {approvalCredentials
-                    ? "Approval Successful 🎉"
-                    : "Review Application"}
+                    ? t("appsReview.approvedTitle")
+                    : t("appsReview.reviewApplication")}
                 </Text>
                 <Text style={styles.modalSubtitle}>
                   {approvalCredentials
                     ? `${approvalCredentials.studentName} → ${approvalCredentials.className}`
-                    : "Approve or reject this application"}
+                    : t("appsReview.reviewSubtitle")}
                 </Text>
               </View>
 
@@ -922,8 +950,7 @@ export default function StudentApplicationsScreen() {
                   <View style={styles.offlineBanner}>
                     <Ionicons name="cloud-offline-outline" size={18} color="#92400E" />
                     <Text style={styles.offlineBannerText}>
-                      Approved offline — the student account will be fully
-                      created once you reconnect.
+                      {t("appsReview.offlineBanner")}
                     </Text>
                   </View>
                 )}
@@ -932,7 +959,7 @@ export default function StudentApplicationsScreen() {
                   <View style={styles.emailSentBanner}>
                     <Ionicons name="mail-outline" size={18} color="#065F46" />
                     <Text style={styles.emailSentText}>
-                      Login details have been emailed to the student.
+                      {t("appsReview.emailSentBanner")}
                     </Text>
                   </View>
                 )}
@@ -958,7 +985,7 @@ export default function StudentApplicationsScreen() {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                  <Text style={styles.doneButtonText}>Done</Text>
+                  <Text style={styles.doneButtonText}>{t("appsReview.btnDone")}</Text>
                 </TouchableOpacity>
               </ScrollView>
 
@@ -973,38 +1000,38 @@ export default function StudentApplicationsScreen() {
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
                     <Ionicons name="person" size={16} color="#4F46E5" />
-                    <Text style={styles.detailSectionTitle}>Student Details</Text>
+                    <Text style={styles.detailSectionTitle}>{t("appsReview.sectionStudentDetails")}</Text>
                   </View>
 
                   <DetailRow
                     icon="person-outline"
                     iconColor="#D97706"
-                    label="Full Name"
+                    label={t("appsReview.labelFullName")}
                     value={selectedApplication.name}
                   />
                   <DetailRow
                     icon="mail-outline"
                     iconColor="#4F46E5"
-                    label="Email Address"
-                    value={selectedApplication.email || "No email provided"}
+                    label={t("appsReview.labelEmail")}
+                    value={selectedApplication.email || t("appsReview.noEmail")}
                   />
                   <DetailRow
                     icon="call-outline"
                     iconColor="#059669"
-                    label="Phone Number"
+                    label={t("appsReview.labelPhone")}
                     value={selectedApplication.phone}
                   />
                   <DetailRow
                     icon="people-outline"
                     iconColor="#4F46E5"
-                    label="Guardian / Parent"
+                    label={t("appsReview.labelGuardian")}
                     value={selectedApplication.guardianName}
                   />
                   {selectedApplication.address ? (
                     <DetailRow
                       icon="home-outline"
                       iconColor="#6B7280"
-                      label="Address"
+                      label={t("appsReview.labelAddress")}
                       value={selectedApplication.address}
                     />
                   ) : null}
@@ -1012,28 +1039,28 @@ export default function StudentApplicationsScreen() {
                     <DetailRow
                       icon="document-text-outline"
                       iconColor="#6B7280"
-                      label="Notes"
+                      label={t("appsReview.labelNotes")}
                       value={selectedApplication.notes}
                     />
                   ) : null}
                   <DetailRow
                     icon="school-outline"
                     iconColor="#7C3AED"
-                    label="Applied for Class"
-                    value={selectedApplication.className || "Not specified"}
+                    label={t("appsReview.labelAppliedClass")}
+                    value={selectedApplication.className || t("appsReview.notSpecified")}
                   />
                   <DetailRow
                     icon="calendar-outline"
                     iconColor="#4F46E5"
-                    label="Applied On"
-                    value={formatDate(selectedApplication.created_at)}
+                    label={t("appsReview.labelAppliedOn")}
+                    value={formatDate(selectedApplication.created_at, t)}
                   />
                 </View>
 
                 <View style={styles.detailSection}>
                   <View style={styles.detailSectionHeader}>
                     <Ionicons name="document-text" size={16} color="#059669" />
-                    <Text style={styles.detailSectionTitle}>Documents</Text>
+                    <Text style={styles.detailSectionTitle}>{t("appsReview.sectionDocuments")}</Text>
                   </View>
 
                   {selectedApplication.documents?.length > 0 ? (
@@ -1049,7 +1076,7 @@ export default function StudentApplicationsScreen() {
                     <View style={styles.emptyDocuments}>
                       <Ionicons name="document-outline" size={20} color="#9CA3AF" />
                       <Text style={styles.emptyDocumentsText}>
-                        No documents attached
+                        {t("appsReview.noDocuments")}
                       </Text>
                     </View>
                   )}
@@ -1059,7 +1086,7 @@ export default function StudentApplicationsScreen() {
                   <View style={styles.detailSectionHeader}>
                     <Ionicons name="school" size={16} color="#4F46E5" />
                     <Text style={styles.detailSectionTitle}>
-                      Assign Class Upon Approval
+                      {t("appsReview.sectionAssignClass")}
                     </Text>
                   </View>
 
@@ -1067,7 +1094,7 @@ export default function StudentApplicationsScreen() {
                     <View style={styles.noClassesBox}>
                       <Ionicons name="alert-circle-outline" size={18} color="#D97706" />
                       <Text style={styles.noClassesText}>
-                        No active classes found. Create a class before approving.
+                        {t("appsReview.noActiveClasses")}
                       </Text>
                     </View>
                   ) : (
@@ -1086,7 +1113,9 @@ export default function StudentApplicationsScreen() {
                             !selectedClass && styles.classSelectorPlaceholder,
                           ]}
                         >
-                          {selectedClass ? selectedClass.name : "Select a class…"}
+                          {selectedClass
+                            ? selectedClass.name
+                            : t("appsReview.selectClassPlaceholder")}
                         </Text>
                         <Ionicons
                           name={showClassPicker ? "chevron-up" : "chevron-down"}
@@ -1118,13 +1147,13 @@ export default function StudentApplicationsScreen() {
                   <View style={styles.detailSectionHeader}>
                     <Ionicons name="chatbubble-ellipses" size={16} color="#DC2626" />
                     <Text style={styles.detailSectionTitle}>
-                      Rejection Reason{" "}
-                      <Text style={styles.optional}>(Optional)</Text>
+                      {t("appsReview.sectionRejectReason")}{" "}
+                      <Text style={styles.optional}>{t("appsReview.optional")}</Text>
                     </Text>
                   </View>
                   <TextInput
                     style={styles.reasonInput}
-                    placeholder="Write a reason for rejection…"
+                    placeholder={t("appsReview.phRejectReason")}
                     placeholderTextColor="#9CA3AF"
                     multiline
                     numberOfLines={3}
@@ -1151,7 +1180,7 @@ export default function StudentApplicationsScreen() {
                     ) : (
                       <>
                         <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.actionButtonText}>Reject</Text>
+                        <Text style={styles.actionButtonText}>{t("appsReview.btnReject")}</Text>
                       </>
                     )}
                   </TouchableOpacity>
@@ -1171,7 +1200,7 @@ export default function StudentApplicationsScreen() {
                     ) : (
                       <>
                         <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" />
-                        <Text style={styles.actionButtonText}>Approve</Text>
+                        <Text style={styles.actionButtonText}>{t("appsReview.btnApprove")}</Text>
                       </>
                     )}
                   </TouchableOpacity>

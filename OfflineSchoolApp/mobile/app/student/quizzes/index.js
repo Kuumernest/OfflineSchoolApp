@@ -28,14 +28,16 @@ import {
 } from "../../../src/services/quiz.service";
 import {
   resolveStudentClassId,
-} from "../../../src/services/student.service";
+} from "../../../src/services/student.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
 const formatTime = (minutes) => {
-  if (!minutes) return "No limit";
+  const { t } = useTranslation();
+  if (!minutes) return t("studentQuiz.noLimit");
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60);
   const m = minutes % 60;
@@ -66,6 +68,7 @@ const sameId = (a, b) =>
 // ─────────────────────────────────────────────────────────────
 
 const getQuizStatus = (quiz, attempts = []) => {
+  const { t } = useTranslation();
   const now          = new Date();
   const qId          = quiz.id || quiz._id;
   const quizAttempts = attempts.filter((a) => sameId(a.quiz_id, qId));
@@ -91,7 +94,7 @@ const getQuizStatus = (quiz, attempts = []) => {
 
   if (!quiz.is_published) {
     return {
-      label:    "Unavailable",
+      label:    t("studentHome.quizUnavailable"),
       color:    "#9CA3AF",
       bg:       "#F3F4F6",
       canStart: false,
@@ -124,7 +127,7 @@ const getQuizStatus = (quiz, attempts = []) => {
       };
     }
     return {
-      label:    "Closed",
+      label:    t("studentHome.quizClosed"),
       color:    "#DC2626",
       bg:       "#FEE2E2",
       canStart: false,
@@ -151,7 +154,7 @@ const getQuizStatus = (quiz, attempts = []) => {
   const inProgress = quizAttempts.find((a) => a.status === "in_progress");
   if (inProgress) {
     return {
-      label:    "In Progress",
+      label:    t("studentHome.quizInProgress"),
       color:    "#4F46E5",
       bg:       "#EEF2FF",
       canStart: true,
@@ -168,7 +171,7 @@ const getQuizStatus = (quiz, attempts = []) => {
     return {
       label:    remaining != null
         ? `${remaining} attempt${remaining !== 1 ? "s" : ""} left`
-        : "Retake",
+        : t("studentHome.quizRetake"),
       color:    "#4F46E5",
       bg:       "#EEF2FF",
       canStart: true,
@@ -178,7 +181,7 @@ const getQuizStatus = (quiz, attempts = []) => {
   }
 
   return {
-    label:    "Not Started",
+    label:    t("studentHome.quizNotStarted"),
     color:    "#059669",
     bg:       "#ECFDF5",
     canStart: true,
@@ -191,6 +194,7 @@ const getQuizStatus = (quiz, attempts = []) => {
 // ─────────────────────────────────────────────────────────────
 
 const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
+  const { t } = useTranslation();
   if (!quiz) return null;
 
   const qId    = quiz.id || quiz._id;
@@ -216,7 +220,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
           <TouchableOpacity onPress={onClose} style={styles.modalClose}>
             <Ionicons name="close" size={22} color="#374151" />
           </TouchableOpacity>
-          <Text style={styles.modalHeaderTitle}>Quiz Details</Text>
+          <Text style={styles.modalHeaderTitle}>{t("studentQuiz.detailsTitle")}</Text>
           <View style={{ width: 36 }} />
         </View>
 
@@ -235,28 +239,28 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
             {[
               {
                 icon:  "help-circle-outline",
-                label: "Questions",
+                label: t("studentQuiz.questions"),
                 value: quiz.question_count ?? (quiz.questions?.length ?? 0),
                 color: "#4F46E5",
                 bg:    "#EEF2FF",
               },
               {
                 icon:  "time-outline",
-                label: "Time Limit",
+                label: t("studentQuiz.timeLimit"),
                 value: formatTime(quiz.time_limit_minutes),
                 color: "#D97706",
                 bg:    "#FEF3C7",
               },
               {
                 icon:  "refresh-outline",
-                label: "Attempts",
+                label: t("studentQuiz.attempts"),
                 value: quiz.max_attempts ?? "∞",
                 color: "#059669",
                 bg:    "#ECFDF5",
               },
               {
                 icon:  "ribbon-outline",
-                label: "Pass Mark",
+                label: t("studentQuiz.passMark"),
                 value: `${quiz.passing_score ?? 70}%`,
                 color: "#DB2777",
                 bg:    "#FDF2F8",
@@ -284,7 +288,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                   size={18}
                   color="#4F46E5"
                 />
-                <Text style={styles.instructionsTitle}>Instructions</Text>
+                <Text style={styles.instructionsTitle}>{t("studentQuiz.instructions")}</Text>
               </View>
               <Text style={styles.instructionsText}>{quiz.instructions}</Text>
             </View>
@@ -297,29 +301,29 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                 icon:  quiz.shuffle_questions
                   ? "shuffle-outline"
                   : "list-outline",
-                label: "Questions",
+                label: t("studentQuiz.questions"),
                 value: quiz.shuffle_questions
-                  ? "Shuffled each attempt"
-                  : "Fixed order",
+                  ? t("studentQuiz.shuffled")
+                  : t("studentQuiz.fixedOrder"),
               },
               {
                 icon:  "eye-outline",
-                label: "Answers shown",
+                label: t("studentQuiz.answersShown"),
                 value:
                   quiz.show_answers_after === "immediately"
-                    ? "After each question"
+                    ? t("quizCreate.feedbackImmediately")
                     : quiz.show_answers_after === "on_completion"
-                    ? "After submitting"
+                    ? t("quizCreate.feedbackOnCompletion")
                     : quiz.show_answers_after === "after_deadline"
-                    ? "After deadline"
-                    : "Not shown",
+                    ? t("quizCreate.feedbackAfterDeadline")
+                    : t("studentQuiz.notShown"),
               },
               {
                 icon:  quiz.allow_backtrack
                   ? "arrow-back-circle-outline"
                   : "lock-closed-outline",
-                label: "Navigation",
-                value: quiz.allow_backtrack ? "Can go back" : "Forward only",
+                label: t("studentQuiz.navigation"),
+                value: quiz.allow_backtrack ? t("studentQuiz.canGoBack") : t("studentQuiz.forwardOnly"),
               },
             ].map((item) => (
               <View key={item.label} style={styles.settingRow}>
@@ -333,8 +337,9 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
           {/* Previous attempts */}
           {submitted.length > 0 && (
             <View style={styles.prevSection}>
-              <Text style={styles.prevTitle}>Previous Attempts</Text>
-              {submitted.map((a, i) => (
+              <Text style={styles.prevTitle}>{t("studentQuiz.prevAttempts")}</Text>
+              {submitted.map((a, i) => {
+                               return (
                 <View key={a.id || i} style={styles.prevCard}>
                   <View style={styles.prevCardLeft}>
                     <Text style={styles.prevAttemptNum}>
@@ -364,11 +369,12 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                         },
                       ]}
                     >
-                      {a.is_passed ? "Passed" : "Failed"}
+                      {a.is_passed ? t("studentQuiz.passed") : t("studentQuiz.failed")}
                     </Text>
                   </View>
                 </View>
-              ))}
+              );
+                             })}
             </View>
           )}
 
@@ -419,7 +425,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                     color="#FFF"
                   />
                   <Text style={styles.startBtnText}>
-                    {status.resumeId ? "Resume Quiz" : "Start Quiz"}
+                    {status.resumeId ? t("studentQuiz.resumeCta") : t("studentQuiz.startCta")}
                   </Text>
                 </>
               )}
@@ -449,6 +455,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
 // ─────────────────────────────────────────────────────────────
 
 export default function StudentQuizzesScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   // ✅ Select primitives directly — stable across renders
@@ -569,7 +576,7 @@ export default function StudentQuizzesScreen() {
       );
 
       if (!canAttempt) {
-        Alert.alert("Cannot Start", reason || "Cannot start quiz");
+        Alert.alert(t("studentQuiz.cannotStart"), reason || t("studentQuiz.cannotStartBody"));
         return;
       }
 
@@ -580,7 +587,7 @@ export default function StudentQuizzesScreen() {
       });
     } catch (err) {
       console.warn("[StudentQuizzes] start error:", err.message);
-      Alert.alert("Error", "Could not start quiz. Please try again.");
+      Alert.alert(t("studentQuiz.errTitle"), t("studentQuiz.startFailedRetry"));
     } finally {
       setStarting(false);
     }
@@ -592,7 +599,7 @@ export default function StudentQuizzesScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading quizzes…</Text>
+        <Text style={styles.loadingText}>{t("studentQuiz.loading")}</Text>
       </View>
     );
   }
@@ -612,7 +619,7 @@ export default function StudentQuizzesScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Quizzes</Text>
+          <Text style={styles.headerTitle}>{t("studentQuiz.listTitle")}</Text>
           <Text style={styles.headerSub}>
             {counts.all} quiz{counts.all !== 1 ? "zes" : ""} available
           </Text>
@@ -668,19 +675,20 @@ export default function StudentQuizzesScreen() {
             />
             <Text style={styles.emptyTitle}>
               {activeFilter === "completed"
-                ? "No completed quizzes"
+                ? t("studentQuiz.emptyDone")
                 : activeFilter === "available"
-                ? "No quizzes available"
-                : "No quizzes yet"}
+                ? t("studentQuiz.emptyAvail")
+                : t("studentQuiz.emptyNone")}
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "completed"
-                ? "Complete a quiz to see it here"
-                : "Check back later for new quizzes"}
+                ? t("studentQuiz.emptyDoneSub")
+                : t("studentQuiz.emptyAvailSub")}
             </Text>
           </View>
         ) : (
-          filteredQuizzes.map(({ quiz, status }) => (
+          filteredQuizzes.map(({ quiz, status }) => {
+                                return (
             <TouchableOpacity
               key={quiz.id || quiz._id}
               style={styles.quizCard}
@@ -830,17 +838,18 @@ export default function StudentQuizzesScreen() {
                 <Text style={styles.tapHint}>
                   {status.canStart
                     ? status.resumeId
-                      ? "Tap to resume →"
+                      ? t("studentQuiz.tapResume")
                       : (status.attempts ?? 0) > 0
-                      ? "Tap to retake →"
-                      : "Tap to view details →"
+                      ? t("studentQuiz.tapRetake")
+                      : t("studentQuiz.tapDetails")
                     : (status.attempts ?? 0) > 0
-                    ? "Tap to view results →"
+                    ? t("studentQuiz.tapResults")
                     : ""}
                 </Text>
               </View>
             </TouchableOpacity>
-          ))
+          );
+                              })
         )}
 
         <View style={{ height: 32 }} />

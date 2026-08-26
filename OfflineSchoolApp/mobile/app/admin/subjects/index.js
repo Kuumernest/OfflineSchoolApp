@@ -39,6 +39,7 @@ const resolveClassCol = async () => {
 };
 
 const normaliseSubject = (subject, classMap, classCol) => {
+  const { t } = useTranslation();
   const rawClassId =
     subject.classId ?? subject.class_id ??
     (classCol ? subject[classCol] : undefined) ??
@@ -49,7 +50,7 @@ const normaliseSubject = (subject, classMap, classCol) => {
 
   const className =
     classObj?.name ?? subject.className ?? subject.class_name ??
-    subject.class?.name ?? "Unknown Class";
+    subject.class?.name ?? t("subjectsList.unknownClass");
 
   const teacherName =
     subject.teacherName ?? subject.teacher_name ??
@@ -64,7 +65,9 @@ const normaliseSubject = (subject, classMap, classCol) => {
 };
 
 const SubjectCard = React.memo(
-  ({ subject, onEdit, onDelete, hideClassBadge = false }) => (
+  ({ subject, onEdit, onDelete, hideClassBadge = false }) => {
+    const { t } = useTranslation();
+    return (
     <View style={styles.card}>
       <View style={styles.iconBox}>
         <Ionicons name="book-outline" size={22} color="#059669" />
@@ -96,7 +99,7 @@ const SubjectCard = React.memo(
               ]}
               numberOfLines={1}
             >
-              {subject.teacherName || "No teacher assigned"}
+              {subject.teacherName || t("subjects.noTeacher")}
             </Text>
           </View>
         </View>
@@ -121,7 +124,8 @@ const SubjectCard = React.memo(
         </TouchableOpacity>
       </View>
     </View>
-  )
+  );
+  }
 );
 
 const EmptyState = React.memo(({ icon, title, subtitle, action }) => (
@@ -172,6 +176,7 @@ const ClassSection = React.memo(({ className, count, children }) => (
 ));
 
 export default function AdminSubjects() {
+  const { t } = useTranslation();
   const router          = useRouter();
   const isMountedRef    = useRef(true);
   const isFirstFocusRef = useRef(true);
@@ -215,7 +220,7 @@ export default function AdminSubjects() {
     } catch (err) {
       console.error("Failed to load subjects:", err);
       if (isMountedRef.current) {
-        setError("Failed to load subjects. Pull down to retry.");
+        setError(t("subjectsList.loadFailed"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -244,26 +249,26 @@ export default function AdminSubjects() {
 
   const handleDelete = useCallback((subject) => {
     Alert.alert(
-      "Delete Subject",
+      t("subjectsList.delTitle"),
       `Permanently delete "${subject.name}" from ${subject.className}?\n\n` +
-      "This may affect teacher assignments and timetable entries.",
+      t("subjectsList.delBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Delete", style: "destructive",
+          text: t("common.delete"), style: "destructive",
           onPress: async () => {
             try {
               await SubjectService.delete(subject.id);
               if (isMountedRef.current) {
                 setSubjects((prev) => prev.filter((s) => s.id !== subject.id));
-                Alert.alert("Deleted", `"${subject.name}" has been removed.`);
+                Alert.alert(t("subjectsList.deletedTitle"), `"${subject.name}" has been removed.`);
               }
             } catch (err) {
               const message =
                 err.response?.data?.message ||
                 (err instanceof Error ? err.message : null) ||
-                "Failed to delete subject";
-              Alert.alert("Error", message);
+                t("subjectsList.errDelete");
+              Alert.alert(t("subjectsList.errTitle"), message);
               if (isMountedRef.current) loadData(true);
             }
           },
@@ -311,7 +316,7 @@ export default function AdminSubjects() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={styles.loadingText}>Loading subjects…</Text>
+        <Text style={styles.loadingText}>{t("subjectsList.loading")}</Text>
       </View>
     );
   }
@@ -325,7 +330,7 @@ export default function AdminSubjects() {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.headerTitle}>Subjects</Text>
+          <Text style={styles.headerTitle}>{t("subjects.title")}</Text>
           <Text style={styles.headerSubtitle}>
             {stats.total} {stats.total === 1 ? "subject" : "subjects"}
             {stats.unassigned > 0 ? ` • ${stats.unassigned} unassigned` : ""}
@@ -370,19 +375,19 @@ export default function AdminSubjects() {
         <View style={styles.statsBanner}>
           <View style={styles.statItem}>
             <Text style={styles.statNumber}>{stats.total}</Text>
-            <Text style={styles.statLabel}>Total</Text>
+            <Text style={styles.statLabel}>{t("common.total")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.assigned}</Text>
-            <Text style={styles.statLabel}>Assigned</Text>
+            <Text style={styles.statLabel}>{t("subjectsList.assigned")}</Text>
           </View>
           <View style={styles.statDivider} />
           <View style={styles.statItem}>
             <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
               {stats.unassigned}
             </Text>
-            <Text style={styles.statLabel}>Unassigned</Text>
+            <Text style={styles.statLabel}>{t("subjectsList.unassigned")}</Text>
           </View>
         </View>
       )}
@@ -410,7 +415,7 @@ export default function AdminSubjects() {
               activeOpacity={0.75}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -418,18 +423,18 @@ export default function AdminSubjects() {
         {!hasClasses ? (
           <EmptyState
             icon="school-outline"
-            title="No classes yet"
-            subtitle="A subject must be linked to a class. Create a class first."
-            action={{ icon: "add-circle-outline", label: "Add Class", color: "#4F46E5", onPress: handleAddClass }}
+            title={t("subjectsList.noClasses")}
+            subtitle={t("subjects.needClass")}
+            action={{ icon: "add-circle-outline", label: t("subjectsList.addClass"), color: "#4F46E5", onPress: handleAddClass }}
           />
         ) : subjects.length === 0 ? (
           <EmptyState
             icon="book-outline"
-            title="No subjects found"
+            title={t("subjects.none")}
             subtitle={selectedClassId
-              ? "No subjects in this class yet. Add one to get started."
-              : "Add your first subject and link it to a class."}
-            action={{ icon: "add-circle-outline", label: "Add Subject", color: "#059669", onPress: handleAddSubject }}
+              ? t("subjectsList.noneInClass")
+              : t("subjectsList.noneHint")}
+            action={{ icon: "add-circle-outline", label: t("subjects.add"), color: "#059669", onPress: handleAddSubject }}
           />
         ) : isAllTab ? (
           groupedSubjects.map((group) => (
@@ -594,3 +599,4 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: { fontSize: 14, fontWeight: "600" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

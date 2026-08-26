@@ -17,7 +17,7 @@ import {
   useDeleteExam,
 } from "@/hooks/useExams";
 import { useAuthStore }       from "@/store/auth.store";
-import { EXAM_STATUS_META }   from "@/constants/exam.constants";
+import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/api";
 import { useToast }           from "@/components/ui/Toast";
@@ -39,20 +39,6 @@ interface AlertItem {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const EXAM_TYPE_LABELS: Record<string, string> = {
-  first_test:            "First Test",
-  second_test:           "Second Test",
-  mid_term:              "Mid-Term",
-  practical:             "Practical",
-  final_exam:            "Final Exam",
-  mock_exam:             "Mock Exam",
-  promotion_exam:        "Promotion Exam",
-  continuous_assessment: "Continuous Assessment",
-  // legacy
-  written:  "Written",
-  oral:     "Oral",
-  project:  "Project",
-};
 
 const STATUS_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
   draft:     ["scheduled", "ongoing"],
@@ -114,12 +100,13 @@ const sortExams = (exams: Exam[], sortBy: string): Exam[] => {
 // ─── Small shared components ──────────────────────────────────────────────────
 
 const StatusBadge = ({ status }: { status: ExamStatus }) => {
+  const { t } = useTranslation();
   const cfg = EXAM_STATUS_META[status] ?? EXAM_STATUS_META.draft;
   return (
     <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
       text-xs font-semibold ${cfg.color} ${cfg.bg}`}>
       <span className={`w-1.5 h-1.5 rounded-full ${cfg.dot}`} />
-      {cfg.label}
+      {t(cfg.labelKey)}
     </span>
   );
 };
@@ -290,7 +277,7 @@ const QuickActionsMenu = ({
     },
     {
       icon: "📋", label: "View Report Cards",
-      onClick: () => { navigate("/exams/reports"); onClose(); },
+      onClick: () => { navigate("/reports/cards"); onClose(); },
     },
     {
       icon: "📈", label: "Results Analytics",
@@ -364,7 +351,7 @@ const ExamRow = ({
           {exam.name}
         </button>
         <p className="text-xs text-gray-400 mt-0.5">
-          {EXAM_TYPE_LABELS[exam.type] ?? exam.type}
+          {examTypeLabel(t, exam.type)}
           {exam.term         ? ` · ${exam.term}`         : ""}
           {exam.academicYear ? ` · ${exam.academicYear}` : ""}
         </p>
@@ -435,7 +422,7 @@ const ExamRow = ({
                       className="w-full text-left px-4 py-2 text-sm text-gray-700
                                  hover:bg-gray-50 flex items-center gap-2">
                       <span className={`w-2 h-2 rounded-full ${EXAM_STATUS_META[s]?.dot}`} />
-                      → {EXAM_STATUS_META[s]?.label}
+                      → {t(EXAM_STATUS_META[s]?.labelKey ?? "examStatus.draft")}
                     </button>
                   ))}
 
@@ -478,6 +465,7 @@ const CalendarView = ({
   exams:       Exam[];
   onExamClick: (e: Exam) => void;
 }) => {
+  const { t } = useTranslation();
   const today = new Date();
   const [cur, setCur] = useState({
     year:  today.getFullYear(),
@@ -603,7 +591,7 @@ const CalendarView = ({
           return (
             <div key={s} className="flex items-center gap-1.5 text-xs text-gray-500">
               <span className={`w-2.5 h-2.5 rounded-full ${cfg.dot}`} />
-              {cfg.label}
+              {t(cfg.labelKey)}
             </div>
           );
         })}
@@ -627,7 +615,7 @@ const TimelineView = ({
     const map: Record<string, { label: string; exams: Exam[] }> = {};
     for (const e of exams) {
       const key = e.type || "other";
-      if (!map[key]) map[key] = { label: EXAM_TYPE_LABELS[key] ?? key, exams: [] };
+      if (!map[key]) map[key] = { label: examTypeLabel(t, key), exams: [] };
       map[key].exams.push(e);
     }
     return Object.values(map);
@@ -773,7 +761,7 @@ const ExamDetailSlideOver = ({
             <div className="flex items-center gap-2 mb-1">
               <StatusBadge status={exam.status} />
               <span className="text-xs text-gray-400">
-                {EXAM_TYPE_LABELS[exam.type] ?? exam.type}
+                {examTypeLabel(t, exam.type)}
               </span>
             </div>
             <h2 className="text-base font-bold text-gray-900 leading-snug">
@@ -842,7 +830,7 @@ const ExamDetailSlideOver = ({
                         border-2 transition-colors
                         ${cfg.color} ${cfg.bg}
                         hover:opacity-80`}>
-                      → {cfg.label}
+                      → {t(cfg.labelKey)}
                     </button>
                   );
                 })}
@@ -1283,7 +1271,7 @@ export default function ExamsPage() {
                     ? "bg-primary-600 text-white"
                     : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                   }`}>
-                {s === "all" ? "All" : EXAM_STATUS_META[s]?.label ?? s}
+                {s === "all" ? t("common.all") : t(EXAM_STATUS_META[s]?.labelKey ?? "examStatus.draft")}
               </button>
             ))}
           </div>
@@ -1357,8 +1345,8 @@ export default function ExamsPage() {
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
               <option value="">{t("exams.allTypes")}</option>
-              {availableTypes.map((t) => (
-                <option key={t} value={t}>{EXAM_TYPE_LABELS[t] ?? t}</option>
+              {availableTypes.map((ty) => (
+                <option key={ty} value={ty}>{examTypeLabel(t, ty)}</option>
               ))}
             </select>
 

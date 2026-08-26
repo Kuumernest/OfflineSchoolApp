@@ -24,6 +24,7 @@ import { useRouter }        from "expo-router";
 import { Ionicons }         from "@expo/vector-icons";
 import AnnouncementService  from "../../../src/services/announcement.service";
 import { ClassService }     from "../../../src/services/class.service";
+import { useTranslation }   from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -37,56 +38,56 @@ const PRIORITY_COLORS = {
 
 const AUDIENCES = [
   {
-    key:   "all",
-    label: "Everyone",
-    desc:  "All staff and students",
-    icon:  "globe-outline",
-    color: "#4F46E5",
+    key:      "all",
+    labelKey: "annAdmin.audAll",
+    descKey:  "annAdmin.audAllDesc",
+    icon:     "globe-outline",
+    color:    "#4F46E5",
   },
   {
-    key:   "teachers",
-    label: "Teachers Only",
-    desc:  "Only teaching staff",
-    icon:  "people-outline",
-    color: "#0891B2",
+    key:      "teachers",
+    labelKey: "annAdmin.audTeachers",
+    descKey:  "annAdmin.audTeachersDesc",
+    icon:     "people-outline",
+    color:    "#0891B2",
   },
   {
-    key:   "students",
-    label: "Students Only",
-    desc:  "All students",
-    icon:  "school-outline",
-    color: "#7C3AED",
+    key:      "students",
+    labelKey: "annAdmin.audStudents",
+    descKey:  "annAdmin.audStudentsDesc",
+    icon:     "school-outline",
+    color:    "#7C3AED",
   },
   {
-    key:   "class",
-    label: "Specific Class",
-    desc:  "Select target class(es)",
-    icon:  "layers-outline",
-    color: "#EA580C",
+    key:      "class",
+    labelKey: "annAdmin.audClass",
+    descKey:  "annAdmin.audClassDesc",
+    icon:     "layers-outline",
+    color:    "#EA580C",
   },
 ];
 
 const PRIORITIES = [
   {
-    key:   "normal",
-    label: "Normal",
-    icon:  "information-circle-outline",
-    color: "#15803D",
-    bg:    "#F0FDF4",
+    key:      "normal",
+    labelKey: "annAdmin.prioNormal",
+    icon:     "information-circle-outline",
+    color:    "#15803D",
+    bg:       "#F0FDF4",
   },
   {
-    key:   "important",
-    label: "Important",
-    icon:  "alert-circle-outline",
-    color: "#92400E",
-    bg:    "#FEF3C7",
+    key:      "important",
+    labelKey: "annAdmin.prioImportant",
+    icon:     "alert-circle-outline",
+    color:    "#92400E",
+    bg:       "#FEF3C7",
   },
   {
-    key:   "urgent",
-    label: "Urgent",
-    icon:  "warning-outline",
-    color: "#991B1B",
-    bg:    "#FEE2E2",
+    key:      "urgent",
+    labelKey: "annAdmin.prioUrgent",
+    icon:     "warning-outline",
+    color:    "#991B1B",
+    bg:       "#FEE2E2",
   },
 ];
 
@@ -98,6 +99,7 @@ const MAX_BODY = 5000;
 
 export default function CreateAnnouncementScreen() {
   const router   = useRouter();
+  const { t }    = useTranslation();
   const titleRef = useRef(null);
 
   // ── Form state ──────────────────────────────────────────
@@ -135,8 +137,8 @@ export default function CreateAnnouncementScreen() {
     loadClasses();
 
     // Auto-focus title after screen transition
-    const t = setTimeout(() => titleRef.current?.focus(), 400);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => titleRef.current?.focus(), 400);
+    return () => clearTimeout(timer);
   }, []);
 
   // ── Clear class selection when audience changes ─────────
@@ -164,19 +166,19 @@ export default function CreateAnnouncementScreen() {
   // ── Validation ──────────────────────────────────────────
   const validate = () => {
     if (!title.trim()) {
-      Alert.alert("Required", "Please enter a title");
+      Alert.alert(t("annAdmin.alertRequired"), t("annAdmin.errNeedTitle"));
       return false;
     }
     if (title.trim().length < 3) {
-      Alert.alert("Too Short", "Title must be at least 3 characters");
+      Alert.alert(t("annAdmin.alertTooShort"), t("annAdmin.errTitleShort"));
       return false;
     }
     if (!body.trim()) {
-      Alert.alert("Required", "Please enter the announcement message");
+      Alert.alert(t("annAdmin.alertRequired"), t("annAdmin.errNeedBody"));
       return false;
     }
     if (audience === "class" && selectedClasses.length === 0) {
-      Alert.alert("Required", "Please select at least one class");
+      Alert.alert(t("annAdmin.alertRequired"), t("annAdmin.errNeedClass"));
       return false;
     }
     return true;
@@ -198,12 +200,12 @@ export default function CreateAnnouncementScreen() {
       });
 
       Alert.alert(
-        "Announcement Sent ✓",
-        "Your announcement has been created successfully.",
-        [{ text: "OK", onPress: () => router.back() }]
+        t("annAdmin.sentTitle"),
+        t("annAdmin.sentBody"),
+        [{ text: t("annAdmin.ok"), onPress: () => router.back() }]
       );
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to create announcement");
+      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errCreate"));
     } finally {
       setSaving(false);
     }
@@ -214,6 +216,13 @@ export default function CreateAnnouncementScreen() {
   const canPreview  = title.trim().length > 0;
   const allSelected =
     classes.length > 0 && selectedClasses.length === classes.length;
+
+  const submitLabel =
+    audience === "class" && selectedClasses.length > 0
+      ? t("announceCreate.sendClasses", { count: selectedClasses.length })
+      : audience !== "all"
+      ? t("annAdmin.sendToAudience", { name: t(selAudience.labelKey) })
+      : t("announceCreate.sendAnnouncement");
 
   // ─────────────────────────────────────────────────────────
   // RENDER
@@ -234,7 +243,7 @@ export default function CreateAnnouncementScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>New Announcement</Text>
+          <Text style={styles.headerTitle}>{t("announcements.new")}</Text>
         </View>
 
         <TouchableOpacity
@@ -248,7 +257,7 @@ export default function CreateAnnouncementScreen() {
           ) : (
             <>
               <Ionicons name="send" size={18} color="#FFF" />
-              <Text style={styles.sendText}>Send</Text>
+              <Text style={styles.sendText}>{t("announceCreate.send")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -264,25 +273,25 @@ export default function CreateAnnouncementScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* ── Title ── */}
-          <Text style={styles.label}>Title *</Text>
+          <Text style={styles.label}>{t("annAdmin.fieldTitle")}</Text>
           <TextInput
             ref={titleRef}
             style={styles.titleInput}
             value={title}
             onChangeText={setTitle}
-            placeholder="Enter announcement title…"
+            placeholder={t("annAdmin.phTitle")}
             placeholderTextColor="#9CA3AF"
             maxLength={200}
             returnKeyType="next"
           />
 
           {/* ── Body ── */}
-          <Text style={styles.label}>Message *</Text>
+          <Text style={styles.label}>{t("annAdmin.fieldMessage")}</Text>
           <TextInput
             style={styles.bodyInput}
             value={body}
             onChangeText={setBody}
-            placeholder="Write your announcement here…"
+            placeholder={t("announceCreate.phBody")}
             placeholderTextColor="#9CA3AF"
             multiline
             textAlignVertical="top"
@@ -296,7 +305,7 @@ export default function CreateAnnouncementScreen() {
           </Text>
 
           {/* ── Audience ── */}
-          <Text style={styles.label}>Target Audience</Text>
+          <Text style={styles.label}>{t("annAdmin.fieldAudience")}</Text>
           <View style={styles.optionsGrid}>
             {AUDIENCES.map((a) => (
               <TouchableOpacity
@@ -328,9 +337,9 @@ export default function CreateAnnouncementScreen() {
                   styles.optionLabel,
                   audience === a.key && { color: a.color },
                 ]}>
-                  {a.label}
+                  {t(a.labelKey)}
                 </Text>
-                <Text style={styles.optionDesc}>{a.desc}</Text>
+                <Text style={styles.optionDesc}>{t(a.descKey)}</Text>
                 {audience === a.key && (
                   <View style={[styles.checkMark, { backgroundColor: a.color }]}>
                     <Ionicons name="checkmark" size={10} color="#FFF" />
@@ -344,14 +353,16 @@ export default function CreateAnnouncementScreen() {
           {audience === "class" && (
             <>
               <View style={styles.classTitleRow}>
-                <Text style={styles.label}>Select Class(es) *</Text>
+                <Text style={styles.label}>{t("annAdmin.fieldClasses")}</Text>
                 {classes.length > 0 && (
                   <TouchableOpacity
                     onPress={toggleAllClasses}
                     style={styles.selectAllBtn}
                   >
                     <Text style={styles.selectAllText}>
-                      {allSelected ? "Deselect All" : "Select All"}
+                      {allSelected
+                        ? t("announceCreate.deselectAll")
+                        : t("announceCreate.selectAll")}
                     </Text>
                   </TouchableOpacity>
                 )}
@@ -361,12 +372,12 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.classesLoader}>
                   <ActivityIndicator size="small" color="#4F46E5" />
                   <Text style={styles.classesLoaderText}>
-                    Loading classes…
+                    {t("annAdmin.loadingClasses")}
                   </Text>
                 </View>
               ) : classes.length === 0 ? (
                 <Text style={styles.noClassText}>
-                  No active classes found. Configure classes first.
+                  {t("annAdmin.noActiveClasses")}
                 </Text>
               ) : (
                 <View style={styles.classGrid}>
@@ -403,15 +414,16 @@ export default function CreateAnnouncementScreen() {
 
               {selectedClasses.length > 0 && (
                 <Text style={styles.selectedCount}>
-                  {selectedClasses.length} class
-                  {selectedClasses.length > 1 ? "es" : ""} selected
+                  {t("announceCreate.classesSelected", {
+                    count: selectedClasses.length,
+                  })}
                 </Text>
               )}
             </>
           )}
 
           {/* ── Priority ── */}
-          <Text style={styles.label}>Priority</Text>
+          <Text style={styles.label}>{t("announcements.priority")}</Text>
           <View style={styles.priorityRow}>
             {PRIORITIES.map((p) => (
               <TouchableOpacity
@@ -435,7 +447,7 @@ export default function CreateAnnouncementScreen() {
                   styles.priorityText,
                   priority === p.key && { color: p.color, fontWeight: "700" },
                 ]}>
-                  {p.label}
+                  {t(p.labelKey)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -446,9 +458,9 @@ export default function CreateAnnouncementScreen() {
             <View style={styles.optionLeft}>
               <Ionicons name="pin-outline" size={18} color="#6B7280" />
               <View>
-                <Text style={styles.optionTitle}>Pin Announcement</Text>
+                <Text style={styles.optionTitle}>{t("annAdmin.pinTitle")}</Text>
                 <Text style={styles.optionSubtitle}>
-                  Stays at top of everyone's feed
+                  {t("annAdmin.pinSub")}
                 </Text>
               </View>
             </View>
@@ -467,12 +479,12 @@ export default function CreateAnnouncementScreen() {
           {/* ── Preview ── */}
           {canPreview && (
             <View style={styles.previewSection}>
-              <Text style={styles.previewLabel}>Preview</Text>
+              <Text style={styles.previewLabel}>{t("common.preview")}</Text>
               <View style={styles.previewCard}>
                 {isPinned && (
                   <View style={styles.previewPin}>
                     <Ionicons name="pin" size={10} color="#4F46E5" />
-                    <Text style={styles.previewPinText}>Pinned</Text>
+                    <Text style={styles.previewPinText}>{t("annAdmin.pinned")}</Text>
                   </View>
                 )}
                 <Text style={styles.previewTitle} numberOfLines={2}>
@@ -494,16 +506,20 @@ export default function CreateAnnouncementScreen() {
                       color:         PRIORITY_COLORS[priority]?.text,
                       textTransform: "capitalize",
                     }}>
-                      {priority}
+                      {t(
+                        PRIORITIES.find((p) => p.key === priority)?.labelKey ||
+                          "annAdmin.prioNormal"
+                      )}
                     </Text>
                   </View>
                   <Text style={styles.previewAudience}>
-                    → {selAudience.label}
+                    {t("annAdmin.previewTo", { name: t(selAudience.labelKey) })}
                   </Text>
                   {audience === "class" && selectedClasses.length > 0 && (
                     <Text style={styles.previewAudience}>
-                      ({selectedClasses.length} class
-                      {selectedClasses.length > 1 ? "es" : ""})
+                      {t("annAdmin.previewClasses", {
+                        count: selectedClasses.length,
+                      })}
                     </Text>
                   )}
                 </View>
@@ -528,12 +544,7 @@ export default function CreateAnnouncementScreen() {
               <>
                 <Ionicons name="megaphone-outline" size={20} color="#FFF" />
                 <Text style={styles.submitText}>
-                  Send Announcement
-                  {audience === "class" && selectedClasses.length > 0
-                    ? ` · ${selectedClasses.length} Class${selectedClasses.length > 1 ? "es" : ""}`
-                    : audience !== "all"
-                    ? ` · ${selAudience.label}`
-                    : ""}
+                  {submitLabel}
                 </Text>
               </>
             )}

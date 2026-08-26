@@ -41,6 +41,8 @@ subjectName: string;
 teacherId: string | null;
 maxScore: number;
 passMark: number;
+/** Report-card coefficient. Stored server-side as weight = coefficient × 100. */
+coefficient: number;
 }
 
 interface ClassAssignment {
@@ -429,6 +431,7 @@ subjectName: sub.name,
 teacherId: null,
 maxScore: totalMarks,
 passMark,
+coefficient: 1,
 },
 },
 },
@@ -699,6 +702,29 @@ text
                               focus:outline-none"
                           />
                         </div>
+                        {/* Coefficient — how much this subject counts in
+                            the average and on the report card. */}
+                        <div>
+                          <label className="text-xs text-gray-500
+                                           font-semibold">
+                            {t("examCreate.coefficient")}
+                          </label>
+                          <input
+                            type="number"
+                            min={0.5}
+                            step={0.5}
+                            value={entry.coefficient}
+                            onChange={(e) =>
+                              updateSubject(
+                                activeClass, sub._id,
+                                "coefficient", Number(e.target.value)
+                              )
+                            }
+                            className="w-full mt-1 px-2 py-1.5 text-xs
+                              border border-gray-200 rounded-lg
+                              focus:outline-none"
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
@@ -919,6 +945,8 @@ schoolId, // ✅ add this
           teacherId: sub.teacherId || null,
           maxScore:  sub.maxScore,
           passMark:  sub.passMark,
+          // The API stores percentage-style weight: coefficient 2 → 200.
+          weight:    Math.round((sub.coefficient > 0 ? sub.coefficient : 1) * 100),
           schoolId,
         });
       } catch {

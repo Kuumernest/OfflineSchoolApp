@@ -13,6 +13,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
+import { useTranslation } from "../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // UUID VALIDATOR
@@ -87,37 +88,41 @@ function resolveClassId(item) {
 // ─────────────────────────────────────────────────────────
 
 const STATUS_META = {
-  draft:     { color: "#6B7280", bg: "#F3F4F6", label: "Draft"     },
-  scheduled: { color: "#4F46E5", bg: "#EEF2FF", label: "Scheduled" },
-  ongoing:   { color: "#D97706", bg: "#FEF3C7", label: "Ongoing"   },
-  completed: { color: "#059669", bg: "#ECFDF5", label: "Completed" },
-  published: { color: "#7C3AED", bg: "#F5F3FF", label: "Published" },
-  archived:  { color: "#9CA3AF", bg: "#F9FAFB", label: "Archived"  },
+  draft:     { color: "#6B7280", bg: "#F3F4F6", labelKey: "examDetail.statusDraft"     },
+  scheduled: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examDetail.statusScheduled" },
+  ongoing:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examDetail.statusOngoing"   },
+  completed: { color: "#059669", bg: "#ECFDF5", labelKey: "examDetail.statusCompleted" },
+  published: { color: "#7C3AED", bg: "#F5F3FF", labelKey: "examDetail.statusPublished" },
+  archived:  { color: "#9CA3AF", bg: "#F9FAFB", labelKey: "examDetail.statusArchived"  },
 };
 
 const SUBMISSION_META = {
-  pending:   { color: "#D97706", bg: "#FEF3C7", label: "Pending",   icon: "time-outline"             },
-  submitted: { color: "#4F46E5", bg: "#EEF2FF", label: "Submitted", icon: "cloud-upload-outline"     },
-  approved:  { color: "#059669", bg: "#ECFDF5", label: "Approved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: "#DC2626", bg: "#FEF2F2", label: "Rejected",  icon: "close-circle-outline"     },
+  pending:   { color: "#D97706", bg: "#FEF3C7", labelKey: "examDetail.statPending",   icon: "time-outline"             },
+  submitted: { color: "#4F46E5", bg: "#EEF2FF", labelKey: "examDetail.statSubmitted", icon: "cloud-upload-outline"     },
+  approved:  { color: "#059669", bg: "#ECFDF5", labelKey: "examDetail.statApproved",  icon: "checkmark-circle-outline" },
+  rejected:  { color: "#DC2626", bg: "#FEF2F2", labelKey: "examDetail.statRejected",  icon: "close-circle-outline"     },
 };
 
-const EXAM_TYPE_LABELS = {
-  first_test:            "First Test",
-  second_test:           "Second Test",
-  mid_term:              "Mid-Term",
-  practical:             "Practical",
-  final_exam:            "Final Exam",
-  mock_exam:             "Mock Exam",
-  promotion_exam:        "Promotion Exam",
-  continuous_assessment: "CA",
+const EXAM_TYPE_KEYS = {
+  first_test:            "examDetail.typeFirstTest",
+  second_test:           "examDetail.typeSecondTest",
+  mid_term:              "examDetail.typeMidTerm",
+  practical:             "examDetail.typePractical",
+  final_exam:            "examDetail.typeFinalExam",
+  mock_exam:             "examDetail.typeMockExam",
+  promotion_exam:        "examDetail.typePromotionExam",
+  continuous_assessment: "examDetail.typeCA",
 };
+
+/** Translated exam-type label, falling back to the raw stored value. */
+const examTypeLabel = (t, type) =>
+  EXAM_TYPE_KEYS[type] ? t(EXAM_TYPE_KEYS[type]) : type;
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const deriveClasses = (subjects, exam) => {
+const deriveClasses = (subjects, exam, t) => {
   const map = {};
 
   if (Array.isArray(exam?.classIds) && exam.classIds.length > 0) {
@@ -129,7 +134,7 @@ const deriveClasses = (subjects, exam) => {
       if (!map[cidStr]) {
         map[cidStr] = {
           classId:   cidStr,
-          className: namesList[i] || exam.className || "Class",
+          className: namesList[i] || exam.className || t("examDetail.classFallback"),
         };
       }
     });
@@ -142,7 +147,7 @@ const deriveClasses = (subjects, exam) => {
       map[cid]?.className ||
       resolveClassName(exam) ||
       exam?.className ||
-      "Unknown Class";
+      t("examDetail.unknownClass");
 
     if (cid && !map[cid]) {
       map[cid] = { classId: cid, className: cname };
@@ -153,7 +158,7 @@ const deriveClasses = (subjects, exam) => {
   if (examClassId && !map[examClassId]) {
     map[examClassId] = {
       classId:   examClassId,
-      className: resolveClassName(exam) || exam?.className || "Class",
+      className: resolveClassName(exam) || exam?.className || t("examDetail.classFallback"),
     };
   }
 
@@ -165,6 +170,7 @@ const deriveClasses = (subjects, exam) => {
 // ─────────────────────────────────────────────────────────
 
 const RejectModal = ({ visible, subjectName, onConfirm, onCancel }) => {
+  const { t } = useTranslation();
   const [reason, setReason] = useState("");
 
   // Reset when opened
@@ -181,13 +187,13 @@ const RejectModal = ({ visible, subjectName, onConfirm, onCancel }) => {
     >
       <View style={rm.overlay}>
         <View style={rm.box}>
-          <Text style={rm.title}>Reject Submission</Text>
+          <Text style={rm.title}>{t("examDetail.rejectTitle")}</Text>
           {!!subjectName && (
             <Text style={rm.sub}>{subjectName}</Text>
           )}
           <TextInput
             style={rm.input}
-            placeholder="Enter reason for rejection (required)"
+            placeholder={t("examDetail.rejectPlaceholder")}
             placeholderTextColor="#9CA3AF"
             value={reason}
             onChangeText={setReason}
@@ -197,20 +203,23 @@ const RejectModal = ({ visible, subjectName, onConfirm, onCancel }) => {
           />
           <View style={rm.actions}>
             <TouchableOpacity style={rm.cancelBtn} onPress={onCancel}>
-              <Text style={rm.cancelText}>Cancel</Text>
+              <Text style={rm.cancelText}>{t("examDetail.cancel")}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[rm.rejectBtn, !reason.trim() && { opacity: 0.4 }]}
               onPress={() => {
                 if (!reason.trim()) {
-                  Alert.alert("Required", "Please enter a rejection reason.");
+                  Alert.alert(
+                    t("examDetail.requiredTitle"),
+                    t("examDetail.reasonRequired")
+                  );
                   return;
                 }
                 onConfirm(reason.trim());
               }}
               disabled={!reason.trim()}
             >
-              <Text style={rm.rejectText}>Reject</Text>
+              <Text style={rm.rejectText}>{t("examDetail.reject")}</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -267,10 +276,79 @@ const rm = StyleSheet.create({
 });
 
 // ─────────────────────────────────────────────────────────
+// COEFFICIENT MODAL
+// ─────────────────────────────────────────────────────────
+
+/**
+ * Set one subject's coefficient — how much it counts in the average and on
+ * the report card. Stored server-side as weight = coefficient × 100.
+ */
+const CoeffModal = ({ visible, subject, saving, onConfirm, onCancel }) => {
+  const { t } = useTranslation();
+  const [value, setValue] = useState("1");
+
+  useEffect(() => {
+    if (visible) {
+      setValue(String(Math.round(((subject?.weight ?? 100) / 100) * 100) / 100));
+    }
+  }, [visible, subject]);
+
+  const parsed = Number(value);
+  const valid  = Number.isFinite(parsed) && parsed > 0;
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="fade"
+      onRequestClose={onCancel}
+    >
+      <View style={rm.overlay}>
+        <View style={rm.box}>
+          <Text style={rm.title}>{t("examDetail.coeffTitle")}</Text>
+          {!!subject?.subjectName && (
+            <Text style={rm.sub}>
+              {t("examDetail.coeffHelp", { subject: subject.subjectName })}
+            </Text>
+          )}
+          <TextInput
+            style={[rm.input, { minHeight: 0, textAlignVertical: "center" }]}
+            keyboardType="numeric"
+            value={value}
+            onChangeText={setValue}
+            placeholder="1"
+            placeholderTextColor="#9CA3AF"
+            autoFocus
+          />
+          <View style={rm.actions}>
+            <TouchableOpacity style={rm.cancelBtn} onPress={onCancel}>
+              <Text style={rm.cancelText}>{t("examDetail.cancel")}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                rm.rejectBtn,
+                { backgroundColor: "#4F46E5" },
+                (!valid || saving) && { opacity: 0.4 },
+              ]}
+              onPress={() => valid && onConfirm(parsed)}
+              disabled={!valid || saving}
+            >
+              <Text style={rm.rejectText}>
+                {saving ? t("examDetail.saving") : t("examDetail.save")}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+};
+
+// ─────────────────────────────────────────────────────────
 // CLASS PICKER MODAL
 // ─────────────────────────────────────────────────────────
 
-const ClassPickerModal = ({ visible, classes, onSelect, onClose, examName }) => (
+const ClassPickerModal = ({ visible, classes, onSelect, onClose, examName, t }) => (
   <Modal
     visible={visible}
     transparent
@@ -288,9 +366,9 @@ const ClassPickerModal = ({ visible, classes, onSelect, onClose, examName }) => 
         onPress={() => {}}
       >
         <View style={cp.handle} />
-        <Text style={cp.title}>Select Class</Text>
+        <Text style={cp.title}>{t("examDetail.pickClassTitle")}</Text>
         <Text style={cp.sub}>
-          Choose a class to enter marks for "{examName}"
+          {t("examDetail.pickClassSub", { exam: examName })}
         </Text>
         <FlatList
           data={classes}
@@ -315,7 +393,7 @@ const ClassPickerModal = ({ visible, classes, onSelect, onClose, examName }) => 
           onPress={onClose}
           activeOpacity={0.7}
         >
-          <Text style={cp.cancelText}>Cancel</Text>
+          <Text style={cp.cancelText}>{t("examDetail.cancel")}</Text>
         </TouchableOpacity>
       </TouchableOpacity>
     </TouchableOpacity>
@@ -423,8 +501,9 @@ const ir = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const SubmissionCard = ({
-  subject, onApprove, onReject, onEnterMarks,
+  subject, onApprove, onReject, onEnterMarks, onEditCoeff,
 }) => {
+  const { t }     = useTranslation();
   const meta      = SUBMISSION_META[subject.submissionStatus] || SUBMISSION_META.pending;
   const className = resolveClassName(subject);
 
@@ -440,36 +519,53 @@ const SubmissionCard = ({
       <View style={sc.top}>
         <View style={sc.info}>
           <Text style={sc.subjectName} numberOfLines={1}>
-            {subject.subjectName || "Unknown Subject"}
+            {subject.subjectName || t("examDetail.unknownSubject")}
           </Text>
           <Text style={sc.teacherName}>
-            {subject.teacherName || "No teacher assigned"}
+            {subject.teacherName || t("examDetail.noTeacher")}
           </Text>
           {subject.totalScoresEntered > 0 && (
             <Text style={sc.scoresCount}>
-              {subject.totalScoresEntered} score(s) entered
+              {t("examDetail.scoresEntered", {
+                count: subject.totalScoresEntered,
+              })}
             </Text>
           )}
         </View>
         <View style={[sc.badge, { backgroundColor: meta.bg }]}>
           <Ionicons name={meta.icon} size={12} color={meta.color} />
           <Text style={[sc.badgeText, { color: meta.color }]}>
-            {meta.label}
+            {t(meta.labelKey)}
           </Text>
         </View>
       </View>
 
       <View style={sc.metaRow}>
-        <Text style={sc.meta}>Max: {subject.maxScore}</Text>
-        <Text style={sc.meta}>Pass: {subject.passMark}</Text>
-        {subject.weight != null && (
-          <Text style={sc.meta}>Weight: {subject.weight}%</Text>
-        )}
+        <Text style={sc.meta}>
+          {t("examDetail.maxLabel", { value: subject.maxScore })}
+        </Text>
+        <Text style={sc.meta}>
+          {t("examDetail.passLabel", { value: subject.passMark })}
+        </Text>
+        {/* weight is percentage-style (100 = ×1); people think in
+            coefficients, so that is what the card shows and edits. */}
+        <TouchableOpacity
+          style={{ flexDirection: "row", alignItems: "center", gap: 3 }}
+          onPress={() => onEditCoeff?.(subject)}
+          activeOpacity={0.7}
+        >
+          <Text style={sc.meta}>
+            {t("examDetail.coeffLabel", {
+              value: Math.round(((subject.weight ?? 100) / 100) * 100) / 100,
+            })}
+          </Text>
+          <Ionicons name="pencil-outline" size={11} color="#4F46E5" />
+        </TouchableOpacity>
         {subject.isPractical && (
-          <Text style={[sc.meta, sc.tag]}>Practical</Text>
+          <Text style={[sc.meta, sc.tag]}>{t("examDetail.tagPractical")}</Text>
         )}
         {subject.isOral && (
-          <Text style={[sc.meta, sc.tag]}>Oral</Text>
+          <Text style={[sc.meta, sc.tag]}>{t("examDetail.tagOral")}</Text>
         )}
       </View>
 
@@ -481,7 +577,7 @@ const SubmissionCard = ({
         >
           <Ionicons name="create-outline" size={14} color="#4F46E5" />
           <Text style={[sc.actionText, { color: "#4F46E5" }]}>
-            Enter Marks
+            {t("examDetail.enterMarks")}
           </Text>
         </TouchableOpacity>
 
@@ -498,7 +594,7 @@ const SubmissionCard = ({
                 color="#059669"
               />
               <Text style={[sc.actionText, { color: "#059669" }]}>
-                Approve
+                {t("examDetail.approve")}
               </Text>
             </TouchableOpacity>
 
@@ -513,7 +609,7 @@ const SubmissionCard = ({
                 color="#DC2626"
               />
               <Text style={[sc.actionText, { color: "#DC2626" }]}>
-                Reject
+                {t("examDetail.reject")}
               </Text>
             </TouchableOpacity>
           </>
@@ -596,6 +692,7 @@ const sc = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const ResultCard = ({ result }) => {
+  const { t }     = useTranslation();
   const className = resolveClassName(result);
   const color     = result.isPassing ? "#059669" : "#DC2626";
 
@@ -609,12 +706,12 @@ const ResultCard = ({ result }) => {
 
       <View style={rc.info}>
         <Text style={rc.name} numberOfLines={1}>
-          {result.studentName || result.name || "Unknown Student"}
+          {result.studentName || result.name || t("examDetail.unknownStudent")}
         </Text>
         <View style={rc.classRow}>
           <Ionicons name="school-outline" size={10} color="#9CA3AF" />
           <Text style={rc.resolvedClass} numberOfLines={1}>
-            {className ?? "No class assigned"}
+            {className ?? t("examDetail.noClass")}
           </Text>
         </View>
         {result.admissionNo ? (
@@ -633,7 +730,9 @@ const ResultCard = ({ result }) => {
         <Text style={rc.grade}>{result.overallGrade || "—"}</Text>
         <View style={[rc.passBadge, { backgroundColor: color + "15" }]}>
           <Text style={[rc.passText, { color }]}>
-            {result.isPassing ? "Pass" : "Fail"}
+            {result.isPassing
+              ? t("examDetail.resultPass")
+              : t("examDetail.resultFail")}
           </Text>
         </View>
       </View>
@@ -679,10 +778,10 @@ const rc = StyleSheet.create({
 
 const QuickActions = ({
   exam, subjects, onEnterMarks, onProcess, onPublish,
-  processing, router, id,
+  processing, router, id, t,
 }) => (
   <View style={qa.wrap}>
-    <Text style={qa.title}>Quick Actions</Text>
+    <Text style={qa.title}>{t("examDetail.quickActions")}</Text>
     <View style={qa.grid}>
 
       <TouchableOpacity
@@ -693,9 +792,13 @@ const QuickActions = ({
         <View style={[qa.icon, { backgroundColor: "#4F46E5" }]}>
           <Ionicons name="create-outline" size={20} color="#FFF" />
         </View>
-        <Text style={[qa.btnLabel, { color: "#4F46E5" }]}>Enter Marks</Text>
+        <Text style={[qa.btnLabel, { color: "#4F46E5" }]}>
+          {t("examDetail.enterMarks")}
+        </Text>
         <Text style={qa.btnSub}>
-          {subjects.filter((s) => s.submissionStatus === "pending").length} pending
+          {t("examDetail.pendingCount", {
+            count: subjects.filter((s) => s.submissionStatus === "pending").length,
+          })}
         </Text>
       </TouchableOpacity>
 
@@ -715,8 +818,10 @@ const QuickActions = ({
             : <Ionicons name="calculator-outline" size={20} color="#FFF" />
           }
         </View>
-        <Text style={[qa.btnLabel, { color: "#059669" }]}>Process</Text>
-        <Text style={qa.btnSub}>Calculate grades</Text>
+        <Text style={[qa.btnLabel, { color: "#059669" }]}>
+          {t("examDetail.process")}
+        </Text>
+        <Text style={qa.btnSub}>{t("examDetail.processSub")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -732,8 +837,10 @@ const QuickActions = ({
         <View style={[qa.icon, { backgroundColor: "#2563EB" }]}>
           <Ionicons name="trophy-outline" size={20} color="#FFF" />
         </View>
-        <Text style={[qa.btnLabel, { color: "#2563EB" }]}>Rankings</Text>
-        <Text style={qa.btnSub}>Full results & stats</Text>
+        <Text style={[qa.btnLabel, { color: "#2563EB" }]}>
+          {t("examDetail.rankings")}
+        </Text>
+        <Text style={qa.btnSub}>{t("examDetail.rankingsSub")}</Text>
       </TouchableOpacity>
 
       {exam.status === "completed" && (
@@ -745,8 +852,10 @@ const QuickActions = ({
           <View style={[qa.icon, { backgroundColor: "#7C3AED" }]}>
             <Ionicons name="megaphone-outline" size={20} color="#FFF" />
           </View>
-          <Text style={[qa.btnLabel, { color: "#7C3AED" }]}>Publish</Text>
-          <Text style={qa.btnSub}>Release to students</Text>
+          <Text style={[qa.btnLabel, { color: "#7C3AED" }]}>
+            {t("examDetail.publish")}
+          </Text>
+          <Text style={qa.btnSub}>{t("examDetail.publishSub")}</Text>
         </TouchableOpacity>
       )}
 
@@ -763,8 +872,10 @@ const QuickActions = ({
         <View style={[qa.icon, { backgroundColor: "#6B7280" }]}>
           <Ionicons name="pencil-outline" size={20} color="#FFF" />
         </View>
-        <Text style={[qa.btnLabel, { color: "#374151" }]}>Edit</Text>
-        <Text style={qa.btnSub}>Modify exam details</Text>
+        <Text style={[qa.btnLabel, { color: "#374151" }]}>
+          {t("examDetail.edit")}
+        </Text>
+        <Text style={qa.btnSub}>{t("examDetail.editSub")}</Text>
       </TouchableOpacity>
 
     </View>
@@ -811,6 +922,7 @@ export default function ExamDetailScreen() {
   const { id }   = useLocalSearchParams();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
+  const { t }    = useTranslation();
 
   const [exam,       setExam]       = useState(null);
   const [subjects,   setSubjects]   = useState([]);
@@ -828,6 +940,8 @@ export default function ExamDetailScreen() {
   // ── Reject modal ──────────────────────────────────────────
   // ✅ Cross-platform — replaces Alert.prompt (Android crash)
   const [rejectModal,   setRejectModal]   = useState(null); // null | subject
+  const [coeffModal,    setCoeffModal]    = useState(null); // null | subject
+  const [coeffSaving,   setCoeffSaving]   = useState(false);
   const [rejectLoading, setRejectLoading] = useState(false);
 
   // ── UUID guard ────────────────────────────────────────────
@@ -860,7 +974,7 @@ export default function ExamDetailScreen() {
       setResults(resultRes?.results   || []);
     } catch (err) {
       console.error("ExamDetail load failed:", err.message);
-      Alert.alert("Error", "Failed to load exam details");
+      Alert.alert(t("examDetail.errorTitle"), t("examDetail.loadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -872,7 +986,7 @@ export default function ExamDetailScreen() {
   // ── Derived data ──────────────────────────────────────────
 
   const classes = useMemo(
-    () => deriveClasses(subjects, exam),
+    () => deriveClasses(subjects, exam, t),
     [subjects, exam]
   );
 
@@ -943,21 +1057,28 @@ export default function ExamDetailScreen() {
       ([s]) => s !== exam?.status
     );
     Alert.alert(
-      "Change Status",
-      `Current: ${STATUS_META[exam?.status]?.label || exam?.status}`,
+      t("examDetail.statusTitle"),
+      t("examDetail.statusCurrent", {
+        status: STATUS_META[exam?.status]
+          ? t(STATUS_META[exam.status].labelKey)
+          : exam?.status,
+      }),
       [
         ...options.map(([s, m]) => ({
-          text:    m.label,
+          text:    t(m.labelKey),
           onPress: async () => {
             try {
               await ExamService.updateExamStatus(id, s, schoolId);
               loadData(true);
             } catch (err) {
-              Alert.alert("Error", err.message || "Status update failed");
+              Alert.alert(
+                t("examDetail.errorTitle"),
+                err.message || t("examDetail.statusUpdateFailed")
+              );
             }
           },
         })),
-        { text: "Cancel", style: "cancel" },
+        { text: t("examDetail.cancel"), style: "cancel" },
       ]
     );
   }, [exam, id, schoolId, loadData]);
@@ -966,12 +1087,12 @@ export default function ExamDetailScreen() {
 
   const handleProcess = useCallback(async () => {
     Alert.alert(
-      "Process Results",
-      "This will calculate totals, grades and class positions. Continue?",
+      t("examDetail.processResults"),
+      t("examDetail.processBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("examDetail.cancel"), style: "cancel" },
         {
-          text:    "Process",
+          text:    t("examDetail.process"),
           onPress: async () => {
             try {
               setProcessing(true);
@@ -981,13 +1102,21 @@ export default function ExamDetailScreen() {
                 schoolId,
               });
               Alert.alert(
-                "Done",
+                t("examDetail.doneTitle"),
                 res?.message ||
-                  `Processed for ${res?.processed ?? 0} student(s).`,
-                [{ text: "OK", onPress: () => loadData(true) }]
+                  t("examDetail.processedCount", {
+                    count: res?.processed ?? 0,
+                  }),
+                [{
+                  text:    t("examDetail.ok"),
+                  onPress: () => loadData(true),
+                }]
               );
             } catch (err) {
-              Alert.alert("Failed", err.message || "Could not process results");
+              Alert.alert(
+                t("examDetail.failedTitle"),
+                err.message || t("examDetail.processFailed")
+              );
             } finally {
               setProcessing(false);
             }
@@ -1001,18 +1130,21 @@ export default function ExamDetailScreen() {
 
   const handlePublish = useCallback(() => {
     Alert.alert(
-      "Publish Results",
-      "Students will be able to see their results. Continue?",
+      t("examDetail.publishTitle"),
+      t("examDetail.publishBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("examDetail.cancel"), style: "cancel" },
         {
-          text:    "Publish",
+          text:    t("examDetail.publish"),
           onPress: async () => {
             try {
               await ExamService.updateExamStatus(id, "published", schoolId);
               loadData(true);
             } catch (err) {
-              Alert.alert("Error", err.message || "Publish failed");
+              Alert.alert(
+                t("examDetail.errorTitle"),
+                err.message || t("examDetail.publishFailed")
+              );
             }
           },
         },
@@ -1031,9 +1163,41 @@ export default function ExamDetailScreen() {
       });
       loadData(true);
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("examDetail.errorTitle"), err.message);
     }
   }, [id, schoolId, loadData]);
+
+  // ── Coefficient (opens modal — Alert.prompt is iOS-only) ──
+
+  const handleEditCoeff = useCallback((subject) => {
+    setCoeffModal(subject);
+  }, []);
+
+  const confirmCoeff = useCallback(async (coefficient) => {
+    if (!coeffModal) return;
+    try {
+      setCoeffSaving(true);
+      const res = await ExamService.updateExamSubject({
+        examId:        id,
+        examSubjectId: coeffModal._id || coeffModal.id,
+        updates:       { weight: Math.round(coefficient * 100) },
+        schoolId,
+        cachedRow:     coeffModal,
+      });
+      setCoeffModal(null);
+      loadData(true);
+      if (res.reprocessRequired) {
+        Alert.alert(
+          t("examDetail.reprocessTitle"),
+          t("examDetail.reprocessBody")
+        );
+      }
+    } catch (err) {
+      Alert.alert(t("examDetail.errorTitle"), err.message);
+    } finally {
+      setCoeffSaving(false);
+    }
+  }, [coeffModal, id, schoolId, loadData]);
 
   // ── Reject (opens modal — no Alert.prompt) ────────────────
 
@@ -1054,7 +1218,7 @@ export default function ExamDetailScreen() {
       setRejectModal(null);
       loadData(true);
     } catch (err) {
-      Alert.alert("Error", err.message);
+      Alert.alert(t("examDetail.errorTitle"), err.message);
     } finally {
       setRejectLoading(false);
     }
@@ -1068,7 +1232,7 @@ export default function ExamDetailScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading exam…</Text>
+        <Text style={styles.loadingText}>{t("examDetail.loadingExam")}</Text>
       </View>
     );
   }
@@ -1077,7 +1241,7 @@ export default function ExamDetailScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Redirecting…</Text>
+        <Text style={styles.loadingText}>{t("examDetail.redirecting")}</Text>
       </View>
     );
   }
@@ -1086,12 +1250,12 @@ export default function ExamDetailScreen() {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
-        <Text style={styles.loadingText}>Exam not found</Text>
+        <Text style={styles.loadingText}>{t("examDetail.notFound")}</Text>
         <TouchableOpacity
           style={styles.backBtnLarge}
           onPress={() => router.back()}
         >
-          <Text style={styles.backBtnLargeText}>Go Back</Text>
+          <Text style={styles.backBtnLargeText}>{t("examDetail.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -1103,7 +1267,7 @@ export default function ExamDetailScreen() {
     exam.classNames ||
     (classes.length > 0
       ? classes.map((c) => c.className).join(", ")
-      : resolveClassName(exam) || exam.className || "All Classes");
+      : resolveClassName(exam) || exam.className || t("examDetail.allClasses"));
 
   // ─────────────────────────────────────────────────────────
   // RENDER
@@ -1118,10 +1282,18 @@ export default function ExamDetailScreen() {
         visible={classPickerVisible}
         classes={classes}
         examName={exam.name}
+        t={t}
         onSelect={(cls) => classPickerCallbackRef.current?.(cls)}
         onClose={() => setClassPickerVisible(false)}
       />
 
+      <CoeffModal
+        visible={!!coeffModal}
+        subject={coeffModal}
+        saving={coeffSaving}
+        onConfirm={confirmCoeff}
+        onCancel={() => setCoeffModal(null)}
+      />
       <RejectModal
         visible={!!rejectModal}
         subjectName={rejectModal?.subjectName}
@@ -1143,7 +1315,7 @@ export default function ExamDetailScreen() {
             {exam.name}
           </Text>
           <Text style={styles.headerSub}>
-            {EXAM_TYPE_LABELS[exam.type] || exam.type}
+            {examTypeLabel(t, exam.type)}
             {" · "}{exam.academicYear}
             {" · "}{exam.term}
           </Text>
@@ -1154,7 +1326,7 @@ export default function ExamDetailScreen() {
           activeOpacity={0.7}
         >
           <Text style={[styles.statusText, { color: statusMeta.color }]}>
-            {statusMeta.label}
+            {t(statusMeta.labelKey)}
           </Text>
           <Ionicons name="chevron-down" size={12} color={statusMeta.color} />
         </TouchableOpacity>
@@ -1163,9 +1335,9 @@ export default function ExamDetailScreen() {
       {/* ── Tab bar ──────────────────────────────────────── */}
       <View style={styles.tabBar}>
         {[
-          { key: "overview",    label: "Overview",    icon: "information-circle-outline" },
-          { key: "submissions", label: "Submissions", icon: "cloud-upload-outline"       },
-          { key: "results",     label: "Results",     icon: "bar-chart-outline"          },
+          { key: "overview",    label: t("examDetail.tabOverview"),    icon: "information-circle-outline" },
+          { key: "submissions", label: t("examDetail.tabSubmissions"), icon: "cloud-upload-outline"       },
+          { key: "results",     label: t("examDetail.tabResults"),     icon: "bar-chart-outline"          },
         ].map((tab) => (
           <TouchableOpacity
             key={tab.key}
@@ -1221,83 +1393,92 @@ export default function ExamDetailScreen() {
               processing={processing}
               router={router}
               id={id}
+              t={t}
             />
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Exam Details</Text>
+              <Text style={styles.cardTitle}>
+                {t("examDetail.detailsTitle")}
+              </Text>
               <InfoRow
                 icon="document-text-outline"
-                label="Name"
+                label={t("examDetail.fieldName")}
                 value={exam.name}
               />
               <InfoRow
                 icon="grid-outline"
-                label="Type"
-                value={EXAM_TYPE_LABELS[exam.type] || exam.type}
+                label={t("examDetail.fieldType")}
+                value={examTypeLabel(t, exam.type)}
               />
               <InfoRow
                 icon="school-outline"
-                label="Classes"
+                label={t("examDetail.fieldClasses")}
                 value={examClassDisplay}
               />
               <InfoRow
                 icon="calendar-outline"
-                label="Academic Year"
+                label={t("examDetail.fieldYear")}
                 value={exam.academicYear}
               />
               <InfoRow
                 icon="layers-outline"
-                label="Term"
+                label={t("examDetail.fieldTerm")}
                 value={exam.term}
               />
               <InfoRow
                 icon="play-outline"
-                label="Start Date"
+                label={t("examDetail.fieldStart")}
                 value={exam.startDate}
               />
               <InfoRow
                 icon="stop-outline"
-                label="End Date"
+                label={t("examDetail.fieldEnd")}
                 value={exam.endDate}
               />
               <InfoRow
                 icon="trophy-outline"
-                label="Total Marks"
+                label={t("examDetail.fieldTotal")}
                 value={String(exam.totalMarks ?? 100)}
               />
               <InfoRow
                 icon="checkmark-circle-outline"
-                label="Pass Mark"
+                label={t("examDetail.fieldPass")}
                 value={String(exam.passMark ?? 50)}
               />
             </View>
 
             {!!exam.description && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Description</Text>
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.descriptionTitle")}
+                </Text>
                 <Text style={styles.bodyText}>{exam.description}</Text>
               </View>
             )}
 
             {!!exam.instructions && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Instructions</Text>
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.instructionsTitle")}
+                </Text>
                 <Text style={styles.bodyText}>{exam.instructions}</Text>
               </View>
             )}
 
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Submission Summary</Text>
+              <Text style={styles.cardTitle}>
+                {t("examDetail.submissionSummary")}
+              </Text>
               <View style={styles.statRow}>
                 {[
-                  { label: "Total",     val: submissionStats.total,     color: "#6B7280" },
-                  { label: "Pending",   val: submissionStats.pending,   color: "#D97706" },
-                  { label: "Submitted", val: submissionStats.submitted, color: "#4F46E5" },
-                  { label: "Approved",  val: submissionStats.approved,  color: "#059669" },
-                  { label: "Rejected",  val: submissionStats.rejected,  color: "#DC2626" },
+                  { id: "total",     label: t("examDetail.statTotal"),     val: submissionStats.total,     color: "#6B7280" },
+                  { id: "pending",   label: t("examDetail.statPending"),   val: submissionStats.pending,   color: "#D97706" },
+                  { id: "submitted", label: t("examDetail.statSubmitted"), val: submissionStats.submitted, color: "#4F46E5" },
+                  { id: "approved",  label: t("examDetail.statApproved"),  val: submissionStats.approved,  color: "#059669" },
+                  { id: "rejected",  label: t("examDetail.statRejected"),  val: submissionStats.rejected,  color: "#DC2626" },
                 ].map((s) => (
                   <View
-                    key={s.label}
+                    key={s.id}
                     style={[styles.statChip, { backgroundColor: s.color + "12" }]}
                   >
                     <Text style={[styles.statVal, { color: s.color }]}>
@@ -1315,16 +1496,18 @@ export default function ExamDetailScreen() {
         {activeTab === "submissions" && (
           <>
             <View style={styles.card}>
-              <Text style={styles.cardTitle}>Mark Entry Status</Text>
+              <Text style={styles.cardTitle}>
+                {t("examDetail.markEntryStatus")}
+              </Text>
               <View style={styles.statRow}>
                 {[
-                  { label: "Pending",   val: submissionStats.pending,   color: "#D97706" },
-                  { label: "Submitted", val: submissionStats.submitted, color: "#4F46E5" },
-                  { label: "Approved",  val: submissionStats.approved,  color: "#059669" },
-                  { label: "Rejected",  val: submissionStats.rejected,  color: "#DC2626" },
+                  { id: "pending",   label: t("examDetail.statPending"),   val: submissionStats.pending,   color: "#D97706" },
+                  { id: "submitted", label: t("examDetail.statSubmitted"), val: submissionStats.submitted, color: "#4F46E5" },
+                  { id: "approved",  label: t("examDetail.statApproved"),  val: submissionStats.approved,  color: "#059669" },
+                  { id: "rejected",  label: t("examDetail.statRejected"),  val: submissionStats.rejected,  color: "#DC2626" },
                 ].map((s) => (
                   <View
-                    key={s.label}
+                    key={s.id}
                     style={[styles.statChip, { backgroundColor: s.color + "12" }]}
                   >
                     <Text style={[styles.statVal, { color: s.color }]}>
@@ -1343,16 +1526,18 @@ export default function ExamDetailScreen() {
             >
               <Ionicons name="create-outline" size={18} color="#FFF" />
               <Text style={styles.enterMarksBtnText}>
-                Enter / Edit All Marks
+                {t("examDetail.enterAllMarks")}
               </Text>
             </TouchableOpacity>
 
             {subjects.length === 0 ? (
               <View style={styles.empty}>
                 <Ionicons name="document-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyTitle}>No subjects assigned</Text>
+                <Text style={styles.emptyTitle}>
+                  {t("examDetail.noSubjects")}
+                </Text>
                 <Text style={styles.emptySub}>
-                  Add subjects in exam settings
+                  {t("examDetail.noSubjectsSub")}
                 </Text>
               </View>
             ) : (
@@ -1363,6 +1548,7 @@ export default function ExamDetailScreen() {
                   onApprove={handleApprove}
                   onReject={handleReject}
                   onEnterMarks={openMarkEntry}
+                  onEditCoeff={handleEditCoeff}
                 />
               ))
             )}
@@ -1387,22 +1573,24 @@ export default function ExamDetailScreen() {
             >
               <Ionicons name="analytics-outline" size={18} color="#FFF" />
               <Text style={styles.enterMarksBtnText}>
-                Open Advanced Results Dashboard
+                {t("examDetail.openDashboard")}
               </Text>
             </TouchableOpacity>
 
             {results.length > 0 && (
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Results Summary</Text>
+                <Text style={styles.cardTitle}>
+                  {t("examDetail.resultsSummary")}
+                </Text>
                 <View style={styles.statRow}>
                   {[
-                    { label: "Students", val: resultStats.total,     color: "#4F46E5" },
-                    { label: "Passed",   val: resultStats.passing,   color: "#059669" },
-                    { label: "Failed",   val: resultStats.failing,   color: "#DC2626" },
-                    { label: "Average",  val: `${resultStats.avg}%`, color: "#D97706" },
+                    { id: "students", label: t("examDetail.statStudents"), val: resultStats.total,     color: "#4F46E5" },
+                    { id: "passed",   label: t("examDetail.statPassed"),   val: resultStats.passing,   color: "#059669" },
+                    { id: "failed",   label: t("examDetail.statFailed"),   val: resultStats.failing,   color: "#DC2626" },
+                    { id: "average",  label: t("examDetail.statAverage"),  val: `${resultStats.avg}%`, color: "#D97706" },
                   ].map((s) => (
                     <View
-                      key={s.label}
+                      key={s.id}
                       style={[styles.statChip, { backgroundColor: s.color + "12" }]}
                     >
                       <Text style={[styles.statVal, { color: s.color }]}>
@@ -1430,16 +1618,20 @@ export default function ExamDetailScreen() {
                 : <Ionicons name="calculator-outline" size={18} color="#FFF" />
               }
               <Text style={styles.enterMarksBtnText}>
-                {results.length > 0 ? "Re-Process Results" : "Process Results"}
+                {results.length > 0
+                  ? t("examDetail.reprocessResults")
+                  : t("examDetail.processResults")}
               </Text>
             </TouchableOpacity>
 
             {results.length === 0 ? (
               <View style={styles.empty}>
                 <Ionicons name="bar-chart-outline" size={48} color="#D1D5DB" />
-                <Text style={styles.emptyTitle}>No results yet</Text>
+                <Text style={styles.emptyTitle}>
+                  {t("examDetail.noResults")}
+                </Text>
                 <Text style={styles.emptySub}>
-                  Enter marks then tap "Process Results"
+                  {t("examDetail.noResultsSub")}
                 </Text>
               </View>
             ) : (

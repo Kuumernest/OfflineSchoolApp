@@ -22,6 +22,7 @@ import * as Clipboard from "expo-clipboard";
 import { ClassService } from "../../../src/services/class.service";
 import { useAuthStore } from "../../../src/store/auth.store";
 import DateField        from "../../../src/components/DateField";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
   enrollStudentLocally,
   pushEnrollments,
@@ -46,17 +47,11 @@ const EMPTY_FORM = {
   classId:       "",
 };
 
-const GENDER_OPTIONS = [
-  { label: "Male",   value: "male"   },
-  { label: "Female", value: "female" },
-  { label: "Other",  value: "other"  },
-];
-
 const SYNC_CONFIG = {
-  pending:     { color: "#d97706", bg: "#fffbeb", border: "#fde68a", icon: "⏳", label: "Saved locally — syncing…"               },
-  syncing:     { color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", icon: "🔄", label: "Syncing with server…"                   },
-  synced:      { color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", icon: "✅", label: "Synced with server!"                    },
-  sync_failed: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: "❌", label: "Sync failed — will retry automatically" },
+  pending:     { color: "#d97706", bg: "#fffbeb", border: "#fde68a", icon: "⏳", labelKey: "syncPending"               },
+  syncing:     { color: "#2563eb", bg: "#eff6ff", border: "#bfdbfe", icon: "🔄", labelKey: "syncSyncing"                   },
+  synced:      { color: "#059669", bg: "#ecfdf5", border: "#a7f3d0", icon: "✅", labelKey: "syncSynced"                    },
+  sync_failed: { color: "#dc2626", bg: "#fef2f2", border: "#fecaca", icon: "❌", labelKey: "syncFailed" },
 };
 
 // ─────────────────────────────────────────────────────────
@@ -252,6 +247,7 @@ const sel = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 export default function AddStudentScreen() {
   const router = useRouter();
+  const { t }  = useTranslation();
 
   // Real auth. These were placeholder strings ("SCHOOL_ID_FROM_AUTH") with a
   // TODO, so every enrollment was stamped with a school that does not exist.
@@ -346,14 +342,14 @@ export default function AddStudentScreen() {
           tempPassword: row.tempPassword ?? prev.tempPassword,
           emailSent:    row.emailSent,
           message: row.synced
-            ? `${row.name} enrolled successfully.`
+            ? t("studentAdd.msgEnrolled", { name: row.name })
             : prev.message,
         };
       });
     } catch (err) {
       console.warn("[AddStudent] status refresh failed:", err.message);
     }
-  }, []);
+  }, [t]);
 
   // Poll briefly while an enrollment is in flight, so the card settles on its
   // own once the outbox delivers. Stops as soon as it lands.
@@ -386,43 +382,43 @@ export default function AddStudentScreen() {
     const next = {};
 
     if (!form.firstName.trim())
-      next.firstName = "First name is required.";
+      next.firstName = t("studentAdd.firstNameRequired");
     else if (form.firstName.trim().length < 2)
-      next.firstName = "At least 2 characters.";
+      next.firstName = t("studentAdd.minTwoChars");
 
     if (!form.lastName.trim())
-      next.lastName = "Last name is required.";
+      next.lastName = t("studentAdd.lastNameRequired");
     else if (form.lastName.trim().length < 2)
-      next.lastName = "At least 2 characters.";
+      next.lastName = t("studentAdd.minTwoChars");
 
     if (!form.classId)
-      next.classId = "Please assign the student to a class.";
+      next.classId = t("studentAdd.classRequired");
 
     if (form.email.trim() && !EMAIL_RE.test(form.email.trim()))
-      next.email = "Enter a valid email address.";
+      next.email = t("studentAdd.emailInvalid");
 
     if (form.phone.trim() && form.phone.trim().length < 7)
-      next.phone = "Phone number is too short.";
+      next.phone = t("studentAdd.phoneTooShort");
 
     if (form.guardianPhone.trim() && form.guardianPhone.trim().length < 7)
-      next.guardianPhone = "Guardian phone is too short.";
+      next.guardianPhone = t("studentAdd.guardianPhoneTooShort");
 
     setErrors(next);
     if (Object.keys(next).length > 0) {
       firstNameRef.current?.focus();
     }
     return Object.keys(next).length === 0;
-  }, [form]);
+  }, [form, t]);
 
   // ── Submit ───────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
     if (!schoolId) {
-      setErrors({ general: "School ID missing. Please re-login." });
+      setErrors({ general: t("studentAdd.schoolIdMissing") });
       return;
     }
     if (!dbReady) {
-      setErrors({ general: "Local database is not ready yet." });
+      setErrors({ general: t("studentAdd.dbNotReady") });
       return;
     }
 
@@ -433,7 +429,7 @@ export default function AddStudentScreen() {
       const selectedClass = classes.find((c) => c.id === form.classId);
       const className     = selectedClass
         ? [selectedClass.name, selectedClass.section].filter(Boolean).join(" ")
-        : "Unknown Class";
+        : t("studentAdd.unknownClass");
 
       // Writes the student into the canonical `students` table and queues one
       // mutation on the shared outbox — the same path every other write takes.
@@ -459,8 +455,8 @@ export default function AddStudentScreen() {
         syncStatus:  "pending",
         isOffline:   !isOnline,
         message:     isOnline
-          ? `${displayName} saved. Uploading…`
-          : `${displayName} saved on this device and will upload when you are back online.`,
+          ? t("studentAdd.msgSavedUploading", { name: displayName })
+          : t("studentAdd.msgSavedOffline", { name: displayName }),
       });
 
       if (isOnline) {
@@ -471,12 +467,12 @@ export default function AddStudentScreen() {
       }
     } catch (err) {
       setErrors({
-        general: err?.message || "Failed to save student. Please try again.",
+        general: err?.message || t("studentAdd.saveFailed"),
       });
     } finally {
       setSaving(false);
     }
-  }, [validate, form, schoolId, classes, isOnline, dbReady, refreshSyncState]);
+  }, [validate, form, schoolId, classes, isOnline, dbReady, refreshSyncState, t]);
 
   // ── Retry sync ───────────────────────────────────────────
   const handleRetrySync = useCallback(async () => {
@@ -514,6 +510,12 @@ export default function AddStudentScreen() {
   // ─────────────────────────────────────────────────────────
   if (success) {
     const cfg = SYNC_CONFIG[success.syncStatus] ?? SYNC_CONFIG.pending;
+    const syncLabels = {
+      syncPending: t("studentAdd.syncPending"),
+      syncSyncing: t("studentAdd.syncSyncing"),
+      syncSynced:  t("studentAdd.syncSynced"),
+      syncFailed:  t("studentAdd.syncFailed"),
+    };
 
     return (
       <SafeAreaView style={s.safe} edges={["top", "bottom"]}>
@@ -533,7 +535,7 @@ export default function AddStudentScreen() {
                 {success.syncStatus === "synced" ? "🎉" : "💾"}
               </Text>
             </View>
-            <Text style={s.heroTitle}>Student Enrolled!</Text>
+            <Text style={s.heroTitle}>{t("studentAdd.successTitle")}</Text>
             <Text style={s.heroSub}>{success.message}</Text>
           </View>
 
@@ -546,7 +548,7 @@ export default function AddStudentScreen() {
           >
             <Text style={s.syncIcon}>{cfg.icon}</Text>
             <Text style={[s.syncLabel, { color: cfg.color }]}>
-              {cfg.label}
+              {syncLabels[cfg.labelKey]}
             </Text>
             {success.syncStatus === "sync_failed" && (
               <TouchableOpacity
@@ -554,7 +556,7 @@ export default function AddStudentScreen() {
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 <Text style={[s.retryText, { color: cfg.color }]}>
-                  ↺ Retry
+                  ↺ {t("studentAdd.retry")}
                 </Text>
               </TouchableOpacity>
             )}
@@ -570,24 +572,31 @@ export default function AddStudentScreen() {
 
           {/* Summary */}
           <View style={s.summaryCard}>
-            <SummaryRow label="Name"  value={success.studentName} />
-            <SummaryRow label="Class" value={success.className}   />
+            <SummaryRow label={t("studentAdd.summaryName")}  value={success.studentName} />
+            <SummaryRow label={t("studentAdd.summaryClass")} value={success.className}   />
             <SummaryRow
-              label="Enrollment No"
+              label={t("studentAdd.summaryEnrollmentNo")}
               value={
                 success.enrollmentNo ??
-                (success.syncStatus === "synced" ? "—" : "Pending sync…")
+                (success.syncStatus === "synced" ? "—" : t("studentAdd.pendingSync"))
               }
               highlight={!!success.enrollmentNo}
             />
             {success.emailSent !== undefined && (
               <SummaryRow
-                label="Email Sent"
-                value={success.emailSent ? "✅ Sent" : "❌ Not sent"}
+                label={t("studentAdd.summaryEmailSent")}
+                value={
+                  success.emailSent
+                    ? t("studentAdd.emailSentYes")
+                    : t("studentAdd.emailSentNo")
+                }
               />
             )}
             {success.isOffline && (
-              <SummaryRow label="Status" value="📱 Saved offline" />
+              <SummaryRow
+                label={t("studentAdd.summaryStatus")}
+                value={t("studentAdd.statusSavedOffline")}
+              />
             )}
           </View>
 
@@ -596,15 +605,15 @@ export default function AddStudentScreen() {
            !success.emailSent             &&
            success.tempPassword           && (
             <View style={s.credCard}>
-              <Text style={s.credTitle}>Share Credentials Manually</Text>
+              <Text style={s.credTitle}>{t("studentAdd.credTitle")}</Text>
 
               <View style={s.credBlock}>
-                <Text style={s.credLabel}>📋 Enrollment No (Login ID)</Text>
+                <Text style={s.credLabel}>{t("studentAdd.credEnrollmentLabel")}</Text>
                 <Text style={s.credValue}>{success.enrollmentNo}</Text>
               </View>
 
               <View style={s.credBlock}>
-                <Text style={s.credLabel}>🔑 Temp Password</Text>
+                <Text style={s.credLabel}>{t("studentAdd.credPasswordLabel")}</Text>
                 <View style={s.credRow}>
                   <Text style={[s.credValue, { flex: 1 }]}>
                     {success.tempPassword}
@@ -615,14 +624,14 @@ export default function AddStudentScreen() {
                     hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                   >
                     <Text style={s.copyBtnText}>
-                      {copied ? "✓ Copied" : "Copy"}
+                      {copied ? t("studentAdd.copied") : t("studentAdd.copy")}
                     </Text>
                   </TouchableOpacity>
                 </View>
               </View>
 
               <Text style={s.credHint}>
-                Student must change this password on first login.
+                {t("studentAdd.credHint")}
               </Text>
             </View>
           )}
@@ -633,7 +642,7 @@ export default function AddStudentScreen() {
             onPress={handleAddAnother}
             activeOpacity={0.8}
           >
-            <Text style={s.primaryBtnText}>Add Another Student</Text>
+            <Text style={s.primaryBtnText}>{t("studentAdd.addAnother")}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -641,7 +650,7 @@ export default function AddStudentScreen() {
             onPress={() => router.replace("/admin/students/approved")}
             activeOpacity={0.8}
           >
-            <Text style={s.secondaryBtnText}>Back to Students</Text>
+            <Text style={s.secondaryBtnText}>{t("studentAdd.backToStudents")}</Text>
           </TouchableOpacity>
         </ScrollView>
       </SafeAreaView>
@@ -664,11 +673,11 @@ export default function AddStudentScreen() {
           <Text style={s.backArrow}>←</Text>
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={s.headerTitle}>Add Student</Text>
+          <Text style={s.headerTitle}>{t("studentAdd.title")}</Text>
           <Text style={s.headerSub}>
             {isOnline
-              ? "Saves locally then syncs to server"
-              : "📴 Offline — will sync when connected"}
+              ? t("studentAdd.headerSubOnline")
+              : t("studentAdd.headerSubOffline")}
           </Text>
         </View>
       </View>
@@ -695,8 +704,7 @@ export default function AddStudentScreen() {
           {!isOnline && (
             <View style={s.offlineBanner}>
               <Text style={s.offlineBannerText}>
-                📴 You're offline. Student will be saved to this device and
-                synced automatically when you reconnect.
+                {t("studentAdd.offlineBanner")}
               </Text>
             </View>
           )}
@@ -704,9 +712,11 @@ export default function AddStudentScreen() {
           {/* ── Info banner ── */}
           <View style={s.infoBanner}>
             <Text style={s.infoBannerText}>
-              ✅ <Text style={{ fontWeight: "700" }}>Direct enrollment</Text>
-              {" — "}saved to device first, then synced to server. Works
-              offline too!
+              ✅{" "}
+              <Text style={{ fontWeight: "700" }}>
+                {t("studentAdd.directEnrollment")}
+              </Text>
+              {" — "}{t("studentAdd.directEnrollmentNote")}
             </Text>
           </View>
 
@@ -714,29 +724,29 @@ export default function AddStudentScreen() {
               CLASS ASSIGNMENT
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="🏫" title="Class Assignment" required />
+            <SectionHeader emoji="🏫" title={t("studentAdd.sectionClass")} required />
 
             {classesLoading ? (
               <View style={s.loadingRow}>
                 <ActivityIndicator size="small" color="#6b7280" />
-                <Text style={s.loadingText}>Loading classes…</Text>
+                <Text style={s.loadingText}>{t("studentAdd.loadingClasses")}</Text>
               </View>
             ) : classes.length === 0 ? (
               <View style={s.emptyClassRow}>
-                <Text style={s.emptyClassText}>⚠ No classes found. </Text>
+                <Text style={s.emptyClassText}>{t("studentAdd.noClasses")}</Text>
                 <TouchableOpacity
                   onPress={() => router.push("/admin/classes")}
                 >
-                  <Text style={s.emptyClassLink}>Add a class first</Text>
+                  <Text style={s.emptyClassLink}>{t("studentAdd.addClassFirst")}</Text>
                 </TouchableOpacity>
               </View>
             ) : (
               <>
                 <SimpleSelect
-                  label="Select Class"
+                  label={t("studentAdd.selectClass")}
                   value={form.classId}
                   onChange={(v) => handleChange("classId", v)}
-                  placeholder="Select a class…"
+                  placeholder={t("studentAdd.selectClassPlaceholder")}
                   error={!!errors.classId}
                   options={classes.map((cls) => ({
                     label: [cls.name, cls.section].filter(Boolean).join(" — "),
@@ -754,17 +764,17 @@ export default function AddStudentScreen() {
               PERSONAL INFORMATION
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="👤" title="Personal Information" />
+            <SectionHeader emoji="👤" title={t("studentAdd.sectionPersonal")} />
 
             <View style={s.row}>
               <View style={{ flex: 1 }}>
                 <FormField
                   ref={firstNameRef}
-                  label="First Name"
+                  label={t("studentAdd.firstName")}
                   required
                   value={form.firstName}
                   onChangeText={(v) => handleChange("firstName", v)}
-                  placeholder="Jane"
+                  placeholder={t("studentAdd.firstNamePlaceholder")}
                   error={errors.firstName}
                   autoCapitalize="words"
                   returnKeyType="next"
@@ -773,11 +783,11 @@ export default function AddStudentScreen() {
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
                 <FormField
-                  label="Last Name"
+                  label={t("studentAdd.lastName")}
                   required
                   value={form.lastName}
                   onChangeText={(v) => handleChange("lastName", v)}
-                  placeholder="Smith"
+                  placeholder={t("studentAdd.lastNamePlaceholder")}
                   error={errors.lastName}
                   autoCapitalize="words"
                   returnKeyType="next"
@@ -786,22 +796,26 @@ export default function AddStudentScreen() {
             </View>
 
             <View style={s.fieldWrap}>
-              <Text style={s.fieldLabel}>Gender</Text>
+              <Text style={s.fieldLabel}>{t("studentAdd.gender")}</Text>
               <SimpleSelect
-                label="Select Gender"
+                label={t("studentAdd.selectGender")}
                 value={form.gender}
                 onChange={(v) => handleChange("gender", v)}
-                placeholder="Select gender…"
-                options={GENDER_OPTIONS}
+                placeholder={t("studentAdd.selectGenderPlaceholder")}
+                options={[
+                  { label: t("studentAdd.genderMale"),   value: "male"   },
+                  { label: t("studentAdd.genderFemale"), value: "female" },
+                  { label: t("studentAdd.genderOther"),  value: "other"  },
+                ]}
               />
             </View>
 
             <DateField
-              label="Date of Birth"
+              label={t("studentAdd.dateOfBirth")}
               value={form.dateOfBirth}
               onChange={(ymd) => handleChange("dateOfBirth", ymd)}
               maximumDate={new Date()}
-              hint="Tap to pick the student's birthday"
+              hint={t("studentAdd.dateOfBirthHint")}
             />
           </View>
 
@@ -809,10 +823,10 @@ export default function AddStudentScreen() {
               CONTACT INFORMATION
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="📬" title="Contact Information" />
+            <SectionHeader emoji="📬" title={t("studentAdd.sectionContact")} />
 
             <FormField
-              label="Email Address"
+              label={t("studentAdd.email")}
               value={form.email}
               onChangeText={(v) => handleChange("email", v)}
               placeholder="student@example.com"
@@ -820,10 +834,10 @@ export default function AddStudentScreen() {
               keyboardType="email-address"
               autoCapitalize="none"
               autoComplete="email"
-              hint="Recommended — login credentials sent here after sync"
+              hint={t("studentAdd.emailHint")}
             />
             <FormField
-              label="Phone Number"
+              label={t("studentAdd.phone")}
               value={form.phone}
               onChangeText={(v) => handleChange("phone", v)}
               placeholder="+234 800 000 0000"
@@ -831,10 +845,10 @@ export default function AddStudentScreen() {
               keyboardType="phone-pad"
             />
             <FormField
-              label="Home Address"
+              label={t("studentAdd.address")}
               value={form.address}
               onChangeText={(v) => handleChange("address", v)}
-              placeholder="12 School Road, Lagos"
+              placeholder={t("studentAdd.addressPlaceholder")}
               autoCapitalize="sentences"
             />
           </View>
@@ -843,17 +857,17 @@ export default function AddStudentScreen() {
               GUARDIAN / PARENT
           ═══════════════════════════════════════════════ */}
           <View style={s.card}>
-            <SectionHeader emoji="👨‍👧" title="Guardian / Parent" />
+            <SectionHeader emoji="👨‍👧" title={t("studentAdd.sectionGuardian")} />
 
             <FormField
-              label="Guardian Name"
+              label={t("studentAdd.guardianName")}
               value={form.guardianName}
               onChangeText={(v) => handleChange("guardianName", v)}
-              placeholder="Mr James Smith"
+              placeholder={t("studentAdd.guardianNamePlaceholder")}
               autoCapitalize="words"
             />
             <FormField
-              label="Guardian Phone"
+              label={t("studentAdd.guardianPhone")}
               value={form.guardianPhone}
               onChangeText={(v) => handleChange("guardianPhone", v)}
               placeholder="+234 800 000 0000"
@@ -864,17 +878,17 @@ export default function AddStudentScreen() {
 
           {/* ── What happens info box ── */}
           <View style={s.infoBox}>
-            <Text style={s.infoBoxTitle}>What happens when you enroll?</Text>
+            <Text style={s.infoBoxTitle}>{t("studentAdd.infoTitle")}</Text>
             {[
-              { e: "💾", t: "Student saved instantly to this device"              },
-              { e: "🔄", t: "Auto-syncs to server when you're online"              },
-              { e: "🔢", t: "Enrollment number generated by server after sync"      },
-              { e: "📧", t: "Login credentials emailed after sync (if email given)" },
-              { e: "📴", t: "Works fully offline — nothing is lost"                 },
-            ].map(({ e, t }) => (
-              <View key={t} style={s.infoRow}>
+              { e: "💾", text: t("studentAdd.infoSaved")        },
+              { e: "🔄", text: t("studentAdd.infoAutoSync")     },
+              { e: "🔢", text: t("studentAdd.infoEnrollmentNo") },
+              { e: "📧", text: t("studentAdd.infoCredentials")  },
+              { e: "📴", text: t("studentAdd.infoOffline")      },
+            ].map(({ e, text }) => (
+              <View key={text} style={s.infoRow}>
                 <Text style={s.infoEmoji}>{e}</Text>
-                <Text style={s.infoText}>{t}</Text>
+                <Text style={s.infoText}>{text}</Text>
               </View>
             ))}
           </View>
@@ -893,11 +907,11 @@ export default function AddStudentScreen() {
             {saving ? (
               <View style={s.submitInner}>
                 <ActivityIndicator color="#fff" size="small" />
-                <Text style={s.submitBtnText}>Saving to device…</Text>
+                <Text style={s.submitBtnText}>{t("studentAdd.savingToDevice")}</Text>
               </View>
             ) : (
               <Text style={s.submitBtnText}>
-                {isOnline ? "Enroll Student" : "Save Offline"}
+                {isOnline ? t("studentAdd.enroll") : t("studentAdd.saveOffline")}
               </Text>
             )}
           </TouchableOpacity>
@@ -907,7 +921,7 @@ export default function AddStudentScreen() {
             onPress={() => router.back()}
             disabled={saving}
           >
-            <Text style={s.discardBtnText}>Discard & Go Back</Text>
+            <Text style={s.discardBtnText}>{t("studentAdd.discard")}</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>

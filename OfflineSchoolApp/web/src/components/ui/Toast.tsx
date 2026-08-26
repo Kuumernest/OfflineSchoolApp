@@ -15,6 +15,8 @@ import {
   Info,
   X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
+
 import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────
@@ -124,6 +126,7 @@ function ToastItem({
   entry:     ToastEntry;
   onDismiss: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   const Icon = ICON[entry.kind];
 
   useEffect(() => {
@@ -173,7 +176,7 @@ function ToastItem({
       <button
         onClick={() => onDismiss(entry.id)}
         className="shrink-0 rounded-control p-0.5 text-ink-faint transition-colors hover:text-ink-body"
-        aria-label="Dismiss"
+        aria-label={t("common.dismiss")}
       >
         <X className="h-4 w-4" />
       </button>
@@ -192,6 +195,7 @@ function ConfirmDialog({
   options:   ConfirmOptions;
   onResolve: (result: boolean) => void;
 }) {
+  const { t } = useTranslation();
   const cancelRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
@@ -250,7 +254,7 @@ function ConfirmDialog({
             onClick={() => onResolve(false)}
             className="h-9 rounded-control border border-line-strong bg-surface px-3.5 text-sm font-medium text-ink-body transition-colors hover:bg-canvas"
           >
-            {options.cancelLabel || "Cancel"}
+            {options.cancelLabel || t("common.cancel")}
           </button>
           <button
             onClick={() => onResolve(true)}
@@ -261,7 +265,7 @@ function ConfirmDialog({
                 : "bg-primary-600 hover:bg-primary-700"
             )}
           >
-            {options.confirmLabel || "Confirm"}
+            {options.confirmLabel || t("common.confirm")}
           </button>
         </div>
       </div>

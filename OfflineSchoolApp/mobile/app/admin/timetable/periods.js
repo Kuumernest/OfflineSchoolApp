@@ -18,6 +18,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PeriodsService } from "../../../src/services/periods.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // Format a Date object → "HH:MM"
 const dateToHHMM = (date) => {
@@ -47,6 +48,7 @@ const formatDisplay = (hhmm) => {
 
 export default function PeriodsManager() {
   const router = useRouter();
+  const { t } = useTranslation();
 
   const [periods, setPeriods] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -86,7 +88,7 @@ export default function PeriodsManager() {
       } catch (err) {
         console.error("Load periods error:", err);
         if (isMountedRef.current) {
-          Alert.alert("Error", "Failed to load periods");
+          Alert.alert(t("ttAdmin.errorTitle"), t("periods.loadFailed"));
         }
       } finally {
         if (isMountedRef.current) {
@@ -95,7 +97,7 @@ export default function PeriodsManager() {
         }
       }
     },
-    [showInactive]
+    [showInactive, t]
   );
 
   useFocusEffect(
@@ -154,7 +156,7 @@ export default function PeriodsManager() {
       }
     } catch (err) {
       if (isMountedRef.current) {
-        Alert.alert("Error", err?.message || "Failed to save period");
+        Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.savePeriodFailed"));
       }
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -163,18 +165,20 @@ export default function PeriodsManager() {
 
   const handleToggleActive = (period) => {
     Alert.alert(
-      period.isActive ? "Deactivate Period" : "Activate Period",
-      `${period.isActive ? "Deactivate" : "Activate"} "${period.name}"?`,
+      period.isActive ? t("ttAdmin.deactivateTitle") : t("ttAdmin.activateTitle"),
+      period.isActive
+        ? t("ttAdmin.deactivateConfirm", { name: period.name })
+        : t("ttAdmin.activateConfirm", { name: period.name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Confirm",
+          text: t("common.confirm"),
           onPress: async () => {
             try {
               await PeriodsService.toggleActive(period.id);
               await load(true);
             } catch (err) {
-              Alert.alert("Error", err?.message || "Failed to update");
+              Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.updateFailed"));
             }
           },
         },
@@ -183,17 +187,17 @@ export default function PeriodsManager() {
   };
 
   const handleDelete = (period) => {
-    Alert.alert("Delete Period", `Delete "${period.name}"? This cannot be undone.`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("ttAdmin.deletePeriodTitle"), t("ttAdmin.deletePeriodBody", { name: period.name }), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text: "Delete",
+        text: t("common.delete"),
         style: "destructive",
         onPress: async () => {
           try {
             await PeriodsService.delete(period.id);
             await load(true);
           } catch (err) {
-            Alert.alert("Cannot Delete", err?.message || "Failed to delete");
+            Alert.alert(t("ttAdmin.cannotDelete"), err?.message || t("ttAdmin.deleteFailed"));
           }
         },
       },
@@ -205,7 +209,7 @@ export default function PeriodsManager() {
       const ok = await PeriodsService.reorder(period.id, direction);
       if (ok) await load(true);
     } catch (err) {
-      Alert.alert("Error", err?.message || "Failed to reorder");
+      Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.reorderFailed"));
     }
   };
 
@@ -225,7 +229,7 @@ export default function PeriodsManager() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading periods…</Text>
+        <Text style={styles.loadingText}>{t("ttAdmin.loadingPeriods")}</Text>
       </View>
     );
   }
@@ -240,9 +244,9 @@ export default function PeriodsManager() {
           <Ionicons name="chevron-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Periods</Text>
+          <Text style={styles.headerTitle}>{t("ttAdmin.periodsTitle")}</Text>
           <Text style={styles.headerSubtitle}>
-            {periods.length} {periods.length === 1 ? "period" : "periods"}
+            {t("ttAdmin.periodCount", { count: periods.length })}
           </Text>
         </View>
         <TouchableOpacity style={styles.addButton} onPress={openCreate}>
@@ -257,7 +261,7 @@ export default function PeriodsManager() {
           onPress={() => setShowInactive(false)}
         >
           <Text style={[styles.filterText, !showInactive && styles.filterTextActive]}>
-            Active
+            {t("common.active")}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -265,7 +269,7 @@ export default function PeriodsManager() {
           onPress={() => setShowInactive(true)}
         >
           <Text style={[styles.filterText, showInactive && styles.filterTextActive]}>
-            All
+            {t("common.all")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -284,14 +288,13 @@ export default function PeriodsManager() {
         {periods.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="time-outline" size={64} color="#D1D5DB" />
-            <Text style={styles.emptyTitle}>No periods yet</Text>
+            <Text style={styles.emptyTitle}>{t("ttAdmin.noPeriodsYet")}</Text>
             <Text style={styles.emptySubtitle}>
-              Create periods with start and end times. These appear as rows in the
-              timetable builder.
+              {t("ttAdmin.noPeriodsHint")}
             </Text>
             <TouchableOpacity style={styles.emptyButton} onPress={openCreate}>
               <Ionicons name="add-circle" size={20} color="#4F46E5" />
-              <Text style={styles.emptyButtonText}>Add Period</Text>
+              <Text style={styles.emptyButtonText}>{t("periods.add")}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -340,12 +343,12 @@ export default function PeriodsManager() {
                   </Text>
                   {!!period.isBreak && (
                     <View style={styles.breakBadge}>
-                      <Text style={styles.breakBadgeText}>Break</Text>
+                      <Text style={styles.breakBadgeText}>{t("timetable.break")}</Text>
                     </View>
                   )}
                   {!period.isActive && (
                     <View style={styles.inactiveBadge}>
-                      <Text style={styles.inactiveBadgeText}>Inactive</Text>
+                      <Text style={styles.inactiveBadgeText}>{t("common.inactive")}</Text>
                     </View>
                   )}
                 </View>
@@ -410,7 +413,7 @@ export default function PeriodsManager() {
 
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {editingId ? "Edit Period" : "New Period"}
+                {editingId ? t("ttAdmin.editPeriod") : t("ttAdmin.newPeriod")}
               </Text>
               <TouchableOpacity onPress={closeModal} disabled={saving}>
                 <Ionicons name="close" size={22} color="#6B7280" />
@@ -419,10 +422,10 @@ export default function PeriodsManager() {
 
             <ScrollView keyboardShouldPersistTaps="handled">
               {/* Name */}
-              <Text style={styles.label}>Period Name</Text>
+              <Text style={styles.label}>{t("ttAdmin.periodName")}</Text>
               <TextInput
                 style={styles.input}
-                placeholder="e.g. Period 1, Lunch Break"
+                placeholder={t("periods.namePh")}
                 placeholderTextColor="#9CA3AF"
                 value={name}
                 onChangeText={setName}
@@ -432,7 +435,7 @@ export default function PeriodsManager() {
               {/* Times */}
               <View style={styles.timePickerRow}>
                 <View style={styles.timePickerCol}>
-                  <Text style={styles.label}>Start Time</Text>
+                  <Text style={styles.label}>{t("periods.starts")}</Text>
                   <TouchableOpacity
                     style={styles.timeButton}
                     onPress={() => setPicker({ visible: true, field: "start" })}
@@ -446,7 +449,7 @@ export default function PeriodsManager() {
                 </View>
 
                 <View style={styles.timePickerCol}>
-                  <Text style={styles.label}>End Time</Text>
+                  <Text style={styles.label}>{t("periods.ends")}</Text>
                   <TouchableOpacity
                     style={styles.timeButton}
                     onPress={() => setPicker({ visible: true, field: "end" })}
@@ -472,7 +475,7 @@ export default function PeriodsManager() {
                   color="#4F46E5"
                 />
                 <Text style={styles.breakToggleText}>
-                  This is a break (recess/lunch)
+                  {t("periods.isBreak")}
                 </Text>
               </TouchableOpacity>
 
@@ -488,7 +491,7 @@ export default function PeriodsManager() {
                   <>
                     <Ionicons name="save-outline" size={18} color="#FFFFFF" />
                     <Text style={styles.saveButtonText}>
-                      {editingId ? "Save Changes" : "Create Period"}
+                      {editingId ? t("ttAdmin.saveChanges") : t("ttAdmin.createPeriod")}
                     </Text>
                   </>
                 )}

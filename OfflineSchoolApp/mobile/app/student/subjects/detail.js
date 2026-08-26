@@ -27,7 +27,8 @@ import * as FileSystem from "expo-file-system/legacy";
 import {
   getSubjectContentForStudent,
   resolveTypeFromItem,
-} from "../../../src/services/student.content.service";
+} from "../../../src/services/student.content.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 let IntentLauncher = null;
 try {
@@ -50,13 +51,13 @@ const SUBJECT_COLORS = [
 ];
 
 const FILTER_TABS = [
-  { key: "all",      label: "All",      icon: "apps-outline"          },
-  { key: "syllabus", label: "Syllabus", icon: "list-outline"          },
-  { key: "notes",    label: "Notes",    icon: "document-text-outline" },
-  { key: "document", label: "Docs",     icon: "attach-outline"        },
-  { key: "video",    label: "Video",    icon: "videocam-outline"      },
-  { key: "audio",    label: "Audio",    icon: "musical-notes-outline" },
-  { key: "image",    label: "Images",   icon: "image-outline"         },
+  { key: "all",      labelKey: "studentSubj.tabAll",      icon: "apps-outline"          },
+  { key: "syllabus", labelKey: "studentSubj.tabSyllabus", icon: "list-outline"          },
+  { key: "notes",    labelKey: "studentSubj.tabNotes",    icon: "document-text-outline" },
+  { key: "document", labelKey: "studentSubj.tabDocs",     icon: "attach-outline"        },
+  { key: "video",    labelKey: "studentSubj.tabVideo",    icon: "videocam-outline"      },
+  { key: "audio",    labelKey: "studentSubj.tabAudio",    icon: "musical-notes-outline" },
+  { key: "image",    labelKey: "studentSubj.tabImages",   icon: "image-outline"         },
 ];
 
 const MIME_TYPES = {
@@ -143,6 +144,7 @@ const isAudioType = (item) =>
   );
 
 const openLocalFile = async (localUri, mime) => {
+  const { t } = useTranslation();
   if (Platform.OS === "android") {
     if (IntentLauncher) {
       try {
@@ -169,14 +171,15 @@ const openLocalFile = async (localUri, mime) => {
     try {
       await Linking.openURL(localUri);
     } catch (err) {
-      throw new Error("Cannot open file on this device: " + err.message);
+      throw new Error(t("studentSubj.cannotOpenPrefix") + err.message);
     }
   }
 };
 
 const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
+  const { t } = useTranslation();
   if (!url) {
-    Alert.alert("No File", "This content has no file or link attached.");
+    Alert.alert(t("studentSubj.noFileTitle"), t("studentSubj.noFileBody"));
     return;
   }
 
@@ -206,7 +209,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
     );
 
     const result = await downloadResumable.downloadAsync();
-    if (!result?.uri) throw new Error("Download failed — server returned no file");
+    if (!result?.uri) throw new Error(t("studentSubj.downloadFailed"));
 
     onDone?.(false);
     await openLocalFile(result.uri, mime);
@@ -214,17 +217,18 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
   } catch (err) {
     console.warn("[downloadAndOpen]", err.message);
     Alert.alert(
-      "Cannot Open File",
+      t("studentSubj.cannotOpenTitle"),
       err.message,
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Open in Browser", onPress: () => Linking.openURL(url).catch(() => {}) },
+        { text: t("common.cancel"), style: "cancel" },
+        { text: t("studentSubj.openBrowser"), onPress: () => Linking.openURL(url).catch(() => {}) },
       ]
     );
   }
 };
 
 const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState(null);
   const [isCached, setIsCached] = useState(false);
 
@@ -270,7 +274,7 @@ const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
         {isDownloading ? (
           <>
             <Text style={mc.label}>
-              {progress < 100 ? `Downloading… ${progress}%` : "Opening…"}
+              {progress < 100 ? `Downloading… ${progress}%` : t("studentSubj.opening")}
             </Text>
             <View style={mc.progressTrack}>
               <View style={[mc.progressFill, { width: `${progress}%`, backgroundColor: color }]} />
@@ -279,10 +283,10 @@ const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
         ) : (
           <>
             <Text style={mc.label}>
-              {isVid ? "Tap to play video" : "Tap to play audio"}
+              {isVid ? t("studentSubj.tapVideo") : t("studentSubj.tapAudio")}
             </Text>
             <Text style={mc.sublabel}>
-              {isCached ? "✓ Cached — opens instantly" : "Downloads & opens in media player"}
+              {isCached ? "✓ Cached — opens instantly" : t("studentSubj.downloadsHint")}
             </Text>
           </>
         )}
@@ -319,11 +323,12 @@ const mc = StyleSheet.create({
 });
 
 const SourceBadge = ({ source }) => {
+  const { t } = useTranslation();
   if (!source || source === "api") return null;
   const map = {
-    "api-alt": { label: "Live",    color: "#059669", bg: "#ECFDF5" },
-    "sqlite":  { label: "Cached",  color: "#D97706", bg: "#FEF3C7" },
-    "none":    { label: "Offline", color: "#DC2626", bg: "#FEE2E2" },
+    "api-alt": { labelKey: "studentSubj.live",    color: "#059669", bg: "#ECFDF5" },
+    "sqlite":  { labelKey: "studentSubj.cached",  color: "#D97706", bg: "#FEF3C7" },
+    "none":    { labelKey: "studentSubj.offline", color: "#DC2626", bg: "#FEE2E2" },
   };
   const v = map[source];
   if (!v) return null;
@@ -333,7 +338,7 @@ const SourceBadge = ({ source }) => {
         name={source === "sqlite" ? "cloud-offline-outline" : "cloud-done-outline"}
         size={11} color={v.color}
       />
-      <Text style={[sbx.text, { color: v.color }]}>{v.label}</Text>
+      <Text style={[sbx.text, { color: v.color }]}>{t(v.labelKey)}</Text>
     </View>
   );
 };
@@ -347,6 +352,7 @@ const sbx = StyleSheet.create({
 });
 
 const ContentCard = React.memo(({ item }) => {
+  const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [progress, setProgress] = useState(null);
 
@@ -367,10 +373,10 @@ const ContentCard = React.memo(({ item }) => {
     "cloud-download-outline";
 
   const openLabel =
-    isVideo ? "Play Video"          :
-    isAudio ? "Play Audio"          :
-    type === "image" ? "View Image" :
-    "Open / Download";
+    isVideo ? t("studentSubj.playVideo")          :
+    isAudio ? t("studentSubj.playAudio")          :
+    type === "image" ? t("studentSubj.viewImage") :
+    t("studentSubj.openDownload");
 
   const handleOpen = useCallback(async () => {
     if (progress !== null) return;
@@ -459,7 +465,7 @@ const ContentCard = React.memo(({ item }) => {
             <>
               <ActivityIndicator size="small" color={color} />
               <Text style={[cc.openBtnText, { color }]}>
-                {progress < 100 ? `Downloading ${progress}%` : "Opening…"}
+                {progress < 100 ? `Downloading ${progress}%` : t("studentSubj.opening")}
               </Text>
             </>
           ) : (
@@ -542,10 +548,11 @@ const sum = StyleSheet.create({
 });
 
 export default function SubjectDetailScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const {
     subjectId,
-    subjectName = "Subject",
+    subjectName = t("studentSubj.subject"),
     teacherName = "",
     subjectCode = "",
     colorIndex  = "0",
@@ -592,7 +599,7 @@ export default function SubjectDetailScreen() {
 
   const visibleFilters = useMemo(() => {
     const typesPresent = new Set(content.map((i) => i.type));
-    return FILTER_TABS.filter((t) => t.key === "all" || typesPresent.has(t.key));
+    return FILTER_TABS.filter((tab) => tab.key === "all" || typesPresent.has(tab.key));
   }, [content]);
 
   const filteredContent = useMemo(() => {
@@ -617,7 +624,7 @@ export default function SubjectDetailScreen() {
       <View style={sd.centered}>
         <ActivityIndicator size="large" color={theme.color} />
         <Text style={[sd.loadingText, { color: theme.color }]}>
-          Loading content…
+          {t("studentSubj.loading")}
         </Text>
       </View>
     );
@@ -689,7 +696,7 @@ export default function SubjectDetailScreen() {
           <Ionicons name="search-outline" size={17} color="#9CA3AF" />
           <TextInput
             style={sd.searchInput}
-            placeholder="Search content…"
+            placeholder={t("studentSubj.searchPh")}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -730,7 +737,7 @@ export default function SubjectDetailScreen() {
                     color={isActive ? "#FFF" : "#6B7280"}
                   />
                   <Text style={[sd.filterChipText, isActive && { color: "#FFF" }]}>
-                    {f.label}
+                    {t(f.labelKey)}
                   </Text>
                   {summary[f.key] > 0 && (
                     <Text style={[sd.filterCount, isActive && { color: "rgba(255,255,255,0.8)" }]}>
@@ -748,7 +755,7 @@ export default function SubjectDetailScreen() {
             <Ionicons name="alert-circle-outline" size={20} color="#DC2626" />
             <Text style={sd.errorText}>{error}</Text>
             <TouchableOpacity onPress={() => load(true)} activeOpacity={0.7}>
-              <Text style={sd.retryText}>Retry</Text>
+              <Text style={sd.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -758,15 +765,15 @@ export default function SubjectDetailScreen() {
             <Ionicons name="folder-open-outline" size={56} color="#D1D5DB" />
             <Text style={sd.emptyTitle}>
               {search
-                ? "No content matches your search"
+                ? t("studentSubj.noMatch")
                 : content.length === 0
-                  ? "No content uploaded yet"
-                  : "No content in this category"}
+                  ? t("studentSubj.emptyNone")
+                  : t("studentSubj.noneInCategory")}
             </Text>
             <Text style={sd.emptySub}>
               {content.length === 0
-                ? "Your teacher hasn't uploaded any materials yet."
-                : "Try a different filter or search term."}
+                ? t("studentSubj.emptySub")
+                : t("studentSubj.noMatchSub")}
             </Text>
             {(search || activeFilter !== "all") && (
               <TouchableOpacity
@@ -774,7 +781,7 @@ export default function SubjectDetailScreen() {
                 onPress={() => { setSearch(""); setActiveFilter("all"); }}
               >
                 <Text style={[sd.resetBtnText, { color: theme.color }]}>
-                  Clear Filters
+                  {t("studentSubj.clearFilters")}
                 </Text>
               </TouchableOpacity>
             )}

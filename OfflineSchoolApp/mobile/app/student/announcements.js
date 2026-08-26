@@ -51,12 +51,13 @@ const C = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const timeAgo = (dateStr) => {
+  const { t } = useTranslation();
   if (!dateStr) return "";
   try {
     const now  = new Date();
     const date = new Date(dateStr);
     const diff = Math.floor((now - date) / 1000);
-    if (diff < 60)     return "Just now";
+    if (diff < 60)     return t("annStudent.justNow");
     if (diff < 3600)   return `${Math.floor(diff / 60)}m ago`;
     if (diff < 86400)  return `${Math.floor(diff / 3600)}h ago`;
     if (diff < 604800) return `${Math.floor(diff / 86400)}d ago`;
@@ -81,28 +82,30 @@ const formatFullDate = (dateStr) => {
 };
 
 const getPriorityConfig = (priority = "normal") => {
+  const { t } = useTranslation();
   const p = (priority || "normal").toLowerCase();
   switch (p) {
     case "urgent":
-      return { label: "Urgent", icon: "alert-circle",       color: C.error,   bg: C.errorBg,   border: "#FECACA" };
+      return { labelKey: "annStudent.prioUrgent", icon: "alert-circle",       color: C.error,   bg: C.errorBg,   border: "#FECACA" };
     case "high":
-      return { label: "High",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A" };
+      return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A" };
     case "low":
       return { label: "Low",    icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200 };
     default:
-      return { label: "Normal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE" };
+      return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE" };
   }
 };
 
 const getAuthorConfig = (authorRole = "") => {
+  const { t } = useTranslation();
   const r = (authorRole || "").toLowerCase();
   if (["super_admin", "school_admin", "admin"].includes(r)) {
-    return { icon: "shield-checkmark", color: C.primary, label: "Administrator" };
+    return { icon: "shield-checkmark", color: C.primary, labelKey: "annStudent.roleAdministrator" };
   }
   if (r === "teacher") {
-    return { icon: "school", color: C.success, label: "Teacher" };
+    return { icon: "school", color: C.success, labelKey: "annStudent.roleTeacher" };
   }
-  return { icon: "person", color: C.gray500, label: "Staff" };
+  return { icon: "person", color: C.gray500, labelKey: "annStudent.roleStaff" };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -110,12 +113,12 @@ const getAuthorConfig = (authorRole = "") => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FILTER_TABS = [
-  { key: "all",     label: "All"     },
-  { key: "unread",  label: "Unread"  },
-  { key: "pinned",  label: "Pinned"  },
-  { key: "urgent",  label: "Urgent"  },
-  { key: "admin",   label: "Admin"   },
-  { key: "teacher", label: "Teacher" },
+  { key: "all",     labelKey: "annStudent.tabAll"     },
+  { key: "unread",  labelKey: "annStudent.tabUnread"  },
+  { key: "pinned",  labelKey: "annStudent.pinned"  },
+  { key: "urgent",  labelKey: "annStudent.prioUrgent"  },
+  { key: "admin",   labelKey: "annStudent.tabAdmin"   },
+  { key: "teacher", labelKey: "annStudent.roleTeacher" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -123,6 +126,7 @@ const FILTER_TABS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 function DetailModal({ ann, visible, onClose, onAcknowledge }) {
+  const { t } = useTranslation();
   if (!visible || !ann) return null;
 
   const pri    = getPriorityConfig(ann.priority);
@@ -152,7 +156,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
             >
               <Ionicons name="close" size={22} color={C.gray700} />
             </TouchableOpacity>
-            <Text style={md.headerTitle}>Announcement</Text>
+            <Text style={md.headerTitle}>{t("annStudent.announcement")}</Text>
             <View style={{ width: 36 }} />
           </View>
 
@@ -164,18 +168,18 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
             <View style={md.badgeRow}>
               <View style={[md.badge, { backgroundColor: pri.bg, borderColor: pri.border }]}>
                 <Ionicons name={pri.icon} size={13} color={pri.color} />
-                <Text style={[md.badgeText, { color: pri.color }]}>{pri.label}</Text>
+                <Text style={[md.badgeText, { color: pri.color }]}>{t(pri.labelKey)}</Text>
               </View>
               {ann.isPinned && (
                 <View style={[md.badge, { backgroundColor: C.warningBg, borderColor: "#FDE68A" }]}>
                   <Ionicons name="pin" size={13} color={C.warning} />
-                  <Text style={[md.badgeText, { color: C.warning }]}>Pinned</Text>
+                  <Text style={[md.badgeText, { color: C.warning }]}>{t("annStudent.pinned")}</Text>
                 </View>
               )}
               {ann.isRead && (
                 <View style={[md.badge, { backgroundColor: C.successBg, borderColor: "#A7F3D0" }]}>
                   <Ionicons name="checkmark-circle" size={13} color={C.success} />
-                  <Text style={[md.badgeText, { color: C.success }]}>Read</Text>
+                  <Text style={[md.badgeText, { color: C.success }]}>{t("annStudent.read")}</Text>
                 </View>
               )}
             </View>
@@ -187,8 +191,8 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
                 <Ionicons name={author.icon} size={16} color={author.color} />
               </View>
               <View style={{ flex: 1 }}>
-                <Text style={md.authorName}>{ann.authorName || "School"}</Text>
-                <Text style={md.authorRoleText}>{author.label}</Text>
+                <Text style={md.authorName}>{ann.authorName || t("annStudent.schoolFallback")}</Text>
+                <Text style={md.authorRoleText}>{t(author.labelKey)}</Text>
               </View>
               <View style={md.dateBox}>
                 <Ionicons name="time-outline" size={13} color={C.gray400} />
@@ -198,18 +202,18 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
 
             <Text style={md.fullDate}>{formatFullDate(ann.createdAt)}</Text>
             <View style={md.divider} />
-            <Text style={md.body}>{ann.body || "No content."}</Text>
+            <Text style={md.body}>{ann.body || t("annStudent.noContent")}</Text>
 
             <View style={md.audienceRow}>
               <Ionicons name="people-outline" size={15} color={C.gray400} />
               <Text style={md.audienceText}>
                 {ann.audience === "all"
-                  ? "Everyone"
+                  ? t("annStudent.audEveryone")
                   : ann.audience === "students"
-                  ? "All Students"
+                  ? t("annStudent.audAllStudents")
                   : ann.audience === "class"
-                  ? "Your Class"
-                  : ann.audience || "Everyone"}
+                  ? t("annStudent.audYourClass")
+                  : ann.audience || t("annStudent.audEveryone")}
               </Text>
             </View>
 
@@ -221,7 +225,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
                   activeOpacity={0.8}
                 >
                   <Ionicons name="checkmark-done-circle" size={18} color={C.white} />
-                  <Text style={md.ackBtnText}>Acknowledge</Text>
+                  <Text style={md.ackBtnText}>{t("annStudent.ack")}</Text>
                 </TouchableOpacity>
               )}
 
@@ -229,7 +233,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
               <View style={md.ackDone}>
                 <Ionicons name="checkmark-done-circle" size={16} color={C.success} />
                 <Text style={md.ackDoneText}>
-                  You have acknowledged this announcement
+                  {t("annStudent.ackedNote")}
                 </Text>
               </View>
             )}
@@ -351,6 +355,7 @@ const md = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function StudentAnnouncements() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   // ✅ Primitive userId — stable dep, prevents infinite useEffect loop
@@ -519,18 +524,18 @@ export default function StudentAnnouncements() {
             {ann.isPinned && (
               <View style={s.pinBadge}>
                 <Ionicons name="pin" size={10} color={C.warning} />
-                <Text style={s.pinBadgeText}>Pinned</Text>
+                <Text style={s.pinBadgeText}>{t("annStudent.pinned")}</Text>
               </View>
             )}
             <View style={[s.priBadge, { backgroundColor: pri.bg }]}>
               <Text style={[s.priBadgeText, { color: pri.color }]}>
-                {pri.label}
+                {t(pri.labelKey)}
               </Text>
             </View>
             <View style={[s.authorBadge, { backgroundColor: author.color + "12" }]}>
               <Ionicons name={author.icon} size={10} color={author.color} />
               <Text style={[s.authorBadgeText, { color: author.color }]}>
-                {author.label}
+                {t(author.labelKey)}
               </Text>
             </View>
           </View>
@@ -548,7 +553,7 @@ export default function StudentAnnouncements() {
 
           <View style={s.cardMeta}>
             <Text style={s.cardAuthor} numberOfLines={1}>
-              {ann.authorName || "School"}
+              {ann.authorName || t("annStudent.schoolFallback")}
             </Text>
             <Text style={s.cardDot}>·</Text>
             <Text style={s.cardTime}>{timeAgo(ann.createdAt)}</Text>
@@ -589,7 +594,7 @@ export default function StudentAnnouncements() {
           <Ionicons name="arrow-back" size={22} color={C.gray700} />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={s.topTitle}>Announcements</Text>
+          <Text style={s.topTitle}>{t("annStudent.listTitle")}</Text>
           <Text style={s.topSub}>
             {inbox.length} total
             {unreadCount > 0 ? ` · ${unreadCount} unread` : ""}
@@ -620,7 +625,7 @@ export default function StudentAnnouncements() {
         <Ionicons name="search-outline" size={18} color={C.gray400} />
         <TextInput
           style={s.searchInput}
-          placeholder="Search announcements…"
+          placeholder={t("annStudent.searchPh")}
           placeholderTextColor={C.gray400}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -652,7 +657,7 @@ export default function StudentAnnouncements() {
               activeOpacity={0.7}
             >
               <Text style={[s.filterTabText, isActive && s.filterTabTextActive]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
               {count > 0 && (
                 <View style={[s.filterBadge, isActive && s.filterBadgeActive]}>
@@ -673,7 +678,7 @@ export default function StudentAnnouncements() {
       {loadingInbox && inbox.length === 0 ? (
         <View style={s.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={s.loadingText}>Loading announcements…</Text>
+          <Text style={s.loadingText}>{t("annStudent.loading")}</Text>
         </View>
       ) : (
         <FlatList
@@ -705,15 +710,15 @@ export default function StudentAnnouncements() {
               </View>
               <Text style={s.emptyTitle}>
                 {searchQuery
-                  ? "No results found"
+                  ? t("annStudent.noResults")
                   : activeFilter !== "all"
                   ? `No ${activeFilter} announcements`
-                  : "No announcements yet"}
+                  : t("annStudent.emptyNone")}
               </Text>
               <Text style={s.emptySub}>
                 {searchQuery
-                  ? "Try a different search term"
-                  : "Announcements from your school and teachers will appear here"}
+                  ? t("annStudent.emptySearchSub")
+                  : t("annStudent.emptySub")}
               </Text>
             </View>
           }
@@ -949,3 +954,4 @@ const s = StyleSheet.create({
     lineHeight: 20,
   },
 });
+import { useTranslation } from "../../src/i18n/useTranslation";

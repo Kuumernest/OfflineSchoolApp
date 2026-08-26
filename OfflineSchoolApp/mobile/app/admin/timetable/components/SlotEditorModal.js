@@ -25,6 +25,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { SubjectService } from "../../../../src/services/subject.service";
 import { TeacherService  } from "../../../../src/services/teacher.service";
+import { useTranslation } from "../../../../src/i18n/useTranslation";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -72,6 +73,18 @@ const firstStr = (...candidates) => {
 /** Capitalise first letter — used to display canonical day names. */
 const capitalize = (s) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+
+/**
+ * Translation keys for the day shown in the header. Keyed by the first three
+ * letters of the canonical day value, which is left untouched.
+ */
+const DAY_LABEL_KEYS = {
+  mon: "timetable.monday",
+  tue: "timetable.tuesday",
+  wed: "timetable.wednesday",
+  thu: "timetable.thursday",
+  fri: "timetable.friday",
+};
 
 const unwrapArray = (result, ...keys) => {
   if (Array.isArray(result)) return result;
@@ -150,6 +163,8 @@ export default function SlotEditorModal({
   onSave,
   onDelete,
 }) {
+  const { t } = useTranslation();
+
   const isMountedRef = useRef(true);
 
   // ── Data ──────────────────────────────────────────────────
@@ -267,7 +282,7 @@ export default function SlotEditorModal({
         if (__DEV__) {
           console.log(
             `👩‍🏫 SlotEditorModal: ${normalised.length} teacher(s)`,
-            normalised.map((t) => `${t.name} [${t.id}]`),
+            normalised.map((item) => `${item.name} [${item.id}]`),
           );
         }
 
@@ -307,7 +322,7 @@ export default function SlotEditorModal({
   );
 
   const selectedTeacher = useMemo(
-    () => teachers.find((t) => t.id === teacherId) ?? null,
+    () => teachers.find((item) => item.id === teacherId) ?? null,
     [teachers, teacherId],
   );
 
@@ -342,11 +357,11 @@ export default function SlotEditorModal({
     if (saving) return;
 
     if (!subjectId) {
-      Alert.alert("Missing Subject", "Please select a subject.");
+      Alert.alert(t("ttAdmin.missingSubjectTitle"), t("ttAdmin.missingSubjectBody"));
       return;
     }
     if (!teacherId) {
-      Alert.alert("Missing Teacher", "Please select a teacher.");
+      Alert.alert(t("ttAdmin.missingTeacherTitle"), t("ttAdmin.missingTeacherBody"));
       return;
     }
 
@@ -359,11 +374,11 @@ export default function SlotEditorModal({
       });
     } catch (err) {
       console.error("SlotEditorModal: save failed:", err.message);
-      Alert.alert("Could Not Save", err.message ?? "Failed to save timetable slot.");
+      Alert.alert(t("ttAdmin.saveFailedTitle"), err.message ?? t("ttAdmin.saveFailedBody"));
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [saving, subjectId, teacherId, room, onSave]);
+  }, [saving, subjectId, teacherId, room, onSave, t]);
 
   /**
    * Wraps onDelete so that:
@@ -377,19 +392,21 @@ export default function SlotEditorModal({
       await onDelete();
     } catch (err) {
       console.error("SlotEditorModal: delete failed:", err.message);
-      Alert.alert("Could Not Delete", err.message ?? "Failed to remove slot.");
+      Alert.alert(t("ttAdmin.deleteFailedTitle"), err.message ?? t("ttAdmin.removeFailed"));
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [saving, onDelete]);
+  }, [saving, onDelete, t]);
 
   // ─────────────────────────────────────────────────────────
   // LABELS
   // ─────────────────────────────────────────────────────────
 
-  // canonicalDay returns "monday" etc. — capitalise for display
-  const dayLabel    = capitalize(cell?.dayOfWeek ?? slot?.dayOfWeek ?? "");
-  const periodLabel = cell?.period?.name ?? slot?.periodName ?? "Selected Period";
+  // The canonical day value is display-only here — translate it, never store it
+  const rawDay      = cell?.dayOfWeek ?? slot?.dayOfWeek ?? "";
+  const dayLabelKey = DAY_LABEL_KEYS[String(rawDay).slice(0, 3).toLowerCase()];
+  const dayLabel    = dayLabelKey ? t(dayLabelKey) : capitalize(rawDay);
+  const periodLabel = cell?.period?.name ?? slot?.periodName ?? t("ttAdmin.selectedPeriod");
   const timeLabel   =
     cell?.period?.startTime && cell?.period?.endTime
       ? `${cell.period.startTime} – ${cell.period.endTime}`
@@ -416,7 +433,7 @@ export default function SlotEditorModal({
           <View style={styles.header}>
             <View style={styles.headerLeft}>
               <Text style={styles.title}>
-                {mode === "edit" ? "Edit Slot" : "Configure Slot"}
+                {mode === "edit" ? t("ttAdmin.editSlot") : t("ttAdmin.configureSlot")}
               </Text>
               <Text style={styles.subtitle}>
                 {dayLabel}{dayLabel && periodLabel ? " • " : ""}{periodLabel}
@@ -442,15 +459,15 @@ export default function SlotEditorModal({
           >
 
             {/* ── Subject ── */}
-            <Text style={styles.sectionLabel}>Select Subject</Text>
+            <Text style={styles.sectionLabel}>{t("ttAdmin.selectSubject")}</Text>
 
             {loadingSubjects ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#4F46E5" size="small" />
-                <Text style={styles.loadingText}>Loading subjects…</Text>
+                <Text style={styles.loadingText}>{t("ttAdmin.loadingSubjects")}</Text>
               </View>
             ) : subjects.length === 0 ? (
-              <Text style={styles.emptyText}>No subjects found for this class.</Text>
+              <Text style={styles.emptyText}>{t("ttAdmin.noSubjects")}</Text>
             ) : (
               subjects.map((subject) => {
                 const selected = subjectId === subject.id;
@@ -478,18 +495,18 @@ export default function SlotEditorModal({
             )}
 
             {/* ── Teacher ── */}
-            <Text style={[styles.sectionLabel, styles.mt16]}>Select Teacher</Text>
+            <Text style={[styles.sectionLabel, styles.mt16]}>{t("ttAdmin.selectTeacher")}</Text>
 
             {!subjectId ? (
-              <Text style={styles.emptyText}>Select a subject first.</Text>
+              <Text style={styles.emptyText}>{t("timetable.chooseSubjectFirst")}</Text>
             ) : loadingTeachers ? (
               <View style={styles.loadingRow}>
                 <ActivityIndicator color="#4F46E5" size="small" />
-                <Text style={styles.loadingText}>Loading teachers…</Text>
+                <Text style={styles.loadingText}>{t("ttAdmin.loadingTeachers")}</Text>
               </View>
             ) : teachers.length === 0 ? (
               <Text style={styles.emptyText}>
-                No teacher assigned to this subject.{"\n"}Configure assignments first.
+                {t("ttAdmin.noTeacherForSubject")}
               </Text>
             ) : (
               teachers.map((teacher) => {
@@ -522,7 +539,7 @@ export default function SlotEditorModal({
               <View style={styles.summary}>
                 {selectedSubject && (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Subject</Text>
+                    <Text style={styles.summaryLabel}>{t("academic.subject")}</Text>
                     <Text style={styles.summaryValue} numberOfLines={1}>
                       {selectedSubject.name}
                     </Text>
@@ -530,7 +547,7 @@ export default function SlotEditorModal({
                 )}
                 {selectedTeacher && (
                   <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel}>Teacher</Text>
+                    <Text style={styles.summaryLabel}>{t("academic.teacher")}</Text>
                     <Text style={styles.summaryValue} numberOfLines={1}>
                       {selectedTeacher.name}
                     </Text>
@@ -541,13 +558,13 @@ export default function SlotEditorModal({
 
             {/* ── Room ── */}
             <Text style={[styles.sectionLabel, styles.mt16]}>
-              Room <Text style={styles.optional}>(Optional)</Text>
+              {t("timetable.room")} <Text style={styles.optional}>{t("ttAdmin.roomOptional")}</Text>
             </Text>
 
             <TextInput
               value={room}
               onChangeText={setRoom}
-              placeholder="e.g. Lab 2, Hall B, Room A10"
+              placeholder={t("timetable.roomPh")}
               style={styles.input}
               placeholderTextColor="#9CA3AF"
               autoCapitalize="words"
@@ -569,7 +586,7 @@ export default function SlotEditorModal({
                 disabled={saving}
                 activeOpacity={0.7}
               >
-                <Text style={styles.btnDeleteText}>Delete</Text>
+                <Text style={styles.btnDeleteText}>{t("common.delete")}</Text>
               </TouchableOpacity>
             )}
 
@@ -581,7 +598,7 @@ export default function SlotEditorModal({
               disabled={saving}
               activeOpacity={0.7}
             >
-              <Text style={styles.btnCancelText}>Cancel</Text>
+              <Text style={styles.btnCancelText}>{t("common.cancel")}</Text>
             </TouchableOpacity>
 
             <View style={{ width: 8 }} />
@@ -595,7 +612,7 @@ export default function SlotEditorModal({
               {saving ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.btnSaveText}>Save Slot</Text>
+                <Text style={styles.btnSaveText}>{t("ttAdmin.saveSlot")}</Text>
               )}
             </TouchableOpacity>
           </View>

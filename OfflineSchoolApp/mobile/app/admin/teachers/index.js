@@ -28,44 +28,13 @@ import { TeacherService } from "../../../src/services/teacher.service";
 
 const STALE_THRESHOLD_MS = 30_000;
 
-const STRINGS = {
-  loading:            "Loading teachers…",
-  errorLoad:          "Failed to load teachers. Pull down to retry.",
-  deleteTitle:        "Delete Teacher",
-  deleteBody:         (name) =>
-    `Permanently delete "${name}"?\n\nThis will also remove all their subject assignments. This cannot be undone.`,
-  deleteSuccess:      (name) => `"${name}" has been removed.`,
-  deleteSuccessTitle: "Deleted",
-  deleteErrorTitle:   "Error",
-  deleteErrorFallback:"Failed to delete teacher",
-  retry:              "Retry",
-  noEmail:            "No email on record",
-  subject:            "subject",
-  subjects:           "subjects",
-  class:              "class",
-  classes:            "classes",
-  unassigned:         "Unassigned",
-  allAssigned:        "All teachers are assigned!",
-  allAssignedSub:     "Every teacher currently has at least one subject assigned.",
-  noTeachers:         "No teachers yet",
-  noTeachersSub:      "Add your first teacher to begin assignment planning.",
-  addTeacher:         "Add Teacher",
-  total:              "Total",
-  assigned:           "Assigned",
-  teachers:           "teachers",
-  teacher:            "teacher",
-  headerUnassigned:   (n) => ` • ${n} unassigned`,
-  filterAll:          (n) => `All (${n})`,
-  filterUnassigned:   (n) => `Unassigned (${n})`,
-  cancel:             "Cancel",
-  delete:             "Delete",
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
 const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
+  const { t } = useTranslation();
   const hasAssignments = Number(teacher.subjectCount ?? 0) > 0;
 
   return (
@@ -83,7 +52,7 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
           {teacher.name}
         </Text>
         <Text style={styles.teacherEmail} numberOfLines={1}>
-          {teacher.email || STRINGS.noEmail}
+          {teacher.email || t("teachers.noEmail")}
         </Text>
 
         <View style={styles.metaRow}>
@@ -92,8 +61,8 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
             <Text style={styles.metaChipText}>
               {teacher.subjectCount ?? 0}{" "}
               {Number(teacher.subjectCount ?? 0) === 1
-                ? STRINGS.subject
-                : STRINGS.subjects}
+                ? t("teachers.subject")
+                : t("teachers.subjects")}
             </Text>
           </View>
 
@@ -102,15 +71,15 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
             <Text style={styles.metaChipText}>
               {teacher.classCount ?? 0}{" "}
               {Number(teacher.classCount ?? 0) === 1
-                ? STRINGS.class
-                : STRINGS.classes}
+                ? t("teachers.klass")
+                : t("teachers.klasses")}
             </Text>
           </View>
 
           {!hasAssignments && (
             <View style={styles.warningChip}>
               <Ionicons name="alert-circle-outline" size={12} color="#D97706" />
-              <Text style={styles.warningChipText}>{STRINGS.unassigned}</Text>
+              <Text style={styles.warningChipText}>{t("teachers.unassigned")}</Text>
             </View>
           )}
         </View>
@@ -141,7 +110,9 @@ const TeacherCard = React.memo(({ teacher, onEdit, onDelete }) => {
   );
 });
 
-const EmptyState = React.memo(({ showOnlyUnassigned, onAdd }) => (
+const EmptyState = React.memo(({ showOnlyUnassigned, onAdd }) => {
+                                const { t } = useTranslation();
+                                return (
   <View style={styles.emptyState}>
     <View style={styles.emptyIconWrap}>
       <Ionicons
@@ -151,44 +122,50 @@ const EmptyState = React.memo(({ showOnlyUnassigned, onAdd }) => (
       />
     </View>
     <Text style={[styles.emptyTitle, showOnlyUnassigned && { color: "#059669" }]}>
-      {showOnlyUnassigned ? STRINGS.allAssigned : STRINGS.noTeachers}
+      {showOnlyUnassigned ? t("teachers.allAssigned") : t("teachers.none")}
     </Text>
     <Text style={styles.emptySubtitle}>
-      {showOnlyUnassigned ? STRINGS.allAssignedSub : STRINGS.noTeachersSub}
+      {showOnlyUnassigned ? t("teachers.allAssignedHint") : t("teachers.noneHint")}
     </Text>
     {!showOnlyUnassigned && (
       <TouchableOpacity style={styles.emptyButton} onPress={onAdd} activeOpacity={0.7}>
         <Ionicons name="add-circle" size={18} color="#4F46E5" />
-        <Text style={styles.emptyButtonText}>{STRINGS.addTeacher}</Text>
+        <Text style={styles.emptyButtonText}>{t("teachers.add")}</Text>
       </TouchableOpacity>
     )}
   </View>
-));
+);
+                              });
 
-const StatsBanner = React.memo(({ stats }) => (
+const StatsBanner = React.memo(({ stats }) => {
+                                 const { t } = useTranslation();
+                                 return (
   <View style={styles.statsBanner}>
     <View style={styles.statItem}>
       <Text style={styles.statNumber}>{stats.total}</Text>
-      <Text style={styles.statLabel}>{STRINGS.total}</Text>
+      <Text style={styles.statLabel}>{t("common.total")}</Text>
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
       <Text style={[styles.statNumber, { color: "#059669" }]}>
         {stats.total - stats.unassigned}
       </Text>
-      <Text style={styles.statLabel}>{STRINGS.assigned}</Text>
+      <Text style={styles.statLabel}>{t("teachers.assigned")}</Text>
     </View>
     <View style={styles.statDivider} />
     <View style={styles.statItem}>
       <Text style={[styles.statNumber, stats.unassigned > 0 && { color: "#D97706" }]}>
         {stats.unassigned}
       </Text>
-      <Text style={styles.statLabel}>{STRINGS.unassigned}</Text>
+      <Text style={styles.statLabel}>{t("teachers.unassigned")}</Text>
     </View>
   </View>
-));
+);
+                               });
 
-const ErrorBanner = React.memo(({ message, onRetry }) => (
+const ErrorBanner = React.memo(({ message, onRetry }) => {
+                                 const { t } = useTranslation();
+                                 return (
   <View style={styles.errorBanner}>
     <Ionicons name="alert-circle" size={18} color="#DC2626" />
     <Text style={styles.errorText}>{message}</Text>
@@ -197,16 +174,18 @@ const ErrorBanner = React.memo(({ message, onRetry }) => (
       activeOpacity={0.75}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
     >
-      <Text style={styles.retryText}>{STRINGS.retry}</Text>
+      <Text style={styles.retryText}>{t("common.retry")}</Text>
     </TouchableOpacity>
   </View>
-));
+);
+                               });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN COMPONENT
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function AdminTeachers() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const isMountedRef   = useRef(true);
@@ -263,7 +242,7 @@ export default function AdminTeachers() {
     } catch (err) {
       console.error("Failed to load teachers:", err);
       if (!isMountedRef.current || requestId !== requestIdRef.current) return;
-      setError(STRINGS.errorLoad);
+      setError(t("teachers.loadFailed"));
     } finally {
       if (isMountedRef.current && requestId === requestIdRef.current) {
         setLoading(false);
@@ -318,12 +297,12 @@ export default function AdminTeachers() {
   const handleDelete = useCallback(
     (teacher) => {
       Alert.alert(
-        STRINGS.deleteTitle,
-        STRINGS.deleteBody(teacher.name),
+        t("teachers.delTitle"),
+        t("teachers.delBody", { name: teacher.name }),
         [
-          { text: STRINGS.cancel, style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text:  STRINGS.delete,
+            text:  t("common.delete"),
             style: "destructive",
             onPress: async () => {
               // Optimistic removal
@@ -334,8 +313,8 @@ export default function AdminTeachers() {
 
                 if (isMountedRef.current) {
                   Alert.alert(
-                    STRINGS.deleteSuccessTitle,
-                    STRINGS.deleteSuccess(teacher.name)
+                    t("teachers.deletedTitle"),
+                    t("teachers.delDone", { name: teacher.name })
                   );
                 }
               } catch (err) {
@@ -349,9 +328,9 @@ export default function AdminTeachers() {
                   const message =
                     err.response?.data?.message ||
                     err.message ||
-                    STRINGS.deleteErrorFallback;
+                    t("teachers.errDelete");
 
-                  Alert.alert(STRINGS.deleteErrorTitle, message);
+                  Alert.alert(t("teachers.errTitle"), message);
                 }
               }
             },
@@ -406,7 +385,7 @@ export default function AdminTeachers() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>{STRINGS.loading}</Text>
+        <Text style={styles.loadingText}>{t("teachers.loading")}</Text>
       </View>
     );
   }
@@ -428,11 +407,11 @@ export default function AdminTeachers() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Teachers</Text>
+          <Text style={styles.headerTitle}>{t("teachers.title")}</Text>
           <Text style={styles.headerSubtitle}>
             {stats.total}{" "}
-            {stats.total === 1 ? STRINGS.teacher : STRINGS.teachers}
-            {stats.unassigned > 0 ? STRINGS.headerUnassigned(stats.unassigned) : ""}
+            {stats.total === 1 ? t("teachers.singular") : t("teachers.plural")}
+            {stats.unassigned > 0 ? t("teachers.headerUnassigned", { count: stats.unassigned }) : ""}
           </Text>
         </View>
 
@@ -453,7 +432,7 @@ export default function AdminTeachers() {
           activeOpacity={0.7}
         >
           <Text style={[styles.filterChipText, !showOnlyUnassigned && styles.filterChipTextActive]}>
-            {STRINGS.filterAll(stats.total)}
+            {t("teachers.filterAll", { count: stats.total })}
           </Text>
         </TouchableOpacity>
 
@@ -463,7 +442,7 @@ export default function AdminTeachers() {
           activeOpacity={0.7}
         >
           <Text style={[styles.filterChipText, showOnlyUnassigned && styles.filterChipTextActive]}>
-            {STRINGS.filterUnassigned(stats.unassigned)}
+            {t("teachers.filterUnassigned", { count: stats.unassigned })}
           </Text>
 
           {stats.unassigned > 0 && !showOnlyUnassigned && (
@@ -693,3 +672,4 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

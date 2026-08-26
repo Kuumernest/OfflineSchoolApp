@@ -14,6 +14,7 @@ import {
 import { useRouter }    from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 import { getDatabase } from "../../../src/db/database";
 import { resolveStudentClassId } from "../../../src/services/student.service";
@@ -268,6 +269,7 @@ export default function StudentTimetableScreen() {
   const user     = useAuthStore((s) => s.user);
   const userId   = user?._id || user?.id || user?.userId;
   const schoolId = user?.schoolId;
+  const { t }    = useTranslation();
 
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -308,7 +310,7 @@ export default function StudentTimetableScreen() {
           console.log("[Timetable] synced:", synced);
         } catch (err) {
           console.warn("[Timetable] sync failed:", err.message);
-          setSyncError("Could not refresh — showing cached timetable");
+          setSyncError(t("timetable.syncError"));
         }
       }
 
@@ -323,7 +325,7 @@ export default function StudentTimetableScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId]);
+  }, [userId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -340,7 +342,7 @@ export default function StudentTimetableScreen() {
     return (
       <View style={st.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={st.loadingText}>Loading timetable…</Text>
+        <Text style={st.loadingText}>{t("timetable.loading")}</Text>
       </View>
     );
   }
@@ -350,10 +352,9 @@ export default function StudentTimetableScreen() {
     return (
       <View style={st.centered}>
         <Ionicons name="calendar-outline" size={52} color="#D1D5DB" />
-        <Text style={st.emptyTitle}>No class assigned</Text>
+        <Text style={st.emptyTitle}>{t("timetable.noClassTitle")}</Text>
         <Text style={st.emptyText}>
-          You have not been assigned to a class yet.{"\n"}
-          Contact your school administrator.
+          {t("timetable.noClassBody")}
         </Text>
       </View>
     );
@@ -364,10 +365,9 @@ export default function StudentTimetableScreen() {
     return (
       <View style={st.centered}>
         <Ionicons name="calendar-outline" size={48} color="#D1D5DB" />
-        <Text style={st.emptyTitle}>No Periods Configured</Text>
+        <Text style={st.emptyTitle}>{t("timetable.noPeriodsTitle")}</Text>
         <Text style={st.emptyText}>
-          The timetable hasn't been set up yet.{"\n"}
-          Contact your school administrator.
+          {t("timetable.noPeriodsBody")}
         </Text>
       </View>
     );
@@ -378,9 +378,9 @@ export default function StudentTimetableScreen() {
     return (
       <View style={st.centered}>
         <Ionicons name="time-outline" size={48} color="#D1D5DB" />
-        <Text style={st.emptyTitle}>No Classes Scheduled</Text>
+        <Text style={st.emptyTitle}>{t("timetable.noScheduleTitle")}</Text>
         <Text style={st.emptyText}>
-          Your class has no timetable entries yet.
+          {t("timetable.noScheduleBody")}
         </Text>
       </View>
     );
@@ -401,14 +401,18 @@ export default function StudentTimetableScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={st.pageTitle}>My Timetable</Text>
+          <Text style={st.pageTitle}>{t("timetable.myTimetable")}</Text>
           {className ? (
             <Text style={st.pageSub}>
-              {className} · {lessonCount} class{lessonCount !== 1 ? "es" : ""} this week
+              {className} · {lessonCount === 1
+                ? t("timetable.oneClassThisWeek")
+                : t("timetable.manyClassesThisWeek", { count: lessonCount })}
             </Text>
           ) : (
             <Text style={st.pageSub}>
-              {lessonCount} class{lessonCount !== 1 ? "es" : ""} this week
+              {lessonCount === 1
+                ? t("timetable.oneClassThisWeek")
+                : t("timetable.manyClassesThisWeek", { count: lessonCount })}
             </Text>
           )}
         </View>
@@ -445,7 +449,7 @@ export default function StudentTimetableScreen() {
               {/* Corner cell */}
               <View style={[st.timeCell, st.cornerCell]}>
                 <Ionicons name="time-outline" size={16} color="#E0E7FF" />
-                <Text style={st.cornerText}>Time</Text>
+                <Text style={st.cornerText}>{t("timetable.timeCol")}</Text>
               </View>
 
               {/* Day headers */}
@@ -465,7 +469,7 @@ export default function StudentTimetableScreen() {
                         isToday && st.dayShortToday,
                       ]}
                     >
-                      {DAY_SHORT[i]}
+                      {t(`timetable.${DAY_SHORT[i].toLowerCase()}`)}
                     </Text>
                     <Text
                       style={[
@@ -473,7 +477,7 @@ export default function StudentTimetableScreen() {
                         isToday && st.dayFullToday,
                       ]}
                     >
-                      {day}
+                      {t(`timetable.${day.toLowerCase()}`)}
                     </Text>
                     {isToday && <View style={st.todayDot} />}
                   </View>
@@ -488,7 +492,7 @@ export default function StudentTimetableScreen() {
                 return (
                   <View key={period.id} style={st.row}>
                     <View style={[st.timeCell, st.breakTimeCell]}>
-                      <Text style={st.breakLabel}>{period.name || "Break"}</Text>
+                      <Text style={st.breakLabel}>{period.name || t("timetable.break")}</Text>
                       {period.startTime ? (
                         <Text style={st.breakTime}>
                           {formatTime(period.startTime)}
@@ -576,11 +580,11 @@ export default function StudentTimetableScreen() {
         <View style={st.legend}>
           <View style={st.legendItem}>
             <View style={[st.legendSwatch, st.slotFilled]} />
-            <Text style={st.legendText}>Class</Text>
+            <Text style={st.legendText}>{t("timetable.classLegend")}</Text>
           </View>
           <View style={st.legendItem}>
             <View style={[st.legendSwatch, st.slotEmpty]} />
-            <Text style={st.legendText}>Free</Text>
+            <Text style={st.legendText}>{t("timetable.freeLegend")}</Text>
           </View>
           {todayIndex >= 0 && (
             <View style={st.legendItem}>
@@ -590,7 +594,7 @@ export default function StudentTimetableScreen() {
                   { backgroundColor: "#EEF2FF", borderWidth: 2, borderColor: "#4F46E5" },
                 ]}
               />
-              <Text style={st.legendText}>Today</Text>
+              <Text style={st.legendText}>{t("timetable.todayLegend")}</Text>
             </View>
           )}
         </View>

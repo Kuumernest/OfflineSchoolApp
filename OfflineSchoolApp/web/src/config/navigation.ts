@@ -335,13 +335,10 @@ export const NAV_ITEMS: NavItem[] = [
         icon:  BarChart3,
         roles: ["super_admin", "school_admin", "admin", "teacher"],
       },
-      {
-        label: "Reports",
-        labelKey: "nav.reports",
-        path:  "/exams/reports",
-        icon:  ClipboardList,
-        roles: ["super_admin", "school_admin", "admin"],
-      },
+      // Report cards are deliberately NOT listed here. They used to appear
+      // both under Exams and under Reports, which read as two features and
+      // sent people to whichever they found first. They now live once, under
+      // Reports, alongside the templates they are built from.
     ],
   },
 
@@ -388,6 +385,15 @@ export const NAV_ITEMS: NavItem[] = [
         labelKey: "nav.overview",
         path:  "/reports",
         icon:  BarChart3,
+        roles: ["super_admin", "school_admin", "admin"],
+      },
+      {
+        // The report card generator. Was /exams/reports and was reachable
+        // from the Exams group; that route now redirects here.
+        label: "Report cards",
+        labelKey: "reportCards.title",
+        path:  "/reports/cards",
+        icon:  ClipboardList,
         roles: ["super_admin", "school_admin", "admin"],
       },
       {

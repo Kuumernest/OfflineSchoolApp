@@ -12,27 +12,32 @@ import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
 import api              from "../../../../src/services/api";
 import DateField        from "../../../../src/components/DateField";
+import { useTranslation } from "../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
 const EXAM_TYPES = [
-  { value: "first_test",            label: "First Test"            },
-  { value: "second_test",           label: "Second Test"           },
-  { value: "mid_term",              label: "Mid-Term"              },
-  { value: "practical",             label: "Practical"             },
-  { value: "final_exam",            label: "Final Exam"            },
-  { value: "mock_exam",             label: "Mock Exam"             },
-  { value: "promotion_exam",        label: "Promotion Exam"        },
-  { value: "continuous_assessment", label: "Continuous Assessment" },
+  { value: "first_test",            labelKey: "examEdit.typeFirstTest"            },
+  { value: "second_test",           labelKey: "examEdit.typeSecondTest"           },
+  { value: "mid_term",              labelKey: "examEdit.typeMidTerm"              },
+  { value: "practical",             labelKey: "examEdit.typePractical"            },
+  { value: "final_exam",            labelKey: "examEdit.typeFinalExam"            },
+  { value: "mock_exam",             labelKey: "examEdit.typeMockExam"             },
+  { value: "promotion_exam",        labelKey: "examEdit.typePromotionExam"        },
+  { value: "continuous_assessment", labelKey: "examEdit.typeContinuousAssessment" },
 ];
 
 const TERMS = [
-  { value: "first_term",  label: "First Term"  },
-  { value: "second_term", label: "Second Term" },
-  { value: "third_term",  label: "Third Term"  },
+  { value: "first_term",  labelKey: "examEdit.termFirst"  },
+  { value: "second_term", labelKey: "examEdit.termSecond" },
+  { value: "third_term",  labelKey: "examEdit.termThird"  },
 ];
+
+/** Turn a labelKey table into the { value, label } shape OptionPicker renders. */
+const translateOptions = (t, options) =>
+  options.map((o) => ({ value: o.value, label: t(o.labelKey) }));
 
 // Academic years: last year through two years ahead, "YYYY/YYYY+1" — picked,
 // never typed, so records can't end up with mismatched year keys.
@@ -140,7 +145,7 @@ const OptionPicker = ({ options, value, onChange }) => (
 
 const ClassPickerModal = ({
   visible, availableClasses, selectedIds,
-  onToggle, onClose, loading,
+  onToggle, onClose, loading, t,
 }) => (
   <Modal
     visible={visible}
@@ -152,7 +157,7 @@ const ClassPickerModal = ({
       <TouchableOpacity style={cm.sheet} activeOpacity={1} onPress={() => {}}>
         <View style={cm.handle} />
         <View style={cm.header}>
-          <Text style={cm.title}>Select Classes</Text>
+          <Text style={cm.title}>{t("examEdit.pickClassesTitle")}</Text>
           <TouchableOpacity
             onPress={onClose}
             style={cm.closeBtn}
@@ -161,18 +166,18 @@ const ClassPickerModal = ({
             <Ionicons name="checkmark" size={22} color={C.primary} />
           </TouchableOpacity>
         </View>
-        <Text style={cm.sub}>Tap to select or deselect classes for this exam</Text>
+        <Text style={cm.sub}>{t("examEdit.pickClassesSub")}</Text>
 
         {loading ? (
           <View style={cm.loadingBox}>
             <ActivityIndicator size="large" color={C.primary} />
-            <Text style={cm.loadingText}>Loading classes…</Text>
+            <Text style={cm.loadingText}>{t("examEdit.loadingClasses")}</Text>
           </View>
         ) : availableClasses.length === 0 ? (
           <View style={cm.empty}>
             <Ionicons name="school-outline" size={36} color={C.gray300} />
-            <Text style={cm.emptyText}>No classes found</Text>
-            <Text style={cm.emptySubText}>Create classes in the admin panel first</Text>
+            <Text style={cm.emptyText}>{t("examEdit.noClassesFound")}</Text>
+            <Text style={cm.emptySubText}>{t("examEdit.noClassesSub")}</Text>
           </View>
         ) : (
           <FlatList
@@ -183,7 +188,7 @@ const ClassPickerModal = ({
             renderItem={({ item }) => {
               const cid      = String(item._id || item.id);
               const selected = selectedIds.includes(cid);
-              const name     = item.name || item.className || "Unknown Class";
+              const name     = item.name || item.className || t("examEdit.unknownClass");
               return (
                 <TouchableOpacity
                   style={[cm.classRow, selected && cm.classRowSelected]}
@@ -206,7 +211,11 @@ const ClassPickerModal = ({
                     )}
                     {item.studentCount != null && (
                       <Text style={cm.classStudents}>
-                        {item.studentCount} student{item.studentCount !== 1 ? "s" : ""}
+                        {item.studentCount === 1
+                          ? t("examEdit.studentOne")
+                          : t("examEdit.studentsMany", {
+                              count: item.studentCount,
+                            })}
                       </Text>
                     )}
                   </View>
@@ -305,6 +314,7 @@ export default function EditExamScreen() {
   const { id }   = useLocalSearchParams();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
+  const { t }    = useTranslation();
 
   const classesLoadedRef  = useRef(false);
   const classesLoadingRef = useRef(false);
@@ -334,7 +344,7 @@ export default function EditExamScreen() {
       setLoading(true);
       const res = await ExamService.getExamById(id, schoolId);
       const e   = res?.exam;
-      if (!e) throw new Error("Exam not found");
+      if (!e) throw new Error(t("examEdit.notFound"));
 
       setExam(e);
       setName(e.name              || "");
@@ -352,7 +362,7 @@ export default function EditExamScreen() {
         setSelectedClasses(
           e.classes.map((c) => ({
             classId:   String(c._id || c.id || c.classId),
-            className: c.name || c.className || "Unknown",
+            className: c.name || c.className || t("examEdit.unknownClass"),
           }))
         );
       } else if (Array.isArray(e.classIds) && e.classIds.length > 0) {
@@ -365,7 +375,7 @@ export default function EditExamScreen() {
         setSelectedClasses([]);
       }
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to load exam");
+      Alert.alert(t("examEdit.errorTitle"), err.message || t("examEdit.loadFailed"));
       router.back();
     } finally {
       setLoading(false);
@@ -441,33 +451,33 @@ export default function EditExamScreen() {
   // ── Validate ───────────────────────────────────────────
   const validate = useCallback(() => {
     if (!name.trim()) {
-      Alert.alert("Validation", "Exam name is required");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.nameRequired"));
       return false;
     }
     if (!academicYear.trim()) {
-      Alert.alert("Validation", "Academic year is required");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.yearRequired"));
       return false;
     }
     if (startDate && !isValidDate(startDate)) {
-      Alert.alert("Validation", "Start date format must be YYYY-MM-DD");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.startDateFormat"));
       return false;
     }
     if (endDate && !isValidDate(endDate)) {
-      Alert.alert("Validation", "End date format must be YYYY-MM-DD");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.endDateFormat"));
       return false;
     }
     if (startDate && endDate && new Date(startDate) > new Date(endDate)) {
-      Alert.alert("Validation", "End date must be after start date");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.endAfterStart"));
       return false;
     }
     const tm = Number(totalMarks);
     const pm = Number(passMark);
     if (isNaN(tm) || tm <= 0) {
-      Alert.alert("Validation", "Total marks must be a positive number");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.totalMarksPositive"));
       return false;
     }
     if (isNaN(pm) || pm < 0 || pm > tm) {
-      Alert.alert("Validation", "Pass mark must be between 0 and total marks");
+      Alert.alert(t("examEdit.validationTitle"), t("examEdit.passMarkRange"));
       return false;
     }
     return true;
@@ -496,11 +506,14 @@ export default function EditExamScreen() {
           ? selectedClasses.map((c) => c.className).join(", ")
           : undefined,
       }, schoolId);
-      Alert.alert("Saved", "Exam updated successfully", [
-        { text: "OK", onPress: () => router.back() },
+      Alert.alert(t("examEdit.savedTitle"), t("examEdit.savedBody"), [
+        { text: t("examEdit.ok"), onPress: () => router.back() },
       ]);
     } catch (err) {
-      Alert.alert("Save Failed", err.message || "Could not update exam");
+      Alert.alert(
+        t("examEdit.saveFailedTitle"),
+        err.message || t("examEdit.saveFailedBody")
+      );
     } finally {
       setSaving(false);
     }
@@ -513,19 +526,22 @@ export default function EditExamScreen() {
   // ── Delete ─────────────────────────────────────────────
   const handleDelete = useCallback(() => {
     Alert.alert(
-      "Delete Exam",
-      `Are you sure you want to delete "${exam?.name}"? This cannot be undone.`,
+      t("examEdit.deleteTitle"),
+      t("examEdit.deleteBody", { name: exam?.name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("examEdit.cancel"), style: "cancel" },
         {
-          text:    "Delete",
+          text:    t("examEdit.delete"),
           style:   "destructive",
           onPress: async () => {
             try {
               await ExamService.deleteExam(id, schoolId);
               router.replace("/admin/exams");
             } catch (err) {
-              Alert.alert("Error", err.message || "Could not delete exam");
+              Alert.alert(
+                t("examEdit.errorTitle"),
+                err.message || t("examEdit.deleteFailed")
+              );
             }
           },
         },
@@ -537,12 +553,14 @@ export default function EditExamScreen() {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={s.loadingText}>Loading exam…</Text>
+        <Text style={s.loadingText}>{t("examEdit.loadingExam")}</Text>
       </View>
     );
   }
 
   const selectedIds    = selectedClasses.map((c) => c.classId);
+  const typeOptions    = translateOptions(t, EXAM_TYPES);
+  const termOptions    = translateOptions(t, TERMS);
   const tm             = Number(totalMarks);
   const pm             = Number(passMark);
   const passRatePct    = tm > 0 ? ((pm / tm) * 100).toFixed(1) : null;
@@ -558,6 +576,7 @@ export default function EditExamScreen() {
         onToggle={toggleClass}
         onClose={() => setClassPickerOpen(false)}
         loading={classesLoading}
+        t={t}
       />
 
       {/* Header */}
@@ -566,7 +585,9 @@ export default function EditExamScreen() {
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle} numberOfLines={1}>Edit Exam</Text>
+          <Text style={s.headerTitle} numberOfLines={1}>
+            {t("examEdit.title")}
+          </Text>
           <Text style={s.headerSub} numberOfLines={1}>{exam?.name || ""}</Text>
         </View>
         <TouchableOpacity
@@ -577,7 +598,7 @@ export default function EditExamScreen() {
         >
           {saving
             ? <ActivityIndicator size="small" color={C.white} />
-            : <Text style={s.saveHeaderBtnText}>Save</Text>
+            : <Text style={s.saveHeaderBtnText}>{t("examEdit.save")}</Text>
           }
         </TouchableOpacity>
       </View>
@@ -591,14 +612,14 @@ export default function EditExamScreen() {
       >
         {/* Basic Info */}
         <View style={s.card}>
-          <SectionTitle>Basic Information</SectionTitle>
-          <Field label="Exam Name" required>
-            <StyledInput value={name} onChangeText={setName} placeholder="e.g. Mid-Term Examination 2024" maxLength={120} />
+          <SectionTitle>{t("examEdit.basicInfo")}</SectionTitle>
+          <Field label={t("examEdit.labelName")} required>
+            <StyledInput value={name} onChangeText={setName} placeholder={t("examEdit.namePlaceholder")} maxLength={120} />
           </Field>
-          <Field label="Exam Type" required>
-            <OptionPicker options={EXAM_TYPES} value={type} onChange={setType} />
+          <Field label={t("examEdit.labelType")} required>
+            <OptionPicker options={typeOptions} value={type} onChange={setType} />
           </Field>
-          <Field label="Academic Year" required>
+          <Field label={t("examEdit.labelYear")} required>
             <OptionPicker
               options={
                 !academicYear || ACADEMIC_YEARS.includes(academicYear)
@@ -609,26 +630,26 @@ export default function EditExamScreen() {
               onChange={setAcademicYear}
             />
           </Field>
-          <Field label="Term" required>
-            <OptionPicker options={TERMS} value={term} onChange={setTerm} />
+          <Field label={t("examEdit.labelTerm")} required>
+            <OptionPicker options={termOptions} value={term} onChange={setTerm} />
           </Field>
         </View>
 
         {/* Classes */}
         <View style={s.card}>
           <View style={s.classSectionHeader}>
-            <SectionTitle noMargin>Classes</SectionTitle>
+            <SectionTitle noMargin>{t("examEdit.classesTitle")}</SectionTitle>
             <TouchableOpacity style={s.addClassBtn} onPress={handleOpenClassPicker} activeOpacity={0.7}>
               <Ionicons name="add" size={18} color={C.primary} />
-              <Text style={s.addClassBtnText}>Add / Edit</Text>
+              <Text style={s.addClassBtnText}>{t("examEdit.addEdit")}</Text>
             </TouchableOpacity>
           </View>
 
           {selectedClasses.length === 0 ? (
             <TouchableOpacity style={s.noClassBox} onPress={handleOpenClassPicker} activeOpacity={0.7}>
               <Ionicons name="school-outline" size={28} color={C.gray300} />
-              <Text style={s.noClassText}>No classes selected</Text>
-              <Text style={s.noClassSub}>Tap "Add / Edit" to assign classes</Text>
+              <Text style={s.noClassText}>{t("examEdit.noClassesSelected")}</Text>
+              <Text style={s.noClassSub}>{t("examEdit.noClassesHint")}</Text>
             </TouchableOpacity>
           ) : (
             <View style={s.classChipWrap}>
@@ -646,41 +667,45 @@ export default function EditExamScreen() {
               ))}
               <TouchableOpacity style={s.editClassChip} onPress={handleOpenClassPicker} activeOpacity={0.7}>
                 <Ionicons name="pencil-outline" size={12} color={C.gray500} />
-                <Text style={s.editClassChipText}>Edit</Text>
+                <Text style={s.editClassChipText}>{t("examEdit.edit")}</Text>
               </TouchableOpacity>
             </View>
           )}
           {selectedClasses.length > 0 && (
             <Text style={s.classCount}>
-              {selectedClasses.length} class{selectedClasses.length !== 1 ? "es" : ""} selected
+              {selectedClasses.length === 1
+                ? t("examEdit.classesSelectedOne")
+                : t("examEdit.classesSelectedMany", {
+                    count: selectedClasses.length,
+                  })}
             </Text>
           )}
         </View>
 
         {/* Dates */}
         <View style={s.card}>
-          <SectionTitle>Dates</SectionTitle>
+          <SectionTitle>{t("examEdit.datesTitle")}</SectionTitle>
           <View style={s.dateRow}>
             <View style={s.dateField}>
-              <DateInput label="Start Date" value={startDate} onChange={setStartDate} />
+              <DateInput label={t("examEdit.labelStartDate")} value={startDate} onChange={setStartDate} />
             </View>
             <View style={s.dateField}>
-              <DateInput label="End Date" value={endDate} onChange={setEndDate} />
+              <DateInput label={t("examEdit.labelEndDate")} value={endDate} onChange={setEndDate} />
             </View>
           </View>
         </View>
 
         {/* Marks */}
         <View style={s.card}>
-          <SectionTitle>Marks Configuration</SectionTitle>
+          <SectionTitle>{t("examEdit.marksTitle")}</SectionTitle>
           <View style={s.dateRow}>
             <View style={s.dateField}>
-              <Field label="Total Marks" required>
+              <Field label={t("examEdit.labelTotalMarks")} required>
                 <StyledInput value={totalMarks} onChangeText={setTotalMarks} placeholder="100" keyboardType="numeric" maxLength={6} />
               </Field>
             </View>
             <View style={s.dateField}>
-              <Field label="Pass Mark" required>
+              <Field label={t("examEdit.labelPassMark")} required>
                 <StyledInput value={passMark} onChangeText={setPassMark} placeholder="50" keyboardType="numeric" maxLength={6} />
               </Field>
             </View>
@@ -688,19 +713,27 @@ export default function EditExamScreen() {
           {passRatePct !== null && (
             <View style={s.passPreview}>
               <Ionicons name="information-circle-outline" size={14} color={C.primary} />
-              <Text style={s.passPreviewText}>Pass rate: {passRatePct}%</Text>
+              <Text style={s.passPreviewText}>
+                {t("examEdit.passRate", { value: passRatePct })}
+              </Text>
             </View>
           )}
         </View>
 
         {/* Additional */}
         <View style={s.card}>
-          <SectionTitle>Additional Information</SectionTitle>
-          <Field label="Description" hint="Optional — visible to teachers">
-            <StyledInput value={description} onChangeText={setDescription} placeholder="Brief description…" multiline numberOfLines={3} maxLength={500} />
+          <SectionTitle>{t("examEdit.additionalInfo")}</SectionTitle>
+          <Field
+            label={t("examEdit.labelDescription")}
+            hint={t("examEdit.descriptionHint")}
+          >
+            <StyledInput value={description} onChangeText={setDescription} placeholder={t("examEdit.descriptionPlaceholder")} multiline numberOfLines={3} maxLength={500} />
           </Field>
-          <Field label="Instructions" hint="Optional — visible to students">
-            <StyledInput value={instructions} onChangeText={setInstructions} placeholder="Instructions for students…" multiline numberOfLines={4} maxLength={1000} />
+          <Field
+            label={t("examEdit.labelInstructions")}
+            hint={t("examEdit.instructionsHint")}
+          >
+            <StyledInput value={instructions} onChangeText={setInstructions} placeholder={t("examEdit.instructionsPlaceholder")} multiline numberOfLines={4} maxLength={1000} />
           </Field>
         </View>
 
@@ -714,25 +747,25 @@ export default function EditExamScreen() {
           {saving ? (
             <>
               <ActivityIndicator size="small" color={C.white} />
-              <Text style={s.saveBtnText}>Saving…</Text>
+              <Text style={s.saveBtnText}>{t("examEdit.saving")}</Text>
             </>
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={20} color={C.white} />
-              <Text style={s.saveBtnText}>Save Changes</Text>
+              <Text style={s.saveBtnText}>{t("examEdit.saveChanges")}</Text>
             </>
           )}
         </TouchableOpacity>
 
         {/* Danger zone */}
         <View style={s.dangerCard}>
-          <Text style={s.dangerTitle}>Danger Zone</Text>
+          <Text style={s.dangerTitle}>{t("examEdit.dangerTitle")}</Text>
           <Text style={s.dangerSub}>
-            Deleting an exam is permanent. All marks and results will be removed.
+            {t("examEdit.dangerSub")}
           </Text>
           <TouchableOpacity style={s.deleteBtn} onPress={handleDelete} activeOpacity={0.8}>
             <Ionicons name="trash-outline" size={16} color={C.error} />
-            <Text style={s.deleteBtnText}>Delete This Exam</Text>
+            <Text style={s.deleteBtnText}>{t("examEdit.deleteBtn")}</Text>
           </TouchableOpacity>
         </View>
 

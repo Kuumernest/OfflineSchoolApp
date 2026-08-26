@@ -7,6 +7,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
   getTeachersList, getClassesList, getSubjectsByClass,
   createAssignment, createBulkAssignments, getTeacherAssignments,
@@ -21,10 +22,10 @@ const normalizeId = (item) => {
 const normalizeList = (list) => (list || []).map(normalizeId).filter(Boolean);
 
 const STEPS = [
-  { id: 1, title: "Select Teacher",   icon: "person-outline"           },
-  { id: 2, title: "Select Class",     icon: "school-outline"           },
-  { id: 3, title: "Select Subjects",  icon: "book-outline"             },
-  { id: 4, title: "Review & Confirm", icon: "checkmark-circle-outline" },
+  { id: 1, titleKey: "assignWork.step1", icon: "person-outline"           },
+  { id: 2, titleKey: "assignWork.step2", icon: "school-outline"           },
+  { id: 3, titleKey: "assignWork.step3", icon: "book-outline"             },
+  { id: 4, titleKey: "assignWork.step4", icon: "checkmark-circle-outline" },
 ];
 
 const EmptyMini = React.memo(({ icon, text, subtext, children }) => (
@@ -56,7 +57,9 @@ const StepDot = React.memo(({ step, isActive, isCompleted, onPress }) => (
   </TouchableOpacity>
 ));
 
-const TeacherCard = React.memo(({ teacher, isSelected, onPress }) => (
+const TeacherCard = React.memo(({ teacher, isSelected, onPress }) => {
+  const { t } = useTranslation();
+  return (
   <TouchableOpacity
     style={[styles.selectionCard, isSelected && styles.selectionCardActive]}
     onPress={onPress}
@@ -70,14 +73,15 @@ const TeacherCard = React.memo(({ teacher, isSelected, onPress }) => (
       </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.selectionTitle} numberOfLines={1}>{teacher.name}</Text>
-        <Text style={styles.selectionSubtitle} numberOfLines={1}>{teacher.email || "No email"}</Text>
+        <Text style={styles.selectionSubtitle} numberOfLines={1}>{teacher.email || t("assignWork.noEmail")}</Text>
       </View>
     </View>
     <View style={[styles.radioOuter, isSelected && styles.radioOuterActive]}>
       {isSelected && <View style={styles.radioInner} />}
     </View>
   </TouchableOpacity>
-));
+  );
+});
 
 const ClassCard = React.memo(({ classItem, isSelected, existingCount, onPress }) => (
   <TouchableOpacity
@@ -108,7 +112,9 @@ const ClassCard = React.memo(({ classItem, isSelected, existingCount, onPress })
   </TouchableOpacity>
 ));
 
-const SubjectCard = React.memo(({ subject, isSelected, alreadyAssigned, onToggle }) => (
+const SubjectCard = React.memo(({ subject, isSelected, alreadyAssigned, onToggle }) => {
+  const { t } = useTranslation();
+  return (
   <TouchableOpacity
     style={[
       styles.subjectCard,
@@ -138,11 +144,12 @@ const SubjectCard = React.memo(({ subject, isSelected, alreadyAssigned, onToggle
     </View>
     {alreadyAssigned && (
       <View style={styles.assignedTag}>
-        <Text style={styles.assignedTagText}>Already Assigned</Text>
+        <Text style={styles.assignedTagText}>{t("assignWork.alreadyAssigned")}</Text>
       </View>
     )}
   </TouchableOpacity>
-));
+  );
+});
 
 const ReviewSubjectItem = React.memo(({ subject, onRemove }) => (
   <View style={styles.reviewSubjectItem}>
@@ -155,6 +162,7 @@ const ReviewSubjectItem = React.memo(({ subject, onRemove }) => (
 ));
 
 export default function AssignTeacher() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams();
 
@@ -226,7 +234,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     } catch (err) {
       if (isMountedRef.current) {
         console.error("Failed to load data:", err);
-        setError("Failed to load data. Check your network connection.");
+        setError(t("assignWork.errLoadData"));
       }
     } finally {
       if (isMountedRef.current) setLoading(false);
@@ -237,7 +245,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
   useEffect(() => {
     if (preselectedTeacherId && teachers.length > 0) {
-      const fullTeacher = teachers.find((t) => t._id === preselectedTeacherId);
+      const fullTeacher = teachers.find((tc) => tc._id === preselectedTeacherId);
       if (fullTeacher) setSelectedTeacher(normalizeId(fullTeacher));
     }
   }, [teachers, preselectedTeacherId]);
@@ -254,7 +262,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       if (isMountedRef.current) setSubjects(normalizeList(subjectsData));
     } catch (err) {
       if (isMountedRef.current) {
-        Alert.alert("Error", "Failed to load subjects for this class");
+        Alert.alert(t("assignWork.errTitle"), t("assignWork.errLoadSubjects"));
         setSubjects([]);
       }
     } finally {
@@ -322,7 +330,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
   const filteredTeachers = useMemo(() => {
     const query = teacherSearch.toLowerCase().trim();
     if (!query) return teachers;
-    return teachers.filter((t) => t.name?.toLowerCase().includes(query));
+    return teachers.filter((tc) => tc.name?.toLowerCase().includes(query));
   }, [teachers, teacherSearch]);
 
   const availableSubjects = useMemo(
@@ -338,7 +346,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
   const handleSubmit = useCallback(async () => {
     if (!selectedTeacher || !selectedClass || selectedSubjects.length === 0) {
-      Alert.alert("Error", "Please complete all selections");
+      Alert.alert(t("assignWork.errTitle"), t("assignWork.errIncomplete"));
       return;
     }
     if (submitting) return;
@@ -372,11 +380,14 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       if (!isMountedRef.current) return;
 
       Alert.alert(
-        "✅ Success!",
-        `${successCount} subject${successCount !== 1 ? "s" : ""} assigned to ${selectedTeacher.name}`,
+        t("assignWork.successTitle"),
+        t("assignWork.successBody", {
+          count: successCount,
+          teacher: selectedTeacher.name,
+        }),
         [
           {
-            text: "Assign More",
+            text: t("assignWork.assignMore"),
             onPress: () => {
               if (isMountedRef.current) {
                 setSelectedClass(null);
@@ -386,7 +397,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
               }
             },
           },
-          { text: "Done", onPress: () => router.back() },
+          { text: t("common.done"), onPress: () => router.back() },
         ]
       );
     } catch (err) {
@@ -395,13 +406,14 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       if (err?.response?.status === 409) {
         await refreshExistingAssignments(selectedTeacher._id);
         Alert.alert(
-          "ℹ️ Already Assigned",
-          "Some or all subjects were already assigned to this teacher.",
-          [{ text: "OK", onPress: () => router.back() }]
+          t("assignWork.dupTitle"),
+          t("assignWork.dupBody"),
+          [{ text: t("assignWork.ok"), onPress: () => router.back() }]
         );
       } else {
-        const message = err?.response?.data?.message || err.message || "Failed to create assignment";
-        Alert.alert("Assignment Failed", message);
+        const message = err?.response?.data?.message || err.message
+          || t("assignWork.errCreate");
+        Alert.alert(t("assignWork.failedTitle"), message);
       }
     } finally {
       if (isMountedRef.current) setSubmitting(false);
@@ -439,7 +451,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         </View>
         <View>
           <Text style={styles.stepInfoLabel}>Step {step.id} of 4</Text>
-          <Text style={styles.stepInfoTitle}>{step.title}</Text>
+          <Text style={styles.stepInfoTitle}>{t(step.titleKey)}</Text>
         </View>
       </View>
     );
@@ -451,7 +463,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         <Ionicons name="search-outline" size={18} color="#9CA3AF" />
         <TextInput
           style={styles.searchTextInput}
-          placeholder="Search teachers by name…"
+          placeholder={t("assignWork.searchPh")}
           placeholderTextColor="#9CA3AF"
           value={teacherSearch}
           onChangeText={setTeacherSearch}
@@ -469,8 +481,8 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       {filteredTeachers.length === 0 ? (
         <EmptyMini
           icon="people-outline"
-          text={teacherSearch ? "No teachers match your search" : "No teachers available"}
-          subtext={!teacherSearch ? "Add teachers first from the Teachers module" : undefined}
+          text={teacherSearch ? t("assignWork.noTeacherMatch") : t("assignWork.noTeachers")}
+          subtext={!teacherSearch ? t("assignWork.noTeachersHint") : undefined}
         />
       ) : (
         filteredTeachers.map((teacher) => (
@@ -492,7 +504,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         <Text style={styles.selectedSummaryText} numberOfLines={1}>{selectedTeacher?.name}</Text>
         {!preselectedTeacherId && (
           <TouchableOpacity onPress={() => goToStep(1)}>
-            <Text style={styles.changeLink}>Change</Text>
+            <Text style={styles.changeLink}>{t("assignWork.change")}</Text>
           </TouchableOpacity>
         )}
       </View>
@@ -510,8 +522,8 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       {classes.length === 0 ? (
         <EmptyMini
           icon="school-outline"
-          text="No classes available"
-          subtext="Create classes first from the Classes module"
+          text={t("assignWork.noClasses")}
+          subtext={t("assignWork.noClassesHint")}
         />
       ) : (
         classes.map((classItem) => {
@@ -552,14 +564,14 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       </View>
 
       {loadingSubjects ? (
-        <EmptyMini text="Loading subjects…">
+        <EmptyMini text={t("assignWork.loadingSubjects")}>
           <ActivityIndicator size="small" color="#4F46E5" />
         </EmptyMini>
       ) : subjects.length === 0 ? (
-        <EmptyMini icon="book-outline" text="No subjects in this class" subtext="Add subjects to this class first" />
+        <EmptyMini icon="book-outline" text={t("assignWork.noSubjects")} subtext={t("assignWork.noSubjectsHint")} />
       ) : (
         <>
-          <Text style={styles.selectHint}>Select one or more subjects to assign</Text>
+          <Text style={styles.selectHint}>{t("assignWork.pickSubjects")}</Text>
 
           {availableSubjects.length > 0 && (
             <TouchableOpacity
@@ -573,7 +585,9 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
                 color="#4F46E5"
               />
               <Text style={styles.selectAllText}>
-                {allAvailableSelected ? "Deselect All" : `Select All (${availableSubjects.length})`}
+                {allAvailableSelected
+                  ? t("assignWork.deselectAll")
+                  : t("assignWork.selectAll", { count: availableSubjects.length })}
               </Text>
             </TouchableOpacity>
           )}
@@ -611,12 +625,12 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
 
   const renderStep4 = () => (
     <View>
-      <Text style={styles.reviewTitle}>Assignment Summary</Text>
+      <Text style={styles.reviewTitle}>{t("assignWork.summary")}</Text>
 
       <View style={styles.reviewSection}>
         <View style={styles.reviewLabel}>
           <Ionicons name="person" size={16} color="#4F46E5" />
-          <Text style={styles.reviewLabelText}>Teacher</Text>
+          <Text style={styles.reviewLabelText}>{t("assignWork.teacher")}</Text>
         </View>
         <View style={styles.reviewValue}>
           <Text style={styles.reviewValueText}>{selectedTeacher?.name}</Text>
@@ -626,7 +640,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       <View style={styles.reviewSection}>
         <View style={styles.reviewLabel}>
           <Ionicons name="school" size={16} color="#7C3AED" />
-          <Text style={styles.reviewLabelText}>Class</Text>
+          <Text style={styles.reviewLabelText}>{t("assignWork.klass")}</Text>
         </View>
         <View style={styles.reviewValue}>
           <Text style={styles.reviewValueText}>{selectedClass?.name}</Text>
@@ -648,14 +662,14 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
       {selectedSubjects.length === 0 && (
         <View style={styles.warningBanner}>
           <Ionicons name="warning" size={18} color="#D97706" />
-          <Text style={styles.warningText}>No subjects selected. Go back to select at least one.</Text>
+          <Text style={styles.warningText}>{t("assignWork.noneSelected")}</Text>
         </View>
       )}
 
       <View style={styles.reviewActions}>
         <TouchableOpacity style={styles.backStepButton} onPress={() => setCurrentStep(3)} activeOpacity={0.7}>
           <Ionicons name="arrow-back" size={18} color="#4F46E5" />
-          <Text style={styles.backStepButtonText}>Back</Text>
+          <Text style={styles.backStepButtonText}>{t("assignWork.back")}</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -672,7 +686,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           ) : (
             <>
               <Ionicons name="checkmark-circle" size={18} color="#FFFFFF" />
-              <Text style={styles.confirmButtonText}>Confirm</Text>
+              <Text style={styles.confirmButtonText}>{t("assignWork.confirm")}</Text>
             </>
           )}
         </TouchableOpacity>
@@ -694,7 +708,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading…</Text>
+        <Text style={styles.loadingText}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -708,8 +722,8 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Assign Teacher</Text>
-          <Text style={styles.headerSubtitle}>Map subjects to a teacher</Text>
+          <Text style={styles.headerTitle}>{t("assignWork.title")}</Text>
+          <Text style={styles.headerSubtitle}>{t("assignWork.blurb")}</Text>
         </View>
       </View>
 
@@ -723,7 +737,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
             <Ionicons name="alert-circle" size={18} color="#DC2626" />
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity onPress={loadData} activeOpacity={0.75}>
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}

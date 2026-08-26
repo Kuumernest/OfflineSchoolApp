@@ -16,6 +16,7 @@ import {
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }        from "@expo/vector-icons";
 import AnnouncementService from "../../../src/services/announcement.service";
+import { useTranslation }  from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -27,18 +28,25 @@ const PRIORITY_STYLES = {
   urgent:    { bg: "#FEE2E2", color: "#991B1B", border: "#FECACA", icon: "warning"             },
 };
 
-const AUDIENCE_LABELS = {
-  all:      "Everyone",
-  teachers: "Teachers Only",
-  students: "Students Only",
-  class:    "Specific Classes",
+const AUDIENCE_LABEL_KEYS = {
+  all:      "annAdmin.audAll",
+  teachers: "annAdmin.audTeachers",
+  students: "annAdmin.audStudents",
+  class:    "annAdmin.audClasses",
 };
 
-const AUTHOR_ROLE_LABELS = {
-  super_admin:  "Super Admin",
-  school_admin: "School Admin",
-  admin:        "Admin",
-  teacher:      "Teacher",
+const AUTHOR_ROLE_LABEL_KEYS = {
+  super_admin:  "annAdmin.roleSuperAdmin",
+  school_admin: "annAdmin.roleSchoolAdmin",
+  admin:        "annAdmin.roleAdmin",
+  teacher:      "annAdmin.roleTeacher",
+};
+
+/** The banner shouts the priority, so each one needs its own upper-case line. */
+const PRIORITY_BANNER_KEYS = {
+  normal:    "annAdmin.bannerNormal",
+  important: "annAdmin.bannerImportant",
+  urgent:    "annAdmin.bannerUrgent",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -84,6 +92,7 @@ function SectionTitle({ children }) {
 
 export default function AnnouncementDetailScreen() {
   const router = useRouter();
+  const { t }  = useTranslation();
   const { id } = useLocalSearchParams();
 
   const [announcement, setAnnouncement] = useState(null);
@@ -109,23 +118,23 @@ export default function AnnouncementDetailScreen() {
       }
     } catch (err) {
       console.error("loadDetail error:", err.message);
-      setError(err.message || "Failed to load announcement");
+      setError(err.message || t("annAdmin.errLoad"));
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => { loadDetail(); }, [loadDetail]);
 
   // ── Delete ─────────────────────────────────────────────────────────────────
   const handleDelete = () => {
     Alert.alert(
-      "Delete Announcement",
-      `Delete "${announcement?.title}"?\n\nThis cannot be undone.`,
+      t("annAdmin.deleteTitle"),
+      t("annAdmin.deleteBody", { title: announcement?.title }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             setDeleting(true);
@@ -133,7 +142,7 @@ export default function AnnouncementDetailScreen() {
               await AnnouncementService.deleteAnnouncement(id);
               router.back();
             } catch (err) {
-              Alert.alert("Error", err.message || "Failed to delete");
+              Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errDelete"));
               setDeleting(false);
             }
           },
@@ -150,7 +159,7 @@ export default function AnnouncementDetailScreen() {
         prev ? { ...prev, isPinned: pinned } : prev
       );
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to toggle pin");
+      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errPin"));
     }
   };
 
@@ -161,9 +170,9 @@ export default function AnnouncementDetailScreen() {
       setAnnouncement((prev) =>
         prev ? { ...prev, isAcknowledged: true, isRead: true } : prev
       );
-      Alert.alert("Done ✓", "Announcement acknowledged.");
+      Alert.alert(t("annAdmin.ackDoneTitle"), t("annAdmin.ackDoneBody"));
     } catch (err) {
-      Alert.alert("Error", err.message || "Failed to acknowledge");
+      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errAck"));
     }
   };
 
@@ -174,7 +183,7 @@ export default function AnnouncementDetailScreen() {
       await Share.share({
         title:   announcement.title,
         message: `📢 ${announcement.title}\n\n${announcement.body}\n\n— ${
-          announcement.authorName || "School"
+          announcement.authorName || t("annAdmin.shareAuthorFallback")
         }`,
       });
     } catch { /* user cancelled — ignore */ }
@@ -188,7 +197,7 @@ export default function AnnouncementDetailScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading…</Text>
+        <Text style={styles.loadingText}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -202,7 +211,7 @@ export default function AnnouncementDetailScreen() {
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={52} color="#D1D5DB" />
         <Text style={styles.notFoundTitle}>
-          {error ? "Something went wrong" : "Announcement not found"}
+          {error ? t("annAdmin.somethingWrong") : t("annAdmin.notFound")}
         </Text>
         {!!error && (
           <Text style={styles.notFoundSub}>{error}</Text>
@@ -211,14 +220,14 @@ export default function AnnouncementDetailScreen() {
           {!!error && (
             <TouchableOpacity style={styles.retryBtn} onPress={loadDetail}>
               <Ionicons name="refresh-outline" size={16} color="#4F46E5" />
-              <Text style={styles.retryBtnText}>Retry</Text>
+              <Text style={styles.retryBtnText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
             style={styles.goBackBtn}
             onPress={() => router.back()}
           >
-            <Text style={styles.goBackText}>Go Back</Text>
+            <Text style={styles.goBackText}>{t("common.goBack")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -232,9 +241,9 @@ export default function AnnouncementDetailScreen() {
   const pri         = PRIORITY_STYLES[announcement.priority] || PRIORITY_STYLES.normal;
   const expired     = isExpired(announcement.expiresAt);
   const fromTeacher = isTeacherRole(announcement.authorRole || announcement.author_role);
-  const authorLabel = AUTHOR_ROLE_LABELS[announcement.authorRole] ||
-                      AUTHOR_ROLE_LABELS[announcement.author_role] ||
-                      "Staff";
+  const authorLabelKey = AUTHOR_ROLE_LABEL_KEYS[announcement.authorRole] ||
+                         AUTHOR_ROLE_LABEL_KEYS[announcement.author_role] ||
+                         "annAdmin.roleStaff";
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -257,10 +266,10 @@ export default function AnnouncementDetailScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            Announcement
+            {t("annAdmin.announcement")}
           </Text>
           {fromTeacher && (
-            <Text style={styles.headerSub}>From Teacher</Text>
+            <Text style={styles.headerSub}>{t("annAdmin.fromTeacher")}</Text>
           )}
         </View>
 
@@ -318,8 +327,9 @@ export default function AnnouncementDetailScreen() {
           <View style={styles.expiredBanner}>
             <Ionicons name="time-outline" size={16} color="#6B7280" />
             <Text style={styles.expiredText}>
-              This announcement expired on{" "}
-              {formatFullDate(announcement.expiresAt)}
+              {t("annAdmin.expiredOn", {
+                date: formatFullDate(announcement.expiresAt),
+              })}
             </Text>
           </View>
         )}
@@ -330,14 +340,14 @@ export default function AnnouncementDetailScreen() {
             <View style={styles.teacherBannerLeft}>
               <Ionicons name="person-circle-outline" size={20} color="#0891B2" />
               <Text style={styles.teacherBannerText}>
-                Sent by{" "}
+                {t("annAdmin.sentBy")}{" "}
                 <Text style={{ fontWeight: "700" }}>
-                  {announcement.authorName || "a Teacher"}
+                  {announcement.authorName || t("annAdmin.teacherFallback")}
                 </Text>
               </Text>
             </View>
             <View style={styles.teacherBadge}>
-              <Text style={styles.teacherBadgeText}>Teacher</Text>
+              <Text style={styles.teacherBadgeText}>{t("annAdmin.roleTeacher")}</Text>
             </View>
           </View>
         )}
@@ -350,11 +360,14 @@ export default function AnnouncementDetailScreen() {
           ]}>
             <Ionicons name={pri.icon} size={18} color={pri.color} />
             <Text style={[styles.priorityText, { color: pri.color }]}>
-              {announcement.priority.toUpperCase()} ANNOUNCEMENT
+              {t(
+                PRIORITY_BANNER_KEYS[announcement.priority] ||
+                  "annAdmin.bannerNormal"
+              )}
             </Text>
             {expired && (
               <View style={styles.expiredTag}>
-                <Text style={styles.expiredTagText}>Expired</Text>
+                <Text style={styles.expiredTagText}>{t("annAdmin.expired")}</Text>
               </View>
             )}
           </View>
@@ -364,7 +377,7 @@ export default function AnnouncementDetailScreen() {
         {announcement.isPinned && (
           <View style={styles.pinnedBanner}>
             <Ionicons name="pin" size={14} color="#4F46E5" />
-            <Text style={styles.pinnedText}>Pinned Announcement</Text>
+            <Text style={styles.pinnedText}>{t("annAdmin.pinnedAnnouncement")}</Text>
           </View>
         )}
 
@@ -373,7 +386,7 @@ export default function AnnouncementDetailScreen() {
 
         {/* ── META CARD ── */}
         <View style={styles.card}>
-          <SectionTitle>Details</SectionTitle>
+          <SectionTitle>{t("annAdmin.details")}</SectionTitle>
 
           {/* Author */}
           <MetaRow
@@ -381,13 +394,13 @@ export default function AnnouncementDetailScreen() {
             iconColor={fromTeacher ? "#0891B2" : "#4F46E5"}
           >
             <Text style={styles.metaValue}>
-              {announcement.authorName || "Unknown"}
+              {announcement.authorName || t("annAdmin.unknown")}
               {"  "}
               <Text style={[
                 styles.metaTag,
                 { color: fromTeacher ? "#0891B2" : "#4F46E5" },
               ]}>
-                {authorLabel}
+                {t(authorLabelKey)}
               </Text>
             </Text>
           </MetaRow>
@@ -402,7 +415,7 @@ export default function AnnouncementDetailScreen() {
           {/* Audience */}
           <MetaRow icon="people-outline" iconColor="#6B7280">
             <Text style={styles.metaValue}>
-              {AUDIENCE_LABELS[announcement.audience] || "Everyone"}
+              {t(AUDIENCE_LABEL_KEYS[announcement.audience] || "annAdmin.audAll")}
             </Text>
           </MetaRow>
 
@@ -416,8 +429,10 @@ export default function AnnouncementDetailScreen() {
                 styles.metaValue,
                 expired && { color: "#9CA3AF" },
               ]}>
-                Expires: {formatFullDate(announcement.expiresAt)}
-                {expired ? "  (expired)" : ""}
+                {t("annAdmin.expiresAt", {
+                  date: formatFullDate(announcement.expiresAt),
+                })}
+                {expired ? t("annAdmin.expiredSuffix") : ""}
               </Text>
             </MetaRow>
           )}
@@ -427,9 +442,11 @@ export default function AnnouncementDetailScreen() {
             announcement.acknowledgedCount !== undefined) && (
             <MetaRow icon="eye-outline" iconColor="#6B7280">
               <Text style={styles.metaValue}>
-                {announcement.readCount ?? 0} read
+                {t("annAdmin.readCount", { count: announcement.readCount ?? 0 })}
                 {announcement.acknowledgedCount !== undefined
-                  ? `  ·  ${announcement.acknowledgedCount} acknowledged`
+                  ? `  ·  ${t("annAdmin.ackCount", {
+                      count: announcement.acknowledgedCount,
+                    })}`
                   : ""}
               </Text>
             </MetaRow>
@@ -439,7 +456,7 @@ export default function AnnouncementDetailScreen() {
           {!announcement._synced && (
             <MetaRow icon="cloud-offline-outline" iconColor="#F59E0B">
               <Text style={[styles.metaValue, { color: "#F59E0B" }]}>
-                Saved offline — will sync when connected
+                {t("annAdmin.savedOffline")}
               </Text>
             </MetaRow>
           )}
@@ -449,12 +466,12 @@ export default function AnnouncementDetailScreen() {
         {announcement.audience === "class" &&
           announcement.targetClasses?.length > 0 && (
             <View style={styles.card}>
-              <SectionTitle>Target Classes</SectionTitle>
+              <SectionTitle>{t("annAdmin.targetClasses")}</SectionTitle>
               <View style={styles.classChips}>
                 {announcement.targetClasses.map((c, i) => {
                   const name =
                     typeof c === "object"
-                      ? c.name || c.className || `Class ${i + 1}`
+                      ? c.name || c.className || t("annAdmin.classIndex", { n: i + 1 })
                       : c;
                   return (
                     <View key={i} style={styles.classChip}>
@@ -473,7 +490,7 @@ export default function AnnouncementDetailScreen() {
 
         {/* ── BODY ── */}
         <View style={styles.card}>
-          <SectionTitle>Message</SectionTitle>
+          <SectionTitle>{t("common.message")}</SectionTitle>
           <Text style={styles.bodyText}>{announcement.body}</Text>
         </View>
 
@@ -491,7 +508,7 @@ export default function AnnouncementDetailScreen() {
                 color="#FFF"
               />
               <Text style={styles.ackButtonText}>
-                Acknowledge This Announcement
+                {t("annAdmin.ackCta")}
               </Text>
             </TouchableOpacity>
           )}
@@ -500,7 +517,7 @@ export default function AnnouncementDetailScreen() {
         {announcement.isAcknowledged && (
           <View style={styles.ackBadge}>
             <Ionicons name="checkmark-circle" size={20} color="#15803D" />
-            <Text style={styles.ackBadgeText}>Acknowledged</Text>
+            <Text style={styles.ackBadgeText}>{t("annAdmin.acknowledged")}</Text>
           </View>
         )}
 
@@ -520,7 +537,7 @@ export default function AnnouncementDetailScreen() {
               styles.quickActionText,
               { color: announcement.isPinned ? "#4F46E5" : "#6B7280" },
             ]}>
-              {announcement.isPinned ? "Unpin" : "Pin"}
+              {announcement.isPinned ? t("annAdmin.unpin") : t("annAdmin.pin")}
             </Text>
           </TouchableOpacity>
 
@@ -531,7 +548,7 @@ export default function AnnouncementDetailScreen() {
           >
             <Ionicons name="share-outline" size={18} color="#4F46E5" />
             <Text style={[styles.quickActionText, { color: "#4F46E5" }]}>
-              Share
+              {t("annAdmin.share")}
             </Text>
           </TouchableOpacity>
 
@@ -547,7 +564,7 @@ export default function AnnouncementDetailScreen() {
               <>
                 <Ionicons name="trash-outline" size={18} color="#DC2626" />
                 <Text style={[styles.quickActionText, { color: "#DC2626" }]}>
-                  Delete
+                  {t("common.delete")}
                 </Text>
               </>
             )}

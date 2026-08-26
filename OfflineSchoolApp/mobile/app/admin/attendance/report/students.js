@@ -52,13 +52,14 @@ const rateColor = (rate) => {
 };
 
 const DATE_PRESETS = [
-  { label: "Today",      start: todayStr(),    end: todayStr()    },
-  { label: "This Month", start: monthStart(0), end: monthEnd(0)   },
-  { label: "Last Month", start: monthStart(1), end: monthEnd(1)   },
-  { label: "Last 3 Mo",  start: monthStart(2), end: monthEnd(0)   },
+  { labelKey: "attAdmin.today",      start: todayStr(),    end: todayStr()    },
+  { labelKey: "attAdmin.repThisMonth", start: monthStart(0), end: monthEnd(0)   },
+  { labelKey: "attAdmin.repLastMonth", start: monthStart(1), end: monthEnd(1)   },
+  { labelKey: "attAdmin.repLast3Mo",  start: monthStart(2), end: monthEnd(0)   },
 ];
 
 const buildStudentSummaries = (records, studentMap = {}) => {
+  const { t } = useTranslation();
   const byStudent = {};
 
   for (const r of records) {
@@ -80,7 +81,7 @@ const buildStudentSummaries = (records, studentMap = {}) => {
         r.student_name   ||
         r.student?.studentName ||
         r.student?.name  ||
-        "Unknown Student";
+        t("attAdmin.unknownStudent");
 
       byStudent[id] = {
         studentId:    id,
@@ -134,6 +135,7 @@ const chipS = StyleSheet.create({
 });
 
 const StudentReportCard = React.memo(({ student, isExpanded, onPress }) => {
+  const { t } = useTranslation();
   const { summary, rate } = student;
   const color = rateColor(rate);
 
@@ -179,11 +181,11 @@ const StudentReportCard = React.memo(({ student, isExpanded, onPress }) => {
       </View>
 
       <View style={cardS.stats}>
-        <StatChip label="Present" value={summary?.present ?? 0} color="#059669" />
-        <StatChip label="Absent"  value={summary?.absent  ?? 0} color="#DC2626" />
-        <StatChip label="Late"    value={summary?.late    ?? 0} color="#D97706" />
-        <StatChip label="Excused" value={summary?.excused ?? 0} color="#4F46E5" />
-        <StatChip label="Total"   value={summary?.total   ?? 0} color="#6B7280" />
+        <StatChip label={t("attStatus.present")} value={summary?.present ?? 0} color="#059669" />
+        <StatChip label={t("attStatus.absent")}  value={summary?.absent  ?? 0} color="#DC2626" />
+        <StatChip label={t("attStatus.late")}    value={summary?.late    ?? 0} color="#D97706" />
+        <StatChip label={t("attStatus.excused")} value={summary?.excused ?? 0} color="#4F46E5" />
+        <StatChip label={t("common.total")}   value={summary?.total   ?? 0} color="#6B7280" />
       </View>
 
       <View style={cardS.barBg}>
@@ -251,11 +253,12 @@ const STATUS_COLORS = {
 };
 
 const StudentDetailPanel = React.memo(({ student }) => {
+  const { t } = useTranslation();
   if (!student?.records?.length) {
     return (
       <View style={detailS.empty}>
         <Ionicons name="calendar-outline" size={32} color="#D1D5DB" />
-        <Text style={detailS.emptyText}>No records in this period</Text>
+        <Text style={detailS.emptyText}>{t("attAdmin.noRecordsPeriod")}</Text>
       </View>
     );
   }
@@ -328,6 +331,7 @@ const detailS = StyleSheet.create({
 });
 
 const SummaryBar = ({ students }) => {
+  const { t } = useTranslation();
   const totals = useMemo(() => {
     const t = { present: 0, absent: 0, late: 0, excused: 0, total: 0 };
     for (const s of students) {
@@ -358,18 +362,18 @@ const SummaryBar = ({ students }) => {
 
       <View style={summaryS.pills}>
         {[
-          { label: "Present", val: totals.present, color: "#059669" },
-          { label: "Absent",  val: totals.absent,  color: "#DC2626" },
-          { label: "Late",    val: totals.late,    color: "#D97706" },
-          { label: "Excused", val: totals.excused, color: "#4F46E5" },
-          { label: "Total",   val: totals.total,   color: "#6B7280" },
+          { labelKey: "attStatus.present", val: totals.present, color: "#059669" },
+          { labelKey: "attStatus.absent",  val: totals.absent,  color: "#DC2626" },
+          { labelKey: "attStatus.late",    val: totals.late,    color: "#D97706" },
+          { labelKey: "attStatus.excused", val: totals.excused, color: "#4F46E5" },
+          { labelKey: "common.total",   val: totals.total,   color: "#6B7280" },
         ].map((p) => (
           <View
-            key={p.label}
+            key={p.labelKey}
             style={[summaryS.pill, { backgroundColor: p.color + "10" }]}
           >
             <Text style={[summaryS.pillVal, { color: p.color }]}>{p.val}</Text>
-            <Text style={summaryS.pillLbl}>{p.label}</Text>
+            <Text style={summaryS.pillLbl}>{t(p.labelKey)}</Text>
           </View>
         ))}
       </View>
@@ -430,6 +434,7 @@ const summaryS = StyleSheet.create({
 });
 
 export default function StudentAttendanceReportScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -490,7 +495,7 @@ export default function StudentAttendanceReportScreen() {
 
     } catch (err) {
       console.error("Student report load failed:", err?.message || err);
-      setError("Failed to load report. Pull down to retry.");
+      setError(t("attAdmin.reportLoadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -538,7 +543,7 @@ export default function StudentAttendanceReportScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading student report…</Text>
+        <Text style={styles.loadingText}>{t("attAdmin.loadingStudentReport")}</Text>
       </View>
     );
   }
@@ -557,9 +562,9 @@ export default function StudentAttendanceReportScreen() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Student Report</Text>
+          <Text style={styles.headerTitle}>{t("attAdmin.studentReportTitle")}</Text>
           <Text style={styles.headerSub}>
-            {selectedPreset.label} · {filtered.length} student
+            {t(selectedPreset.labelKey)} · {filtered.length} student
             {filtered.length !== 1 ? "s" : ""}
           </Text>
         </View>
@@ -581,7 +586,7 @@ export default function StudentAttendanceReportScreen() {
         >
           {DATE_PRESETS.map((p, i) => (
             <TouchableOpacity
-              key={p.label}
+              key={p.labelKey}
               style={[
                 styles.presetBtn,
                 preset === i && styles.presetBtnActive,
@@ -595,7 +600,7 @@ export default function StudentAttendanceReportScreen() {
                   preset === i && styles.presetTextActive,
                 ]}
               >
-                {p.label}
+                {t(p.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -607,7 +612,7 @@ export default function StudentAttendanceReportScreen() {
           <Ionicons name="search-outline" size={16} color="#9CA3AF" />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search name, class, admission no…"
+            placeholder={t("attAdmin.searchStudentReport")}
             placeholderTextColor="#9CA3AF"
             value={search}
             onChangeText={setSearch}
@@ -625,9 +630,9 @@ export default function StudentAttendanceReportScreen() {
       <View style={styles.sortRow}>
         {[
           { key: "name",   label: "A – Z"       },
-          { key: "class",  label: "By Class"    },
-          { key: "rate",   label: "By Rate"     },
-          { key: "absent", label: "Most Absent" },
+          { key: "class",  labelKey: "attAdmin.sortByClass"    },
+          { key: "rate",   labelKey: "attAdmin.sortByRate"     },
+          { key: "absent", labelKey: "attAdmin.sortMostAbsent" },
         ].map((s) => (
           <TouchableOpacity
             key={s.key}
@@ -644,7 +649,7 @@ export default function StudentAttendanceReportScreen() {
                 sortBy === s.key && styles.sortTextActive,
               ]}
             >
-              {s.label}
+              {t(s.labelKey)}
             </Text>
           </TouchableOpacity>
         ))}
@@ -690,14 +695,14 @@ export default function StudentAttendanceReportScreen() {
             <Ionicons name="people-outline" size={56} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>
               {error
-                ? "Failed to load report"
+                ? t("attAdmin.reportLoadFailedShort")
                 : search
-                ? "No students match your search"
-                : "No attendance records found"}
+                ? t("attAdmin.noStudentsMatch")
+                : t("attAdmin.noRecords")}
             </Text>
             <Text style={styles.emptySub}>
               {!error && !search
-                ? "Mark student attendance first, then check back here"
+                ? t("attAdmin.markStudentsFirst")
                 : ""}
             </Text>
             {!!error && (
@@ -706,7 +711,7 @@ export default function StudentAttendanceReportScreen() {
                 onPress={() => loadReport()}
                 activeOpacity={0.8}
               >
-                <Text style={styles.retryText}>Try Again</Text>
+                <Text style={styles.retryText}>{t("attAdmin.tryAgain")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -853,3 +858,4 @@ const styles = StyleSheet.create({
   },
   retryText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 });
+import { useTranslation } from "../../../../src/i18n/useTranslation";

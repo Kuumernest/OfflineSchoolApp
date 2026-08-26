@@ -53,7 +53,29 @@ const parseDay = (value) => {
 const expiryFor = (school) =>
   parseDay(school?.settings?.idCardValidUntil) ?? academicYearEnd(school?.academicYear);
 
+/**
+ * The academic year a card belongs to, as printed: "2025/2026".
+ *
+ * The card carries the year rather than a full date, so the English and French
+ * cards say exactly the same thing and a date format cannot differ between
+ * them. The school's stated year wins when it parses; failing that the year is
+ * read off the effective expiry date, so a school that only set a custom
+ * expiry still prints the year that date falls in.
+ */
+const academicYearLabel = (school) => {
+  const stated = /(\d{4})\s*[/-]\s*(\d{4})/.exec(
+    String(school?.academicYear ?? school?.settings?.academicYear ?? "")
+  );
+  if (stated) return `${stated[1]}/${stated[2]}`;
+
+  const end = expiryFor(school);
+  // September onward belongs to the year that ends the following calendar
+  // year — the same convention academicYearEnd uses.
+  const endYear = end.getUTCMonth() >= 8 ? end.getUTCFullYear() + 1 : end.getUTCFullYear();
+  return `${endYear - 1}/${endYear}`;
+};
+
 /** YYYY-MM-DD, for handing a date back to a date input. */
 const toDayString = (date) => date.toISOString().slice(0, 10);
 
-module.exports = { academicYearEnd, parseDay, expiryFor, toDayString };
+module.exports = { academicYearEnd, parseDay, expiryFor, academicYearLabel, toDayString };

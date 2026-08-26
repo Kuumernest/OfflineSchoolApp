@@ -14,7 +14,8 @@ import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
-import api              from "../../../src/services/api";
+import api              from "../../../src/services/api";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -535,6 +536,7 @@ const sc2 = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 export default function TeacherSubjectsScreen() {
+  const { t } = useTranslation();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = toStr(user?.schoolId);
   const teacherId = toStr(user?._id || user?.id);
@@ -644,7 +646,7 @@ export default function TeacherSubjectsScreen() {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={s.loadingText}>Loading your classes…</Text>
+        <Text style={s.loadingText}>{t("teacherSubjects.loading")}</Text>
       </View>
     );
   }
@@ -659,9 +661,9 @@ export default function TeacherSubjectsScreen() {
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
         <View style={s.headerCenter}>
-          <Text style={s.headerTitle}>My Classes & Subjects</Text>
+          <Text style={s.headerTitle}>{t("teacherSubjects.title")}</Text>
           <Text style={s.headerSub}>
-            {user?.name || "Teacher"}
+            {user?.name || t("teacherSubjects.teacher")}
             {user?.staffId ? ` · ${user.staffId}` : ""}
             {source === "api" ? "  ·  synced from server" : ""}
           </Text>
@@ -684,21 +686,21 @@ export default function TeacherSubjectsScreen() {
         <SummaryCard
           icon="school-outline"
           count={stats.classes}
-          label="Classes"
+          label={t("teacherSubjects.classes")}
           color={C.primary}
           bg={C.primaryBg}
         />
         <SummaryCard
           icon="book-outline"
           count={stats.subjects}
-          label="Subjects"
+          label={t("teacherSubjects.subjects")}
           color={C.success}
           bg={C.successBg}
         />
         <SummaryCard
           icon="people-outline"
           count={stats.students}
-          label="Students"
+          label={t("teacherSubjects.students")}
           color={C.warning}
           bg={C.warningBg}
         />
@@ -710,7 +712,7 @@ export default function TeacherSubjectsScreen() {
           <Ionicons name="alert-circle-outline" size={16} color={C.error} />
           <Text style={s.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadData()}>
-            <Text style={s.retryText}>Retry</Text>
+            <Text style={s.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -732,17 +734,17 @@ export default function TeacherSubjectsScreen() {
           <View style={s.emptyIconBg}>
             <Ionicons name="school-outline" size={48} color={C.gray300} />
           </View>
-          <Text style={s.emptyTitle}>No Assignments Found</Text>
+          <Text style={s.emptyTitle}>{t("teacherSubjects.emptyTitle")}</Text>
           <Text style={s.emptyText}>
             You haven't been assigned to any classes or subjects yet.
-            Contact your school administrator.
+            {t("teacherSubjects.emptyHint")}
           </Text>
           <TouchableOpacity
             style={s.emptyRetryBtn}
             onPress={() => loadData(true)}
           >
             <Ionicons name="refresh" size={16} color={C.white} />
-            <Text style={s.emptyRetryText}>Refresh</Text>
+            <Text style={s.emptyRetryText}>{t("common.refresh")}</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -849,7 +851,7 @@ export default function TeacherSubjectsScreen() {
                         color={accentColor}
                       />
                       <Text style={[s.actionChipText, { color: accentColor }]}>
-                        Exams
+                        {t("teacherSubjects.exams")}
                       </Text>
                     </TouchableOpacity>
 
@@ -876,7 +878,7 @@ export default function TeacherSubjectsScreen() {
                         color={C.success}
                       />
                       <Text style={[s.actionChipText, { color: C.success }]}>
-                        Students
+                        {t("teacherSubjects.students")}
                       </Text>
                     </TouchableOpacity>
 
@@ -902,7 +904,7 @@ export default function TeacherSubjectsScreen() {
                         color={C.primary}
                       />
                       <Text style={[s.actionChipText, { color: C.primary }]}>
-                        Results
+                        {t("teacherSubjects.results")}
                       </Text>
                     </TouchableOpacity>
                   </View>

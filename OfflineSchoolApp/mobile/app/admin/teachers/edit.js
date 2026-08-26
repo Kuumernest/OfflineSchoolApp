@@ -28,31 +28,6 @@ import { TeacherService } from "../../../src/services/teacher.service";
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STRINGS = {
-  loading:               "Loading teacher…",
-  saving:                "Saving…",
-  notFound:              "Teacher not found.",
-  errorLoad:             "Failed to load teacher data.",
-  errorSave:             "Failed to save changes.",
-  errorUnassign:         "Failed to unassign subject.",
-  errorAssign:           "Failed to assign subject.",
-  saved:                 "Changes saved.",
-  savedTitle:            "Saved",
-  unassignTitle:         "Remove Subject",
-  unassignBody:          (name) => `Remove "${name}" from this teacher?`,
-  unassignConfirm:       "Remove",
-  cancel:                "Cancel",
-  name:                  "Full Name",
-  email:                 "Email Address",
-  namePlaceholder:       "e.g. Jane Smith",
-  emailPlaceholder:      "e.g. jane@school.com",
-  assignedSubjects:      "Assigned Subjects",
-  availableSubjects:     "Available Subjects",
-  noAssigned:            "No subjects assigned yet.",
-  noAvailable:           "No available subjects found.",
-  saveChanges:           "Save Changes",
-  retry:                 "Retry",
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -158,7 +133,9 @@ const FieldInput = React.memo(
   )
 );
 
-const ErrorBanner = React.memo(({ message, onRetry }) => (
+const ErrorBanner = React.memo(({ message, onRetry }) => {
+                                 const { t } = useTranslation();
+                                 return (
   <View style={styles.errorBanner}>
     <Ionicons name="alert-circle" size={16} color="#DC2626" />
     <Text style={styles.errorText}>{message}</Text>
@@ -167,17 +144,19 @@ const ErrorBanner = React.memo(({ message, onRetry }) => (
         onPress={onRetry}
         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       >
-        <Text style={styles.retryText}>{STRINGS.retry}</Text>
+        <Text style={styles.retryText}>{t("common.retry")}</Text>
       </TouchableOpacity>
     )}
   </View>
-));
+);
+                               });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function EditTeacher() {
+  const { t } = useTranslation();
   const router = useRouter();
   const { id: teacherId } = useLocalSearchParams();
 
@@ -210,7 +189,7 @@ export default function EditTeacher() {
 
   const loadAll = useCallback(async (isRefresh = false) => {
     if (!teacherId) {
-      setLoadError(STRINGS.notFound);
+      setLoadError(t("teachersEdit.notFound"));
       setLoading(false);
       return;
     }
@@ -228,7 +207,7 @@ export default function EditTeacher() {
       if (!isMountedRef.current) return;
 
       if (!teacherRow) {
-        setLoadError(STRINGS.notFound);
+        setLoadError(t("teachersEdit.notFound"));
         return;
       }
 
@@ -245,7 +224,7 @@ export default function EditTeacher() {
       );
     } catch (err) {
       console.error("[EditTeacher] load error:", err.message);
-      if (isMountedRef.current) setLoadError(STRINGS.errorLoad);
+      if (isMountedRef.current) setLoadError(t("teachersEdit.errLoad"));
     } finally {
       if (isMountedRef.current) {
         setLoading(false);
@@ -262,7 +241,7 @@ export default function EditTeacher() {
     let valid = true;
 
     if (!name.trim()) {
-      setNameError("Name is required.");
+      setNameError(t("teachersEdit.errNameRequired"));
       valid = false;
     } else {
       setNameError("");
@@ -270,10 +249,10 @@ export default function EditTeacher() {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email.trim()) {
-      setEmailError("Email is required.");
+      setEmailError(t("teachersEdit.errEmailRequired"));
       valid = false;
     } else if (!emailRegex.test(email.trim())) {
-      setEmailError("Enter a valid email address.");
+      setEmailError(t("teachersEdit.errEmailInvalid"));
       valid = false;
     } else {
       setEmailError("");
@@ -293,12 +272,12 @@ export default function EditTeacher() {
       await TeacherService.update(teacherId, name.trim(), email.trim().toLowerCase());
 
       if (isMountedRef.current) {
-        Alert.alert(STRINGS.savedTitle, STRINGS.saved);
+        Alert.alert(t("teachersEdit.savedTitle"), t("teachersEdit.saved"));
         router.back();
       }
     } catch (err) {
       if (isMountedRef.current) {
-        Alert.alert("Error", err.message || STRINGS.errorSave);
+        Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errSave"));
       }
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -309,12 +288,12 @@ export default function EditTeacher() {
 
   const handleUnassign = useCallback((subject) => {
     Alert.alert(
-      STRINGS.unassignTitle,
-      STRINGS.unassignBody(subject.name),
+      t("teachersEdit.unassignTitle"),
+      t("teachersEdit.unassignBody", { name: subject.name }),
       [
-        { text: STRINGS.cancel, style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  STRINGS.unassignConfirm,
+          text:  t("common.remove"),
           style: "destructive",
           onPress: async () => {
             // FIX: use subject.subjectId (the subject's PK) for the
@@ -343,7 +322,7 @@ export default function EditTeacher() {
                   const exists = prev.some((s) => (s.subjectId ?? s.id) === sid);
                   return exists ? prev : [...prev, subject];
                 });
-                Alert.alert("Error", err.message || STRINGS.errorUnassign);
+                Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errUnassign"));
               }
             } finally {
               if (isMountedRef.current) {
@@ -407,7 +386,7 @@ export default function EditTeacher() {
           const exists = prev.some((s) => (s.subjectId ?? s.id) === sid);
           return exists ? prev : [...prev, subject];
         });
-        Alert.alert("Error", err.message || STRINGS.errorAssign);
+        Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errAssign"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -426,7 +405,7 @@ export default function EditTeacher() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>{STRINGS.loading}</Text>
+        <Text style={styles.loadingText}>{t("teachersEdit.loading")}</Text>
       </View>
     );
   }
@@ -437,7 +416,7 @@ export default function EditTeacher() {
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
         <Text style={styles.errorMessage}>{loadError}</Text>
         <TouchableOpacity style={styles.retryButton} onPress={() => loadAll()}>
-          <Text style={styles.retryButtonText}>{STRINGS.retry}</Text>
+          <Text style={styles.retryButtonText}>{t("common.retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -461,10 +440,10 @@ export default function EditTeacher() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {teacher?.name ?? "Edit Teacher"}
+            {teacher?.name ?? t("teachersEdit.title")}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {assignedSubjects.length} subject{assignedSubjects.length !== 1 ? "s" : ""} assigned
+            {t("teachersEdit.subjectsAssigned", { count: assignedSubjects.length })}
           </Text>
         </View>
 
@@ -477,7 +456,7 @@ export default function EditTeacher() {
           {saving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
-            <Text style={styles.saveButtonText}>Save</Text>
+            <Text style={styles.saveButtonText}>{t("common.save")}</Text>
           )}
         </TouchableOpacity>
       </View>
@@ -499,17 +478,17 @@ export default function EditTeacher() {
         {/* ── PROFILE FIELDS ── */}
         <View style={styles.card}>
           <FieldInput
-            label={STRINGS.name}
+            label={t("teachersEdit.nameLabel")}
             value={name}
             onChangeText={setName}
-            placeholder={STRINGS.namePlaceholder}
+            placeholder={t("teachersEdit.namePh")}
             error={nameError}
           />
           <FieldInput
-            label={STRINGS.email}
+            label={t("teachersEdit.emailLabel")}
             value={email}
             onChangeText={setEmail}
-            placeholder={STRINGS.emailPlaceholder}
+            placeholder={t("teachersEdit.emailPh")}
             keyboardType="email-address"
             autoCapitalize="none"
             error={emailError}
@@ -519,12 +498,12 @@ export default function EditTeacher() {
         {/* ── ASSIGNED SUBJECTS ── */}
         <View style={styles.card}>
           <SectionHeader
-            title={STRINGS.assignedSubjects}
+            title={t("teachersEdit.assigned")}
             count={assignedSubjects.length}
           />
 
           {assignedSubjects.length === 0 ? (
-            <Text style={styles.emptyText}>{STRINGS.noAssigned}</Text>
+            <Text style={styles.emptyText}>{t("teachersEdit.noneAssigned")}</Text>
           ) : (
             assignedSubjects.map((subject) => (
               <SubjectRow
@@ -543,12 +522,12 @@ export default function EditTeacher() {
         {/* ── AVAILABLE SUBJECTS ── */}
         <View style={styles.card}>
           <SectionHeader
-            title={STRINGS.availableSubjects}
+            title={t("teachersEdit.available")}
             count={availableSubjects.length}
           />
 
           {availableSubjects.length === 0 ? (
-            <Text style={styles.emptyText}>{STRINGS.noAvailable}</Text>
+            <Text style={styles.emptyText}>{t("teachersEdit.noneAvailable")}</Text>
           ) : (
             availableSubjects.map((subject) => (
               <SubjectRow
@@ -691,3 +670,4 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 13, color: "#991B1B" },
   retryText:  { fontSize: 13, color: "#DC2626", fontWeight: "700" },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

@@ -27,28 +27,29 @@ import { useAnnouncementStore } from "../../../src/store/announcement.store";
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "inbox", label: "Inbox", icon: "mail-outline" },
-  { key: "sent",  label: "Sent",  icon: "send-outline" },
+  { key: "inbox", labelKey: "annTeacher.tabInbox", icon: "mail-outline" },
+  { key: "sent",  labelKey: "annTeacher.tabSent",  icon: "send-outline" },
 ];
 
 const PRIORITY_CONFIG = {
-  urgent: { color: "#DC2626", bg: "#FEE2E2", label: "Urgent" },
-  high:   { color: "#DC2626", bg: "#FEE2E2", label: "High"   },
-  normal: { color: "#D97706", bg: "#FEF3C7", label: "Normal" },
-  medium: { color: "#D97706", bg: "#FEF3C7", label: "Normal" },
-  low:    { color: "#059669", bg: "#ECFDF5", label: "Low"    },
+  urgent: { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioUrgent" },
+  high:   { color: "#DC2626", bg: "#FEE2E2", labelKey: "annTeacher.prioHigh"   },
+  normal: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal" },
+  medium: { color: "#D97706", bg: "#FEF3C7", labelKey: "annTeacher.prioNormal" },
+  low:    { color: "#059669", bg: "#ECFDF5", labelKey: "annTeacher.prioLow"    },
 };
 
 const AUDIENCE_CONFIG = {
-  all:      { label: "Everyone", color: "#2563EB", bg: "#DBEAFE" },
-  teachers: { label: "Teachers", color: "#7C3AED", bg: "#EDE9FE" },
-  students: { label: "Students", color: "#059669", bg: "#ECFDF5" },
-  class:    { label: "Class",    color: "#D97706", bg: "#FEF3C7" },
+  all:      { labelKey: "annTeacher.audAll", color: "#2563EB", bg: "#DBEAFE" },
+  teachers: { labelKey: "annTeacher.audTeachers", color: "#7C3AED", bg: "#EDE9FE" },
+  students: { labelKey: "annTeacher.audStudents", color: "#059669", bg: "#ECFDF5" },
+  class:    { labelKey: "annTeacher.audClass",    color: "#D97706", bg: "#FEF3C7" },
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatRelative = (dateStr) => {
+  const { t } = useTranslation();
   if (!dateStr) return "";
   const date   = new Date(dateStr);
   const diffMs = Date.now() - date.getTime();
@@ -56,7 +57,7 @@ const formatRelative = (dateStr) => {
   const h      = Math.floor(diffMs / 3600000);
   const d      = Math.floor(diffMs / 86400000);
 
-  if (m  <  1) return "Just now";
+  if (m  <  1) return t("annTeacher.justNow");
   if (m  < 60) return `${m}m ago`;
   if (h  < 24) return `${h}h ago`;
   if (d  <  7) return `${d}d ago`;
@@ -71,7 +72,9 @@ const checkExpired = (expiresAt) =>
 
 // ─── Empty state ──────────────────────────────────────────────────────────────
 
-const EmptyState = ({ tab, onCompose }) => (
+const EmptyState = ({ tab, onCompose }) => {
+                     const { t } = useTranslation();
+                     return (
   <View style={styles.emptyWrap}>
     <View style={styles.emptyIconCircle}>
       <Ionicons
@@ -81,25 +84,27 @@ const EmptyState = ({ tab, onCompose }) => (
       />
     </View>
     <Text style={styles.emptyTitle}>
-      {tab === "inbox" ? "No announcements yet" : "Nothing sent yet"}
+      {tab === "inbox" ? t("annTeacher.emptyInboxTitle") : t("annTeacher.emptySentTitle")}
     </Text>
     <Text style={styles.emptySub}>
       {tab === "inbox"
-        ? "School-wide and teacher announcements will appear here."
-        : "Tap the button below to send your first announcement."}
+        ? t("annTeacher.emptyInboxSub")
+        : t("annTeacher.emptySentSub")}
     </Text>
     {tab === "sent" && (
       <TouchableOpacity style={styles.emptyAction} onPress={onCompose}>
         <Ionicons name="add" size={18} color="#FFF" />
-        <Text style={styles.emptyActionText}>Create Announcement</Text>
+        <Text style={styles.emptyActionText}>{t("annTeacher.createAnnouncement")}</Text>
       </TouchableOpacity>
     )}
   </View>
 );
+                   };
 
 // ─── Announcement card ────────────────────────────────────────────────────────
 
 const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
+  const { t } = useTranslation();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const priority = PRIORITY_CONFIG[item.priority] || PRIORITY_CONFIG.normal;
@@ -115,13 +120,13 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
 
   const senderLabel =
     tab === "inbox"
-      ? item.authorName || "Admin"
+      ? item.authorName || t("annTeacher.adminFallback")
       : `To: ${
           item.targetClasses?.length
             ? item.targetClasses.map((c) => c?.name || c).join(", ")
             : item.audience === "all"
-            ? "Whole School"
-            : audience.label
+            ? t("annTeacher.wholeSchool")
+            : t(audience.labelKey)
         }`;
 
   return (
@@ -144,7 +149,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
         {isPinned && (
           <View style={styles.pinnedBadge}>
             <Ionicons name="pin" size={11} color="#7C3AED" />
-            <Text style={styles.pinnedText}>Pinned</Text>
+            <Text style={styles.pinnedText}>{t("annTeacher.pinned")}</Text>
           </View>
         )}
 
@@ -193,19 +198,19 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
           <View style={[styles.tag, { backgroundColor: priority.bg }]}>
             <View style={[styles.tagDot, { backgroundColor: priority.color }]} />
             <Text style={[styles.tagText, { color: priority.color }]}>
-              {priority.label}
+              {t(priority.labelKey)}
             </Text>
           </View>
 
           <View style={[styles.tag, { backgroundColor: audience.bg }]}>
             <Text style={[styles.tagText, { color: audience.color }]}>
-              {audience.label}
+              {t(audience.labelKey)}
             </Text>
           </View>
 
           {expired && (
             <View style={[styles.tag, { backgroundColor: "#F3F4F6" }]}>
-              <Text style={[styles.tagText, { color: "#9CA3AF" }]}>Expired</Text>
+              <Text style={[styles.tagText, { color: "#9CA3AF" }]}>{t("annTeacher.expired")}</Text>
             </View>
           )}
 
@@ -213,7 +218,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
             <View style={[styles.tag, { backgroundColor: "#ECFDF5" }]}>
               <Ionicons name="checkmark-done" size={11} color="#059669" />
               <Text style={[styles.tagText, { color: "#059669" }]}>
-                Acknowledged
+                {t("annTeacher.acknowledged")}
               </Text>
             </View>
           )}
@@ -236,6 +241,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
 // ─── Main Screen ──────────────────────────────────────────────────────────────
 
 export default function AnnouncementsScreen() {
+  const { t } = useTranslation();
   const router = useRouter();
   const user   = useAuthStore((s) => s.user);
 
@@ -299,27 +305,27 @@ export default function AnnouncementsScreen() {
 
     if (activeTab === "sent") {
       Alert.alert(
-        "Delete Announcement",
+        t("annTeacher.deleteTitle"),
         `"${item.title}"\n\nThis will remove it for all recipients.`,
         [
-          { text: "Cancel", style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           {
-            text:    "Delete",
+            text:    t("common.delete"),
             style:   "destructive",
             onPress: async () => {
               try { await remove(id); }
-              catch (err) { Alert.alert("Error", err.message); }
+              catch (err) { Alert.alert(t("annTeacher.errorTitle"), err.message); }
             },
           },
         ]
       );
     } else {
       Alert.alert(
-        "Acknowledge",
-        "Mark this announcement as acknowledged?",
+        t("annTeacher.ackTitle"),
+        t("annTeacher.ackBody"),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Acknowledge", onPress: () => acknowledge(id) },
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("annTeacher.ackTitle"), onPress: () => acknowledge(id) },
         ]
       );
     }
@@ -345,7 +351,7 @@ export default function AnnouncementsScreen() {
         </TouchableOpacity>
 
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Announcements</Text>
+          <Text style={styles.headerTitle}>{t("annTeacher.listTitle")}</Text>
           {unreadCount > 0 && (
             <Text style={styles.headerSub}>{unreadCount} unread</Text>
           )}
@@ -357,7 +363,7 @@ export default function AnnouncementsScreen() {
           activeOpacity={0.85}
         >
           <Ionicons name="add" size={20} color="#FFF" />
-          <Text style={styles.composeBtnText}>New</Text>
+          <Text style={styles.composeBtnText}>{t("annTeacher.new")}</Text>
         </TouchableOpacity>
       </View>
 
@@ -399,7 +405,7 @@ export default function AnnouncementsScreen() {
                 color={active ? "#4F46E5" : "#9CA3AF"}
               />
               <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
               {tab.key === "inbox" && unreadCount > 0 && (
                 <View style={styles.tabBadge}>
@@ -417,7 +423,7 @@ export default function AnnouncementsScreen() {
       {loading && data.length === 0 ? (
         <View style={styles.loaderWrap}>
           <ActivityIndicator size="large" color="#4F46E5" />
-          <Text style={styles.loaderText}>Loading announcements…</Text>
+          <Text style={styles.loaderText}>{t("annTeacher.loading")}</Text>
         </View>
       ) : (
         <FlatList
@@ -726,3 +732,4 @@ const styles = StyleSheet.create({
     elevation:       6,
   },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

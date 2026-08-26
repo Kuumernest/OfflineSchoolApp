@@ -26,6 +26,8 @@ import {
   VALID_DAYS,
 }                         from "../../../src/utils/timetableMappers";
 
+import { useTranslation } from "../../../src/i18n/useTranslation";
+
 import SlotEditorModal from "./components/SlotEditorModal";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -38,11 +40,11 @@ import SlotEditorModal from "./components/SlotEditorModal";
  * The label field is for display only.
  */
 const DAYS = [
-  { key: "MON", label: "Mon" },
-  { key: "TUE", label: "Tue" },
-  { key: "WED", label: "Wed" },
-  { key: "THU", label: "Thu" },
-  { key: "FRI", label: "Fri" },
+  { key: "MON", labelKey: "timetable.mon" },
+  { key: "TUE", labelKey: "timetable.tue" },
+  { key: "WED", labelKey: "timetable.wed" },
+  { key: "THU", labelKey: "timetable.thu" },
+  { key: "FRI", labelKey: "timetable.fri" },
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -72,6 +74,7 @@ const getPeriodTime = (period) => ({
 
 export default function AdminTimetableBuilder() {
   const router     = useRouter();
+  const { t }      = useTranslation();
   const mountedRef = useRef(true);
   const initialLoadDoneRef = useRef(false);
 
@@ -203,9 +206,9 @@ export default function AdminTimetableBuilder() {
       await refreshUnsyncedCount();
     } catch (err) {
       console.error("loadSlots failed:", err);
-      if (mountedRef.current) Alert.alert("Error", "Failed to load timetable slots");
+      if (mountedRef.current) Alert.alert(t("ttAdmin.errorTitle"), t("ttAdmin.loadSlotsFailed"));
     }
-  }, [refreshUnsyncedCount]);
+  }, [refreshUnsyncedCount, t]);
 
   // ── Full initial load ───────────────────────────────────────────────────────
   const loadInitialData = useCallback(async (isRefresh = false) => {
@@ -263,7 +266,7 @@ export default function AdminTimetableBuilder() {
       await refreshUnsyncedCount();
     } catch (err) {
       console.error("loadInitialData failed:", err);
-      if (mountedRef.current) setError("Failed to load timetable configuration.");
+      if (mountedRef.current) setError(t("ttAdmin.loadConfigFailed"));
     } finally {
       if (mountedRef.current) {
         setLoading(false);
@@ -271,7 +274,7 @@ export default function AdminTimetableBuilder() {
         initialLoadDoneRef.current = true;
       }
     }
-  }, [buildLookupMaps, refreshUnsyncedCount]);
+  }, [buildLookupMaps, refreshUnsyncedCount, t]);
 
   // ── Boot ────────────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -347,13 +350,13 @@ export default function AdminTimetableBuilder() {
       }
 
       await refreshUnsyncedCount();
-      if (mountedRef.current) Alert.alert("Synced", "Timetable synced with server.");
+      if (mountedRef.current) Alert.alert(t("ttAdmin.syncedTitle"), t("ttAdmin.syncedBody"));
     } catch (err) {
-      Alert.alert("Sync Failed", err.message || "Could not sync timetable.");
+      Alert.alert(t("ttAdmin.syncFailedTitle"), err.message || t("ttAdmin.syncFailedBody"));
     } finally {
       if (mountedRef.current) setSyncing(false);
     }
-  }, [syncing, loadSlots, refreshUnsyncedCount]);
+  }, [syncing, loadSlots, refreshUnsyncedCount, t]);
 
   // ── Derived data ─────────────────────────────────────────────────────────────
   const selectedClass = useMemo(
@@ -492,24 +495,24 @@ export default function AdminTimetableBuilder() {
           setTeacherMap(newTeacherMap);
         }
         await loadSlots();
-        if (mountedRef.current) Alert.alert("Saved", "Timetable slot saved successfully");
+        if (mountedRef.current) Alert.alert(t("ttAdmin.savedTitle"), t("ttAdmin.savedBody"));
       }
     } catch (err) {
       console.error("handleSaveSlot failed:", err);
-      Alert.alert("Could Not Save", err.message || "Failed to save timetable slot");
+      Alert.alert(t("ttAdmin.saveFailedTitle"), err.message || t("ttAdmin.saveFailedBody"));
     }
-  }, [modalMode, selectedSlot, selectedCell, loadSlots, closeModal, buildLookupMaps]);
+  }, [modalMode, selectedSlot, selectedCell, loadSlots, closeModal, buildLookupMaps, t]);
 
   const handleDeleteSlot = useCallback(async () => {
     if (!selectedSlot) return;
 
     Alert.alert(
-      "Remove Slot",
-      "Are you sure you want to clear this timetable slot?",
+      t("ttAdmin.removeTitle"),
+      t("ttAdmin.removeBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Remove",
+          text:  t("common.remove"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -521,23 +524,23 @@ export default function AdminTimetableBuilder() {
               if (mountedRef.current) {
                 closeModal();
                 await loadSlots();
-                if (mountedRef.current) Alert.alert("Removed", "Slot cleared from timetable");
+                if (mountedRef.current) Alert.alert(t("ttAdmin.removedTitle"), t("ttAdmin.removedBody"));
               }
             } catch (err) {
-              Alert.alert("Error", err.message || "Failed to remove slot");
+              Alert.alert(t("ttAdmin.errorTitle"), err.message || t("ttAdmin.removeFailed"));
             }
           },
         },
       ]
     );
-  }, [selectedSlot, loadSlots, closeModal]);
+  }, [selectedSlot, loadSlots, closeModal, t]);
 
   // ── Render ───────────────────────────────────────────────────────────────────
   if (loading) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Initializing timetable grid…</Text>
+        <Text style={styles.loadingText}>{t("ttAdmin.initializing")}</Text>
       </View>
     );
   }
@@ -557,8 +560,8 @@ export default function AdminTimetableBuilder() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Timetable Builder</Text>
-          <Text style={styles.headerSubtitle}>Configure weekly schedules</Text>
+          <Text style={styles.headerTitle}>{t("ttAdmin.title")}</Text>
+          <Text style={styles.headerSubtitle}>{t("ttAdmin.subtitle")}</Text>
         </View>
 
         <TouchableOpacity
@@ -610,7 +613,7 @@ export default function AdminTimetableBuilder() {
               onPress={() => loadInitialData()}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -624,7 +627,7 @@ export default function AdminTimetableBuilder() {
           >
             <Ionicons name="warning-outline" size={18} color="#D97706" />
             <Text style={styles.unsyncedText}>
-              {unsyncedCount} slot{unsyncedCount !== 1 ? "s" : ""} not yet synced. Tap to sync.
+              {t("ttAdmin.unsyncedSlots", { count: unsyncedCount })}
             </Text>
             <Ionicons name="chevron-forward" size={16} color="#D97706" />
           </TouchableOpacity>
@@ -634,17 +637,17 @@ export default function AdminTimetableBuilder() {
         {syncing && (
           <View style={styles.syncingBanner}>
             <ActivityIndicator size="small" color="#4F46E5" />
-            <Text style={styles.syncingText}>Syncing with server…</Text>
+            <Text style={styles.syncingText}>{t("ttAdmin.syncing")}</Text>
           </View>
         )}
 
         {/* ── Class selector ── */}
-        <Text style={styles.sectionLabel}>Select Class</Text>
+        <Text style={styles.sectionLabel}>{t("ttAdmin.selectClass")}</Text>
 
         {classes.length === 0 ? (
           <View style={styles.emptyBox}>
             <Ionicons name="school-outline" size={28} color="#9CA3AF" />
-            <Text style={styles.emptyText}>No active classes found.</Text>
+            <Text style={styles.emptyText}>{t("ttAdmin.noActiveClasses")}</Text>
           </View>
         ) : (
           <ScrollView
@@ -675,10 +678,10 @@ export default function AdminTimetableBuilder() {
         <View style={styles.configBanner}>
           <Ionicons name="time-outline" size={18} color="#4F46E5" />
           <Text style={styles.configBannerText}>
-            Time periods are synced from the server.
+            {t("ttAdmin.periodsFromServer")}
           </Text>
           <TouchableOpacity onPress={() => router.push("/admin/periods")} activeOpacity={0.7}>
-            <Text style={styles.configAction}>Configure</Text>
+            <Text style={styles.configAction}>{t("ttAdmin.configure")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -686,19 +689,19 @@ export default function AdminTimetableBuilder() {
         {!selectedClassId ? (
           <View style={styles.emptyState}>
             <Ionicons name="school-outline" size={32} color="#9CA3AF" />
-            <Text style={styles.emptyText}>Please select a class above.</Text>
+            <Text style={styles.emptyText}>{t("ttAdmin.selectClassAbove")}</Text>
           </View>
         ) : periods.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="hourglass-outline" size={32} color="#D97706" />
             <Text style={styles.emptyText}>
-              No active periods found.{"\n"}Configure system periods first.
+              {t("ttAdmin.noActivePeriods")}
             </Text>
           </View>
         ) : (
           <View>
             <Text style={styles.gridMetaTitle}>
-              {"Editing: "}
+              {`${t("ttAdmin.editing")} `}
               <Text style={styles.highlightText}>{selectedClass?.name || ""}</Text>
             </Text>
 
@@ -707,11 +710,11 @@ export default function AdminTimetableBuilder() {
                 {/* Column headers */}
                 <View style={styles.gridHeader}>
                   <View style={styles.periodHeaderCell}>
-                    <Text style={styles.gridHeaderText}>Period</Text>
+                    <Text style={styles.gridHeaderText}>{t("periods.period")}</Text>
                   </View>
                   {DAYS.map((day) => (
                     <View key={day.key} style={styles.dayHeaderCell}>
-                      <Text style={styles.gridHeaderText}>{day.label}</Text>
+                      <Text style={styles.gridHeaderText}>{t(day.labelKey)}</Text>
                     </View>
                   ))}
                 </View>
@@ -764,7 +767,7 @@ export default function AdminTimetableBuilder() {
                                 </Text>
                                 {!!slot.room && (
                                   <Text style={styles.roomText} numberOfLines={1}>
-                                    Rm: {slot.room}
+                                    {t("ttAdmin.roomShort", { room: slot.room })}
                                   </Text>
                                 )}
                                 {pending && (

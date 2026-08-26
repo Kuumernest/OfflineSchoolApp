@@ -14,6 +14,7 @@ import { useAuthStore }   from "@/store/auth.store";
 import StudentService     from "@/services/student.service";
 import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -97,6 +98,7 @@ function ActionButton({ icon, label, description, onPress, variant = "default", 
 // ─────────────────────────────────────────────────────────
 
 function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const [resetting, setResetting]     = useState(false);
   const [newCreds, setNewCreds]       = useState(null); // { tempPassword }
@@ -118,12 +120,12 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
   const handleReset = useCallback(() => {
     if (!studentId || resetting) return;
     Alert.alert(
-      "Reset password?",
-      "A new temporary password will be generated. The current one stops working immediately.",
+      t("studentRecord.resetConfirmTitle"),
+      t("studentRecord.resetConfirmMessage"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("studentRecord.cancel"), style: "cancel" },
         {
-          text: "Reset",
+          text: t("studentRecord.reset"),
           style: "destructive",
           onPress: async () => {
             setResetting(true);
@@ -134,20 +136,22 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
                 `/students/${studentId}/reset-password`
               );
               if (!data?.success) {
-                throw new Error(data?.message || "Reset failed");
+                throw new Error(data?.message || t("studentRecord.resetFailed"));
               }
               if (data.tempPassword) {
                 setNewCreds({ tempPassword: data.tempPassword });
               } else {
                 setResetNote(
                   data.message ||
-                    "Password reset. New credentials were emailed to the student."
+                    t("studentRecord.resetEmailed")
                 );
               }
             } catch (err) {
               Alert.alert(
-                "Could not reset",
-                err?.response?.data?.message || err?.message || "Please try again."
+                t("studentRecord.resetErrorTitle"),
+                err?.response?.data?.message ||
+                  err?.message ||
+                  t("studentRecord.tryAgain")
               );
             } finally {
               setResetting(false);
@@ -156,7 +160,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
         },
       ]
     );
-  }, [studentId, resetting]);
+  }, [studentId, resetting, t]);
 
   const handleCopyNew = useCallback(() => {
     if (!newCreds) return;
@@ -171,14 +175,11 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
     <View style={styles.enrollCard}>
       <View style={styles.enrollHeader}>
         <Ionicons name="card-outline" size={16} color="#4F46E5" />
-        <Text style={styles.enrollTitle}>Login Credentials</Text>
+        <Text style={styles.enrollTitle}>{t("studentRecord.loginCredentials")}</Text>
       </View>
 
       <Text style={styles.enrollHint}>
-        The student uses this enrollment number to log in. Their first
-        password is generated automatically — shown once when the student was
-        enrolled (or sent by email). They will set their own password at
-        first login.
+        {t("studentRecord.enrollHint")}
       </Text>
 
       <View style={styles.enrollRow}>
@@ -188,7 +189,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
           copied && styles.copyBtnCopied,
         ]}>
           <Text style={[styles.copyBtnText, copied && styles.copyBtnTextCopied]}>
-            {copied ? "✓ Copied" : "Copy"}
+            {copied ? t("studentRecord.copied") : t("studentRecord.copy")}
           </Text>
         </TouchableOpacity>
       </View>
@@ -197,8 +198,10 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
         <View style={styles.resetWarning}>
           <Ionicons name="shield-outline" size={14} color="#92400E" />
           <Text style={styles.resetWarningText}>
-            <Text style={{ fontWeight: "700" }}>Password not yet changed.</Text>
-            {" "}The student is still using their generated first password.
+            <Text style={{ fontWeight: "700" }}>
+              {t("studentRecord.passwordNotChanged")}
+            </Text>
+            {" "}{t("studentRecord.passwordNotChangedNote")}
           </Text>
         </View>
       )}
@@ -213,14 +216,16 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
         >
           <Ionicons name="key-outline" size={14} color="#92400E" />
           <Text style={styles.resetBtnText}>
-            {resetting ? "Resetting…" : "Forgot password? Reset it"}
+            {resetting
+              ? t("studentRecord.resetting")
+              : t("studentRecord.forgotPassword")}
           </Text>
         </TouchableOpacity>
       )}
 
       {newCreds && (
         <View style={styles.newCredsBox}>
-          <Text style={styles.newCredsTitle}>New temporary password</Text>
+          <Text style={styles.newCredsTitle}>{t("studentRecord.newTempPassword")}</Text>
           <View style={styles.enrollRow}>
             <Text style={styles.enrollNo} selectable>{newCreds.tempPassword}</Text>
             <TouchableOpacity onPress={handleCopyNew} style={[
@@ -228,13 +233,12 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
               newCopied && styles.copyBtnCopied,
             ]}>
               <Text style={[styles.copyBtnText, newCopied && styles.copyBtnTextCopied]}>
-                {newCopied ? "✓ Copied" : "Copy"}
+                {newCopied ? t("studentRecord.copied") : t("studentRecord.copy")}
               </Text>
             </TouchableOpacity>
           </View>
           <Text style={styles.newCredsHint}>
-            Shown once — write it down or share it now. The student must set a
-            new password at next login.
+            {t("studentRecord.newCredsHint")}
           </Text>
         </View>
       )}
@@ -256,6 +260,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
 // ─────────────────────────────────────────────────────────
 
 function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel }) {
+  const { t } = useTranslation();
   const others = (classes || []).filter(
     (c) => String(c._id ?? c.id) !== String(currentClassId ?? "")
   );
@@ -266,14 +271,14 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
         <View style={styles.modalSheet}>
           <View style={styles.modalHeader}>
             <Ionicons name="swap-horizontal-outline" size={20} color="#4F46E5" />
-            <Text style={styles.modalTitle}>Move to Class</Text>
+            <Text style={styles.modalTitle}>{t("studentRecord.moveToClass")}</Text>
           </View>
 
           {others.length === 0 ? (
             <View style={styles.modalEmpty}>
               <Ionicons name="alert-circle-outline" size={16} color="#92400E" />
               <Text style={styles.modalEmptyText}>
-                No other classes available. Create more classes first.
+                {t("studentRecord.noOtherClasses")}
               </Text>
             </View>
           ) : (
@@ -292,7 +297,9 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
                   <View style={{ marginLeft: 10 }}>
                     <Text style={styles.modalItemName}>{cls.name}</Text>
                     {cls.level && (
-                      <Text style={styles.modalItemLevel}>Level {cls.level}</Text>
+                      <Text style={styles.modalItemLevel}>
+                        {t("studentRecord.level", { level: cls.level })}
+                      </Text>
                     )}
                   </View>
                 </TouchableOpacity>
@@ -301,7 +308,7 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
           )}
 
           <TouchableOpacity onPress={onCancel} style={styles.modalCancel}>
-            <Text style={styles.modalCancelText}>Cancel</Text>
+            <Text style={styles.modalCancelText}>{t("studentRecord.cancel")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -316,6 +323,7 @@ function MoveClassPicker({ visible, classes, currentClassId, onSelect, onCancel 
 export default function StudentDetailScreen() {
   const { studentId }    = useLocalSearchParams();
   const router           = useRouter();
+  const { t }            = useTranslation();
   const { user }         = useAuthStore();
   const schoolId         = user?.schoolId ?? "";
 
@@ -348,7 +356,7 @@ export default function StudentDetailScreen() {
         baseUpdatedAtRef.current = loaded.updatedAt || loaded.updated_at || null;
         console.log("[detail] 📌 base_updated_at captured:", baseUpdatedAtRef.current);
       } else {
-        setError("Student not found.");
+        setError(t("studentRecord.notFound"));
       }
 
       const cls = await db.getAllAsync(
@@ -357,11 +365,11 @@ export default function StudentDetailScreen() {
       );
       setClasses(cls);
     } catch (err) {
-      setError(err?.message || "Failed to load student.");
+      setError(err?.message || t("studentRecord.loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [studentId, schoolId]);
+  }, [studentId, schoolId, t]);
 
   useEffect(() => { loadStudent(); }, [loadStudent]);
 
@@ -370,18 +378,18 @@ export default function StudentDetailScreen() {
   const withConfirm = useCallback(async (title, message, action) => {
     return new Promise((resolve) => {
       Alert.alert(title, message, [
-        { text: "Cancel", style: "cancel", onPress: () => resolve(false) },
-        { text: action,   style: action === "Delete" ? "destructive" : "default",
+        { text: t("studentRecord.cancel"), style: "cancel", onPress: () => resolve(false) },
+        { text: action,   style: action === t("studentRecord.delete") ? "destructive" : "default",
           onPress: () => resolve(true) },
       ]);
     });
-  }, []);
+  }, [t]);
 
   const handleSuspend = useCallback(async () => {
     const yes = await withConfirm(
-      "Suspend Student",
-      `Suspend "${student?.name}"? They will not be able to log in until restored.`,
-      "Suspend"
+      t("studentRecord.suspendStudent"),
+      t("studentRecord.suspendConfirm", { name: student?.name }),
+      t("studentRecord.suspend")
     );
     if (!yes) return;
     setIsBusy(true);
@@ -396,19 +404,25 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, status: "suspended", updatedAt: now }));
       baseUpdatedAtRef.current = now;
-      Alert.alert("Suspended", `${student?.name} has been suspended.`);
+      Alert.alert(
+        t("studentRecord.suspendedTitle"),
+        t("studentRecord.suspendedMessage", { name: student?.name })
+      );
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to suspend.");
+      Alert.alert(
+        t("studentRecord.error"),
+        err?.response?.data?.message || err?.message || t("studentRecord.suspendFailed")
+      );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm]);
+  }, [student, studentId, withConfirm, t]);
 
   const handleRestore = useCallback(async () => {
     const yes = await withConfirm(
-      "Restore Student",
-      `Restore "${student?.name}" and re-enable their account?`,
-      "Restore"
+      t("studentRecord.restoreStudent"),
+      t("studentRecord.restoreConfirm", { name: student?.name }),
+      t("studentRecord.restore")
     );
     if (!yes) return;
     setIsBusy(true);
@@ -423,19 +437,25 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, status: "approved", updatedAt: now }));
       baseUpdatedAtRef.current = now;
-      Alert.alert("Restored", `${student?.name} has been restored.`);
+      Alert.alert(
+        t("studentRecord.restoredTitle"),
+        t("studentRecord.restoredMessage", { name: student?.name })
+      );
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to restore.");
+      Alert.alert(
+        t("studentRecord.error"),
+        err?.response?.data?.message || err?.message || t("studentRecord.restoreFailed")
+      );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm]);
+  }, [student, studentId, withConfirm, t]);
 
   const handleDelete = useCallback(async () => {
     const yes = await withConfirm(
-      "Delete Student",
-      `Permanently delete "${student?.name}"? This cannot be undone.`,
-      "Delete"
+      t("studentRecord.deleteStudent"),
+      t("studentRecord.deleteConfirm", { name: student?.name }),
+      t("studentRecord.delete")
     );
     if (!yes) return;
     setIsBusy(true);
@@ -447,21 +467,26 @@ export default function StudentDetailScreen() {
       if (result?.overwrote) {
         console.log("[detail] ⚠️ Overwrite detected:", result.overwrote);
       }
-      Alert.alert("Deleted", `${student?.name} has been removed.`, [
-        { text: "OK", onPress: () => router.back() },
-      ]);
+      Alert.alert(
+        t("studentRecord.deletedTitle"),
+        t("studentRecord.deletedMessage", { name: student?.name }),
+        [{ text: t("studentRecord.ok"), onPress: () => router.back() }]
+      );
     } catch (err) {
       setIsBusy(false);
-      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to delete.");
+      Alert.alert(
+        t("studentRecord.error"),
+        err?.response?.data?.message || err?.message || t("studentRecord.deleteFailed")
+      );
     }
-  }, [student, studentId, router, withConfirm]);
+  }, [student, studentId, router, withConfirm, t]);
 
   const handleMoveSelect = useCallback(async (cls) => {
     const classId = String(cls._id ?? cls.id);
     const yes = await withConfirm(
-      "Move Student",
-      `Move "${student?.name}" to "${cls.name}"?`,
-      "Move"
+      t("studentRecord.moveStudentTitle"),
+      t("studentRecord.moveConfirm", { name: student?.name, className: cls.name }),
+      t("studentRecord.move")
     );
     if (!yes) { setShowMovePicker(false); return; }
     setIsBusy(true);
@@ -476,13 +501,19 @@ export default function StudentDetailScreen() {
       const now = new Date().toISOString();
       setStudent((s) => ({ ...s, className: cls.name, classId, updatedAt: now }));
       baseUpdatedAtRef.current = now;
-      Alert.alert("Moved", `${student?.name} moved to ${cls.name}.`);
+      Alert.alert(
+        t("studentRecord.movedTitle"),
+        t("studentRecord.movedMessage", { name: student?.name, className: cls.name })
+      );
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.message || err?.message || "Failed to move.");
+      Alert.alert(
+        t("studentRecord.error"),
+        err?.response?.data?.message || err?.message || t("studentRecord.moveFailed")
+      );
     } finally {
       setIsBusy(false);
     }
-  }, [student, studentId, withConfirm]);
+  }, [student, studentId, withConfirm, t]);
 
   // ── Derived ─────────────────────────────────────────────
 
@@ -500,7 +531,7 @@ export default function StudentDetailScreen() {
     return (
       <View style={styles.center}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading student…</Text>
+        <Text style={styles.loadingText}>{t("studentRecord.loading")}</Text>
       </View>
     );
   }
@@ -509,12 +540,12 @@ export default function StudentDetailScreen() {
     return (
       <View style={styles.center}>
         <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-        <Text style={styles.errorTitle}>Student not found</Text>
+        <Text style={styles.errorTitle}>{t("studentRecord.notFoundTitle")}</Text>
         <Text style={styles.errorSub}>
-          {error || "This student may have been deleted."}
+          {error || t("studentRecord.notFoundHint")}
         </Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.errorBtn}>
-          <Text style={styles.errorBtnText}>Go Back</Text>
+          <Text style={styles.errorBtnText}>{t("studentRecord.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -540,7 +571,7 @@ export default function StudentDetailScreen() {
             <Text style={styles.headerTitle} numberOfLines={1}>
               {student.name}
             </Text>
-            <Text style={styles.headerSub}>Student Detail</Text>
+            <Text style={styles.headerSub}>{t("studentRecord.headerSub")}</Text>
           </View>
           <TouchableOpacity onPress={loadStudent} style={styles.refreshBtn}>
             <Ionicons name="refresh-outline" size={18} color="#6B7280" />
@@ -595,7 +626,9 @@ export default function StudentDetailScreen() {
               {mustReset && (
                 <View style={styles.badgeAmber}>
                   <Ionicons name="key-outline" size={11} color="#92400E" />
-                  <Text style={styles.badgeAmberText}>Password not changed</Text>
+                  <Text style={styles.badgeAmberText}>
+                    {t("studentRecord.badgePasswordNotChanged")}
+                  </Text>
                 </View>
               )}
             </View>
@@ -610,35 +643,35 @@ export default function StudentDetailScreen() {
         />
 
         {/* Personal info */}
-        <Section title="Personal Information">
-          <InfoRow icon="person-outline"   label="Full Name"     value={student.name || student.studentName} />
-          <InfoRow icon="mail-outline"     label="Email"         value={student.email} />
-          <InfoRow icon="call-outline"     label="Phone"         value={student.phone} />
-          <InfoRow icon="calendar-outline" label="Date of Birth" value={formatDate(student.dateOfBirth || student.date_of_birth)} />
-          <InfoRow icon="card-outline"     label="Enrollment No" value={enrollmentNo} mono />
-          <InfoRow icon="pricetag-outline" label="Admission No"  value={student.admissionNumber || student.admissionNo} />
-          <InfoRow icon="person-outline"   label="Gender"        value={student.gender} />
-          <InfoRow icon="location-outline" label="Address"       value={student.address} />
+        <Section title={t("studentRecord.sectionPersonal")}>
+          <InfoRow icon="person-outline"   label={t("studentRecord.fullName")}     value={student.name || student.studentName} />
+          <InfoRow icon="mail-outline"     label={t("studentRecord.email")}         value={student.email} />
+          <InfoRow icon="call-outline"     label={t("studentRecord.phone")}         value={student.phone} />
+          <InfoRow icon="calendar-outline" label={t("studentRecord.dateOfBirth")} value={formatDate(student.dateOfBirth || student.date_of_birth)} />
+          <InfoRow icon="card-outline"     label={t("studentRecord.enrollmentNo")} value={enrollmentNo} mono />
+          <InfoRow icon="pricetag-outline" label={t("studentRecord.admissionNo")}  value={student.admissionNumber || student.admissionNo} />
+          <InfoRow icon="person-outline"   label={t("studentRecord.gender")}        value={student.gender} />
+          <InfoRow icon="location-outline" label={t("studentRecord.address")}       value={student.address} />
         </Section>
 
         {/* School info */}
-        <Section title="School Information">
-          <InfoRow icon="school-outline"   label="Class"          value={classNameDisplay} />
-          <InfoRow icon="people-outline"   label="Guardian Name"  value={student.guardianName || student.guardian_name} />
-          <InfoRow icon="call-outline"     label="Guardian Phone" value={student.guardianPhone || student.guardian_phone} />
-          <InfoRow icon="calendar-outline" label="Enrolled On"    value={formatDate(student.enrolledAt || student.enrolled_at || student.approved_at)} />
-          <InfoRow icon="calendar-outline" label="Created"        value={formatDate(student.createdAt || student.created_at)} />
-          <InfoRow icon="calendar-outline" label="Last Updated"   value={formatDate(student.updatedAt || student.updated_at)} />
+        <Section title={t("studentRecord.sectionSchool")}>
+          <InfoRow icon="school-outline"   label={t("studentRecord.className")}          value={classNameDisplay} />
+          <InfoRow icon="people-outline"   label={t("studentRecord.guardianName")}  value={student.guardianName || student.guardian_name} />
+          <InfoRow icon="call-outline"     label={t("studentRecord.guardianPhone")} value={student.guardianPhone || student.guardian_phone} />
+          <InfoRow icon="calendar-outline" label={t("studentRecord.enrolledOn")}    value={formatDate(student.enrolledAt || student.enrolled_at || student.approved_at)} />
+          <InfoRow icon="calendar-outline" label={t("studentRecord.created")}        value={formatDate(student.createdAt || student.created_at)} />
+          <InfoRow icon="calendar-outline" label={t("studentRecord.lastUpdated")}   value={formatDate(student.updatedAt || student.updated_at)} />
         </Section>
 
         {/* Actions */}
         <View style={styles.actionsSection}>
-          <Text style={styles.sectionTitle}>Actions</Text>
+          <Text style={styles.sectionTitle}>{t("studentRecord.sectionActions")}</Text>
 
           <ActionButton
             icon="swap-horizontal-outline"
-            label="Move to Class"
-            description="Transfer this student to a different class"
+            label={t("studentRecord.moveToClass")}
+            description={t("studentRecord.moveDesc")}
             variant="default"
             disabled={isBusy}
             onPress={() => setShowMovePicker(true)}
@@ -647,8 +680,8 @@ export default function StudentDetailScreen() {
           {isSuspended ? (
             <ActionButton
               icon="checkmark-circle-outline"
-              label="Restore Student"
-              description="Re-enable this student's account"
+              label={t("studentRecord.restoreStudent")}
+              description={t("studentRecord.restoreDesc")}
               variant="success"
               disabled={isBusy}
               onPress={handleRestore}
@@ -656,8 +689,8 @@ export default function StudentDetailScreen() {
           ) : (
             <ActionButton
               icon="ban-outline"
-              label="Suspend Student"
-              description="Temporarily disable this student's account"
+              label={t("studentRecord.suspendStudent")}
+              description={t("studentRecord.suspendDesc")}
               variant="warning"
               disabled={isBusy}
               onPress={handleSuspend}
@@ -666,8 +699,8 @@ export default function StudentDetailScreen() {
 
           <ActionButton
             icon="trash-outline"
-            label="Delete Student"
-            description="Permanently remove this student"
+            label={t("studentRecord.deleteStudent")}
+            description={t("studentRecord.deleteDesc")}
             variant="danger"
             disabled={isBusy}
             onPress={handleDelete}

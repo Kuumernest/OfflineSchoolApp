@@ -347,7 +347,7 @@ const nameTier = (name) => {
 /** The faint repeating crest along the bottom edge. */
 const STRIP_MARKS = Array.from({ length: 22 }, () => "<span>&#10022;</span>").join("");
 
-const renderCard = ({ student, school, labels, origin, validUntil }) => {
+const renderCard = ({ student, school, labels, origin, academicYear }) => {
   const logo  = absoluteLogo(school.logo, origin);
   const photo = absoluteLogo(student.photoUrl, origin);
 
@@ -399,8 +399,8 @@ const renderCard = ({ student, school, labels, origin, validUntil }) => {
           </div>
 
           <div class="validity">
-            <div class="validity__label">${esc(labels.validUntil)}</div>
-            <div class="validity__date">${orDash(validUntil)}</div>
+            <div class="validity__label">${esc(labels.academicYear)}</div>
+            <div class="validity__date">${orDash(academicYear)}</div>
           </div>
 
           <div class="sig sig--right">
@@ -417,7 +417,7 @@ const renderCard = ({ student, school, labels, origin, validUntil }) => {
 };
 
 const buildIdCardsHtml = ({ data, labels, printedOn, origin }) => {
-  const { school, students, validUntil } = data;
+  const { school, students, academicYear } = data;
 
   // Chunked into sheets rather than left to flow, so a page break can only
   // land between cards. A card split across two pages is scrap paper.
@@ -426,7 +426,7 @@ const buildIdCardsHtml = ({ data, labels, printedOn, origin }) => {
     sheets.push(`
       <div class="sheet">
         ${students.slice(i, i + PER_SHEET)
-          .map((student) => renderCard({ student, school, labels, origin, validUntil }))
+          .map((student) => renderCard({ student, school, labels, origin, academicYear }))
           .join("")}
       </div>
     `);

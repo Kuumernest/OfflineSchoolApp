@@ -20,6 +20,7 @@ import { Ionicons }                     from "@expo/vector-icons";
 
 import { useResultsStore }   from "../../../../../src/store/results.store";
 import { useAuthStore }      from "../../../../../src/store/auth.store";
+import { useTranslation }    from "../../../../../src/i18n/useTranslation";
 import ResultsProcessingCard from "../../../components/ResultsProcessingCard";
 import RankingsTable         from "../../../components/RankingsTable";
 
@@ -43,11 +44,11 @@ const COLORS = {
 };
 
 const TABS = [
-  { key: "overview", label: "Overview", icon: "grid-outline"      },
-  { key: "class",    label: "Class",    icon: "people-outline"    },
-  { key: "grade",    label: "Grade",    icon: "school-outline"    },
-  { key: "school",   label: "School",   icon: "trophy-outline"    },
-  { key: "stats",    label: "Stats",    icon: "bar-chart-outline" },
+  { key: "overview", labelKey: "examResults.tabs.overview", icon: "grid-outline"      },
+  { key: "class",    labelKey: "examResults.tabs.class",    icon: "people-outline"    },
+  { key: "grade",    labelKey: "examResults.tabs.grade",    icon: "school-outline"    },
+  { key: "school",   labelKey: "examResults.tabs.school",   icon: "trophy-outline"    },
+  { key: "stats",    labelKey: "examResults.tabs.stats",    icon: "bar-chart-outline" },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -56,6 +57,7 @@ const TABS = [
 
 export default function ExamResultsScreen() {
   const { examId } = useLocalSearchParams();
+  const { t }      = useTranslation();
 
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? null);
 
@@ -130,25 +132,25 @@ export default function ExamResultsScreen() {
               <View style={styles.quickStats}>
                 <QuickStatCard
                   icon="people"
-                  label="Total"
+                  label={t("common.total")}
                   value={stats.totalStudents ?? 0}
                   color={COLORS.primary}
                 />
                 <QuickStatCard
                   icon="checkmark-circle"
-                  label="Passed"
+                  label={t("examResults.passed")}
                   value={stats.passed ?? 0}
                   color={COLORS.success}
                 />
                 <QuickStatCard
                   icon="close-circle"
-                  label="Failed"
+                  label={t("examResults.failed")}
                   value={stats.failed ?? 0}
                   color={COLORS.error}
                 />
                 <QuickStatCard
                   icon="trending-up"
-                  label="Pass %"
+                  label={t("examResults.passPct")}
                   value={`${stats.passRate ?? 0}%`}
                   color={COLORS.warning}
                 />
@@ -157,7 +159,7 @@ export default function ExamResultsScreen() {
 
             {rankings.class?.length > 0 && (
               <RankingsTable
-                title="Top 5 — Class"
+                title={t("examResults.top5Class")}
                 rankings={rankings.class.slice(0, 5)}
                 scope="class"
                 onStudentPress={handleStudentPress}
@@ -171,9 +173,11 @@ export default function ExamResultsScreen() {
                   size={48}
                   color={COLORS.gray200}
                 />
-                <Text style={styles.emptyTitle}>No results yet</Text>
+                <Text style={styles.emptyTitle}>
+                  {t("exams.noResultsYet")}
+                </Text>
                 <Text style={styles.emptySubtitle}>
-                  Process the exam above to generate results and rankings.
+                  {t("examResults.emptySubtitle")}
                 </Text>
               </View>
             )}
@@ -183,7 +187,7 @@ export default function ExamResultsScreen() {
       case "class":
         return (
           <RankingsTable
-            title="Class Rankings"
+            title={t("examResults.classRankings")}
             rankings={rankings.class ?? []}
             scope="class"
             onStudentPress={handleStudentPress}
@@ -193,7 +197,7 @@ export default function ExamResultsScreen() {
       case "grade":
         return (
           <RankingsTable
-            title="Grade Rankings"
+            title={t("examResults.gradeRankings")}
             rankings={rankings.grade ?? []}
             scope="grade"
             onStudentPress={handleStudentPress}
@@ -203,7 +207,7 @@ export default function ExamResultsScreen() {
       case "school":
         return (
           <RankingsTable
-            title="School Rankings"
+            title={t("examResults.schoolRankings")}
             rankings={rankings.school ?? []}
             scope="school"
             onStudentPress={handleStudentPress}
@@ -234,7 +238,7 @@ export default function ExamResultsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
 
-        <Text style={styles.screenTitle}>Exam Results</Text>
+        <Text style={styles.screenTitle}>{t("examResults.title")}</Text>
 
         <TouchableOpacity
           onPress={onRefresh}
@@ -255,7 +259,7 @@ export default function ExamResultsScreen() {
           <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
           <Text style={styles.errorText} numberOfLines={2}>{error}</Text>
           <TouchableOpacity onPress={fetchData}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -285,7 +289,7 @@ export default function ExamResultsScreen() {
                   activeTab === tab.key && styles.activeTabLabel,
                 ]}
               >
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -308,7 +312,7 @@ export default function ExamResultsScreen() {
         {loading && !refreshing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color={COLORS.primary} />
-            <Text style={styles.loadingText}>Loading results…</Text>
+            <Text style={styles.loadingText}>{t("examResults.loading")}</Text>
           </View>
         ) : (
           renderContent()
@@ -335,13 +339,15 @@ function QuickStatCard({ icon, label, value, color }) {
 }
 
 function StatsView({ stats }) {
+  const { t } = useTranslation();
+
   if (!stats) {
     return (
       <View style={styles.emptyStats}>
         <Ionicons name="analytics-outline" size={48} color={COLORS.gray200} />
-        <Text style={styles.emptyText}>No statistics available yet.</Text>
+        <Text style={styles.emptyText}>{t("examResults.noStats")}</Text>
         <Text style={styles.emptySubtitle}>
-          Process the exam from the Overview tab first.
+          {t("examResults.noStatsSub")}
         </Text>
       </View>
     );
@@ -352,20 +358,22 @@ function StatsView({ stats }) {
 
       {/* Performance overview */}
       <View style={styles.statsSection}>
-        <Text style={styles.sectionTitle}>Performance Overview</Text>
+        <Text style={styles.sectionTitle}>
+          {t("examResults.performanceOverview")}
+        </Text>
         <View style={styles.statsGrid}>
-          <StatBox label="Students"  value={stats.totalStudents} />
-          <StatBox label="Passed"    value={stats.passed}  color={COLORS.success} />
-          <StatBox label="Failed"    value={stats.failed}  color={COLORS.error}   />
+          <StatBox label={t("examResults.students")} value={stats.totalStudents} />
+          <StatBox label={t("examResults.passed")} value={stats.passed}  color={COLORS.success} />
+          <StatBox label={t("examResults.failed")} value={stats.failed}  color={COLORS.error}   />
           <StatBox
-            label="Pass Rate"
+            label={t("exams.passRate")}
             value={`${stats.passRate?.toFixed(1) ?? 0}%`}
             color={(stats.passRate ?? 0) >= 50 ? COLORS.success : COLORS.error}
           />
-          <StatBox label="Average" value={`${stats.average?.toFixed(1) ?? 0}%`} />
-          <StatBox label="Highest" value={`${stats.highest?.toFixed(1) ?? 0}%`} color={COLORS.success} />
-          <StatBox label="Lowest"  value={`${stats.lowest?.toFixed(1)  ?? 0}%`} color={COLORS.error}   />
-          <StatBox label="Avg GPA" value={stats.averageGpa?.toFixed(2)  ?? "—"} />
+          <StatBox label={t("results.average")} value={`${stats.average?.toFixed(1) ?? 0}%`} />
+          <StatBox label={t("results.highest")} value={`${stats.highest?.toFixed(1) ?? 0}%`} color={COLORS.success} />
+          <StatBox label={t("results.lowest")}  value={`${stats.lowest?.toFixed(1)  ?? 0}%`} color={COLORS.error}   />
+          <StatBox label={t("examResults.avgGpa")} value={stats.averageGpa?.toFixed(2)  ?? "—"} />
         </View>
       </View>
 
@@ -373,7 +381,9 @@ function StatsView({ stats }) {
       {stats.gradeDistribution &&
         Object.keys(stats.gradeDistribution).length > 0 && (
           <View style={styles.statsSection}>
-            <Text style={styles.sectionTitle}>Grade Distribution</Text>
+            <Text style={styles.sectionTitle}>
+              {t("results.gradeDistribution")}
+            </Text>
             <View style={styles.gradeDistContainer}>
               {Object.entries(stats.gradeDistribution)
                 .sort(([a], [b]) => a.localeCompare(b))
@@ -408,7 +418,7 @@ function StatsView({ stats }) {
       {/* Subject performance */}
       {stats.subjectStats?.length > 0 && (
         <View style={styles.statsSection}>
-          <Text style={styles.sectionTitle}>Subject Performance</Text>
+          <Text style={styles.sectionTitle}>{t("results.bySubject")}</Text>
           {stats.subjectStats.map((sub) => (
             <View
               key={sub.subjectId ?? sub.subjectName}
@@ -431,7 +441,7 @@ function StatsView({ stats }) {
                   },
                 ]}
               >
-                {sub.passRate?.toFixed(0)}% pass
+                {t("examResults.pctPass", { pct: sub.passRate?.toFixed(0) })}
               </Text>
             </View>
           ))}

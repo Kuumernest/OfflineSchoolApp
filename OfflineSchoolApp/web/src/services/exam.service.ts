@@ -8,6 +8,7 @@ SubmissionsResponse,
 ResultsResponse,
 StatsResponse,
 CreateExamForm,
+ExamSubject,
 } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────
@@ -128,6 +129,31 @@ schoolId: string;
 }
 ) => {
 const { data } = await api.post(`/exams/${examId}/subjects`, payload);
+return data;
+};
+
+/**
+ * Update one exam subject's settings — coefficient included.
+ *
+ * The API stores the coefficient as percentage-style `weight` (100 = ×1,
+ * 200 = ×2). `reprocessRequired` comes back true when marks already exist
+ * and the change makes computed averages stale.
+ */
+export const updateExamSubject = async (
+examId: string,
+examSubjectId: string,
+payload: {
+weight?: number;
+maxScore?: number;
+passMark?: number;
+teacherId?: string | null;
+schoolId: string;
+}
+): Promise<{ success: boolean; subject: ExamSubject; reprocessRequired: boolean }> => {
+const { data } = await api.put(
+`/exams/${examId}/subjects/${examSubjectId}`,
+payload
+);
 return data;
 };
 

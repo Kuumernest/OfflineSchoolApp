@@ -17,7 +17,8 @@ const { buildTranscriptHtml } = require("../print/transcript");
 const { buildIdCardsHtml }    = require("../print/idCard");
 const QRCode                  = require("qrcode");
 const gate                    = require("../services/gate.service");
-const { expiryFor } = require("../utils/idCardExpiry");
+const { academicYearLabel } = require("../utils/idCardExpiry");
+const docVerify = require("../services/documentVerify.service");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const portal = require("../services/portal.service");
 const GuardianAccess = require("../db/models/GuardianAccess");
@@ -257,21 +258,20 @@ router.get("/id-cards/:classId", asyncHandler(async (req, res) => {
   const skipped = rows.length - students.length;
 
   /**
-   * When the card expires.
+   * The year the card is valid for.
    *
-   * A school sets this in Settings; left unset it is the end of the academic
-   * year the school is currently in. The arithmetic lives in one place so the
-   * date the settings screen shows as "the default" is the date that actually
-   * gets printed.
+   * Printed as the academic year — "2025/2026" — rather than an expiry date,
+   * so the English and French cards carry the identical string. The school's
+   * expiry setting still decides WHICH year is printed when the school has not
+   * stated its academic year; the arithmetic lives in one place so the settings
+   * screen and the printed card can never disagree.
    */
-  const expiresOn = expiryFor(school);
-
   const lang = req.query.lang;
   const data = {
     school,
     class: { _id: String(klass._id), name: klass.name },
     students,
-    validUntil: formatPrintDate(expiresOn, lang),
+    academicYear: academicYearLabel(school),
   };
 
   return respond(req, res, {
@@ -400,6 +400,47 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
       },
   };
 
+  /**
+   * The verification strip, minted only when the document is actually
+   * rendered — the JSON view feeds screens, not paper, and counting those as
+   * prints would make printCount meaningless. The snapshot holds one line per
+   * year plus the header facts: exactly what a registrar compares against the
+   * paper, nothing the paper does not already say.
+   */
+  const isHtml = String(req.query.format || "").toLowerCase() === "html";
+  let verify = null;
+  if (isHtml) {
+    const round1 = (v) => (typeof v === "number" ? Math.round(v * 10) / 10 : null);
+    verify = await docVerify.printableBlock({
+      schoolId,
+      kind: "transcript",
+      studentId: String(student._id),
+      examId: null,
+      origin: originOf(req),
+      snapshot: {
+        facts: [
+          { label: { en: "Student", fr: "Élève" },          value: data.student.name },
+          { label: { en: "Admission no.", fr: "Matricule" }, value: data.student.enrollmentNo },
+          { label: { en: "Years on record", fr: "Années enregistrées" },
+            value: String(data.overall.yearsOnRecord) },
+          { label: { en: "Overall average", fr: "Moyenne générale" },
+            value: data.overall.average != null ? String(data.overall.average) : "—" },
+          ...record.map((y) => {
+            const last = y.terms[y.terms.length - 1];
+            return {
+              label: { en: String(y.academicYear), fr: String(y.academicYear) },
+              value: [
+                y.className,
+                last?.average != null ? `${round1(last.average)}` : null,
+                y.outcome,
+              ].filter(Boolean).join(" · ") || "—",
+            };
+          }),
+        ],
+      },
+    });
+  }
+
   const lang = req.query.lang;
   return respond(req, res, {
     data,
@@ -408,6 +449,7 @@ router.get("/transcript/:studentId", asyncHandler(async (req, res) => {
       labels:    labelsFor(lang),
       printedOn: formatPrintDate(new Date(), lang),
       origin:    originOf(req),
+      verify,
     }),
   });
 }));
@@ -471,6 +513,92 @@ router.delete("/student-photo/:studentId", officeOnly, asyncHandler(async (req, 
   await Student.updateOne({ _id: req.params.studentId }, { photoUrl: null });
 
   return res.json({ success: true, photoUrl: null });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// DOCUMENT VERIFICATION (office side)
+// ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Every verification code issued for one student.
+ *
+ * The office view behind the public /verify page: which documents carry a
+ * code, when each was last reprinted, and whether the school still stands
+ * behind it. Exam names are joined in because "report_card, exam 3f9c…"
+ * identifies nothing to the person deciding what to revoke.
+ */
+router.get("/verifications", officeOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+  if (!req.query.studentId) return bad(res, "studentId is required");
+
+  const rows = await docVerify.listForStudent({
+    schoolId, studentId: String(req.query.studentId),
+  });
+
+  const Exam = require("../db/models/Exam");
+  const examIds = [...new Set(rows.map((r) => r.examId).filter((v) => v && v !== "-"))];
+  const exams = examIds.length
+    ? await Exam.find({ _id: { $in: examIds } }).select("name term academicYear").lean()
+    : [];
+  const examById = new Map(exams.map((e) => [String(e._id), e]));
+
+  return res.json({
+    success: true,
+    data: rows.map((r) => {
+      const exam = r.examId !== "-" ? examById.get(String(r.examId)) : null;
+      return {
+        _id:          String(r._id),
+        kind:         r.kind,
+        code:         docVerify.formatCode(r.code),
+        examId:       r.examId === "-" ? null : r.examId,
+        examName:     exam?.name ?? null,
+        term:         exam?.term ?? null,
+        academicYear: exam?.academicYear ?? null,
+        issuedAt:     r.issuedAt,
+        refreshedAt:  r.refreshedAt,
+        printCount:   r.printCount ?? 1,
+        revokedAt:    r.revokedAt ?? null,
+        revokeReason: r.revokeReason ?? null,
+      };
+    }),
+  });
+}));
+
+/**
+ * Withdraw a code — the public page then answers "withdrawn by the school".
+ * Office-only for the same reason reissuing a gate token is: it cancels a
+ * paper someone may be carrying, which is not a decision to make in passing.
+ */
+router.post("/verifications/:id/revoke", officeOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  try {
+    const row = await docVerify.setRevoked({
+      schoolId, id: req.params.id, revoked: true,
+      reason: req.body.reason,
+      by: req.user?._id ? String(req.user._id) : null,
+    });
+    return res.json({ success: true, data: { _id: String(row._id), revokedAt: row.revokedAt } });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({ success: false, message: err.message });
+  }
+}));
+
+/** Reinstate a code revoked by mistake — the page goes back to "genuine". */
+router.post("/verifications/:id/restore", officeOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  try {
+    const row = await docVerify.setRevoked({
+      schoolId, id: req.params.id, revoked: false,
+    });
+    return res.json({ success: true, data: { _id: String(row._id), revokedAt: null } });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({ success: false, message: err.message });
+  }
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════

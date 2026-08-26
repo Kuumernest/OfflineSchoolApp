@@ -9,7 +9,7 @@ import {
 }                                     from "@/hooks/useExamResults";
 import {
   EXAM_STATUS_META,
-  EXAM_TYPE_LABELS,
+  examTypeLabel,
 }                                     from "@/constants/exam.constants";
 import type {
   Exam,
@@ -127,7 +127,7 @@ const ExamPicker = ({
                   {exam.name}
                 </p>
                 <p className="text-xs text-gray-400 mt-0.5 truncate">
-                  {EXAM_TYPE_LABELS[exam.type] ?? exam.type}
+                  {examTypeLabel(t, exam.type)}
                   {exam.term         ? ` · ${exam.term}`         : ""}
                   {exam.academicYear ? ` · ${exam.academicYear}` : ""}
                 </p>
@@ -139,7 +139,7 @@ const ExamPicker = ({
               </div>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full
                 shrink-0 mt-0.5 ${meta.color} ${meta.bg}`}>
-                {meta.label}
+                {t(meta.labelKey)}
               </span>
             </button>
           );
@@ -735,7 +735,7 @@ export default function ExamResultsPage() {
           </p>
         </div>
         <Link
-          to="/exams/reports"
+          to="/reports/cards"
           className="px-4 py-2 bg-green-600 text-white rounded-xl
                      text-sm font-semibold hover:bg-green-700
                      transition-colors"
@@ -804,7 +804,7 @@ export default function ExamResultsPage() {
                       {selectedExam.name}
                     </h2>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {EXAM_TYPE_LABELS[selectedExam.type] ?? selectedExam.type}
+                      {examTypeLabel(t, selectedExam.type)}
                       {selectedExam.term         ? ` · ${selectedExam.term}`         : ""}
                       {selectedExam.academicYear ? ` · ${selectedExam.academicYear}` : ""}
                       {selectedExam.classNames   ? ` · ${selectedExam.classNames}`   : ""}

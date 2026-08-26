@@ -395,17 +395,17 @@ const getSubmissions = async ({
  */
 const assignExamSubject = async ({
   examId, subjectId, classId, teacherId = null,
-  subjectName = null, maxScore = 100, passMark = 50, schoolId,
+  subjectName = null, maxScore = 100, passMark = 50, weight = 100, schoolId,
 }) => {
   if (!examId)    throw new Error("examId is required");
   if (!subjectId) throw new Error("subjectId is required");
 
   const id = generateUUID();
-  const body = { id, subjectId, classId, teacherId, maxScore, passMark, schoolId };
+  const body = { id, subjectId, classId, teacherId, maxScore, passMark, weight, schoolId };
 
   await ExamCache.cacheExamSubjects([{
     _id: id, examId, subjectId, classId, schoolId, teacherId,
-    subjectName, maxScore, passMark, submissionStatus: "pending",
+    subjectName, maxScore, passMark, weight, submissionStatus: "pending",
   }], examId).catch(() => {});
 
   try {
@@ -423,6 +423,51 @@ const assignExamSubject = async ({
       payload: body,
     });
     return { success: true, queued: true, id };
+  }
+};
+
+/**
+ * Update one exam subject's settings — the coefficient lives here, stored
+ * server-side as percentage-style `weight` (100 = ×1, 200 = ×2).
+ *
+ * Offline the change is written to the local cache and queued, keyed by the
+ * exam subject so repeated edits replace each other rather than stacking.
+ * `reprocessRequired` is true when marks already exist and averages are now
+ * stale; offline it is assumed true, because the device cannot know.
+ *
+ * @returns {Promise<{ success: boolean, queued: boolean, reprocessRequired: boolean }>}
+ */
+const updateExamSubject = async ({
+  examId, examSubjectId, updates, schoolId, cachedRow = null,
+}) => {
+  if (!examId)        throw new Error("examId is required");
+  if (!examSubjectId) throw new Error("examSubjectId is required");
+
+  const body = { ...updates, schoolId };
+
+  try {
+    const res = await api.put(`/exams/${examId}/subjects/${examSubjectId}`, body);
+    const updated = res.data?.subject;
+    if (updated) await ExamCache.cacheExamSubjects([updated], examId).catch(() => {});
+    return {
+      success: true, queued: false,
+      reprocessRequired: Boolean(res.data?.reprocessRequired),
+    };
+  } catch (err) {
+    if (!isOfflineError(err)) throw err;
+
+    if (cachedRow) {
+      await ExamCache.cacheExamSubjects(
+        [{ ...cachedRow, ...updates, _id: examSubjectId, examId }], examId
+      ).catch(() => {});
+    }
+    await MutationQueue.enqueue({
+      entityKey: `exam-subject-update:${examSubjectId}`,
+      method:    "PUT",
+      endpoint:  `/exams/${examId}/subjects/${examSubjectId}`,
+      payload:   body,
+    });
+    return { success: true, queued: true, reprocessRequired: true };
   }
 };
 
@@ -844,6 +889,7 @@ export const ExamService = {
   // Submissions (ExamSubject records)
   getSubmissions,
   assignExamSubject,
+  updateExamSubject,
 
   // Scores
   getScores,

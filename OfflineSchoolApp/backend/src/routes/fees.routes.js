@@ -18,6 +18,7 @@ const {
   balancesFor,
   applyStructure,
 } = require("../services/fees.service");
+const { displayName } = require("../utils/studentName");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -354,7 +355,7 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
   if (classId) filter.classId = classId;
 
   const students = await Student.find(filter)
-    .select("_id name enrollmentNo classId")
+    .select("_id studentName name firstName lastName enrollmentNo classId")
     .lean();
 
   const balances = await balancesFor({
@@ -366,7 +367,7 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
   const rows = students
     .map((s) => ({
       studentId:    String(s._id),
-      name:         s.name,
+      name:         displayName(s) || null,
       enrollmentNo: s.enrollmentNo ?? null,
       classId:      s.classId ?? null,
       ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),

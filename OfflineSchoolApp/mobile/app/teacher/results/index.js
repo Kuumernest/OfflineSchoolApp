@@ -50,7 +50,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
-
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
 
 // #R1 — correct wrapper: _tableExists(db, tableName)
@@ -465,6 +465,7 @@ const loadQuizResults = async (teacherId, classIds) => {
 // ── API loader ─────────────────────────────────────────────────────────────
 
 const loadResultsFromAPI = async (schoolId) => {
+  const { t } = useTranslation();
   try {
     const res  = await api.get("/teacher/results", {
       params:  { schoolId },
@@ -496,7 +497,7 @@ const loadResultsFromAPI = async (schoolId) => {
       return {
         id:             r._id || r.id || String(Math.random()),
         source:         r.type === "quiz" ? "quiz" : "exam",
-        examTitle:      r.examTitle    || r.title       || r.exam_title || r.quizTitle || "Assessment",
+        examTitle:      r.examTitle    || r.title       || r.exam_title || r.quizTitle || t("teacherResults.assessmentFallback"),
         examDate:       r.examDate     || r.date        || r.submitted_at || r.createdAt || null,
         subjectName:    r.subjectName  || r.subject     || r.subject_name || null,
         subjectId:      r.subjectId    || r.subject_id  || null,
@@ -528,14 +529,17 @@ const loadResultsFromAPI = async (schoolId) => {
 // GROUPING
 // ═════════════════════════════════════════════════════════════════════════════
 
-const groupResults = (results) => {
+/** Bucket key for rows with no subject — never shown, so never translated. */
+const GENERAL_SUBJECT_KEY = "General";
+
+const groupResults = (results, t) => {
   const classMap = new Map();
 
   for (const r of results) {
     const classId   = r.classId   || "unknown";
-    const className = r.className || "Unknown Class";
+    const className = r.className || t("teacherResults.unknownClass");
     // #R5 — use subjectId as tie-breaker before falling back to "General"
-    const subjectKey = r.subjectName || r.subjectId || "General";
+    const subjectKey = r.subjectName || r.subjectId || GENERAL_SUBJECT_KEY;
 
     if (!classMap.has(classId)) {
       classMap.set(classId, { classId, className, subjects: new Map() });
@@ -543,7 +547,15 @@ const groupResults = (results) => {
     const cls = classMap.get(classId);
 
     if (!cls.subjects.has(subjectKey)) {
-      cls.subjects.set(subjectKey, { subjectName: r.subjectName || subjectKey, results: [] });
+      cls.subjects.set(subjectKey, {
+        subjectKey,
+        subjectName:
+          r.subjectName ||
+          (subjectKey === GENERAL_SUBJECT_KEY
+            ? t("teacherResults.generalSubject")
+            : String(subjectKey)),
+        results: [],
+      });
     }
     cls.subjects.get(subjectKey).results.push(r);
   }
@@ -556,6 +568,7 @@ const groupResults = (results) => {
       subjects: [...cls.subjects.values()]
         .sort((a, b) => a.subjectName.localeCompare(b.subjectName))
         .map((sub) => ({
+          subjectKey:  sub.subjectKey,
           subjectName: sub.subjectName,
           results:     sub.results,
           analytics:   calculateAnalytics(sub.results),
@@ -645,20 +658,20 @@ function TabBar({ tabs, active, onSelect }) {
       style={tb.wrap}
       contentContainerStyle={tb.content}
     >
-      {tabs.map((t) => (
+      {tabs.map((tab) => (
         <TouchableOpacity
-          key={t.key}
-          style={[tb.tab, active === t.key && tb.tabActive]}
-          onPress={() => onSelect(t.key)}
+          key={tab.key}
+          style={[tb.tab, active === tab.key && tb.tabActive]}
+          onPress={() => onSelect(tab.key)}
           activeOpacity={0.7}
         >
-          <Text style={[tb.label, active === t.key && tb.labelActive]}>
-            {t.label}
+          <Text style={[tb.label, active === tab.key && tb.labelActive]}>
+            {tab.label}
           </Text>
-          {t.count != null && (
-            <View style={[tb.badge, active === t.key && tb.badgeActive]}>
-              <Text style={[tb.badgeText, active === t.key && tb.badgeTextActive]}>
-                {t.count}
+          {tab.count != null && (
+            <View style={[tb.badge, active === tab.key && tb.badgeActive]}>
+              <Text style={[tb.badgeText, active === tab.key && tb.badgeTextActive]}>
+                {tab.count}
               </Text>
             </View>
           )}
@@ -686,17 +699,18 @@ const tb = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function SubjectAnalyticsStrip({ analytics }) {
+  const { t } = useTranslation();
   if (!analytics) return null;
   return (
     <View style={sas.wrap}>
       {[
-        { label: "Avg",  value: `${analytics.avg}%`,      color: getPerformanceColor(analytics.avg) },
-        { label: "Pass", value: `${analytics.passRate}%`, color: analytics.passRate >= 70 ? C.success : C.warning },
-        { label: "High", value: `${analytics.max}%`,      color: C.success },
-        { label: "Low",  value: `${analytics.min}%`,      color: analytics.min < 50 ? C.error : C.gray700 },
-        { label: "Total",value: analytics.total,           color: C.primary },
-      ].map(({ label, value, color }, i, arr) => (
-        <React.Fragment key={label}>
+        { id: "avg",   label: t("teacherResults.stats.avg"),   value: `${analytics.avg}%`,      color: getPerformanceColor(analytics.avg) },
+        { id: "pass",  label: t("teacherResults.stats.pass"),  value: `${analytics.passRate}%`, color: analytics.passRate >= 70 ? C.success : C.warning },
+        { id: "high",  label: t("teacherResults.stats.high"),  value: `${analytics.max}%`,      color: C.success },
+        { id: "low",   label: t("teacherResults.stats.low"),   value: `${analytics.min}%`,      color: analytics.min < 50 ? C.error : C.gray700 },
+        { id: "total", label: t("teacherResults.stats.total"), value: analytics.total,          color: C.primary },
+      ].map(({ id, label, value, color }, i, arr) => (
+        <React.Fragment key={id}>
           <View style={sas.item}>
             <Text style={[sas.value, { color }]}>{value}</Text>
             <Text style={sas.label}>{label}</Text>
@@ -721,6 +735,7 @@ const sas = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ResultRow({ result, onPress }) {
+  const { t }   = useTranslation();
   const pct     = result.percentage;
   const grade   = getGrade(pct);
   const perfCol = getPerformanceColor(pct);
@@ -734,7 +749,7 @@ function ResultRow({ result, onPress }) {
       <View style={rr.info}>
         <View style={rr.nameRow}>
           <Text style={rr.studentName} numberOfLines={1}>
-            {result.studentName || "Unknown"}
+            {result.studentName || t("teacherResults.unknown")}
           </Text>
           {isQuiz && (
             <View style={rr.quizTag}>
@@ -743,7 +758,7 @@ function ResultRow({ result, onPress }) {
           )}
         </View>
         <Text style={rr.examTitle} numberOfLines={1}>
-          {result.examTitle || "Assessment"}
+          {result.examTitle || t("teacherResults.assessment")}
           {result.examDate
             ? `  ·  ${new Date(result.examDate).toLocaleDateString()}`
             : ""}
@@ -783,6 +798,7 @@ const rr = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ResultCard({ result, onPress }) {
+  const { t }   = useTranslation();
   const pct     = result.percentage;
   const grade   = getGrade(pct);
   const perfCol = getPerformanceColor(pct);
@@ -801,11 +817,13 @@ function ResultCard({ result, onPress }) {
                 color={isQuiz ? C.purple : C.primary}
               />
               <Text style={[rc.sourceText, { color: isQuiz ? C.purple : C.primary }]}>
-                {isQuiz ? "Quiz" : "Exam"}
+                {isQuiz
+                  ? t("teacherResults.sourceQuiz")
+                  : t("teacherResults.sourceExam")}
               </Text>
             </View>
             <Text style={rc.examTitle} numberOfLines={1}>
-              {result.examTitle || "Assessment"}
+              {result.examTitle || t("teacherResults.assessment")}
             </Text>
           </View>
           <View style={[rc.gradeBadge, { backgroundColor: grade.color + "18" }]}>
@@ -813,7 +831,7 @@ function ResultCard({ result, onPress }) {
           </View>
         </View>
         <Text style={rc.studentName} numberOfLines={1}>
-          {result.studentName || "Unknown Student"}
+          {result.studentName || t("teacherResults.unknownStudent")}
         </Text>
         <View style={rc.metaRow}>
           {!!result.subjectName && (
@@ -844,12 +862,22 @@ function ResultCard({ result, onPress }) {
           </Text>
         </View>
         {result.marksObtained != null && (
-          <Text style={rc.marks}>{result.marksObtained} / {result.totalMarks ?? "—"} marks</Text>
+          <Text style={rc.marks}>
+            {t("teacherResults.marks", {
+              obtained: result.marksObtained,
+              total:    result.totalMarks ?? "—",
+            })}
+          </Text>
         )}
         {isQuiz && result.timeTaken != null && (
           <Text style={rc.marks}>
-            ⏱ {Math.round(result.timeTaken / 60)} min
-            {result.isPassed ? "  ✅ Passed" : "  ❌ Failed"}
+            {t("teacherResults.minutes", {
+              minutes: Math.round(result.timeTaken / 60),
+            })}
+            {"  "}
+            {result.isPassed
+              ? t("teacherResults.quizPassed")
+              : t("teacherResults.quizFailed")}
           </Text>
         )}
       </View>
@@ -882,6 +910,7 @@ const rc = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function GroupedResultsView({ grouped, onResultPress, filterSource }) {
+  const { t } = useTranslation();
   const [expandedClasses,  setExpandedClasses]  = useState({});
   const [expandedSubjects, setExpandedSubjects] = useState({});
 
@@ -921,10 +950,18 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
               <View style={gv.classHeaderText}>
                 <Text style={gv.className}>{cls.className}</Text>
                 <Text style={gv.classMeta}>
-                  {cls.subjects.length} subject{cls.subjects.length !== 1 ? "s" : ""}
+                  {t("teacherResults.subjectCount", {
+                    count: cls.subjects.length,
+                  })}
                   {"  ·  "}
-                  {filteredCls.length} result{filteredCls.length !== 1 ? "s" : ""}
-                  {classAnalytics ? `  ·  Avg ${classAnalytics.avg}%` : ""}
+                  {t("teacherResults.resultCount", {
+                    count: filteredCls.length,
+                  })}
+                  {classAnalytics
+                    ? `  ·  ${t("teacherResults.avgInline", {
+                        avg: classAnalytics.avg,
+                      })}`
+                    : ""}
                 </Text>
               </View>
               <Ionicons
@@ -937,7 +974,7 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
             {isClassOpen && (
               <View style={gv.classBody}>
                 {cls.subjects.map((sub) => {
-                  const subKey    = `${cls.classId}::${sub.subjectName}`;
+                  const subKey    = `${cls.classId}::${sub.subjectKey}`;
                   const isSubOpen = expandedSubjects[subKey] !== false;
 
                   const subResults = filterSource === "all"
@@ -952,7 +989,7 @@ function GroupedResultsView({ grouped, onResultPress, filterSource }) {
                   if (!subResults.length) return null;
 
                   return (
-                    <View key={sub.subjectName} style={gv.subjectBlock}>
+                    <View key={sub.subjectKey} style={gv.subjectBlock}>
                       <TouchableOpacity
                         style={gv.subjectHeader}
                         onPress={() => toggleSubject(subKey)}
@@ -1013,11 +1050,13 @@ const gv = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function AnalyticsPanel({ analytics }) {
+  const { t } = useTranslation();
+
   if (!analytics) {
     return (
       <View style={ap.empty}>
         <Ionicons name="bar-chart-outline" size={32} color={C.gray300} />
-        <Text style={ap.emptyText}>No data to analyse</Text>
+        <Text style={ap.emptyText}>{t("teacherResults.panel.noData")}</Text>
       </View>
     );
   }
@@ -1037,24 +1076,26 @@ function AnalyticsPanel({ analytics }) {
   return (
     <View style={ap.wrap}>
       <View style={ap.row}>
-        <StatBox label="Average" value={`${analytics.avg}%`}
+        <StatBox label={t("teacherResults.stats.average")} value={`${analytics.avg}%`}
           color={getPerformanceColor(analytics.avg)}
           bg={getPerformanceColor(analytics.avg) + "15"} />
-        <StatBox label="Highest" value={`${analytics.max}%`} color={C.success} bg={C.successBg} />
-        <StatBox label="Lowest"  value={`${analytics.min}%`}
+        <StatBox label={t("teacherResults.stats.highest")} value={`${analytics.max}%`} color={C.success} bg={C.successBg} />
+        <StatBox label={t("teacherResults.stats.lowest")}  value={`${analytics.min}%`}
           color={analytics.min < 50 ? C.error : C.warning}
           bg={analytics.min < 50 ? C.errorBg : C.warningBg} />
       </View>
       <View style={[ap.row, { marginTop: 8 }]}>
-        <StatBox label="Total"     value={analytics.total}          color={C.primary} bg={C.primaryBg} />
-        <StatBox label="Passed"    value={analytics.passed}         color={C.success} bg={C.successBg} />
-        <StatBox label="Failed"    value={analytics.failed}         color={C.error}   bg={C.errorBg}   />
-        <StatBox label="Pass Rate" value={`${analytics.passRate}%`}
+        <StatBox label={t("teacherResults.stats.total")}    value={analytics.total}  color={C.primary} bg={C.primaryBg} />
+        <StatBox label={t("teacherResults.stats.passed")}   value={analytics.passed} color={C.success} bg={C.successBg} />
+        <StatBox label={t("teacherResults.stats.failed")}   value={analytics.failed} color={C.error}   bg={C.errorBg}   />
+        <StatBox label={t("teacherResults.stats.passRate")} value={`${analytics.passRate}%`}
           color={analytics.passRate >= 70 ? C.success : C.warning}
           bg={analytics.passRate >= 70 ? C.successBg : C.warningBg} />
       </View>
       <View style={ap.section}>
-        <Text style={ap.sectionTitle}>Grade Distribution</Text>
+        <Text style={ap.sectionTitle}>
+          {t("teacherResults.panel.gradeDistribution")}
+        </Text>
         {Object.entries(analytics.gradeDist).map(([grade, count]) => (
           <View key={grade} style={ap.barRow}>
             <Text style={[ap.barLabel, { color: gradeColors[grade] }]}>{grade}</Text>
@@ -1066,7 +1107,9 @@ function AnalyticsPanel({ analytics }) {
         ))}
       </View>
       <View style={ap.section}>
-        <Text style={ap.sectionTitle}>Score Ranges</Text>
+        <Text style={ap.sectionTitle}>
+          {t("teacherResults.panel.scoreRanges")}
+        </Text>
         {Object.entries(analytics.ranges).map(([range, count]) => (
           <View key={range} style={ap.barRow}>
             <Text style={[ap.barLabel, { color: rangeColors[range], fontSize: 10 }]}>
@@ -1101,6 +1144,8 @@ const ap = StyleSheet.create({
 // ═════════════════════════════════════════════════════════════════════════════
 
 function ResultDetailModal({ result, visible, onClose }) {
+  const { t } = useTranslation();
+
   if (!result) return null;
 
   const pct    = result.percentage;
@@ -1108,13 +1153,20 @@ function ResultDetailModal({ result, visible, onClose }) {
   const isQuiz = result.source === "quiz";
 
   const rows = [
-    { label: "Student",   value: result.studentName || "—" },
-    { label: "Admission", value: result.admissionNo  || "—" },
-    { label: "Subject",   value: result.subjectName  || "—" },
-    { label: "Class",     value: result.className    || "—" },
-    { label: "Type",      value: isQuiz ? "Quiz" : "Exam" },
+    { id: "student",   label: t("teacherResults.detail.student"),   value: result.studentName || "—" },
+    { id: "admission", label: t("teacherResults.detail.admission"), value: result.admissionNo  || "—" },
+    { id: "subject",   label: t("teacherResults.detail.subject"),   value: result.subjectName  || "—" },
+    { id: "class",     label: t("teacherResults.detail.class"),     value: result.className    || "—" },
     {
-      label: "Date",
+      id:    "type",
+      label: t("teacherResults.detail.type"),
+      value: isQuiz
+        ? t("teacherResults.sourceQuiz")
+        : t("teacherResults.sourceExam"),
+    },
+    {
+      id:    "date",
+      label: t("teacherResults.detail.date"),
       value: result.examDate
         ? new Date(result.examDate).toLocaleDateString("en-GB", {
             day: "2-digit", month: "short", year: "numeric",
@@ -1123,17 +1175,24 @@ function ResultDetailModal({ result, visible, onClose }) {
     },
     ...(isQuiz ? [
       {
-        label: "Time Taken",
+        id:    "timeTaken",
+        label: t("teacherResults.detail.timeTaken"),
         value: result.timeTaken
           ? `${Math.floor(result.timeTaken / 60)}m ${result.timeTaken % 60}s`
           : "—",
       },
-      { label: "Passed",    value: result.isPassed ? "Yes ✅" : "No ❌" },
-      { label: "Attempt",   value: result.attemptNumber ? `#${result.attemptNumber}` : "—" },
-      { label: "Questions", value: String(result.totalQuestions ?? "—") },
+      {
+        id:    "passed",
+        label: t("teacherResults.detail.passed"),
+        value: result.isPassed
+          ? t("teacherResults.detail.yes")
+          : t("teacherResults.detail.no"),
+      },
+      { id: "attempt",   label: t("teacherResults.detail.attempt"),   value: result.attemptNumber ? `#${result.attemptNumber}` : "—" },
+      { id: "questions", label: t("teacherResults.detail.questions"), value: String(result.totalQuestions ?? "—") },
     ] : [
-      { label: "Remarks", value: result.remarks || "—" },
-      { label: "Status",  value: result.status  || "—" },
+      { id: "remarks", label: t("teacherResults.detail.remarks"), value: result.remarks || "—" },
+      { id: "status",  label: t("teacherResults.detail.status"),  value: result.status  || "—" },
     ]),
   ];
 
@@ -1147,7 +1206,7 @@ function ResultDetailModal({ result, visible, onClose }) {
       <View style={dm.wrap}>
         <View style={dm.header}>
           <Text style={dm.title} numberOfLines={2}>
-            {result.examTitle || "Assessment Detail"}
+            {result.examTitle || t("teacherResults.assessmentDetail")}
           </Text>
           <TouchableOpacity onPress={onClose} style={dm.closeBtn}>
             <Ionicons name="close" size={22} color={C.gray900} />
@@ -1169,13 +1228,16 @@ function ResultDetailModal({ result, visible, onClose }) {
             </Text>
             {result.marksObtained != null && (
               <Text style={dm.marksText}>
-                {result.marksObtained} / {result.totalMarks ?? "—"} marks
+                {t("teacherResults.marks", {
+                  obtained: result.marksObtained,
+                  total:    result.totalMarks ?? "—",
+                })}
               </Text>
             )}
           </View>
           <View style={dm.infoCard}>
-            {rows.map(({ label, value }) => (
-              <View key={label} style={dm.infoRow}>
+            {rows.map(({ id, label, value }) => (
+              <View key={id} style={dm.infoRow}>
                 <Text style={dm.infoLabel}>{label}</Text>
                 <Text style={dm.infoValue}>{String(value)}</Text>
               </View>
@@ -1210,15 +1272,16 @@ const dm = StyleSheet.create({
 
 // #R9 — removed flex:1 so this renders correctly inside FlatList on Android
 function EmptyState({ message }) {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.empty}>
       <View style={styles.emptyIconBg}>
         <Ionicons name="document-outline" size={48} color={C.gray300} />
       </View>
-      <Text style={styles.emptyTitle}>No Results Found</Text>
+      <Text style={styles.emptyTitle}>{t("teacherResults.empty.title")}</Text>
       <Text style={styles.emptyText}>
-        {message ||
-          "No results available yet. They will appear once students complete assessments."}
+        {message || t("teacherResults.empty.default")}
       </Text>
     </View>
   );
@@ -1229,6 +1292,7 @@ function EmptyState({ message }) {
 // ═════════════════════════════════════════════════════════════════════════════
 
 export default function TeacherResultsScreen() {
+  const { t }     = useTranslation();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = String(user?.schoolId || "");
   const teacherId = String(user?._id || user?.id || "");
@@ -1305,11 +1369,15 @@ export default function TeacherResultsScreen() {
       loadedRef.current = true;
     } catch (err) {
       console.error("[results] load error:", err.message);
-      setError("Failed to load results. Pull down to retry.");
+      setError(t("teacherResults.error"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
+    // `t` is intentionally not a dependency: i18n.t() reads the live locale at
+    // call time, and listing it here would reload every result on a language
+    // switch.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teacherId, schoolId]);
 
   useEffect(() => {
@@ -1318,7 +1386,7 @@ export default function TeacherResultsScreen() {
   }, [loadResults]);
 
   // Derived data — memoised to avoid recalculating on every render
-  const grouped       = useMemo(() => groupResults(allResults),                     [allResults]);
+  const grouped       = useMemo(() => groupResults(allResults, t),               [allResults, t]);
   const examResults   = useMemo(() => allResults.filter((r) => r.source === "exam"), [allResults]);
   const quizResults   = useMemo(() => allResults.filter((r) => r.source === "quiz"), [allResults]);
   const analytics     = useMemo(() => calculateAnalytics(allResults),               [allResults]);
@@ -1326,10 +1394,10 @@ export default function TeacherResultsScreen() {
   const quizAnalytics = useMemo(() => calculateAnalytics(quizResults),              [quizResults]);
 
   const tabs = [
-    { key: "grouped",  label: "By Class", count: allResults.length },
-    { key: "exams",    label: "Exams",    count: examResults.length },
-    { key: "quizzes",  label: "Quizzes",  count: quizResults.length },
-    { key: "analysis", label: "Analysis" },
+    { key: "grouped",  label: t("teacherResults.tabs.grouped"),  count: allResults.length },
+    { key: "exams",    label: t("teacherResults.tabs.exams"),    count: examResults.length },
+    { key: "quizzes",  label: t("teacherResults.tabs.quizzes"),  count: quizResults.length },
+    { key: "analysis", label: t("teacherResults.tabs.analysis") },
   ];
 
   const openDetail = useCallback((r) => {
@@ -1353,7 +1421,7 @@ export default function TeacherResultsScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={styles.loadingText}>Loading results…</Text>
+        <Text style={styles.loadingText}>{t("teacherResults.loading")}</Text>
       </View>
     );
   }
@@ -1367,11 +1435,13 @@ export default function TeacherResultsScreen() {
           <Ionicons name="arrow-back" size={24} color={C.gray900} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Results & Analysis</Text>
+          <Text style={styles.headerTitle}>{t("teacherResults.title")}</Text>
           <Text style={styles.headerSub}>
-            {allResults.length} result{allResults.length !== 1 ? "s" : ""}
+            {t("teacherResults.resultCount", { count: allResults.length })}
             {assignments.length > 0
-              ? `  ·  ${assignments.length} subject${assignments.length !== 1 ? "s" : ""}`
+              ? `  ·  ${t("teacherResults.subjectCount", {
+                  count: assignments.length,
+                })}`
               : ""}
           </Text>
         </View>
@@ -1397,7 +1467,7 @@ export default function TeacherResultsScreen() {
           <Ionicons name="alert-circle-outline" size={16} color={C.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadResults(true)}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -1417,7 +1487,11 @@ export default function TeacherResultsScreen() {
       {(activeTab === "exams" || activeTab === "quizzes") && (
         flatListData.length === 0 ? (
           <EmptyState
-            message={`No ${activeTab === "exams" ? "exam" : "quiz"} results yet.`}
+            message={
+              activeTab === "exams"
+                ? t("teacherResults.empty.noExamResults")
+                : t("teacherResults.empty.noQuizResults")
+            }
           />
         ) : (
           <FlatList
@@ -1437,12 +1511,12 @@ export default function TeacherResultsScreen() {
               flatListAnalytics ? (
                 <View style={styles.summaryStrip}>
                   {[
-                    { label: "Average",   value: `${flatListAnalytics.avg}%` },
-                    { label: "Pass Rate", value: `${flatListAnalytics.passRate}%`, color: C.success },
-                    { label: "Results",   value: flatListData.length },
-                    { label: "Top Score", value: `${flatListAnalytics.max}%`,      color: C.primary },
-                  ].map(({ label, value, color }, i, arr) => (
-                    <React.Fragment key={label}>
+                    { id: "average",  label: t("teacherResults.stats.average"),  value: `${flatListAnalytics.avg}%` },
+                    { id: "passRate", label: t("teacherResults.stats.passRate"), value: `${flatListAnalytics.passRate}%`, color: C.success },
+                    { id: "results",  label: t("teacherResults.stats.results"),  value: flatListData.length },
+                    { id: "topScore", label: t("teacherResults.stats.topScore"), value: `${flatListAnalytics.max}%`,      color: C.primary },
+                  ].map(({ id, label, value, color }, i, arr) => (
+                    <React.Fragment key={id}>
                       <View style={styles.summaryItem}>
                         <Text style={[styles.summaryValue, color ? { color } : {}]}>{value}</Text>
                         <Text style={styles.summaryLabel}>{label}</Text>
@@ -1458,7 +1532,9 @@ export default function TeacherResultsScreen() {
             )}
             ListFooterComponent={
               <Text style={styles.footer}>
-                {flatListData.length} result{flatListData.length !== 1 ? "s" : ""}
+                {t("teacherResults.resultCount", {
+                  count: flatListData.length,
+                })}
               </Text>
             }
           />
@@ -1479,28 +1555,36 @@ export default function TeacherResultsScreen() {
           }
         >
           {allResults.length === 0 ? (
-            <EmptyState message="Results will appear here once students complete assessments." />
+            <EmptyState message={t("teacherResults.empty.analysis")} />
           ) : (
             <>
               <View style={styles.analysisSection}>
-                <Text style={styles.analysisSectionTitle}>📊 Overall Performance</Text>
+                <Text style={styles.analysisSectionTitle}>
+                  {t("teacherResults.sections.overall")}
+                </Text>
                 <AnalyticsPanel analytics={analytics} />
               </View>
               {examAnalytics && (
                 <View style={styles.analysisSection}>
-                  <Text style={styles.analysisSectionTitle}>📄 Exam Performance</Text>
+                  <Text style={styles.analysisSectionTitle}>
+                    {t("teacherResults.sections.exam")}
+                  </Text>
                   <AnalyticsPanel analytics={examAnalytics} />
                 </View>
               )}
               {quizAnalytics && (
                 <View style={styles.analysisSection}>
-                  <Text style={styles.analysisSectionTitle}>🧪 Quiz Performance</Text>
+                  <Text style={styles.analysisSectionTitle}>
+                    {t("teacherResults.sections.quiz")}
+                  </Text>
                   <AnalyticsPanel analytics={quizAnalytics} />
                 </View>
               )}
               {grouped.length > 0 && (
                 <View style={styles.analysisSection}>
-                  <Text style={styles.analysisSectionTitle}>🏫 Per Class Breakdown</Text>
+                  <Text style={styles.analysisSectionTitle}>
+                    {t("teacherResults.sections.perClass")}
+                  </Text>
                   {grouped.map((cls, ci) => {
                     const clsResults   = cls.subjects.flatMap((s) => s.results);
                     const clsAnalytics = calculateAnalytics(clsResults);
@@ -1513,31 +1597,34 @@ export default function TeacherResultsScreen() {
                           <Text style={styles.classBreakdownTitle}>{cls.className}</Text>
                           <View style={styles.classBreakdownStats}>
                             <StatBox
-                              label="Avg"
+                              label={t("teacherResults.stats.avg")}
                               value={`${clsAnalytics.avg}%`}
                               color={getPerformanceColor(clsAnalytics.avg)}
                               bg={getPerformanceColor(clsAnalytics.avg) + "15"}
                             />
                             <StatBox
-                              label="Pass Rate"
+                              label={t("teacherResults.stats.passRate")}
                               value={`${clsAnalytics.passRate}%`}
                               color={clsAnalytics.passRate >= 70 ? C.success : C.warning}
                               bg={clsAnalytics.passRate >= 70 ? C.successBg : C.warningBg}
                             />
                             <StatBox
-                              label="Total"
+                              label={t("teacherResults.stats.total")}
                               value={clsAnalytics.total}
                               color={C.primary}
                               bg={C.primaryBg}
                             />
                           </View>
                           {cls.subjects.map((sub) => (
-                            <View key={sub.subjectName} style={styles.subjectBreakdown}>
+                            <View key={sub.subjectKey} style={styles.subjectBreakdown}>
                               <View style={[styles.subjectBreakdownDot, { backgroundColor: accent }]} />
                               <Text style={styles.subjectBreakdownName}>{sub.subjectName}</Text>
                               {sub.analytics ? (
                                 <Text style={styles.subjectBreakdownStats}>
-                                  Avg {sub.analytics.avg}%  ·  {sub.analytics.passRate}% pass
+                                  {t("teacherResults.subjectStats", {
+                                    avg:  sub.analytics.avg,
+                                    pass: sub.analytics.passRate,
+                                  })}
                                 </Text>
                               ) : null}
                             </View>

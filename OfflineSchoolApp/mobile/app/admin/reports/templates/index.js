@@ -10,6 +10,7 @@ import { router, useFocusEffect } from "expo-router";
 import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { TemplateService } from "../../../../src/services/template.service";
+import { useTranslation } from "../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -40,6 +41,7 @@ const C = {
 // ─────────────────────────────────────────────────────────
 
 export default function TemplatesScreen() {
+  const { t } = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
 
@@ -54,7 +56,7 @@ export default function TemplatesScreen() {
       const data = await TemplateService.getAll(schoolId);
       setTemplates(data);
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -66,18 +68,18 @@ export default function TemplatesScreen() {
   // ── Set default ───────────────────────────────────────
   const handleSetDefault = useCallback((id, name) => {
     Alert.alert(
-      "Set as Default",
-      `Use "${name}" as the default template for all reports?`,
+      t("templatesList.setAsDefault"),
+      t("templatesList.setDefaultBody", { name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Set Default",
+          text: t("templatesList.setDefault"),
           onPress: async () => {
             try {
               await TemplateService.setDefault(id);
               load();
             } catch (err) {
-              Alert.alert("Error", err?.response?.data?.error || err.message);
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
             }
           },
         },
@@ -99,13 +101,13 @@ export default function TemplatesScreen() {
       const { created } = await TemplateService.seedDefault(schoolId);
       if (!created) {
         Alert.alert(
-          "Already there",
-          "Your school already has the default template — it is in the list below."
+          t("templatesList.alreadyDefault"),
+          t("templatesList.alreadyDefaultBody")
         );
       }
       load();
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
     } finally {
       setSeeding(false);
     }
@@ -117,7 +119,7 @@ export default function TemplatesScreen() {
       await TemplateService.duplicate(id, schoolId);
       load();
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
     }
   }, [schoolId, load]);
 
@@ -125,25 +127,25 @@ export default function TemplatesScreen() {
   const handleDelete = useCallback((id, name, isDefault) => {
     if (isDefault) {
       Alert.alert(
-        "Cannot Delete",
-        "This is your default template. Set another template as default first."
+        t("templatesList.cannotDelete"),
+        t("templatesList.cannotDeleteBody")
       );
       return;
     }
     Alert.alert(
-      "Delete Template",
+      t("templatesList.deleteTitle"),
       `Delete "${name}"? This cannot be undone.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
               await TemplateService.delete(id);
               load();
             } catch (err) {
-              Alert.alert("Error", err?.response?.data?.error || err.message);
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
             }
           },
         },
@@ -157,7 +159,7 @@ export default function TemplatesScreen() {
         <Header />
         <View style={s.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={s.loadingText}>Loading templates…</Text>
+          <Text style={s.loadingText}>{t("templatesList.loading")}</Text>
         </View>
       </View>
     );
@@ -229,21 +231,22 @@ export default function TemplatesScreen() {
 // ─────────────────────────────────────────────────────────
 
 function Header() {
+  const { t } = useTranslation();
   return (
     <View style={s.header}>
       <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
         <Ionicons name="arrow-back" size={24} color={C.gray900} />
       </TouchableOpacity>
       <View style={s.headerCenter}>
-        <Text style={s.headerTitle}>Report Templates</Text>
-        <Text style={s.headerSub}>Manage your report card designs</Text>
+        <Text style={s.headerTitle}>{t("templates.title")}</Text>
+        <Text style={s.headerSub}>{t("templates.blurb")}</Text>
       </View>
       <TouchableOpacity
         style={s.newBtn}
         onPress={() => router.push("/admin/reports/templates/builder")}
       >
         <Ionicons name="add" size={18} color={C.white} />
-        <Text style={s.newBtnText}>New</Text>
+        <Text style={s.newBtnText}>{t("templates.new")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -252,6 +255,7 @@ function Header() {
 function TemplateCard({
   item, onEdit, onPreview, onSetDefault, onDuplicate, onDelete,
 }) {
+  const { t } = useTranslation();
   return (
     <View style={[s.card, item.isDefault && s.cardDefault]}>
       <View style={s.cardTop}>
@@ -271,7 +275,7 @@ function TemplateCard({
             {item.isDefault && (
               <View style={s.defaultBadge}>
                 <Ionicons name="star" size={10} color={C.primary} />
-                <Text style={s.defaultBadgeText}>Default</Text>
+                <Text style={s.defaultBadgeText}>{t("common.default")}</Text>
               </View>
             )}
           </View>
@@ -302,13 +306,13 @@ function TemplateCard({
       )}
 
       <View style={s.cardActions}>
-        <ActionBtn icon="eye-outline"    label="Preview" color={C.gray700} onPress={onPreview}    />
-        <ActionBtn icon="create-outline" label="Edit"    color={C.primary} onPress={onEdit}       />
+        <ActionBtn icon="eye-outline"    label={t("common.preview")} color={C.gray700} onPress={onPreview}    />
+        <ActionBtn icon="create-outline" label={t("common.edit")}    color={C.primary} onPress={onEdit}       />
         {!item.isDefault && (
-          <ActionBtn icon="star-outline" label="Default" color={C.warning} onPress={onSetDefault} />
+          <ActionBtn icon="star-outline" label={t("common.default")} color={C.warning} onPress={onSetDefault} />
         )}
-        <ActionBtn icon="copy-outline"   label="Copy"   color={C.purple}  onPress={onDuplicate}  />
-        <ActionBtn icon="trash-outline"  label="Delete" color={C.error}   onPress={onDelete}     />
+        <ActionBtn icon="copy-outline"   label={t("common.copy")}   color={C.purple}  onPress={onDuplicate}  />
+        <ActionBtn icon="trash-outline"  label={t("common.delete")} color={C.error}   onPress={onDelete}     />
       </View>
     </View>
   );
@@ -328,12 +332,13 @@ function ActionBtn({ icon, label, color, onPress }) {
 }
 
 function EmptyState({ onSeed, seeding }) {
+  const { t } = useTranslation();
   return (
     <View style={s.empty}>
       <View style={s.emptyIcon}>
         <Ionicons name="document-text-outline" size={48} color={C.gray300} />
       </View>
-      <Text style={s.emptyTitle}>No Templates Yet</Text>
+      <Text style={s.emptyTitle}>{t("templates.none")}</Text>
       <Text style={s.emptyBody}>
         Create your first report card template by pasting your
         school's HTML layout.
@@ -347,7 +352,7 @@ function EmptyState({ onSeed, seeding }) {
         {seeding
           ? <ActivityIndicator size="small" color={C.white} />
           : <Ionicons name="sparkles-outline" size={18} color={C.white} />}
-        <Text style={s.emptyBtnText}>Start from the default</Text>
+        <Text style={s.emptyBtnText}>{t("templatesList.fromDefault")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -356,7 +361,7 @@ function EmptyState({ onSeed, seeding }) {
         activeOpacity={0.8}
       >
         <Ionicons name="add-circle-outline" size={18} color={C.primary} />
-        <Text style={s.emptyBtnGhostText}>Create from scratch</Text>
+        <Text style={s.emptyBtnGhostText}>{t("templatesList.fromScratch")}</Text>
       </TouchableOpacity>
     </View>
   );

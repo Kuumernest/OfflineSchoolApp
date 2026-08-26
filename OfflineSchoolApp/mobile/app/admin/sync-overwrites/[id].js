@@ -31,36 +31,37 @@ const formatDateTime = (value) => {
 
 const getActionConfig = (action) => {
   switch (action) {
-    case "suspend": return { icon: "ban-outline",              color: "#D97706", label: "Suspended" };
-    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", label: "Restored"  };
-    case "delete":  return { icon: "trash-outline",            color: "#DC2626", label: "Deleted"   };
-    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", label: "Moved"     };
-    default:        return { icon: "sync-outline",             color: "#6B7280", label: action || "Updated" };
+    case "suspend": return { icon: "ban-outline",              color: "#D97706", labelKey: "syncScreens.aSuspended" };
+    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", labelKey: "syncScreens.aRestored"  };
+    case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.aDeleted"   };
+    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.aMoved"     };
+    // `raw` keeps an unrecognised action visible instead of mislabelling it.
+    default:        return { icon: "sync-outline",             color: "#6B7280", labelKey: "syncScreens.aUpdated", raw: action };
   }
 };
 
 // Fields we care about comparing (hide internal/noise fields).
 const RELEVANT_FIELDS = [
-  { key: "studentName",    label: "Name" },
-  { key: "name",           label: "Name" },
-  { key: "email",          label: "Email" },
-  { key: "phone",          label: "Phone" },
-  { key: "status",         label: "Status" },
-  { key: "isActive",       label: "Active" },
-  { key: "className",      label: "Class" },
-  { key: "classId",        label: "Class ID" },
-  { key: "guardianName",   label: "Guardian" },
-  { key: "guardianPhone",  label: "Guardian Phone" },
-  { key: "address",        label: "Address" },
-  { key: "gender",         label: "Gender" },
+  { key: "studentName",    labelKey: "common.name" },
+  { key: "name",           labelKey: "common.name" },
+  { key: "email",          labelKey: "common.email" },
+  { key: "phone",          labelKey: "common.phone" },
+  { key: "status",         labelKey: "common.status" },
+  { key: "isActive",       labelKey: "common.active" },
+  { key: "className",      labelKey: "syncScreens.fClass" },
+  { key: "classId",        labelKey: "syncScreens.fClassId" },
+  { key: "guardianName",   labelKey: "syncScreens.fGuardian" },
+  { key: "guardianPhone",  labelKey: "syncScreens.fGuardianPhone" },
+  { key: "address",        labelKey: "common.address" },
+  { key: "gender",         labelKey: "common.gender" },
 ];
 
 const buildDiff = (lostVersion, currentVersion) => {
   const diffs = [];
   const seen  = new Set();
 
-  for (const { key, label } of RELEVANT_FIELDS) {
-    if (seen.has(label)) continue;
+  for (const { key, labelKey } of RELEVANT_FIELDS) {
+    if (seen.has(labelKey)) continue;
 
     const lost    = lostVersion?.[key];
     const current = currentVersion?.[key];
@@ -71,12 +72,12 @@ const buildDiff = (lostVersion, currentVersion) => {
     const currentStr = current === null || current === undefined ? "—" : String(current);
 
     if (lostStr !== currentStr) {
-      diffs.push({ label, lost: lostStr, current: currentStr, changed: true });
+      diffs.push({ labelKey, lost: lostStr, current: currentStr, changed: true });
     } else if (lostStr !== "—") {
-      diffs.push({ label, lost: lostStr, current: currentStr, changed: false });
+      diffs.push({ labelKey, lost: lostStr, current: currentStr, changed: false });
     }
 
-    seen.add(label);
+    seen.add(labelKey);
   }
 
   return diffs;
@@ -87,6 +88,7 @@ const buildDiff = (lostVersion, currentVersion) => {
 // ─────────────────────────────────────────────────────────
 
 export default function OverwriteDetailScreen() {
+  const { t } = useTranslation();
   const { id }   = useLocalSearchParams();
   const router   = useRouter();
 
@@ -124,12 +126,12 @@ export default function OverwriteDetailScreen() {
 
   const handleDelete = useCallback(() => {
     Alert.alert(
-      "Delete Overwrite Record",
-      "This will permanently remove this audit record. You can't undo this.",
+      t("syncScreens.delCta"),
+      t("syncScreens.delBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:    "Delete",
+          text:    t("common.delete"),
           style:   "destructive",
           onPress: async () => {
             await SyncOverwriteService.deleteOverwrite(id);
@@ -146,7 +148,7 @@ export default function OverwriteDetailScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading…</Text>
+        <Text style={styles.loadingText}>{t("common.loading")}</Text>
       </View>
     );
   }
@@ -155,9 +157,9 @@ export default function OverwriteDetailScreen() {
     return (
       <View style={styles.centered}>
         <Ionicons name="alert-circle-outline" size={48} color="#EF4444" />
-        <Text style={styles.errorTitle}>Overwrite record not found</Text>
+        <Text style={styles.errorTitle}>{t("syncScreens.notFound")}</Text>
         <TouchableOpacity onPress={() => router.back()} style={styles.errorBtn}>
-          <Text style={styles.errorBtnText}>Go Back</Text>
+          <Text style={styles.errorBtnText}>{t("common.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -178,7 +180,7 @@ export default function OverwriteDetailScreen() {
           <Ionicons name="chevron-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Overwrite Details</Text>
+          <Text style={styles.headerTitle}>{t("syncScreens.detailTitle")}</Text>
           <Text style={styles.headerSub}>
             {overwrite.entity_name || overwrite.entity_type}
           </Text>
@@ -198,10 +200,10 @@ export default function OverwriteDetailScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.summaryAction}>
               <Text style={{ color: action.color, fontWeight: "700" }}>
-                {overwrite.overwritten_by_name || "Someone"}
+                {overwrite.overwritten_by_name || t("syncScreens.someone")}
               </Text>
               {" "}
-              <Text style={{ color: "#6B7280" }}>{action.label.toLowerCase()}</Text>
+              <Text style={{ color: "#6B7280" }}>{(action.raw || t(action.labelKey)).toLowerCase()}</Text>
               {" this record"}
             </Text>
             <Text style={styles.summaryTime}>
@@ -212,12 +214,12 @@ export default function OverwriteDetailScreen() {
 
         {/* Timeline */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Timeline</Text>
+          <Text style={styles.sectionTitle}>{t("syncScreens.timeline")}</Text>
 
           <View style={styles.timelineRow}>
             <View style={styles.timelineDotMine} />
             <View style={styles.timelineContent}>
-              <Text style={styles.timelineLabel}>Your edit</Text>
+              <Text style={styles.timelineLabel}>{t("syncScreens.yourEdit")}</Text>
               <Text style={styles.timelineTime}>
                 {formatDateTime(overwrite.lost_edit_at)}
               </Text>
@@ -230,7 +232,7 @@ export default function OverwriteDetailScreen() {
             <View style={styles.timelineDotTheirs} />
             <View style={styles.timelineContent}>
               <Text style={styles.timelineLabel}>
-                {overwrite.overwritten_by_name || "Another admin"}'s edit
+                {overwrite.overwritten_by_name || t("syncScreens.anotherAdmin")}'s edit
               </Text>
               <Text style={styles.timelineTime}>
                 {formatDateTime(overwrite.overwritten_at)}
@@ -245,19 +247,20 @@ export default function OverwriteDetailScreen() {
             <Text style={styles.sectionTitle}>
               Changes ({diffs.filter((d) => d.changed).length})
             </Text>
-            {diffs.map((d, i) => (
+            {diffs.map((d, i) => {
+                         return (
               <View
-                key={`${d.label}-${i}`}
+                key={`${d.labelKey}-${i}`}
                 style={[
                   styles.diffRow,
                   i < diffs.length - 1 && styles.diffRowBorder,
                 ]}
               >
-                <Text style={styles.diffField}>{d.label}</Text>
+                <Text style={styles.diffField}>{t(d.labelKey)}</Text>
 
                 <View style={styles.diffValues}>
                   <View style={styles.diffCol}>
-                    <Text style={styles.diffColLabel}>Your version</Text>
+                    <Text style={styles.diffColLabel}>{t("syncScreens.yourVersion")}</Text>
                     <Text style={[
                       styles.diffValue,
                       d.changed && styles.diffValueOld,
@@ -269,7 +272,7 @@ export default function OverwriteDetailScreen() {
                   <Ionicons name="arrow-forward" size={14} color="#9CA3AF" />
 
                   <View style={styles.diffCol}>
-                    <Text style={styles.diffColLabel}>Current</Text>
+                    <Text style={styles.diffColLabel}>{t("syncScreens.current")}</Text>
                     <Text style={[
                       styles.diffValue,
                       d.changed && styles.diffValueNew,
@@ -279,36 +282,37 @@ export default function OverwriteDetailScreen() {
                   </View>
                 </View>
               </View>
-            ))}
+            );
+                       })}
           </View>
         ) : (
           <View style={styles.card}>
-            <Text style={styles.sectionTitle}>Changes</Text>
+            <Text style={styles.sectionTitle}>{t("syncScreens.changes")}</Text>
             <Text style={styles.noDiffText}>
               {currentVersion
-                ? "No visible differences in tracked fields."
+                ? t("syncScreens.noDiffs")
                 : overwrite.new_action === "delete"
-                  ? "This record was deleted, so no current version is available."
-                  : "Current version unavailable — record may have been deleted or not yet synced."}
+                  ? t("syncScreens.recordDeleted")
+                  : t("syncScreens.currentUnavailable")}
             </Text>
           </View>
         )}
 
         {/* Raw metadata */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Metadata</Text>
+          <Text style={styles.sectionTitle}>{t("syncScreens.metadata")}</Text>
 
-          <MetaRow label="Entity Type"      value={overwrite.entity_type} />
-          <MetaRow label="Entity ID"        value={overwrite.entity_id} mono />
-          <MetaRow label="Overwrite ID"     value={overwrite.id} mono />
-          <MetaRow label="School ID"        value={overwrite.school_id} mono />
+          <MetaRow label={t("syncScreens.mEntityType")}      value={overwrite.entity_type} />
+          <MetaRow label={t("syncScreens.mEntityId")}        value={overwrite.entity_id} mono />
+          <MetaRow label={t("syncScreens.mOverwriteId")}     value={overwrite.id} mono />
+          <MetaRow label={t("syncScreens.mSchoolId")}        value={overwrite.school_id} mono />
           <MetaRow
-            label="Recorded"
+            label={t("syncScreens.mRecorded")}
             value={formatDateTime(overwrite.created_at)}
           />
           {overwrite.seen_at && (
             <MetaRow
-              label="Seen At"
+              label={t("syncScreens.mSeenAt")}
               value={formatDateTime(overwrite.seen_at)}
             />
           )}
@@ -536,3 +540,4 @@ const styles = StyleSheet.create({
     fontSize:   11,
   },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

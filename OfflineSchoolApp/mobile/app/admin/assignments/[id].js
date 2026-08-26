@@ -18,13 +18,16 @@ import {
   getAssignmentsForTeacher,
   deleteAssignment,
   backfillTeacherNames,
-} from "../../../src/services/assignment.service";
+} from "../../../src/services/assignment.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const TeacherCard = React.memo(({ teacherInfo, assignmentCount, classCount }) => (
+const TeacherCard = React.memo(({ teacherInfo, assignmentCount, classCount }) => {
+                                 const { t } = useTranslation();
+                                 return (
   <View style={styles.teacherCard}>
     <View style={styles.teacherAvatar}>
       <Text style={styles.teacherAvatarText}>
@@ -33,33 +36,36 @@ const TeacherCard = React.memo(({ teacherInfo, assignmentCount, classCount }) =>
     </View>
     <View style={styles.teacherInfoBlock}>
       <Text style={styles.teacherName} numberOfLines={1}>
-        {teacherInfo?.name || "Unknown"}
+        {teacherInfo?.name || t("assignList.unknown")}
       </Text>
       <Text style={styles.teacherEmail} numberOfLines={1}>
-        {teacherInfo?.email || "No email on record"}
+        {teacherInfo?.email || t("assignList.noEmailRecord")}
       </Text>
       <View style={styles.teacherStats}>
         <View style={styles.teacherStatItem}>
           <Text style={styles.teacherStatNumber}>{assignmentCount}</Text>
-          <Text style={styles.teacherStatLabel}>Subjects</Text>
+          <Text style={styles.teacherStatLabel}>{t("assignList.subjects")}</Text>
         </View>
         <View style={styles.teacherStatDivider} />
         <View style={styles.teacherStatItem}>
           <Text style={styles.teacherStatNumber}>{classCount}</Text>
-          <Text style={styles.teacherStatLabel}>Classes</Text>
+          <Text style={styles.teacherStatLabel}>{t("assignList.classes")}</Text>
         </View>
       </View>
     </View>
   </View>
-));
+);
+                               });
 
-const SubjectRow = React.memo(({ assignment, onRemove, isRemoving }) => (
+const SubjectRow = React.memo(({ assignment, onRemove, isRemoving }) => {
+                                const { t } = useTranslation();
+                                return (
   <View style={styles.subjectRow}>
     <View style={styles.subjectRowLeft}>
       <View style={styles.subjectDot} />
       <View style={{ flex: 1 }}>
         <Text style={styles.subjectName} numberOfLines={1}>
-          {assignment.subject?.name || "Unknown Subject"}
+          {assignment.subject?.name || t("assignList.unknownSubject")}
         </Text>
         {!!assignment.subject?.code && (
           <Text style={styles.subjectCode}>{assignment.subject.code}</Text>
@@ -80,7 +86,8 @@ const SubjectRow = React.memo(({ assignment, onRemove, isRemoving }) => (
       )}
     </TouchableOpacity>
   </View>
-));
+);
+                              });
 
 const ClassGroup = React.memo(({ classId, group, onRemove, removingId }) => (
   <View style={styles.classGroup}>
@@ -107,12 +114,14 @@ const ClassGroup = React.memo(({ classId, group, onRemove, removingId }) => (
   </View>
 ));
 
-const EmptyAssignments = React.memo(({ onAssign }) => (
+const EmptyAssignments = React.memo(({ onAssign }) => {
+                                      const { t } = useTranslation();
+                                      return (
   <View style={styles.emptyState}>
     <Ionicons name="git-branch-outline" size={48} color="#D1D5DB" />
-    <Text style={styles.emptyTitle}>No Assignments</Text>
+    <Text style={styles.emptyTitle}>{t("assignList.detailEmpty")}</Text>
     <Text style={styles.emptySubtitle}>
-      This teacher has no subject assignments yet
+      {t("assignList.detailEmptySub")}
     </Text>
     <TouchableOpacity
       style={styles.emptyAction}
@@ -120,16 +129,18 @@ const EmptyAssignments = React.memo(({ onAssign }) => (
       activeOpacity={0.7}
     >
       <Ionicons name="add-circle" size={18} color="#4F46E5" />
-      <Text style={styles.emptyActionText}>Assign Subjects</Text>
+      <Text style={styles.emptyActionText}>{t("assignList.assignSubjects")}</Text>
     </TouchableOpacity>
   </View>
-));
+);
+                                    });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MAIN SCREEN
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function TeacherAssignmentDetail() {
+  const { t } = useTranslation();
   const router = useRouter();
   const params = useLocalSearchParams();
 
@@ -200,7 +211,7 @@ export default function TeacherAssignmentDetail() {
     } catch (err) {
       console.error("[TeacherAssignmentDetail] Failed to load:", err.message);
       if (isMountedRef.current) {
-        setError("Failed to load assignments. Pull down to retry.");
+        setError(t("assignList.detailLoadFailed"));
       }
     } finally {
       isLoadingRef.current = false;
@@ -216,7 +227,7 @@ export default function TeacherAssignmentDetail() {
       if (!teacherId) {
         if (isMountedRef.current) {
           setLoading(false);
-          setError("Invalid teacher ID. Please go back and try again.");
+          setError(t("assignList.invalidTeacherId"));
         }
         return;
       }
@@ -231,12 +242,12 @@ export default function TeacherAssignmentDetail() {
     const className   = assignment.class?.name   || "this class";
 
     Alert.alert(
-      "Remove Assignment",
+      t("assignList.removeTitle"),
       `Remove "${subjectName}" from ${className}?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Remove",
+          text:  t("common.remove"),
           style: "destructive",
           onPress: async () => {
             const id = assignment._id;
@@ -246,11 +257,11 @@ export default function TeacherAssignmentDetail() {
               await deleteAssignment(id);
               if (!isMountedRef.current) return;
               setAssignments((prev) => prev.filter((a) => a._id !== id));
-              Alert.alert("Removed", "Assignment removed successfully.");
+              Alert.alert(t("assignList.removedTitle"), t("assignList.removedBody"));
             } catch (err) {
               console.error("[TeacherAssignmentDetail] Remove failed:", err.message);
               if (isMountedRef.current) {
-                Alert.alert("Error", "Failed to remove assignment. Please try again.");
+                Alert.alert(t("assignList.errTitle"), t("assignList.removeFailed"));
               }
             } finally {
               if (isMountedRef.current) setRemovingId(null);
@@ -272,12 +283,12 @@ export default function TeacherAssignmentDetail() {
   }, [router, teacherId, teacherInfo, fallbackTeacherName]);
 
   // ── Derived data ──────────────────────────────────────────────────────────
-  const groupedByClass = useMemo(() =>
-    assignments.reduce((acc, assignment) => {
+  const groupedByClass = useMemo(() => {
+                                   return assignments.reduce((acc, assignment) => {
       // ✅ FIX: class name/id come from assignment.class which hydrateRow()
       //    populates from class_json blob — { _id, name, level, section }
       const classId   = assignment.class?._id || assignment.class?.id || `no-class-${assignment._id}`;
-      const className = assignment.class?.name || "Unknown Class";
+      const className = assignment.class?.name || t("assignList.unknownClass");
 
       if (!acc[classId]) {
         acc[classId] = {
@@ -288,7 +299,8 @@ export default function TeacherAssignmentDetail() {
       }
       acc[classId].subjects.push(assignment);
       return acc;
-    }, {})
+    }, {});
+                                 }
   , [assignments]);
 
   const classCount = useMemo(
@@ -305,7 +317,7 @@ export default function TeacherAssignmentDetail() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading assignments…</Text>
+        <Text style={styles.loadingText}>{t("assignList.loading")}</Text>
       </View>
     );
   }
@@ -325,7 +337,7 @@ export default function TeacherAssignmentDetail() {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {teacherInfo?.name || fallbackTeacherName || "Teacher"}
+            {teacherInfo?.name || fallbackTeacherName || t("assignList.teacher")}
           </Text>
           <Text style={styles.headerSubtitle}>
             {assignments.length} assignment{assignments.length !== 1 ? "s" : ""}{" "}
@@ -364,7 +376,7 @@ export default function TeacherAssignmentDetail() {
               activeOpacity={0.75}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -379,14 +391,14 @@ export default function TeacherAssignmentDetail() {
         {/* ── Section header ── */}
         {assignments.length > 0 && (
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Assignments by Class</Text>
+            <Text style={styles.sectionTitle}>{t("assignList.byClassTitle")}</Text>
             <TouchableOpacity
               onPress={navigateToAssign}
               activeOpacity={0.7}
               style={styles.sectionAction}
             >
               <Ionicons name="add-circle-outline" size={16} color="#4F46E5" />
-              <Text style={styles.sectionActionText}>Add More</Text>
+              <Text style={styles.sectionActionText}>{t("assignList.addMore")}</Text>
             </TouchableOpacity>
           </View>
         )}

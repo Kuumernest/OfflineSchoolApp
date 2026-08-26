@@ -125,6 +125,24 @@ const PAGE_CSS = `
     color: #55607a; font-size: 8.5px; display: flex; justify-content: space-between;
   }
 
+  .verify {
+    display: flex; align-items: center; gap: 10px;
+    margin-top: 16px; padding: 8px 10px;
+    border: 1px solid #d7dbe3; border-radius: 3px; background: #f7f8fa;
+    page-break-inside: avoid;
+  }
+  .verify__qr { width: 20mm; height: 20mm; flex: none; }
+  .verify__qr svg { width: 100%; height: 100%; display: block; }
+  .verify__title {
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: #2b3242;
+  }
+  .verify__text { font-size: 9px; color: #55607a; margin-top: 2px; }
+  .verify__code {
+    font-family: Consolas, Menlo, monospace; font-weight: 700;
+    color: #14181f; letter-spacing: 0.05em;
+  }
+
   @media screen {
     body { padding: 18px; background: #eceef3; }
     .sheet {
@@ -173,6 +191,30 @@ const renderSignatures = (labels) => `
   </div>
 `;
 
+/**
+ * The verification strip an outward-facing document carries.
+ *
+ * `verify` is documentVerify.service.printableBlock()'s answer, and may be
+ * null — a document that could not get its code still prints, exactly like an
+ * ID card whose QR failed to render.
+ */
+const renderVerify = (verify, labels) => {
+  if (!verify) return "";
+  return `
+    <div class="verify">
+      <div class="verify__qr">${verify.qrSvg ?? ""}</div>
+      <div>
+        <div class="verify__title">${esc(labels.verifyTitle)}</div>
+        <div class="verify__text">
+          ${esc(labels.verifyHint)}
+          <span class="verify__code">${esc(verify.code)}</span>
+          — ${esc(verify.url)}
+        </div>
+      </div>
+    </div>
+  `;
+};
+
 const buildDocument = ({ title, body, footerLeft, footerRight }) => `<!doctype html>
 <html>
   <head>
@@ -193,5 +235,5 @@ const buildDocument = ({ title, body, footerLeft, footerRight }) => `<!doctype h
 
 module.exports = {
   esc, orDash, absoluteLogo,
-  renderHeading, renderFacts, renderSignatures, buildDocument,
+  renderHeading, renderFacts, renderSignatures, renderVerify, buildDocument,
 };

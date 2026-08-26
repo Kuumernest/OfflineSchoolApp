@@ -10,7 +10,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import api              from "../../../src/services/api";
-import { getDatabase }  from "../../../src/db/database";
+import { getDatabase }  from "../../../src/db/database";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -36,18 +37,18 @@ const COLORS = {
 };
 
 const STATUS_META = {
-  pending:   { color: COLORS.warning, bg: COLORS.warningBg, label: "Pending",   icon: "time-outline"             },
-  submitted: { color: COLORS.primary, bg: COLORS.primaryBg, label: "Submitted", icon: "cloud-upload-outline"     },
-  approved:  { color: COLORS.success, bg: COLORS.successBg, label: "Approved",  icon: "checkmark-circle-outline" },
-  rejected:  { color: COLORS.error,   bg: COLORS.errorBg,   label: "Rejected",  icon: "close-circle-outline"     },
+  pending:   { color: COLORS.warning, bg: COLORS.warningBg, labelKey: "results.pending",   icon: "time-outline"             },
+  submitted: { color: COLORS.primary, bg: COLORS.primaryBg, labelKey: "results.submitted", icon: "cloud-upload-outline"     },
+  approved:  { color: COLORS.success, bg: COLORS.successBg, labelKey: "results.approved",  icon: "checkmark-circle-outline" },
+  rejected:  { color: COLORS.error,   bg: COLORS.errorBg,   labelKey: "results.rejected",  icon: "close-circle-outline"     },
 };
 
 const FILTERS = [
-  { id: "all",           label: "All Exams",   icon: "apps-outline"             },
-  { id: "pending-marks", label: "Needs Marks", icon: "create-outline"           },
-  { id: "rejected",      label: "Rejected",    icon: "close-circle-outline"     },
-  { id: "submitted",     label: "Submitted",   icon: "cloud-upload-outline"     },
-  { id: "approved",      label: "Approved",    icon: "checkmark-circle-outline" },
+  { id: "all",           labelKey: "teacherExams.tabAll",   icon: "apps-outline"             },
+  { id: "pending-marks", labelKey: "teacherExams.needsMarks", icon: "create-outline"           },
+  { id: "rejected",      labelKey: "results.rejected",    icon: "close-circle-outline"     },
+  { id: "submitted",     labelKey: "results.submitted",   icon: "cloud-upload-outline"     },
+  { id: "approved",      labelKey: "results.approved",    icon: "checkmark-circle-outline" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -117,6 +118,7 @@ const fetchExamSubmissions = async (examId, schoolId) => {
 // ─────────────────────────────────────────────────────────
 
 export default function TeacherExamsScreen() {
+  const { t } = useTranslation();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId;
   const teacherId = toStr(user?._id || user?.id);
@@ -322,7 +324,7 @@ export default function TeacherExamsScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading your exams…</Text>
+        <Text style={styles.loadingText}>{t("teacherExams.loading")}</Text>
       </View>
     );
   }
@@ -336,7 +338,7 @@ export default function TeacherExamsScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>My Exams</Text>
+          <Text style={styles.headerTitle}>{t("teacherExams.title")}</Text>
           <Text style={styles.headerSub}>
             {activeFilter === "all"
               ? `${displayList.length} exam${displayList.length !== 1 ? "s" : ""} with your subjects`
@@ -380,7 +382,7 @@ export default function TeacherExamsScreen() {
                   color={isActive ? COLORS.white : COLORS.gray500}
                 />
                 <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                  {f.label}
+                  {t(f.labelKey)}
                 </Text>
                 {count > 0 && (
                   <View style={[styles.filterChipBadge, isActive && styles.filterChipBadgeActive]}>
@@ -417,7 +419,7 @@ export default function TeacherExamsScreen() {
           <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadData()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -443,11 +445,11 @@ export default function TeacherExamsScreen() {
               color={COLORS.gray200}
             />
             <Text style={styles.emptyTitle}>
-              {activeFilter === "all" ? "No Active Exams" : "No Matching Exams"}
+              {activeFilter === "all" ? t("teacherExams.emptyTitle") : t("teacherExams.noMatch")}
             </Text>
             <Text style={styles.emptyText}>
               {activeFilter === "all"
-                ? "You have no subjects assigned in any active exam"
+                ? t("teacherExams.emptySub")
                 : `No exams match the "${activeFilterMeta?.label}" filter`}
             </Text>
             {activeFilter !== "all" && (
@@ -455,7 +457,7 @@ export default function TeacherExamsScreen() {
                 style={styles.emptyBtn}
                 onPress={() => setActiveFilter("all")}
               >
-                <Text style={styles.emptyBtnText}>Show All Exams</Text>
+                <Text style={styles.emptyBtnText}>{t("teacherExams.showAll")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -484,6 +486,7 @@ export default function TeacherExamsScreen() {
 // ─────────────────────────────────────────────────────────
 
 function ExamCard({ item, onPress }) {
+  const { t } = useTranslation();
   const { exam, total, pending, submitted, approved, rejected } = item;
   const allApproved = approved === total && total > 0;
   const hasRejected = rejected > 0;
@@ -513,10 +516,10 @@ function ExamCard({ item, onPress }) {
       </View>
 
       <View style={styles.statusRow}>
-        {pending   > 0 && <StatusPill count={pending}   label="Pending"   status="pending"   />}
-        {submitted > 0 && <StatusPill count={submitted} label="Submitted" status="submitted" />}
-        {approved  > 0 && <StatusPill count={approved}  label="Approved"  status="approved"  />}
-        {rejected  > 0 && <StatusPill count={rejected}  label="Rejected"  status="rejected"  />}
+        {pending   > 0 && <StatusPill count={pending}   label={t("results.pending")}   status="pending"   />}
+        {submitted > 0 && <StatusPill count={submitted} label={t("results.submitted")} status="submitted" />}
+        {approved  > 0 && <StatusPill count={approved}  label={t("results.approved")}  status="approved"  />}
+        {rejected  > 0 && <StatusPill count={rejected}  label={t("results.rejected")}  status="rejected"  />}
       </View>
 
       {hasRejected && (
@@ -539,7 +542,7 @@ function ExamCard({ item, onPress }) {
         <View style={styles.actionHint}>
           <Ionicons name="checkmark-circle" size={13} color={COLORS.success} />
           <Text style={[styles.actionHintText, { color: COLORS.success }]}>
-            All subjects approved ✓
+            {t("teacherExams.allApproved")}
           </Text>
         </View>
       )}

@@ -468,11 +468,11 @@ export default function ParentPortalScreen() {
                   activeOpacity={0.85}
                 >
                   <Ionicons name="create-outline" size={17} color="#FFFFFF" />
-                  <Text style={styles.newMsgText}>New message</Text>
+                  <Text style={styles.newMsgText}>{t("msgMobile.newMessage")}</Text>
                 </TouchableOpacity>
 
                 {(data ?? []).length === 0 ? (
-                  <Text style={styles.emptyMsg}>No conversations yet.</Text>
+                  <Text style={styles.emptyMsg}>{t("msgMobile.emptyTitle")}</Text>
                 ) : (
                   (data ?? []).map((c) => (
                     <TouchableOpacity

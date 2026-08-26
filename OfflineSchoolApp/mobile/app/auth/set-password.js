@@ -93,6 +93,15 @@ export default function SetPasswordScreen() {
   const updateUser = useAuthStore((s) => s.updateUser);
   const logout = useAuthStore((s) => s.logout);
 
+  // Two flows share this screen:
+  //   - forced reset: the admin created the account, so there is no current
+  //     password to prove and the API waives it;
+  //   - settings: the user is changing a password they already know, and the
+  //     API requires currentPassword. Sending none 400s.
+  const isForcedReset = !!user?.mustResetPassword;
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [showNew, setShowNew] = useState(false);
@@ -110,9 +119,18 @@ export default function SetPasswordScreen() {
   const passwordsMatch =
     newPassword === confirmPassword && confirmPassword.length > 0;
 
+  const canSubmit =
+    allMet && passwordsMatch && (isForcedReset || currentPassword.length > 0);
+
   // ── Handle Navigation ──────────────────────────────────────────────────────
   const navigateByRole = useCallback(
     (targetUser) => {
+      // A voluntary change should return where it started, not bounce the user
+      // to a dashboard they never asked for.
+      if (!isForcedReset) {
+        router.back();
+        return;
+      }
       const role = targetUser?.role || user?.role;
       if (role === "teacher") {
         router.replace("/teacher/dashboard");
@@ -122,7 +140,7 @@ export default function SetPasswordScreen() {
         router.replace("/");
       }
     },
-    [router, user?.role]
+    [router, user?.role, isForcedReset]
   );
 
   // ── Submit ─────────────────────────────────────────────────────────────────
@@ -139,13 +157,19 @@ export default function SetPasswordScreen() {
       return;
     }
 
+    if (!isForcedReset && !currentPassword) {
+      setError(t("setPassword.currentRequired"));
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await api.post("/auth/change-password", {
         newPassword,
         confirmPassword,
-        // currentPassword is not required when mustResetPassword is true
+        // Only waived while mustResetPassword is set; required otherwise.
+        ...(isForcedReset ? {} : { currentPassword }),
       });
 
       if (!response.data?.success) {
@@ -195,6 +219,8 @@ export default function SetPasswordScreen() {
   }, [
     allMet,
     passwordsMatch,
+    isForcedReset,
+    currentPassword,
     newPassword,
     confirmPassword,
     setUser,
@@ -239,14 +265,24 @@ export default function SetPasswordScreen() {
             <Ionicons name="lock-closed" size={32} color="#4F46E5" />
           </View>
 
-          <Text style={styles.title}>{t("setPassword.title")}</Text>
-
-          <Text style={styles.subtitle}>
-            {t("setPassword.welcome")}{" "}
-            <Text style={styles.name}>{user?.name || "there"}</Text>!
-            {"\n"}
-            {t("setPassword.subtitle")}
+          <Text style={styles.title}>
+            {isForcedReset
+              ? t("setPassword.title")
+              : t("setPassword.changeTitle")}
           </Text>
+
+          {isForcedReset ? (
+            <Text style={styles.subtitle}>
+              {t("setPassword.welcome")}{" "}
+              <Text style={styles.name}>{user?.name || "there"}</Text>!
+              {"\n"}
+              {t("setPassword.subtitle")}
+            </Text>
+          ) : (
+            <Text style={styles.subtitle}>
+              {t("setPassword.changeSubtitle")}
+            </Text>
+          )}
         </View>
 
         {/* ── Inline Error Banner ── */}
@@ -259,8 +295,45 @@ export default function SetPasswordScreen() {
 
         {/* ── Form Card ── */}
         <View style={styles.card}>
+          {/* Current password - only when there is one to prove */}
+          {!isForcedReset && (
+            <>
+              <Text style={styles.label}>
+                {t("setPassword.currentLabel")}
+              </Text>
+              <View style={styles.inputRow}>
+                <TextInput
+                  style={styles.input}
+                  value={currentPassword}
+                  onChangeText={(v) => {
+                    setCurrentPassword(v);
+                    setError(null);
+                  }}
+                  placeholder={t("setPassword.currentPh")}
+                  placeholderTextColor="#9CA3AF"
+                  secureTextEntry={!showCurrent}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                <TouchableOpacity
+                  style={styles.eyeBtn}
+                  onPress={() => setShowCurrent((v) => !v)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                >
+                  <Ionicons
+                    name={showCurrent ? "eye-off-outline" : "eye-outline"}
+                    size={20}
+                    color="#9CA3AF"
+                  />
+                </TouchableOpacity>
+              </View>
+            </>
+          )}
+
           {/* New password */}
-          <Text style={styles.label}>{t("setPassword.newLabel")}</Text>
+          <Text style={[styles.label, !isForcedReset && { marginTop: 16 }]}>
+            {t("setPassword.newLabel")}
+          </Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
@@ -364,11 +437,10 @@ export default function SetPasswordScreen() {
         <TouchableOpacity
           style={[
             styles.submitBtn,
-            (!allMet || !passwordsMatch || loading) &&
-              styles.submitBtnDisabled,
+            (!canSubmit || loading) && styles.submitBtnDisabled,
           ]}
           onPress={handleSubmit}
-          disabled={!allMet || !passwordsMatch || loading}
+          disabled={!canSubmit || loading}
           activeOpacity={0.8}
         >
           {loading ? (
@@ -377,7 +449,9 @@ export default function SetPasswordScreen() {
             <>
               <Ionicons name="lock-closed-outline" size={18} color="#FFF" />
               <Text style={styles.submitBtnText}>
-                {t("setPassword.submit")}
+                {isForcedReset
+                  ? t("setPassword.submit")
+                  : t("setPassword.changeSubmit")}
               </Text>
             </>
           )}
@@ -395,14 +469,22 @@ export default function SetPasswordScreen() {
           </Text>
         </View>
 
-        {/* ── Sign Out Link ── */}
+        {/* A forced reset offers a way out; a voluntary change, a way back. */}
         <TouchableOpacity
           style={styles.logoutLink}
-          onPress={handleLogout}
+          onPress={isForcedReset ? handleLogout : () => router.back()}
           activeOpacity={0.7}
         >
-          <Ionicons name="log-out-outline" size={16} color="#9CA3AF" />
-          <Text style={styles.logoutText}>{t("setPassword.signOutInstead")}</Text>
+          <Ionicons
+            name={isForcedReset ? "log-out-outline" : "arrow-back-outline"}
+            size={16}
+            color="#9CA3AF"
+          />
+          <Text style={styles.logoutText}>
+            {isForcedReset
+              ? t("setPassword.signOutInstead")
+              : t("setPassword.cancel")}
+          </Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

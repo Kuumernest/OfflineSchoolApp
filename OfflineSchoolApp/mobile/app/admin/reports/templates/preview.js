@@ -32,17 +32,18 @@ const C = {
 // ─────────────────────────────────────────────────────────
 
 export default function TemplatePreviewScreen() {
+  const { t } = useTranslation();
   const { templateId, examId, studentId } = useLocalSearchParams();
 
   const [html,    setHtml]    = useState(null);
-  const [name,    setName]    = useState("Preview");
+  const [name,    setName]    = useState(t("templates.previewTitle"));
   const [isRaw,   setIsRaw]   = useState(false);
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState(null);
 
   useEffect(() => {
     if (!templateId) {
-      setError("No template ID provided.");
+      setError(t("templatesList.noTemplateId"));
       setLoading(false);
       return;
     }
@@ -54,7 +55,7 @@ export default function TemplatePreviewScreen() {
     )
       .then((res) => {
         setHtml(res.renderedHtml);
-        setName(res.templateName || "Preview");
+        setName(res.templateName || t("templates.previewTitle"));
         setIsRaw(res.isRaw       || false);
       })
       .catch((err) => {
@@ -77,7 +78,7 @@ export default function TemplatePreviewScreen() {
         <View style={s.headerCenter}>
           <Text style={s.headerTitle} numberOfLines={1}>{name}</Text>
           <Text style={s.headerSub}>
-            {examId ? "Live Preview" : "Layout Preview"}
+            {examId ? t("templatesList.livePreview") : t("templatesList.layoutPreview")}
           </Text>
         </View>
         {templateId && (
@@ -106,7 +107,7 @@ export default function TemplatePreviewScreen() {
           />
           <Text style={s.rawBannerText}>
             Showing layout only — placeholders are still visible.
-            Open with a real student to see filled data.
+            {t("templatesList.previewNote2")}
           </Text>
         </View>
       )}
@@ -115,7 +116,7 @@ export default function TemplatePreviewScreen() {
       {loading && (
         <View style={s.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={s.loadingText}>Rendering preview…</Text>
+          <Text style={s.loadingText}>{t("templatesList.rendering")}</Text>
         </View>
       )}
 
@@ -129,7 +130,7 @@ export default function TemplatePreviewScreen() {
             onPress={() => router.back()}
             activeOpacity={0.7}
           >
-            <Text style={s.retryBtnText}>Go Back</Text>
+            <Text style={s.retryBtnText}>{t("common.goBack")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -214,3 +215,4 @@ const s = StyleSheet.create({
   },
   retryBtnText: { fontSize: 14, fontWeight: "600", color: C.white },
 });
+import { useTranslation } from "../../../../src/i18n/useTranslation";

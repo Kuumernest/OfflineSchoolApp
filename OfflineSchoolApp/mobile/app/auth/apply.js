@@ -24,6 +24,7 @@ import * as ImagePicker    from "expo-image-picker";
 import * as FileSystem     from "expo-file-system/legacy";
 import { Ionicons }        from "@expo/vector-icons";
 import { API_URL }         from "../../src/services/api";
+import { useTranslation }  from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -33,12 +34,18 @@ const MAX_DOCUMENTS  = 5;
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
 
 const DOCUMENT_TYPES = [
-  { label: "Birth Certificate",      value: "birth_certificate"   },
-  { label: "Previous School Report", value: "school_report"       },
-  { label: "Medical Certificate",    value: "medical_certificate" },
-  { label: "Passport Photo",         value: "passport_photo"      },
-  { label: "Other",                  value: "other"               },
+  { value: "birth_certificate"   },
+  { value: "school_report"       },
+  { value: "medical_certificate" },
+  { value: "passport_photo"      },
+  { value: "other"               },
 ];
+
+/** Visible label for a document type — falls back to "Other". */
+const docTypeLabel = (t, value) =>
+  DOCUMENT_TYPES.some((d) => d.value === value)
+    ? t(`applyForm.docType.${value}`)
+    : t("applyForm.docType.other");
 
 const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
@@ -124,7 +131,10 @@ const FieldError = ({ message }) =>
 // DOCUMENT ROW
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DocumentRow = ({ doc, index, onRemove, onChangeType }) => (
+const DocumentRow = ({ doc, index, onRemove, onChangeType }) => {
+  const { t } = useTranslation();
+
+  return (
   <View style={docStyles.row}>
     <View style={docStyles.iconBox}>
       <Ionicons
@@ -140,19 +150,19 @@ const DocumentRow = ({ doc, index, onRemove, onChangeType }) => (
 
       <TouchableOpacity
         onPress={() => {
-          const cur  = DOCUMENT_TYPES.findIndex((t) => t.value === doc.docType);
+          const cur  = DOCUMENT_TYPES.findIndex((d) => d.value === doc.docType);
           const next = DOCUMENT_TYPES[(cur + 1) % DOCUMENT_TYPES.length];
           onChangeType(index, next.value);
         }}
         style={docStyles.typeChip}
         activeOpacity={0.7}
         accessibilityRole="button"
-        accessibilityLabel={`Change document type, currently ${
-          DOCUMENT_TYPES.find((t) => t.value === doc.docType)?.label ?? "Other"
-        }`}
+        accessibilityLabel={t("applyForm.changeDocType", {
+          label: docTypeLabel(t, doc.docType),
+        })}
       >
         <Text style={docStyles.typeChipText}>
-          {DOCUMENT_TYPES.find((t) => t.value === doc.docType)?.label ?? "Other"} ↺
+          {docTypeLabel(t, doc.docType)} ↺
         </Text>
       </TouchableOpacity>
     </View>
@@ -162,12 +172,13 @@ const DocumentRow = ({ doc, index, onRemove, onChangeType }) => (
       style={docStyles.removeBtn}
       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
       accessibilityRole="button"
-      accessibilityLabel={`Remove ${doc.name}`}
+      accessibilityLabel={t("applyForm.removeDoc", { name: doc.name })}
     >
       <Ionicons name="close-circle" size={22} color="#DC2626" />
     </TouchableOpacity>
   </View>
-);
+  );
+};
 
 const docStyles = StyleSheet.create({
   row: {
@@ -209,7 +220,8 @@ const docStyles = StyleSheet.create({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ApplyScreen() {
-  const router = useRouter();
+  const router  = useRouter();
+  const { t }   = useTranslation();
 
   const {
     schoolId,
@@ -253,36 +265,43 @@ export default function ApplyScreen() {
 
   const validate = useCallback(() => {
     const errs = {};
-    if (!schoolId?.toString().trim()) errs.school       = "No school selected.";
-    if (!form.studentName.trim())     errs.studentName  = "Student name is required";
-    if (!form.guardianName.trim())    errs.guardianName = "Guardian / parent name is required";
-    if (!form.email.trim())           errs.email        = "Email address is required";
-    else if (!EMAIL_REGEX.test(form.email.trim())) errs.email = "Enter a valid email address";
-    if (!form.phone.trim())           errs.phone        = "Phone number is required";
-    if (!selectedClass)               errs.class        = "Please select a class";
+    if (!schoolId?.toString().trim()) errs.school       = t("applyForm.errNoSchool");
+    if (!form.studentName.trim())     errs.studentName  = t("applyForm.errStudentName");
+    if (!form.guardianName.trim())    errs.guardianName = t("applyForm.errGuardian");
+    if (!form.email.trim())           errs.email        = t("applyForm.errEmailRequired");
+    else if (!EMAIL_REGEX.test(form.email.trim())) errs.email = t("applyForm.errEmailInvalid");
+    if (!form.phone.trim())           errs.phone        = t("applyForm.errPhone");
+    if (!selectedClass)               errs.class        = t("applyForm.errClass");
     setFieldErrors(errs);
     return Object.keys(errs).length === 0;
-  }, [form, selectedClass, schoolId]);
+  }, [form, selectedClass, schoolId, t]);
 
   // ── Document helpers ───────────────────────────────────────────────────────
 
   const addDocument = useCallback((file) => {
     if (documents.length >= MAX_DOCUMENTS) {
-      Alert.alert("Limit Reached", `You can attach up to ${MAX_DOCUMENTS} documents.`);
+      Alert.alert(
+        t("applyForm.alertLimitTitle"),
+        t("applyForm.alertLimitBody", { count: MAX_DOCUMENTS })
+      );
       return;
     }
     if (file.size && file.size > MAX_SIZE_BYTES) {
       Alert.alert(
-        "File Too Large",
-        `"${file.name}" is ${formatBytes(file.size)}.\nMax allowed: ${formatBytes(MAX_SIZE_BYTES)}.`
+        t("applyForm.alertTooLargeTitle"),
+        t("applyForm.alertTooLargeBody", {
+          name: file.name,
+          size: formatBytes(file.size),
+          max:  formatBytes(MAX_SIZE_BYTES),
+        })
       );
       return;
     }
     const mime = file.mimeType || getMimeTypeFromName(file.name);
     if (!isAllowedMime(mime)) {
       Alert.alert(
-        "Unsupported File",
-        `"${file.name}" is not supported.\nAllowed: PDF, JPG, PNG, WEBP, GIF, HEIC`
+        t("applyForm.alertUnsupportedTitle"),
+        t("applyForm.alertUnsupportedBody", { name: file.name })
       );
       return;
     }
@@ -292,11 +311,14 @@ export default function ApplyScreen() {
         (d.name === file.name && d.size === file.size)
     );
     if (alreadyAdded) {
-      Alert.alert("Already Added", `"${file.name}" is already in the list.`);
+      Alert.alert(
+        t("applyForm.alertAlreadyTitle"),
+        t("applyForm.alertAlreadyBody", { name: file.name })
+      );
       return;
     }
     setDocuments((prev) => [...prev, { ...file, mimeType: mime, docType: "other" }]);
-  }, [documents]);
+  }, [documents, t]);
 
   const handlePickDocument = async () => {
     try {
@@ -319,7 +341,7 @@ export default function ApplyScreen() {
         mimeType,
       });
     } catch (err) {
-      Alert.alert("Error", "Could not pick document. Please try again.");
+      Alert.alert(t("applyForm.alertErrorTitle"), t("applyForm.alertPickDocFailed"));
       console.warn("DocumentPicker error:", err.message);
     }
   };
@@ -328,7 +350,10 @@ export default function ApplyScreen() {
     try {
       const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permission.granted) {
-        Alert.alert("Permission Required", "Please allow access to your photo library.");
+        Alert.alert(
+          t("applyForm.alertPermissionTitle"),
+          t("applyForm.alertPermissionBody")
+        );
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -354,19 +379,19 @@ export default function ApplyScreen() {
         mimeType,
       });
     } catch (err) {
-      Alert.alert("Error", "Could not pick image. Please try again.");
+      Alert.alert(t("applyForm.alertErrorTitle"), t("applyForm.alertPickImageFailed"));
       console.warn("ImagePicker error:", err.message);
     }
   };
 
   const handlePickSource = () => {
     Alert.alert(
-      "Attach Document",
-      "Choose a source",
+      t("applyForm.alertAttachTitle"),
+      t("applyForm.alertAttachBody"),
       [
-        { text: "📄 Files (PDF)",    onPress: handlePickDocument },
-        { text: "🖼️ Photo Library", onPress: handlePickImage    },
-        { text: "Cancel",            style:   "cancel"           },
+        { text: `📄 ${t("applyForm.sourceFiles")}`,  onPress: handlePickDocument },
+        { text: `🖼️ ${t("applyForm.sourcePhotos")}`, onPress: handlePickImage    },
+        { text: t("applyForm.cancel"),               style:   "cancel"           },
       ]
     );
   };
@@ -385,13 +410,17 @@ export default function ApplyScreen() {
 
   const handleSubmit = async () => {
     if (!validate()) {
-      setError("Please fix the errors highlighted below.");
+      setError(t("applyForm.fixErrors"));
       return;
     }
 
     setLoading(true);
     setError(null);
-    setUploadStage(documents.length > 0 ? "Reading files…" : "Submitting…");
+    setUploadStage(
+      documents.length > 0
+        ? t("applyForm.stageReadingFiles")
+        : t("applyForm.stageSubmitting")
+    );
 
     try {
       const uploadUrl = `${API_URL}/public/students/apply`;
@@ -410,7 +439,7 @@ export default function ApplyScreen() {
       // ── No documents → plain JSON POST ────────────────────────────────────
       if (documents.length === 0) {
         console.log("📤 Submitting (no documents)");
-        setUploadStage("Submitting…");
+        setUploadStage(t("applyForm.stageSubmitting"));
 
         const res  = await fetch(uploadUrl, {
           method:  "POST",
@@ -421,10 +450,14 @@ export default function ApplyScreen() {
         const text = await res.text();
         let   data;
         try   { data = JSON.parse(text); }
-        catch { data = { message: text || "Unexpected server response" }; }
+        catch { data = { message: text || t("applyForm.unexpectedResponse") }; }
 
         if (!res.ok) {
-          throw new Error(data.detail || data.message || `Submission failed (${res.status})`);
+          throw new Error(
+            data.detail ||
+            data.message ||
+            t("applyForm.submissionFailed", { status: res.status })
+          );
         }
 
         console.log("✅ Submitted (no documents)");
@@ -446,7 +479,10 @@ export default function ApplyScreen() {
       const files = [];
       for (let i = 0; i < documents.length; i++) {
         const doc = documents[i];
-        setUploadStage(`Reading file ${i + 1} of ${documents.length}…`);
+        setUploadStage(t("applyForm.stageReadingFile", {
+          index: i + 1,
+          total: documents.length,
+        }));
 
         console.log(`  ↳ reading: ${doc.name} (${doc.mimeType})`);
 
@@ -461,7 +497,7 @@ export default function ApplyScreen() {
         });
       }
 
-      setUploadStage("Uploading…");
+      setUploadStage(t("applyForm.stageUploading"));
 
       const res = await fetch(uploadUrl, {
         method:  "POST",
@@ -475,10 +511,14 @@ export default function ApplyScreen() {
 
       let data;
       try   { data = JSON.parse(text); }
-      catch { data = { message: text || "Unexpected server response" }; }
+      catch { data = { message: text || t("applyForm.unexpectedResponse") }; }
 
       if (!res.ok) {
-        throw new Error(data.detail || data.message || `Submission failed (${res.status})`);
+        throw new Error(
+          data.detail ||
+          data.message ||
+          t("applyForm.submissionFailed", { status: res.status })
+        );
       }
 
       console.log("✅ Application submitted successfully");
@@ -499,30 +539,33 @@ export default function ApplyScreen() {
       <View style={styles.successContainer}>
         <View style={styles.successCard}>
           <Text style={styles.successEmoji}>🎉</Text>
-          <Text style={styles.successTitle}>Application Submitted!</Text>
+          <Text style={styles.successTitle}>{t("applyForm.successTitle")}</Text>
           <Text style={styles.successMessage}>
-            Thank you,{" "}
-            <Text style={{ fontWeight: "700" }}>{form.studentName}</Text>!
+            {t("applyForm.successThanksPre")}
+            <Text style={{ fontWeight: "700" }}>{form.studentName}</Text>
+            {t("applyForm.successThanksPost")}
             {"\n\n"}
-            Your application to{" "}
-            <Text style={{ fontWeight: "700" }}>{schoolName || "the school"}</Text>{" "}
-            for{" "}
-            <Text style={{ fontWeight: "700" }}>{selectedClass?.name}</Text>{" "}
-            has been received.
+            {t("applyForm.successAppPre")}
+            <Text style={{ fontWeight: "700" }}>
+              {schoolName || t("applyForm.schoolFallback")}
+            </Text>
+            {t("applyForm.successAppMid")}
+            <Text style={{ fontWeight: "700" }}>{selectedClass?.name}</Text>
+            {t("applyForm.successAppPost")}
             {"\n\n"}
-            Login credentials will be sent to:{"\n"}
+            {t("applyForm.successCredentials")}{"\n"}
             <Text style={styles.successEmail}>{form.email}</Text>
             {"\n\n"}
-            Please check your inbox and spam folder after approval.
+            {t("applyForm.successCheckInbox")}
           </Text>
 
           <TouchableOpacity
             style={styles.backBtn}
             onPress={() => router.replace("/auth/login")}
             accessibilityRole="button"
-            accessibilityLabel="Back to Login"
+            accessibilityLabel={t("applyForm.backToLogin")}
           >
-            <Text style={styles.backBtnText}>Back to Login</Text>
+            <Text style={styles.backBtnText}>{t("applyForm.backToLogin")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -545,23 +588,20 @@ export default function ApplyScreen() {
           style={styles.backArrow}
           onPress={() => router.back()}
           accessibilityRole="button"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("applyForm.goBack")}
         >
-          <Text style={styles.backArrowText}>← Back</Text>
+          <Text style={styles.backArrowText}>← {t("applyForm.back")}</Text>
         </TouchableOpacity>
 
         <View style={styles.header}>
           <Text style={styles.emoji}>📋</Text>
-          <Text style={styles.title}>Student Application</Text>
+          <Text style={styles.title}>{t("applyForm.heading")}</Text>
           {schoolName ? (
             <View style={styles.schoolBadge}>
               <Text style={styles.schoolBadgeText}>🏫 {schoolName}</Text>
             </View>
           ) : null}
-          <Text style={styles.subtitle}>
-            Fill in the details below. You will receive login credentials
-            by email once your application is approved.
-          </Text>
+          <Text style={styles.subtitle}>{t("applyForm.subtitle")}</Text>
         </View>
 
         {error ? (
@@ -578,33 +618,33 @@ export default function ApplyScreen() {
 
         <View style={styles.card}>
 
-          <Text style={styles.label}>Student Full Name *</Text>
+          <Text style={styles.label}>{t("applyForm.labelStudentName")} *</Text>
           <TextInput
             style={[styles.input, fieldErrors.studentName && styles.inputError]}
             value={form.studentName}
             onChangeText={(v) => updateField("studentName", v)}
-            placeholder="e.g. John Doe"
+            placeholder={t("applyForm.phStudentName")}
             placeholderTextColor="#9CA3AF"
             autoCapitalize="words"
             returnKeyType="next"
-            accessibilityLabel="Student full name"
+            accessibilityLabel={t("applyForm.a11yStudentName")}
           />
           <FieldError message={fieldErrors.studentName} />
 
-          <Text style={styles.label}>Parent / Guardian Name *</Text>
+          <Text style={styles.label}>{t("applyForm.labelGuardian")} *</Text>
           <TextInput
             style={[styles.input, fieldErrors.guardianName && styles.inputError]}
             value={form.guardianName}
             onChangeText={(v) => updateField("guardianName", v)}
-            placeholder="e.g. Jane Doe"
+            placeholder={t("applyForm.phGuardian")}
             placeholderTextColor="#9CA3AF"
             autoCapitalize="words"
             returnKeyType="next"
-            accessibilityLabel="Parent or guardian name"
+            accessibilityLabel={t("applyForm.a11yGuardian")}
           />
           <FieldError message={fieldErrors.guardianName} />
 
-          <Text style={styles.label}>Email Address *</Text>
+          <Text style={styles.label}>{t("applyForm.labelEmail")} *</Text>
           <TextInput
             style={[styles.input, fieldErrors.email && styles.inputError]}
             value={form.email}
@@ -615,29 +655,27 @@ export default function ApplyScreen() {
             autoCapitalize="none"
             autoCorrect={false}
             returnKeyType="next"
-            accessibilityLabel="Email address"
+            accessibilityLabel={t("applyForm.a11yEmail")}
           />
           <FieldError message={fieldErrors.email} />
           {!fieldErrors.email && (
-            <Text style={styles.hint}>
-              Login credentials will be sent to this address after approval
-            </Text>
+            <Text style={styles.hint}>{t("applyForm.emailHint")}</Text>
           )}
 
-          <Text style={styles.label}>Phone Number *</Text>
+          <Text style={styles.label}>{t("applyForm.labelPhone")} *</Text>
           <TextInput
             style={[styles.input, fieldErrors.phone && styles.inputError]}
             value={form.phone}
             onChangeText={(v) => updateField("phone", v)}
-            placeholder="e.g. 08012345678"
+            placeholder={t("applyForm.phPhone")}
             placeholderTextColor="#9CA3AF"
             keyboardType="phone-pad"
             returnKeyType="next"
-            accessibilityLabel="Phone number"
+            accessibilityLabel={t("applyForm.a11yPhone")}
           />
           <FieldError message={fieldErrors.phone} />
 
-          <Text style={styles.label}>Class Applying For *</Text>
+          <Text style={styles.label}>{t("applyForm.labelClass")} *</Text>
           <FieldError message={fieldErrors.class} />
 
           {availableClasses.length > 0 ? (
@@ -663,7 +701,7 @@ export default function ApplyScreen() {
                       activeOpacity={0.7}
                       accessibilityRole="radio"
                       accessibilityState={{ checked: isSelected }}
-                      accessibilityLabel={`Select class ${cls.name}`}
+                      accessibilityLabel={t("applyForm.a11ySelectClass", { name: cls.name })}
                     >
                       <Text style={[styles.classChipText, isSelected && styles.classChipTextSelected]}>
                         {cls.name}
@@ -677,7 +715,7 @@ export default function ApplyScreen() {
               {selectedClass ? (
                 <View style={styles.selectedConfirm}>
                   <Text style={styles.selectedConfirmText}>
-                    ✅ Applying for:{" "}
+                    ✅ {t("applyForm.applyingFor")}{" "}
                     <Text style={{ fontWeight: "700" }}>{selectedClass.name}</Text>
                     {selectedClass.level ? `  ·  ${selectedClass.level}` : ""}
                   </Text>
@@ -687,17 +725,16 @@ export default function ApplyScreen() {
           ) : (
             <View style={styles.noClassesBox}>
               <Text style={styles.noClassesEmoji}>⚠️</Text>
-              <Text style={styles.noClassesText}>
-                No classes are currently available at this school.{"\n"}
-                Please contact the school administration or try again later.
-              </Text>
+              <Text style={styles.noClassesText}>{t("applyForm.noClasses")}</Text>
               <TouchableOpacity
                 style={styles.goBackBtn}
                 onPress={() => router.back()}
                 accessibilityRole="button"
-                accessibilityLabel="Select another school"
+                accessibilityLabel={t("applyForm.selectAnotherSchool")}
               >
-                <Text style={styles.goBackBtnText}>← Select Another School</Text>
+                <Text style={styles.goBackBtnText}>
+                  ← {t("applyForm.selectAnotherSchool")}
+                </Text>
               </TouchableOpacity>
             </View>
           )}
@@ -706,9 +743,12 @@ export default function ApplyScreen() {
 
           <View style={styles.documentHeader}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.label}>Supporting Documents</Text>
+              <Text style={styles.label}>{t("applyForm.labelDocuments")}</Text>
               <Text style={styles.hint2}>
-                PDF or image · max {formatBytes(MAX_SIZE_BYTES)} each · up to {MAX_DOCUMENTS} files
+                {t("applyForm.docsHint", {
+                  size:  formatBytes(MAX_SIZE_BYTES),
+                  count: MAX_DOCUMENTS,
+                })}
               </Text>
             </View>
             <Text style={styles.docCount}>{documents.length}/{MAX_DOCUMENTS}</Text>
@@ -731,14 +771,16 @@ export default function ApplyScreen() {
               activeOpacity={0.7}
               accessibilityRole="button"
               accessibilityLabel={
-                documents.length === 0 ? "Attach documents" : "Attach another document"
+                documents.length === 0
+                  ? t("applyForm.a11yAttachDocs")
+                  : t("applyForm.a11yAttachAnother")
               }
             >
               <Ionicons name="attach-outline" size={20} color="#4F46E5" />
               <Text style={styles.addDocBtnText}>
                 {documents.length === 0
-                  ? "Attach Documents (Optional)"
-                  : "Attach Another Document"}
+                  ? t("applyForm.attachDocs")
+                  : t("applyForm.attachAnother")}
               </Text>
             </TouchableOpacity>
           )}
@@ -746,24 +788,23 @@ export default function ApplyScreen() {
           {documents.length > 0 && (
             <View style={styles.legendBox}>
               <Text style={styles.legendText}>
-                💡 Tap the document type badge to cycle through types:
-                Birth Certificate → School Report → Medical → Photo → Other
+                💡 {t("applyForm.docLegend")}
               </Text>
             </View>
           )}
 
           <View style={styles.sectionDivider} />
-          <Text style={[styles.label, { marginTop: 4 }]}>Additional Notes (optional)</Text>
+          <Text style={[styles.label, { marginTop: 4 }]}>{t("applyForm.labelNotes")}</Text>
           <TextInput
             style={[styles.input, styles.textarea]}
             value={form.notes}
             onChangeText={(v) => updateField("notes", v)}
-            placeholder="Any special requirements or information…"
+            placeholder={t("applyForm.phNotes")}
             placeholderTextColor="#9CA3AF"
             multiline
             numberOfLines={4}
             textAlignVertical="top"
-            accessibilityLabel="Additional notes"
+            accessibilityLabel={t("applyForm.a11yNotes")}
           />
         </View>
 
@@ -776,7 +817,7 @@ export default function ApplyScreen() {
               activeOpacity={0.8}
               accessibilityRole="button"
               accessibilityState={{ disabled: loading, busy: loading }}
-              accessibilityLabel="Submit application"
+              accessibilityLabel={t("applyForm.a11ySubmit")}
             >
               {loading ? (
                 <View style={styles.loadingRow}>
@@ -786,14 +827,11 @@ export default function ApplyScreen() {
                   ) : null}
                 </View>
               ) : (
-                <Text style={styles.submitBtnText}>Submit Application →</Text>
+                <Text style={styles.submitBtnText}>{t("applyForm.submit")} →</Text>
               )}
             </TouchableOpacity>
 
-            <Text style={styles.disclaimer}>
-              By submitting you agree that your information will be reviewed
-              by the school administration.
-            </Text>
+            <Text style={styles.disclaimer}>{t("applyForm.disclaimer")}</Text>
           </>
         )}
 

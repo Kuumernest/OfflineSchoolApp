@@ -35,14 +35,18 @@ import {
   type Attachment,
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
+import { useTranslation } from "react-i18next";
+
 import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-const errorText = (err: unknown): string => {
+const errorText = (err: unknown, t: (key: string) => string): string => {
   const res = (err as { response?: { data?: { error?: string; message?: string } } })
     ?.response?.data;
-  return res?.error ?? res?.message ?? (err as Error)?.message ?? "Something went wrong";
+  return (
+    res?.error ?? res?.message ?? (err as Error)?.message ?? t("messages.genericError")
+  );
 };
 
 const timeLabel = (iso?: string | null): string => {
@@ -57,10 +61,14 @@ const timeLabel = (iso?: string | null): string => {
 };
 
 /** Direct threads have no title; they are named for the other person. */
-const titleFor = (c: Conversation, myId: string): string => {
+const titleFor = (
+  c: Conversation,
+  myId: string,
+  t: (key: string) => string,
+): string => {
   if (c.title) return c.title;
   const other = c.participants?.find((p) => String(p.id) !== String(myId));
-  return other?.name || "Conversation";
+  return other?.name || t("messages.conversation");
 };
 
 const KindIcon = ({ kind }: { kind: Conversation["kind"] }) => {
@@ -72,6 +80,7 @@ const KindIcon = ({ kind }: { kind: Conversation["kind"] }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MessagesPage() {
+  const { t } = useTranslation();
   const user   = useUser();
   const myId   = String(user?._id ?? "");
   const client = useQueryClient();
@@ -151,7 +160,7 @@ export default function MessagesPage() {
       client.invalidateQueries({ queryKey: ["messages", activeId] });
       client.invalidateQueries({ queryKey: ["conversations"] });
     },
-    onError: (err) => setSendError(errorText(err)),
+    onError: (err) => setSendError(errorText(err, t)),
   });
 
   const handleSend = useCallback(() => {
@@ -169,7 +178,7 @@ export default function MessagesPage() {
       const uploaded = await uploadAttachment(activeId, file);
       setPending((p) => [...p, uploaded]);
     } catch (err) {
-      setSendError(errorText(err));
+      setSendError(errorText(err, t));
     } finally {
       setAttaching(false);
       // Reset the input so choosing the same file twice still fires onChange.
@@ -180,7 +189,7 @@ export default function MessagesPage() {
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteMessage(id),
     onSuccess: () => client.invalidateQueries({ queryKey: ["messages", activeId] }),
-    onError: (err) => setSendError(errorText(err)),
+    onError: (err) => setSendError(errorText(err, t)),
   });
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -190,9 +199,9 @@ export default function MessagesPage() {
       <div className="flex items-center justify-between border-b border-gray-200
                       bg-white px-6 py-4">
         <div>
-          <h1 className="text-xl font-bold text-gray-900">Messages</h1>
+          <h1 className="text-xl font-bold text-gray-900">{t("messages.title")}</h1>
           <p className="mt-0.5 text-sm text-gray-500">
-            Conversations with staff, students and parents.
+            {t("messages.blurb")}
           </p>
         </div>
         <button
@@ -202,7 +211,7 @@ export default function MessagesPage() {
                      hover:bg-blue-700"
         >
           <Plus size={16} />
-          New conversation
+          {t("messages.newConversation")}
         </button>
       </div>
 
@@ -220,13 +229,13 @@ export default function MessagesPage() {
             <div className="m-3 flex items-start gap-2 rounded-lg bg-red-50
                             border border-red-200 p-3 text-sm text-red-700">
               <AlertCircle size={16} className="mt-0.5 shrink-0" />
-              <span>{errorText(conversationsQuery.error)}</span>
+              <span>{errorText(conversationsQuery.error, t)}</span>
             </div>
           )}
 
           {!conversationsQuery.isLoading && conversations.length === 0 && (
             <div className="p-6 text-center text-sm text-gray-500">
-              No conversations yet.
+              {t("messages.noneYet")}
             </div>
           )}
 
@@ -243,7 +252,7 @@ export default function MessagesPage() {
               <div className="flex items-center gap-2">
                 <KindIcon kind={c.kind} />
                 <span className="flex-1 truncate text-sm font-semibold text-gray-900">
-                  {titleFor(c, myId)}
+                  {titleFor(c, myId, t)}
                 </span>
                 {Boolean(c.unread) && (
                   <span className="shrink-0 rounded-full bg-blue-600 px-1.5 py-0.5
@@ -254,7 +263,7 @@ export default function MessagesPage() {
               </div>
               <div className="mt-1 flex items-center gap-2">
                 <span className="flex-1 truncate text-xs text-gray-500">
-                  {c.lastMessagePreview || "No messages yet"}
+                  {c.lastMessagePreview || t("messages.noMessagesYet")}
                 </span>
                 <span className="shrink-0 text-[10px] text-gray-400">
                   {timeLabel(c.lastMessageAt)}
@@ -268,7 +277,7 @@ export default function MessagesPage() {
         <section className="flex flex-1 flex-col min-w-0 bg-gray-50">
           {!active ? (
             <div className="flex flex-1 items-center justify-center text-sm text-gray-400">
-              Select a conversation
+              {t("messages.selectOne")}
             </div>
           ) : (
             <>
@@ -276,12 +285,12 @@ export default function MessagesPage() {
                 <div className="flex items-center gap-2">
                   <KindIcon kind={active.kind} />
                   <h2 className="font-semibold text-gray-900">
-                    {titleFor(active, myId)}
+                    {titleFor(active, myId, t)}
                   </h2>
                   {active.isReadOnly && (
                     <span className="rounded bg-gray-100 px-2 py-0.5 text-[10px]
                                      font-semibold text-gray-600">
-                      READ ONLY
+                      {t("messages.readOnly")}
                     </span>
                   )}
                 </div>
@@ -318,12 +327,12 @@ export default function MessagesPage() {
                       >
                         {!mine && !m.isDeleted && (
                           <div className="mb-0.5 text-[11px] font-semibold text-gray-500">
-                            {m.sender?.name || "Unknown"}
+                            {m.sender?.name || t("messages.unknownSender")}
                           </div>
                         )}
 
                         <div className="whitespace-pre-wrap break-words">
-                          {m.isDeleted ? "This message was deleted" : m.body}
+                          {m.isDeleted ? t("messages.deleted") : m.body}
                         </div>
 
                         {!m.isDeleted && (m.attachments?.length ?? 0) > 0 && (
@@ -357,7 +366,7 @@ export default function MessagesPage() {
                             <button
                               onClick={() => deleteMutation.mutate(m._id)}
                               className="opacity-0 transition-opacity group-hover:opacity-100"
-                              title="Delete message"
+                              title={t("messages.deleteMessage")}
                             >
                               <Trash2 size={12} />
                             </button>
@@ -418,7 +427,7 @@ export default function MessagesPage() {
                     <button
                       onClick={() => fileRef.current?.click()}
                       disabled={attaching || sendMutation.isPending}
-                      title="Attach a file"
+                      title={t("messages.attach")}
                       className="flex h-[42px] w-[42px] shrink-0 items-center justify-center
                                  rounded-xl text-gray-500 transition-colors
                                  hover:bg-gray-100 disabled:opacity-50"
@@ -438,7 +447,7 @@ export default function MessagesPage() {
                         }
                       }}
                       rows={1}
-                      placeholder="Write a message…"
+                      placeholder={t("messages.writePh")}
                       className="flex-1 resize-none rounded-xl border-2 border-gray-200
                                  bg-gray-50 px-3 py-2.5 text-sm outline-none
                                  transition-colors focus:border-blue-500 focus:bg-white"
@@ -495,6 +504,7 @@ function NewConversationModal({
   onClose:  () => void;
   onOpened: (c: Conversation) => void;
 }) {
+  const { t } = useTranslation();
   const [q,       setQ]       = useState("");
   const [opening, setOpening] = useState<string | null>(null);
   const [error,   setError]   = useState<string | null>(null);
@@ -502,8 +512,8 @@ function NewConversationModal({
   // Debounced so a fast typist does not fire a request per keystroke.
   const [debounced, setDebounced] = useState("");
   useEffect(() => {
-    const t = setTimeout(() => setDebounced(q), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setDebounced(q), 250);
+    return () => clearTimeout(timer);
   }, [q]);
 
   const recipientsQuery = useQuery<Recipient[], Error>({
@@ -517,7 +527,7 @@ function NewConversationModal({
     try {
       onOpened(await openDirect(r.id, r.kind));
     } catch (err) {
-      setError(errorText(err));
+      setError(errorText(err, t));
     } finally {
       setOpening(null);
     }
@@ -536,7 +546,7 @@ function NewConversationModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-gray-200 px-5 py-4">
-          <h2 className="font-bold text-gray-900">New conversation</h2>
+          <h2 className="font-bold text-gray-900">{t("messages.newConversation")}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
             <X size={18} />
           </button>
@@ -551,7 +561,7 @@ function NewConversationModal({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search staff, students or parents…"
+              placeholder={t("messages.searchPh")}
               className="flex-1 bg-transparent text-sm outline-none"
             />
           </div>
@@ -574,8 +584,8 @@ function NewConversationModal({
           {!recipientsQuery.isLoading && recipients.length === 0 && (
             <p className="px-5 py-8 text-center text-sm text-gray-500">
               {debounced
-                ? "Nobody matches that name."
-                : "There is nobody you can start a conversation with."}
+                ? t("messages.noMatch")
+                : t("messages.nobodyAvailable")}
             </p>
           )}
 

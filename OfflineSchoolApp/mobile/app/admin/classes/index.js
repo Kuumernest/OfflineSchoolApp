@@ -20,6 +20,7 @@ import {
 import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons }                  from "@expo/vector-icons";
 import { ClassService }              from "../../../src/services/class.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const BRAND = "#4F46E5";
 
@@ -30,6 +31,7 @@ const BRAND = "#4F46E5";
 const ClassCard = React.memo(function ClassCard({
   classItem, onPress, onToggle, onDelete,
 }) {
+  const { t } = useTranslation();
   const isActive = !!classItem.isActive;
 
   return (
@@ -70,7 +72,7 @@ const ClassCard = React.memo(function ClassCard({
       <View style={styles.classActions}>
         {!isActive && (
           <View style={styles.inactiveBadge}>
-            <Text style={styles.inactiveBadgeText}>Inactive</Text>
+            <Text style={styles.inactiveBadgeText}>{t("common.inactive")}</Text>
           </View>
         )}
 
@@ -79,7 +81,7 @@ const ClassCard = React.memo(function ClassCard({
           onPress={() => onToggle(classItem)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
-          accessibilityLabel={isActive ? "Deactivate class" : "Activate class"}
+          accessibilityLabel={isActive ? t("classesAdmin.a11yDeactivate") : t("classesAdmin.a11yActivate")}
         >
           <Ionicons
             name={isActive ? "pause-circle-outline" : "play-circle-outline"}
@@ -93,7 +95,7 @@ const ClassCard = React.memo(function ClassCard({
           onPress={() => onDelete(classItem)}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           activeOpacity={0.7}
-          accessibilityLabel="Delete class"
+          accessibilityLabel={t("classesAdmin.a11yDelete")}
         >
           <Ionicons name="trash-outline" size={20} color="#DC2626" />
         </TouchableOpacity>
@@ -105,43 +107,45 @@ const ClassCard = React.memo(function ClassCard({
 });
 
 const EmptyState = React.memo(function EmptyState({ showInactive, onAdd }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.emptyState}>
       <Ionicons name="school-outline" size={48} color="#D1D5DB" />
       <Text style={styles.emptyTitle}>
-        {showInactive ? "No classes found" : "No active classes"}
+        {showInactive ? t("classesAdmin.noneFound") : t("classesAdmin.noneActive")}
       </Text>
       <Text style={styles.emptySubtitle}>
         {showInactive
-          ? "Create your first class to get started"
-          : "All classes are inactive or none exist yet"}
+          ? t("classesAdmin.emptyFirst")
+          : t("classesAdmin.emptyInactive")}
       </Text>
       <TouchableOpacity style={styles.emptyButton} onPress={onAdd} activeOpacity={0.7}>
         <Ionicons name="add-circle" size={18} color={BRAND} />
-        <Text style={styles.emptyButtonText}>Add Class</Text>
+        <Text style={styles.emptyButtonText}>{t("classesAdmin.addClass")}</Text>
       </TouchableOpacity>
     </View>
   );
 });
 
 const StatsBanner = React.memo(function StatsBanner({ stats }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.statsBanner}>
       <View style={styles.statItem}>
         <Text style={styles.statNumber}>{stats.total}</Text>
-        <Text style={styles.statLabel}>Total</Text>
+        <Text style={styles.statLabel}>{t("common.total")}</Text>
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
         <Text style={[styles.statNumber, { color: "#059669" }]}>{stats.active}</Text>
-        <Text style={styles.statLabel}>Active</Text>
+        <Text style={styles.statLabel}>{t("common.active")}</Text>
       </View>
       <View style={styles.statDivider} />
       <View style={styles.statItem}>
         <Text style={[styles.statNumber, stats.inactive > 0 && { color: "#D97706" }]}>
           {stats.inactive}
         </Text>
-        <Text style={styles.statLabel}>Inactive</Text>
+        <Text style={styles.statLabel}>{t("common.inactive")}</Text>
       </View>
     </View>
   );
@@ -152,6 +156,7 @@ const StatsBanner = React.memo(function StatsBanner({ stats }) {
 // ─────────────────────────────────────────────────────────
 
 export default function AdminClasses() {
+  const { t } = useTranslation();
   const router = useRouter();
 
   const isMountedRef    = useRef(true);
@@ -181,7 +186,7 @@ export default function AdminClasses() {
     } catch (err) {
       console.error("[AdminClasses] load error:", err);
       if (isMountedRef.current) {
-        setError("Failed to load classes. Pull down to retry.");
+        setError(t("classesAdmin.errLoad"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -210,13 +215,13 @@ export default function AdminClasses() {
 
   const handleToggleActive = useCallback((classItem) => {
     const isActive    = !!classItem.isActive;
-    const actionLabel = isActive ? "Deactivate" : "Activate";
+    const actionLabel = isActive ? t("classesAdmin.deactivate") : t("classesAdmin.activate");
 
     Alert.alert(
       `${actionLabel} Class`,
       `Are you sure you want to ${actionLabel.toLowerCase()} "${classItem.name}"?`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
           text:  actionLabel,
           style: isActive ? "destructive" : "default",
@@ -237,7 +242,7 @@ export default function AdminClasses() {
                 prev.map((c) => c.id === classItem.id ? { ...c, isActive } : c)
               );
               Alert.alert(
-                "Error",
+                t("classesAdmin.errTitle"),
                 err?.response?.data?.message || err?.message ||
                   `Failed to ${actionLabel.toLowerCase()} class`
               );
@@ -250,14 +255,12 @@ export default function AdminClasses() {
 
   const handleDelete = useCallback((classItem) => {
     Alert.alert(
-      "Delete Class",
-      `Permanently delete "${classItem.name}"?\n\n` +
-        "All linked subjects and teacher assignments will also be removed. " +
-        "This cannot be undone.",
+      t("classesAdmin.delTitle"),
+      t("classesAdmin.delBody", { name: classItem.name }),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -269,24 +272,24 @@ export default function AdminClasses() {
               setClasses((prev) => prev.filter((c) => c.id !== classItem.id));
 
               Alert.alert(
-                "Deleted",
+                t("classesAdmin.deletedTitle"),
                 deletedSubjects > 0
                   ? `"${classItem.name}" and ${deletedSubjects} subject${deletedSubjects === 1 ? "" : "s"} removed.`
                   : `"${classItem.name}" has been removed.`
               );
             } catch (err) {
               const status  = err?.response?.status;
-              const message = err?.response?.data?.message || err?.message || "Failed to delete class";
+              const message = err?.response?.data?.message || err?.message || t("classesAdmin.errDelete");
 
               if (status === 409 || message.toLowerCase().includes("student")) {
                 Alert.alert(
-                  "Cannot Delete",
+                  t("classesAdmin.cannotDelete"),
                   `"${classItem.name}" has students enrolled.\n\nMove or remove all students first, then try again.`
                 );
                 return;
               }
 
-              Alert.alert("Error", message);
+              Alert.alert(t("classesAdmin.errTitle"), message);
             }
           },
         },
@@ -305,7 +308,7 @@ export default function AdminClasses() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={BRAND} />
-        <Text style={styles.loadingText}>Loading classes…</Text>
+        <Text style={styles.loadingText}>{t("classesAdmin.loading")}</Text>
       </View>
     );
   }
@@ -319,13 +322,13 @@ export default function AdminClasses() {
           onPress={() => router.back()}
           style={styles.backButton}
           activeOpacity={0.7}
-          accessibilityLabel="Go back"
+          accessibilityLabel={t("common.goBack")}
         >
           <Ionicons name="arrow-back" size={24} color="#111827" />
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Classes</Text>
+          <Text style={styles.headerTitle}>{t("classesAdmin.title")}</Text>
           <Text style={styles.headerSubtitle}>
             {stats.total} {stats.total === 1 ? "class" : "classes"}
             {stats.inactive > 0 ? ` · ${stats.inactive} inactive` : ""}
@@ -336,7 +339,7 @@ export default function AdminClasses() {
           style={styles.addButton}
           onPress={handleAddClass}
           activeOpacity={0.7}
-          accessibilityLabel="Add class"
+          accessibilityLabel={t("classesAdmin.a11yAdd")}
         >
           <Ionicons name="add" size={24} color="#FFFFFF" />
         </TouchableOpacity>
@@ -386,7 +389,7 @@ export default function AdminClasses() {
               activeOpacity={0.75}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}

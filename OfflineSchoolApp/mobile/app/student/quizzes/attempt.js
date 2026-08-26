@@ -29,7 +29,8 @@ import {
   getAttemptResult,
   toggleFlag,
   getAttemptProgress,
-} from "../../../src/services/quiz.service";
+} from "../../../src/services/quiz.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -42,12 +43,12 @@ const formatSeconds = (secs) => {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 };
 
-const QUESTION_TYPE_LABELS = {
-  multiple_choice:   "Single Answer",
-  multiple_select:   "Multiple Answers",
-  true_false:        "True / False",
-  fill_in_the_blank: "Fill in the Blank",
-  matching:          "Matching",
+const QUESTION_TYPE_KEYS = {
+  multiple_choice:   "studentQuiz.typeSingle",
+  multiple_select:   "studentQuiz.typeMultiple",
+  true_false:        "quizCreate.typeTrueFalse",
+  fill_in_the_blank: "quizCreate.typeFillBlank",
+  matching:          "studentQuiz.typeMatching",
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -147,10 +148,12 @@ const QuestionNavGrid = ({
   flagged,
   onJump,
   onClose,
-}) => (
+}) => {
+                          const { t } = useTranslation();
+                          return (
   <View style={styles.navGrid}>
     <View style={styles.navGridHeader}>
-      <Text style={styles.navGridTitle}>Jump to Question</Text>
+      <Text style={styles.navGridTitle}>{t("studentQuiz.jumpTo")}</Text>
       <TouchableOpacity onPress={onClose} style={styles.navGridClose}>
         <Ionicons name="close" size={20} color="#374151" />
       </TouchableOpacity>
@@ -159,10 +162,10 @@ const QuestionNavGrid = ({
     {/* Legend */}
     <View style={styles.navLegend}>
       {[
-        { color: "#4F46E5", label: "Current"  },
-        { color: "#059669", label: "Answered" },
-        { color: "#F59E0B", label: "Flagged"  },
-        { color: "#E5E7EB", label: "Skipped"  },
+        { color: "#4F46E5", labelKey: "studentQuiz.current"  },
+        { color: "#059669", labelKey: "studentQuiz.answered" },
+        { color: "#F59E0B", labelKey: "studentQuiz.flagged"  },
+        { color: "#E5E7EB", labelKey: "studentQuiz.skipped"  },
       ].map((l) => (
         <View key={l.label} style={styles.navLegendItem}>
           <View style={[styles.navLegendDot, { backgroundColor: l.color }]} />
@@ -205,12 +208,14 @@ const QuestionNavGrid = ({
     </View>
   </View>
 );
+                        };
 
 // ─────────────────────────────────────────────────────────────
 // RESULT SCREEN
 // ─────────────────────────────────────────────────────────────
 
 const ResultScreen = ({ result, quiz, onClose }) => {
+  const { t } = useTranslation();
   const [showAnswers, setShowAnswers] = useState(false);
 
   const attempt  = result?.attempt;
@@ -235,17 +240,17 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             color="#FFF"
           />
           <Text style={styles.resultBannerTitle}>
-            {isPassed ? "Congratulations!" : "Better Luck Next Time"}
+            {isPassed ? t("studentQuiz.passedTitle") : t("studentQuiz.failedTitle")}
           </Text>
           <Text style={styles.resultBannerSub}>
-            {isPassed ? "You passed this quiz" : "You did not meet the pass mark"}
+            {isPassed ? t("studentQuiz.passedSub") : t("studentQuiz.failedSub")}
           </Text>
         </View>
 
         {/* Score */}
         {attempt?.show_score !== false && (
           <View style={styles.scoreCard}>
-            <Text style={styles.scoreLabel}>Your Score</Text>
+            <Text style={styles.scoreLabel}>{t("studentQuiz.yourScore")}</Text>
             <Text
               style={[
                 styles.scoreValue,
@@ -271,7 +276,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
           {[
             {
               icon:  "time-outline",
-              label: "Time Taken",
+              labelKey: "studentQuiz.timeTaken",
               value: attempt?.time_taken_secs
                 ? formatSeconds(attempt.time_taken_secs)
                 : "—",
@@ -280,21 +285,21 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             },
             {
               icon:  "help-circle-outline",
-              label: "Questions",
+              labelKey: "studentQuiz.questions",
               value: attempt?.answers?.length ?? 0,
               color: "#D97706",
               bg:    "#FEF3C7",
             },
             {
               icon:  "checkmark-circle-outline",
-              label: "Correct",
+              labelKey: "studentQuiz.correct",
               value: (attempt?.answers || []).filter((a) => a.is_correct).length,
               color: "#059669",
               bg:    "#ECFDF5",
             },
             {
               icon:  "close-circle-outline",
-              label: "Incorrect",
+              labelKey: "studentQuiz.incorrect",
               value: (attempt?.answers || []).filter(
                 (a) => a.is_correct === false
               ).length,
@@ -328,7 +333,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
               color="#4F46E5"
             />
             <Text style={styles.reviewToggleText}>
-              {showAnswers ? "Hide" : "Review"} Answers
+              {showAnswers ? t("studentQuiz.hide") : t("studentQuiz.review")} Answers
             </Text>
           </TouchableOpacity>
         )}
@@ -424,7 +429,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
                 {question.question_type === "fill_in_the_blank" &&
                   answer.text_answer && (
                     <View style={styles.fillAnswerRow}>
-                      <Text style={styles.fillAnswerLabel}>Your answer: </Text>
+                      <Text style={styles.fillAnswerLabel}>{t("studentQuiz.yourAnswerColon")}</Text>
                       <Text
                         style={[
                           styles.fillAnswerText,
@@ -467,7 +472,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
           activeOpacity={0.8}
         >
           <Ionicons name="home-outline" size={18} color="#FFF" />
-          <Text style={styles.doneBtnText}>Done</Text>
+          <Text style={styles.doneBtnText}>{t("common.done")}</Text>
         </TouchableOpacity>
       </View>
     </View>
@@ -479,6 +484,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
 // ─────────────────────────────────────────────────────────────
 
 export default function AttemptScreen() {
+  const { t } = useTranslation();
   const router  = useRouter();
   const params  = useLocalSearchParams();
   const user    = useAuthStore((s) => s.user);
@@ -529,9 +535,9 @@ export default function AttemptScreen() {
       } catch (err) {
         console.warn("Failed to init attempt:", err.message);
         Alert.alert(
-          "Error",
-          err.message || "Could not start quiz",
-          [{ text: "Go Back", onPress: () => router.back() }]
+          t("studentQuiz.errTitle"),
+          err.message || t("studentQuiz.startFailed"),
+          [{ text: t("common.goBack"), onPress: () => router.back() }]
         );
       }
     };
@@ -665,7 +671,7 @@ export default function AttemptScreen() {
         setResult(res);
         setPhase("result");
       } catch (err) {
-        Alert.alert("Error", "Could not submit quiz. Please try again.");
+        Alert.alert(t("studentQuiz.errTitle"), t("studentQuiz.submitFailed"));
         console.warn("submitAttempt failed:", err.message);
       } finally {
         setSubmitting(false);
@@ -674,20 +680,20 @@ export default function AttemptScreen() {
 
     if (unanswered > 0) {
       Alert.alert(
-        "Submit Quiz?",
+        t("studentQuiz.submitTitle"),
         `You have ${unanswered} unanswered question${unanswered !== 1 ? "s" : ""}. Are you sure you want to submit?`,
         [
-          { text: "Keep Going", style: "cancel" },
-          { text: "Submit",     style: "destructive", onPress: doSubmit },
+          { text: t("studentQuiz.keepGoing"), style: "cancel" },
+          { text: t("studentQuiz.submit"),     style: "destructive", onPress: doSubmit },
         ]
       );
     } else {
       Alert.alert(
-        "Submit Quiz",
-        "Are you ready to submit your answers?",
+        t("studentQuiz.submitCta"),
+        t("studentQuiz.submitBody"),
         [
-          { text: "Cancel", style: "cancel" },
-          { text: "Submit", onPress: doSubmit },
+          { text: t("common.cancel"), style: "cancel" },
+          { text: t("studentQuiz.submit"), onPress: doSubmit },
         ]
       );
     }
@@ -713,7 +719,7 @@ export default function AttemptScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Starting quiz…</Text>
+        <Text style={styles.loadingText}>{t("studentQuiz.starting")}</Text>
       </View>
     );
   }
@@ -724,7 +730,7 @@ export default function AttemptScreen() {
       <View style={styles.container}>
         <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
         <View style={styles.resultHeader}>
-          <Text style={styles.resultHeaderTitle}>Quiz Complete</Text>
+          <Text style={styles.resultHeaderTitle}>{t("studentQuiz.complete")}</Text>
         </View>
         <ResultScreen
           result={result}
@@ -754,15 +760,16 @@ export default function AttemptScreen() {
         {/* Left: Exit */}
         <TouchableOpacity
           style={styles.topBarBtn}
-          onPress={() =>
-            Alert.alert(
-              "Exit Quiz?",
-              "Your progress will be saved. You can resume later.",
+          onPress={() => {
+                     return Alert.alert(
+              t("studentQuiz.exitTitle"),
+              t("studentQuiz.exitBody"),
               [
-                { text: "Stay",        style: "cancel" },
-                { text: "Exit",        onPress: () => router.back() },
+                { text: t("studentQuiz.stay"),        style: "cancel" },
+                { text: t("studentQuiz.exit"),        onPress: () => router.back() },
               ]
-            )
+            );
+                   }
           }
         >
           <Ionicons name="close" size={20} color="#374151" />
@@ -805,7 +812,9 @@ export default function AttemptScreen() {
         <View style={styles.questionMeta}>
           <View style={styles.questionTypeBadge}>
             <Text style={styles.questionTypeText}>
-              {QUESTION_TYPE_LABELS[currentQ.question_type] ||
+              {(QUESTION_TYPE_KEYS[currentQ.question_type]
+                ? t(QUESTION_TYPE_KEYS[currentQ.question_type])
+                : null) ||
                 currentQ.question_type}
             </Text>
           </View>
@@ -845,7 +854,7 @@ export default function AttemptScreen() {
         {/* Hint for multi-select */}
         {isMultiSelect && (
           <Text style={styles.multiSelectHint}>
-            Select all that apply
+            {t("studentQuiz.selectAllApply")}
           </Text>
         )}
 
@@ -904,7 +913,7 @@ export default function AttemptScreen() {
         {/* ── FILL IN BLANK ── */}
         {isFillInBlank && (
           <View style={styles.fillBlankContainer}>
-            <Text style={styles.fillBlankLabel}>Your Answer</Text>
+            <Text style={styles.fillBlankLabel}>{t("studentQuiz.yourAnswer")}</Text>
             <View style={styles.fillBlankInput}>
               <Text
                 style={[
@@ -913,7 +922,7 @@ export default function AttemptScreen() {
                 ]}
                 onPress={() => {
                   Alert.prompt(
-                    "Your Answer",
+                    t("studentQuiz.yourAnswer"),
                     "",
                     (text) => handleTextAnswer(text),
                     "plain-text",
@@ -921,7 +930,7 @@ export default function AttemptScreen() {
                   );
                 }}
               >
-                {currentAnswer?.text_answer || "Tap to type your answer…"}
+                {currentAnswer?.text_answer || t("studentQuiz.typeAnswerPh")}
               </Text>
             </View>
           </View>
@@ -955,7 +964,7 @@ export default function AttemptScreen() {
               currentIndex === 0 && styles.navBtnTextDisabled,
             ]}
           >
-            Previous
+            {t("studentQuiz.previous")}
           </Text>
         </TouchableOpacity>
 
@@ -975,7 +984,7 @@ export default function AttemptScreen() {
             ) : (
               <>
                 <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                <Text style={styles.submitBtnText}>Submit</Text>
+                <Text style={styles.submitBtnText}>{t("studentQuiz.submit")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -985,7 +994,7 @@ export default function AttemptScreen() {
             onPress={goNext}
             activeOpacity={0.8}
           >
-            <Text style={styles.nextBtnText}>Next</Text>
+            <Text style={styles.nextBtnText}>{t("studentQuiz.next")}</Text>
             <Ionicons name="arrow-forward" size={18} color="#FFF" />
           </TouchableOpacity>
         )}

@@ -8,6 +8,8 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
+import { useTranslation } from "../../../src/i18n/useTranslation";
+
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
@@ -87,6 +89,7 @@ export default function RankingsTable({
   refreshing     = false,
   onRefresh,
 }) {
+  const { t } = useTranslation();
   const [expandedId, setExpandedId] = useState(null);
   const positionField = getPositionField(scope);
 
@@ -96,9 +99,9 @@ export default function RankingsTable({
   }
 
   const tableTitle =
-    scope === "school" ? "School Rankings"       :
-    scope === "grade"  ? "Grade/Stream Rankings" :
-                         "Class Rankings";
+    scope === "school" ? t("examResults.schoolRankings") :
+    scope === "grade"  ? t("rankTable.titleGrade")       :
+                         t("examResults.classRankings");
 
   const renderItem = ({ item, index }) => {
     const position      = item[positionField] ?? index + 1;
@@ -144,7 +147,7 @@ export default function RankingsTable({
           {/* Student info */}
           <View style={styles.studentInfo}>
             <Text style={styles.studentName} numberOfLines={1}>
-              {item.studentName || item.name || "Unknown Student"}
+              {item.studentName || item.name || t("examDetail.unknownStudent")}
             </Text>
             {subLabel ? (
               <Text style={styles.subLabel} numberOfLines={1}>{subLabel}</Text>
@@ -154,7 +157,7 @@ export default function RankingsTable({
             <View style={styles.classTag}>
               <Ionicons name="school-outline" size={10} color={COLORS.primary} />
               <Text style={styles.classTagText} numberOfLines={1}>
-                {resolvedClass ?? "No class"}
+                {resolvedClass ?? t("rankTable.noClass")}
               </Text>
             </View>
           </View>
@@ -186,7 +189,7 @@ export default function RankingsTable({
             <Text style={styles.gpaValue}>
               {item.gpa != null ? item.gpa.toFixed(1) : "—"}
             </Text>
-            <Text style={styles.gpaLabel}>GPA</Text>
+            <Text style={styles.gpaLabel}>{t("rankTable.gpa")}</Text>
           </View>
 
           <Ionicons
@@ -207,15 +210,17 @@ export default function RankingsTable({
     <View style={styles.container}>
       <View style={styles.tableHeader}>
         <Text style={styles.tableTitle}>{tableTitle}</Text>
-        <Text style={styles.tableCount}>{rankings.length} students</Text>
+        <Text style={styles.tableCount}>
+          {t("rankTable.studentCount", { count: rankings.length })}
+        </Text>
       </View>
 
       {rankings.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="trophy-outline" size={48} color={COLORS.gray200} />
-          <Text style={styles.emptyText}>No rankings available</Text>
+          <Text style={styles.emptyText}>{t("results.noRankings")}</Text>
           <Text style={styles.emptySubtext}>
-            Process results first to generate rankings
+            {t("results.processFirst")}
           </Text>
         </View>
       ) : (
@@ -239,42 +244,47 @@ export default function RankingsTable({
 // ─────────────────────────────────────────────────────────
 
 function ExpandedDetail({ item, resolvedClass }) {
+  const { t } = useTranslation();
+
   return (
     <View style={styles.expandedDetail}>
       <View style={styles.detailSummaryRow}>
         <DetailStat
-          label="Total"
+          label={t("common.total")}
           value={`${item.totalScore ?? "—"}/${item.maxTotalScore ?? "—"}`}
         />
         <DetailStat
-          label="Percentage"
+          label={t("rankTable.percentage")}
           value={item.percentage != null
             ? `${item.percentage.toFixed(1)}%`
             : "—"}
         />
         <DetailStat
-          label="Pass/Fail"
+          label={t("rankTable.passFail")}
           value={`${item.subjectsPassed ?? 0}P / ${item.subjectsFailed ?? 0}F`}
           valueColor={item.isPassing ? COLORS.success : COLORS.error}
         />
-        <DetailStat label="Class" value={resolvedClass || "—"} />
+        <DetailStat
+          label={t("examDetail.classFallback")}
+          value={resolvedClass || "—"}
+        />
       </View>
 
       <View style={styles.rankingsRow}>
         <RankBadge
-          label="Class"
+          label={t("examResults.tabs.class")}
           position={item.classPosition}
           total={item.totalInClass}
           color="#4F46E5"
         />
         <RankBadge
-          label="Grade"
+          label={t("examResults.tabs.grade")}
           position={item.gradePosition}
           total={item.totalInGrade}
           color="#059669"
         />
         <RankBadge
-          label="School"
+          label={t("examResults.tabs.school")}
           position={item.schoolPosition}
           total={item.totalInSchool}
           color="#D97706"
@@ -283,16 +293,26 @@ function ExpandedDetail({ item, resolvedClass }) {
 
       {item.subjectBreakdown?.length > 0 && (
         <View style={styles.subjectBreakdown}>
-          <Text style={styles.breakdownTitle}>Subject Breakdown</Text>
+          <Text style={styles.breakdownTitle}>{t("rankTable.breakdown")}</Text>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View>
               <View style={styles.breakdownHeader}>
-                <Text style={[styles.breakdownCell, styles.colSubject]}>Subject</Text>
-                <Text style={[styles.breakdownCell, styles.colScore]}>Score</Text>
+                <Text style={[styles.breakdownCell, styles.colSubject]}>
+                  {t("rankTable.colSubject")}
+                </Text>
+                <Text style={[styles.breakdownCell, styles.colScore]}>
+                  {t("rankTable.colScore")}
+                </Text>
                 <Text style={[styles.breakdownCell, styles.colScore]}>/20</Text>
-                <Text style={[styles.breakdownCell, styles.colGrade]}>Grade</Text>
-                <Text style={[styles.breakdownCell, styles.colGrade]}>Pts</Text>
-                <Text style={[styles.breakdownCell, styles.colStatus]}>Status</Text>
+                <Text style={[styles.breakdownCell, styles.colGrade]}>
+                  {t("rankTable.colGrade")}
+                </Text>
+                <Text style={[styles.breakdownCell, styles.colGrade]}>
+                  {t("rankTable.colPts")}
+                </Text>
+                <Text style={[styles.breakdownCell, styles.colStatus]}>
+                  {t("common.status")}
+                </Text>
               </View>
 
               {item.subjectBreakdown.map((s, si) => (
@@ -307,7 +327,7 @@ function ExpandedDetail({ item, resolvedClass }) {
                     style={[styles.breakdownCell, styles.colSubject]}
                     numberOfLines={1}
                   >
-                    {s.subjectName || `Subject ${si + 1}`}
+                    {s.subjectName || `${t("teacherExamSubjects.subjectFallback")} ${si + 1}`}
                   </Text>
                   <Text style={[styles.breakdownCell, styles.colScore]}>
                     {s.isAbsent ? "—" : s.score ?? "—"}
@@ -323,7 +343,7 @@ function ExpandedDetail({ item, resolvedClass }) {
                     s.isPassing ? { color: COLORS.success  } :
                                   { color: COLORS.error    },
                   ]}>
-                    {s.isAbsent ? "AB" : s.grade || "—"}
+                    {s.isAbsent ? t("rankTable.abShort") : s.grade || "—"}
                   </Text>
                   <Text style={[styles.breakdownCell, styles.colGrade]}>
                     {s.isAbsent ? "—" : s.points?.toFixed(1) ?? "—"}
@@ -345,7 +365,11 @@ function ExpandedDetail({ item, resolvedClass }) {
                             s.isPassing ? COLORS.success  : COLORS.error,
                         },
                       ]}>
-                        {s.isAbsent ? "Absent" : s.isPassing ? "Pass" : "Fail"}
+                        {s.isAbsent
+                          ? t("rankTable.absent")
+                          : s.isPassing
+                          ? t("examDetail.resultPass")
+                          : t("examDetail.resultFail")}
                       </Text>
                     </View>
                   </View>
@@ -386,6 +410,7 @@ function DetailStat({ label, value, valueColor }) {
 }
 
 function RankBadge({ label, position, total, color }) {
+  const { t } = useTranslation();
   const hasData = position != null && total != null;
   return (
     <View style={[
@@ -397,7 +422,9 @@ function RankBadge({ label, position, total, color }) {
       </Text>
       <Text style={styles.rankBadgeLabel}>{label}</Text>
       {hasData && (
-        <Text style={styles.rankBadgeTotal}>of {total}</Text>
+        <Text style={styles.rankBadgeTotal}>
+          {t("rankTable.ofTotal", { total })}
+        </Text>
       )}
     </View>
   );

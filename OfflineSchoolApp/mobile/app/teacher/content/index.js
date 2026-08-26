@@ -31,29 +31,30 @@ import {
   getTeacherSubjectsForContent,
   deleteContent,
   updateContentStatus,
-} from "../../../src/services/content.service";
+} from "../../../src/services/content.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────
 
 const CONTENT_TABS = [
-  { id: "all",      label: "All",      icon: "grid-outline",          color: "#4F46E5" },
-  { id: "syllabus", label: "Syllabus", icon: "list-outline",          color: "#7C3AED" },
-  { id: "notes",    label: "Notes",    icon: "document-text-outline", color: "#2563EB" },
-  { id: "video",    label: "Videos",   icon: "videocam-outline",      color: "#DC2626" },
-  { id: "audio",    label: "Audio",    icon: "musical-notes-outline", color: "#D97706" },
-  { id: "document", label: "Docs",     icon: "attach-outline",        color: "#059669" },
-  { id: "image",    label: "Images",   icon: "image-outline",         color: "#DB2777" },
+  { id: "all",      labelKey: "teacherContent.tabAll",      icon: "grid-outline",          color: "#4F46E5" },
+  { id: "syllabus", labelKey: "studentSubj.tabSyllabus", icon: "list-outline",          color: "#7C3AED" },
+  { id: "notes",    labelKey: "studentSubj.tabNotes",    icon: "document-text-outline", color: "#2563EB" },
+  { id: "video",    labelKey: "teacherContent.tabVideos",   icon: "videocam-outline",      color: "#DC2626" },
+  { id: "audio",    labelKey: "studentSubj.tabAudio",    icon: "musical-notes-outline", color: "#D97706" },
+  { id: "document", labelKey: "studentSubj.tabDocs",     icon: "attach-outline",        color: "#059669" },
+  { id: "image",    labelKey: "studentSubj.tabImages",   icon: "image-outline",         color: "#DB2777" },
 ];
 
 const SORT_OPTIONS = [
-  { id: "newest",    label: "Newest First" },
-  { id: "oldest",    label: "Oldest First" },
-  { id: "az",        label: "A → Z"        },
-  { id: "za",        label: "Z → A"        },
-  { id: "size_desc", label: "Largest"      },
-  { id: "size_asc",  label: "Smallest"     },
+  { id: "newest",    labelKey: "teacherContent.sortNewest" },
+  { id: "oldest",    labelKey: "teacherContent.sortOldest" },
+  { id: "az",        labelKey: "teacherContent.sortAz"        },
+  { id: "za",        labelKey: "teacherContent.sortZa"        },
+  { id: "size_desc", labelKey: "teacherContent.sortLargest"      },
+  { id: "size_asc",  labelKey: "teacherContent.sortSmallest"     },
 ];
 
 const STATUS_COLORS = {
@@ -63,12 +64,12 @@ const STATUS_COLORS = {
 };
 
 const SUMMARY_TYPES = [
-  { id: "syllabus", icon: "list",          color: "#7C3AED", bg: "#EDE9FE", label: "Syllabus" },
-  { id: "notes",    icon: "document-text", color: "#2563EB", bg: "#DBEAFE", label: "Notes"    },
-  { id: "video",    icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", label: "Videos"   },
-  { id: "audio",    icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", label: "Audio"    },
-  { id: "document", icon: "attach",        color: "#059669", bg: "#ECFDF5", label: "Docs"     },
-  { id: "image",    icon: "image",         color: "#DB2777", bg: "#FDF2F8", label: "Images"   },
+  { id: "syllabus", icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
+  { id: "notes",    icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
+  { id: "video",    icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "teacherContent.tabVideos"   },
+  { id: "audio",    icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
+  { id: "document", icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "studentSubj.tabDocs"     },
+  { id: "image",    icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "studentSubj.tabImages"   },
 ];
 
 const UPLOAD_ENTRY_ROUTE = "/teacher/content/select-subject";
@@ -101,20 +102,21 @@ const formatCount = (n) => {
 };
 
 const getTypeConfig = (type = "") => {
+  const { t } = useTranslation();
   const map = {
-    syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", label: "Syllabus" },
-    notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", label: "Notes"    },
-    video:    { icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", label: "Video"    },
-    audio:    { icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", label: "Audio"    },
-    document: { icon: "attach",        color: "#059669", bg: "#ECFDF5", label: "Document" },
-    image:    { icon: "image",         color: "#DB2777", bg: "#FDF2F8", label: "Image"    },
+    syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
+    notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
+    video:    { icon: "videocam",      color: "#DC2626", bg: "#FEE2E2", labelKey: "studentSubj.tabVideo"    },
+    audio:    { icon: "musical-notes", color: "#D97706", bg: "#FEF3C7", labelKey: "studentSubj.tabAudio"    },
+    document: { icon: "attach",        color: "#059669", bg: "#ECFDF5", labelKey: "teacherContent.kDocument" },
+    image:    { icon: "image",         color: "#DB2777", bg: "#FDF2F8", labelKey: "teacherContent.kImage"    },
   };
   return (
     map[type?.toLowerCase()] || {
       icon:  "document-outline",
       color: "#6B7280",
       bg:    "#F3F4F6",
-      label: type || "File",
+      label: type || t("teacherContent.kFile"),
     }
   );
 };
@@ -155,7 +157,7 @@ function TypeTab({ tab, active, count, onPress }) {
         color={active ? "#FFF" : tab.color}
       />
       <Text style={[tabStyles.label, active && tabStyles.labelActive]}>
-        {tab.label}
+        {t(tab.labelKey)}
       </Text>
       {count > 0 && (
         <View
@@ -213,7 +215,7 @@ function ContentCard({ item, onPress, onOptions }) {
         <View style={cardStyles.metaRow}>
           <View style={[cardStyles.typeBadge, { backgroundColor: cfg.bg }]}>
             <Text style={[cardStyles.typeText, { color: cfg.color }]}>
-              {cfg.label}
+              {t(cfg.labelKey)}
             </Text>
           </View>
           <Text style={cardStyles.meta}>{formatBytes(item.fileSize)}</Text>
@@ -254,6 +256,7 @@ function ContentCard({ item, onPress, onOptions }) {
 }
 
 function EmptyState({ activeTab, onUpload }) {
+  const { t } = useTranslation();
   const cfg = getTypeConfig(activeTab === "all" ? "document" : activeTab);
   return (
     <View style={emptyStyles.container}>
@@ -265,12 +268,12 @@ function EmptyState({ activeTab, onUpload }) {
         />
       </View>
       <Text style={emptyStyles.title}>
-        {activeTab === "all" ? "No Content Yet" : `No ${cfg.label} Yet`}
+        {activeTab === "all" ? t("teacherContent.emptyTitle") : t("teacherContent.emptyTypeTitle", { type: t(cfg.labelKey) })}
       </Text>
       <Text style={emptyStyles.sub}>
         {activeTab === "all"
-          ? "Your content library is empty.\nStart uploading study materials."
-          : `No ${cfg.label.toLowerCase()} uploaded yet.\nTap below to add some.`}
+          ? t("teacherContent.emptySub")
+          : t("teacherContent.emptyTypeSub", { type: t(cfg.labelKey).toLowerCase() })}
       </Text>
       <TouchableOpacity
         style={[emptyStyles.btn, { backgroundColor: cfg.color }]}
@@ -278,7 +281,7 @@ function EmptyState({ activeTab, onUpload }) {
         activeOpacity={0.8}
       >
         <Ionicons name="cloud-upload-outline" size={16} color="#FFF" />
-        <Text style={emptyStyles.btnText}>Upload Now</Text>
+        <Text style={emptyStyles.btnText}>{t("teacherContent.uploadNow")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -287,6 +290,7 @@ function EmptyState({ activeTab, onUpload }) {
 function OptionsSheet({
   visible, item, onClose, onOpen, onShare, onArchive, onDelete,
 }) {
+  const { t } = useTranslation();
   if (!item) return null;
   const cfg = getTypeConfig(item.type);
 
@@ -294,28 +298,28 @@ function OptionsSheet({
     {
       id:      "open",
       icon:    "open-outline",
-      label:   "Open / Preview",
+      labelKey:   "teacherContent.openPreview",
       color:   "#111827",
       onPress: onOpen,
     },
     {
       id:      "share",
       icon:    "share-outline",
-      label:   "Share Link",
+      labelKey:   "teacherContent.shareLink",
       color:   "#4F46E5",
       onPress: onShare,
     },
     {
       id:      "archive",
       icon:    item.status === "archived" ? "eye-outline" : "archive-outline",
-      label:   item.status === "archived" ? "Restore (Make Active)" : "Archive",
+      label:   item.status === "archived" ? t("teacherContent.restoreActive") : t("teacherContent.archive"),
       color:   "#D97706",
       onPress: onArchive,
     },
     {
       id:      "delete",
       icon:    "trash-outline",
-      label:   "Delete",
+      labelKey:   "common.delete",
       color:   "#DC2626",
       onPress: onDelete,
     },
@@ -343,7 +347,7 @@ function OptionsSheet({
                 {item.title}
               </Text>
               <Text style={sheetStyles.fileHeaderSub}>
-                {cfg.label}  ·  {formatBytes(item.fileSize)}
+                {t(cfg.labelKey)}  ·  {formatBytes(item.fileSize)}
               </Text>
             </View>
           </View>
@@ -366,7 +370,7 @@ function OptionsSheet({
                 <Ionicons name={opt.icon} size={18} color={opt.color} />
               </View>
               <Text style={[sheetStyles.optionLabel, { color: opt.color }]}>
-                {opt.label}
+                {t(opt.labelKey)}
               </Text>
               <Ionicons name="chevron-forward" size={16} color="#E5E7EB" />
             </TouchableOpacity>
@@ -377,7 +381,7 @@ function OptionsSheet({
             onPress={onClose}
             activeOpacity={0.7}
           >
-            <Text style={sheetStyles.cancelText}>Cancel</Text>
+            <Text style={sheetStyles.cancelText}>{t("common.cancel")}</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -386,6 +390,7 @@ function OptionsSheet({
 }
 
 function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
+  const { t } = useTranslation();
   return (
     <Modal
       visible={visible}
@@ -401,7 +406,7 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
           {options.map((opt, idx) => {
             const isSelected =
               typeof opt === "string" ? opt === selected : opt.id === selected;
-            const label = typeof opt === "string" ? opt : opt.label;
+            const label = typeof opt === "string" ? opt : t(opt.labelKey);
             const id    = typeof opt === "string" ? opt : opt.id;
 
             return (
@@ -434,7 +439,7 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
             onPress={onClose}
             activeOpacity={0.7}
           >
-            <Text style={sheetStyles.cancelText}>Cancel</Text>
+            <Text style={sheetStyles.cancelText}>{t("common.cancel")}</Text>
           </TouchableOpacity>
         </Pressable>
       </Pressable>
@@ -447,6 +452,7 @@ function PickerModal({ visible, title, options, selected, onSelect, onClose }) {
 // ─────────────────────────────────────────────────────────────
 
 function ContentLibraryPage() {
+  const { t } = useTranslation();
   const router    = useRouter();
   const user      = useAuthStore((s) => s.user);
   const teacherId = user?._id || user?.id || user?.userId || null;
@@ -494,7 +500,7 @@ function ContentLibraryPage() {
         setSubjects(subjectsData        || []);
       } catch (err) {
         console.error("Content load error:", err);
-        setError("Failed to load content library");
+        setError(t("teacherContent.loadFailed"));
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -565,7 +571,7 @@ function ContentLibraryPage() {
   }, [allItems]);
 
   const subjectOptions = useMemo(() => {
-    const all = [{ id: "__all__", label: "All Subjects" }];
+    const all = [{ id: "__all__", labelKey: "teacherContent.allSubjects" }];
     subjects.forEach((s) =>
       all.push({ id: s.subjectId, label: s.subjectName })
     );
@@ -586,11 +592,12 @@ function ContentLibraryPage() {
 
   const handleOpenItem = useCallback((item) => {
     if (item.fileUrl) {
-      Linking.openURL(item.fileUrl).catch(() =>
-        Alert.alert("Error", "Could not open this file.")
+      Linking.openURL(item.fileUrl).catch(() => {
+                                            return Alert.alert(t("teacherContent.errTitle"), t("teacherContent.openFailedBody"));
+                                          }
       );
     } else {
-      Alert.alert("No file", "This item has no file URL.");
+      Alert.alert(t("teacherContent.noFile"), t("teacherContent.noFileBody"));
     }
   }, []);
 
@@ -602,16 +609,19 @@ function ContentLibraryPage() {
         url:     item.fileUrl,
       });
     } catch {
-      Alert.alert("Share failed", "Could not share this file.");
+      Alert.alert(t("teacherContent.shareFailed"), t("teacherContent.shareFailedBody"));
     }
   }, []);
 
   const handleArchiveItem = useCallback((item) => {
     const newStatus = item.status === "archived" ? "active" : "archived";
-    const label     = newStatus === "archived" ? "Archive" : "Restore";
+    const label     = newStatus === "archived" ? t("teacherContent.archive") : t("teacherContent.restore");
 
-    Alert.alert(`${label} Content`, `${label} "${item.title}"?`, [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(
+      t("teacherContent.statusTitle", { action: label }),
+      t("teacherContent.statusBody", { action: label, title: item.title }),
+      [
+      { text: t("common.cancel"), style: "cancel" },
       {
         text:    label,
         onPress: async () => {
@@ -623,7 +633,10 @@ function ContentLibraryPage() {
               )
             );
           } catch {
-            Alert.alert("Error", `Could not ${label.toLowerCase()} this item.`);
+            Alert.alert(
+              t("teacherContent.errTitle"),
+              t("teacherContent.statusFailed", { action: label.toLowerCase() }),
+            );
           }
         },
       },
@@ -632,12 +645,12 @@ function ContentLibraryPage() {
 
   const handleDeleteItem = useCallback((item) => {
     Alert.alert(
-      "Delete Content",
+      t("teacherContent.deleteTitle"),
       `Permanently delete "${item.title}"?\n\nThis cannot be undone.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text:  "Delete",
+          text:  t("common.delete"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -653,7 +666,7 @@ function ContentLibraryPage() {
                 };
               });
             } catch {
-              Alert.alert("Error", "Could not delete this item. Please try again.");
+              Alert.alert(t("teacherContent.errTitle"), t("teacherContent.deleteFailed"));
             }
           },
         },
@@ -675,15 +688,17 @@ function ContentLibraryPage() {
   }, [router]);
 
   const activeFilterSubjectLabel = useMemo(() => {
-    if (!filterSubject) return "Subject";
+    if (!filterSubject) return t("teacherContent.subject");
     return (
       subjects.find((s) => s.subjectId === filterSubject)?.subjectName ||
-      "Subject"
+      t("teacherContent.subject")
     );
   }, [filterSubject, subjects]);
 
   const activeSortLabel = useMemo(
-    () => SORT_OPTIONS.find((s) => s.id === sortBy)?.label || "Sort",
+    () => {
+      return (() => { const o = SORT_OPTIONS.find((so) => so.id === sortBy); return o ? t(o.labelKey) : t("teacherContent.sort"); })();
+    },
     [sortBy]
   );
 
@@ -694,7 +709,7 @@ function ContentLibraryPage() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading content library…</Text>
+        <Text style={styles.loadingText}>{t("teacherContent.loading")}</Text>
       </View>
     );
   }
@@ -717,7 +732,7 @@ function ContentLibraryPage() {
         </TouchableOpacity>
 
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>Content Library</Text>
+          <Text style={styles.headerTitle}>{t("teacherContent.title")}</Text>
           {summary?.total > 0 && (
             <Text style={styles.headerSub}>
               {summary.total} file{summary.total !== 1 ? "s" : ""}
@@ -744,7 +759,7 @@ function ContentLibraryPage() {
             activeOpacity={0.8}
           >
             <Ionicons name="add" size={18} color="#FFF" />
-            <Text style={styles.uploadBtnText}>Upload</Text>
+            <Text style={styles.uploadBtnText}>{t("teacherContent.upload")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -756,7 +771,7 @@ function ContentLibraryPage() {
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
-            placeholder="Search by title, subject…"
+            placeholder={t("teacherContent.searchPh")}
             placeholderTextColor="#9CA3AF"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -777,7 +792,7 @@ function ContentLibraryPage() {
           <Ionicons name="alert-circle-outline" size={16} color="#DC2626" />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => loadContent()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -857,7 +872,7 @@ function ContentLibraryPage() {
               icon={s.icon}
               color={s.color}
               bg={s.bg}
-              label={s.label}
+              label={t(s.labelKey)}
               count={summary[s.id] || 0}
               active={activeTab === s.id}
               onPress={() => setActiveTab(s.id)}
@@ -915,13 +930,13 @@ function ContentLibraryPage() {
         activeOpacity={0.85}
       >
         <Ionicons name="cloud-upload-outline" size={20} color="#FFF" />
-        <Text style={styles.fabText}>Upload</Text>
+        <Text style={styles.fabText}>{t("teacherContent.upload")}</Text>
       </TouchableOpacity>
 
       {/* SORT MODAL */}
       <PickerModal
         visible={showSortModal}
-        title="Sort By"
+        title={t("teacherContent.sortBy")}
         options={SORT_OPTIONS}
         selected={sortBy}
         onSelect={(id) => setSortBy(id)}
@@ -931,7 +946,7 @@ function ContentLibraryPage() {
       {/* SUBJECT FILTER MODAL */}
       <PickerModal
         visible={showFilterModal}
-        title="Filter by Subject"
+        title={t("teacherContent.filterSubject")}
         options={subjectOptions}
         selected={filterSubject || "__all__"}
         onSelect={handleSubjectSelect}

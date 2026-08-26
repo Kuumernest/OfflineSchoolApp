@@ -45,11 +45,12 @@ const timeAgo = (value) => {
 
 const getActionConfig = (action) => {
   switch (action) {
-    case "suspend": return { icon: "ban-outline",             color: "#D97706", label: "Suspend" };
-    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", label: "Restore" };
-    case "delete":  return { icon: "trash-outline",            color: "#DC2626", label: "Delete"  };
-    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", label: "Move"    };
-    default:        return { icon: "sync-outline",             color: "#6B7280", label: action || "Update" };
+    case "suspend": return { icon: "ban-outline",             color: "#D97706", labelKey: "syncScreens.vSuspend" };
+    case "restore": return { icon: "checkmark-circle-outline", color: "#059669", labelKey: "syncScreens.vRestore" };
+    case "delete":  return { icon: "trash-outline",            color: "#DC2626", labelKey: "syncScreens.vDelete"  };
+    case "move":    return { icon: "swap-horizontal-outline",  color: "#4F46E5", labelKey: "syncScreens.vMove"    };
+    // `raw` keeps an unrecognised action visible instead of mislabelling it.
+    default:        return { icon: "sync-outline",             color: "#6B7280", labelKey: "syncScreens.vUpdate", raw: action };
   }
 };
 
@@ -67,6 +68,7 @@ const getEntityIcon = (entityType) => {
 // ─────────────────────────────────────────────────────────
 
 function OverwriteRow({ item, onPress, onDismiss }) {
+  const { t } = useTranslation();
   const action = getActionConfig(item.new_action);
   const isUnseen = item.seen_by_loser === 0;
 
@@ -107,7 +109,7 @@ function OverwriteRow({ item, onPress, onDismiss }) {
 
         <Text style={styles.rowDescription} numberOfLines={2}>
           <Text style={{ fontWeight: "600", color: "#111827" }}>
-            {item.overwritten_by_name || "Someone"}
+            {item.overwritten_by_name || t("syncScreens.someone")}
           </Text>
           {"'s edit replaced yours from "}
           {formatDateTime(item.lost_edit_at)}
@@ -130,6 +132,7 @@ function OverwriteRow({ item, onPress, onDismiss }) {
 // ─────────────────────────────────────────────────────────
 
 export default function SyncOverwritesScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const schoolId = useAuthStore((s) => s.user?.schoolId);
 
@@ -177,12 +180,12 @@ export default function SyncOverwritesScreen() {
     if (unseenCount === 0) return;
 
     Alert.alert(
-      "Mark All as Seen",
+      t("syncScreens.markAllSeen"),
       `Mark all ${unseenCount} overwrite${unseenCount > 1 ? "s" : ""} as seen? This will clear the dashboard alert.`,
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Mark All",
+          text: t("syncScreens.markAll"),
           onPress: async () => {
             await SyncOverwriteService.markAllAsSeen(schoolId);
             setOverwrites((prev) =>
@@ -204,7 +207,7 @@ export default function SyncOverwritesScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading overwrites…</Text>
+        <Text style={styles.loadingText}>{t("syncScreens.loading")}</Text>
       </View>
     );
   }
@@ -219,15 +222,15 @@ export default function SyncOverwritesScreen() {
           <View style={styles.emptyIcon}>
             <Ionicons name="checkmark-circle" size={48} color="#10B981" />
           </View>
-          <Text style={styles.emptyTitle}>All clear!</Text>
+          <Text style={styles.emptyTitle}>{t("syncScreens.allClear")}</Text>
           <Text style={styles.emptySubtitle}>
-            None of your edits have been overwritten by other admins.
+            {t("syncScreens.allClearSub")}
           </Text>
           <TouchableOpacity
             onPress={() => router.back()}
             style={styles.emptyBtn}
           >
-            <Text style={styles.emptyBtnText}>Back to Dashboard</Text>
+            <Text style={styles.emptyBtnText}>{t("syncScreens.backToDash")}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -240,7 +243,7 @@ export default function SyncOverwritesScreen() {
     <View style={styles.container}>
       <Header
         onBack={() => router.back()}
-        actionLabel={unseenCount > 0 ? "Dismiss All" : null}
+        actionLabel={unseenCount > 0 ? t("syncScreens.dismissAll") : null}
         onAction={handleDismissAll}
       />
 
@@ -248,8 +251,7 @@ export default function SyncOverwritesScreen() {
       <View style={styles.infoBanner}>
         <Ionicons name="information-circle-outline" size={16} color="#1E40AF" />
         <Text style={styles.infoText}>
-          These are edits you made that were later replaced by other admins.
-          Tap one to see the diff.
+          {t("syncScreens.banner")}
         </Text>
       </View>
 
@@ -283,14 +285,15 @@ export default function SyncOverwritesScreen() {
 // ─────────────────────────────────────────────────────────
 
 function Header({ onBack, actionLabel, onAction }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.header}>
       <TouchableOpacity onPress={onBack} style={styles.backBtn}>
         <Ionicons name="chevron-back" size={22} color="#374151" />
       </TouchableOpacity>
       <View style={{ flex: 1 }}>
-        <Text style={styles.headerTitle}>Sync Overwrites</Text>
-        <Text style={styles.headerSub}>Edits replaced by other admins</Text>
+        <Text style={styles.headerTitle}>{t("syncScreens.listTitle")}</Text>
+        <Text style={styles.headerSub}>{t("syncScreens.listBlurb")}</Text>
       </View>
       {actionLabel && (
         <TouchableOpacity onPress={onAction} style={styles.actionBtn}>
@@ -456,3 +459,4 @@ const styles = StyleSheet.create({
   },
   emptyBtnText: { color: "#fff", fontWeight: "700", fontSize: 14 },
 });
+import { useTranslation } from "../../../src/i18n/useTranslation";

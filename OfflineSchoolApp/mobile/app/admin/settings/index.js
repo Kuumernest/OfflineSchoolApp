@@ -24,6 +24,7 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useRouter }       from "expo-router";
 import * as ImagePicker    from "expo-image-picker";
 import { toDisplayUri }    from "../../../src/utils/logoUri";
+import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import DateField           from "../../../src/components/DateField";
 import {
@@ -47,19 +48,19 @@ import {
 // ─────────────────────────────────────────────────────────
 
 const SECTIONS = [
-  { id: "school",    label: "School",           icon: "business-outline"      },
-  { id: "profile",   label: "My Profile",       icon: "person-circle-outline" },
-  { id: "grading",   label: "Grading System",   icon: "school-outline"        },
-  { id: "admins",    label: "Admin Management", icon: "shield-outline"        },
-  { id: "idcards",   label: "ID Cards",         icon: "card-outline"          },
-  { id: "analytics", label: "Analytics",        icon: "bar-chart-outline"     },
+  { id: "school",    labelKey: "adminSettings.secSchool",    icon: "business-outline"      },
+  { id: "profile",   labelKey: "adminSettings.secProfile",   icon: "person-circle-outline" },
+  { id: "grading",   labelKey: "adminSettings.secGrading",   icon: "school-outline"        },
+  { id: "admins",    labelKey: "adminSettings.secAdmins",    icon: "shield-outline"        },
+  { id: "idcards",   labelKey: "adminSettings.secIdCards",   icon: "card-outline"          },
+  { id: "analytics", labelKey: "adminSettings.secAnalytics", icon: "bar-chart-outline"     },
 ];
 
-const ROLE_LABELS = {
-  super_admin:  "Super Admin",
-  school_admin: "School Admin",
-  admin:        "Admin",
-  teacher:      "Teacher",
+const ROLE_LABEL_KEYS = {
+  super_admin:  "adminSettings.roleSuperAdmin",
+  school_admin: "adminSettings.roleSchoolAdmin",
+  admin:        "adminSettings.roleAdmin",
+  teacher:      "adminSettings.roleTeacher",
 };
 
 const ROLE_COLORS = {
@@ -70,24 +71,34 @@ const ROLE_COLORS = {
 };
 
 const SCHOOL_TYPES = [
-  { value: "primary",    label: "Primary"         },
-  { value: "jhs",        label: "JHS"             },
-  { value: "shs",        label: "SHS / Secondary" },
-  { value: "combined",   label: "Combined"        },
-  { value: "vocational", label: "Vocational"      },
-  { value: "university", label: "University"      },
-  { value: "other",      label: "Other"           },
+  { value: "primary",    labelKey: "adminSettings.typePrimary"    },
+  { value: "jhs",        labelKey: "adminSettings.typeJhs"        },
+  { value: "shs",        labelKey: "adminSettings.typeShs"        },
+  { value: "combined",   labelKey: "adminSettings.typeCombined"   },
+  { value: "vocational", labelKey: "adminSettings.typeVocational" },
+  { value: "university", labelKey: "adminSettings.typeUniversity" },
+  { value: "other",      labelKey: "adminSettings.typeOther"      },
 ];
 
 const TERM_SYSTEMS = [
-  { value: "trimester", label: "Trimester (3 Terms)" },
-  { value: "semester",  label: "Semester (2 Terms)"  },
-  { value: "quarter",   label: "Quarter (4 Terms)"   },
+  { value: "trimester", labelKey: "adminSettings.termTrimester" },
+  { value: "semester",  labelKey: "adminSettings.termSemester"  },
+  { value: "quarter",   labelKey: "adminSettings.termQuarter"   },
 ];
 
 const DAYS_OF_WEEK = [
   "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday",
 ];
+
+/** Stored/sent values stay English; only the chip label is localised. */
+const DAY_SHORT_KEYS = {
+  Monday:    "adminSettings.dayMon",
+  Tuesday:   "adminSettings.dayTue",
+  Wednesday: "adminSettings.dayWed",
+  Thursday:  "adminSettings.dayThu",
+  Friday:    "adminSettings.dayFri",
+  Saturday:  "adminSettings.daySat",
+};
 
 // ─────────────────────────────────────────────────────────
 // LOGO FORMAT HELPER
@@ -104,22 +115,25 @@ const normaliseLogo = (raw) => toDisplayUri(raw);
 // SHARED SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-const SectionTab = React.memo(({ section, active, onPress }) => (
-  <TouchableOpacity
-    style={[styles.tab, active && styles.tabActive]}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <Ionicons
-      name={section.icon}
-      size={18}
-      color={active ? "#4F46E5" : "#9CA3AF"}
-    />
-    <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
-      {section.label}
-    </Text>
-  </TouchableOpacity>
-));
+const SectionTab = React.memo(({ section, active, onPress }) => {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      style={[styles.tab, active && styles.tabActive]}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <Ionicons
+        name={section.icon}
+        size={18}
+        color={active ? "#4F46E5" : "#9CA3AF"}
+      />
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+        {t(section.labelKey)}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
 const SettingRow = React.memo(({ label, children, hint }) => (
   <View style={styles.settingRow}>
@@ -138,6 +152,7 @@ const Card = React.memo(({ children, style }) => (
 // ─────────────────────────────────────────────────────────
 
 const SchoolSection = ({ schoolId }) => {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
 
@@ -228,7 +243,7 @@ const SchoolSection = ({ schoolId }) => {
   const pickLogo = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== "granted") {
-      Alert.alert("Permission Required", "Please allow access to your photo library.");
+      Alert.alert(t("adminSettings.permTitle"), t("adminSettings.permPhotoBody"));
       return;
     }
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -247,10 +262,10 @@ const SchoolSection = ({ schoolId }) => {
   };
 
   const removeLogo = () => {
-    Alert.alert("Remove Logo", "Remove the school logo?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("adminSettings.removeLogoTitle"), t("adminSettings.removeLogoBody"), [
+      { text: t("adminSettings.cancel"), style: "cancel" },
       {
-        text: "Remove",
+        text: t("adminSettings.remove"),
         style: "destructive",
         onPress: () => {
           setLogoUri(null);
@@ -268,7 +283,10 @@ const SchoolSection = ({ schoolId }) => {
   };
 
   const handleSave = async () => {
-    if (!name.trim()) { Alert.alert("Error", "School name is required"); return; }
+    if (!name.trim()) {
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errSchoolName"));
+      return;
+    }
     try {
       setSaving(true);
       const cleanedBase64 = logoBase64
@@ -311,9 +329,12 @@ const SchoolSection = ({ schoolId }) => {
           setLogoBase64(null);
         }
       }
-      Alert.alert("Saved", "School settings updated successfully");
+      Alert.alert(t("adminSettings.savedTitle"), t("adminSettings.schoolSaved"));
     } catch (err) {
-      Alert.alert("Error", err?.response?.data?.message || "Failed to save settings");
+      Alert.alert(
+        t("adminSettings.errTitle"),
+        err?.response?.data?.message || t("adminSettings.errSaveSettings")
+      );
     } finally {
       setSaving(false);
     }
@@ -346,7 +367,9 @@ const SchoolSection = ({ schoolId }) => {
           color={logoStatus === "error" ? "#FCA5A5" : "#9CA3AF"}
         />
         <Text style={sc.logoPlaceholderText}>
-          {logoStatus === "error" ? "Failed to load" : "No Logo"}
+          {logoStatus === "error"
+            ? t("adminSettings.logoLoadFailed")
+            : t("adminSettings.noLogo")}
         </Text>
       </View>
     );
@@ -364,7 +387,7 @@ const SchoolSection = ({ schoolId }) => {
     <View>
       {/* ── Logo ── */}
       <Card>
-        <Text style={styles.cardTitle}>School Logo</Text>
+        <Text style={styles.cardTitle}>{t("adminSettings.schoolLogo")}</Text>
         <View style={sc.logoRow}>
           <TouchableOpacity style={sc.logoBox} onPress={pickLogo} activeOpacity={0.8}>
             <LogoContent />
@@ -373,7 +396,9 @@ const SchoolSection = ({ schoolId }) => {
             <TouchableOpacity style={sc.logoBtn} onPress={pickLogo} activeOpacity={0.8}>
               <Ionicons name="cloud-upload-outline" size={16} color="#4F46E5" />
               <Text style={sc.logoBtnText}>
-                {logoStatus === "ready" ? "Change Logo" : "Upload Logo"}
+                {logoStatus === "ready"
+                  ? t("adminSettings.changeLogo")
+                  : t("adminSettings.uploadLogo")}
               </Text>
             </TouchableOpacity>
             {logoStatus === "ready" && (
@@ -383,97 +408,99 @@ const SchoolSection = ({ schoolId }) => {
                 activeOpacity={0.8}
               >
                 <Ionicons name="trash-outline" size={16} color="#DC2626" />
-                <Text style={[sc.logoBtnText, { color: "#DC2626" }]}>Remove</Text>
+                <Text style={[sc.logoBtnText, { color: "#DC2626" }]}>
+                  {t("adminSettings.remove")}
+                </Text>
               </TouchableOpacity>
             )}
-            <Text style={sc.logoHint}>Square image recommended (PNG / JPG)</Text>
+            <Text style={sc.logoHint}>{t("adminSettings.logoHint")}</Text>
           </View>
         </View>
       </Card>
 
       {/* ── Basic Info ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>Basic Information</Text>
-        <SettingRow label="School Name *">
+        <Text style={styles.cardTitle}>{t("adminSettings.basicInfo")}</Text>
+        <SettingRow label={t("adminSettings.schoolName")}>
           <TextInput
             style={styles.input}
             value={name}
             onChangeText={setName}
-            placeholder="e.g. Greenfield Academy"
+            placeholder={t("adminSettings.schoolNamePh")}
             autoCapitalize="words"
           />
         </SettingRow>
-        <SettingRow label="School Motto / Tagline">
+        <SettingRow label={t("adminSettings.motto")}>
           <TextInput
             style={styles.input}
             value={motto}
             onChangeText={setMotto}
-            placeholder="e.g. Excellence in Education"
+            placeholder={t("adminSettings.mottoPh")}
             autoCapitalize="sentences"
           />
         </SettingRow>
-        <SettingRow label="School Type">
+        <SettingRow label={t("adminSettings.schoolType")}>
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={sc.chipRow}
           >
-            {SCHOOL_TYPES.map((t) => (
+            {SCHOOL_TYPES.map((opt) => (
               <TouchableOpacity
-                key={t.value}
-                style={[sc.chip, schoolType === t.value && sc.chipActive]}
-                onPress={() => setSchoolType(t.value)}
+                key={opt.value}
+                style={[sc.chip, schoolType === opt.value && sc.chipActive]}
+                onPress={() => setSchoolType(opt.value)}
               >
-                <Text style={[sc.chipText, schoolType === t.value && sc.chipTextActive]}>
-                  {t.label}
+                <Text style={[sc.chipText, schoolType === opt.value && sc.chipTextActive]}>
+                  {t(opt.labelKey)}
                 </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
         </SettingRow>
-        <SettingRow label="School Code">
+        <SettingRow label={t("adminSettings.schoolCode")}>
           <TextInput
             style={[styles.input, styles.inputSmall]}
             value={schoolCode}
             onChangeText={setSchoolCode}
-            placeholder="e.g. GFA"
+            placeholder={t("adminSettings.schoolCodePh")}
             autoCapitalize="characters"
             maxLength={10}
           />
         </SettingRow>
-        <SettingRow label="Reg Number">
+        <SettingRow label={t("adminSettings.regNumber")}>
           <TextInput
             style={styles.input}
             value={regNumber}
             onChangeText={setRegNumber}
-            placeholder="Official registration number"
+            placeholder={t("adminSettings.regNumberPh")}
           />
         </SettingRow>
-        <SettingRow label="Year Founded">
+        <SettingRow label={t("adminSettings.yearFounded")}>
           <TextInput
             style={[styles.input, styles.inputSmall]}
             value={foundedYear}
             onChangeText={setFoundedYear}
-            placeholder="e.g. 1998"
+            placeholder={t("adminSettings.yearFoundedPh")}
             keyboardType="numeric"
             maxLength={4}
           />
         </SettingRow>
-        <SettingRow label="Principal">
+        <SettingRow label={t("adminSettings.principal")}>
           <TextInput
             style={styles.input}
             value={principalName}
             onChangeText={setPrincipalName}
-            placeholder="Full name of head teacher"
+            placeholder={t("adminSettings.principalPh")}
             autoCapitalize="words"
           />
         </SettingRow>
-        <SettingRow label="About">
+        <SettingRow label={t("adminSettings.about")}>
           <TextInput
             style={[styles.input, sc.textarea]}
             value={description}
             onChangeText={setDescription}
-            placeholder="Brief description..."
+            placeholder={t("adminSettings.aboutPh")}
             multiline
             numberOfLines={3}
             textAlignVertical="top"
@@ -483,8 +510,8 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Contact ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>Contact Details</Text>
-        <SettingRow label="School Email">
+        <Text style={styles.cardTitle}>{t("adminSettings.contactDetails")}</Text>
+        <SettingRow label={t("adminSettings.schoolEmail")}>
           <TextInput
             style={styles.input}
             value={email}
@@ -494,7 +521,7 @@ const SchoolSection = ({ schoolId }) => {
             autoCapitalize="none"
           />
         </SettingRow>
-        <SettingRow label="Phone">
+        <SettingRow label={t("adminSettings.phone")}>
           <TextInput
             style={styles.input}
             value={phone}
@@ -503,7 +530,7 @@ const SchoolSection = ({ schoolId }) => {
             keyboardType="phone-pad"
           />
         </SettingRow>
-        <SettingRow label="Website">
+        <SettingRow label={t("adminSettings.website")}>
           <TextInput
             style={styles.input}
             value={website}
@@ -517,13 +544,13 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Location ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>Location</Text>
-        <SettingRow label="Address">
+        <Text style={styles.cardTitle}>{t("adminSettings.location")}</Text>
+        <SettingRow label={t("adminSettings.address")}>
           <TextInput
             style={[styles.input, sc.textarea]}
             value={address}
             onChangeText={setAddress}
-            placeholder="Street address"
+            placeholder={t("adminSettings.addressPh")}
             multiline
             numberOfLines={2}
             textAlignVertical="top"
@@ -531,24 +558,24 @@ const SchoolSection = ({ schoolId }) => {
         </SettingRow>
         <View style={sc.row2}>
           <View style={{ flex: 1 }}>
-            <SettingRow label="City">
+            <SettingRow label={t("adminSettings.city")}>
               <TextInput
                 style={styles.input}
                 value={city}
                 onChangeText={setCity}
-                placeholder="City"
+                placeholder={t("adminSettings.city")}
                 autoCapitalize="words"
               />
             </SettingRow>
           </View>
           <View style={{ width: 10 }} />
           <View style={{ flex: 1 }}>
-            <SettingRow label="State">
+            <SettingRow label={t("adminSettings.state")}>
               <TextInput
                 style={styles.input}
                 value={state}
                 onChangeText={setState}
-                placeholder="State"
+                placeholder={t("adminSettings.state")}
                 autoCapitalize="words"
               />
             </SettingRow>
@@ -558,22 +585,22 @@ const SchoolSection = ({ schoolId }) => {
 
       {/* ── Academic Calendar ── */}
       <Card style={{ marginTop: 12 }}>
-        <Text style={styles.cardTitle}>Academic Calendar</Text>
-        <SettingRow label="System">
+        <Text style={styles.cardTitle}>{t("adminSettings.academicCalendar")}</Text>
+        <SettingRow label={t("adminSettings.system")}>
           <View style={styles.segmented}>
-            {TERM_SYSTEMS.map((t) => (
+            {TERM_SYSTEMS.map((opt) => (
               <TouchableOpacity
-                key={t.value}
-                style={[styles.segment, termSystem === t.value && styles.segmentActive]}
-                onPress={() => setTermSystem(t.value)}
+                key={opt.value}
+                style={[styles.segment, termSystem === opt.value && styles.segmentActive]}
+                onPress={() => setTermSystem(opt.value)}
               >
                 <Text
                   style={[
                     styles.segmentText,
-                    termSystem === t.value && styles.segmentTextActive,
+                    termSystem === opt.value && styles.segmentTextActive,
                   ]}
                 >
-                  {t.label.split(" ")[0]}
+                  {t(opt.labelKey)}
                 </Text>
               </TouchableOpacity>
             ))}
@@ -582,7 +609,7 @@ const SchoolSection = ({ schoolId }) => {
         <View style={sc.row2}>
           <View style={{ flex: 1 }}>
             <DateField
-              label="Year Start"
+              label={t("adminSettings.yearStart")}
               value={academicYearStart}
               onChange={setAcademicYearStart}
             />
@@ -590,13 +617,13 @@ const SchoolSection = ({ schoolId }) => {
           <View style={{ width: 10 }} />
           <View style={{ flex: 1 }}>
             <DateField
-              label="Year End"
+              label={t("adminSettings.yearEnd")}
               value={academicYearEnd}
               onChange={setAcademicYearEnd}
             />
           </View>
         </View>
-        <SettingRow label="School Days">
+        <SettingRow label={t("adminSettings.schoolDays")}>
           <View style={sc.dayRow}>
             {DAYS_OF_WEEK.map((day) => {
               const active = schoolDays.includes(day);
@@ -607,7 +634,7 @@ const SchoolSection = ({ schoolId }) => {
                   onPress={() => toggleDay(day)}
                 >
                   <Text style={[sc.dayChipText, active && sc.dayChipTextActive]}>
-                    {day.slice(0, 3)}
+                    {t(DAY_SHORT_KEYS[day])}
                   </Text>
                 </TouchableOpacity>
               );
@@ -633,7 +660,7 @@ const SchoolSection = ({ schoolId }) => {
         ) : (
           <>
             <Ionicons name="save-outline" size={18} color="#fff" />
-            <Text style={styles.btnText}>Save School Settings</Text>
+            <Text style={styles.btnText}>{t("adminSettings.saveSchool")}</Text>
           </>
         )}
       </TouchableOpacity>
@@ -671,6 +698,7 @@ const sc = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 const ProfileSection = ({ user, onProfileUpdated }) => {
+  const { t } = useTranslation();
   const [name,            setName]            = useState("");
   const [email,           setEmail]           = useState("");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -688,14 +716,17 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
   }, [user]);
 
   const handleSaveProfile = async () => {
-    if (!name.trim()) { Alert.alert("Error", "Name is required"); return; }
+    if (!name.trim()) {
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errName"));
+      return;
+    }
     try {
       setSaving(true);
       const updated = await updateProfile({ name: name.trim(), email });
       onProfileUpdated?.(updated);
-      Alert.alert("Success", "Profile updated successfully");
+      Alert.alert(t("adminSettings.successTitle"), t("adminSettings.profileSaved"));
     } catch {
-      Alert.alert("Error", "Failed to update profile");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errProfileSave"));
     } finally {
       setSaving(false);
     }
@@ -703,11 +734,11 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
 
   const handleChangePassword = async () => {
     if (!currentPassword || !newPassword || !confirmPassword) {
-      Alert.alert("Error", "All fields required");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errAllFields"));
       return;
     }
     if (newPassword !== confirmPassword) {
-      Alert.alert("Error", "Passwords don't match");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errPwMismatch"));
       return;
     }
     try {
@@ -717,9 +748,9 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
       setNewPassword("");
       setConfirmPassword("");
       setShowPwForm(false);
-      Alert.alert("Success", "Password changed");
+      Alert.alert(t("adminSettings.successTitle"), t("adminSettings.pwChanged"));
     } catch {
-      Alert.alert("Error", "Failed to change password");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errPwChange"));
     } finally {
       setChangingPw(false);
     }
@@ -728,8 +759,8 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
   return (
     <View>
       <Card>
-        <Text style={styles.cardTitle}>Personal Information</Text>
-        <SettingRow label="Full Name">
+        <Text style={styles.cardTitle}>{t("adminSettings.personalInfo")}</Text>
+        <SettingRow label={t("adminSettings.fullName")}>
           <TextInput
             style={styles.input}
             value={name}
@@ -737,7 +768,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
             autoCapitalize="words"
           />
         </SettingRow>
-        <SettingRow label="Email">
+        <SettingRow label={t("adminSettings.email")}>
           <TextInput
             style={styles.input}
             value={email}
@@ -746,7 +777,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
             keyboardType="email-address"
           />
         </SettingRow>
-        <SettingRow label="Role">
+        <SettingRow label={t("adminSettings.role")}>
           <View
             style={[
               styles.roleBadge,
@@ -754,7 +785,9 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
             ]}
           >
             <Text style={[styles.roleText, { color: ROLE_COLORS[user?.role] || "#6B7280" }]}>
-              {ROLE_LABELS[user?.role] || user?.role}
+              {ROLE_LABEL_KEYS[user?.role]
+                ? t(ROLE_LABEL_KEYS[user?.role])
+                : user?.role}
             </Text>
           </View>
         </SettingRow>
@@ -763,15 +796,17 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
           onPress={handleSaveProfile}
           disabled={saving}
         >
-          <Text style={styles.btnText}>Save Profile</Text>
+          <Text style={styles.btnText}>{t("adminSettings.saveProfile")}</Text>
         </TouchableOpacity>
       </Card>
 
       <Card style={{ marginTop: 12 }}>
         <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>Password</Text>
+          <Text style={styles.cardTitle}>{t("adminSettings.password")}</Text>
           <TouchableOpacity onPress={() => setShowPwForm(!showPwForm)}>
-            <Text style={styles.linkText}>{showPwForm ? "Cancel" : "Change Password"}</Text>
+            <Text style={styles.linkText}>
+              {showPwForm ? t("adminSettings.cancel") : t("adminSettings.changePw")}
+            </Text>
           </TouchableOpacity>
         </View>
         {showPwForm && (
@@ -781,7 +816,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
                 style={[styles.input, { flex: 1 }]}
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
-                placeholder="Current password"
+                placeholder={t("adminSettings.currentPwPh")}
                 secureTextEntry={!showCurrentPw}
               />
               <TouchableOpacity
@@ -800,7 +835,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
                 style={[styles.input, { flex: 1 }]}
                 value={newPassword}
                 onChangeText={setNewPassword}
-                placeholder="New password"
+                placeholder={t("adminSettings.newPwPh")}
                 secureTextEntry={!showNewPw}
               />
               <TouchableOpacity
@@ -818,7 +853,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
               style={styles.input}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              placeholder="Confirm new password"
+              placeholder={t("adminSettings.confirmPwPh")}
               secureTextEntry
             />
             <TouchableOpacity
@@ -826,7 +861,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
               onPress={handleChangePassword}
               disabled={changingPw}
             >
-              <Text style={styles.btnText}>Update Password</Text>
+              <Text style={styles.btnText}>{t("adminSettings.updatePw")}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -848,6 +883,7 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
  * and what happens when somebody scans it.
  */
 const IdCardSection = ({ schoolId }) => {
+  const { t } = useTranslation();
   const [settings, setSettings] = useState(null);
   const [loading,  setLoading]  = useState(true);
   const [saving,   setSaving]   = useState(false);
@@ -883,14 +919,13 @@ const IdCardSection = ({ schoolId }) => {
       });
       setSettings(config);
       Alert.alert(
-        "Saved",
+        t("adminSettings.savedTitle"),
         // Said every time, because it is the thing an admin gets wrong: this
         // changes cards printed from now on, not cards already laminated.
-        "This applies to cards printed from now on. Cards already issued keep " +
-        "the date printed on them."
+        t("adminSettings.idCardSavedBody")
       );
     } catch (err) {
-      Alert.alert("Could not save", err.message);
+      Alert.alert(t("adminSettings.errSaveTitle"), err.message);
     } finally {
       setSaving(false);
     }
@@ -908,8 +943,7 @@ const IdCardSection = ({ schoolId }) => {
     return (
       <View style={styles.card}>
         <Text style={{ fontSize: 13, color: "#96570B" }}>
-          These settings could not be loaded, and nothing is cached on this
-          device yet. Connect once and reopen this screen.
+          {t("adminSettings.idCardOfflineNote")}
         </Text>
       </View>
     );
@@ -919,31 +953,27 @@ const IdCardSection = ({ schoolId }) => {
   const usingDefault = !idCard.validUntil;
 
   const CHOICES = [
-    { value: "off",        label: "Never",
-      hint: "Record the scan, tell nobody." },
-    { value: "exceptions", label: "Only when something is unusual",
-      hint: "A late arrival or a child leaving early. Recommended." },
-    { value: "all",        label: "Every scan",
-      hint: "Every arrival and departure. Expect a high message volume." },
+    { value: "off",        label: t("adminSettings.gateOffLabel"),
+      hint: t("adminSettings.gateOffHint") },
+    { value: "exceptions", label: t("adminSettings.gateExceptionsLabel"),
+      hint: t("adminSettings.gateExceptionsHint") },
+    { value: "all",        label: t("adminSettings.gateAllLabel"),
+      hint: t("adminSettings.gateAllHint") },
   ];
 
   return (
     <View style={{ gap: 14 }}>
 
       <View style={styles.card}>
-        <Text style={idCardStyles.title}>Card expiry</Text>
-        <Text style={idCardStyles.blurb}>
-          The date printed on student ID cards. Leave it empty and cards expire
-          at the end of the current academic year, so every card printed this
-          year carries the same date.
-        </Text>
+        <Text style={idCardStyles.title}>{t("adminSettings.cardExpiryTitle")}</Text>
+        <Text style={idCardStyles.blurb}>{t("adminSettings.cardExpiryBlurb")}</Text>
 
-        <Text style={idCardStyles.label}>Valid until</Text>
+        <Text style={idCardStyles.label}>{t("adminSettings.validUntil")}</Text>
         <TextInput
           style={styles.input}
           value={idCard.validUntil}
           onChangeText={(v) => patchIdCard({ validUntil: v.trim() })}
-          placeholder="YYYY-MM-DD"
+          placeholder={t("adminSettings.datePh")}
           placeholderTextColor="#9CA3AF"
           autoCapitalize="none"
           keyboardType={Platform.OS === "ios" ? "numbers-and-punctuation" : "default"}
@@ -953,24 +983,20 @@ const IdCardSection = ({ schoolId }) => {
             as "no expiry" rather than "the usual date". */}
         <Text style={idCardStyles.hint}>
           {usingDefault
-            ? `Cards will be valid until ${idCard.defaultValidUntil}, the end of the academic year.`
-            : `Cards will be valid until ${idCard.effectiveValidUntil}.`}
+            ? t("adminSettings.validUntilDefaultHint", { date: idCard.defaultValidUntil })
+            : t("adminSettings.validUntilHint", { date: idCard.effectiveValidUntil })}
         </Text>
 
         {!usingDefault && (
           <TouchableOpacity onPress={() => patchIdCard({ validUntil: "" })}>
-            <Text style={idCardStyles.link}>Use the default date</Text>
+            <Text style={idCardStyles.link}>{t("adminSettings.useDefaultDate")}</Text>
           </TouchableOpacity>
         )}
       </View>
 
       <View style={styles.card}>
-        <Text style={idCardStyles.title}>Gate messages</Text>
-        <Text style={idCardStyles.blurb}>
-          What a parent is told when their child's card is scanned at the gate.
-          A school of 500 scanning twice a day is about 20,000 messages a month,
-          so sending every scan is rarely the right choice.
-        </Text>
+        <Text style={idCardStyles.title}>{t("adminSettings.gateTitle")}</Text>
+        <Text style={idCardStyles.blurb}>{t("adminSettings.gateBlurb")}</Text>
 
         {CHOICES.map((choice) => {
           const active = gate.notify === choice.value;
@@ -999,7 +1025,7 @@ const IdCardSection = ({ schoolId }) => {
         {gate.notify === "exceptions" && (
           <View style={{ marginTop: 12, gap: 12 }}>
             <View>
-              <Text style={idCardStyles.label}>Arrival is late after</Text>
+              <Text style={idCardStyles.label}>{t("adminSettings.lateAfter")}</Text>
               <TextInput
                 style={styles.input}
                 value={gate.lateAfter}
@@ -1009,7 +1035,7 @@ const IdCardSection = ({ schoolId }) => {
               />
             </View>
             <View>
-              <Text style={idCardStyles.label}>Departure is early before</Text>
+              <Text style={idCardStyles.label}>{t("adminSettings.earlyBefore")}</Text>
               <TextInput
                 style={styles.input}
                 value={gate.earlyBefore}
@@ -1031,7 +1057,7 @@ const IdCardSection = ({ schoolId }) => {
         {saving
           ? <ActivityIndicator color="#fff" size="small" />
           : <Ionicons name="save-outline" size={17} color="#fff" />}
-        <Text style={idCardStyles.saveTxt}>Save</Text>
+        <Text style={idCardStyles.saveTxt}>{t("adminSettings.save")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1061,6 +1087,7 @@ const idCardStyles = StyleSheet.create({
 });
 
 const GradingSection = ({ schoolId }) => {
+  const { t } = useTranslation();
   const [config,  setConfig]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -1083,9 +1110,9 @@ const GradingSection = ({ schoolId }) => {
     try {
       setSaving(true);
       await saveGradingConfig({ ...config, schoolId });
-      Alert.alert("Success", "Grading system updated");
+      Alert.alert(t("adminSettings.successTitle"), t("adminSettings.gradingSaved"));
     } catch {
-      Alert.alert("Error", "Failed to save config");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errGradingSave"));
     } finally {
       setSaving(false);
     }
@@ -1099,8 +1126,8 @@ const GradingSection = ({ schoolId }) => {
   return (
     <View>
       <Card>
-        <Text style={styles.cardTitle}>Grading Settings</Text>
-        <SettingRow label="Pass Mark %">
+        <Text style={styles.cardTitle}>{t("adminSettings.gradingSettings")}</Text>
+        <SettingRow label={t("adminSettings.passMark")}>
           <TextInput
             style={[styles.input, styles.inputSmall]}
             value={String(config.passMark ?? 50)}
@@ -1108,7 +1135,7 @@ const GradingSection = ({ schoolId }) => {
             keyboardType="numeric"
           />
         </SettingRow>
-        <SettingRow label="GPA System">
+        <SettingRow label={t("adminSettings.gpaSystem")}>
           <Switch
             value={config.useGpa}
             onValueChange={(v) => setConfig({ ...config, useGpa: v })}
@@ -1121,7 +1148,7 @@ const GradingSection = ({ schoolId }) => {
         onPress={handleSave}
         disabled={saving}
       >
-        <Text style={styles.btnText}>Save Grading System</Text>
+        <Text style={styles.btnText}>{t("adminSettings.saveGrading")}</Text>
       </TouchableOpacity>
     </View>
   );
@@ -1132,6 +1159,7 @@ const GradingSection = ({ schoolId }) => {
 // ─────────────────────────────────────────────────────────
 
 const AdminsSection = ({ schoolId, currentUserId }) => {
+  const { t } = useTranslation();
   const [admins,     setAdmins]     = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [showModal,  setShowModal]  = useState(false);
@@ -1163,7 +1191,7 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
       setNewName("");
       setNewEmail("");
     } catch {
-      Alert.alert("Error", "Failed to create admin");
+      Alert.alert(t("adminSettings.errTitle"), t("adminSettings.errCreateAdmin"));
     } finally {
       setCreating(false);
     }
@@ -1177,17 +1205,19 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
     <View>
       <Card>
         <View style={styles.cardTitleRow}>
-          <Text style={styles.cardTitle}>Admins ({admins.length})</Text>
+          <Text style={styles.cardTitle}>
+            {t("adminSettings.adminsCount", { count: admins.length })}
+          </Text>
           <TouchableOpacity style={styles.addBtn} onPress={() => setShowModal(true)}>
             <Ionicons name="add" size={18} color="#4F46E5" />
-            <Text style={styles.addBtnText}>Add Admin</Text>
+            <Text style={styles.addBtnText}>{t("adminSettings.addAdmin")}</Text>
           </TouchableOpacity>
         </View>
         {admins.map((a) => (
           <View key={a._id} style={styles.adminRow}>
             <View style={styles.adminInfo}>
               <Text style={styles.adminName}>
-                {a.name} {a._id === currentUserId && "(You)"}
+                {a.name} {a._id === currentUserId && t("adminSettings.youSuffix")}
               </Text>
               <Text style={styles.adminEmail}>{a.email}</Text>
             </View>
@@ -1200,13 +1230,13 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
           <View style={styles.modalContent}>
             <TextInput
               style={styles.input}
-              placeholder="Name"
+              placeholder={t("adminSettings.namePh")}
               value={newName}
               onChangeText={setNewName}
             />
             <TextInput
               style={[styles.input, { marginTop: 10 }]}
-              placeholder="Email"
+              placeholder={t("adminSettings.email")}
               value={newEmail}
               onChangeText={setNewEmail}
               keyboardType="email-address"
@@ -1214,7 +1244,7 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
             />
             <View style={styles.modalActions}>
               <TouchableOpacity style={styles.btn} onPress={() => setShowModal(false)}>
-                <Text>Cancel</Text>
+                <Text>{t("adminSettings.cancel")}</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.btn, styles.btnPrimary, { flex: 1 }]}
@@ -1223,7 +1253,7 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
               >
                 {creating
                   ? <ActivityIndicator color="#fff" size="small" />
-                  : <Text style={{ color: "#fff" }}>Create</Text>
+                  : <Text style={{ color: "#fff" }}>{t("adminSettings.create")}</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -1239,6 +1269,7 @@ const AdminsSection = ({ schoolId, currentUserId }) => {
 // ─────────────────────────────────────────────────────────
 
 const AnalyticsSection = ({ schoolId }) => {
+  const { t } = useTranslation();
   const [analytics, setAnalytics] = useState(null);
   const [loading,   setLoading]   = useState(true);
 
@@ -1264,15 +1295,15 @@ const AnalyticsSection = ({ schoolId }) => {
   return (
     <View>
       <Card>
-        <Text style={styles.cardTitle}>School Summary</Text>
+        <Text style={styles.cardTitle}>{t("adminSettings.schoolSummary")}</Text>
         <View style={styles.analyticsGrid}>
           <View style={[styles.analyticsCard, { backgroundColor: "#EEF2FF" }]}>
             <Text style={styles.analyticsNumber}>{analytics.summary?.totalTeachers ?? 0}</Text>
-            <Text>Teachers</Text>
+            <Text>{t("adminSettings.teachers")}</Text>
           </View>
           <View style={[styles.analyticsCard, { backgroundColor: "#F5F3FF" }]}>
             <Text style={styles.analyticsNumber}>{analytics.summary?.totalClasses ?? 0}</Text>
-            <Text>Classes</Text>
+            <Text>{t("adminSettings.classes")}</Text>
           </View>
         </View>
       </Card>
@@ -1285,6 +1316,7 @@ const AnalyticsSection = ({ schoolId }) => {
 // ─────────────────────────────────────────────────────────
 
 export default function AdminSettings() {
+  const { t }      = useTranslation();
   const router     = useRouter();
   const user       = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
@@ -1328,8 +1360,10 @@ export default function AdminSettings() {
           <Ionicons name="arrow-back" size={22} color="#111827" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Settings</Text>
-          <Text style={styles.headerSub}>{currentUser?.name || "Admin"}</Text>
+          <Text style={styles.headerTitle}>{t("adminSettings.title")}</Text>
+          <Text style={styles.headerSub}>
+            {currentUser?.name || t("adminSettings.adminFallback")}
+          </Text>
         </View>
       </View>
 

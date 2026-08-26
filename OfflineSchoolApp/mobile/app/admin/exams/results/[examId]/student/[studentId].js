@@ -14,6 +14,7 @@ import { Ionicons }                     from "@expo/vector-icons";
 import { useAuthStore }                 from "../../../../../../src/store/auth.store";
 import api                              from "../../../../../../src/services/api";
 import ReportCard                       from "../../../../components/ReportCard";
+import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -45,8 +46,8 @@ const C = {
 // ─────────────────────────────────────────────────────────
 
 const TABS = [
-  { key: "setup",   label: "Setup",       icon: "settings-outline"      },
-  { key: "preview", label: "Report Card", icon: "document-text-outline" },
+  { key: "setup",   labelKey: "studentResult.tabs.setup",   icon: "settings-outline"      },
+  { key: "preview", labelKey: "studentResult.tabs.preview", icon: "document-text-outline" },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -54,6 +55,7 @@ const TABS = [
 // ─────────────────────────────────────────────────────────
 
 function SubjectEditor({ subject, onChange }) {
+  const { t }      = useTranslation();
   const isAbsent   = subject.isAbsent || subject.isExempt;
   const scoreColor = isAbsent
     ? C.gray400
@@ -65,7 +67,7 @@ function SubjectEditor({ subject, onChange }) {
     <View style={se.row}>
       <View style={se.nameCol}>
         <Text style={se.name} numberOfLines={1}>
-          {subject.subjectName || "Unknown"}
+          {subject.subjectName || t("studentResult.unknownSubject")}
         </Text>
         {!!subject.teacherName && (
           <Text style={se.teacher}>{subject.teacherName}</Text>
@@ -73,7 +75,9 @@ function SubjectEditor({ subject, onChange }) {
         {isAbsent && (
           <View style={se.absentBadge}>
             <Text style={se.absentText}>
-              {subject.isAbsent ? "ABSENT" : "EXEMPT"}
+              {subject.isAbsent
+                ? t("exams.absent")
+                : t("studentResult.exempt")}
             </Text>
           </View>
         )}
@@ -189,6 +193,8 @@ const se = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 function SummaryBar({ computed, passMark, outOf }) {
+  const { t } = useTranslation();
+
   if (!computed) return null;
   const {
     average, isPassing, totalCoefficients,
@@ -203,27 +209,27 @@ function SummaryBar({ computed, passMark, outOf }) {
     }]}>
       <View style={sb.item}>
         <Text style={[sb.val, { color }]}>{average?.toFixed(2)}</Text>
-        <Text style={sb.lbl}>Avg /{outOf}</Text>
+        <Text style={sb.lbl}>{t("studentResult.avgOutOf", { outOf })}</Text>
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
         <Text style={[sb.val, { color: C.primary }]}>{totalCoefficients}</Text>
-        <Text style={sb.lbl}>Total Coeff</Text>
+        <Text style={sb.lbl}>{t("studentResult.totalCoeff")}</Text>
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
         <Text style={[sb.val, { color: C.success }]}>{subjectsPassed ?? 0}</Text>
-        <Text style={sb.lbl}>Passed</Text>
+        <Text style={sb.lbl}>{t("studentResult.passed")}</Text>
       </View>
       <View style={sb.divider} />
       <View style={sb.item}>
         <Text style={[sb.val, { color: C.error }]}>{subjectsFailed ?? 0}</Text>
-        <Text style={sb.lbl}>Failed</Text>
+        <Text style={sb.lbl}>{t("studentResult.failed")}</Text>
       </View>
       <View style={sb.divider} />
       <View style={[sb.badge, { backgroundColor: color + "18" }]}>
         <Text style={[sb.badgeText, { color }]}>
-          {isPassing ? "PASS" : "FAIL"}
+          {isPassing ? t("studentResult.pass") : t("studentResult.fail")}
         </Text>
       </View>
     </View>
@@ -278,6 +284,7 @@ const ls = StyleSheet.create({
 
 export default function StudentReportCardScreen() {
   const { examId, studentId } = useLocalSearchParams();
+  const { t }    = useTranslation();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
 
@@ -307,7 +314,9 @@ export default function StudentReportCardScreen() {
         `/results/${examId}/student/${studentId}/reportcard`
       );
 
-      if (!data?.success) throw new Error(data?.error || "Failed to load");
+      if (!data?.success) {
+        throw new Error(data?.error || t("studentResult.loadFailed"));
+      }
 
       setReportData(data.data);
       setSubjects((data.data.subjects || []).map((s) => ({ ...s })));
@@ -322,7 +331,7 @@ export default function StudentReportCardScreen() {
     } finally {
       setLoading(false);
     }
-  }, [examId, studentId]);
+  }, [examId, studentId, t]);
 
   useEffect(() => { loadReportCard(); }, [loadReportCard]);
 
@@ -409,17 +418,25 @@ export default function StudentReportCardScreen() {
         }
       );
 
-      if (!data?.success) throw new Error(data?.error || "Calculation failed");
+      if (!data?.success) {
+        throw new Error(data?.error || t("studentResult.calcFailed"));
+      }
 
       setComputed(data.data);
       setActiveTab("preview");
-      Alert.alert("Done", "Report card calculated and saved.");
+      Alert.alert(
+        t("studentResult.calcDoneTitle"),
+        t("studentResult.calcDoneBody")
+      );
     } catch (err) {
-      Alert.alert("Error", err.message || "Calculation failed");
+      Alert.alert(
+        t("studentResult.errorTitle"),
+        err.message || t("studentResult.calcFailed")
+      );
     } finally {
       setCalculating(false);
     }
-  }, [examId, studentId, subjects, outOf, passMark]);
+  }, [examId, studentId, subjects, outOf, passMark, t]);
 
   // ── Reissue ───────────────────────────────────────────
 
@@ -433,13 +450,12 @@ export default function StudentReportCardScreen() {
    */
   const handleReissue = useCallback(() => {
     Alert.alert(
-      "Reissue report card?",
-      "This replaces the copy already issued to the parent with one built " +
-      "from the current marks and template. The old copy is not kept.",
+      t("studentResult.reissueTitle"),
+      t("studentResult.reissueBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("common.cancel"), style: "cancel" },
         {
-          text: "Reissue",
+          text: t("studentResult.reissue"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -450,15 +466,15 @@ export default function StudentReportCardScreen() {
               );
               const revived = data?.data?.revived;
               Alert.alert(
-                "Reissued",
+                t("studentResult.reissuedTitle"),
                 revived
-                  ? "The card was restored and replaced with a fresh copy."
-                  : "The parent's copy now reflects the current marks."
+                  ? t("studentResult.reissuedRevived")
+                  : t("studentResult.reissuedFresh")
               );
             } catch (err) {
               const res = err?.response?.data;
               Alert.alert(
-                "Reissue failed",
+                t("studentResult.reissueFailed"),
                 res?.detail || res?.error || err.message
               );
             } finally {
@@ -468,7 +484,7 @@ export default function StudentReportCardScreen() {
         },
       ]
     );
-  }, [examId, studentId, schoolId]);
+  }, [examId, studentId, schoolId, t]);
 
   // ── Share ─────────────────────────────────────────────
 
@@ -478,23 +494,23 @@ export default function StudentReportCardScreen() {
       const d = reportData;
       const c = computed || liveComputed;
       const msg =
-        `📋 REPORT CARD\n` +
-        `Student: ${d?.studentName || "—"}\n` +
-        `Admission: ${d?.admissionNo ? "#" + d.admissionNo : "—"}\n` +
-        `Class: ${d?.className || "—"}\n` +
-        `Exam: ${d?.examName || "—"} · ${d?.term || ""} ${d?.academicYear || ""}\n\n` +
-        `RESULTS:\n` +
-        `Average: ${c?.average?.toFixed(2) ?? "—"}/${c?.outOf ?? outOf}\n` +
-        `Grade: ${c?.overallGrade || "—"}\n` +
-        `Result: ${c?.isPassing ? "✅ PASS" : "❌ FAIL"}\n` +
-        `Pass Mark: ${c?.passMark ?? passMark}/${c?.outOf ?? outOf}`;
+        `${t("studentResult.shareTitle")}\n` +
+        `${t("studentResult.shareStudent")} ${d?.studentName || "—"}\n` +
+        `${t("studentResult.shareAdmission")} ${d?.admissionNo ? "#" + d.admissionNo : "—"}\n` +
+        `${t("studentResult.shareClass")} ${d?.className || "—"}\n` +
+        `${t("results.my.examLabel")} ${d?.examName || "—"} · ${d?.term || ""} ${d?.academicYear || ""}\n\n` +
+        `${t("studentResult.shareResults")}\n` +
+        `${t("studentResult.shareAverage")} ${c?.average?.toFixed(2) ?? "—"}/${c?.outOf ?? outOf}\n` +
+        `${t("results.my.gradeLabel")} ${c?.overallGrade || "—"}\n` +
+        `${t("results.my.resultLabel")} ${c?.isPassing ? t("results.my.passFlag") : t("results.my.failFlag")}\n` +
+        `${t("studentResult.sharePassMark")} ${c?.passMark ?? passMark}/${c?.outOf ?? outOf}`;
       await Share.share({ message: msg });
     } catch (err) {
-      Alert.alert("Share Failed", err.message);
+      Alert.alert(t("results.my.shareFailed"), err.message);
     } finally {
       setSharing(false);
     }
-  }, [reportData, computed, liveComputed, outOf, passMark]);
+  }, [reportData, computed, liveComputed, outOf, passMark, t]);
 
   // ── Build ReportCard result object ────────────────────
 
@@ -553,7 +569,7 @@ export default function StudentReportCardScreen() {
     return (
       <View style={s.centered}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={s.loadingText}>Loading report card…</Text>
+        <Text style={s.loadingText}>{t("studentResult.loading")}</Text>
       </View>
     );
   }
@@ -564,10 +580,10 @@ export default function StudentReportCardScreen() {
         <Ionicons name="alert-circle-outline" size={48} color={C.error} />
         <Text style={s.errorText}>{error}</Text>
         <TouchableOpacity style={s.primaryBtn} onPress={loadReportCard}>
-          <Text style={s.primaryBtnText}>Retry</Text>
+          <Text style={s.primaryBtnText}>{t("common.retry")}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={s.grayBtn} onPress={() => router.back()}>
-          <Text style={s.grayBtnText}>Go Back</Text>
+          <Text style={s.grayBtnText}>{t("common.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -577,10 +593,10 @@ export default function StudentReportCardScreen() {
     return (
       <View style={s.centered}>
         <Ionicons name="document-outline" size={48} color={C.gray200} />
-        <Text style={s.emptyText}>No scores found</Text>
-        <Text style={s.emptySub}>Enter marks for this student first</Text>
+        <Text style={s.emptyText}>{t("studentResult.noScores")}</Text>
+        <Text style={s.emptySub}>{t("studentResult.noScoresSub")}</Text>
         <TouchableOpacity style={s.grayBtn} onPress={() => router.back()}>
-          <Text style={s.grayBtnText}>Go Back</Text>
+          <Text style={s.grayBtnText}>{t("common.goBack")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -613,7 +629,7 @@ export default function StudentReportCardScreen() {
 
           <View style={s.headerCenter}>
             <Text style={s.headerTitle} numberOfLines={1}>
-              {reportData.studentName || "Report Card"}
+              {reportData.studentName || t("results.my.reportCard")}
             </Text>
             <Text style={s.headerSub} numberOfLines={1}>
               {reportData.className} · {reportData.examName}
@@ -667,7 +683,7 @@ export default function StudentReportCardScreen() {
                 s.tabText,
                 activeTab === tab.key && s.tabTextActive,
               ]}>
-                {tab.label}
+                {t(tab.labelKey)}
               </Text>
             </TouchableOpacity>
           ))}
@@ -688,7 +704,7 @@ export default function StudentReportCardScreen() {
                 </View>
                 <View style={s.studentInfo}>
                   <Text style={s.studentName}>
-                    {reportData.studentName || "Unknown Student"}
+                    {reportData.studentName || t("studentResult.unknownStudent")}
                   </Text>
                   <Text style={s.studentMeta}>
                     {[
@@ -704,10 +720,12 @@ export default function StudentReportCardScreen() {
 
             {/* Calculation settings */}
             <View style={s.card}>
-              <Text style={s.cardTitle}>Calculation Settings</Text>
+              <Text style={s.cardTitle}>{t("studentResult.calcSettings")}</Text>
               <View style={s.settingsRow}>
                 <View style={s.settingItem}>
-                  <Text style={s.settingLabel}>Normalize Out Of</Text>
+                  <Text style={s.settingLabel}>
+                    {t("studentResult.normalizeOutOf")}
+                  </Text>
                   <TextInput
                     style={s.settingInput}
                     value={outOf}
@@ -717,7 +735,9 @@ export default function StudentReportCardScreen() {
                   />
                 </View>
                 <View style={s.settingItem}>
-                  <Text style={s.settingLabel}>Pass Mark</Text>
+                  <Text style={s.settingLabel}>
+                    {t("studentResult.passMark")}
+                  </Text>
                   <TextInput
                     style={s.settingInput}
                     value={passMark}
@@ -728,8 +748,7 @@ export default function StudentReportCardScreen() {
                 </View>
               </View>
               <Text style={s.settingHint}>
-                Scores normalize to /{outOf}. Pass mark is {passMark}/{outOf}.
-                Weighted avg = Σ(normalized × coeff) ÷ Σcoeff
+                {t("studentResult.settingHint", { outOf, passMark })}
               </Text>
             </View>
 
@@ -742,25 +761,31 @@ export default function StudentReportCardScreen() {
 
             {/* Subject table */}
             <View style={s.card}>
-              <Text style={s.cardTitle}>Subject Marks & Coefficients</Text>
+              <Text style={s.cardTitle}>{t("studentResult.subjectMarks")}</Text>
 
               <View style={s.tableHead}>
-                <Text style={[s.th, { flex: 1.8 }]}>Subject</Text>
-                <Text style={[s.th, { flex: 0.8 }]}>Score</Text>
+                <Text style={[s.th, { flex: 1.8 }]}>
+                  {t("studentResult.thSubject")}
+                </Text>
+                <Text style={[s.th, { flex: 0.8 }]}>
+                  {t("studentResult.thScore")}
+                </Text>
                 <Text style={[s.th, { flex: 0.7, textAlign: "center" }]}>
-                  Coeff
+                  {t("studentResult.thCoeff")}
                 </Text>
                 <Text style={[s.th, { flex: 0.8, textAlign: "center" }]}>
                   /{outOf}
                 </Text>
                 <Text style={[s.th, { flex: 0.8, textAlign: "right" }]}>
-                  Wtd
+                  {t("studentResult.thWtd")}
                 </Text>
               </View>
 
               {displaySubjects.length === 0 ? (
                 <View style={s.emptyTable}>
-                  <Text style={s.emptyTableText}>No scores entered yet</Text>
+                  <Text style={s.emptyTableText}>
+                    {t("studentResult.noScoresYet")}
+                  </Text>
                 </View>
               ) : (
                 displaySubjects.map((sub, i) => (
@@ -783,25 +808,25 @@ export default function StudentReportCardScreen() {
                     : C.error + "40",
                 },
               ]}>
-                <Text style={s.cardTitle}>Live Calculation</Text>
+                <Text style={s.cardTitle}>{t("studentResult.liveCalc")}</Text>
                 <View style={s.liveRow}>
                   <LiveStat
-                    label={`Average /${outOfNum}`}
+                    label={t("studentResult.averageOutOf", { outOf: outOfNum })}
                     value={liveComputed.average?.toFixed(2)}
                     color={liveComputed.isPassing ? C.success : C.error}
                   />
                   <LiveStat
-                    label="Percentage"
+                    label={t("studentResult.percentage")}
                     value={`${liveComputed.percentage}%`}
                     color={C.primary}
                   />
                   <LiveStat
-                    label="Passed"
+                    label={t("studentResult.passed")}
                     value={liveComputed.subjectsPassed}
                     color={C.success}
                   />
                   <LiveStat
-                    label="Failed"
+                    label={t("studentResult.failed")}
                     value={liveComputed.subjectsFailed}
                     color={C.error}
                   />
@@ -825,8 +850,8 @@ export default function StudentReportCardScreen() {
               }
               <Text style={s.calcBtnText}>
                 {calculating
-                  ? "Calculating…"
-                  : "Calculate & Generate Report Card"}
+                  ? t("studentResult.calculating")
+                  : t("studentResult.calcAndGenerate")}
               </Text>
             </TouchableOpacity>
 
@@ -856,16 +881,20 @@ export default function StudentReportCardScreen() {
                   size={48}
                   color={C.gray200}
                 />
-                <Text style={s.emptyText}>No report card yet</Text>
+                <Text style={s.emptyText}>
+                  {t("studentResult.noReportCard")}
+                </Text>
                 <Text style={s.emptySub}>
-                  Go to Setup and tap "Calculate" to generate
+                  {t("studentResult.noReportCardSub")}
                 </Text>
                 <TouchableOpacity
                   style={s.calcBtn}
                   onPress={() => setActiveTab("setup")}
                 >
                   <Ionicons name="settings-outline" size={18} color={C.white} />
-                  <Text style={s.calcBtnText}>Go to Setup</Text>
+                  <Text style={s.calcBtnText}>
+                    {t("studentResult.goToSetup")}
+                  </Text>
                 </TouchableOpacity>
               </View>
             )}

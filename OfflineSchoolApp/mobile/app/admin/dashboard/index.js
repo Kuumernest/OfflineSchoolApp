@@ -16,7 +16,8 @@ import { getAdminStats }          from "../../../src/services/adminStats.service
 import { syncTeacherAssignments } from "../../../src/services/syncAssignments.service";
 import { getSchoolInfo }          from "../../../src/services/school.service";
 import SyncOverwriteService       from "../../../src/services/sync-overwrite.service";
-import { toDisplayUri }           from "../../../src/utils/logoUri";
+import { toDisplayUri }           from "../../../src/utils/logoUri";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -25,77 +26,77 @@ import { toDisplayUri }           from "../../../src/utils/logoUri";
 const QUICK_ACTIONS = [
   {
     id:    "collect-fees",
-    title: "Collect Fees",
+    titleKey: "dashAdmin.qa_collect_fees",
     icon:  "cash-outline",
     color: "#3B4996",
     route: "/admin/fees",
   },
   {
     id:    "print-register",
-    title: "Print Register",
+    titleKey: "dashAdmin.qa_print_register",
     icon:  "print-outline",
     color: "#4F5A70",
     route: "/admin/documents",
   },
   {
     id:    "gate-scan",
-    title: "Gate Scan",
+    titleKey: "dashAdmin.qa_gate_scan",
     icon:  "qr-code-outline",
     color: "#12683A",
     route: "/admin/gate",
   },
   {
     id:    "record-expense",
-    title: "Record Expense",
+    titleKey: "dashAdmin.qa_record_expense",
     icon:  "receipt-outline",
     color: "#9F2318",
     route: "/admin/finance/expenses",
   },
   {
     id:    "add-student",
-    title: "Add Student",
+    titleKey: "dashAdmin.qa_add_student",
     icon:  "person-add-outline",
     color: "#0891B2",
     route: "/admin/students/add",
   },
   {
     id:    "add-class",
-    title: "Add Class",
+    titleKey: "dashAdmin.qa_add_class",
     icon:  "add-circle-outline",
     color: "#4F46E5",
     route: "/admin/classes/add",
   },
   {
     id:    "add-subject",
-    title: "Add Subject",
+    titleKey: "dashAdmin.qa_add_subject",
     icon:  "add-circle-outline",
     color: "#059669",
     route: "/admin/subjects/add",
   },
   {
     id:    "add-teacher",
-    title: "Add Teacher",
+    titleKey: "dashAdmin.qa_add_teacher",
     icon:  "add-circle-outline",
     color: "#7C3AED",
     route: "/admin/teachers/add",
   },
   {
     id:    "assign-teacher",
-    title: "Assign Teacher",
+    titleKey: "dashAdmin.qa_assign_teacher",
     icon:  "git-branch-outline",
     color: "#DB2777",
     route: "/admin/assignments",
   },
   {
     id:    "review-apps",
-    title: "Review Apps",
+    titleKey: "dashAdmin.qa_review_apps",
     icon:  "clipboard-outline",
     color: "#D97706",
     route: "/admin/students/applications",
   },
   {
     id:    "build-timetable",
-    title: "Timetable",
+    titleKey: "dashAdmin.qa_build_timetable",
     icon:  "time-outline",
     color: "#DC2626",
     route: "/admin/timetable",
@@ -105,168 +106,168 @@ const QUICK_ACTIONS = [
 const ALL_MODULES = [
   {
     id:          "fees",
-    title:       "Fees",
+    titleKey:    "dashAdmin.mod_fees",
     icon:        "cash-outline",
     color:       "#3B4996",
     route:       "/admin/fees",
-    description: "Balances & payments",
+    descKey:     "dashAdmin.modSub_fees",
   },
   {
     id:          "expenses",
-    title:       "Expenses",
+    titleKey:    "dashAdmin.mod_expenses",
     icon:        "receipt-outline",
     color:       "#9F2318",
     route:       "/admin/finance/expenses",
-    description: "Money going out",
+    descKey:     "dashAdmin.modSub_expenses",
   },
   {
     id:          "payroll",
-    title:       "Payroll",
+    titleKey:    "dashAdmin.mod_payroll",
     icon:        "briefcase-outline",
     color:       "#12683A",
     route:       "/admin/finance/payroll",
-    description: "Runs & payslips (read-only)",
+    descKey:     "dashAdmin.modSub_payroll",
   },
   {
     id:          "fin-reports",
-    title:       "Reports",
+    titleKey:    "dashAdmin.mod_fin_reports",
     icon:        "stats-chart-outline",
     color:       "#3B4996",
     route:       "/admin/finance/reports",
-    description: "Income vs expenditure",
+    descKey:     "dashAdmin.modSub_fin_reports",
   },
   {
     id:          "promotion",
-    title:       "End of Year",
+    titleKey:    "dashAdmin.mod_promotion",
     icon:        "school-outline",
     color:       "#1B4F8A",
     route:       "/admin/promotion",
-    description: "Rollover (read-only)",
+    descKey:     "dashAdmin.modSub_promotion",
   },
   {
     id:          "printing",
-    title:       "Printing",
+    titleKey:    "dashAdmin.mod_printing",
     icon:        "print-outline",
     color:       "#4F5A70",
     route:       "/admin/documents",
-    description: "Class lists & transcripts",
+    descKey:     "dashAdmin.modSub_printing",
   },
   {
     id:          "exports",
-    title:       "Exports",
+    titleKey:    "dashAdmin.mod_exports",
     icon:        "grid-outline",
     color:       "#12683A",
     route:       "/admin/exports",
-    description: "Excel spreadsheets",
+    descKey:     "dashAdmin.modSub_exports",
   },
   {
     id:          "classes",
-    title:       "Classes",
+    titleKey:    "dashAdmin.mod_classes",
     icon:        "school-outline",
     color:       "#4F46E5",
     route:       "/admin/classes",
-    description: "Create & manage classes",
+    descKey:     "dashAdmin.modSub_classes",
   },
   {
     id:          "subjects",
-    title:       "Subjects",
+    titleKey:    "dashAdmin.mod_subjects",
     icon:        "book-outline",
     color:       "#059669",
     route:       "/admin/subjects",
-    description: "Create & link subjects",
+    descKey:     "dashAdmin.modSub_subjects",
   },
   {
     id:          "teachers",
-    title:       "Teachers",
+    titleKey:    "dashAdmin.mod_teachers",
     icon:        "people-outline",
     color:       "#7C3AED",
     route:       "/admin/teachers",
-    description: "Manage teachers",
+    descKey:     "dashAdmin.modSub_teachers",
   },
   {
     id:          "applications",
-    title:       "Applications",
+    titleKey:    "dashAdmin.mod_applications",
     icon:        "person-add-outline",
     color:       "#D97706",
     route:       "/admin/students/applications",
-    description: "Review applications",
+    descKey:     "dashAdmin.modSub_applications",
   },
   {
     id:          "students",
-    title:       "Students",
+    titleKey:    "dashAdmin.mod_students",
     icon:        "people-circle-outline",
     color:       "#059669",
     route:       "/admin/students/approved",
-    description: "Approved students",
+    descKey:     "dashAdmin.modSub_students",
   },
   {
     id:          "teacher-assignments",
-    title:       "Assignments",
+    titleKey:    "dashAdmin.mod_teacher_assignments",
     icon:        "git-branch-outline",
     color:       "#DB2777",
     route:       "/admin/assignments",
-    description: "Teacher allocation",
+    descKey:     "dashAdmin.modSub_teacher_assignments",
   },
   {
     id:          "timetable",
-    title:       "Timetable",
+    titleKey:    "dashAdmin.mod_timetable",
     icon:        "time-outline",
     color:       "#DC2626",
     route:       "/admin/timetable",
-    description: "Schedule builder",
+    descKey:     "dashAdmin.modSub_timetable",
   },
   {
     id:          "attendance",
-    title:       "Attendance",
+    titleKey:    "dashAdmin.mod_attendance",
     icon:        "calendar-outline",
     color:       "#059669",
     route:       "/admin/attendance",
-    description: "Tracking & reports",
+    descKey:     "dashAdmin.modSub_attendance",
   },
   {
     id:          "exams",
-    title:       "Exams",
+    titleKey:    "dashAdmin.mod_exams",
     icon:        "trophy-outline",
     color:       "#7C3AED",
     route:       "/admin/exams",
-    description: "Exams & results",
+    descKey:     "dashAdmin.modSub_exams",
   },
   {
     id:          "announcements",
-    title:       "Announcements",
+    titleKey:    "dashAdmin.mod_announcements",
     icon:        "megaphone-outline",
     color:       "#DB2777",
     route:       "/admin/announcements",
-    description: "Broadcast system",
+    descKey:     "dashAdmin.modSub_announcements",
   },
   {
     id:          "settings",
-    title:       "Settings",
+    titleKey:    "dashAdmin.mod_settings",
     icon:        "settings-outline",
     color:       "#6B7280",
     route:       "/admin/settings",
-    description: "System config",
+    descKey:     "dashAdmin.modSub_settings",
   },
 ];
 
 const STAT_ROWS = [
   [
-    { key: "pendingApplications", label: "Pending",      icon: "document-text",    color: "#D97706" },
-    { key: "approvedStudents",    label: "Students",     icon: "people-circle",    color: "#059669" },
-    { key: "totalTeachers",       label: "Teachers",     icon: "people",           color: "#4F46E5" },
-    { key: "unassignedTeachers",  label: "Unassigned",   icon: "person-remove",    color: "#DC2626" },
+    { key: "pendingApplications", labelKey: "dashAdmin.hPending",      icon: "document-text",    color: "#D97706" },
+    { key: "approvedStudents",    labelKey: "dashAdmin.sStudents",     icon: "people-circle",    color: "#059669" },
+    { key: "totalTeachers",       labelKey: "dashAdmin.sTeachers",     icon: "people",           color: "#4F46E5" },
+    { key: "unassignedTeachers",  labelKey: "dashAdmin.hUnassigned",   icon: "person-remove",    color: "#DC2626" },
   ],
   [
-    { key: "totalClasses",        label: "Classes",      icon: "school",           color: "#7C3AED" },
-    { key: "totalSubjects",       label: "Subjects",     icon: "book",             color: "#059669" },
-    { key: "assignedSubjects",    label: "Assigned",     icon: "git-branch",       color: "#DB2777" },
-    { key: "activeAnnouncements", label: "Notices",      icon: "megaphone",        color: "#7C3AED" },
+    { key: "totalClasses",        labelKey: "dashAdmin.sClasses",      icon: "school",           color: "#7C3AED" },
+    { key: "totalSubjects",       labelKey: "dashAdmin.sSubjects",     icon: "book",             color: "#059669" },
+    { key: "assignedSubjects",    labelKey: "dashAdmin.hAssigned",     icon: "git-branch",       color: "#DB2777" },
+    { key: "activeAnnouncements", labelKey: "dashAdmin.hNotices",      icon: "megaphone",        color: "#7C3AED" },
   ],
   [
-    { key: "totalPeriods",             label: "Periods",      icon: "time",             color: "#4F46E5" },
-    { key: "incompleteTimetableSlots", label: "No Timetable", icon: "calendar-outline", color: "#DC2626" },
-    { key: "timetableConflicts",       label: "Conflicts",    icon: "warning",          color: "#DC2626" },
-    { key: "classesWithoutSubjects",   label: "No Subjects",  icon: "alert-circle",     color: "#D97706" },
+    { key: "totalPeriods",             labelKey: "dashAdmin.hPeriods",      icon: "time",             color: "#4F46E5" },
+    { key: "incompleteTimetableSlots", labelKey: "dashAdmin.hNoTimetable", icon: "calendar-outline", color: "#DC2626" },
+    { key: "timetableConflicts",       labelKey: "dashAdmin.hConflicts",    icon: "warning",          color: "#DC2626" },
+    { key: "classesWithoutSubjects",   labelKey: "dashAdmin.hNoSubjects",  icon: "alert-circle",     color: "#D97706" },
   ],
 ];
 
@@ -283,10 +284,11 @@ const MODULES_PREVIEW_COUNT = 7;
 // ─────────────────────────────────────────────────────────
 
 const getGreeting = () => {
+  const { t } = useTranslation();
   const h = new Date().getHours();
-  if (h < 12) return "Good Morning";
-  if (h < 17) return "Good Afternoon";
-  return "Good Evening";
+  if (h < 12) return t("studentHome.greetingMorning");
+  if (h < 17) return t("studentHome.greetingAfternoon");
+  return t("studentHome.greetingEvening");
 };
 
 // ─────────────────────────────────────────────────────────
@@ -386,7 +388,7 @@ const StatCard = React.memo(({ item, value }) => (
   <View style={[styles.statCard, { backgroundColor: item.color + "15" }]}>
     <Ionicons name={item.icon} size={18} color={item.color} />
     <Text style={styles.statNumber}>{value}</Text>
-    <Text style={styles.statLabel}>{item.label}</Text>
+    <Text style={styles.statLabel}>{t(item.labelKey)}</Text>
   </View>
 ));
 
@@ -417,7 +419,7 @@ const ActionButton = React.memo(({ action, onPress }) => (
       <Ionicons name={action.icon} size={22} color={action.color} />
     </View>
     <Text style={styles.actionTitle} numberOfLines={2}>
-      {action.title}
+      {t(action.titleKey)}
     </Text>
   </TouchableOpacity>
 ));
@@ -432,8 +434,8 @@ const ModuleRow = React.memo(({ module, onPress }) => (
       <Ionicons name={module.icon} size={20} color={module.color} />
     </View>
     <View style={styles.moduleInfo}>
-      <Text style={styles.moduleTitle}>{module.title}</Text>
-      <Text style={styles.moduleDesc}>{module.description}</Text>
+      <Text style={styles.moduleTitle}>{t(module.titleKey)}</Text>
+      <Text style={styles.moduleDesc}>{t(module.descKey)}</Text>
     </View>
     <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
   </TouchableOpacity>
@@ -444,6 +446,7 @@ const ModuleRow = React.memo(({ module, onPress }) => (
 // ─────────────────────────────────────────────────────────
 
 export default function AdminDashboard() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const logout   = useAuthStore((s) => s.logout);
@@ -500,7 +503,7 @@ export default function AdminDashboard() {
       } catch (err) {
         console.error("Dashboard stats error:", err);
         if (!mountedRef.current) return;
-        setError("Failed to load dashboard data. Pull down to retry.");
+        setError(t("dashAdmin.loadFailed"));
       } finally {
         if (!mountedRef.current) return;
         setLoading(false);
@@ -529,7 +532,7 @@ export default function AdminDashboard() {
   const navigate = useCallback(
     (path, title) => {
       if (!path) {
-        Alert.alert("Navigation Error", `No route defined for "${title}".`);
+        Alert.alert(t("dashAdmin.navErrTitle"), t("dashAdmin.navErrBody", { title }));
         return;
       }
       router.push(path);
@@ -539,10 +542,10 @@ export default function AdminDashboard() {
 
   // ── Logout ────────────────────────────────────────────
   const handleLogout = useCallback(() => {
-    Alert.alert("Logout", "Are you sure you want to logout?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("dashAdmin.logout"), t("dashAdmin.logoutBody"), [
+      { text: t("common.cancel"), style: "cancel" },
       {
-        text:    "Logout",
+        text:    t("dashAdmin.logout"),
         style:   "destructive",
         onPress: async () => {
           await logout();
@@ -634,7 +637,7 @@ export default function AdminDashboard() {
         id:      "no-assignments",
         type:    "warning",
         icon:    "git-branch-outline",
-        message: "No teacher assignments yet — assign teachers to subjects",
+        message: t("dashAdmin.noAssignmentsHint"),
         route:   "/admin/assignments",
       });
     }
@@ -672,7 +675,7 @@ export default function AdminDashboard() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading dashboard…</Text>
+        <Text style={styles.loadingText}>{t("dashAdmin.loading")}</Text>
       </View>
     );
   }
@@ -687,12 +690,12 @@ export default function AdminDashboard() {
         <View style={{ flex: 1 }}>
           <Text style={styles.greeting}>{greeting}</Text>
           <Text style={styles.userName} numberOfLines={1}>
-            {user?.name || "Admin"}
+            {user?.name || t("dashAdmin.adminFallback")}
           </Text>
-          <Text style={styles.subtitle}>Control Center</Text>
+          <Text style={styles.subtitle}>{t("dashAdmin.controlCenter")}</Text>
         </View>
         <TouchableOpacity
-          onPress={() => navigate("/admin/settings", "Settings")}
+          onPress={() => navigate("/admin/settings", t("dashAdmin.settings"))}
           activeOpacity={0.75}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         >
@@ -724,14 +727,14 @@ export default function AdminDashboard() {
               onPress={() => loadStats(false, true)}
               activeOpacity={0.75}
             >
-              <Text style={styles.retryText}>Retry</Text>
+              <Text style={styles.retryText}>{t("common.retry")}</Text>
             </TouchableOpacity>
           </View>
         )}
 
         {/* ── System Health Stats ───────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>System Health</Text>
+          <Text style={styles.sectionTitle}>{t("dashAdmin.systemHealth")}</Text>
           {STAT_ROWS.map((row) => (
             <View
               key={row.map((s) => s.key).join("-")}
@@ -755,7 +758,7 @@ export default function AdminDashboard() {
               <AlertRow
                 key={a.id}
                 alert={a}
-                onPress={() => navigate(a.route, "Alert")}
+                onPress={() => navigate(a.route, t("dashAdmin.alert"))}
               />
             ))}
           </View>
@@ -763,13 +766,13 @@ export default function AdminDashboard() {
 
         {/* ── Quick Actions ─────────────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <Text style={styles.sectionTitle}>{t("dashAdmin.quickActions")}</Text>
           <View style={styles.actionsGrid}>
             {QUICK_ACTIONS.map((a) => (
               <ActionButton
                 key={a.id}
                 action={a}
-                onPress={() => navigate(a.route, a.title)}
+                onPress={() => navigate(a.route, t(a.titleKey))}
               />
             ))}
           </View>
@@ -777,12 +780,12 @@ export default function AdminDashboard() {
 
         {/* ── Modules ───────────────────────────────── */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Modules</Text>
+          <Text style={styles.sectionTitle}>{t("dashAdmin.modules")}</Text>
           {visibleModules.map((m) => (
             <ModuleRow
               key={m.id}
               module={m}
-              onPress={() => navigate(m.route, m.title)}
+              onPress={() => navigate(m.route, t(m.titleKey))}
             />
           ))}
           {ALL_MODULES.length > MODULES_PREVIEW_COUNT && (
@@ -793,7 +796,7 @@ export default function AdminDashboard() {
             >
               <Text style={styles.showMoreText}>
                 {showAllModules
-                  ? "Show Less"
+                  ? t("dashAdmin.showLess")
                   : `Show ${ALL_MODULES.length - MODULES_PREVIEW_COUNT} More`}
               </Text>
               <Ionicons
@@ -812,7 +815,7 @@ export default function AdminDashboard() {
           activeOpacity={0.75}
         >
           <Ionicons name="log-out-outline" size={18} color="#DC2626" />
-          <Text style={styles.logoutText}>Logout</Text>
+          <Text style={styles.logoutText}>{t("dashAdmin.logout")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />

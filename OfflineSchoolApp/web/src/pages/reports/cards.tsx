@@ -1,10 +1,10 @@
-// web/src/pages/exams/reports/index.tsx
+// web/src/pages/reports/cards.tsx
 import { useState, useEffect } from "react";
 import { Link }                from "react-router-dom";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
-         EXAM_TYPE_LABELS }    from "@/constants/exam.constants";
+         examTypeLabel }    from "@/constants/exam.constants";
 import type { Exam }           from "@/types/exam.types";
 
 import api                     from "@/lib/api";
@@ -30,6 +30,7 @@ const ExamCard = ({
   onSelect:   () => void;
   isSelected: boolean;
 }) => {
+  const { t } = useTranslation();
   const meta = EXAM_STATUS_META[exam.status] ?? EXAM_STATUS_META.draft;
   return (
     <button
@@ -46,7 +47,7 @@ const ExamCard = ({
             {exam.name}
           </p>
           <p className="text-xs text-gray-400 mt-0.5">
-            {EXAM_TYPE_LABELS[exam.type]} · {exam.term} · {exam.academicYear}
+            {examTypeLabel(t, exam.type)} · {exam.term} · {exam.academicYear}
           </p>
           {(exam.classNames || exam.className) && (
             <p className="text-xs text-primary-600 font-medium mt-1">
@@ -56,7 +57,7 @@ const ExamCard = ({
         </div>
         <span className={`text-xs font-bold px-2 py-0.5 rounded-full
           flex-shrink-0 ${meta.color} ${meta.bg}`}>
-          {meta.label}
+          {t(meta.labelKey)}
         </span>
       </div>
     </button>
@@ -70,7 +71,7 @@ const ExamCard = ({
 // GET /results/:examId/student/:studentId/reportcard/html
 // ─────────────────────────────────────────────────────────
 
-export default function ExamReportsPage() {
+export default function ReportCardsPage() {
   const { t, i18n } = useTranslation();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);

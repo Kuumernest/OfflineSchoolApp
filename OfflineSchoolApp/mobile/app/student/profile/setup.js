@@ -30,6 +30,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import DateField        from "../../../src/components/DateField";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // SKIP FLAG
@@ -150,6 +151,7 @@ const f = StyleSheet.create({
 // ─────────────────────────────────────────────────────────
 
 function SelectField({ label, value, options, onSelect, required, error }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const selected = options.find((o) => o.value === value);
   return (
@@ -163,7 +165,7 @@ function SelectField({ label, value, options, onSelect, required, error }) {
         activeOpacity={0.7}
       >
         <Text style={[sf.selectorText, !selected && sf.placeholder]}>
-          {selected?.label || `Select ${label}`}
+          {selected?.label || t("profileStudent.selectPlaceholder", { label })}
         </Text>
         <Ionicons
           name={open ? "chevron-up" : "chevron-down"}
@@ -214,10 +216,14 @@ const sf = StyleSheet.create({
 // OPTION LISTS
 // ─────────────────────────────────────────────────────────
 
+/** Options carry a translation key; labels are resolved at render time. */
+const withLabels = (options, t) =>
+  options.map((o) => ({ value: o.value, label: t(o.labelKey) }));
+
 const GENDERS = [
-  { value: "male",   label: "Male"   },
-  { value: "female", label: "Female" },
-  { value: "other",  label: "Other / Prefer not to say" },
+  { value: "male",   labelKey: "profileStudent.genderMale"   },
+  { value: "female", labelKey: "profileStudent.genderFemale" },
+  { value: "other",  labelKey: "profileStudent.genderOther"  },
 ];
 
 const BLOOD_GROUPS = [
@@ -228,12 +234,12 @@ const BLOOD_GROUPS = [
 ];
 
 const GUARDIAN_RELATIONS = [
-  { value: "father",      label: "Father"       },
-  { value: "mother",      label: "Mother"       },
-  { value: "sibling",     label: "Sibling"      },
-  { value: "uncle",       label: "Uncle / Aunt" },
-  { value: "grandparent", label: "Grandparent"  },
-  { value: "other",       label: "Other"        },
+  { value: "father",      labelKey: "profileStudent.relFather"      },
+  { value: "mother",      labelKey: "profileStudent.relMother"      },
+  { value: "sibling",     labelKey: "profileStudent.relSibling"     },
+  { value: "uncle",       labelKey: "profileStudent.relUncle"       },
+  { value: "grandparent", labelKey: "profileStudent.relGrandparent" },
+  { value: "other",       labelKey: "profileStudent.relOther"       },
 ];
 
 // ─────────────────────────────────────────────────────────
@@ -241,80 +247,80 @@ const GUARDIAN_RELATIONS = [
 // ─────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: "personal", title: "Personal Info", icon: "person-outline", desc: "Basic personal details" },
-  { id: "contact",  title: "Contact",       icon: "call-outline",   desc: "How to reach you"       },
-  { id: "guardian", title: "Guardian",      icon: "people-outline", desc: "Parent / guardian info" },
+  { id: "personal", icon: "person-outline", titleKey: "profileStudent.stepPersonal", descKey: "profileStudent.stepPersonalDesc" },
+  { id: "contact",  icon: "call-outline",   titleKey: "profileStudent.stepContact",  descKey: "profileStudent.stepContactDesc"  },
+  { id: "guardian", icon: "people-outline", titleKey: "profileStudent.stepGuardian", descKey: "profileStudent.stepGuardianDesc" },
 ];
 
 // ─────────────────────────────────────────────────────────
 // VALIDATION
 // ─────────────────────────────────────────────────────────
 
-const validateStep = (step, form) => {
+const validateStep = (step, form, t) => {
   const errors = {};
 
   if (step === 0) {
     const firstName = form.firstName?.trim();
     if (!firstName) {
-      errors.firstName = "First name is required";
+      errors.firstName = t("profileStudent.errFirstName");
     } else if (firstName.length < 2) {
-      errors.firstName = "Must be at least 2 characters";
+      errors.firstName = t("profileStudent.errMinChars");
     } else if (!/^[a-zA-Z\s'-]+$/.test(firstName)) {
-      errors.firstName = "Contains invalid characters";
+      errors.firstName = t("profileStudent.errInvalidChars");
     }
 
     const lastName = form.lastName?.trim();
     if (!lastName) {
-      errors.lastName = "Last name is required";
+      errors.lastName = t("profileStudent.errLastName");
     } else if (lastName.length < 2) {
-      errors.lastName = "Must be at least 2 characters";
+      errors.lastName = t("profileStudent.errMinChars");
     }
 
     if (!form.gender) {
-      errors.gender = "Please select your gender";
+      errors.gender = t("profileStudent.errGender");
     }
 
     const dob = form.dateOfBirth?.trim();
     if (!dob) {
-      errors.dateOfBirth = "Date of birth is required";
+      errors.dateOfBirth = t("profileStudent.errDob");
     } else {
       const age =
         new Date().getFullYear() - new Date(dob).getFullYear();
-      if (age < 3)  errors.dateOfBirth = "Please enter a valid date of birth";
-      if (age > 30) errors.dateOfBirth = "Please enter a valid date of birth";
+      if (age < 3)  errors.dateOfBirth = t("profileStudent.errDobInvalid");
+      if (age > 30) errors.dateOfBirth = t("profileStudent.errDobInvalid");
     }
   }
 
   if (step === 1) {
     const phone = form.phone?.trim();
     if (!phone) {
-      errors.phone = "Phone number is required";
+      errors.phone = t("profileStudent.errPhone");
     } else if (!/^\+?[\d\s\-()]{7,15}$/.test(phone)) {
-      errors.phone = "Enter a valid phone number";
+      errors.phone = t("profileStudent.errPhoneInvalid");
     }
 
     if (!form.address?.trim()) {
-      errors.address = "Address is required";
+      errors.address = t("profileStudent.errAddress");
     }
   }
 
   if (step === 2) {
     if (!form.guardianName?.trim()) {
-      errors.guardianName = "Guardian name is required";
+      errors.guardianName = t("profileStudent.errGuardianName");
     }
 
     const gPhone = form.guardianPhone?.trim();
     if (!gPhone) {
-      errors.guardianPhone = "Guardian phone is required";
+      errors.guardianPhone = t("profileStudent.errGuardianPhone");
     } else if (!/^\+?[\d\s\-()]{7,15}$/.test(gPhone)) {
-      errors.guardianPhone = "Enter a valid phone number";
+      errors.guardianPhone = t("profileStudent.errPhoneInvalid");
     }
 
     if (
       form.guardianEmail?.trim() &&
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.guardianEmail)
     ) {
-      errors.guardianEmail = "Invalid email address";
+      errors.guardianEmail = t("profileStudent.errEmail");
     }
   }
 
@@ -522,6 +528,7 @@ const clearDraft = async (uid) => {
 // ─────────────────────────────────────────────────────────
 
 export default function StudentProfileSetup() {
+  const { t }               = useTranslation();
   const user                = useAuthStore((s) => s.user);
   const setUser             = useAuthStore((s) => s.setUser);
   const setProfileCompleted = useAuthStore((s) => s.setProfileCompleted);
@@ -682,12 +689,12 @@ export default function StudentProfileSetup() {
   // and immediately redirects back here — creating a reload loop.
   const handleSkip = useCallback(() => {
     Alert.alert(
-      "Skip for Now?",
-      "You can complete your profile later from Settings. Some features may be limited until your profile is complete.",
+      t("profileStudent.skipTitle"),
+      t("profileStudent.skipBody"),
       [
-        { text: "Cancel", style: "cancel" },
+        { text: t("profileStudent.cancel"), style: "cancel" },
         {
-          text: "Skip for Now",
+          text: t("profileStudent.skipConfirm"),
           style: "destructive",
           onPress: async () => {
             try {
@@ -703,11 +710,11 @@ export default function StudentProfileSetup() {
         },
       ]
     );
-  }, [goToDashboard, setProfileCompleted]);
+  }, [goToDashboard, setProfileCompleted, t]);
 
   // ── Navigation ────────────────────────────────────────
   const goNext = useCallback(() => {
-    const errs = validateStep(step, form);
+    const errs = validateStep(step, form, t);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       // Scroll to top so the user sees the first error
@@ -722,7 +729,7 @@ export default function StudentProfileSetup() {
       handleSubmit();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step, form]);
+  }, [step, form, t]);
 
   const goBack = useCallback(() => {
     setErrors({});
@@ -740,7 +747,10 @@ export default function StudentProfileSetup() {
   // ── Submit ────────────────────────────────────────────
   const handleSubmit = useCallback(async () => {
     if (!userId) {
-      Alert.alert("Session Error", "Your session has expired. Please log in again.");
+      Alert.alert(
+        t("profileStudent.sessionErrorTitle"),
+        t("profileStudent.sessionErrorBody")
+      );
       return;
     }
 
@@ -760,17 +770,20 @@ export default function StudentProfileSetup() {
       setUser?.({ ...user, name: fullName, profileCompleted: true });
 
       Alert.alert(
-        "Profile Saved! 🎉",
-        "Your profile has been set up successfully.",
-        [{ text: "Continue", onPress: goToDashboard }]
+        t("profileStudent.savedTitle"),
+        t("profileStudent.savedBody"),
+        [{ text: t("profileStudent.continueBtn"), onPress: goToDashboard }]
       );
     } catch (err) {
       console.warn("[handleSubmit] unexpected error:", err.message);
-      Alert.alert("Save Failed", "Something went wrong. Please try again.");
+      Alert.alert(
+        t("profileStudent.saveFailedTitle"),
+        t("profileStudent.saveFailedBody")
+      );
     } finally {
       setSaving(false);
     }
-  }, [form, userId, user, setUser, setProfileCompleted, goToDashboard]);
+  }, [form, userId, user, setUser, setProfileCompleted, goToDashboard, t]);
 
   // ─────────────────────────────────────────────────────
   // STEP CONTENT
@@ -785,10 +798,10 @@ export default function StudentProfileSetup() {
             <View style={ss.row}>
               <View style={{ flex: 1 }}>
                 <Field
-                  label="First Name" required
+                  label={t("profileStudent.labelFirstName")} required
                   value={form.firstName}
                   onChangeText={(v) => set("firstName", v)}
-                  placeholder="e.g. John"
+                  placeholder={t("profileStudent.phFirstName")}
                   icon="person-outline"
                   error={errors.firstName}
                 />
@@ -796,25 +809,25 @@ export default function StudentProfileSetup() {
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
                 <Field
-                  label="Last Name" required
+                  label={t("profileStudent.labelLastName")} required
                   value={form.lastName}
                   onChangeText={(v) => set("lastName", v)}
-                  placeholder="e.g. Doe"
+                  placeholder={t("profileStudent.phLastName")}
                   error={errors.lastName}
                 />
               </View>
             </View>
 
             <SelectField
-              label="Gender" required
+              label={t("profileStudent.labelGender")} required
               value={form.gender}
-              options={GENDERS}
+              options={withLabels(GENDERS, t)}
               onSelect={(v) => set("gender", v)}
               error={errors.gender}
             />
 
             <DateField
-              label="Date of Birth" required
+              label={t("profileStudent.labelDob")} required
               value={form.dateOfBirth}
               onChange={(ymd) => set("dateOfBirth", ymd)}
               maximumDate={maxBirthday}
@@ -823,23 +836,23 @@ export default function StudentProfileSetup() {
             />
 
             <Field
-              label="Place of Birth"
+              label={t("profileStudent.labelPlaceOfBirth")}
               value={form.placeOfBirth}
               onChangeText={(v) => set("placeOfBirth", v)}
-              placeholder="City / town you were born in"
+              placeholder={t("profileStudent.phPlaceOfBirth")}
               icon="location-outline"
             />
 
             <Field
-              label="National ID / Birth Certificate No."
+              label={t("profileStudent.labelNationalId")}
               value={form.nationalId}
               onChangeText={(v) => set("nationalId", v)}
-              placeholder="e.g. BC123456"
+              placeholder={t("profileStudent.phNationalId")}
               icon="card-outline"
             />
 
             <SelectField
-              label="Blood Group"
+              label={t("profileStudent.labelBloodGroup")}
               value={form.bloodGroup}
               options={BLOOD_GROUPS}
               onSelect={(v) => set("bloodGroup", v)}
@@ -852,9 +865,11 @@ export default function StudentProfileSetup() {
                   <Ionicons name="repeat-outline" size={18} color="#D97706" />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={ss.toggleTitle}>Repeating this year?</Text>
+                  <Text style={ss.toggleTitle}>
+                    {t("profileStudent.repeatTitle")}
+                  </Text>
                   <Text style={ss.toggleSub}>
-                    Tick if you are repeating this class / grade
+                    {t("profileStudent.repeatHint")}
                   </Text>
                 </View>
               </View>
@@ -870,19 +885,19 @@ export default function StudentProfileSetup() {
             </View>
 
             <Field
-              label="Health / Medical Conditions (optional)"
+              label={t("profileStudent.labelMedical")}
               value={form.medicalConditions}
               onChangeText={(v) => set("medicalConditions", v)}
-              placeholder="Any known conditions, allergies or disabilities"
+              placeholder={t("profileStudent.phMedical")}
               multiline
               icon="medical-outline"
             />
 
             <Field
-              label="About Me (optional)"
+              label={t("profileStudent.labelBio")}
               value={form.bio}
               onChangeText={(v) => set("bio", v)}
-              placeholder="A short introduction about yourself…"
+              placeholder={t("profileStudent.phBio")}
               multiline
               icon="document-text-outline"
             />
@@ -893,29 +908,29 @@ export default function StudentProfileSetup() {
         return (
           <>
             <Field
-              label="Primary Phone" required
+              label={t("profileStudent.labelPhone")} required
               value={form.phone}
               onChangeText={(v) => set("phone", v)}
-              placeholder="e.g. +233 20 000 0000"
+              placeholder={t("profileStudent.phPhone")}
               keyboardType="phone-pad"
               icon="call-outline"
               error={errors.phone}
             />
 
             <Field
-              label="Alternate Phone"
+              label={t("profileStudent.labelAltPhone")}
               value={form.alternatePhone}
               onChangeText={(v) => set("alternatePhone", v)}
-              placeholder="Optional"
+              placeholder={t("profileStudent.phOptional")}
               keyboardType="phone-pad"
               icon="call-outline"
             />
 
             <Field
-              label="Residential Address" required
+              label={t("profileStudent.labelAddress")} required
               value={form.address}
               onChangeText={(v) => set("address", v)}
-              placeholder="House / street address"
+              placeholder={t("profileStudent.phAddress")}
               icon="home-outline"
               multiline
               error={errors.address}
@@ -924,19 +939,19 @@ export default function StudentProfileSetup() {
             <View style={ss.row}>
               <View style={{ flex: 1 }}>
                 <Field
-                  label="City / Town"
+                  label={t("profileStudent.labelCity")}
                   value={form.city}
                   onChangeText={(v) => set("city", v)}
-                  placeholder="e.g. Accra"
+                  placeholder={t("profileStudent.phCity")}
                 />
               </View>
               <View style={{ width: 12 }} />
               <View style={{ flex: 1 }}>
                 <Field
-                  label="State / Region"
+                  label={t("profileStudent.labelState")}
                   value={form.state}
                   onChangeText={(v) => set("state", v)}
-                  placeholder="e.g. Greater Accra"
+                  placeholder={t("profileStudent.phState")}
                 />
               </View>
             </View>
@@ -949,42 +964,41 @@ export default function StudentProfileSetup() {
             <View style={ss.infoBox}>
               <Ionicons name="people-outline" size={20} color={C.info} />
               <Text style={ss.infoText}>
-                Guardian information is used for emergency contact and school
-                communication.
+                {t("profileStudent.infoGuardian")}
               </Text>
             </View>
 
             <Field
-              label="Guardian Full Name" required
+              label={t("profileStudent.labelGuardianName")} required
               value={form.guardianName}
               onChangeText={(v) => set("guardianName", v)}
-              placeholder="Parent / guardian full name"
+              placeholder={t("profileStudent.phGuardianName")}
               icon="person-outline"
               error={errors.guardianName}
             />
 
             <Field
-              label="Guardian Phone" required
+              label={t("profileStudent.labelGuardianPhone")} required
               value={form.guardianPhone}
               onChangeText={(v) => set("guardianPhone", v)}
-              placeholder="e.g. +233 20 000 0000"
+              placeholder={t("profileStudent.phPhone")}
               keyboardType="phone-pad"
               icon="call-outline"
               error={errors.guardianPhone}
             />
 
             <SelectField
-              label="Relationship to You"
+              label={t("profileStudent.labelRelation")}
               value={form.guardianRelation}
-              options={GUARDIAN_RELATIONS}
+              options={withLabels(GUARDIAN_RELATIONS, t)}
               onSelect={(v) => set("guardianRelation", v)}
             />
 
             <Field
-              label="Guardian Email (Optional)"
+              label={t("profileStudent.labelGuardianEmail")}
               value={form.guardianEmail}
               onChangeText={(v) => set("guardianEmail", v)}
-              placeholder="guardian@email.com"
+              placeholder={t("profileStudent.phGuardianEmail")}
               keyboardType="email-address"
               icon="mail-outline"
               error={errors.guardianEmail}
@@ -995,7 +1009,7 @@ export default function StudentProfileSetup() {
       default:
         return null;
     }
-  }, [step, form, errors, set, minBirthday, maxBirthday]);
+  }, [step, form, errors, set, minBirthday, maxBirthday, t]);
 
   // ─────────────────────────────────────────────────────
   // LOADING STATE
@@ -1005,7 +1019,7 @@ export default function StudentProfileSetup() {
     return (
       <View style={ss.loadingScreen}>
         <ActivityIndicator size="large" color={C.primary} />
-        <Text style={ss.loadingText}>Loading your profile…</Text>
+        <Text style={ss.loadingText}>{t("profileStudent.loading")}</Text>
       </View>
     );
   }
@@ -1030,8 +1044,10 @@ export default function StudentProfileSetup() {
             <Ionicons name="arrow-back" size={22} color={C.gray700} />
           </TouchableOpacity>
           <View style={{ flex: 1 }}>
-            <Text style={ss.topTitle}>Profile Setup</Text>
-            <Text style={ss.topSub}>Step {step + 1} of {STEPS.length}</Text>
+            <Text style={ss.topTitle}>{t("profileStudent.title")}</Text>
+            <Text style={ss.topSub}>
+              {t("profileStudent.stepOf", { current: step + 1, total: STEPS.length })}
+            </Text>
           </View>
           <TouchableOpacity
             style={ss.skipBtn}
@@ -1039,7 +1055,7 @@ export default function StudentProfileSetup() {
             hitSlop={8}
             activeOpacity={0.7}
           >
-            <Text style={ss.skipBtnText}>Skip for now</Text>
+            <Text style={ss.skipBtnText}>{t("profileStudent.skip")}</Text>
           </TouchableOpacity>
         </View>
 
@@ -1048,7 +1064,7 @@ export default function StudentProfileSetup() {
           <View style={ss.skipHint}>
             <Ionicons name="information-circle-outline" size={14} color={C.gray400} />
             <Text style={ss.skipHintText}>
-              You can skip and complete your profile later from Settings
+              {t("profileStudent.skipHint")}
             </Text>
           </View>
         )}
@@ -1089,7 +1105,7 @@ export default function StudentProfileSetup() {
                   isCurrent && ss.stepLabelActive,
                   isDone    && ss.stepLabelDone,
                 ]}>
-                  {s.title}
+                  {t(s.titleKey)}
                 </Text>
               </View>
             );
@@ -1098,8 +1114,8 @@ export default function StudentProfileSetup() {
 
         {/* STEP HEADER */}
         <View style={ss.stepHeader}>
-          <Text style={ss.stepTitle}>{STEPS[step].title}</Text>
-          <Text style={ss.stepDesc}>{STEPS[step].desc}</Text>
+          <Text style={ss.stepTitle}>{t(STEPS[step].titleKey)}</Text>
+          <Text style={ss.stepDesc}>{t(STEPS[step].descKey)}</Text>
         </View>
 
         {/* FORM */}
@@ -1119,7 +1135,7 @@ export default function StudentProfileSetup() {
           {step > 0 && (
             <TouchableOpacity style={ss.backAction} onPress={goBack}>
               <Ionicons name="arrow-back" size={18} color={C.primary} />
-              <Text style={ss.backActionText}>Back</Text>
+              <Text style={ss.backActionText}>{t("profileStudent.back")}</Text>
             </TouchableOpacity>
           )}
           <TouchableOpacity
@@ -1133,7 +1149,9 @@ export default function StudentProfileSetup() {
             ) : (
               <>
                 <Text style={ss.nextBtnText}>
-                  {step === STEPS.length - 1 ? "Save Profile" : "Next"}
+                  {step === STEPS.length - 1
+                    ? t("profileStudent.save")
+                    : t("profileStudent.next")}
                 </Text>
                 <Ionicons
                   name={

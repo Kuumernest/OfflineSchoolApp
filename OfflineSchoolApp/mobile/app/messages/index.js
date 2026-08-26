@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -40,9 +41,10 @@ const timeLabel = (iso) => {
 
 /** Direct threads carry no title; they are named for the other person. */
 const titleFor = (c, myId) => {
+  const { t } = useTranslation();
   if (c.title) return c.title;
   const other = (c.participants || []).find((p) => String(p.id) !== String(myId));
-  return other?.name || "Conversation";
+  return other?.name || t("msgMobile.conversation");
 };
 
 const iconFor = (kind) => {
@@ -54,6 +56,7 @@ const iconFor = (kind) => {
 // ── Screen ──────────────────────────────────────────────────────────────────
 
 export default function ConversationsScreen() {
+  const { t } = useTranslation();
   const user  = useAuthStore((s) => s.user);
   const myId  = String(user?._id ?? "");
 
@@ -76,7 +79,7 @@ export default function ConversationsScreen() {
   /** Server refresh. Failure here is ordinary — say so quietly, do not alarm. */
   const refresh = useCallback(async () => {
     const res = await MessageService.syncConversations({ myId, myKind: "user" });
-    setSyncNote(res.ok ? null : "Showing saved conversations — no connection");
+    setSyncNote(res.ok ? null : t("msgMobile.syncNote"));
     await loadLocal();
   }, [myId, loadLocal]);
 
@@ -92,7 +95,8 @@ export default function ConversationsScreen() {
 
   // ── Render ────────────────────────────────────────────────────────────────
 
-  const renderItem = ({ item }) => (
+  const renderItem = ({ item }) => {
+                       return (
     <TouchableOpacity
       style={s.row}
       activeOpacity={0.7}
@@ -112,7 +116,7 @@ export default function ConversationsScreen() {
 
         <View style={s.rowBottom}>
           <Text style={s.rowPreview} numberOfLines={1}>
-            {item.lastMessagePreview || "No messages yet"}
+            {item.lastMessagePreview || t("msgMobile.noMessagesYet")}
           </Text>
           {item.unread > 0 && (
             <View style={s.badge}>
@@ -123,6 +127,7 @@ export default function ConversationsScreen() {
       </View>
     </TouchableOpacity>
   );
+                     };
 
   return (
     <View style={s.screen}>
@@ -132,7 +137,7 @@ export default function ConversationsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={s.backBtn}>
           <Ionicons name="chevron-back" size={24} color={C.gray900} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Messages</Text>
+        <Text style={s.headerTitle}>{t("msgMobile.title")}</Text>
         <TouchableOpacity
           onPress={() => router.push("/messages/new")}
           style={s.backBtn}
@@ -163,9 +168,9 @@ export default function ConversationsScreen() {
           ListEmptyComponent={
             <View style={s.empty}>
               <Ionicons name="chatbubbles-outline" size={44} color={C.gray300} />
-              <Text style={s.emptyTitle}>No conversations yet</Text>
+              <Text style={s.emptyTitle}>{t("msgMobile.emptyTitle")}</Text>
               <Text style={s.emptyBody}>
-                Messages from your teachers and the school office appear here.
+                {t("msgMobile.emptyBody")}
               </Text>
               <TouchableOpacity
                 style={s.emptyBtn}
@@ -173,7 +178,7 @@ export default function ConversationsScreen() {
                 activeOpacity={0.85}
               >
                 <Ionicons name="create-outline" size={17} color={C.white} />
-                <Text style={s.emptyBtnText}>Start a conversation</Text>
+                <Text style={s.emptyBtnText}>{t("msgMobile.startConversation")}</Text>
               </TouchableOpacity>
             </View>
           }

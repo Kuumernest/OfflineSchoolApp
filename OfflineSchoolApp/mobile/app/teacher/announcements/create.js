@@ -23,14 +23,15 @@ import {
 } from "react-native";
 import { useRouter }            from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
+import { useTranslation }      from "../../../src/i18n/useTranslation";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { useAnnouncementStore } from "../../../src/store/announcement.store";
 import { getDatabase }          from "../../../src/db/database";
 
 const PRIORITIES = [
-  { key: "low",    label: "Low",    icon: "remove-circle-outline", color: "#059669", bg: "#ECFDF5" },
-  { key: "normal", label: "Normal", icon: "alert-circle-outline",  color: "#D97706", bg: "#FEF3C7" },
-  { key: "urgent", label: "Urgent", icon: "warning-outline",       color: "#DC2626", bg: "#FEE2E2" },
+  { key: "low",    icon: "remove-circle-outline", color: "#059669", bg: "#ECFDF5" },
+  { key: "normal", icon: "alert-circle-outline",  color: "#D97706", bg: "#FEF3C7" },
+  { key: "urgent", icon: "warning-outline",       color: "#DC2626", bg: "#FEE2E2" },
 ];
 
 const MAX_TITLE = 120;
@@ -44,7 +45,7 @@ const loadClassSubjectMap = async (teacherId) => {
     const tables  = await db
       .getAllAsync(`SELECT name FROM sqlite_master WHERE type='table'`)
       .catch(() => []);
-    const tableSet = new Set(tables.map((t) => t.name));
+    const tableSet = new Set(tables.map((tbl) => tbl.name));
 
     if (!tableSet.has("subjects")) return {};
 
@@ -90,6 +91,7 @@ const loadClassSubjectMap = async (teacherId) => {
 };
 
 const ClassChip = React.memo(({ cls, selected, onToggle, single = false }) => {
+  const { t }     = useTranslation();
   const scaleAnim = useRef(new Animated.Value(1)).current;
 
   const handlePress = useCallback(() => {
@@ -118,7 +120,7 @@ const ClassChip = React.memo(({ cls, selected, onToggle, single = false }) => {
           />
         )}
         <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-          {cls.name || "Class"}
+          {cls.name || t("announceCreate.classFallback")}
           {cls.section ? ` ${cls.section}` : ""}
         </Text>
       </TouchableOpacity>
@@ -142,31 +144,35 @@ const SubjectChip = React.memo(({ subject, selected, onSelect }) => (
   </TouchableOpacity>
 ));
 
-const PriorityPill = React.memo(({ item, selected, onSelect }) => (
-  <TouchableOpacity
-    style={[
-      styles.priorityPill,
-      {
-        borderColor:     selected ? item.color : "transparent",
-        backgroundColor: selected ? item.bg    : "#F9FAFB",
-      },
-    ]}
-    onPress={() => onSelect(item.key)}
-    activeOpacity={0.7}
-  >
-    <Ionicons
-      name={item.icon}
-      size={15}
-      color={selected ? item.color : "#9CA3AF"}
-    />
-    <Text style={[
-      styles.priorityText,
-      { color: selected ? item.color : "#6B7280", fontWeight: selected ? "700" : "500" },
-    ]}>
-      {item.label}
-    </Text>
-  </TouchableOpacity>
-));
+const PriorityPill = React.memo(({ item, selected, onSelect }) => {
+  const { t } = useTranslation();
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.priorityPill,
+        {
+          borderColor:     selected ? item.color : "transparent",
+          backgroundColor: selected ? item.bg    : "#F9FAFB",
+        },
+      ]}
+      onPress={() => onSelect(item.key)}
+      activeOpacity={0.7}
+    >
+      <Ionicons
+        name={item.icon}
+        size={15}
+        color={selected ? item.color : "#9CA3AF"}
+      />
+      <Text style={[
+        styles.priorityText,
+        { color: selected ? item.color : "#6B7280", fontWeight: selected ? "700" : "500" },
+      ]}>
+        {t(`announceCreate.priority.${item.key}`)}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
 const CharCount = ({ current, max }) => {
   const ratio = current / max;
@@ -189,8 +195,9 @@ const FieldLabel = ({ label, required, right }) => (
 );
 
 export default function CreateAnnouncementScreen() {
-  const router = useRouter();
-  const user   = useAuthStore((s) => s.user);
+  const router  = useRouter();
+  const { t }   = useTranslation();
+  const user    = useAuthStore((s) => s.user);
 
   const assignedClasses = useAnnouncementStore((s) => s.assignedClasses);
   const loadingClasses  = useAnnouncementStore((s) => s.loadingClasses);
@@ -283,36 +290,36 @@ export default function CreateAnnouncementScreen() {
     const e = {};
 
     if (!title.trim())
-      e.title = "Title is required";
+      e.title = t("announceCreate.errTitleRequired");
     else if (title.trim().length > MAX_TITLE)
-      e.title = `Max ${MAX_TITLE} characters`;
+      e.title = t("announceCreate.errMaxChars", { count: MAX_TITLE });
 
     if (!body.trim())
-      e.body = "Message body is required";
+      e.body = t("announceCreate.errBodyRequired");
     else if (body.trim().length > MAX_BODY)
-      e.body = `Max ${MAX_BODY} characters`;
+      e.body = t("announceCreate.errMaxChars", { count: MAX_BODY });
 
     if (noticeType === "general") {
       if (selectedClassIds.length === 0)
-        e.classes = "Select at least one class";
+        e.classes = t("announceCreate.errSelectClass");
     } else {
       if (!subjectClassId)
-        e.classes = "Select the class for this subject notice";
+        e.classes = t("announceCreate.errSelectSubjectClass");
       if (!selectedSubject)
-        e.subject = "Select a subject";
+        e.subject = t("announceCreate.errSelectSubject");
     }
 
     if (expiresAt.trim()) {
       const d = new Date(expiresAt.trim());
       if (isNaN(d.getTime()))
-        e.expiresAt = "Invalid date — use YYYY-MM-DD";
+        e.expiresAt = t("announceCreate.errInvalidDate");
       else if (d <= new Date())
-        e.expiresAt = "Expiry must be in the future";
+        e.expiresAt = t("announceCreate.errExpiryPast");
     }
 
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [title, body, noticeType, selectedClassIds, subjectClassId, selectedSubject, expiresAt]);
+  }, [title, body, noticeType, selectedClassIds, subjectClassId, selectedSubject, expiresAt, t]);
 
   const handleSubmit = useCallback(async () => {
     if (submitting) return;
@@ -343,23 +350,23 @@ export default function CreateAnnouncementScreen() {
 
       const classCount = finalClassIds.length;
       const successMsg = noticeType === "subject"
-        ? `Subject notice sent for ${finalSubjectName}.`
-        : `Sent to ${classCount} class${classCount > 1 ? "es" : ""}.`;
+        ? t("announceCreate.sentSubject", { name: finalSubjectName })
+        : t("announceCreate.sentClasses", { count: classCount });
 
-      Alert.alert("Announcement Sent ✓", successMsg, [
+      Alert.alert(`${t("announceCreate.sentTitle")} ✓`, successMsg, [
         { text: "OK", onPress: () => router.back() },
       ]);
     } catch (err) {
       Alert.alert(
-        "Failed to Send",
-        err.message || "Something went wrong. Please try again.",
+        t("announceCreate.failedTitle"),
+        err.message || t("announceCreate.failedBody"),
         [{ text: "OK" }]
       );
     }
   }, [
     submitting, validate, createNew,
     noticeType, selectedClassIds, subjectClassId, selectedSubject,
-    title, body, priority, expiresAt, router,
+    title, body, priority, expiresAt, router, t,
   ]);
 
   const selPriority = PRIORITIES.find((p) => p.key === priority) || PRIORITIES[1];
@@ -386,11 +393,11 @@ export default function CreateAnnouncementScreen() {
           </TouchableOpacity>
 
           <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>New Announcement</Text>
+            <Text style={styles.headerTitle}>{t("announceCreate.title")}</Text>
             <Text style={styles.headerSub}>
               {isSubject && selectedSubject
-                ? `Subject notice · ${selectedSubject.name}`
-                : "Visible to students in selected classes"}
+                ? `${t("announceCreate.subjectNotice")} · ${selectedSubject.name}`
+                : t("announceCreate.headerSubGeneral")}
             </Text>
           </View>
 
@@ -405,7 +412,7 @@ export default function CreateAnnouncementScreen() {
             ) : (
               <>
                 <Ionicons name="send" size={15} color="#FFF" />
-                <Text style={styles.sendBtnText}>Send</Text>
+                <Text style={styles.sendBtnText}>{t("announceCreate.send")}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -418,7 +425,7 @@ export default function CreateAnnouncementScreen() {
         >
           {/* NOTICE TYPE */}
           <View style={styles.card}>
-            <FieldLabel label="Notice Type" />
+            <FieldLabel label={t("announceCreate.labelNoticeType")} />
             <View style={styles.typeToggleRow}>
               <TouchableOpacity
                 style={[styles.typeToggleBtn, !isSubject && styles.typeToggleBtnActive]}
@@ -428,9 +435,11 @@ export default function CreateAnnouncementScreen() {
                 <Ionicons name="megaphone-outline" size={18} color={!isSubject ? "#4F46E5" : "#9CA3AF"} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.typeToggleLabel, !isSubject && { color: "#4F46E5", fontWeight: "700" }]}>
-                    General
+                    {t("announceCreate.typeGeneral")}
                   </Text>
-                  <Text style={styles.typeToggleSub}>Class announcement</Text>
+                  <Text style={styles.typeToggleSub}>
+                    {t("announceCreate.typeGeneralSub")}
+                  </Text>
                 </View>
                 {!isSubject && <Ionicons name="checkmark-circle" size={16} color="#4F46E5" />}
               </TouchableOpacity>
@@ -443,9 +452,11 @@ export default function CreateAnnouncementScreen() {
                 <Ionicons name="book-outline" size={18} color={isSubject ? "#059669" : "#9CA3AF"} />
                 <View style={{ flex: 1 }}>
                   <Text style={[styles.typeToggleLabel, isSubject && { color: "#059669", fontWeight: "700" }]}>
-                    Subject Notice
+                    {t("announceCreate.typeSubject")}
                   </Text>
-                  <Text style={styles.typeToggleSub}>Appears in subject tab</Text>
+                  <Text style={styles.typeToggleSub}>
+                    {t("announceCreate.typeSubjectSub")}
+                  </Text>
                 </View>
                 {isSubject && <Ionicons name="checkmark-circle" size={16} color="#059669" />}
               </TouchableOpacity>
@@ -456,13 +467,15 @@ export default function CreateAnnouncementScreen() {
           {!isSubject && (
             <View style={styles.card}>
               <FieldLabel
-                label="Send To"
+                label={t("announceCreate.labelSendTo")}
                 required
                 right={
                   assignedClasses.length > 0 ? (
                     <TouchableOpacity onPress={handleSelectAll}>
                       <Text style={styles.selectAllBtn}>
-                        {allSelected ? "Deselect All" : "Select All"}
+                        {allSelected
+                          ? t("announceCreate.deselectAll")
+                          : t("announceCreate.selectAll")}
                       </Text>
                     </TouchableOpacity>
                   ) : null
@@ -471,13 +484,19 @@ export default function CreateAnnouncementScreen() {
               {loadingClasses ? (
                 <View style={styles.loaderRow}>
                   <ActivityIndicator size="small" color="#4F46E5" />
-                  <Text style={styles.loaderText}>Loading your classes…</Text>
+                  <Text style={styles.loaderText}>
+                    {t("announceCreate.loadingClasses")}
+                  </Text>
                 </View>
               ) : assignedClasses.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons name="school-outline" size={28} color="#D1D5DB" />
-                  <Text style={styles.emptyTitle}>No classes assigned</Text>
-                  <Text style={styles.emptySub}>Contact your administrator.</Text>
+                  <Text style={styles.emptyTitle}>
+                    {t("announceCreate.noClassesTitle")}
+                  </Text>
+                  <Text style={styles.emptySub}>
+                    {t("announceCreate.noClassesSub")}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.chipsWrap}>
@@ -496,7 +515,9 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.selectedNote}>
                   <Ionicons name="checkmark-circle" size={14} color="#4F46E5" />
                   <Text style={styles.selectedNoteText}>
-                    {selectedClassIds.length} class{selectedClassIds.length > 1 ? "es" : ""} selected
+                    {t("announceCreate.classesSelected", {
+                      count: selectedClassIds.length,
+                    })}
                   </Text>
                 </View>
               )}
@@ -510,18 +531,24 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.stepBadge}>
                   <Text style={styles.stepBadgeText}>1</Text>
                 </View>
-                <FieldLabel label="Pick a Class" required />
+                <FieldLabel label={t("announceCreate.labelPickClass")} required />
               </View>
               {loadingClasses ? (
                 <View style={styles.loaderRow}>
                   <ActivityIndicator size="small" color="#059669" />
-                  <Text style={styles.loaderText}>Loading your classes…</Text>
+                  <Text style={styles.loaderText}>
+                    {t("announceCreate.loadingClasses")}
+                  </Text>
                 </View>
               ) : assignedClasses.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons name="school-outline" size={28} color="#D1D5DB" />
-                  <Text style={styles.emptyTitle}>No classes assigned</Text>
-                  <Text style={styles.emptySub}>Contact your administrator.</Text>
+                  <Text style={styles.emptyTitle}>
+                    {t("announceCreate.noClassesTitle")}
+                  </Text>
+                  <Text style={styles.emptySub}>
+                    {t("announceCreate.noClassesSub")}
+                  </Text>
                 </View>
               ) : (
                 <View style={styles.chipsWrap}>
@@ -541,7 +568,11 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.selectedNote}>
                   <Ionicons name="checkmark-circle" size={14} color="#059669" />
                   <Text style={[styles.selectedNoteText, { color: "#059669" }]}>
-                    {assignedClasses.find((c) => c.id === subjectClassId)?.name || "Class"} selected
+                    {t("announceCreate.classSelected", {
+                      name:
+                        assignedClasses.find((c) => c.id === subjectClassId)?.name ||
+                        t("announceCreate.classFallback"),
+                    })}
                   </Text>
                 </View>
               )}
@@ -555,19 +586,23 @@ export default function CreateAnnouncementScreen() {
                 <View style={[styles.stepBadge, { backgroundColor: "#059669" }]}>
                   <Text style={styles.stepBadgeText}>2</Text>
                 </View>
-                <FieldLabel label="Pick a Subject" required />
+                <FieldLabel label={t("announceCreate.labelPickSubject")} required />
               </View>
               {loadingSubjects ? (
                 <View style={styles.loaderRow}>
                   <ActivityIndicator size="small" color="#059669" />
-                  <Text style={styles.loaderText}>Loading subjects…</Text>
+                  <Text style={styles.loaderText}>
+                    {t("announceCreate.loadingSubjects")}
+                  </Text>
                 </View>
               ) : availableSubjects.length === 0 ? (
                 <View style={styles.emptyBox}>
                   <Ionicons name="book-outline" size={28} color="#D1D5DB" />
-                  <Text style={styles.emptyTitle}>No subjects found</Text>
+                  <Text style={styles.emptyTitle}>
+                    {t("announceCreate.noSubjectsTitle")}
+                  </Text>
                   <Text style={styles.emptySub}>
-                    No subjects linked to you for this class.{"\n"}Subjects appear after sync.
+                    {t("announceCreate.noSubjectsSub")}
                   </Text>
                 </View>
               ) : (
@@ -587,7 +622,7 @@ export default function CreateAnnouncementScreen() {
                 <View style={styles.selectedNote}>
                   <Ionicons name="checkmark-circle" size={14} color="#059669" />
                   <Text style={[styles.selectedNoteText, { color: "#059669" }]}>
-                    Notice will appear in the {selectedSubject.name} subject tab
+                    {t("announceCreate.subjectTabNote", { name: selectedSubject.name })}
                   </Text>
                 </View>
               )}
@@ -596,7 +631,7 @@ export default function CreateAnnouncementScreen() {
 
           {/* PRIORITY */}
           <View style={styles.card}>
-            <FieldLabel label="Priority" />
+            <FieldLabel label={t("announceCreate.labelPriority")} />
             <View style={styles.priorityRow}>
               {PRIORITIES.map((p) => (
                 <PriorityPill key={p.key} item={p} selected={priority === p.key} onSelect={setPriority} />
@@ -607,7 +642,7 @@ export default function CreateAnnouncementScreen() {
           {/* TITLE */}
           <View style={styles.card}>
             <FieldLabel
-              label="Title"
+              label={t("announceCreate.labelTitle")}
               required
               right={<CharCount current={title.length} max={MAX_TITLE} />}
             />
@@ -615,12 +650,12 @@ export default function CreateAnnouncementScreen() {
               style={[styles.input, errors.title && styles.inputErr]}
               placeholder={
                 isSubject && selectedSubject
-                  ? `e.g. ${selectedSubject.name} — Quiz on Friday`
-                  : "e.g. Test rescheduled to Friday"
+                  ? t("announceCreate.phTitleSubject", { name: selectedSubject.name })
+                  : t("announceCreate.phTitle")
               }
               placeholderTextColor="#9CA3AF"
               value={title}
-              onChangeText={(t) => { setTitle(t); clearFieldError("title"); }}
+              onChangeText={(v) => { setTitle(v); clearFieldError("title"); }}
               maxLength={MAX_TITLE + 10}
               returnKeyType="next"
               onSubmitEditing={() => bodyRef.current?.focus()}
@@ -632,17 +667,17 @@ export default function CreateAnnouncementScreen() {
           {/* BODY */}
           <View style={styles.card}>
             <FieldLabel
-              label="Message"
+              label={t("announceCreate.labelMessage")}
               required
               right={<CharCount current={body.length} max={MAX_BODY} />}
             />
             <TextInput
               ref={bodyRef}
               style={[styles.input, styles.bodyInput, errors.body && styles.inputErr]}
-              placeholder="Write your announcement here…"
+              placeholder={t("announceCreate.phBody")}
               placeholderTextColor="#9CA3AF"
               value={body}
-              onChangeText={(t) => { setBody(t); clearFieldError("body"); }}
+              onChangeText={(v) => { setBody(v); clearFieldError("body"); }}
               maxLength={MAX_BODY + 10}
               multiline
               textAlignVertical="top"
@@ -653,28 +688,28 @@ export default function CreateAnnouncementScreen() {
           {/* EXPIRY */}
           <View style={styles.card}>
             <FieldLabel
-              label="Expiry Date"
-              right={<Text style={styles.optionalLabel}>optional</Text>}
+              label={t("announceCreate.labelExpiry")}
+              right={
+                <Text style={styles.optionalLabel}>{t("announceCreate.optional")}</Text>
+              }
             />
             <TextInput
               style={[styles.input, errors.expiresAt && styles.inputErr]}
-              placeholder="YYYY-MM-DD  e.g. 2025-06-30"
+              placeholder={t("announceCreate.phExpiry")}
               placeholderTextColor="#9CA3AF"
               value={expiresAt}
-              onChangeText={(t) => { setExpiresAt(t); clearFieldError("expiresAt"); }}
+              onChangeText={(v) => { setExpiresAt(v); clearFieldError("expiresAt"); }}
               keyboardType="numbers-and-punctuation"
               returnKeyType="done"
             />
             {errors.expiresAt && <Text style={styles.errText}>{errors.expiresAt}</Text>}
-            <Text style={styles.hint}>
-              Announcement auto-hides after this date. Leave blank for no expiry.
-            </Text>
+            <Text style={styles.hint}>{t("announceCreate.expiryHint")}</Text>
           </View>
 
           {/* PREVIEW */}
           {canPreview && (
             <View style={styles.card}>
-              <Text style={styles.previewLabel}>Preview</Text>
+              <Text style={styles.previewLabel}>{t("announceCreate.preview")}</Text>
               <View style={styles.previewBox}>
                 <View style={styles.previewTop}>
                   <View style={[styles.previewIcon, {
@@ -688,22 +723,24 @@ export default function CreateAnnouncementScreen() {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.previewTitle} numberOfLines={1}>
-                      {title || "Announcement title"}
+                      {title || t("announceCreate.previewTitleFallback")}
                     </Text>
                     <Text style={styles.previewMeta}>
-                      {user?.name || "You"}
+                      {user?.name || t("announceCreate.previewAuthorFallback")}
                       {isSubject && selectedSubject ? ` · ${selectedSubject.name}` : ""}
-                      {" · Just now"}
+                      {` · ${t("announceCreate.previewJustNow")}`}
                     </Text>
                   </View>
                   {isSubject && (
                     <View style={[styles.previewBadge, { backgroundColor: "#ECFDF5" }]}>
-                      <Text style={[styles.previewBadgeText, { color: "#059669" }]}>Subject</Text>
+                      <Text style={[styles.previewBadgeText, { color: "#059669" }]}>
+                        {t("announceCreate.previewSubjectBadge")}
+                      </Text>
                     </View>
                   )}
                 </View>
                 <Text style={styles.previewBody} numberOfLines={5}>
-                  {body || "Message preview will appear here…"}
+                  {body || t("announceCreate.previewBodyFallback")}
                 </Text>
               </View>
             </View>
@@ -732,11 +769,12 @@ export default function CreateAnnouncementScreen() {
                   />
                   <Text style={styles.submitText}>
                     {isSubject && selectedSubject
-                      ? `Send Subject Notice · ${selectedSubject.name}`
-                      : `Send${selectedClassIds.length > 0
-                          ? ` · ${selectedClassIds.length} Class${selectedClassIds.length > 1 ? "es" : ""}`
-                          : " Announcement"
-                        }`
+                      ? `${t("announceCreate.sendSubjectNotice")} · ${selectedSubject.name}`
+                      : selectedClassIds.length > 0
+                        ? t("announceCreate.sendClasses", {
+                            count: selectedClassIds.length,
+                          })
+                        : t("announceCreate.sendAnnouncement")
                     }
                   </Text>
                 </>

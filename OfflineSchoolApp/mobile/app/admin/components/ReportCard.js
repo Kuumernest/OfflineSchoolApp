@@ -11,6 +11,7 @@ import { Ionicons }    from "@expo/vector-icons";
 import * as Print      from "expo-print";
 import * as Sharing    from "expo-sharing";
 import api             from "../../../src/services/api";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -49,11 +50,14 @@ const pctColor = (pct) => {
   return C.error;
 };
 
-const positionSuffix = (n) => {
+// `t` is passed in: a module-scope helper cannot call the hook, and the
+// ordinal suffix is visible text (1st / 1er).
+const positionSuffix = (n, t) => {
   if (!n && n !== 0) return "—";
   const s   = ["th", "st", "nd", "rd"];
   const v   = n % 100;
-  return `${n}${s[(v - 20) % 10] || s[v] || s[0]}`;
+  const key = s[(v - 20) % 10] || s[v] || s[0];
+  return `${n}${t(`reportCardDoc.ordinal.${key}`)}`;
 };
 
 // ─────────────────────────────────────────────────────────
@@ -164,26 +168,32 @@ const InfoRow = ({ label, value, valueColor }) => (
   </View>
 );
 
-const RankBadge = ({ label, position, total, color }) => (
-  <View style={[s.rankBadge, {
-    borderColor:     color + "30",
-    backgroundColor: color + "08",
-  }]}>
-    <Text style={[s.rankPos, { color }]}>
-      {positionSuffix(position)}
-    </Text>
-    <Text style={s.rankLabel}>{label}</Text>
-    {position != null && total != null && (
-      <Text style={s.rankTotal}>of {total}</Text>
-    )}
-  </View>
-);
+const RankBadge = ({ label, position, total, color }) => {
+  const { t } = useTranslation();
+  return (
+    <View style={[s.rankBadge, {
+      borderColor:     color + "30",
+      backgroundColor: color + "08",
+    }]}>
+      <Text style={[s.rankPos, { color }]}>
+        {positionSuffix(position, t)}
+      </Text>
+      <Text style={s.rankLabel}>{label}</Text>
+      {position != null && total != null && (
+        <Text style={s.rankTotal}>
+          {t("reportCardDoc.ofTotal", { total })}
+        </Text>
+      )}
+    </View>
+  );
+};
 
 // ─────────────────────────────────────────────────────────
 // SUBJECT ROW
 // ─────────────────────────────────────────────────────────
 
 const SubjectRow = ({ subject, index, maxScore }) => {
+  const { t }    = useTranslation();
   const absent   = subject.isAbsent;
   const passing  = subject.isPassing;
   const score    = subject.score ?? subject.rawScore;
@@ -202,7 +212,8 @@ const SubjectRow = ({ subject, index, maxScore }) => {
       {/* Name */}
       <View style={s.col_name}>
         <Text style={s.subjectName} numberOfLines={1}>
-          {subject.subjectName || `Subject ${index + 1}`}
+          {subject.subjectName
+            || t("reportCardDoc.subjectFallback", { index: index + 1 })}
         </Text>
         {subject.teacherName ? (
           <Text style={s.subjectTeacher} numberOfLines={1}>
@@ -214,7 +225,9 @@ const SubjectRow = ({ subject, index, maxScore }) => {
       {/* Score */}
       <View style={s.col_score}>
         <Text style={[s.subjectScore, { color }]}>
-          {absent ? "ABS" : score != null ? score : "—"}
+          {absent
+            ? t("reportCardDoc.absent")
+            : score != null ? score : "—"}
         </Text>
         {norm != null && !absent ? (
           <Text style={s.subjectNorm}>/{Math.round(norm)}</Text>
@@ -224,7 +237,7 @@ const SubjectRow = ({ subject, index, maxScore }) => {
       {/* Grade */}
       <View style={[s.gradePill, { backgroundColor: color + "18" }]}>
         <Text style={[s.gradeText, { color }]}>
-          {absent ? "ABS" : subject.grade || "—"}
+          {absent ? t("reportCardDoc.absent") : subject.grade || "—"}
         </Text>
       </View>
 
@@ -267,23 +280,30 @@ const fetchReportCardHtml = async ({ examId, studentId, schoolId, schoolName }) 
   }
 };
 
-function buildPdfHtml({ result, exam, schoolName }) {
+// `t` (and the BCP-47 `locale` for the date) are passed in: this is a
+// module-scope builder, so it cannot call the hook itself.
+function buildPdfHtml({ result, exam, schoolName, t, locale }) {
   const subjects = result.subjectBreakdown || [];
+  const abs      = t("reportCardDoc.absent");
   const rows = subjects.map((s) => {
     const score = s.score ?? s.rawScore;
     const color = s.isAbsent ? "#9CA3AF" : s.isPassing ? "#059669" : "#DC2626";
     return `
       <tr>
         <td>${s.subjectName || ""}</td>
-        <td style="text-align:center">${s.isAbsent ? "ABS" : score ?? "—"}</td>
+        <td style="text-align:center">${s.isAbsent ? abs : score ?? "—"}</td>
         <td style="text-align:center;color:${color};font-weight:700">
-          ${s.isAbsent ? "ABS" : s.grade || "—"}
+          ${s.isAbsent ? abs : s.grade || "—"}
         </td>
         <td style="text-align:center">
           ${s.isAbsent ? "—" : (s.points ?? s.gpaPoints)?.toFixed(1) ?? "—"}
         </td>
         <td style="text-align:center;color:${color}">
-          ${s.isAbsent ? "—" : s.isPassing ? "Pass" : "Fail"}
+          ${s.isAbsent
+            ? "—"
+            : s.isPassing
+              ? t("reportCardDoc.passed")
+              : t("reportCardDoc.failed")}
         </td>
       </tr>
     `;
@@ -325,15 +345,15 @@ function buildPdfHtml({ result, exam, schoolName }) {
       </style>
     </head>
     <body>
-      <h1>${schoolName || "School"}</h1>
+      <h1>${schoolName || t("reportCardDoc.school")}</h1>
       <p style="font-size:10px;color:#2563EB;font-weight:700;
                 letter-spacing:1.5px;margin-top:2px">
-        ACADEMIC REPORT CARD
+        ${t("reportCardDoc.title")}
       </p>
 
       <div class="banner">
         <div style="font-weight:700;font-size:14px">
-          ${exam?.name || "Examination"}
+          ${exam?.name || t("reportCardDoc.examination")}
         </div>
         <div style="font-size:11px;opacity:.85;margin-top:2px">
           ${[exam?.academicYear, exam?.term].filter(Boolean).join("  ·  ")}
@@ -342,85 +362,91 @@ function buildPdfHtml({ result, exam, schoolName }) {
 
       <table class="info-table">
         <tr>
-          <td>Student Name</td>
+          <td>${t("reportCardDoc.labels.studentName")}</td>
           <td><strong>${result.studentName || ""}</strong></td>
           <td style="width:16px"></td>
-          <td>Admission No</td>
+          <td>${t("reportCardDoc.labels.admissionNo")}</td>
           <td>${result.admissionNo ? "#" + result.admissionNo : "—"}</td>
         </tr>
         <tr>
-          <td>Class</td>
+          <td>${t("reportCardDoc.labels.class")}</td>
           <td>${result.className || "—"}</td>
           <td></td>
-          <td>Academic Year</td>
+          <td>${t("reportCardDoc.labels.academicYear")}</td>
           <td>${exam?.academicYear || "—"}</td>
         </tr>
         <tr>
-          <td>Term</td>
+          <td>${t("reportCardDoc.labels.term")}</td>
           <td>${exam?.term || "—"}</td>
           <td></td>
-          <td>Status</td>
+          <td>${t("reportCardDoc.labels.status")}</td>
           <td class="${result.isPassing ? "pass" : "fail"}">
-            ${result.isPassing ? "PASS" : "FAIL"}
+            ${result.isPassing
+              ? t("reportCardDoc.pass")
+              : t("reportCardDoc.fail")}
           </td>
         </tr>
       </table>
 
-      <h2>Performance Summary</h2>
+      <h2>${t("reportCardDoc.performanceSummary")}</h2>
       <div class="summary">
         <div class="summary-box">
           <div class="summary-val" style="color:${pctColor(result.percentage ?? 0)}">
             ${(result.percentage ?? 0).toFixed(1)}%
           </div>
-          <div class="summary-lbl">Overall</div>
+          <div class="summary-lbl">${t("reportCardDoc.summary.overall")}</div>
         </div>
         <div class="summary-box">
           <div class="summary-val" style="color:#2563EB">
             ${result.average?.toFixed(1) ?? "—"}
           </div>
-          <div class="summary-lbl">Average</div>
+          <div class="summary-lbl">${t("reportCardDoc.summary.average")}</div>
         </div>
         <div class="summary-box">
           <div class="summary-val" style="color:#7C3AED">
             ${result.overallGrade || "—"}
           </div>
-          <div class="summary-lbl">Grade</div>
+          <div class="summary-lbl">${t("reportCardDoc.summary.grade")}</div>
         </div>
         ${result.gpa != null ? `
         <div class="summary-box">
           <div class="summary-val" style="color:#D97706">
             ${result.gpa.toFixed(2)}
           </div>
-          <div class="summary-lbl">GPA</div>
+          <div class="summary-lbl">${t("reportCardDoc.summary.gpa")}</div>
         </div>` : ""}
       </div>
 
-      <h2>Subject Breakdown</h2>
+      <h2>${t("reportCardDoc.subjectBreakdown")}</h2>
       <table>
         <thead>
           <tr>
-            <th>Subject</th>
-            <th style="text-align:center">Score</th>
-            <th style="text-align:center">Grade</th>
-            <th style="text-align:center">Points</th>
-            <th style="text-align:center">Status</th>
+            <th>${t("reportCardDoc.table.subject")}</th>
+            <th style="text-align:center">${t("reportCardDoc.table.score")}</th>
+            <th style="text-align:center">${t("reportCardDoc.table.grade")}</th>
+            <th style="text-align:center">${t("reportCardDoc.table.points")}</th>
+            <th style="text-align:center">${t("reportCardDoc.table.status")}</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
       </table>
 
       ${result.overallRemark ? `
-        <h2>Teacher's Remark</h2>
+        <h2>${t("reportCardDoc.teacherRemark")}</h2>
         <p style="font-style:italic;color:#4B5563;line-height:1.6">
           ${result.overallRemark}
         </p>
       ` : ""}
 
       <div class="footer">
-        Generated on ${new Date().toLocaleDateString("en-GB", {
-          day: "numeric", month: "long", year: "numeric",
+        ${t("reportCardDoc.generatedOn", {
+          date: new Date().toLocaleDateString(locale || "en-GB", {
+            day: "numeric", month: "long", year: "numeric",
+          }),
         })}
-        &nbsp;·&nbsp; ${schoolName || "School"} — Official Academic Report
+        &nbsp;·&nbsp; ${t("reportCardDoc.officialReport", {
+          school: schoolName || t("reportCardDoc.school"),
+        })}
       </div>
     </body>
     </html>
@@ -443,6 +469,8 @@ export default function ReportCard({
   showExportBar = true,
   compact       = false,
 }) {
+  const { t, locale } = useTranslation();
+
   if (!result) return null;
 
   const isPassing  = result.isPassing;
@@ -458,7 +486,7 @@ export default function ReportCard({
       if (html) return html;
     }
     // Fallback: local builder (offline / no identifiers passed down).
-    return buildPdfHtml({ result, exam, schoolName });
+    return buildPdfHtml({ result, exam, schoolName, t, locale });
   };
 
   const handlePrint = useCallback(async () => {
@@ -466,7 +494,7 @@ export default function ReportCard({
       const html = await resolveHtml();
       await Print.printAsync({ html });
     } catch (err) {
-      Alert.alert("Print Error", err.message);
+      Alert.alert(t("reportCardDoc.printError"), err.message);
     }
   }, [result, exam, schoolName, examId, studentId, schoolId]);
 
@@ -476,15 +504,17 @@ export default function ReportCard({
       const { uri }       = await Print.printToFileAsync({ html });
       const canShare      = await Sharing.isAvailableAsync();
       if (!canShare) {
-        Alert.alert("Sharing not available on this device");
+        Alert.alert(t("reportCardDoc.sharingUnavailable"));
         return;
       }
       await Sharing.shareAsync(uri, {
         mimeType:    "application/pdf",
-        dialogTitle: `${result.studentName || "Student"} — Report Card`,
+        dialogTitle: t("reportCardDoc.shareTitle", {
+          name: result.studentName || t("reportCardDoc.studentFallback"),
+        }),
       });
     } catch (err) {
-      Alert.alert("Share Error", err.message);
+      Alert.alert(t("reportCardDoc.shareError"), err.message);
     }
   }, [result, exam, schoolName, examId, studentId, schoolId]);
 
@@ -504,7 +534,7 @@ export default function ReportCard({
             activeOpacity={0.7}
           >
             <Ionicons name="print-outline" size={16} color={C.primary} />
-            <Text style={s.exportBtnText}>Print</Text>
+            <Text style={s.exportBtnText}>{t("reportCardDoc.print")}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={s.exportBtn}
@@ -512,7 +542,7 @@ export default function ReportCard({
             activeOpacity={0.7}
           >
             <Ionicons name="share-outline" size={16} color={C.primary} />
-            <Text style={s.exportBtnText}>Share PDF</Text>
+            <Text style={s.exportBtnText}>{t("reportCardDoc.sharePdf")}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -530,16 +560,16 @@ export default function ReportCard({
           </View>
           <View style={s.schoolInfo}>
             <Text style={s.schoolName} numberOfLines={1}>
-              {schoolName || "School"}
+              {schoolName || t("reportCardDoc.school")}
             </Text>
-            <Text style={s.reportLabel}>ACADEMIC REPORT CARD</Text>
+            <Text style={s.reportLabel}>{t("reportCardDoc.title")}</Text>
           </View>
         </View>
 
         {/* ── Exam banner ───────────────────────────────── */}
         <View style={s.examBanner}>
           <Text style={s.examBannerName} numberOfLines={1}>
-            {exam?.name || "Examination"}
+            {exam?.name || t("reportCardDoc.examination")}
           </Text>
           <Text style={s.examBannerSub}>
             {[exam?.academicYear, exam?.term].filter(Boolean).join("  ·  ")}
@@ -550,19 +580,31 @@ export default function ReportCard({
         <View style={s.card}>
           <SectionHeader
             icon="person-outline"
-            title="Student Information"
+            title={t("reportCardDoc.studentInfo")}
           />
           <View style={s.studentInfoGrid}>
             <View style={s.studentInfoLeft}>
-              <InfoRow label="Name"         value={result.studentName} />
               <InfoRow
-                label="Admission No"
+                label={t("reportCardDoc.labels.name")}
+                value={result.studentName}
+              />
+              <InfoRow
+                label={t("reportCardDoc.labels.admissionNo")}
                 value={result.admissionNo
                   ? `#${result.admissionNo}` : null}
               />
-              <InfoRow label="Class"        value={result.className}   />
-              <InfoRow label="Academic Year" value={exam?.academicYear}/>
-              <InfoRow label="Term"         value={exam?.term}         />
+              <InfoRow
+                label={t("reportCardDoc.labels.class")}
+                value={result.className}
+              />
+              <InfoRow
+                label={t("reportCardDoc.labels.academicYear")}
+                value={exam?.academicYear}
+              />
+              <InfoRow
+                label={t("reportCardDoc.labels.term")}
+                value={exam?.term}
+              />
             </View>
             <View style={s.perfCircleWrap}>
               <CircleProgress percentage={percentage} size={90} />
@@ -571,7 +613,9 @@ export default function ReportCard({
                 { backgroundColor: passColor + "15" },
               ]}>
                 <Text style={[s.passText, { color: passColor }]}>
-                  {isPassing ? "PASS" : "FAIL"}
+                  {isPassing
+                    ? t("reportCardDoc.pass")
+                    : t("reportCardDoc.fail")}
                 </Text>
               </View>
             </View>
@@ -582,30 +626,30 @@ export default function ReportCard({
         <View style={s.card}>
           <SectionHeader
             icon="bar-chart-outline"
-            title="Performance Summary"
+            title={t("reportCardDoc.performanceSummary")}
             color={C.purple}
           />
 
           <View style={s.summaryGrid}>
             <SummaryBox
               value={`${percentage.toFixed(1)}%`}
-              label="Overall"
+              label={t("reportCardDoc.summary.overall")}
               color={passColor}
             />
             <SummaryBox
               value={result.average?.toFixed(1) ?? "—"}
-              label="Average"
+              label={t("reportCardDoc.summary.average")}
               color={C.primary}
             />
             <SummaryBox
               value={result.overallGrade || "—"}
-              label="Grade"
+              label={t("reportCardDoc.summary.grade")}
               color={C.purple}
             />
             {result.gpa != null && (
               <SummaryBox
                 value={result.gpa.toFixed(2)}
-                label="GPA"
+                label={t("reportCardDoc.summary.gpa")}
                 color={C.warning}
               />
             )}
@@ -615,12 +659,16 @@ export default function ReportCard({
             <ScorePill
               icon="checkmark-circle"
               color={C.success}
-              label={`Passed: ${result.subjectsPassed ?? 0}`}
+              label={t("reportCardDoc.passedCount", {
+                count: result.subjectsPassed ?? 0,
+              })}
             />
             <ScorePill
               icon="close-circle"
               color={C.error}
-              label={`Failed: ${result.subjectsFailed ?? 0}`}
+              label={t("reportCardDoc.failedCount", {
+                count: result.subjectsFailed ?? 0,
+              })}
             />
             <ScorePill
               icon="layers-outline"
@@ -635,24 +683,24 @@ export default function ReportCard({
           <View style={s.card}>
             <SectionHeader
               icon="trophy-outline"
-              title="Class Rankings"
+              title={t("reportCardDoc.rankings")}
               color={C.warning}
             />
             <View style={s.rankingsRow}>
               <RankBadge
-                label="Class"
+                label={t("reportCardDoc.rank.class")}
                 position={result.classPosition}
                 total={result.totalInClass}
                 color="#4F46E5"
               />
               <RankBadge
-                label="Grade"
+                label={t("reportCardDoc.rank.grade")}
                 position={result.gradePosition}
                 total={result.totalInGrade}
                 color="#059669"
               />
               <RankBadge
-                label="School"
+                label={t("reportCardDoc.rank.school")}
                 position={result.schoolPosition}
                 total={result.totalInSchool}
                 color="#D97706"
@@ -666,15 +714,23 @@ export default function ReportCard({
           <View style={s.card}>
             <SectionHeader
               icon="book-outline"
-              title="Subject Breakdown"
+              title={t("reportCardDoc.subjectBreakdown")}
             />
 
             {/* Table header */}
             <View style={s.tableHeader}>
-              <Text style={[s.thCell, { flex: 1 }]}>Subject</Text>
-              <Text style={[s.thCell, { width: 52 }]}>Score</Text>
-              <Text style={[s.thCell, { width: 44 }]}>Grade</Text>
-              <Text style={[s.thCell, { width: 36 }]}>Pts</Text>
+              <Text style={[s.thCell, { flex: 1 }]}>
+                {t("reportCardDoc.table.subject")}
+              </Text>
+              <Text style={[s.thCell, { width: 52 }]}>
+                {t("reportCardDoc.table.score")}
+              </Text>
+              <Text style={[s.thCell, { width: 44 }]}>
+                {t("reportCardDoc.table.grade")}
+              </Text>
+              <Text style={[s.thCell, { width: 36 }]}>
+                {t("reportCardDoc.table.pts")}
+              </Text>
               <View style={{ width: 14 }} />
             </View>
 
@@ -694,7 +750,7 @@ export default function ReportCard({
           <View style={s.card}>
             <SectionHeader
               icon="chatbubble-ellipses-outline"
-              title="Teacher's Remark"
+              title={t("reportCardDoc.teacherRemark")}
               color={C.success}
             />
             <Text style={s.remarkText}>{result.overallRemark}</Text>
@@ -726,8 +782,8 @@ export default function ReportCard({
                   ? C.success : C.error },
             ]}>
               {result.promotionStatus === "promoted"
-                ? "Promoted to Next Class"
-                : "Not Promoted — Repeat Class"}
+                ? t("reportCardDoc.promoted")
+                : t("reportCardDoc.notPromoted")}
             </Text>
           </View>
         )}
@@ -735,12 +791,16 @@ export default function ReportCard({
         {/* ── Footer ───────────────────────────────────── */}
         <View style={s.footer}>
           <Text style={s.footerText}>
-            Generated on {new Date().toLocaleDateString("en-GB", {
-              day: "numeric", month: "long", year: "numeric",
+            {t("reportCardDoc.generatedOn", {
+              date: new Date().toLocaleDateString(locale || "en-GB", {
+                day: "numeric", month: "long", year: "numeric",
+              }),
             })}
           </Text>
           <Text style={s.footerSub}>
-            {schoolName || "School"} — Official Academic Report
+            {t("reportCardDoc.officialReport", {
+              school: schoolName || t("reportCardDoc.school"),
+            })}
           </Text>
         </View>
 

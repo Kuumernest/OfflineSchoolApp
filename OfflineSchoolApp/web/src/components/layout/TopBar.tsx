@@ -154,7 +154,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
 
     debounceRef.current = setTimeout(async () => {
       try {
-        const data = await globalSearch(value);
+        const data = await globalSearch(value, t);
         setResults(data);
       } catch {
         setError("Search failed. Please try again.");

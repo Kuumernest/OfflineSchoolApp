@@ -25,28 +25,25 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import api                 from "../../../src/services/api";
+import { useTranslation }  from "../../../src/i18n/useTranslation";
 
 const STATUS_OPTIONS = [
-  { value: "present", label: "Present", color: "#059669", icon: "checkmark-circle" },
-  { value: "absent",  label: "Absent",  color: "#DC2626", icon: "close-circle"     },
-  { value: "late",    label: "Late",    color: "#D97706", icon: "time"             },
-  { value: "excused", label: "Excused", color: "#4F46E5", icon: "shield-checkmark" },
+  { value: "present", labelKey: "academic.present", color: "#059669", icon: "checkmark-circle" },
+  { value: "absent",  labelKey: "academic.absent",  color: "#DC2626", icon: "close-circle"     },
+  { value: "late",    labelKey: "academic.late",    color: "#D97706", icon: "time"             },
+  { value: "excused", labelKey: "academic.excused", color: "#4F46E5", icon: "shield-checkmark" },
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
 
-const DAYS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
-const MONTHS = [
-  "Jan","Feb","Mar","Apr","May","Jun",
-  "Jul","Aug","Sep","Oct","Nov","Dec",
-];
-
-const formatDate = (d) => {
+const formatDate = (d, t) => {
   const dt = new Date(d);
-  return `${DAYS[dt.getDay()]}, ${MONTHS[dt.getMonth()]} ${dt.getDate()}`;
+  return `${t(`attAdmin.day${dt.getDay()}`)}, ${t(`attAdmin.mon${dt.getMonth()}`)} ${dt.getDate()}`;
 };
 
 const ClassSelector = ({ schoolId, onSelect }) => {
+  const { t } = useTranslation();
+
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search,  setSearch]  = useState("");
@@ -75,11 +72,11 @@ const ClassSelector = ({ schoolId, onSelect }) => {
       setClasses(active);
     } catch (err) {
       console.error("fetchClasses failed:", err.message);
-      setError("Failed to load classes. Tap to retry.");
+      setError(t("attAdmin.classesLoadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useEffect(() => { fetchClasses(); }, [fetchClasses]);
 
@@ -98,7 +95,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
     return (
       <View style={cs.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={cs.loadingText}>Loading classes…</Text>
+        <Text style={cs.loadingText}>{t("attAdmin.loadingClasses")}</Text>
       </View>
     );
   }
@@ -109,7 +106,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
         <Ionicons name="alert-circle-outline" size={48} color="#DC2626" />
         <Text style={cs.errorText}>{error}</Text>
         <TouchableOpacity style={cs.retryBtn} onPress={fetchClasses}>
-          <Text style={cs.retryText}>Try Again</Text>
+          <Text style={cs.retryText}>{t("common.retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -121,7 +118,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
         <Ionicons name="search-outline" size={16} color="#9CA3AF" />
         <TextInput
           style={cs.searchInput}
-          placeholder="Search class…"
+          placeholder={t("attAdmin.searchClass")}
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
@@ -147,12 +144,12 @@ const ClassSelector = ({ schoolId, onSelect }) => {
           <View style={cs.empty}>
             <Ionicons name="school-outline" size={48} color="#D1D5DB" />
             <Text style={cs.emptyText}>
-              {search ? "No classes match your search" : "No classes found"}
+              {search ? t("attAdmin.noClassesMatch") : t("attAdmin.noClassesFound")}
             </Text>
           </View>
         ) : (
           filtered.map((cls) => {
-            const name = cls.name || "Unnamed Class";
+            const name = cls.name || t("attAdmin.unnamedClass");
             const sub  = [cls.level, cls.section]
               .filter(Boolean)
               .join(" · ");
@@ -267,6 +264,7 @@ const MarkAttendance = React.forwardRef(({
   today,
   onSaved,
 }, ref) => {
+  const { t } = useTranslation();
   const [roster,     setRoster]     = useState([]);
   const [attendance, setAttendance] = useState({});
   const [loading,    setLoading]    = useState(true);
@@ -297,7 +295,7 @@ const MarkAttendance = React.forwardRef(({
 
     } catch (err) {
       console.error("loadRoster failed:", err.message);
-      Alert.alert("Error", "Failed to load student roster. Pull down to retry.");
+      Alert.alert(t("attAdmin.errorTitle"), t("attAdmin.loadRosterFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -312,7 +310,7 @@ const MarkAttendance = React.forwardRef(({
     );
 
     if (!records.length) {
-      Alert.alert("Nothing to save", "Please mark at least one student.");
+      Alert.alert(t("attAdmin.nothingToSave"), t("attAdmin.markOneStudent"));
       return;
     }
 
@@ -329,14 +327,14 @@ const MarkAttendance = React.forwardRef(({
         });
 
         Alert.alert(
-          "✅ Saved",
+          t("attAdmin.savedTitle"),
           `Attendance saved for ${records.length} student(s).${
             unmarked > 0 ? `\n${unmarked} student(s) not marked.` : ""
           }`,
           [{ text: "OK", onPress: onSaved }]
         );
       } catch (err) {
-        Alert.alert("Save Failed", err.message || "Please try again.");
+        Alert.alert(t("attAdmin.saveFailed"), err.message || t("attAdmin.pleaseTryAgain"));
       } finally {
         setSaving(false);
       }
@@ -344,11 +342,11 @@ const MarkAttendance = React.forwardRef(({
 
     if (unmarked > 0) {
       Alert.alert(
-        "Unmarked Students",
+        t("attAdmin.unmarkedStudentsTitle"),
         `${unmarked} student(s) have not been marked. Save anyway?`,
         [
           { text: "Cancel",      style: "cancel" },
-          { text: "Save Anyway", onPress: doSave  },
+          { text: t("attAdmin.saveAnyway"), onPress: doSave  },
         ]
       );
     } else {
@@ -394,7 +392,7 @@ const MarkAttendance = React.forwardRef(({
     return (
       <View style={ms.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={ms.loadingText}>Loading students…</Text>
+        <Text style={ms.loadingText}>{t("attAdmin.loadingStudents")}</Text>
       </View>
     );
   }
@@ -432,7 +430,7 @@ const MarkAttendance = React.forwardRef(({
       </View>
 
       <View style={ms.markAllRow}>
-        <Text style={ms.markAllLabel}>Mark all:</Text>
+        <Text style={ms.markAllLabel}>{t("attAdmin.markAllColon")}</Text>
         {STATUS_OPTIONS.map((opt) => (
           <TouchableOpacity
             key={opt.value}
@@ -455,7 +453,7 @@ const MarkAttendance = React.forwardRef(({
         <Ionicons name="search-outline" size={16} color="#9CA3AF" />
         <TextInput
           style={ms.searchInput}
-          placeholder="Search student…"
+          placeholder={t("attAdmin.searchStudent")}
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
@@ -562,12 +560,12 @@ const MarkAttendance = React.forwardRef(({
             <Ionicons name="people-outline" size={48} color="#D1D5DB" />
             <Text style={ms.emptyTitle}>
               {search
-                ? "No students match your search"
-                : "No students in this class"}
+                ? t("attAdmin.noStudentsMatch")
+                : t("attAdmin.noStudentsInClass")}
             </Text>
             {!search && (
               <Text style={ms.emptyText}>
-                Enrol students into this class first
+                {t("attAdmin.enrolFirst")}
               </Text>
             )}
           </View>
@@ -720,6 +718,7 @@ const ms = StyleSheet.create({
 });
 
 export default function MarkStudentAttendanceScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -771,12 +770,12 @@ export default function MarkStudentAttendanceScreen() {
 
         <View style={mainS.headerCenter}>
           <Text style={mainS.headerTitle}>
-            {selectedClass ? selectedClass.name : "Student Attendance"}
+            {selectedClass ? selectedClass.name : t("attAdmin.studentAttendanceTitle")}
           </Text>
           <Text style={mainS.headerSub}>
             {selectedClass
               ? formatDate(today)
-              : "Select a class to begin"}
+              : t("attAdmin.selectClassToBegin")}
           </Text>
         </View>
 
@@ -789,7 +788,7 @@ export default function MarkStudentAttendanceScreen() {
           >
             {saving
               ? <ActivityIndicator size="small" color="#FFF" />
-              : <Text style={mainS.saveBtnText}>Save</Text>
+              : <Text style={mainS.saveBtnText}>{t("common.save")}</Text>
             }
           </TouchableOpacity>
         ) : (
@@ -804,7 +803,7 @@ export default function MarkStudentAttendanceScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={14} color="#4F46E5" />
-          <Text style={mainS.breadcrumbBack}>All Classes</Text>
+          <Text style={mainS.breadcrumbBack}>{t("attAdmin.allClasses")}</Text>
           <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
           <Text style={mainS.breadcrumbCurrent}>{selectedClass.name}</Text>
           {!!selectedClass.sub && (

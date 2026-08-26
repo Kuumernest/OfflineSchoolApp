@@ -10,6 +10,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth.store";
 import { getDatabase }    from "@/db/database";
 import api              from "@/services/api";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -17,32 +18,38 @@ import api              from "@/services/api";
 
 const MAX_NAME = 80;
 const MAX_CODE = 20;
-const EXAMPLES = ["Mathematics", "English", "Biology", "History"];
+const EXAMPLE_KEYS = [
+  "subjectsAdd.exMath",
+  "subjectsAdd.exEnglish",
+  "subjectsAdd.exBiology",
+  "subjectsAdd.exHistory",
+];
 const INITIAL  = { name: "", code: "", coefficient: "", classIds: [], teacherId: "" };
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const validate = (form) => {
+const validate = (form, t) => {
   const errors = {};
   const name   = form.name.trim();
 
-  if (!name)              errors.name     = "Subject name is required.";
-  else if (name.length < 2)   errors.name = "Subject name must be at least 2 characters.";
-  else if (name.length > MAX_NAME) errors.name = `Cannot exceed ${MAX_NAME} characters.`;
+  if (!name)              errors.name     = t("subjectsAdd.errNameRequired");
+  else if (name.length < 2)   errors.name = t("subjectsAdd.errNameShort");
+  else if (name.length > MAX_NAME)
+    errors.name = t("subjectsAdd.errNameLong", { max: MAX_NAME });
 
   if (form.classIds.length === 0)
-    errors.classIds = "Please select at least one class.";
+    errors.classIds = t("subjectsAdd.errNoClass");
 
   // Optional, but a coefficient of 0 or a typo would rescale every average in
   // the class, so anything present must be a sane positive number.
   const coeff = form.coefficient.trim();
   if (coeff !== "") {
     const n = Number(coeff);
-    if (!Number.isFinite(n))  errors.coefficient = "Coefficient must be a number.";
-    else if (n < 0.1)         errors.coefficient = "Coefficient must be at least 0.1.";
-    else if (n > 20)          errors.coefficient = "Coefficient cannot exceed 20.";
+    if (!Number.isFinite(n))  errors.coefficient = t("subjectsAdd.errCoeffNumber");
+    else if (n < 0.1)         errors.coefficient = t("subjectsAdd.errCoeffMin");
+    else if (n > 20)          errors.coefficient = t("subjectsAdd.errCoeffMax");
   }
 
   return errors;
@@ -53,6 +60,7 @@ const validate = (form) => {
 // ─────────────────────────────────────────────────────────
 
 function ResultsSummary({ results, subjectName, onDone, onAddAnother }) {
+  const { t } = useTranslation();
   const succeeded = results.filter((r) => r.ok);
   const failed    = results.filter((r) => !r.ok);
 
@@ -94,11 +102,11 @@ function ResultsSummary({ results, subjectName, onDone, onAddAnother }) {
       )}
 
       <TouchableOpacity onPress={onAddAnother} style={styles.outlineBtn}>
-        <Text style={styles.outlineBtnText}>Add Another Subject</Text>
+        <Text style={styles.outlineBtnText}>{t("subjectsAdd.another")}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity onPress={onDone} style={styles.primaryBtn}>
-        <Text style={styles.primaryBtnText}>Done</Text>
+        <Text style={styles.primaryBtnText}>{t("common.done")}</Text>
       </TouchableOpacity>
     </ScrollView>
   );
@@ -109,6 +117,7 @@ function ResultsSummary({ results, subjectName, onDone, onAddAnother }) {
 // ─────────────────────────────────────────────────────────
 
 export default function AddSubjectScreen() {
+  const { t } = useTranslation();
   const router   = useRouter();
   const { user } = useAuthStore();
   const schoolId = user?.schoolId ?? "";
@@ -184,7 +193,7 @@ export default function AddSubjectScreen() {
   // ── Submit ──────────────────────────────────────────────
 
   const handleSubmit = useCallback(async () => {
-    const errs = validate(form);
+    const errs = validate(form, t);
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
@@ -212,7 +221,7 @@ export default function AddSubjectScreen() {
         const msg =
           err?.response?.data?.message ||
           err?.message ||
-          "Unknown error";
+          t("subjectsAdd.unknownError");
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: false, error: msg });
       }
     }
@@ -221,7 +230,7 @@ export default function AddSubjectScreen() {
 
     // If single class and all succeeded → navigate away
     if (outcomes.length === 1 && outcomes[0].ok) {
-      router.push("/subjects");
+      router.push("/admin/subjects");
       return;
     }
 
@@ -241,14 +250,14 @@ export default function AddSubjectScreen() {
     if (!isDirty) { router.back(); return; }
 
     Alert.alert(
-      "Discard Changes",
-      "Are you sure you want to discard unsaved changes?",
+      t("subjectsAdd.discardTitle"),
+      t("subjectsAdd.discardBody"),
       [
-        { text: "Keep Editing", style: "cancel" },
-        { text: "Discard", style: "destructive", onPress: () => router.back() },
+        { text: t("subjectsAdd.keepEditing"), style: "cancel" },
+        { text: t("subjectsAdd.discard"), style: "destructive", onPress: () => router.back() },
       ]
     );
-  }, [form, router]);
+  }, [form, router, t]);
 
   const nameLen    = form.name.trim().length;
   const nearLimit  = nameLen > MAX_NAME - 15;
@@ -260,11 +269,11 @@ export default function AddSubjectScreen() {
   if (results) {
     return (
       <View style={{ flex: 1, backgroundColor: "#F9FAFB" }}>
-        <ScreenHeader title="Subject Created" onBack={() => router.push("/subjects")} />
+        <ScreenHeader title={t("subjectsAdd.created")} onBack={() => router.push("/admin/subjects")} />
         <ResultsSummary
           results={results}
           subjectName={form.name.trim()}
-          onDone={() => router.push("/subjects")}
+          onDone={() => router.push("/admin/subjects")}
           onAddAnother={() => {
             setForm(INITIAL);
             setResults(null);
@@ -285,8 +294,8 @@ export default function AddSubjectScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScreenHeader
-        title="Add Subject"
-        subtitle="Create a subject for one or more classes"
+        title={t("subjectsAdd.title")}
+        subtitle={t("subjectsAdd.blurb")}
         onBack={handleDiscard}
       />
 
@@ -298,7 +307,7 @@ export default function AddSubjectScreen() {
         <View style={styles.infoBanner}>
           <Ionicons name="book-outline" size={15} color="#1D4ED8" />
           <Text style={styles.infoBannerText}>
-            Select multiple classes to create this subject in all of them at once.
+            {t("subjectsAdd.multiHint")}
           </Text>
         </View>
 
@@ -307,7 +316,7 @@ export default function AddSubjectScreen() {
           {/* Subject name */}
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>
-              Subject Name <Text style={{ color: "#EF4444" }}>*</Text>
+              {t("subjectsAdd.nameLabel")} <Text style={{ color: "#EF4444" }}>*</Text>
             </Text>
             <View style={[styles.inputWrap, errors.name && styles.inputError]}>
               <Ionicons
@@ -317,11 +326,11 @@ export default function AddSubjectScreen() {
               />
               <TextInput
                 value={form.name}
-                onChangeText={(t) => {
-                  setForm((p) => ({ ...p, name: t }));
+                onChangeText={(v) => {
+                  setForm((p) => ({ ...p, name: v }));
                   setErrors((p) => ({ ...p, name: undefined }));
                 }}
-                placeholder="e.g. Mathematics, English Language"
+                placeholder={t("subjectsAdd.namePh")}
                 placeholderTextColor="#D1D5DB"
                 maxLength={MAX_NAME + 5}
                 autoFocus
@@ -345,22 +354,22 @@ export default function AddSubjectScreen() {
                 <Text style={styles.errorText}>{errors.name}</Text>
               </View>
             ) : (
-              <Text style={styles.hint}>Use a clear, recognisable name.</Text>
+              <Text style={styles.hint}>{t("subjectsAdd.nameHint")}</Text>
             )}
 
             {/* Example chips */}
             <View style={styles.examplesRow}>
-              <Text style={styles.examplesLabel}>Examples:</Text>
-              {EXAMPLES.map((ex) => (
+              <Text style={styles.examplesLabel}>{t("subjectsAdd.examples")}</Text>
+              {EXAMPLE_KEYS.map((exKey) => (
                 <TouchableOpacity
-                  key={ex}
+                  key={exKey}
                   onPress={() => {
-                    setForm((p) => ({ ...p, name: ex }));
+                    setForm((p) => ({ ...p, name: t(exKey) }));
                     setErrors((p) => ({ ...p, name: undefined }));
                   }}
                   style={styles.exampleChip}
                 >
-                  <Text style={styles.exampleChipText}>{ex}</Text>
+                  <Text style={styles.exampleChipText}>{t(exKey)}</Text>
                 </TouchableOpacity>
               ))}
             </View>
@@ -368,28 +377,28 @@ export default function AddSubjectScreen() {
 
           {/* Subject code */}
           <View style={styles.fieldWrap}>
-            <Text style={styles.fieldLabel}>Subject Code</Text>
+            <Text style={styles.fieldLabel}>{t("subjectsAdd.codeLabel")}</Text>
             <TextInput
               value={form.code}
-              onChangeText={(t) => setForm((p) => ({ ...p, code: t }))}
-              placeholder="e.g. MATH101 (optional)"
+              onChangeText={(v) => setForm((p) => ({ ...p, code: v }))}
+              placeholder={t("subjectsAdd.codePh")}
               placeholderTextColor="#D1D5DB"
               maxLength={MAX_CODE}
               style={styles.inputStandalone}
             />
-            <Text style={styles.hint}>Optional short code.</Text>
+            <Text style={styles.hint}>{t("subjectsAdd.codeHint")}</Text>
           </View>
 
           {/* Subject coefficient */}
           <View style={styles.fieldWrap}>
-            <Text style={styles.fieldLabel}>Coefficient</Text>
+            <Text style={styles.fieldLabel}>{t("subjectsAdd.coeffLabel")}</Text>
             <TextInput
               value={form.coefficient}
-              onChangeText={(t) => {
-                setForm((p) => ({ ...p, coefficient: t }));
+              onChangeText={(v) => {
+                setForm((p) => ({ ...p, coefficient: v }));
                 setErrors((p) => ({ ...p, coefficient: undefined }));
               }}
-              placeholder="e.g. 2 (optional, defaults to 1)"
+              placeholder={t("subjectsAdd.coeffPh")}
               placeholderTextColor="#D1D5DB"
               keyboardType="decimal-pad"
               maxLength={5}
@@ -414,7 +423,7 @@ export default function AddSubjectScreen() {
           {/* Classes multi-select */}
           <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>
-              Classes <Text style={{ color: "#EF4444" }}>*</Text>
+              {t("subjectsAdd.classesLabel")} <Text style={{ color: "#EF4444" }}>*</Text>
             </Text>
 
             <View style={[
@@ -424,11 +433,11 @@ export default function AddSubjectScreen() {
               {loadingData ? (
                 <View style={styles.loadingRow}>
                   <ActivityIndicator size="small" color="#4F46E5" />
-                  <Text style={styles.hint}>Loading classes…</Text>
+                  <Text style={styles.hint}>{t("subjectsAdd.loadingClasses")}</Text>
                 </View>
               ) : classes.length === 0 ? (
                 <Text style={[styles.hint, { padding: 12 }]}>
-                  No classes found. Create a class first.
+                  {t("subjectsAdd.noClasses")}
                 </Text>
               ) : (
                 <>
@@ -444,7 +453,7 @@ export default function AddSubjectScreen() {
                       color={allSelected ? "#4F46E5" : "#9CA3AF"}
                     />
                     <Text style={styles.classSelectAllText}>
-                      {allSelected ? "Deselect All" : "Select All"}
+                      {allSelected ? t("subjectsAdd.deselectAll") : t("subjectsAdd.selectAll")}
                     </Text>
                     <Text style={styles.classCountBadge}>
                       {form.classIds.length}/{classes.length}
@@ -516,9 +525,9 @@ export default function AddSubjectScreen() {
           {/* Teacher picker */}
           {teachers.length > 0 && (
             <View style={styles.fieldWrap}>
-              <Text style={styles.fieldLabel}>Assigned Teacher</Text>
+              <Text style={styles.fieldLabel}>{t("subjectsAdd.teacherLabel")}</Text>
               <Text style={styles.hint}>
-                Optional — you can assign a teacher later.
+                {t("subjectsAdd.teacherHint")}
               </Text>
 
               <View style={styles.classList}>
@@ -540,33 +549,33 @@ export default function AddSubjectScreen() {
                     styles.className,
                     form.teacherId === "" && styles.classNameChecked,
                   ]}>
-                    No teacher assigned
+                    {t("subjectsAdd.noTeacher")}
                   </Text>
                 </TouchableOpacity>
 
-                {teachers.map((t, i) => (
+                {teachers.map((teacher, i) => (
                   <TouchableOpacity
-                    key={t._id}
-                    onPress={() => setForm((p) => ({ ...p, teacherId: t._id }))}
+                    key={teacher._id}
+                    onPress={() => setForm((p) => ({ ...p, teacherId: teacher._id }))}
                     style={[
                       styles.classRow,
                       i < teachers.length - 1 && styles.classRowBorder,
-                      form.teacherId === t._id && styles.classRowChecked,
+                      form.teacherId === teacher._id && styles.classRowChecked,
                     ]}
                     disabled={submitting}
                   >
                     <Ionicons
-                      name={form.teacherId === t._id
+                      name={form.teacherId === teacher._id
                         ? "radio-button-on"
                         : "radio-button-off"}
                       size={18}
-                      color={form.teacherId === t._id ? "#4F46E5" : "#D1D5DB"}
+                      color={form.teacherId === teacher._id ? "#4F46E5" : "#D1D5DB"}
                     />
                     <Text style={[
                       styles.className,
-                      form.teacherId === t._id && styles.classNameChecked,
+                      form.teacherId === teacher._id && styles.classNameChecked,
                     ]}>
-                      {t.name}
+                      {teacher.name}
                     </Text>
                   </TouchableOpacity>
                 ))}
@@ -593,7 +602,7 @@ export default function AddSubjectScreen() {
               <>
                 <Ionicons name="add-circle-outline" size={18} color="#fff" />
                 <Text style={styles.submitText}>
-                  Create Subject
+                  {t("subjectsAdd.submit")}
                   {form.classIds.length > 1
                     ? ` (${form.classIds.length} classes)`
                     : ""}
@@ -608,7 +617,7 @@ export default function AddSubjectScreen() {
             disabled={submitting}
             style={styles.discardBtn}
           >
-            <Text style={styles.discardText}>Discard &amp; Go Back</Text>
+            <Text style={styles.discardText}>{t("subjectsAdd.discardGoBack")}</Text>
           </TouchableOpacity>
         </View>
 

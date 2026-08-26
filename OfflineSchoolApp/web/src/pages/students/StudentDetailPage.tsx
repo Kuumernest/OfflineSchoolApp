@@ -40,6 +40,8 @@ import { Button }               from "@/components/ui/Button";
 import { getErrorMessage }      from "@/lib/api";
 import {
   uploadStudentPhoto, deleteStudentPhoto,
+  fetchVerifications, revokeVerification, restoreVerification,
+  type DocumentVerificationRow,
 } from "@/services/document.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -579,6 +581,175 @@ function PhotoCard({
   );
 }
 
+/**
+ * The verification codes on this student's printed documents.
+ *
+ * The office side of the public /verify page: which transcripts and report
+ * cards carry a code, and the revoke switch. Revoking flips the public page
+ * to "withdrawn by the school" — the document itself is untouched, which is
+ * the point: the paper is out of reach, its verification is not.
+ */
+function VerificationsCard({ studentId, schoolId }: {
+  studentId: string;
+  schoolId:  string;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const qc = useQueryClient();
+
+  // Which row has its reason box open, and the reason being typed.
+  const [revoking, setRevoking] = useState<string | null>(null);
+  const [reason, setReason]     = useState("");
+  const [busy, setBusy]         = useState<string | null>(null);
+
+  const query = useQuery<DocumentVerificationRow[], Error>({
+    queryKey:  ["verifications", studentId],
+    queryFn:   () => fetchVerifications(studentId, schoolId),
+    staleTime: 30_000,
+  });
+  const rows = query.data ?? [];
+
+  const refresh = () => { void qc.invalidateQueries({ queryKey: ["verifications", studentId] }); };
+
+  const doRevoke = async (id: string) => {
+    setBusy(id);
+    try {
+      await revokeVerification(id, schoolId, reason);
+      toast({ kind: "success", title: t("verif.revokedOk") });
+      setRevoking(null);
+      setReason("");
+      refresh();
+    } catch (err) {
+      toast({ kind: "error", title: t("verif.failed"), message: getErrorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const doRestore = async (id: string) => {
+    setBusy(id);
+    try {
+      await restoreVerification(id, schoolId);
+      toast({ kind: "success", title: t("verif.restoredOk") });
+      refresh();
+    } catch (err) {
+      toast({ kind: "error", title: t("verif.failed"), message: getErrorMessage(err) });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const kindLabel = (r: DocumentVerificationRow) =>
+    r.kind === "transcript"
+      ? t("verif.transcript")
+      : [t("verif.reportCard"), r.examName].filter(Boolean).join(" · ");
+
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
+      <h2 className="text-sm font-bold text-gray-700">{t("verif.title")}</h2>
+      <p className="mt-1 text-xs leading-relaxed text-gray-500">{t("verif.hint")}</p>
+
+      {rows.length === 0 ? (
+        <p className="mt-3 text-xs text-gray-400">
+          {query.isLoading ? "…" : t("verif.none")}
+        </p>
+      ) : (
+        <ul className="mt-3 divide-y divide-gray-100">
+          {rows.map((r) => {
+            const revoked = Boolean(r.revokedAt);
+            return (
+              <li key={r._id} className="py-3">
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-gray-800">
+                      {kindLabel(r)}
+                      {r.term || r.academicYear ? (
+                        <span className="ml-1 font-normal text-gray-500">
+                          · {[r.term, r.academicYear].filter(Boolean).join(" ")}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="mt-0.5 text-xs text-gray-500">
+                      <span className="font-mono font-semibold text-gray-700">{r.code}</span>
+                      {" · "}
+                      {t("verif.lastPrinted", { date: formatDate(r.refreshedAt) ?? "—" })}
+                      {" · "}
+                      {t("verif.prints", { count: r.printCount })}
+                    </div>
+                    {revoked && r.revokeReason ? (
+                      <div className="mt-0.5 text-xs text-amber-700">{r.revokeReason}</div>
+                    ) : null}
+                  </div>
+
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+                      revoked
+                        ? "bg-amber-50 text-amber-700"
+                        : "bg-emerald-50 text-emerald-700"
+                    )}
+                  >
+                    {revoked
+                      ? <ShieldAlert className="h-3 w-3" aria-hidden="true" />
+                      : <CheckCircle2 className="h-3 w-3" aria-hidden="true" />}
+                    {revoked ? t("verif.revoked") : t("verif.active")}
+                  </span>
+
+                  {revoked ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={busy === r._id}
+                      onClick={() => doRestore(r._id)}
+                    >
+                      {t("verif.restore")}
+                    </Button>
+                  ) : revoking === r._id ? null : (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setRevoking(r._id); setReason(""); }}
+                    >
+                      {t("verif.revoke")}
+                    </Button>
+                  )}
+                </div>
+
+                {revoking === r._id && !revoked && (
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <input
+                      value={reason}
+                      onChange={(e) => setReason(e.target.value)}
+                      placeholder={t("verif.reasonPh")}
+                      className="min-w-0 flex-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs focus:border-indigo-400 focus:outline-none"
+                      maxLength={200}
+                      autoFocus
+                    />
+                    <Button
+                      size="sm"
+                      loading={busy === r._id}
+                      onClick={() => doRevoke(r._id)}
+                    >
+                      {t("verif.confirm")}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      onClick={() => { setRevoking(null); setReason(""); }}
+                    >
+                      {t("common.cancel")}
+                    </Button>
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 export default function StudentDetailPage() {
   const { t } = useTranslation();
   const { id }   = useParams<{ id: string }>();
@@ -960,6 +1131,14 @@ export default function StudentDetailPage() {
             schoolId={schoolId}
             photoUrl={(student as { photoUrl?: string | null }).photoUrl ?? null}
             onChanged={() => { void qc.invalidateQueries({ queryKey: QK.student(id ?? "") }); }}
+          />
+        </div>
+
+        {/* ── Verifiable documents ── */}
+        <div className="lg:col-span-2">
+          <VerificationsCard
+            studentId={student._id}
+            schoolId={schoolId}
           />
         </div>
 
