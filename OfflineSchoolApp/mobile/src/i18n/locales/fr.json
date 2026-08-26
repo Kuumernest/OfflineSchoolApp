@@ -455,6 +455,30 @@
       "clearSearch": "Effacer la recherche"
     }
   },
+  "quizHistory": {
+    "title": "Historique des quiz",
+    "oneAttempt": "1 tentative",
+    "manyAttempts": "{{count}} tentatives",
+    "loading": "Chargement de l'historique des quiz…",
+    "totalStat": "Total",
+    "passedStat": "Réussies",
+    "failedStat": "Échouées",
+    "avgStat": "Note moyenne",
+    "filterAll": "Toutes ({{count}})",
+    "filterPassed": "Réussies ({{count}})",
+    "filterFailed": "Échouées ({{count}})",
+    "allEmptyTitle": "Aucune tentative de quiz pour le moment",
+    "filterEmptyTitle": "Aucune tentative {{filter}}",
+    "allEmptySub": "Terminez un quiz pour voir votre historique ici",
+    "filterEmptySub": "Essayez un autre filtre",
+    "attemptBadge": "Tentative {{number}}",
+    "passBadge": "Réussi",
+    "failBadge": "Échoué",
+    "scoreLabel": "Pass",
+    "passMark": "Note de passage : {{mark}} %",
+    "quizFallback": "Quiz",
+    "atTime": "à"
+  },
   "classes": {
     "title": "Classes",
     "add": "Ajouter une classe",

@@ -455,6 +455,30 @@
       "clearSearch": "Clear search"
     }
   },
+  "quizHistory": {
+    "title": "Quiz History",
+    "oneAttempt": "1 attempt",
+    "manyAttempts": "{{count}} attempts",
+    "loading": "Loading quiz history…",
+    "totalStat": "Total",
+    "passedStat": "Passed",
+    "failedStat": "Failed",
+    "avgStat": "Avg Score",
+    "filterAll": "All ({{count}})",
+    "filterPassed": "Passed ({{count}})",
+    "filterFailed": "Failed ({{count}})",
+    "allEmptyTitle": "No quiz attempts yet",
+    "filterEmptyTitle": "No {{filter}} attempts",
+    "allEmptySub": "Complete a quiz to see your history here",
+    "filterEmptySub": "Try a different filter",
+    "attemptBadge": "Attempt {{number}}",
+    "passBadge": "Passed",
+    "failBadge": "Failed",
+    "scoreLabel": "Pass",
+    "passMark": "Pass mark: {{mark}}%",
+    "quizFallback": "Quiz",
+    "atTime": "at"
+  },
   "classes": {
     "title": "Classes",
     "add": "Add class",

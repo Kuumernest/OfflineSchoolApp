@@ -20,6 +20,7 @@ import { useRouter }        from "expo-router";
 import { Ionicons }         from "@expo/vector-icons";
 import { useAuthStore }     from "../../../src/store/auth.store";
 import { getUserAttempts }  from "../../../src/services/quiz.service";
+import { useTranslation }   from "../../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -73,11 +74,12 @@ const getScoreBg = (percentage, passingScore = 70) => {
 // ─────────────────────────────────────────────────────────────
 
 const AttemptCard = ({ item }) => {
-  const pct          = Math.round(item.percentage || 0);
-  const passingScore = item.passing_score ?? 70;
-  const scoreColor   = getScoreColor(pct, passingScore);
-  const scoreBg      = getScoreBg(pct, passingScore);
-  const duration     = formatDuration(item.time_taken_secs);
+  const { t }          = useTranslation();
+  const pct            = Math.round(item.percentage || 0);
+  const passingScore   = item.passing_score ?? 70;
+  const scoreColor     = getScoreColor(pct, passingScore);
+  const scoreBg        = getScoreBg(pct, passingScore);
+  const duration       = formatDuration(item.time_taken_secs);
 
   return (
     <View style={styles.card}>
@@ -88,13 +90,13 @@ const AttemptCard = ({ item }) => {
             {pct}%
           </Text>
           <Text style={[styles.scoreLabel, { color: scoreColor }]}>
-            {item.is_passed ? "Pass" : "Fail"}
+            {item.is_passed ? t("quizHistory.scoreLabel") : t("quizHistory.failBadge")}
           </Text>
         </View>
 
         <View style={{ flex: 1 }}>
           <Text style={styles.quizTitle} numberOfLines={2}>
-            {item.title ?? "Quiz"}
+            {item.title ?? t("quizHistory.quizFallback")}
           </Text>
 
           {(item.subject_name || item.class_name) ? (
@@ -124,7 +126,7 @@ const AttemptCard = ({ item }) => {
                   { color: item.is_passed ? "#059669" : "#DC2626" },
                 ]}
               >
-                {item.is_passed ? "Passed" : "Failed"}
+                {item.is_passed ? t("quizHistory.passBadge") : t("quizHistory.failBadge")}
               </Text>
             </View>
 
@@ -132,7 +134,7 @@ const AttemptCard = ({ item }) => {
             <View style={styles.badge}>
               <Ionicons name="refresh-outline" size={12} color="#6B7280" />
               <Text style={styles.badgeText}>
-                Attempt {item.attempt_number || 1}
+                {t("quizHistory.attemptBadge", { number: item.attempt_number || 1 })}
               </Text>
             </View>
 
@@ -162,7 +164,7 @@ const AttemptCard = ({ item }) => {
           <View style={styles.breakdownItem}>
             <Ionicons name="ribbon-outline" size={13} color="#9CA3AF" />
             <Text style={styles.breakdownText}>
-              Pass mark: {item.passing_score}%
+              {t("quizHistory.passMark", { mark: item.passing_score })}
             </Text>
           </View>
         ) : null}
@@ -175,7 +177,7 @@ const AttemptCard = ({ item }) => {
           <Text style={styles.dateText}>
             {formatDate(item.submitted_at || item.started_at)}
             {item.submitted_at
-              ? `  at  ${formatTime(item.submitted_at)}`
+              ? `  ${t("quizHistory.atTime")}  ${formatTime(item.submitted_at)}`
               : ""}
           </Text>
         </View>
@@ -212,6 +214,7 @@ export default function QuizHistoryScreen() {
   const userId  = useAuthStore(
     (s) => s.user?._id || s.user?.id || s.user?.userId
   );
+  const { t }   = useTranslation();
 
   const [attempts,   setAttempts]   = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -276,7 +279,7 @@ export default function QuizHistoryScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color="#4F46E5" />
-        <Text style={styles.loadingText}>Loading quiz history…</Text>
+        <Text style={styles.loadingText}>{t("quizHistory.loading")}</Text>
       </View>
     );
   }
@@ -294,9 +297,11 @@ export default function QuizHistoryScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Quiz History</Text>
+          <Text style={styles.headerTitle}>{t("quizHistory.title")}</Text>
           <Text style={styles.headerSub}>
-            {stats.total} attempt{stats.total !== 1 ? "s" : ""}
+            {stats.total === 1
+              ? t("quizHistory.oneAttempt")
+              : t("quizHistory.manyAttempts", { count: stats.total })}
           </Text>
         </View>
       </View>
@@ -305,13 +310,13 @@ export default function QuizHistoryScreen() {
       {attempts.length > 0 && (
         <View style={styles.statsRow}>
           {[
-            { label: "Total",     value: stats.total,                                color: "#4F46E5", bg: "#EEF2FF" },
-            { label: "Passed",    value: stats.passed,                               color: "#059669", bg: "#ECFDF5" },
-            { label: "Failed",    value: stats.failed,                               color: "#DC2626", bg: "#FEE2E2" },
-            { label: "Avg Score", value: stats.avgPct != null ? `${stats.avgPct}%` : "—", color: "#D97706", bg: "#FEF3C7" },
+            { key: "total",   label: t("quizHistory.totalStat"),      value: stats.total,                                              color: "#4F46E5", bg: "#EEF2FF" },
+            { key: "passed",  label: t("quizHistory.passedStat"),     value: stats.passed,                                             color: "#059669", bg: "#ECFDF5" },
+            { key: "failed",  label: t("quizHistory.failedStat"),     value: stats.failed,                                             color: "#DC2626", bg: "#FEE2E2" },
+            { key: "avg",     label: t("quizHistory.avgStat"),        value: stats.avgPct != null ? `${stats.avgPct}%` : "—",          color: "#D97706", bg: "#FEF3C7" },
           ].map((s) => (
             <View
-              key={s.label}
+              key={s.key}
               style={[styles.statCard, { backgroundColor: s.bg }]}
             >
               <Text style={[styles.statValue, { color: s.color }]}>
@@ -326,9 +331,9 @@ export default function QuizHistoryScreen() {
       {/* Filter chips */}
       <View style={styles.filterRow}>
         {[
-          { id: "all",    label: `All (${stats.total})`     },
-          { id: "passed", label: `Passed (${stats.passed})` },
-          { id: "failed", label: `Failed (${stats.failed})` },
+          { id: "all",    label: t("quizHistory.filterAll",    { count: stats.total }) },
+          { id: "passed", label: t("quizHistory.filterPassed", { count: stats.passed }) },
+          { id: "failed", label: t("quizHistory.filterFailed", { count: stats.failed }) },
         ].map((f) => (
           <TouchableOpacity
             key={f.id}
@@ -370,13 +375,13 @@ export default function QuizHistoryScreen() {
             <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>
               {filter === "all"
-                ? "No quiz attempts yet"
-                : `No ${filter} attempts`}
+                ? t("quizHistory.allEmptyTitle")
+                : t("quizHistory.filterEmptyTitle", { filter })}
             </Text>
             <Text style={styles.emptySubtitle}>
               {filter === "all"
-                ? "Complete a quiz to see your history here"
-                : "Try a different filter"}
+                ? t("quizHistory.allEmptySub")
+                : t("quizHistory.filterEmptySub")}
             </Text>
           </View>
         }
