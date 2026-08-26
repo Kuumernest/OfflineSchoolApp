@@ -438,7 +438,22 @@
     "nameLabel": "Subject name",
     "codeLabel": "Subject code",
     "namePh": "e.g. Mathematics",
-    "codePh": "e.g. MATH101"
+    "codePh": "e.g. MATH101",
+    "my": {
+      "loading": "Loading subjects…",
+      "title": "My Subjects",
+      "searchPh": "Search subjects or teachers…",
+      "oneSubject": "1 subject",
+      "manySubjects": "{{count}} subjects",
+      "oneTeacher": "1 teacher",
+      "manyTeachers": "{{count}} teachers",
+      "viewContent": "View content",
+      "noMatchSearch": "No subjects match your search",
+      "noneFound": "No subjects found",
+      "tryDifferent": "Try a different keyword",
+      "appearAfterSync": "Your subjects will appear here after sync",
+      "clearSearch": "Clear search"
+    }
   },
   "classes": {
     "title": "Classes",

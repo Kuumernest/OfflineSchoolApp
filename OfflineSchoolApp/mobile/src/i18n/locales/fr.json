@@ -438,7 +438,22 @@
     "nameLabel": "Nom de la matière",
     "codeLabel": "Code de la matière",
     "namePh": "ex. Mathématiques",
-    "codePh": "ex. MATH101"
+    "codePh": "ex. MATH101",
+    "my": {
+      "loading": "Chargement des matières…",
+      "title": "Mes matières",
+      "searchPh": "Rechercher des matières ou des professeurs…",
+      "oneSubject": "1 matière",
+      "manySubjects": "{{count}} matières",
+      "oneTeacher": "1 professeur",
+      "manyTeachers": "{{count}} professeurs",
+      "viewContent": "Voir le contenu",
+      "noMatchSearch": "Aucune matière ne correspond à votre recherche",
+      "noneFound": "Aucune matière trouvée",
+      "tryDifferent": "Essayez un autre mot-clé",
+      "appearAfterSync": "Vos matières apparaîtront ici après la synchronisation",
+      "clearSearch": "Effacer la recherche"
+    }
   },
   "classes": {
     "title": "Classes",

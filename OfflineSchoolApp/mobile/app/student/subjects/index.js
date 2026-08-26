@@ -18,6 +18,7 @@ import { Ionicons }  from "@expo/vector-icons";
 import { useAuthStore }          from "../../../src/store/auth.store";
 import { getDatabase }           from "../../../src/db/database";
 import { resolveStudentClassId } from "../../../src/services/student.service";
+import { useTranslation }        from "../../../src/i18n/useTranslation";
 
 const SUBJECT_COLORS = [
   { bg: "#EEF2FF", color: "#4F46E5", icon: "calculator-outline"   },
@@ -88,7 +89,7 @@ const loadSubjects = async (db, classId) => {
   }
 };
 
-const SubjectCard = React.memo(({ subject, colorSet, onPress }) => (
+const SubjectCard = React.memo(({ subject, colorSet, onPress, viewLabel }) => (
   <TouchableOpacity
     style={[st.card, { borderLeftColor: colorSet.color }]}
     onPress={onPress}
@@ -118,7 +119,7 @@ const SubjectCard = React.memo(({ subject, colorSet, onPress }) => (
     </View>
 
     <View style={st.arrowWrap}>
-      <Text style={st.viewContent}>View content</Text>
+      <Text style={st.viewContent}>{viewLabel}</Text>
       <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
     </View>
   </TouchableOpacity>
@@ -128,6 +129,7 @@ export default function StudentSubjectsScreen() {
   const router  = useRouter();
   const user    = useAuthStore((s) => s.user);
   const userId  = user?._id || user?.id || user?.userId;
+  const { t }   = useTranslation();
 
   const [loading,    setLoading]    = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -206,7 +208,7 @@ export default function StudentSubjectsScreen() {
     return (
       <View style={st.centered}>
         <ActivityIndicator size="large" color="#059669" />
-        <Text style={st.loadingText}>Loading subjects…</Text>
+        <Text style={st.loadingText}>{t("subjects.my.loading")}</Text>
       </View>
     );
   }
@@ -224,7 +226,7 @@ export default function StudentSubjectsScreen() {
           <Ionicons name="arrow-back" size={22} color="#374151" />
         </TouchableOpacity>
         <View style={{ flex: 1 }}>
-          <Text style={st.headerTitle}>My Subjects</Text>
+          <Text style={st.headerTitle}>{t("subjects.my.title")}</Text>
           {!!className && (
             <Text style={st.headerSub}>{className}</Text>
           )}
@@ -238,7 +240,7 @@ export default function StudentSubjectsScreen() {
         <Ionicons name="search-outline" size={18} color="#9CA3AF" />
         <TextInput
           style={st.searchInput}
-          placeholder="Search subjects or teachers…"
+          placeholder={t("subjects.my.searchPh")}
           placeholderTextColor="#9CA3AF"
           value={search}
           onChangeText={setSearch}
@@ -259,13 +261,17 @@ export default function StudentSubjectsScreen() {
         <View style={st.statChip}>
           <Ionicons name="book-outline" size={14} color="#059669" />
           <Text style={st.statChipText}>
-            {subjects.length} subject{subjects.length !== 1 ? "s" : ""}
+            {subjects.length === 1
+              ? t("subjects.my.oneSubject")
+              : t("subjects.my.manySubjects", { count: subjects.length })}
           </Text>
         </View>
         <View style={st.statChip}>
           <Ionicons name="person-outline" size={14} color="#4F46E5" />
           <Text style={st.statChipText}>
-            {uniqueTeacherCount} teacher{uniqueTeacherCount !== 1 ? "s" : ""}
+            {uniqueTeacherCount === 1
+              ? t("subjects.my.oneTeacher")
+              : t("subjects.my.manyTeachers", { count: uniqueTeacherCount })}
           </Text>
         </View>
         {!!className && (
@@ -294,12 +300,12 @@ export default function StudentSubjectsScreen() {
           <View style={st.emptyState}>
             <Ionicons name="book-outline" size={52} color="#D1D5DB" />
             <Text style={st.emptyTitle}>
-              {search ? "No subjects match your search" : "No subjects found"}
+              {search ? t("subjects.my.noMatchSearch") : t("subjects.my.noneFound")}
             </Text>
             <Text style={st.emptySub}>
               {search
-                ? "Try a different keyword"
-                : "Your subjects will appear here after sync"}
+                ? t("subjects.my.tryDifferent")
+                : t("subjects.my.appearAfterSync")}
             </Text>
             {search.length > 0 && (
               <TouchableOpacity
@@ -307,7 +313,7 @@ export default function StudentSubjectsScreen() {
                 onPress={() => setSearch("")}
                 activeOpacity={0.7}
               >
-                <Text style={st.clearBtnText}>Clear search</Text>
+                <Text style={st.clearBtnText}>{t("subjects.my.clearSearch")}</Text>
               </TouchableOpacity>
             )}
           </View>
@@ -319,6 +325,7 @@ export default function StudentSubjectsScreen() {
                 key={subject.id}
                 subject={subject}
                 colorSet={colorSet}
+                viewLabel={t("subjects.my.viewContent")}
                 onPress={() => goToDetail(subject, idx)}
               />
             );
