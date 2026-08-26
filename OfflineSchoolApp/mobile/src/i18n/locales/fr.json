@@ -335,6 +335,9 @@
     "newStudent": "Nouvel élève ?",
     "applyBlurb": "Déposez une demande d'inscription. Vous recevrez votre matricule et vos identifiants dès que votre demande sera acceptée.",
     "applyCta": "Demander une inscription",
+    "forgotStaff": "Mot de passe oublié ? Contactez votre administrateur système.",
+    "forgotStudent": "Mot de passe oublié ? Demandez à votre professeur ou à l'administration de le réinitialiser.",
+    "parentPortal": "Portail parental →",
     "copyright": "Système de gestion scolaire © {{year}}"
   },
   "changePassword": {
@@ -1224,6 +1227,7 @@
     "alreadyScanned": "Déjà scanné",
     "notRecognised": "Carte non reconnue",
     "unknownHint": "Elle a peut-être été émise depuis la dernière synchronisation.",
+    "unknownQueued": "Le scan a été enregistré et sera vérifié à la prochaine synchronisation.",
     "unknownStudent": "Élève inconnu",
     "recent": "Aujourd'hui",
     "noScans": "Aucun scan aujourd'hui",

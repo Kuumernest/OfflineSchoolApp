@@ -335,6 +335,9 @@
     "newStudent": "New student?",
     "applyBlurb": "Submit an application to join the school. You will receive your enrolment number and login details once your application is approved.",
     "applyCta": "Apply for admission",
+    "forgotStaff": "Forgotten your password? Contact your system administrator.",
+    "forgotStudent": "Forgotten your password? Ask your class teacher or school admin to reset it.",
+    "parentPortal": "Parent portal →",
     "copyright": "School Management System © {{year}}"
   },
   "changePassword": {
@@ -1224,6 +1227,7 @@
     "alreadyScanned": "Already scanned",
     "notRecognised": "Card not recognised",
     "unknownHint": "It may have been issued since this device last synced.",
+    "unknownQueued": "The scan was saved and will be checked when this device syncs.",
     "unknownStudent": "Unknown student",
     "recent": "Today",
     "noScans": "No scans yet today",

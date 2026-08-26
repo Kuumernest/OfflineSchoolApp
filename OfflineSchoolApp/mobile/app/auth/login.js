@@ -7,12 +7,14 @@ import {
 } from "react-native";
 import { useRouter }    from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 export default function LoginScreen() {
   const router    = useRouter();
   const login     = useAuthStore((s) => s.login);
   const error     = useAuthStore((s) => s.error);
   const isLoading = useAuthStore((s) => s.isLoading);
+  const { t }     = useTranslation();
 
   const [identifier, setIdentifier] = useState("");
   const [password,   setPassword]   = useState("");
@@ -47,8 +49,8 @@ export default function LoginScreen() {
         {/* ── Header ── */}
         <View style={styles.header}>
           <Text style={styles.emoji}>🏫</Text>
-          <Text style={styles.title}>School App</Text>
-          <Text style={styles.subtitle}>Sign in to your account</Text>
+          <Text style={styles.title}>{t("login.appName")}</Text>
+          <Text style={styles.subtitle}>{t("login.signInToAccount")}</Text>
         </View>
 
         {/* ── Form ── */}
@@ -60,12 +62,12 @@ export default function LoginScreen() {
           ) : null}
 
           {/* Identifier field */}
-          <Text style={styles.label}>Email or Enrollment Number</Text>
+          <Text style={styles.label}>{t("login.identifier")}</Text>
           <TextInput
             style={styles.input}
             value={identifier}
             onChangeText={setIdentifier}
-            placeholder="admin@school.com  or  GHS-2024-0042"
+            placeholder={t("login.identifierPh")}
             placeholderTextColor="#9CA3AF"
             autoCapitalize="none"
             autoCorrect={false}
@@ -73,14 +75,14 @@ export default function LoginScreen() {
           />
           <Text style={styles.hint}>
             {identifier.length === 0
-              ? "💡 Staff enter their email · Students enter their enrollment number"
+              ? `💡 ${t("login.identifierHint")}`
               : looksLikeEmail
-                ? "✓ Signing in as staff / admin"
-                : "✓ Signing in as student"}
+                ? `✓ ${t("login.asStaff")}`
+                : `✓ ${t("login.asStudent")}`}
           </Text>
 
           {/* Password */}
-          <Text style={styles.label}>Password</Text>
+          <Text style={styles.label}>{t("login.password")}</Text>
           <View style={styles.passwordRow}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -101,8 +103,8 @@ export default function LoginScreen() {
 
           <Text style={styles.forgotNote}>
             {looksLikeEmail
-              ? "Forgotten your password? Contact your system administrator."
-              : "Forgotten your password? Ask your class teacher or school admin to reset it."}
+              ? t("login.forgotStaff")
+              : t("login.forgotStudent")}
           </Text>
 
           <TouchableOpacity
@@ -112,7 +114,7 @@ export default function LoginScreen() {
           >
             {isLoading
               ? <ActivityIndicator color="#FFF" />
-              : <Text style={styles.loginBtnText}>Sign In</Text>
+              : <Text style={styles.loginBtnText}>{t("login.submit")}</Text>
             }
           </TouchableOpacity>
         </View>
@@ -120,23 +122,21 @@ export default function LoginScreen() {
         {/* ── Divider ── */}
         <View style={styles.dividerRow}>
           <View style={styles.dividerLine} />
-          <Text style={styles.dividerText}>or</Text>
+          <Text style={styles.dividerText}>{t("login.or")}</Text>
           <View style={styles.dividerLine} />
         </View>
 
         {/* ── Apply CTA ── */}
         <View style={styles.applyCard}>
-          <Text style={styles.applyTitle}>New Student?</Text>
+          <Text style={styles.applyTitle}>{t("login.newStudent")}</Text>
           <Text style={styles.applySubtitle}>
-            Submit an application to join the school.{"\n"}
-            You will receive your enrollment number and login
-            credentials once your application is approved.
+            {t("login.applyBlurb")}
           </Text>
           <TouchableOpacity
             style={styles.applyBtn}
             onPress={() => router.push("/auth/select-school")}
           >
-            <Text style={styles.applyBtnText}>Apply for Admission →</Text>
+            <Text style={styles.applyBtnText}>{t("login.applyCta")} →</Text>
           </TouchableOpacity>
         </View>
 
@@ -148,7 +148,7 @@ export default function LoginScreen() {
           style={styles.portalLink}
           onPress={() => router.push("/portal")}
         >
-          <Text style={styles.portalLinkText}>Parent portal →</Text>
+          <Text style={styles.portalLinkText}>{t("login.parentPortal")}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
