@@ -479,6 +479,27 @@
     "quizFallback": "Quiz",
     "atTime": "à"
   },
+  "timetable": {
+    "loading": "Chargement de l'emploi du temps…",
+    "myTimetable": "Mon emploi du temps",
+    "noClassTitle": "Aucune classe attribuée",
+    "noClassBody": "Vous n'avez pas encore été affecté(e) à une classe.\nContactez l'administration de l'école.",
+    "noPeriodsTitle": "Aucune période configurée",
+    "noPeriodsBody": "L'emploi du temps n'a pas encore été établi.\nContactez l'administration de l'école.",
+    "noScheduleTitle": "Aucun cours planifié",
+    "noScheduleBody": "Votre classe n'a pas encore d'emploi du temps.",
+    "oneClassThisWeek": "1 cours cette semaine",
+    "manyClassesThisWeek": "{{count}} cours cette semaine",
+    "syncError": "Impossible d'actualiser — affichage de l'emploi du temps en cache",
+    "timeCol": "Heure",
+    "break": "Pause",
+    "classLegend": "Cours",
+    "freeLegend": "Libre",
+    "todayLegend": "Aujourd'hui",
+    "monday": "Lundi", "tuesday": "Mardi", "wednesday": "Mercredi",
+    "thursday": "Jeudi", "friday": "Vendredi", "saturday": "Samedi", "sunday": "Dimanche",
+    "mon": "LUN", "tue": "MAR", "wed": "MER", "thu": "JEU", "fri": "VEN"
+  },
   "classes": {
     "title": "Classes",
     "add": "Ajouter une classe",
@@ -1341,6 +1362,12 @@
     "loadingMore": "Chargement…"
   },
   "setPassword": {
+    "changeTitle": "Changer le mot de passe",
+    "changeSubtitle": "Saisissez votre mot de passe actuel, puis choisissez-en un nouveau.",
+    "currentLabel": "Mot de passe actuel",
+    "currentPh": "Saisissez votre mot de passe actuel",
+    "currentRequired": "Veuillez saisir votre mot de passe actuel.",
+    "changeSubmit": "Mettre à jour le mot de passe",
     "title": "Définissez votre mot de passe",
     "welcome": "Bienvenue,",
     "subtitle": "Votre compte a été créé par l'administration. Veuillez définir un mot de passe personnel pour continuer.",
@@ -1368,6 +1395,47 @@
     "cancel": "Annuler",
     "signOut": "Se déconnecter",
     "securityNote": "Votre mot de passe est chiffré et stocké en toute sécurité. Nous ne le voyons jamais et ne le conservons pas en clair.",
-    "signOutInstead": "Se déconnecter plutôt"
+        "signOutInstead": "Se déconnecter plutôt"
+  },
+  "teacher": {
+    "dashboard": {
+      "title": "Tableau de bord enseignant",
+      "greeting": "Bonjour {{timeOfDay}}",
+      "morning": "Matin",
+      "afternoon": "Après-midi",
+      "evening": "Soirée",
+      "quickActions": "Actions rapides",
+      "modules": "Mes modules",
+      "myExams": "Mes examens",
+      "enterMarks": "Saisir les notes",
+      "uploadNotes": "Télécharger des notes",
+      "createQuiz": "Créer un quiz",
+      "assignHw": "Devoir",
+      "attendance": "Présence",
+      "announce": "Annoncer",
+      "messages": "Messages",
+      "myExamsMarks": "Mes examens et notes",
+      "descriptionMyExams": "Voir les examens et saisir les notes",
+      "mySubjectsClasses": "Mes matières et classes"
+    },
+    "students": {
+      "title": "Mes élèves",
+      "allClasses": "Toutes mes classes",
+      "classList": "Élèves de {{className}}",
+      "classSummary": "{{count}} élève dans {{className}}",
+      "classSummary_other": "{{count}} élèves dans {{className}}",
+      "searchPlaceholder": "Rechercher des élèves…",
+      "noResults": "Aucun élève trouvé",
+      "noResultsHint": "Essayez un autre nom ou numéro d'admission.",
+      "export": "Exporter",
+      "studentId": "ID de l'élève",
+      "admissionNumber": "N° d'admission",
+            "parentContact": "Contact parent",
+      "total": "Total",
+      "male": "Mâle",
+      "female": "Femelle",
+      "noMatches": "Aucune correspondance",
+      "clearSearch": "Effacer la recherche"
+    }
   }
 }

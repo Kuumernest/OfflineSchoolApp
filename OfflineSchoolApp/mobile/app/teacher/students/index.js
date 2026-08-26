@@ -18,6 +18,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
 
 /**
@@ -339,6 +340,7 @@ export default function TeacherStudentsScreen() {
   const { classId, className } = useLocalSearchParams();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId || user?.school_id;
+  const { t } = useTranslation();
 
   const [students,   setStudents]   = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -414,10 +416,10 @@ export default function TeacherStudentsScreen() {
   if (loading) {
     return (
       <View style={styles.screen}>
-        <Header title={className || "Students"} />
+                <Header title={className || t("teacher.students.title")} />
         <View style={styles.centered}>
           <ActivityIndicator size="large" color={C.primary} />
-          <Text style={styles.loadingText}>Loading students…</Text>
+          <Text style={styles.loadingText}>{t("common.loading")}</Text>
         </View>
       </View>
     );
@@ -425,14 +427,14 @@ export default function TeacherStudentsScreen() {
 
   return (
     <View style={styles.screen}>
-      <Header title={className || "Students"} count={students.length} />
+      <Header title={className || t("teacher.students.title")} count={students.length} />
 
       {/* ── Stats Bar ── */}
       {students.length > 0 && (
         <View style={styles.statsBar}>
-          <StatChip label="Total"  value={stats.total}  color={C.primary} />
-          <StatChip label="Male"   value={stats.male}   color="#0284C7" />
-          <StatChip label="Female" value={stats.female} color="#DB2777" />
+                    <StatChip label={t("teacher.students.total")} value={stats.total}  color={C.primary} />
+          <StatChip label={t("teacher.students.male")} value={stats.male}   color="#0284C7" />
+          <StatChip label={t("teacher.students.female")} value={stats.female} color="#DB2777" />
         </View>
       )}
 
@@ -445,7 +447,7 @@ export default function TeacherStudentsScreen() {
               style={styles.searchInput}
               value={search}
               onChangeText={setSearch}
-              placeholder="Search by name, admission, email…"
+                    placeholder={t("teacher.students.searchPlaceholder")}
               placeholderTextColor={C.gray400}
               returnKeyType="search"
             />
@@ -590,8 +592,8 @@ function EmptyState({ hasSearch, onClear }) {
           color={C.gray300}
         />
       </View>
-      <Text style={styles.emptyTitle}>
-        {hasSearch ? "No matches found" : "No students yet"}
+            <Text style={styles.emptyTitle}>
+        {hasSearch ? t("teacher.students.noMatches") : t("teacher.students.noResults")}
       </Text>
       <Text style={styles.emptyBody}>
         {hasSearch
@@ -605,7 +607,7 @@ function EmptyState({ hasSearch, onClear }) {
           activeOpacity={0.8}
         >
           <Ionicons name="close-circle-outline" size={16} color={C.white} />
-          <Text style={styles.emptyBtnText}>Clear Search</Text>
+              <Text style={styles.emptyBtnText}>{t("teacher.students.clearSearch")}</Text>
         </TouchableOpacity>
       )}
     </View>

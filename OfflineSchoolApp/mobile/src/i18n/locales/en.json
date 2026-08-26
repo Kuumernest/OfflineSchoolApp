@@ -479,6 +479,27 @@
     "quizFallback": "Quiz",
     "atTime": "at"
   },
+  "timetable": {
+    "loading": "Loading timetable…",
+    "myTimetable": "My Timetable",
+    "noClassTitle": "No class assigned",
+    "noClassBody": "You have not been assigned to a class yet.\nContact your school administrator.",
+    "noPeriodsTitle": "No Periods Configured",
+    "noPeriodsBody": "The timetable hasn't been set up yet.\nContact your school administrator.",
+    "noScheduleTitle": "No Classes Scheduled",
+    "noScheduleBody": "Your class has no timetable entries yet.",
+    "oneClassThisWeek": "1 class this week",
+    "manyClassesThisWeek": "{{count}} classes this week",
+    "syncError": "Could not refresh — showing cached timetable",
+    "timeCol": "Time",
+    "break": "Break",
+    "classLegend": "Class",
+    "freeLegend": "Free",
+    "todayLegend": "Today",
+    "monday": "Monday", "tuesday": "Tuesday", "wednesday": "Wednesday",
+    "thursday": "Thursday", "friday": "Friday", "saturday": "Saturday", "sunday": "Sunday",
+    "mon": "MON", "tue": "TUE", "wed": "WED", "thu": "THU", "fri": "FRI"
+  },
   "classes": {
     "title": "Classes",
     "add": "Add class",
@@ -1341,6 +1362,12 @@
     "loadingMore": "Loading more…"
   },
   "setPassword": {
+    "changeTitle": "Change Password",
+    "changeSubtitle": "Enter your current password, then choose a new one.",
+    "currentLabel": "Current Password",
+    "currentPh": "Enter your current password",
+    "currentRequired": "Please enter your current password.",
+    "changeSubmit": "Update Password",
     "title": "Set Your Password",
     "welcome": "Welcome,",
     "subtitle": "Your account was created by the admin. Please set a personal password to continue.",
@@ -1368,6 +1395,47 @@
     "cancel": "Cancel",
     "signOut": "Sign Out",
     "securityNote": "Your password is encrypted and stored securely. We never see or store it in plain text.",
-    "signOutInstead": "Sign out instead"
+        "signOutInstead": "Sign out instead"
+  },
+  "teacher": {
+    "dashboard": {
+      "title": "Teacher Dashboard",
+      "greeting": "Good {{timeOfDay}}",
+      "morning": "Morning",
+      "afternoon": "Afternoon",
+      "evening": "Evening",
+      "quickActions": "Quick Actions",
+      "modules": "My Modules",
+      "myExams": "My Exams",
+      "enterMarks": "Enter Marks",
+      "uploadNotes": "Upload Notes",
+      "createQuiz": "Create Quiz",
+      "assignHw": "Assign HW",
+      "attendance": "Attendance",
+      "announce": "Announce",
+      "messages": "Messages",
+      "myExamsMarks": "My Exams & Marks",
+      "descriptionMyExams": "View exams and enter marks",
+      "mySubjectsClasses": "My Subjects & Classes"
+    },
+    "students": {
+      "title": "My Students",
+      "allClasses": "All My Classes",
+      "classList": "Students in {{className}}",
+      "classSummary": "{{count}} student in {{className}}",
+      "classSummary_other": "{{count}} students in {{className}}",
+      "searchPlaceholder": "Search students…",
+      "noResults": "No students found",
+      "noResultsHint": "Try a different name or admission number.",
+      "export": "Export",
+      "studentId": "Student ID",
+      "admissionNumber": "Admission No.",
+            "parentContact": "Parent Contact",
+      "total": "Total",
+      "male": "Male",
+      "female": "Female",
+            "noMatches": "No matches found",
+      "clearSearch": "Clear Search"
+    }
   }
 }
