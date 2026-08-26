@@ -112,6 +112,73 @@ export const fetchAnnouncements = async (studentId?: string | null): Promise<Por
   unwrap(await client.get("/announcements", childParams(studentId)).then((r) => r.data));
 
 /** Fetches the printable receipt as HTML, using the portal token. */
+// ─── Messaging ────────────────────────────────────────────────────────────────
+//
+// The portal was read-only until messaging arrived: these are the first write
+// endpoints a guardian has. They mirror the staff routes exactly and are
+// gated by the same communication policy on the server, so a parent can only
+// reach teachers, the office, and their own child.
+
+export interface PortalRecipient {
+  kind:      "user" | "guardian";
+  id:        string;
+  name:      string;
+  role?:     string | null;
+  subtitle?: string | null;
+}
+
+export interface PortalConversation {
+  _id:                 string;
+  kind:                string;
+  title?:              string | null;
+  participants?:       { kind: string; id: string; name?: string | null }[];
+  lastMessageAt?:      string | null;
+  lastMessagePreview?: string | null;
+  unread?:             number;
+}
+
+export interface PortalMessage {
+  _id:        string;
+  seq:        number;
+  sender:     { kind: string; id: string; name?: string | null };
+  body:       string | null;
+  attachments?: { url: string; name?: string | null; kind?: string }[];
+  createdAt:  string;
+  isDeleted?: boolean;
+}
+
+export const fetchPortalRecipients = async (q = ""): Promise<PortalRecipient[]> =>
+  (await client.get("/portal/messages/recipients", { params: { q } })).data?.data ?? [];
+
+export const fetchPortalConversations = async (): Promise<PortalConversation[]> =>
+  (await client.get("/portal/messages/conversations")).data?.data ?? [];
+
+export const openPortalConversation = async (
+  id: string,
+  kind: "user" | "guardian" = "user",
+): Promise<PortalConversation> =>
+  (await client.post("/portal/messages/conversations", { id, kind })).data?.data;
+
+export const fetchPortalThread = async (
+  conversationId: string,
+): Promise<{ conversation: PortalConversation; messages: PortalMessage[] }> =>
+  (await client.get(`/portal/messages/conversations/${conversationId}`)).data?.data
+    ?? { conversation: null, messages: [] };
+
+export const sendPortalMessage = async (
+  conversationId: string,
+  body: string,
+): Promise<PortalMessage> =>
+  (await client.post(`/portal/messages/conversations/${conversationId}`, { body }))
+    .data?.data;
+
+export const markPortalRead = async (
+  conversationId: string,
+  seq: number,
+): Promise<void> => {
+  await client.post(`/portal/messages/conversations/${conversationId}/read`, { seq });
+};
+
 export async function fetchReceiptHtml(paymentId: string, lang: string): Promise<string> {
   const { data } = await client.get(`/receipt/${paymentId}`, {
     params: { lang },

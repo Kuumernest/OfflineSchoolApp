@@ -280,17 +280,12 @@ const handleStudentAnnouncements = async (req, res) => {
       ` resolvedClassId=${studentClassId || "none"}`
     );
 
-    const audienceConditions = [
-      { audience: "all"      },
-      { audience: "students" },
-    ];
-
-    if (studentClassId) {
-      audienceConditions.push({
-        audience:      "class",
-        targetClasses: studentClassId,
-      });
-    }
+    // Covers both the legacy single `audience` and the multi-select
+    // `audiences`, so notices written in either era reach the student.
+    const audienceConditions = Announcement.audienceMatch({
+      audience: "students",
+      classId:  studentClassId || null,
+    });
 
     const now    = new Date();
     const filter = {
@@ -560,9 +555,8 @@ router.get("/", adminOrTeacher, async (req, res) => {
 
     if (!isAdmin) {
       const teacherConditions = [
-        { audience: "all"      },
-        { audience: "teachers" },
-        { author:   req.user._id },
+        ...Announcement.audienceMatch({ audience: "teachers" }),
+        { author: req.user._id },
       ];
 
       if (filter.audience) {
@@ -624,6 +618,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
       title,
       body,
       audience      = "all",
+      audiences,
       targetClasses = [],
       priority      = "normal",
       isPinned      = false,
@@ -640,6 +635,37 @@ router.post("/", adminOrTeacher, async (req, res) => {
     const isAdminRole   = ["super_admin", "school_admin"].includes(req.user.role);
     const isTeacherRole = req.user.role === "teacher";
 
+    /**
+     * The multi-select set this announcement targets.
+     *
+     * Callers may send `audiences: ["students","parents"]`, or the legacy
+     * single `audience`. Normalising to one vocabulary here means the
+     * permission checks below are written once instead of twice.
+     */
+    const ALLOWED_AUDIENCES = ["students", "teachers", "parents"];
+    let resolvedAudiences = Array.isArray(audiences)
+      ? [...new Set(audiences.map(String))]
+      : Announcement.expandLegacyAudience(audience);
+
+    const invalid = resolvedAudiences.filter((a) => !ALLOWED_AUDIENCES.includes(a));
+    if (invalid.length) {
+      return res.status(400).json({
+        message: `Unknown audience: ${invalid.join(", ")}`,
+      });
+    }
+    if (!resolvedAudiences.length) {
+      return res.status(400).json({ message: "At least one audience is required" });
+    }
+
+    // A teacher may address students and the parents of the classes they
+    // teach, never the staff body. Checked against the resolved set so it
+    // cannot be bypassed by sending `audiences` instead of `audience`.
+    if (isTeacherRole && resolvedAudiences.includes("teachers")) {
+      return res.status(403).json({
+        message: "Teachers can only send announcements to students or specific classes.",
+      });
+    }
+
     let resolvedSubjectName = subjectName || null;
     if (subjectId && !resolvedSubjectName) {
       try {
@@ -650,11 +676,6 @@ router.post("/", adminOrTeacher, async (req, res) => {
     }
 
     if (isTeacherRole) {
-      if (audience === "teachers" || audience === "all") {
-        return res.status(403).json({
-          message: "Teachers can only send announcements to students or specific classes.",
-        });
-      }
       if (isPinned) {
         return res.status(403).json({
           message: "Only administrators can pin announcements.",
@@ -700,6 +721,7 @@ router.post("/", adminOrTeacher, async (req, res) => {
       _id:           id || uuidv4(),
       title:         title.trim(),
       body:          body.trim(),
+      audiences:     resolvedAudiences,
       author:        req.user._id,
       authorName:    req.user.name || req.user.fullName || "Unknown",
       authorRole:    req.user.role,

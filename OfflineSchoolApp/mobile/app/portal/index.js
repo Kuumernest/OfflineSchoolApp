@@ -42,7 +42,7 @@ const C = {
   canvas:    "#F4F5F8",
 };
 
-const TABS = ["fees", "results", "attendance", "news"];
+const TABS = ["fees", "results", "attendance", "news", "messages"];
 
 export default function ParentPortalScreen() {
   const router          = useRouter();
@@ -112,6 +112,7 @@ export default function ParentPortalScreen() {
         results:    PortalService.fetchResults,
         attendance: PortalService.fetchAttendance,
         news:       PortalService.fetchAnnouncements,
+        messages:   PortalService.fetchConversations,
       }[tab];
 
       setSection(await fetcher(childId ?? selected));
@@ -459,6 +460,51 @@ export default function ParentPortalScreen() {
             )}
 
             {/* ── News ── */}
+            {tab === "messages" && (
+              <>
+                <TouchableOpacity
+                  style={styles.newMsgBtn}
+                  onPress={() => router.push("/portal/messages/new")}
+                  activeOpacity={0.85}
+                >
+                  <Ionicons name="create-outline" size={17} color="#FFFFFF" />
+                  <Text style={styles.newMsgText}>New message</Text>
+                </TouchableOpacity>
+
+                {(data ?? []).length === 0 ? (
+                  <Text style={styles.emptyMsg}>No conversations yet.</Text>
+                ) : (
+                  (data ?? []).map((c) => (
+                    <TouchableOpacity
+                      key={c._id}
+                      style={styles.convoRow}
+                      activeOpacity={0.7}
+                      onPress={() => router.push(`/portal/messages/${c._id}`)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.convoTitle} numberOfLines={1}>
+                          {c.title ||
+                            (c.participants || [])
+                              .map((p) => p.name)
+                              .filter(Boolean)
+                              .join(", ") ||
+                            "Conversation"}
+                        </Text>
+                        <Text style={styles.convoPreview} numberOfLines={1}>
+                          {c.lastMessagePreview || "No messages yet"}
+                        </Text>
+                      </View>
+                      {c.unread > 0 && (
+                        <View style={styles.convoBadge}>
+                          <Text style={styles.convoBadgeText}>{c.unread}</Text>
+                        </View>
+                      )}
+                    </TouchableOpacity>
+                  ))
+                )}
+              </>
+            )}
+
             {tab === "news" && (
               (data?.length ?? 0) === 0 ? (
                 <View style={styles.card}>
@@ -579,4 +625,25 @@ const styles = StyleSheet.create({
 
   newsBody: { marginTop: 8, fontSize: 13, color: C.inkBody, lineHeight: 19 },
   empty:    { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+
+  // ── Messages ──────────────────────────────────────────────────────────────
+  newMsgBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    backgroundColor: C.ink, borderRadius: 10,
+    paddingVertical: 11, marginBottom: 12,
+  },
+  newMsgText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
+  emptyMsg:   { fontSize: 13, color: C.inkFaint, textAlign: "center", paddingVertical: 24 },
+
+  convoRow: {
+    flexDirection: "row", alignItems: "center", gap: 10,
+    paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  convoTitle:   { fontSize: 14, fontWeight: "600", color: C.ink },
+  convoPreview: { fontSize: 12, color: C.inkFaint, marginTop: 2 },
+  convoBadge: {
+    minWidth: 20, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: 10, backgroundColor: C.ink, alignItems: "center",
+  },
+  convoBadgeText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
 });

@@ -153,10 +153,29 @@ userSchema.index({ classId:  1 },              { name: "classId_1"             }
 userSchema.index({ schoolId: 1, classId: 1 },  { name: "schoolId_1_classId_1"  });
 userSchema.index({ email:    1, isActive: 1 }, { name: "email_1_isActive_1"    });
 
-// enrollmentNo — unique sparse (matches "enrollmentNo_1" already in DB)
+// enrollmentNo — unique, but only over rows that actually have one.
+//
+// This replaces the old "enrollmentNo_1" (unique + sparse), which was broken:
+// a sparse index skips a MISSING field but still indexes an explicit null, and
+// the field above carries `default: null`. Every staff user therefore landed in
+// the index under the same key, so on a fresh database the SECOND teacher or
+// admin could not be created at all — E11000 on { enrollmentNo: null }.
+//
+// A partial filter on $type: "string" indexes only real numbers, so any number
+// of users may have none. The index is deliberately given a NEW NAME: declaring
+// different options under the old name raises IndexOptionsConflict on connect
+// for every existing deployment, which would take the app down at startup.
+//
+// Existing databases keep the old broken index until it is dropped —
+// scripts/fix-enrollment-index.js does that, and must be run once per
+// deployment. Fresh databases only ever get this one.
 userSchema.index(
   { enrollmentNo: 1 },
-  { unique: true, sparse: true, name: "enrollmentNo_1" }
+  {
+    unique: true,
+    partialFilterExpression: { enrollmentNo: { $type: "string" } },
+    name: "enrollmentNo_unique_present",
+  }
 );
 
 // email lookup — non-unique sparse (matches "email_lookup_sparse" in DB)

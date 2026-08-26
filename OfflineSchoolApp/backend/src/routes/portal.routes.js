@@ -11,6 +11,9 @@ const FeeCharge     = require("../db/models/FeeCharge");
 const FeePayment    = require("../db/models/FeePayment");
 const ResultSummary = require("../db/models/ResultSummary");
 const GeneratedReport = require("../db/models/GeneratedReport");
+const Conversation  = require("../db/models/Conversation");
+const commsPolicy   = require("../services/communication/policy.service");
+const comms         = require("../services/communication/conversation.service");
 // Attendance.js exports TWO models. Importing the module as one silently
 // yields an object with no .find, which fails only when the route is called.
 const { StudentAttendance } = require("../db/models/Attendance");
@@ -319,6 +322,171 @@ router.get("/results/:summaryId/report-card", asyncHandler(async (req, res) => {
       issuedAt:     report.updatedAt,
     },
   });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MESSAGING — the guardian side
+//
+// Guardians are not Users, so they cannot use /api/messages, which sits
+// behind the staff authenticate(). These four routes give them the same
+// conversations through their own token, and defer every question of who
+// they may talk to to the same policy module the staff routes use.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Conversations this guardian is part of. */
+router.get("/messages/conversations", asyncHandler(async (req, res) => {
+  const me   = comms.principalFromRequest(req);
+  const rows = await comms.listFor(me, { limit: req.query.limit });
+
+  return res.json({
+    success: true,
+    data: rows.map((c) => {
+      const mine = (c.participants || []).find(
+        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
+      );
+      return {
+        _id:                c._id,
+        kind:               c.kind,
+        title:              c.title,
+        participants:       c.participants,
+        lastMessageAt:      c.lastMessageAt,
+        lastMessagePreview: c.lastMessagePreview,
+        isArchived:         c.isArchived,
+        unread: Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0)),
+      };
+    }),
+  });
+}));
+
+/**
+ * Who this guardian may write to.
+ *
+ * Same gate as the staff route: candidates are narrowed by a query and then
+ * decided by canMessage(), so the picker can never offer somebody the send
+ * path will refuse.
+ */
+router.get("/messages/recipients", asyncHandler(async (req, res) => {
+  const me       = comms.principalFromRequest(req);
+  const settings = await comms.loadSettings(me.schoolId);
+
+  const candidates = await comms.findCandidateRecipients(me, settings, {
+    q:     String(req.query.q || ""),
+    limit: Number(req.query.limit) || 40,
+  });
+
+  const allowed = candidates
+    .filter((c) => commsPolicy.canMessage(me, c, settings).allowed)
+    .map((c) => ({
+      kind:     c.kind,
+      id:       c.id,
+      name:     c.name,
+      role:     c.kind === "guardian" ? "guardian" : c.role,
+      subtitle: c.subtitle ?? null,
+    }));
+
+  return res.json({ success: true, data: allowed });
+}));
+
+/** Open, or reuse, a thread with a teacher, an administrator, or own child. */
+router.post("/messages/conversations", asyncHandler(async (req, res) => {
+  const me = comms.principalFromRequest(req);
+  const { kind = "user", id } = req.body || {};
+
+  if (!id) {
+    return res.status(400).json({ success: false, message: "id is required" });
+  }
+
+  const target = await comms.resolveTargetPrincipal(me.schoolId, kind, id);
+  if (!target) {
+    return res.status(404).json({ success: false, message: "Recipient not found" });
+  }
+
+  const settings = await comms.loadSettings(me.schoolId);
+  const verdict  = commsPolicy.canMessage(me, target, settings);
+
+  if (!verdict.allowed) {
+    return res.status(403).json({ success: false, message: verdict.reason });
+  }
+
+  const conversation = await comms.openDirect(me, target);
+  return res.status(201).json({ success: true, data: conversation });
+}));
+
+/** Read a thread. Guardians never audit — membership or nothing. */
+router.get("/messages/conversations/:id", asyncHandler(async (req, res) => {
+  const me = comms.principalFromRequest(req);
+
+  const conversation = await Conversation.findOne({
+    _id: String(req.params.id), schoolId: me.schoolId, deletedAt: null,
+  }).lean();
+
+  if (!conversation || !commsPolicy.isParticipant(me, conversation)) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  const docs = await comms.listMessages(conversation._id, {
+    limit:     req.query.limit,
+    beforeSeq: req.query.beforeSeq,
+  });
+
+  return res.json({
+    success: true,
+    data: {
+      conversation,
+      messages: docs.map((m) => m.toClientJSON()),
+    },
+  });
+}));
+
+/** Post into a thread. */
+router.post("/messages/conversations/:id", asyncHandler(async (req, res) => {
+  const me = comms.principalFromRequest(req);
+
+  const conversation = await Conversation.findOne({
+    _id: String(req.params.id), schoolId: me.schoolId, deletedAt: null,
+  });
+
+  if (!conversation) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  const verdict = commsPolicy.canPostToConversation(me, conversation);
+  if (!verdict.allowed) {
+    return res.status(403).json({ success: false, message: verdict.reason });
+  }
+
+  const { body, attachments = [], replyTo = null,
+          clientId = null, deviceCreatedAt = null } = req.body || {};
+
+  const { message, duplicate } = await comms.postMessage({
+    conversation, principal: me,
+    body, attachments, replyTo, clientId, deviceCreatedAt,
+  });
+
+  return res.status(duplicate ? 200 : 201).json({
+    success: true, duplicate, data: message.toClientJSON(),
+  });
+}));
+
+/** Move the read marker. */
+router.post("/messages/conversations/:id/read", asyncHandler(async (req, res) => {
+  const me  = comms.principalFromRequest(req);
+  const seq = req.body?.seq;
+
+  if (seq == null) {
+    return res.status(400).json({ success: false, message: "seq is required" });
+  }
+
+  const conversation = await Conversation.findOne({
+    _id: String(req.params.id), schoolId: me.schoolId, deletedAt: null,
+  }).lean();
+
+  if (!conversation || !commsPolicy.isParticipant(me, conversation)) {
+    return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  await comms.markRead(conversation._id, me, seq);
+  return res.json({ success: true });
 }));
 
 /** Attendance, summarised. A parent wants the pattern, not 180 rows. */

@@ -32,6 +32,7 @@ import { useAuthStore } from "@/store/auth.store";
 const LoginPage        = lazy(() => import("@/pages/LoginPage"));
 const ChangePassword   = lazy(() => import("@/pages/auth/ChangePasswordPage"));
 const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
+const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
@@ -65,6 +66,8 @@ const ExamResultsPage  = lazy(() => import("@/pages/exams/results/index"));
 const ExamReportsPage  = lazy(() => import("@/pages/exams/reports/index"));
 
 const AnnouncementsPage = lazy(() => import("@/pages/announcements/index"));
+const MessagesPage      = lazy(() => import("@/pages/messages/index"));
+const MessageAuditPage  = lazy(() => import("@/pages/messages/audit"));
 
 const ReportsOverview  = lazy(() => import("@/pages/reports/index"));
 const TemplatesPage    = lazy(() => import("@/pages/reports/templates"));
@@ -154,6 +157,7 @@ export default function App() {
 
           <Route index element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={page(<DashboardPage />)} />
+          <Route path="/watchlist" element={page(<WatchlistPage />)} />
 
           {/* ── Students ───────────────────────────────────────────────── */}
           <Route path="/students"              element={page(<StudentsPage />)} />
@@ -192,6 +196,10 @@ export default function App() {
 
           {/* ── Announcements ──────────────────────────────────────────── */}
           <Route path="/announcements" element={page(<AnnouncementsPage />)} />
+
+          {/* ── Messages ───────────────────────────────────────────────── */}
+          <Route path="/messages"       element={page(<MessagesPage />)} />
+          <Route path="/messages/audit" element={page(<MessageAuditPage />)} />
 
           {/* ── Reports ────────────────────────────────────────────────── */}
           <Route path="/reports"           element={page(<ReportsOverview />)} />

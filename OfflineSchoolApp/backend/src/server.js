@@ -38,6 +38,7 @@ const UPLOAD_DIRS = [
   "uploads/content/image",
   "uploads/logos",
   "uploads/photos",
+  "uploads/messages",
 ];
 
 UPLOAD_DIRS.forEach((dir) => {
@@ -311,6 +312,10 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", loadRoute("./routes/auth.routes"));
 app.use("/api",      loadRoute("./routes/public.routes"));
+// Public document verification (QR on transcripts and report cards). Mounted
+// with the other unauthenticated routes: the person checking a document is a
+// stranger to this system, and that is the feature.
+app.use("/api",      loadRoute("./routes/verify.routes"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GUARDIAN PORTAL
@@ -654,10 +659,26 @@ app.use("/api/exports",
   loadRoute("./routes/export.routes")
 );
 
+// Messaging: direct threads, class/subject channels, groups. Every route
+// consults the communication policy; guardians come in through the portal
+// router instead, because a portal token identifies a GuardianAccess row
+// and not a User.
+app.use("/api/messages",
+  auth.authenticate,
+  loadRoute("./routes/messages.routes")
+);
+
 // The school gate: QR sign-in and sign-out. Staff-only, enforced inside.
 app.use("/api/gate",
   auth.authenticate,
   loadRoute("./routes/gate.routes")
+);
+
+// Cross-module reads — the early-warning watch list. Office-only, enforced
+// inside the router.
+app.use("/api/insights",
+  auth.authenticate,
+  loadRoute("./routes/insights.routes")
 );
 
 // ─────────────────────────────────────────────────────────────────────────────

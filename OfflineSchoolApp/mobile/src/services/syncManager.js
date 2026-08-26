@@ -473,6 +473,15 @@ class SyncManagerClass {
       console.warn("[SyncManager] Could not register reconcilers:", err.message);
     }
 
+    // Messaging registers separately: a queued message that syncs without its
+    // reconciler would stay stuck showing as "queued" in the thread even
+    // though the server already has it.
+    try {
+      require("./message.service").registerMessageReconcilers();
+    } catch (err) {
+      console.warn("[SyncManager] Could not register message reconciler:", err.message);
+    }
+
     this.startAutoSync();
     this.startTriggers();
     console.log("[SyncManager] Initialized");

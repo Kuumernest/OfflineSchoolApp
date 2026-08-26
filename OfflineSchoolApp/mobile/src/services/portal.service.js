@@ -128,6 +128,49 @@ export const fetchResults       = (studentId) => load("results", "/results", stu
 export const fetchAttendance    = (studentId) => load("attendance", "/attendance", studentId);
 export const fetchAnnouncements = (studentId) => load("news", "/announcements", studentId);
 
+// ── Messaging ───────────────────────────────────────────────────────────────
+//
+// The first part of the portal that writes. Conversations go through `load` so
+// the list survives a dead link like every other section; sending does not,
+// because a guardian's phone has no outbox — a failed send has to be reported
+// rather than silently queued, or a parent would believe the school had been
+// told something it never received.
+
+export const fetchConversations = (studentId) =>
+  load("messages", "/messages/conversations", studentId);
+
+/** Who this guardian may write to. Needs a connection. */
+export const fetchRecipients = async (q = "") => {
+  const { data } = await client.get("/messages/recipients", { params: { q } });
+  return data?.data ?? [];
+};
+
+/** Open, or reuse, a thread. Needs a connection. */
+export const openConversation = async (id, kind = "user") => {
+  const { data } = await client.post("/messages/conversations", { id, kind });
+  return data?.data ?? null;
+};
+
+/** One thread, cached per conversation so it re-opens offline. */
+export const fetchThread = (conversationId) =>
+  load(`thread:${conversationId}`, `/messages/conversations/${conversationId}`);
+
+export const sendMessage = async (conversationId, body) => {
+  const { data } = await client.post(
+    `/messages/conversations/${conversationId}`,
+    { body }
+  );
+  return data?.data ?? null;
+};
+
+export const markRead = async (conversationId, seq) => {
+  try {
+    await client.post(`/messages/conversations/${conversationId}/read`, { seq });
+  } catch {
+    // A read receipt is not worth surfacing to a parent.
+  }
+};
+
 /** The printable receipt, as HTML the phone turns into a PDF. */
 export const fetchReceiptHtml = async (paymentId, lang = "en") => {
   const { data } = await client.get(`/receipt/${paymentId}`, {

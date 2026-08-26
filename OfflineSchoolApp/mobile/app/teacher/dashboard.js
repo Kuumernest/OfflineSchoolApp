@@ -40,6 +40,7 @@ const QUICK_ACTIONS = [
   { id: "assign-homework", title: "Assign HW",    icon: "clipboard-outline",     color: "#D97706", route: "/teacher/homework/create"            },
   { id: "mark-attendance", title: "Attendance",   icon: "checkbox-outline",      color: "#DB2777", route: "/teacher/attendance"                 },
   { id: "announce",        title: "Announce",     icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements/create"       },
+  { id: "messages",        title: "Messages",     icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                           },
 ];
 
 const MODULES = [

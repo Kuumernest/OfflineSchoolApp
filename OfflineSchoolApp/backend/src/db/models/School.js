@@ -156,6 +156,28 @@ const settingsSchema = new mongoose.Schema(
       match:   [/^\d{4}-\d{2}-\d{2}$|^$/, "idCardValidUntil must look like 2026-08-31"],
     },
 
+    /**
+     * Who may message whom inside this school.
+     *
+     * Read through communication/policy.service.js resolveSettings(), which
+     * supplies the defaults — so a school created before these existed
+     * behaves identically to one that accepted the defaults.
+     *
+     * studentToStudent is ON by default — pupils talking to each other is
+     * normal school life — but stays a switch so a school that would rather
+     * keep peer messaging closed can turn it off without a code change.
+     * adminAudit is on alongside it: peer messaging a school cannot review
+     * is a safeguarding problem, and the two belong together.
+     */
+    communication: {
+      studentToStudent:  { type: Boolean, default: true  },
+      studentToAdmin:    { type: Boolean, default: true  },
+      guardianToTeacher: { type: Boolean, default: true  },
+      guardianToAdmin:   { type: Boolean, default: true  },
+      /** Whether admins may read conversation bodies during an audit. */
+      adminAudit:        { type: Boolean, default: true  },
+    },
+
     currency: {
       type:    String,
       default: "USD",

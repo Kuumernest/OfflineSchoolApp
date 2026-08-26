@@ -23,6 +23,9 @@ import {
   Printer,
   FileSpreadsheet,
   KeyRound,
+  Eye,
+  MessageSquare,
+  ShieldAlert,
 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { type UserRole }   from "@/types";
@@ -62,6 +65,18 @@ export const NAV_ITEMS: NavItem[] = [
     path:  "/dashboard",
     icon:  LayoutDashboard,
     roles: ["super_admin", "school_admin", "admin", "teacher"],
+  },
+
+  // ── Students to watch ────────────────────────────────────
+  // Teachers deliberately absent: the list names children by fee arrears,
+  // which is bursar knowledge. A teacher view would first need the money
+  // signal stripped — the API refuses them for the same reason.
+  {
+    label: "Students to watch",
+    labelKey: "nav.watchlist",
+    path:  "/watchlist",
+    icon:  Eye,
+    roles: ["super_admin", "school_admin", "admin"],
   },
 
   // ── Students ─────────────────────────────────────────────
@@ -337,6 +352,28 @@ export const NAV_ITEMS: NavItem[] = [
     path:  "/announcements",
     icon:  Megaphone,
     roles: ["super_admin", "school_admin", "admin", "teacher"],
+  },
+
+  // ── Messages ──────────────────────────────────────────────
+  // Teachers included: a teacher talking to a parent about one child is the
+  // single most useful thing in the module, and it is theirs to start.
+  {
+    label: "Messages",
+    labelKey: "nav.messages",
+    path:  "/messages",
+    icon:  MessageSquare,
+    roles: ["super_admin", "school_admin", "admin", "teacher"],
+  },
+
+  // ── Message audit ─────────────────────────────────────────
+  // Administrators only. Reading a thread here is recorded server-side, so
+  // this is a deliberate destination rather than a tab off Messages.
+  {
+    label: "Message audit",
+    labelKey: "nav.messageAudit",
+    path:  "/messages/audit",
+    icon:  ShieldAlert,
+    roles: ["super_admin", "school_admin", "admin"],
   },
 
   // ── Reports ───────────────────────────────────────────────

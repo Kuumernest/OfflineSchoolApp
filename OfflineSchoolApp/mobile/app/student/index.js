@@ -643,6 +643,7 @@ export default function StudentDashboard() {
     { id: "subjects",      title: "Subjects",      icon: "book-outline",          color: "#D97706", route: "/student/subjects"        },
     { id: "attendance",    title: "Attendance",    icon: "calendar-outline",      color: "#DC2626", route: "/student/attendance"      },
     { id: "announcements", title: "Announcements", icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
+    { id: "messages",      title: "Messages",      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
     { id: "results",       title: "Results",       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
     { id: "settings",      title: "Settings",      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
   ], []);

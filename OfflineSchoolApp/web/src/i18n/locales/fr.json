@@ -139,7 +139,9 @@
     "documents": "Impression",
     "classLists": "Listes de classe",
     "transcripts": "Relevés de notes",
-    "exports": "Exports"
+    "exports": "Exports",
+    "messages": "Messages",
+    "messageAudit": "Audit des messages"
   },
   "academic": {
     "student": "Élève",
@@ -1186,7 +1188,15 @@
     "position": "Rang",
     "reversalNote": "Annulé",
     "children": "Enfants",
-    "switchChild": "Changer d'enfant"
+    "switchChild": "Changer d'enfant",
+    "messages": "Messages",
+    "newMessage": "Nouveau message",
+    "noConversations": "Aucune conversation pour l'instant.",
+    "noMessages": "Aucun message pour l'instant.",
+    "chooseRecipient": "À qui souhaitez-vous écrire ?",
+    "noRecipients": "Personne n'est disponible pour recevoir un message.",
+    "writeMessage": "Écrire un message…",
+    "messageDeleted": "Ce message a été supprimé"
   },
   "codes": {
     "title": "Accès parents",

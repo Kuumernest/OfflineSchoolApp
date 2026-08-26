@@ -139,7 +139,9 @@
     "documents": "Printing",
     "classLists": "Class lists",
     "transcripts": "Transcripts",
-    "exports": "Exports"
+    "exports": "Exports",
+    "messages": "Messages",
+    "messageAudit": "Message audit"
   },
   "academic": {
     "student": "Student",
@@ -1186,7 +1188,15 @@
     "position": "Position",
     "reversalNote": "Reversed",
     "children": "Children",
-    "switchChild": "Switch child"
+    "switchChild": "Switch child",
+    "messages": "Messages",
+    "newMessage": "New message",
+    "noConversations": "No conversations yet.",
+    "noMessages": "No messages yet.",
+    "chooseRecipient": "Who would you like to write to?",
+    "noRecipients": "There is nobody available to write to.",
+    "writeMessage": "Write a message…",
+    "messageDeleted": "This message was deleted"
   },
   "codes": {
     "title": "Portal access",
