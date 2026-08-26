@@ -16,6 +16,7 @@ import {
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../../src/services/api";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -122,6 +123,7 @@ const SchoolAvatar = ({ name, logoUrl }) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const SchoolCard = ({ school, onSelect }) => {
+  const { t } = useTranslation();
   const locationParts = [school.city, school.state].filter(Boolean);
   const location      = locationParts.join(", ") || school.address || "";
   const classCount    = school.classes.length;
@@ -146,7 +148,7 @@ const SchoolCard = ({ school, onSelect }) => {
           {school.verified && (
             <View style={styles.verifiedBadge}>
               <Ionicons name="checkmark-circle" size={14} color="#059669" />
-              <Text style={styles.verifiedText}>Verified</Text>
+              <Text style={styles.verifiedText}>{t("selectSchool.verified")}</Text>
             </View>
           )}
         </View>
@@ -161,7 +163,9 @@ const SchoolCard = ({ school, onSelect }) => {
         <View style={styles.metaRow}>
           <Ionicons name="library-outline" size={12} color="#9CA3AF" />
           <Text style={styles.metaText}>
-            {classCount} {classCount === 1 ? "class" : "classes"} available
+            {classCount === 1
+              ? t("selectSchool.oneClass")
+              : t("selectSchool.manyClasses", { count: classCount })}
           </Text>
         </View>
 
@@ -198,6 +202,7 @@ const SchoolCard = ({ school, onSelect }) => {
 
 export default function SelectSchoolScreen() {
   const router = useRouter();
+  const { t }  = useTranslation();
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [schools,     setSchools]     = useState([]);
@@ -338,7 +343,7 @@ export default function SelectSchoolScreen() {
       return (
         <View style={styles.centreBox}>
           <Text style={styles.centreEmoji}>😕</Text>
-          <Text style={styles.centreTitle}>Something went wrong</Text>
+          <Text style={styles.centreTitle}>{t("selectSchool.errorTitle")}</Text>
           <Text style={styles.centreBody}>{error}</Text>
           <TouchableOpacity
             style={styles.retryBtn}
@@ -346,7 +351,7 @@ export default function SelectSchoolScreen() {
             accessibilityRole="button"
             accessibilityLabel="Retry loading schools"
           >
-            <Text style={styles.retryBtnText}>Try Again</Text>
+            <Text style={styles.retryBtnText}>{t("selectSchool.retry")}</Text>
           </TouchableOpacity>
         </View>
       );
@@ -355,11 +360,11 @@ export default function SelectSchoolScreen() {
     return (
       <View style={styles.centreBox}>
         <Text style={styles.centreEmoji}>🏫</Text>
-        <Text style={styles.centreTitle}>No schools found</Text>
+        <Text style={styles.centreTitle}>{t("selectSchool.emptyTitle")}</Text>
         <Text style={styles.centreBody}>
           {debouncedQuery
-            ? `No results for "${debouncedQuery}". Try a different search term.`
-            : "There are no schools available right now. Pull down to refresh."}
+            ? t("selectSchool.emptySearch", { query: debouncedQuery })
+            : t("selectSchool.emptyBody")}
         </Text>
         {debouncedQuery ? (
           <TouchableOpacity
@@ -371,12 +376,12 @@ export default function SelectSchoolScreen() {
             accessibilityRole="button"
             accessibilityLabel="Clear search"
           >
-            <Text style={styles.retryBtnText}>Clear Search</Text>
+            <Text style={styles.retryBtnText}>{t("selectSchool.clearSearch")}</Text>
           </TouchableOpacity>
         ) : null}
       </View>
     );
-  }, [loading, error, debouncedQuery, fetchSchools]);
+  }, [loading, error, debouncedQuery, fetchSchools, t]);
 
   // ── List footer ────────────────────────────────────────────────────────────
 
@@ -385,10 +390,10 @@ export default function SelectSchoolScreen() {
     return (
       <View style={styles.footerLoader}>
         <ActivityIndicator size="small" color="#4F46E5" />
-        <Text style={styles.footerLoaderText}>Loading more…</Text>
+        <Text style={styles.footerLoaderText}>{t("selectSchool.loadingMore")}</Text>
       </View>
     );
-  }, [loadingMore]);
+  }, [loadingMore, t]);
 
   // ── Render item ────────────────────────────────────────────────────────────
 
@@ -418,12 +423,12 @@ export default function SelectSchoolScreen() {
           accessibilityLabel="Go back"
         >
           <Ionicons name="arrow-back" size={20} color="#4F46E5" />
-          <Text style={styles.backArrowText}>Back</Text>
+          <Text style={styles.backArrowText}>{t("selectSchool.back")}</Text>
         </TouchableOpacity>
 
-        <Text style={styles.headerTitle}>Find a School</Text>
+        <Text style={styles.headerTitle}>{t("selectSchool.title")}</Text>
         <Text style={styles.headerSubtitle}>
-          Select a school to submit your application
+          {t("selectSchool.subtitle")}
         </Text>
 
         {/* Search bar */}
@@ -433,7 +438,7 @@ export default function SelectSchoolScreen() {
             style={styles.searchInput}
             value={query}
             onChangeText={setQuery}
-            placeholder="Search by school name or city…"
+            placeholder={t("selectSchool.searchPh")}
             placeholderTextColor="#9CA3AF"
             returnKeyType="search"
             autoCorrect={false}

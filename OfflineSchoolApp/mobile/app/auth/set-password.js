@@ -19,6 +19,7 @@ import * as SecureStore from "expo-secure-store";
 
 import { useAuthStore } from "../../src/store/auth.store";
 import api from "../../src/services/api";
+import { useTranslation } from "../../src/i18n/useTranslation";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS & VALIDATION RULES
@@ -26,30 +27,32 @@ import api from "../../src/services/api";
 
 const TOKEN_KEY = "auth_token";
 
+// Labels are i18n keys — translated where the list is rendered, because this
+// array lives at module scope outside any React component.
 const REQUIREMENTS = [
   {
     key: "length",
-    label: "At least 8 characters",
+    labelKey: "setPassword.reqLength",
     test: (p) => p.length >= 8,
   },
   {
     key: "upper",
-    label: "At least one uppercase letter",
+    labelKey: "setPassword.reqUpper",
     test: (p) => /[A-Z]/.test(p),
   },
   {
     key: "lower",
-    label: "At least one lowercase letter",
+    labelKey: "setPassword.reqLower",
     test: (p) => /[a-z]/.test(p),
   },
   {
     key: "number",
-    label: "At least one number",
+    labelKey: "setPassword.reqNumber",
     test: (p) => /\d/.test(p),
   },
   {
     key: "special",
-    label: "At least one special character (!@#$%^&*)",
+    labelKey: "setPassword.reqSpecial",
     test: (p) => /[!@#$%^&*]/.test(p),
   },
 ];
@@ -83,6 +86,7 @@ const reqStyles = StyleSheet.create({
 
 export default function SetPasswordScreen() {
   const router = useRouter();
+  const { t }  = useTranslation();
 
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -126,12 +130,12 @@ export default function SetPasswordScreen() {
     setError(null);
 
     if (!allMet) {
-      setError("Please meet all password requirements before continuing.");
+      setError(t("setPassword.meetAll"));
       return;
     }
 
     if (!passwordsMatch) {
-      setError("Passwords do not match.");
+      setError(t("setPassword.notMatchErr"));
       return;
     }
 
@@ -146,7 +150,7 @@ export default function SetPasswordScreen() {
 
       if (!response.data?.success) {
         throw new Error(
-          response.data?.message || "Failed to update password."
+          response.data?.message || t("setPassword.failed")
         );
       }
 
@@ -169,11 +173,11 @@ export default function SetPasswordScreen() {
 
       // ── Success Prompt & Safe Navigation ───────────────────────────────────
       Alert.alert(
-        "Password Set! 🎉",
-        "Your password has been saved. Welcome aboard!",
+        t("setPassword.successTitle"),
+        t("setPassword.successBody"),
         [
           {
-            text: "Let's Go",
+            text: t("setPassword.letsGo"),
             onPress: () => navigateByRole(finalUser),
           },
         ]
@@ -183,7 +187,7 @@ export default function SetPasswordScreen() {
       const msg =
         err?.response?.data?.message ||
         err?.message ||
-        "Something went wrong. Please try again.";
+        t("setPassword.genericError");
       setError(msg);
     } finally {
       setLoading(false);
@@ -197,14 +201,15 @@ export default function SetPasswordScreen() {
     updateUser,
     user,
     navigateByRole,
+    t,
   ]);
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const handleLogout = useCallback(() => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(t("setPassword.signOutTitle"), t("setPassword.signOutBody"), [
+      { text: t("setPassword.cancel"), style: "cancel" },
       {
-        text: "Sign Out",
+        text: t("setPassword.signOut"),
         style: "destructive",
         onPress: async () => {
           await logout();
@@ -212,7 +217,7 @@ export default function SetPasswordScreen() {
         },
       },
     ]);
-  }, [logout, router]);
+  }, [logout, router, t]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER
@@ -234,14 +239,13 @@ export default function SetPasswordScreen() {
             <Ionicons name="lock-closed" size={32} color="#4F46E5" />
           </View>
 
-          <Text style={styles.title}>Set Your Password</Text>
+          <Text style={styles.title}>{t("setPassword.title")}</Text>
 
           <Text style={styles.subtitle}>
-            Welcome,{" "}
+            {t("setPassword.welcome")}{" "}
             <Text style={styles.name}>{user?.name || "there"}</Text>!
             {"\n"}
-            Your account was created by the admin. Please set a personal
-            password to continue.
+            {t("setPassword.subtitle")}
           </Text>
         </View>
 
@@ -256,7 +260,7 @@ export default function SetPasswordScreen() {
         {/* ── Form Card ── */}
         <View style={styles.card}>
           {/* New password */}
-          <Text style={styles.label}>New Password</Text>
+          <Text style={styles.label}>{t("setPassword.newLabel")}</Text>
           <View style={styles.inputRow}>
             <TextInput
               style={styles.input}
@@ -265,7 +269,7 @@ export default function SetPasswordScreen() {
                 setNewPassword(v);
                 setError(null);
               }}
-              placeholder="Create a strong password"
+              placeholder={t("setPassword.newPh")}
               placeholderTextColor="#9CA3AF"
               secureTextEntry={!showNew}
               autoCapitalize="none"
@@ -288,14 +292,14 @@ export default function SetPasswordScreen() {
           {newPassword.length > 0 && (
             <View style={styles.requirements}>
               {checks.map((c) => (
-                <RequirementRow key={c.key} met={c.met} label={c.label} />
+                <RequirementRow key={c.key} met={c.met} label={t(c.labelKey)} />
               ))}
             </View>
           )}
 
           {/* Confirm password */}
           <Text style={[styles.label, { marginTop: 16 }]}>
-            Confirm Password
+            {t("setPassword.confirmLabel")}
           </Text>
           <View style={styles.inputRow}>
             <TextInput
@@ -313,7 +317,7 @@ export default function SetPasswordScreen() {
                 setConfirmPassword(v);
                 setError(null);
               }}
-              placeholder="Re-enter your password"
+              placeholder={t("setPassword.confirmPh")}
               placeholderTextColor="#9CA3AF"
               secureTextEntry={!showConfirm}
               autoCapitalize="none"
@@ -349,8 +353,8 @@ export default function SetPasswordScreen() {
                 ]}
               >
                 {passwordsMatch
-                  ? "Passwords match"
-                  : "Passwords do not match"}
+                  ? t("setPassword.match")
+                  : t("setPassword.mismatch")}
               </Text>
             </View>
           )}
@@ -373,7 +377,7 @@ export default function SetPasswordScreen() {
             <>
               <Ionicons name="lock-closed-outline" size={18} color="#FFF" />
               <Text style={styles.submitBtnText}>
-                Set Password & Continue
+                {t("setPassword.submit")}
               </Text>
             </>
           )}
@@ -387,8 +391,7 @@ export default function SetPasswordScreen() {
             color="#4F46E5"
           />
           <Text style={styles.noteText}>
-            Your password is encrypted and stored securely. We never see or
-            store it in plain text.
+            {t("setPassword.securityNote")}
           </Text>
         </View>
 
@@ -399,7 +402,7 @@ export default function SetPasswordScreen() {
           activeOpacity={0.7}
         >
           <Ionicons name="log-out-outline" size={16} color="#9CA3AF" />
-          <Text style={styles.logoutText}>Sign out instead</Text>
+          <Text style={styles.logoutText}>{t("setPassword.signOutInstead")}</Text>
         </TouchableOpacity>
 
         <View style={{ height: 40 }} />
