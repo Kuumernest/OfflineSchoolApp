@@ -9,6 +9,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import ExamService      from "../../../src/services/exam.service";
+import { useTranslation } from "../../../src/i18n/useTranslation";
 
 const COLORS = {
   primary:   "#2563EB",
@@ -192,6 +193,7 @@ const fetchMyResults = async (userId, schoolId) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ResultPreviewCard = ({ item, onPress }) => {
+  const { t } = useTranslation();
   const isPassing = item.isPassing ?? (item.percentage >= 50);
   const passColor = isPassing ? COLORS.success : COLORS.error;
   const passBg    = isPassing ? COLORS.successBg : COLORS.errorBg;
@@ -203,7 +205,7 @@ const ResultPreviewCard = ({ item, onPress }) => {
 
       <View style={rc.body}>
         <Text style={rc.examName} numberOfLines={1}>
-          {item.examName || "Examination"}
+          {item.examName || t("results.my.examFallback")}
         </Text>
 
         {/* Meta chips */}
@@ -234,14 +236,14 @@ const ResultPreviewCard = ({ item, onPress }) => {
             <Text style={[rc.statVal, { color: passColor }]}>
               {pct.toFixed(1)}%
             </Text>
-            <Text style={rc.statLbl}>Score</Text>
+            <Text style={rc.statLbl}>{t("results.my.scoreStat")}</Text>
           </View>
 
           <View style={rc.statItem}>
             <Text style={[rc.statVal, { color: COLORS.primary }]}>
               {item.overallGrade || "—"}
             </Text>
-            <Text style={rc.statLbl}>Grade</Text>
+            <Text style={rc.statLbl}>{t("results.my.gradeStat")}</Text>
           </View>
 
           {item.classPosition != null && (
@@ -250,13 +252,13 @@ const ResultPreviewCard = ({ item, onPress }) => {
                 #{item.classPosition}
                 {item.totalInClass ? `/${item.totalInClass}` : ""}
               </Text>
-              <Text style={rc.statLbl}>Position</Text>
+              <Text style={rc.statLbl}>{t("results.my.positionStat")}</Text>
             </View>
           )}
 
           <View style={[rc.passPill, { backgroundColor: passBg }]}>
             <Text style={[rc.passText, { color: passColor }]}>
-              {isPassing ? "PASS" : "FAIL"}
+              {isPassing ? t("results.my.passPill") : t("results.my.failPill")}
             </Text>
           </View>
         </View>
@@ -337,6 +339,7 @@ export default function StudentResultsListScreen() {
   const user      = useAuthStore((s) => s.user);
   const userId    = user?._id || user?.id || user?.userId;
   const schoolId  = user?.schoolId;
+  const { t }     = useTranslation();
 
   const [results,    setResults]    = useState([]);
   const [loading,    setLoading]    = useState(true);
@@ -346,7 +349,7 @@ export default function StudentResultsListScreen() {
 
   const load = useCallback(async (isRefresh = false) => {
     if (!userId) {
-      setError("Could not identify your account");
+      setError(t("results.my.accountError"));
       setLoading(false);
       return;
     }
@@ -360,12 +363,12 @@ export default function StudentResultsListScreen() {
       setSource(src);
     } catch (err) {
       console.error("[StudentResults] load error:", err.message);
-      setError("Failed to load results. Pull down to retry.");
+      setError(t("results.my.loadError"));
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, schoolId]);
+  }, [userId, schoolId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -381,7 +384,7 @@ export default function StudentResultsListScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading your results…</Text>
+        <Text style={styles.loadingText}>{t("results.my.loadingList")}</Text>
       </View>
     );
   }
@@ -401,11 +404,13 @@ export default function StudentResultsListScreen() {
           <Ionicons name="arrow-back" size={24} color={COLORS.gray900} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
-          <Text style={styles.headerTitle}>My Results</Text>
+          <Text style={styles.headerTitle}>{t("results.my.myResults")}</Text>
           <Text style={styles.headerSub}>
             {results.length > 0
-              ? `${results.length} exam result${results.length !== 1 ? "s" : ""}`
-              : "No published results yet"}
+              ? results.length === 1
+                ? t("results.my.oneExamResult")
+                : t("results.my.manyExamResults", { count: results.length })
+              : t("results.my.noPublished")}
           </Text>
         </View>
       </View>
@@ -439,9 +444,9 @@ export default function StudentResultsListScreen() {
           !error ? (
             <View style={styles.empty}>
               <Ionicons name="document-text-outline" size={56} color={COLORS.gray200} />
-              <Text style={styles.emptyTitle}>No Results Yet</Text>
+              <Text style={styles.emptyTitle}>{t("results.noneCompleted")}</Text>
               <Text style={styles.emptySub}>
-                Your results will appear here once your teacher publishes them.
+                {t("results.my.noPublished")}
               </Text>
             </View>
           ) : null

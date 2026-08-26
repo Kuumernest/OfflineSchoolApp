@@ -10,6 +10,7 @@ import { useLocalSearchParams, router } from "expo-router";
 import { useDispatch, useSelector }     from "react-redux";
 import { Ionicons }                     from "@expo/vector-icons";
 import { useAuthStore }                 from "../../../src/store/auth.store";
+import { useTranslation }               from "../../../src/i18n/useTranslation";
 import ReportCard                       from "../../admin/components/ReportCard";
 import {
   fetchMyExamResult,
@@ -46,6 +47,7 @@ export default function StudentReportCardScreen() {
   const user        = useAuthStore((s) => s.user);
   const studentId   = user?._id || user?.id;
   const schoolId    = user?.schoolId;
+  const { t }       = useTranslation();
 
   const {
     myExamResult,
@@ -75,20 +77,20 @@ export default function StudentReportCardScreen() {
     try {
       const result = myExamResult;
       const msg    =
-        `📋 My Report Card\n` +
-        `Exam: ${currentExam?.name || "Examination"}\n` +
-        `Score: ${result?.percentage?.toFixed(1) ?? "—"}%\n` +
-        `Grade: ${result?.overallGrade || "—"}\n` +
-        `Position: ${
+        `${t("results.my.shareTitle")}\n` +
+        `${t("results.my.examLabel")} ${currentExam?.name || t("results.my.reportCard")}\n` +
+        `${t("results.my.scoreLabel")} ${result?.percentage?.toFixed(1) ?? "—"}%\n` +
+        `${t("results.my.gradeLabel")} ${result?.overallGrade || "—"}\n` +
+        `${t("results.my.positionLabel")} ${
           result?.classPosition
-            ? `#${result.classPosition} in class`
+            ? t("results.my.inClass", { pos: result.classPosition })
             : "—"
         }\n` +
-        `Result: ${result?.isPassing ? "✅ PASS" : "❌ FAIL"}`;
+        `${t("results.my.resultLabel")}: ${result?.isPassing ? t("results.my.passFlag") : t("results.my.failFlag")}`;
 
       await Share.share({ message: msg });
     } catch (err) {
-      Alert.alert("Share Failed", err.message);
+      Alert.alert(t("results.my.shareFailed"), err.message);
     }
   };
 
@@ -98,7 +100,7 @@ export default function StudentReportCardScreen() {
     return (
       <View style={styles.centered}>
         <ActivityIndicator size="large" color={COLORS.primary} />
-        <Text style={styles.loadingText}>Loading your report card…</Text>
+        <Text style={styles.loadingText}>{t("results.my.loading")}</Text>
       </View>
     );
   }
@@ -110,17 +112,17 @@ export default function StudentReportCardScreen() {
       <View style={styles.centered}>
         <Ionicons name="document-outline" size={56} color={COLORS.gray200} />
         <Text style={styles.errorTitle}>
-          {error || "Report card not available"}
+          {error || t("results.my.notAvailable")}
         </Text>
         <Text style={styles.errorSub}>
-          Results may not be published yet. Check back later.
+          {t("results.my.notPublished")}
         </Text>
         <TouchableOpacity
           style={styles.backBtn}
           onPress={() => router.back()}
           activeOpacity={0.8}
         >
-          <Text style={styles.backBtnText}>Go Back</Text>
+          <Text style={styles.backBtnText}>{t("results.my.goBack")}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.retryBtn}
@@ -128,7 +130,7 @@ export default function StudentReportCardScreen() {
           activeOpacity={0.8}
         >
           <Ionicons name="refresh-outline" size={16} color={COLORS.primary} />
-          <Text style={styles.retryBtnText}>Try Again</Text>
+          <Text style={styles.retryBtnText}>{t("results.my.retry")}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -152,12 +154,12 @@ export default function StudentReportCardScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {currentExam?.name || "Report Card"}
+            {currentExam?.name || t("results.my.reportCard")}
           </Text>
           <Text style={styles.headerSub} numberOfLines={1}>
             {[currentExam?.academicYear, currentExam?.term]
               .filter(Boolean)
-              .join("  ·  ") || user?.name || "My Results"}
+              .join("  ·  ") || user?.name || t("results.my.myResults")}
           </Text>
         </View>
 
@@ -196,8 +198,8 @@ export default function StudentReportCardScreen() {
           },
         ]}>
           {myExamResult.isPassing
-            ? `You passed with ${myExamResult.percentage?.toFixed(1)}%`
-            : `You scored ${myExamResult.percentage?.toFixed(1)}% — not yet passed`}
+            ? t("results.my.passedWith", { pct: myExamResult.percentage?.toFixed(1) })
+            : t("results.my.scoredNotPassed", { pct: myExamResult.percentage?.toFixed(1) })}
         </Text>
       </View>
 
