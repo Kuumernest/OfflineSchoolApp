@@ -86,19 +86,74 @@ const TEMPLATES = {
     };
   },
 
+  /**
+   * The outstanding balance, and the date it was due.
+   *
+   * The date is the point of this message. "You owe 40,000" invites a reply
+   * asking by when; "40,000 was due on 15 September" does not, and a parent who
+   * has genuinely paid can say so against a specific bill. It comes from the
+   * due date entered on the fee structure, carried onto the charge and passed
+   * in by feeReminders.service.
+   *
+   * Three wordings rather than one, because the difference matters to the
+   * person reading it: a bill not yet due is a notice, a bill due today is a
+   * nudge, and a bill three weeks late is a different conversation. Sending the
+   * overdue wording to somebody whose fees are not due yet is the fastest way
+   * to have a school stop using reminders.
+   */
   "fee.reminder": (d, lang) => {
     const en = lang !== "fr";
-    const lines = en
-      ? [
-          `<b>${esc(d.studentName)}</b> has an outstanding fee balance of <b>${money(d.balance, lang)}</b>.`,
-          `Please settle it at the school office.`,
-        ]
-      : [
-          `<b>${esc(d.studentName)}</b> a un solde de frais impayés de <b>${money(d.balance, lang)}</b>.`,
-          `Merci de le régler au secrétariat.`,
-        ];
+
+    // Formatted here rather than in the service: the service does not know the
+    // family's language, and this is the only place that does.
+    const due = d.dueDate
+      ? new Date(d.dueDate).toLocaleDateString(en ? "en-GB" : "fr-FR", {
+          day: "numeric", month: "long", year: "numeric", timeZone: "UTC",
+        })
+      : null;
+
+    const days = Number(d.daysOverdue) || 0;
+    const late = Boolean(d.isOverdue);
+
+    const opening = en
+      ? `<b>${esc(d.studentName)}</b> has an outstanding fee balance of <b>${money(d.balance, lang)}</b>.`
+      : `<b>${esc(d.studentName)}</b> a un solde de frais impayés de <b>${money(d.balance, lang)}</b>.`;
+
+    // No due date at all: the plain balance notice, which is what this template
+    // said before it learned about deadlines.
+    const middle = !due
+      ? null
+      : late
+        ? en
+          ? `This was due on <b>${due}</b>${days > 0 ? ` — ${days} day${days === 1 ? "" : "s"} ago` : ""}.`
+          : `Le règlement était attendu le <b>${due}</b>${days > 0 ? ` — il y a ${days} jour${days === 1 ? "" : "s"}` : ""}.`
+        : en
+          ? `It is due on <b>${due}</b>.`
+          : `Le règlement est attendu le <b>${due}</b>.`;
+
+    // Three closings, not two. "…by that date" with no date above it is
+    // nonsense, and that is exactly what an undated charge produced until
+    // rendering all four cases showed it.
+    const closing = !due
+      ? (en
+          ? "Please settle it at the school office."
+          : "Merci de le régler au secrétariat.")
+      : late
+        ? (en
+            ? "Please settle it at the school office as soon as you are able."
+            : "Merci de le régler au secrétariat dès que possible.")
+        : (en
+            ? "Please settle it at the school office by that date."
+            : "Merci de le régler au secrétariat avant cette date.");
+
+    const lines = [opening, middle, closing].filter(Boolean);
+
+    const subject = en
+      ? (late ? "Overdue school fees" : "School fees due")
+      : (late ? "Frais de scolarité en retard" : "Frais de scolarité à régler");
+
     return {
-      subject: en ? "Outstanding school fees" : "Frais de scolarité impayés",
+      subject,
       text: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n"),
       html: shell(d.schoolName, lines.map((l) => `<p style="margin:0 0 8px">${l}</p>`).join(""), FOOTER[en ? "en" : "fr"]),
     };

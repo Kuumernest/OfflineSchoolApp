@@ -57,6 +57,19 @@ export default function FeeStructuresPage() {
     academicYear: ACADEMIC_YEAR_OPTIONS[1],
     classIds:     [] as string[],
     term:         "",
+    /**
+     * The last day these fees may be paid without being late.
+     *
+     * Held as the "YYYY-MM-DD" string a native date input produces and sent as
+     * that string, never as a Date. Turning it into a Date in the browser and
+     * serialising it would shift the day by one for anybody west of UTC, and a
+     * fee due on the 15th arriving at the server as the 14th is the kind of bug
+     * that surfaces as an angry parent.
+     */
+    dueDate:      "",
+    penaltyMode:  "none" as "none" | "fixed" | "percent",
+    penaltyAmount: "",
+    penaltyGrace: "0",
     items:        [emptyItem()],
   });
 
@@ -81,6 +94,12 @@ export default function FeeStructuresPage() {
         academicYear: form.academicYear.trim(),
         classIds:     form.classIds,
         term:         form.term.trim() || null,
+        dueDate:      form.dueDate,
+        penalty: {
+          mode:      form.penaltyMode,
+          amount:    form.penaltyMode === "none" ? 0 : Number(form.penaltyAmount) || 0,
+          graceDays: Number(form.penaltyGrace) || 0,
+        },
         items: form.items
           .filter((i) => i.code.trim() && i.label.trim())
           .map((i) => ({
@@ -93,7 +112,11 @@ export default function FeeStructuresPage() {
       }),
     onSuccess: () => {
       setOpen(false);
-      setForm({ academicYear: "", classIds: [], term: "", items: [emptyItem()] });
+      setForm({
+        academicYear: "", classIds: [], term: "", dueDate: "",
+        penaltyMode: "none", penaltyAmount: "", penaltyGrace: "0",
+        items: [emptyItem()],
+      });
       invalidate();
     },
     onError: (err) =>
@@ -269,6 +292,25 @@ export default function FeeStructuresPage() {
               </select>
             </FormField>
 
+            {/*
+              Required, and marked so. Everything that chases an unpaid bill —
+              which families to remind, who has earned a late fee — is
+              calculated from this date, so a structure without one is a bill
+              nobody can ever be chased for. Asked here, at setup, while the
+              person entering the price list still knows the answer.
+            */}
+            <FormField
+              label={t("fees.dueDate")}
+              hint={t("fees.dueDateHint")}
+              required
+            >
+              <Input
+                type="date"
+                value={form.dueDate}
+                onChange={(e) => setForm((f) => ({ ...f, dueDate: e.target.value }))}
+              />
+            </FormField>
+
             <FormField label={t("academic.term")}>
               <Input
                 placeholder={t("fees.wholeYear")}
@@ -363,6 +405,77 @@ export default function FeeStructuresPage() {
             </div>
           </FormField>
 
+          {/* ── Late fees ─────────────────────────────────────────────────
+              Off unless a school asks for it. A late fee is money added to a
+              family's bill, and a school that has not decided to charge one
+              must not start charging it because a field defaulted.
+
+              Never applied automatically either: the bursar raises them from a
+              preview on the arrears page, so somebody has read the list of
+              families first. */}
+          <div>
+            <p className="mb-2 text-[13px] font-medium text-ink-body">
+              {t("fees.penalty")}
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FormField label={t("fees.penaltyMode")}>
+                <select
+                  value={form.penaltyMode}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      penaltyMode: e.target.value as "none" | "fixed" | "percent",
+                    }))
+                  }
+                  className="w-full rounded-control border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-primary-400"
+                >
+                  <option value="none">{t("fees.penaltyNone")}</option>
+                  <option value="fixed">{t("fees.penaltyFixed")}</option>
+                  <option value="percent">{t("fees.penaltyPercent")}</option>
+                </select>
+              </FormField>
+
+              {form.penaltyMode !== "none" && (
+                <>
+                  <FormField
+                    label={
+                      form.penaltyMode === "percent"
+                        ? t("fees.penaltyRate")
+                        : t("fees.penaltyAmount")
+                    }
+                    hint={
+                      form.penaltyMode === "percent"
+                        ? t("fees.penaltyRateHint")
+                        : undefined
+                    }
+                  >
+                    <Input
+                      inputMode="numeric"
+                      value={form.penaltyAmount}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, penaltyAmount: e.target.value }))
+                      }
+                    />
+                  </FormField>
+
+                  <FormField
+                    label={t("fees.penaltyGrace")}
+                    hint={t("fees.penaltyGraceHint")}
+                  >
+                    <Input
+                      inputMode="numeric"
+                      value={form.penaltyGrace}
+                      onChange={(e) =>
+                        setForm((f) => ({ ...f, penaltyGrace: e.target.value }))
+                      }
+                    />
+                  </FormField>
+                </>
+              )}
+            </div>
+          </div>
+
           <div>
             <div className="mb-2 flex items-center justify-between">
               <p className="text-[13px] font-medium text-ink-body">{t("fees.items")}</p>
@@ -434,7 +547,7 @@ export default function FeeStructuresPage() {
             <Button
               type="submit"
               loading={createMutation.isPending}
-              disabled={!form.academicYear.trim()}
+              disabled={!form.academicYear.trim() || !form.dueDate}
             >
               {t("common.save")}
             </Button>

@@ -136,6 +136,12 @@ const PERMISSION_DEFS = [
   p("fees.waive",       "fees", FINANCE_ROLES, true,
     "Reduce or write off a charge. Above the waiver threshold this raises a " +
     "request rather than reducing the bill."),
+  p("fees.remind",      "fees", FINANCE_ROLES, true,
+    "Send a family a reminder about what is outstanding. Reads the due date " +
+    "entered on the fee structure to decide who is late."),
+  p("fees.penalize",    "fees", FINANCE_ROLES, true,
+    "Add the late fee a structure defines to bills that have passed their due " +
+    "date. Adds money to a family's bill, so it is never automatic."),
 
   // ── The second signature ──────────────────────────────────────────────────
   //

@@ -20,6 +20,7 @@ const {
 } = require("../services/fees.service");
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
+const reminders = require("../services/feeReminders.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -63,8 +64,52 @@ const asWholeAmount = (value) => {
 // take no money, which is a real job and previously unexpressable.
 const canRead   = requirePermission("fees.view");
 const canWrite  = requirePermission("fees.manage");
-const canRefund = requirePermission("fees.refund");
-const canWaive  = requirePermission("fees.waive");
+const canRefund   = requirePermission("fees.refund");
+const canWaive    = requirePermission("fees.waive");
+const canRemind   = requirePermission("fees.remind");
+const canPenalize = requirePermission("fees.penalize");
+
+/**
+ * A calendar day from the client, as a Date.
+ *
+ * Accepts "2026-09-15" and rejects anything else, rather than handing whatever
+ * arrived to new Date() — which turns "next friday" into an Invalid Date and
+ * stores null, so a structure would silently end up with no deadline and its
+ * families would never be reminded.
+ */
+const asDueDate = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const s = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;   // undefined = invalid
+  const d = new Date(`${s}T00:00:00.000Z`);
+  return Number.isNaN(d.getTime()) ? undefined : d;
+};
+
+/** The penalty rule from a request body, or an error string. */
+const cleanPenalty = (raw) => {
+  if (!raw || raw.mode === undefined || raw.mode === null || raw.mode === "none") {
+    return { value: { mode: "none", amount: 0, graceDays: 0 }, error: null };
+  }
+
+  if (!["fixed", "percent"].includes(raw.mode)) {
+    return { value: null, error: `penalty.mode must be none, fixed or percent` };
+  }
+
+  const amount = asWholeAmount(raw.amount);
+  if (amount === null || amount < 0) {
+    return { value: null, error: "penalty.amount must be a whole number" };
+  }
+  if (raw.mode === "percent" && amount > 100) {
+    return { value: null, error: "A percentage penalty cannot exceed 100" };
+  }
+
+  const graceDays = asWholeAmount(raw.graceDays ?? 0);
+  if (graceDays === null || graceDays < 0 || graceDays > 365) {
+    return { value: null, error: "penalty.graceDays must be between 0 and 365" };
+  }
+
+  return { value: { mode: raw.mode, amount, graceDays }, error: null };
+};
 
 router.use(canRead);
 
@@ -93,6 +138,31 @@ router.post("/structures", canWrite, asyncHandler(async (req, res) => {
 
   const { academicYear, term = null, items } = req.body;
   if (!academicYear) return bad(res, "academicYear is required");
+
+  // Required, and this is the one new obligation on this endpoint.
+  //
+  // Everything downstream — which families to remind, who has earned a late
+  // fee — is derived from this date, and a structure published without one is
+  // a bill nobody can ever be chased for. Asked for at setup, when the person
+  // entering the price list knows the answer, rather than inferred later from
+  // a term calendar the school may not keep.
+  //
+  // Old structures have none and stay valid; only new ones must say.
+  const dueDate = asDueDate(req.body.dueDate);
+  if (dueDate === undefined) {
+    return bad(res, "dueDate must be a calendar date like 2026-09-15", "INVALID_DATE");
+  }
+  if (dueDate === null) {
+    return bad(
+      res,
+      "A due date is required: it is what fee reminders and late fees are " +
+      "calculated from.",
+      "DUE_DATE_REQUIRED"
+    );
+  }
+
+  const penalty = cleanPenalty(req.body.penalty);
+  if (penalty.error) return bad(res, penalty.error, "INVALID_PENALTY");
 
   // A structure may bill several classes. `classId` is still accepted as a
   // single value so an older client is not broken by the change; an empty list
@@ -133,6 +203,8 @@ router.post("/structures", canWrite, asyncHandler(async (req, res) => {
       _id: req.body._id || uuidv4(),
       schoolId, academicYear, classIds, term,
       items:     clean,
+      dueDate,
+      penalty:   penalty.value,
       createdBy: req.user?._id ? String(req.user._id) : null,
     });
     return res.status(201).json({ success: true, data: structure });
@@ -353,6 +425,131 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
   });
 
   return res.status(201).json({ success: true, data: reversal, totals });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REMINDERS
+//
+// Built entirely on the due date entered when the structure was set up. A
+// charge with no due date is invisible here, which is the right reading of a
+// bill with no deadline and is what every charge raised before this feature
+// existed looks like — no school gets a surprise batch of reminders for last
+// year on the day it upgrades.
+//
+// Preview and send are separate calls on purpose. These are messages to
+// families about money, and the bursar should see the list, including who has
+// no phone number on file, before any of them go out.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/fees/reminders?academicYear=&classId=&mode=overdue|dueSoon|all
+router.get("/reminders", canRemind, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const mode = ["overdue", "dueSoon", "all"].includes(req.query.mode)
+    ? req.query.mode
+    : "overdue";
+
+  const rows = await reminders.candidates({
+    schoolId,
+    academicYear: req.query.academicYear || null,
+    classId:      req.query.classId || null,
+    mode,
+  });
+
+  // Who was reminded lately, so the preview can grey them out rather than the
+  // bursar pressing send and being told afterwards that nothing happened.
+  const recent = await reminders.recentlyReminded(
+    schoolId, rows.map((r) => r.studentId)
+  );
+
+  return res.json({
+    success: true,
+    count:   rows.length,
+    mode,
+    cooldownDays: reminders.REMINDER_COOLDOWN_DAYS,
+    data: rows.map((r) => ({ ...r, recentlyReminded: recent.has(r.studentId) })),
+  });
+}));
+
+// POST /api/fees/reminders   { academicYear?, classId?, mode?, studentIds?, force? }
+router.post("/reminders", canRemind, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const mode = ["overdue", "dueSoon", "all"].includes(req.body.mode)
+    ? req.body.mode
+    : "overdue";
+
+  try {
+    const result = await reminders.sendReminders({
+      schoolId,
+      academicYear: req.body.academicYear || null,
+      classId:      req.body.classId || null,
+      studentIds:   Array.isArray(req.body.studentIds) ? req.body.studentIds : null,
+      mode,
+      force:        req.body.force === true,
+      requestedBy:  req.user?._id ? String(req.user._id) : null,
+    });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({
+      success: false, code: err.code ?? "ERROR", message: err.message,
+    });
+  }
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// LATE FEES
+//
+// The penalty rule lives on the structure next to the due date, so two classes
+// on different price lists can have different late fees and different grace
+// periods.
+//
+// Never automatic. A late fee is money added to a family's bill, and it is
+// raised by the bursar from a preview. Applying twice is harmless: the unique
+// index on FeeCharge means a second run can only collide with the row the first
+// one wrote.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/fees/penalties?academicYear=&structureId=
+router.get("/penalties", canPenalize, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const rows = await reminders.penaltyPreview({
+    schoolId,
+    academicYear: req.query.academicYear || null,
+    structureId:  req.query.structureId || null,
+  });
+
+  return res.json({
+    success: true,
+    count:   rows.length,
+    total:   rows.reduce((s, r) => s + r.amount, 0),
+    data:    rows,
+  });
+}));
+
+// POST /api/fees/penalties   { academicYear?, structureId?, studentIds? }
+router.post("/penalties", canPenalize, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  try {
+    const result = await reminders.applyPenalties({
+      schoolId,
+      academicYear: req.body.academicYear || null,
+      structureId:  req.body.structureId || null,
+      studentIds:   Array.isArray(req.body.studentIds) ? req.body.studentIds : null,
+      raisedBy:     req.user?._id ? String(req.user._id) : null,
+    });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({
+      success: false, code: err.code ?? "ERROR", message: err.message,
+    });
+  }
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════

@@ -41,6 +41,9 @@ export async function fetchStructures(
 }
 
 export async function createStructure(payload: {
+  /** Required. "2026-09-15". See FeeStructure.dueDate. */
+  dueDate:      string;
+  penalty?:     { mode: "none" | "fixed" | "percent"; amount: number; graceDays: number };
   schoolId:     string;
   academicYear: string;
   /** Empty or omitted bills every class in the school. */
@@ -126,6 +129,91 @@ export async function reversePayment(
     reversal: unwrap<FeePayment>(data),
     totals:   (data as { totals: FeeTotals }).totals,
   };
+}
+
+// ─── Chasing arrears ──────────────────────────────────────────────────────────
+//
+// Both jobs are built on the due date entered when the structure was set up: a
+// charge with no due date is invisible to them, which is the right reading of a
+// bill with no deadline.
+//
+// Preview and act are separate calls on purpose — these send messages to
+// families and add money to their bills, so the bursar sees the list first.
+
+export type ReminderMode = "overdue" | "dueSoon" | "all";
+
+export interface ReminderCandidate {
+  studentId:    string;
+  name:         string | null;
+  enrollmentNo: string | null;
+  classId:      string | null;
+  guardianName: string | null;
+  balance:      number;
+  earliestDue:  string;
+  isOverdue:    boolean;
+  daysOverdue:  number;
+  /** Whether a message can actually reach this family. */
+  reachable:    boolean;
+  /** Already reminded inside the cooldown, so sending would skip them. */
+  recentlyReminded: boolean;
+}
+
+export interface PenaltyCandidate {
+  studentId:    string;
+  name:         string | null;
+  enrollmentNo: string | null;
+  structureId:  string;
+  term:         string | null;
+  dueDate:      string;
+  graceDays:    number;
+  daysOverdue:  number;
+  outstanding:  number;
+  mode:         "fixed" | "percent";
+  rate:         number;
+  /** What would actually be charged, computed server-side from the balance. */
+  amount:       number;
+}
+
+export async function fetchReminderCandidates(
+  schoolId: string,
+  opts: { academicYear?: string; classId?: string; mode?: ReminderMode } = {}
+): Promise<{ rows: ReminderCandidate[]; cooldownDays: number }> {
+  const { data } = await api.get(`${BASE}/reminders${qs({ schoolId, ...opts })}`);
+  return {
+    rows: (data?.data as ReminderCandidate[]) ?? [],
+    cooldownDays: Number(data?.cooldownDays) || 0,
+  };
+}
+
+export async function sendReminders(payload: {
+  schoolId:      string;
+  academicYear?: string;
+  classId?:      string;
+  mode?:         ReminderMode;
+  studentIds?:   string[];
+  /** Send again to families already reminded inside the cooldown. */
+  force?:        boolean;
+}): Promise<{ queued: number; skippedRecent: number; skippedUnreachable: number }> {
+  const { data } = await api.post(`${BASE}/reminders`, payload);
+  return data;
+}
+
+export async function fetchPenaltyCandidates(
+  schoolId: string,
+  opts: { academicYear?: string; structureId?: string } = {}
+): Promise<{ rows: PenaltyCandidate[]; total: number }> {
+  const { data } = await api.get(`${BASE}/penalties${qs({ schoolId, ...opts })}`);
+  return { rows: (data?.data as PenaltyCandidate[]) ?? [], total: Number(data?.total) || 0 };
+}
+
+export async function applyPenalties(payload: {
+  schoolId:      string;
+  academicYear?: string;
+  structureId?:  string;
+  studentIds?:   string[];
+}): Promise<{ raised: number; total: number; skipped: number }> {
+  const { data } = await api.post(`${BASE}/penalties`, payload);
+  return data;
 }
 
 // ─── Arrears ──────────────────────────────────────────────────────────────────

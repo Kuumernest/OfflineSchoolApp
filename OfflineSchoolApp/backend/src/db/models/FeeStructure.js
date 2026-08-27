@@ -69,6 +69,68 @@ const feeStructureSchema = new mongoose.Schema(
      */
     term: { type: String, default: null },
 
+    /**
+     * The last day these fees may be paid without being late.
+     *
+     * Entered when the structure is set up, copied onto every charge the
+     * structure raises, and read by two things afterwards: which families to
+     * remind, and which charges have earned a penalty. Putting it here rather
+     * than asking for it again at reminder time is what makes both of those a
+     * query instead of a judgement call.
+     *
+     * A plain calendar day with no time in it. Stored as a Date at UTC midnight
+     * because that is what the field type gives us; everything that compares
+     * against it uses endOfDay() so that a fee due on the 15th is not overdue
+     * at one minute past midnight on the 15th.
+     *
+     * Optional in the schema and required by the create endpoint. Structures
+     * written before this existed have none, and a null due date simply means
+     * "nothing to remind about and nothing to penalise" — which is the correct
+     * reading of a bill with no deadline, and keeps every historic row valid.
+     */
+    dueDate: { type: Date, default: null, index: true },
+
+    /**
+     * What happens when the due date passes.
+     *
+     *   none     Nothing. The default, because a school that has not asked for
+     *            late fees must not suddenly start charging families.
+     *   fixed    A flat amount in whole XAF, once.
+     *   percent  A share of what is still owed at the moment it is applied.
+     *
+     * graceDays buys the days after the due date before a penalty may be
+     * raised at all — the week where a parent who paid on the Friday has not
+     * yet been recorded on the Monday.
+     *
+     * A penalty is never automatic. It is raised by the bursar, from a preview,
+     * because it is money added to a family's bill and somebody should have
+     * looked at the list first. Once per student per structure per term, which
+     * the unique index on FeeCharge enforces rather than any code here.
+     */
+    penalty: {
+      mode: {
+        type:    String,
+        enum:    ["none", "fixed", "percent"],
+        default: "none",
+      },
+      /** XAF when mode is "fixed"; a percentage 1–100 when "percent". */
+      amount: {
+        type:    Number,
+        default: 0,
+        min:     [0, "A penalty cannot be negative"],
+        validate: {
+          validator: Number.isInteger,
+          message:   "Amounts are whole XAF — the currency has no minor unit",
+        },
+      },
+      graceDays: {
+        type:    Number,
+        default: 0,
+        min:     [0, "Grace days cannot be negative"],
+        max:     [365, "A year of grace is not grace"],
+      },
+    },
+
     items: {
       type: [feeItemSchema],
       default: [],
@@ -94,6 +156,18 @@ const feeStructureSchema = new mongoose.Schema(
 /** Convenience: the whole bill for this structure. */
 feeStructureSchema.virtual("total").get(function () {
   return (this.items || []).reduce((sum, i) => sum + (i.amount || 0), 0);
+});
+
+/**
+ * Does this structure charge for being late?
+ *
+ * A mode other than "none" is not enough — a fixed penalty of zero and a
+ * percentage of zero are both "no penalty", and a school that set the mode and
+ * then cleared the amount means the latter.
+ */
+feeStructureSchema.virtual("hasPenalty").get(function () {
+  const p = this.penalty ?? {};
+  return p.mode !== "none" && Number(p.amount) > 0;
 });
 
 // A class may appear in only one ACTIVE structure per year and term.

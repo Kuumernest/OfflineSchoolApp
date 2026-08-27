@@ -163,6 +163,12 @@ const applyStructure = async ({ structure, students, raisedBy }) => {
         academicYear: structure.academicYear,
         term:         structure.term ?? null,
         structureId:  String(structure._id),
+        // Copied onto the charge rather than read back through the structure
+        // every time. A charge is the thing that is owed, and it has to keep
+        // the deadline it was raised under: a school that publishes a corrected
+        // structure next term must not silently move the date on bills already
+        // sent to families.
+        dueDate:      structure.dueDate ?? null,
         // The student's own class, not the structure's — a structure that
         // covers several classes must still record which one each charge
         // belongs to, or the arrears-by-class report cannot group them.

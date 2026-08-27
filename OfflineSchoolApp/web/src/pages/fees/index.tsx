@@ -25,6 +25,7 @@ import {
 import { useFormat }           from "@/i18n/format";
 import { fetchOutstanding }    from "@/services/fee.service";
 import { fetchClasses }        from "@/services/class.service";
+import ChaseArrears            from "@/pages/fees/ChaseArrears";
 
 /** Sensible default: the year that started most recently. */
 const currentAcademicYear = (): string => {
@@ -94,6 +95,16 @@ export default function FeesPage() {
             {t("fees.structures")}
           </Button>
         }
+      />
+
+      {/* Reminding and charging, above the list rather than buried in it: a
+          bursar opens this page to act on the arrears, not only to read them.
+          Renders nothing if the school has taken both capabilities away from
+          them. */}
+      <ChaseArrears
+        schoolId={schoolId}
+        academicYear={year}
+        classId={classId || undefined}
       />
 
       {/* The headline figure, before the detail. */}

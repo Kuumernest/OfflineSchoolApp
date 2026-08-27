@@ -1419,7 +1419,9 @@
       "subjects.manage": "Add, edit and remove subjects",
       "dashboard.view": "See the dashboard figures",
       "settings.view": "See school settings",
-      "settings.manage": "Change school settings"
+      "settings.manage": "Change school settings",
+      "fees.remind": "Send fee reminders",
+      "fees.penalize": "Add late fees"
     },
     "note": {
       "payroll.setSalary": "Never the person who pays it. Somebody who can both raise a salary and pay it is not meaningfully supervised.",
@@ -1443,7 +1445,8 @@
       "settings.manage": "Grading, the academic year, ID cards. These decide how every mark in the school is interpreted.",
       "students.viewFull": "The whole record in the admission console, as opposed to the roster fields the fee desk needs.",
       "fees.refund": "Above the school's refund threshold this raises a request instead of paying the money out.",
-      "fees.waive": "Above the waiver threshold this raises a request instead of reducing the bill."
+      "fees.waive": "Above the waiver threshold this raises a request instead of reducing the bill.",
+      "fees.penalize": "Adds money to a family's bill, so it is never automatic — the bursar raises them from a preview."
     }
   },
   "approvals": {
@@ -1594,7 +1597,63 @@
     "selectedCount": "{{count}} class selected",
     "selectedCount_other": "{{count}} classes selected",
     "selectAll": "Select all",
-    "clearSelection": "Clear"
+    "clearSelection": "Clear",
+    "dueDate": "Fees due by",
+    "dueDateHint": "The last day these fees may be paid without being late. Reminders and late fees are calculated from it.",
+    "penalty": "Late fee",
+    "penaltyMode": "Charge for paying late",
+    "penaltyNone": "No late fee",
+    "penaltyFixed": "A fixed amount",
+    "penaltyPercent": "A percentage of what is owed",
+    "penaltyAmount": "Amount (XAF)",
+    "penaltyRate": "Percentage",
+    "penaltyRateHint": "Of whatever is still unpaid when it is applied",
+    "penaltyGrace": "Grace period (days)",
+    "penaltyGraceHint": "Days after the due date before a late fee may be added"
+  },
+  "chase": {
+    "title": "Chasing what is owed",
+    "blurb": "Remind families about outstanding fees, or add the late fee your fee structure defines. Both show you the list first.",
+    "remind": "Send reminders",
+    "penalise": "Add late fees",
+    "remindTitle": "Send fee reminders",
+    "modeHint": "Overdue means the due date has passed. Due soon looks two weeks ahead.",
+    "mode": {
+      "overdue": "Overdue",
+      "dueSoon": "Due soon",
+      "all": "Everyone who owes"
+    },
+    "student": "Student",
+    "due": "Due",
+    "nobodyToRemind": "Nobody to remind",
+    "noContact": "No phone or email on file",
+    "alreadyReminded": "Reminded in the last {{days}} days",
+    "daysLate": "{{count}} day late",
+    "daysLate_other": "{{count}} days late",
+    "forceLabel": "Remind them again anyway",
+    "forceHint": "Sends to families already reminded recently.",
+    "sendN": "Send {{count}} reminder",
+    "sendN_other": "Send {{count}} reminders",
+    "remindersQueued": "{{count}} reminder queued",
+    "remindersQueued_other": "{{count}} reminders queued",
+    "skippedRecent": "{{count}} reminded recently",
+    "skippedUnreachable": "{{count}} with no contact details",
+    "remindFailed": "The reminders could not be sent",
+    "penaliseTitle": "Add late fees",
+    "penaliseWarning": "This adds a charge to each family's bill. It cannot be undone from here — a late fee raised in error has to be voided on the student's account.",
+    "rule": "Rule",
+    "lateFee": "Late fee",
+    "rulePercent": "{{rate}}% of what is owed",
+    "ruleFixed": "{{amount}} fixed",
+    "owesSince": "Owes {{amount}}, {{days}} days late",
+    "nobodyToPenalise": "No late fees to add",
+    "nobodyToPenaliseHint": "A late fee appears here once a fee structure with a late-fee rule has passed its due date and its grace period.",
+    "penaltyTotal": "Total {{amount}}",
+    "raiseN": "Add {{count}} late fee",
+    "raiseN_other": "Add {{count}} late fees",
+    "penaltiesRaised": "{{count}} late fee added",
+    "penaltiesRaised_other": "{{count}} late fees added",
+    "penaltyFailed": "The late fees could not be added"
   },
   "method": {
     "cash": "Cash",

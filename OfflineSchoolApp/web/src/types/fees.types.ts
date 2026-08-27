@@ -21,6 +21,15 @@ export interface FeeItem {
   isOptional?: boolean;
 }
 
+/** What happens once the due date passes. */
+export interface FeePenalty {
+  mode:      "none" | "fixed" | "percent";
+  /** XAF when mode is "fixed"; a percentage 1–100 when "percent". */
+  amount:    number;
+  /** Days after the due date before a late fee may be raised at all. */
+  graceDays: number;
+}
+
 export interface FeeStructure {
   _id:          string;
   schoolId:     string;
@@ -31,6 +40,14 @@ export interface FeeStructure {
   term:         string | null;
   items:        FeeItem[];
   total?:       number;
+  /**
+   * The last day these fees may be paid without being late. Required on new
+   * structures — reminders and late fees are both calculated from it. Null on
+   * structures published before the field existed, which simply means there is
+   * nothing to chase.
+   */
+  dueDate:      string | null;
+  penalty?:     FeePenalty;
   isActive:     boolean;
   createdAt?:   string;
 }

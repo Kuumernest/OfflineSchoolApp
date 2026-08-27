@@ -1419,7 +1419,9 @@
       "subjects.manage": "Ajouter, modifier et supprimer des matières",
       "dashboard.view": "Consulter les chiffres du tableau de bord",
       "settings.view": "Consulter les paramètres",
-      "settings.manage": "Modifier les paramètres"
+      "settings.manage": "Modifier les paramètres",
+      "fees.remind": "Envoyer des rappels de frais",
+      "fees.penalize": "Ajouter des pénalités de retard"
     },
     "note": {
       "payroll.setSalary": "Jamais la personne qui verse la paie. Quelqu'un qui peut à la fois augmenter un salaire et le payer n'est pas réellement contrôlé.",
@@ -1443,7 +1445,8 @@
       "settings.manage": "Notation, année scolaire, cartes d'identité. Ces réglages déterminent l'interprétation de toutes les notes de l'établissement.",
       "students.viewFull": "Le dossier complet dans la console d'admission, par opposition aux données d'identité dont le service financier a besoin.",
       "fees.refund": "Au-delà du seuil de remboursement, cette action crée une demande au lieu de verser l'argent.",
-      "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture."
+      "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture.",
+      "fees.penalize": "Ajoute de l'argent à la facture d'une famille : jamais automatique, l'économe les crée depuis un aperçu."
     }
   },
   "approvals": {
@@ -1594,7 +1597,63 @@
     "selectedCount": "{{count}} classe sélectionnée",
     "selectedCount_other": "{{count}} classes sélectionnées",
     "selectAll": "Tout sélectionner",
-    "clearSelection": "Effacer"
+    "clearSelection": "Effacer",
+    "dueDate": "Frais à régler avant le",
+    "dueDateHint": "Le dernier jour où ces frais peuvent être réglés sans retard. Les rappels et les pénalités en découlent.",
+    "penalty": "Pénalité de retard",
+    "penaltyMode": "Frais en cas de retard",
+    "penaltyNone": "Aucune pénalité",
+    "penaltyFixed": "Un montant fixe",
+    "penaltyPercent": "Un pourcentage du solde dû",
+    "penaltyAmount": "Montant (XAF)",
+    "penaltyRate": "Pourcentage",
+    "penaltyRateHint": "Du solde encore impayé au moment de l'application",
+    "penaltyGrace": "Délai de grâce (jours)",
+    "penaltyGraceHint": "Jours après l'échéance avant qu'une pénalité puisse être ajoutée"
+  },
+  "chase": {
+    "title": "Recouvrement",
+    "blurb": "Rappelez aux familles les frais impayés, ou ajoutez la pénalité définie par votre grille tarifaire. Les deux affichent d'abord la liste.",
+    "remind": "Envoyer des rappels",
+    "penalise": "Ajouter les pénalités",
+    "remindTitle": "Envoyer des rappels de frais",
+    "modeHint": "En retard : l'échéance est passée. Bientôt dû : dans les deux semaines à venir.",
+    "mode": {
+      "overdue": "En retard",
+      "dueSoon": "Bientôt dû",
+      "all": "Tous les débiteurs"
+    },
+    "student": "Élève",
+    "due": "Échéance",
+    "nobodyToRemind": "Aucun rappel à envoyer",
+    "noContact": "Ni téléphone ni e-mail au dossier",
+    "alreadyReminded": "Relancé dans les {{days}} derniers jours",
+    "daysLate": "{{count}} jour de retard",
+    "daysLate_other": "{{count}} jours de retard",
+    "forceLabel": "Relancer malgré tout",
+    "forceHint": "Envoie aussi aux familles récemment relancées.",
+    "sendN": "Envoyer {{count}} rappel",
+    "sendN_other": "Envoyer {{count}} rappels",
+    "remindersQueued": "{{count}} rappel en file d'attente",
+    "remindersQueued_other": "{{count}} rappels en file d'attente",
+    "skippedRecent": "{{count}} récemment relancés",
+    "skippedUnreachable": "{{count}} sans coordonnées",
+    "remindFailed": "Les rappels n'ont pas pu être envoyés",
+    "penaliseTitle": "Ajouter les pénalités de retard",
+    "penaliseWarning": "Cette action ajoute des frais à la facture de chaque famille. Elle ne peut pas être annulée ici — une pénalité ajoutée par erreur doit être annulée sur le compte de l'élève.",
+    "rule": "Règle",
+    "lateFee": "Pénalité",
+    "rulePercent": "{{rate}} % du solde dû",
+    "ruleFixed": "{{amount}} fixe",
+    "owesSince": "Doit {{amount}}, {{days}} jours de retard",
+    "nobodyToPenalise": "Aucune pénalité à ajouter",
+    "nobodyToPenaliseHint": "Une pénalité apparaît ici lorsqu'une grille tarifaire prévoyant une pénalité a dépassé son échéance et son délai de grâce.",
+    "penaltyTotal": "Total {{amount}}",
+    "raiseN": "Ajouter {{count}} pénalité",
+    "raiseN_other": "Ajouter {{count}} pénalités",
+    "penaltiesRaised": "{{count}} pénalité ajoutée",
+    "penaltiesRaised_other": "{{count}} pénalités ajoutées",
+    "penaltyFailed": "Les pénalités n'ont pas pu être ajoutées"
   },
   "method": {
     "cash": "Espèces",
