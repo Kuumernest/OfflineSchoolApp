@@ -22,6 +22,7 @@ import ExportService      from "../../../src/services/export.service";
 import { ClassService }   from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { errorText } from "../../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -108,7 +109,7 @@ export default function ExportsScreen() {
       });
       if (!shared) Alert.alert(t("exp.title"), fileName);
     } catch (err) {
-      Alert.alert(t("exp.failed"), err?.message ?? String(err));
+      Alert.alert(t("exp.failed"), errorText(t, err) || String(err));
     } finally {
       setBusy(false);
     }

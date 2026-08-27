@@ -16,6 +16,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -632,7 +633,7 @@ export default function TeacherSubjectsScreen() {
 
     } catch (err) {
       console.error("[TeacherSubjects] load error:", err);
-      setError(err.message);
+      setError(errorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);

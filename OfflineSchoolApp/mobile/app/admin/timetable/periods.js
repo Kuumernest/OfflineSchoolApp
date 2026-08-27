@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { PeriodsService } from "../../../src/services/periods.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // Format a Date object → "HH:MM"
 const dateToHHMM = (date) => {
@@ -156,7 +157,7 @@ export default function PeriodsManager() {
       }
     } catch (err) {
       if (isMountedRef.current) {
-        Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.savePeriodFailed"));
+        Alert.alert(t("ttAdmin.errorTitle"), errorText(t, err, "ttAdmin.savePeriodFailed"));
       }
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -178,7 +179,7 @@ export default function PeriodsManager() {
               await PeriodsService.toggleActive(period.id);
               await load(true);
             } catch (err) {
-              Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.updateFailed"));
+              Alert.alert(t("ttAdmin.errorTitle"), errorText(t, err, "ttAdmin.updateFailed"));
             }
           },
         },
@@ -197,7 +198,7 @@ export default function PeriodsManager() {
             await PeriodsService.delete(period.id);
             await load(true);
           } catch (err) {
-            Alert.alert(t("ttAdmin.cannotDelete"), err?.message || t("ttAdmin.deleteFailed"));
+            Alert.alert(t("ttAdmin.cannotDelete"), errorText(t, err, "ttAdmin.deleteFailed"));
           }
         },
       },
@@ -209,7 +210,7 @@ export default function PeriodsManager() {
       const ok = await PeriodsService.reorder(period.id, direction);
       if (ok) await load(true);
     } catch (err) {
-      Alert.alert(t("ttAdmin.errorTitle"), err?.message || t("ttAdmin.reorderFailed"));
+      Alert.alert(t("ttAdmin.errorTitle"), errorText(t, err, "ttAdmin.reorderFailed"));
     }
   };
 

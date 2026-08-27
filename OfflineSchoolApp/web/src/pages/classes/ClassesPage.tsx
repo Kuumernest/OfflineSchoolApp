@@ -621,7 +621,7 @@ export default function ClassesPage() {
             ?{" "}
             {deleteConfirm?.type === "class" &&
               "All linked subjects and teacher assignments will also be removed. "}
-            This action cannot be undone.
+            {t("common.cannotUndo")}
           </p>
 
           {deleteMutation.isError && (

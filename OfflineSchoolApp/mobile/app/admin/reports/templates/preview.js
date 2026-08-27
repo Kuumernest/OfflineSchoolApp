@@ -59,7 +59,7 @@ export default function TemplatePreviewScreen() {
         setIsRaw(res.isRaw       || false);
       })
       .catch((err) => {
-        setError(err?.response?.data?.error || err.message);
+        setError(err?.response?.data?.error || errorText(t, err));
       })
       .finally(() => setLoading(false));
   }, [templateId, examId, studentId]);
@@ -106,7 +106,7 @@ export default function TemplatePreviewScreen() {
             color={C.primary}
           />
           <Text style={s.rawBannerText}>
-            Showing layout only — placeholders are still visible.
+            {t("templatesList.previewNote1")}{" "}
             {t("templatesList.previewNote2")}
           </Text>
         </View>
@@ -216,3 +216,4 @@ const s = StyleSheet.create({
   retryBtnText: { fontSize: 14, fontWeight: "600", color: C.white },
 });
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";

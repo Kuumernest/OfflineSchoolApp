@@ -12,6 +12,7 @@ import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -69,35 +70,45 @@ interface Analytics {
 // CONSTANTS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Every list below is module scope, which cannot call a hook, so each entry
+// carries a translation key and the component resolves it at render. The
+// `value` / `id` fields stay English — they are compared, stored and sent to
+// the API.
 const SECTIONS = [
-  { id: "school",    label: "School",           icon: Building2     },
-  { id: "profile",   label: "My Profile",       icon: User          },
-  { id: "grading",   label: "Grading System",   icon: GraduationCap },
-  { id: "admins",    label: "Admin Management", icon: Shield        },
-  { id: "idcards",   label: "ID Cards",         icon: CreditCard    },
-  { id: "analytics", label: "Analytics",        icon: BarChart3     },
+  { id: "school",    labelKey: "settings.secSchool",    icon: Building2     },
+  { id: "profile",   labelKey: "settings.secProfile",   icon: User          },
+  { id: "grading",   labelKey: "settings.secGrading",   icon: GraduationCap },
+  { id: "admins",    labelKey: "settings.secAdmins",    icon: Shield        },
+  { id: "idcards",   labelKey: "settings.secIdCards",   icon: CreditCard    },
+  { id: "analytics", labelKey: "settings.secAnalytics", icon: BarChart3     },
 ] as const;
 
 type SectionId = typeof SECTIONS[number]["id"];
 
 const SCHOOL_TYPES = [
-  { value: "primary",    label: "Primary"         },
-  { value: "jhs",        label: "JHS"             },
-  { value: "shs",        label: "SHS / Secondary" },
-  { value: "combined",   label: "Combined"        },
-  { value: "vocational", label: "Vocational"      },
-  { value: "university", label: "University"      },
-  { value: "other",      label: "Other"           },
+  { value: "primary",    labelKey: "settings.typePrimary"    },
+  { value: "jhs",        labelKey: "settings.typeJhs"        },
+  { value: "shs",        labelKey: "settings.typeShs"        },
+  { value: "combined",   labelKey: "settings.typeCombined"   },
+  { value: "vocational", labelKey: "settings.typeVocational" },
+  { value: "university", labelKey: "settings.typeUniversity" },
+  { value: "other",      labelKey: "settings.typeOther"      },
 ];
 
 const TERM_SYSTEMS = [
-  { value: "trimester", label: "Trimester (3 Terms)" },
-  { value: "semester",  label: "Semester (2 Terms)"  },
-  { value: "quarter",   label: "Quarter (4 Terms)"   },
+  { value: "trimester", labelKey: "settings.termTrimester" },
+  { value: "semester",  labelKey: "settings.termSemester"  },
+  { value: "quarter",   labelKey: "settings.termQuarter"   },
 ];
 
+// `value` is what the API stores; `labelKey` is the three-letter chip.
 const DAYS_OF_WEEK = [
-  "Monday","Tuesday","Wednesday","Thursday","Friday","Saturday",
+  { value: "Monday",    labelKey: "settings.dayMon" },
+  { value: "Tuesday",   labelKey: "settings.dayTue" },
+  { value: "Wednesday", labelKey: "settings.dayWed" },
+  { value: "Thursday",  labelKey: "settings.dayThu" },
+  { value: "Friday",    labelKey: "settings.dayFri" },
+  { value: "Saturday",  labelKey: "settings.daySat" },
 ];
 
 const ROLE_COLORS: Record<string, string> = {
@@ -107,11 +118,17 @@ const ROLE_COLORS: Record<string, string> = {
   teacher:      "bg-emerald-100 text-emerald-700",
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  super_admin:  "Super Admin",
-  school_admin: "School Admin",
-  admin:        "Admin",
-  teacher:      "Teacher",
+const ROLE_LABEL_KEYS: Record<string, string> = {
+  super_admin:  "settings.roleSuperAdmin",
+  school_admin: "settings.schoolAdmin",
+  admin:        "settings.roleAdmin",
+  teacher:      "academic.teacher",
+};
+
+/** The visible name for a role, falling back to the raw value we were sent. */
+const roleLabel = (role: string | undefined, t: TFunction): string => {
+  const key = ROLE_LABEL_KEYS[role ?? ""];
+  return key ? t(key) : (role ?? "");
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -122,10 +139,12 @@ const ROLE_LABELS: Record<string, string> = {
 // render a stored "/uploads/logos/..." path — see utils/logoSrc.
 const normaliseLogo = resolveLogoSrc;
 
-const extractMessage = (err: unknown): string =>
+// Takes the translator as a parameter — the fallback is shown to the user and
+// module scope cannot call a hook.
+const extractMessage = (err: unknown, t: TFunction): string =>
   (err as { response?: { data?: { message?: string } } })
     ?.response?.data?.message ??
-  (err instanceof Error ? err.message : "Something went wrong");
+  (err instanceof Error ? err.message : t("settings.somethingWrong"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED UI PRIMITIVES
@@ -235,12 +254,13 @@ function Textarea({
 function SaveButton({
   onClick,
   loading,
-  label = "Save Changes",
+  label,
 }: {
   onClick:  () => void;
   loading:  boolean;
-  label?:   string;
+  label:    string;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onClick}
@@ -255,7 +275,7 @@ function SaveButton({
         ? <Loader2 className="h-4 w-4 animate-spin" />
         : <Save className="h-4 w-4" />
       }
-      {loading ? "Saving…" : label}
+      {loading ? t("common.saving") : label}
     </button>
   );
 }
@@ -274,6 +294,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     schoolType: "primary", termSystem: "trimester", schoolCode: "",
     registrationNumber: "", foundedYear: "", principalName: "",
     description: "", academicYearStart: "", academicYearEnd: "",
+    // API values, never translated.
     schoolDays: ["Monday","Tuesday","Wednesday","Thursday","Friday"],
     schoolStartTime: "07:30", schoolEndTime: "15:30", logo: null,
   };
@@ -325,11 +346,12 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           if (norm) setLogoPreview(norm);
         }
       } catch (err) {
-        toast({ kind: "error", title: "Load failed", message: extractMessage(err) });
+        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
   const handleLogoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -350,7 +372,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
 
   const handleSave = async () => {
     if (!form.name.trim()) {
-      toast({ kind: "error", title: "Validation", message: "School name is required" });
+      toast({ kind: "error", title: t("settings.validation"), message: t("settings.schoolNameRequired") });
       return;
     }
 
@@ -380,11 +402,11 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
       };
 
       await api.put("/admin/school-info", payload);
-      toast({ kind: "success", title: "Saved", message: "School settings updated" });
+      toast({ kind: "success", title: t("settings.savedTitle"), message: t("settings.schoolSaved") });
       setLogoFile(null);
       setRemoveLogo(false);
     } catch (err) {
-      toast({ kind: "error", title: "Save failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err, t) });
     } finally {
       setSaving(false);
     }
@@ -416,7 +438,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           {/* Preview */}
           <div className="h-24 w-24 shrink-0 overflow-hidden rounded-2xl border-2 border-gray-200 bg-gray-50">
             {logoPreview
-              ? <img src={logoPreview} alt="logo" className="h-full w-full object-cover" />
+              ? <img src={logoPreview} alt={t("settings.schoolLogo")} className="h-full w-full object-cover" />
               : (
                 <div className="flex h-full w-full flex-col items-center justify-center gap-1">
                   <Building2 className="h-8 w-8 text-gray-300" />
@@ -434,7 +456,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
               text-indigo-600 hover:bg-indigo-50 transition
             ">
               <Upload className="h-4 w-4" />
-              {logoPreview ? "Change Logo" : "Upload Logo"}
+              {logoPreview ? t("settings.changeLogo") : t("settings.uploadLogo")}
               <input
                 type="file"
                 accept="image/*"
@@ -458,7 +480,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             )}
 
             <p className="text-xs text-gray-400">
-              Square image recommended · PNG or JPG · max 2 MB
+              {t("settings.logoHint")}
             </p>
           </div>
         </div>
@@ -469,7 +491,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
         <CardTitle>{t("settings.basicInfo")}</CardTitle>
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <FieldLabel>School Name *</FieldLabel>
+            <FieldLabel>{t("settings.schoolName")} *</FieldLabel>
             <Input value={form.name} onChange={(v) => set("name", v)} placeholder={t("settings.namePh")} />
           </div>
           <div className="sm:col-span-2">
@@ -481,18 +503,19 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           <div className="sm:col-span-2">
             <FieldLabel>{t("settings.schoolType")}</FieldLabel>
             <div className="flex flex-wrap gap-2">
-              {SCHOOL_TYPES.map((t) => (
+              {/* Named `opt`, not `t` — `t` here is the translator. */}
+              {SCHOOL_TYPES.map((opt) => (
                 <button
-                  key={t.value}
-                  onClick={() => set("schoolType", t.value)}
+                  key={opt.value}
+                  onClick={() => set("schoolType", opt.value)}
                   className={cn(
                     "rounded-full border px-4 py-1.5 text-sm font-medium transition",
-                    form.schoolType === t.value
+                    form.schoolType === opt.value
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                       : "border-gray-200 bg-white text-gray-500 hover:border-indigo-300"
                   )}
                 >
-                  {t.label}
+                  {t(opt.labelKey)}
                 </button>
               ))}
             </div>
@@ -576,18 +599,19 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           <div>
             <FieldLabel>{t("settings.termSystem")}</FieldLabel>
             <div className="inline-flex rounded-xl border border-gray-200 bg-gray-100 p-1 gap-1">
-              {TERM_SYSTEMS.map((t) => (
+              {/* Named `sys`, not `t` — `t` here is the translator. */}
+              {TERM_SYSTEMS.map((sys) => (
                 <button
-                  key={t.value}
-                  onClick={() => set("termSystem", t.value)}
+                  key={sys.value}
+                  onClick={() => set("termSystem", sys.value)}
                   className={cn(
                     "rounded-lg px-4 py-1.5 text-sm font-medium transition",
-                    form.termSystem === t.value
+                    form.termSystem === sys.value
                       ? "bg-white text-gray-900 shadow-sm"
                       : "text-gray-500 hover:text-gray-700"
                   )}
                 >
-                  {t.label.split(" ")[0]}
+                  {t(sys.labelKey)}
                 </button>
               ))}
             </div>
@@ -611,16 +635,16 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <div className="flex flex-wrap gap-2">
               {DAYS_OF_WEEK.map((day) => (
                 <button
-                  key={day}
-                  onClick={() => toggleDay(day)}
+                  key={day.value}
+                  onClick={() => toggleDay(day.value)}
                   className={cn(
                     "rounded-xl border px-4 py-1.5 text-sm font-medium transition",
-                    form.schoolDays.includes(day)
+                    form.schoolDays.includes(day.value)
                       ? "border-indigo-500 bg-indigo-50 text-indigo-700"
                       : "border-gray-200 bg-white text-gray-400 hover:border-gray-300"
                   )}
                 >
-                  {day.slice(0, 3)}
+                  {t(day.labelKey)}
                 </button>
               ))}
             </div>
@@ -669,7 +693,7 @@ function ProfileSection() {
 
   const handleSaveProfile = async () => {
     if (!name.trim()) {
-      toast({ kind: "error", title: "Validation", message: "Name is required" });
+      toast({ kind: "error", title: t("settings.validation"), message: t("settings.nameRequired") });
       return;
     }
     setSaving(true);
@@ -680,9 +704,9 @@ function ProfileSection() {
       });
       const updated = data?.profile || data?.user;
       if (updated) setUser(updated);
-      toast({ kind: "success", title: "Profile updated" });
+      toast({ kind: "success", title: t("settings.profileUpdated") });
     } catch (err) {
-      toast({ kind: "error", title: "Failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
     } finally {
       setSaving(false);
     }
@@ -690,15 +714,15 @@ function ProfileSection() {
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw || !confirmPw) {
-      toast({ kind: "error", title: "All fields required" });
+      toast({ kind: "error", title: t("settings.allFieldsRequired") });
       return;
     }
     if (newPw !== confirmPw) {
-      toast({ kind: "error", title: "Passwords don't match" });
+      toast({ kind: "error", title: t("settings.passwordsDiffer") });
       return;
     }
     if (newPw.length < 8) {
-      toast({ kind: "error", title: "Password must be at least 8 characters" });
+      toast({ kind: "error", title: t("settings.passwordMin8") });
       return;
     }
     setSavingPw(true);
@@ -708,11 +732,11 @@ function ProfileSection() {
         newPassword:     newPw,
         confirmPassword: confirmPw,
       });
-      toast({ kind: "success", title: "Password changed" });
+      toast({ kind: "success", title: t("changePassword.success") });
       setCurrentPw(""); setNewPw(""); setConfirmPw("");
       setShowPwForm(false);
     } catch (err) {
-      toast({ kind: "error", title: "Failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
     } finally {
       setSavingPw(false);
     }
@@ -741,7 +765,7 @@ function ProfileSection() {
                 ROLE_COLORS[user?.role ?? ""] || "bg-gray-100 text-gray-600"
               )}
             >
-              {ROLE_LABELS[user?.role ?? ""] || user?.role || "—"}
+              {roleLabel(user?.role, t) || "—"}
             </span>
           </div>
         </div>
@@ -756,7 +780,7 @@ function ProfileSection() {
             onClick={() => setShowPwForm((v) => !v)}
             className="text-sm font-medium text-indigo-600 hover:underline"
           >
-            {showPwForm ? "Cancel" : "Change Password"}
+            {showPwForm ? t("common.cancel") : t("settings.changePassword")}
           </button>
         </div>
 
@@ -841,7 +865,7 @@ function ProfileSection() {
               "
             >
               {savingPw && <Loader2 className="h-4 w-4 animate-spin" />}
-              {savingPw ? "Updating…" : "Update Password"}
+              {savingPw ? t("settings.updating") : t("settings.updatePassword")}
             </button>
           </div>
         )}
@@ -867,11 +891,12 @@ function GradingSection({ schoolId }: { schoolId: string }) {
         const { data } = await api.get("/admin/settings/grading", { params: { schoolId } });
         setConfig(data?.grading || null);
       } catch (err) {
-        toast({ kind: "error", title: "Load failed", message: extractMessage(err) });
+        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
   const handleSave = async () => {
@@ -879,9 +904,9 @@ function GradingSection({ schoolId }: { schoolId: string }) {
     setSaving(true);
     try {
       await api.put("/admin/settings/grading", { ...config, schoolId });
-      toast({ kind: "success", title: "Grading system updated" });
+      toast({ kind: "success", title: t("settings.gradingSaved") });
     } catch (err) {
-      toast({ kind: "error", title: "Save failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err, t) });
     } finally {
       setSaving(false);
     }
@@ -1047,17 +1072,18 @@ function AdminsSection({
       const { data } = await api.get("/admin/settings/admins", { params: { schoolId } });
       setAdmins(data?.admins || []);
     } catch (err) {
-      toast({ kind: "error", title: "Load failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {
     if (!newName.trim() || !newEmail.trim()) {
-      toast({ kind: "error", title: "Name and email are required" });
+      toast({ kind: "error", title: t("settings.nameEmailRequired") });
       return;
     }
     setCreating(true);
@@ -1066,11 +1092,15 @@ function AdminsSection({
         name: newName.trim(), email: newEmail.trim(), role: newRole, schoolId,
       });
       if (data?.admin) setAdmins((prev) => [data.admin, ...prev]);
-      toast({ kind: "success", title: "Admin created", message: `Login details sent to ${newEmail}` });
+      toast({
+        kind: "success",
+        title: t("settings.adminCreated"),
+        message: t("settings.adminCreatedBody", { email: newEmail }),
+      });
       setShowModal(false);
       setNewName(""); setNewEmail(""); setNewRole("admin");
     } catch (err) {
-      toast({ kind: "error", title: "Failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
     } finally {
       setCreating(false);
     }
@@ -1078,16 +1108,16 @@ function AdminsSection({
 
   const handleRemove = async (adminId: string, adminName: string) => {
     if (adminId === currentUserId) {
-      toast({ kind: "error", title: "Cannot remove yourself" });
+      toast({ kind: "error", title: t("settings.cannotRemoveSelf") });
       return;
     }
-    if (!confirm(`Remove ${adminName} from admin access?`)) return;
+    if (!window.confirm(t("settings.removeAdminConfirm", { name: adminName }))) return;
     try {
       await api.delete(`/admin/settings/admins/${adminId}`);
       setAdmins((prev) => prev.filter((a) => a._id !== adminId));
-      toast({ kind: "success", title: "Admin removed" });
+      toast({ kind: "success", title: t("settings.adminRemoved") });
     } catch (err) {
-      toast({ kind: "error", title: "Failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
     }
   };
 
@@ -1102,7 +1132,7 @@ function AdminsSection({
       <Card>
         <div className="mb-5 flex items-center justify-between">
           <h3 className="text-base font-bold text-gray-900">
-            Admin Users ({admins.length})
+            {t("settings.adminUsers", { count: admins.length })}
           </h3>
           <button
             onClick={() => setShowModal(true)}
@@ -1126,7 +1156,7 @@ function AdminsSection({
                 <p className="text-sm font-semibold text-gray-900">
                   {a.name}
                   {a._id === currentUserId && (
-                    <span className="ml-2 text-xs text-gray-400">(You)</span>
+                    <span className="ml-2 text-xs text-gray-400">{t("settings.you")}</span>
                   )}
                 </p>
                 <p className="text-xs text-gray-500">{a.email}</p>
@@ -1135,7 +1165,7 @@ function AdminsSection({
                 "rounded-full px-2.5 py-1 text-xs font-semibold",
                 ROLE_COLORS[a.role] || "bg-gray-100 text-gray-600"
               )}>
-                {ROLE_LABELS[a.role] || a.role}
+                {roleLabel(a.role, t)}
               </span>
               {a._id !== currentUserId && (
                 <button
@@ -1186,7 +1216,8 @@ function AdminsSection({
                     text-sm outline-none focus:border-indigo-400
                   "
                 >
-                  <option value="admin">Admin</option>
+                  {/* Values are role identifiers the API stores — labels only. */}
+                  <option value="admin">{t("settings.roleAdmin")}</option>
                   <option value="school_admin">{t("settings.schoolAdmin")}</option>
                 </select>
               </div>
@@ -1205,7 +1236,7 @@ function AdminsSection({
                 className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50 transition"
               >
                 {creating && <Loader2 className="h-4 w-4 animate-spin" />}
-                {creating ? "Creating…" : "Create Admin"}
+                {creating ? t("settings.creating") : t("settings.createAdmin")}
               </button>
             </div>
           </div>
@@ -1231,11 +1262,12 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
         const { data } = await api.get("/admin/settings/analytics", { params: { schoolId } });
         setAnalytics(data?.analytics || null);
       } catch (err) {
-        toast({ kind: "error", title: "Load failed", message: extractMessage(err) });
+        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
   if (loading) return (
@@ -1253,11 +1285,13 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
     </Card>
   );
 
+  // `id` is the React key — a translated label would remount every tile on a
+  // language switch.
   const stats = [
-    { label: "Teachers",  value: analytics.summary.totalTeachers, bg: "bg-indigo-50",   text: "text-indigo-700"  },
-    { label: "Students",  value: analytics.summary.totalStudents, bg: "bg-emerald-50",  text: "text-emerald-700" },
-    { label: "Classes",   value: analytics.summary.totalClasses,  bg: "bg-purple-50",   text: "text-purple-700"  },
-    { label: "Subjects",  value: analytics.summary.totalSubjects, bg: "bg-amber-50",    text: "text-amber-700"   },
+    { id: "teachers", label: t("academic.teacher_other"), value: analytics.summary.totalTeachers, bg: "bg-indigo-50",   text: "text-indigo-700"  },
+    { id: "students", label: t("academic.student_other"), value: analytics.summary.totalStudents, bg: "bg-emerald-50",  text: "text-emerald-700" },
+    { id: "classes",  label: t("academic.class_other"),   value: analytics.summary.totalClasses,  bg: "bg-purple-50",   text: "text-purple-700"  },
+    { id: "subjects", label: t("academic.subject_other"), value: analytics.summary.totalSubjects, bg: "bg-amber-50",    text: "text-amber-700"   },
   ];
 
   return (
@@ -1266,7 +1300,7 @@ function AnalyticsSection({ schoolId }: { schoolId: string }) {
         <CardTitle>{t("settings.schoolSummary")}</CardTitle>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
           {stats.map((s) => (
-            <div key={s.label} className={cn("rounded-2xl p-5 text-center", s.bg)}>
+            <div key={s.id} className={cn("rounded-2xl p-5 text-center", s.bg)}>
               <p className={cn("text-3xl font-extrabold", s.text)}>{s.value ?? "—"}</p>
               <p className="mt-1 text-sm font-medium text-gray-600">{s.label}</p>
             </div>
@@ -1308,7 +1342,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         const { data } = await api.get("/admin/settings/id-card", { params: { schoolId } });
         setSettings({ idCard: data.idCard, gate: data.gate });
       } catch (err) {
-        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err) });
+        toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
       } finally {
         setLoading(false);
       }
@@ -1336,7 +1370,7 @@ function IdCardSection({ schoolId }: { schoolId: string }) {
         message: t("settings.idCardReprint"),
       });
     } catch (err) {
-      toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err) });
+      toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err, t) });
     } finally {
       setSaving(false);
     }
@@ -1536,7 +1570,7 @@ export default function SettingsPage() {
                     )}
                   >
                     <Icon className={cn("h-4 w-4", active ? "text-indigo-600" : "text-gray-400")} />
-                    {s.label}
+                    {t(s.labelKey)}
                     {active && <ChevronRight className="ml-auto h-3 w-3 text-indigo-400" />}
                   </button>
                 </li>
@@ -1564,7 +1598,7 @@ export default function SettingsPage() {
                   )}
                 >
                   <Icon className="h-3.5 w-3.5" />
-                  {s.label}
+                  {t(s.labelKey)}
                 </button>
               );
             })}

@@ -108,7 +108,7 @@ export default function AttendanceReportsPage() {
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t("attendance.reportsTitle")}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Who was in, and how that compares with the rest of the week.
+            {t("attendance.reportBlurb")}
           </p>
         </div>
 
@@ -152,7 +152,7 @@ export default function AttendanceReportsPage() {
             { key: "present",  label: "Present",  tone: "bg-emerald-500" },
             { key: "absent",   label: "Absent",   tone: "bg-red-500" },
             { key: "late",     label: "Late",     tone: "bg-amber-500" },
-            { key: "on_leave", label: "On leave", tone: "bg-blue-500" },
+            { key: "on_leave", label: t("attendance.onLeave"), tone: "bg-blue-500" },
           ]}
         />
       </div>
@@ -191,7 +191,7 @@ export default function AttendanceReportsPage() {
 
         {weeklyQ.isLoading ? (
           <div className="h-48 flex items-center justify-center">
-            <span className="text-sm text-gray-400">Loading trend…</span>
+            <span className="text-sm text-gray-400">{t("attendance.loadingTrend")}</span>
           </div>
         ) : trend.length === 0 ? (
           <div className="h-48 flex flex-col items-center justify-center gap-2">

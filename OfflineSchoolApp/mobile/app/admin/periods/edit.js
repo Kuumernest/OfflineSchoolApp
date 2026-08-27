@@ -123,7 +123,7 @@ export default function EditPeriod() {
       if (!isMountedRef.current) return;
       Alert.alert(
         t("periodsAdmin.errorTitle"),
-        err.response?.data?.message || err.message || t("periodsAdmin.updateFailed")
+        err.response?.data?.message || errorText(t, err, "periodsAdmin.updateFailed")
       );
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -149,7 +149,7 @@ export default function EditPeriod() {
               if (!isMountedRef.current) return;
               Alert.alert(
                 t("periodsAdmin.cannotDelete"),
-                err.message || t("periodsAdmin.deleteFailed")
+                errorText(t, err, "periodsAdmin.deleteFailed")
               );
             } finally {
               if (isMountedRef.current) setDeleting(false);
@@ -394,3 +394,4 @@ const styles = StyleSheet.create({
   discardText: { fontSize: 14, color: "#9CA3AF", fontWeight: "500" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

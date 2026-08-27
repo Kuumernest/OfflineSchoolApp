@@ -419,7 +419,7 @@ export default function EditTeacherPage() {
         <PageHeader title={t("teachersEdit.title")} onBack={() => navigate("/teachers")} />
         <div className="flex-1 flex items-center justify-center gap-3">
           <Loader2 size={32} className="animate-spin text-indigo-600" />
-          <span className="text-gray-500 text-sm">Loading teacher…</span>
+          <span className="text-gray-500 text-sm">{t("teachersEdit.loading")}</span>
         </div>
       </div>
     );
@@ -707,6 +707,8 @@ function PageHeader({
   title:  string;
   onBack: () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="bg-white border-b border-gray-200 px-6 py-4 flex
                     items-center gap-4 shrink-0">
@@ -720,7 +722,7 @@ function PageHeader({
       <div>
         <h1 className="text-lg font-bold text-gray-900">{title}</h1>
         <p className="text-xs text-gray-500 mt-0.5">
-          Teacher profile &amp; subject assignments
+          {t("teachersEdit.subtitle")}
         </p>
       </div>
     </div>

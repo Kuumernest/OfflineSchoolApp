@@ -20,6 +20,7 @@ import { getStudentById } from "../../../src/services/student.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { errorText } from "../../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -100,7 +101,7 @@ export default function StudentFeeScreen() {
       // Deliberately not "sent" — it is recorded here and will sync later.
       Alert.alert(t("fees.recorded"), t("fees.recordedOffline"));
     } catch (err) {
-      Alert.alert(t("fees.recordFailed"), err.message);
+      Alert.alert(t("fees.recordFailed"), errorText(t, err));
     } finally {
       setSaving(false);
     }

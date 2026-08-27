@@ -207,7 +207,7 @@ export default function AnnouncementsPage() {
       invalidate();
     },
     onError: (err) =>
-      toast({ title: "Could not mark as read", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("announcements.errMarkRead"), message: getErrorMessage(err), kind: "error" }),
   });
 
   // ── Composer ───────────────────────────────────────────────────────────────
@@ -241,7 +241,7 @@ export default function AnnouncementsPage() {
 
   const askRemove = async (a: Announcement) => {
     const ok = await confirm({
-      title:        "Remove this announcement?",
+      title:        t("announcements.removeConfirm"),
       message:      `"${a.title}" will disappear for everyone who can currently see it.`,
       confirmLabel: t("common.remove"),
       kind:         "danger",
@@ -307,7 +307,7 @@ export default function AnnouncementsPage() {
       <div className="flex flex-wrap gap-2">
         <Select
           options={[
-            { value: "", label: "Every audience" },
+            { value: "", label: t("announcements.everyAudience") },
             ...audiences.map((a) => ({ value: a, label: AUDIENCE_LABELS[a] })),
           ]}
           value={audience}
@@ -315,7 +315,7 @@ export default function AnnouncementsPage() {
         />
         <Select
           options={[
-            { value: "", label: "Any priority" },
+            { value: "", label: t("announcements.anyPriority") },
             ...PRIORITIES.map((p) => ({ value: p, label: PRIORITY_LABELS[p] })),
           ]}
           value={priority}
@@ -542,7 +542,7 @@ export default function AnnouncementsPage() {
 
           <FormField
             label={t("announcements.expire")}
-            hint="Leave empty to keep it up indefinitely."
+            hint={t("announcements.expiryHint")}
           >
             <Input
               type="date"
@@ -556,7 +556,7 @@ export default function AnnouncementsPage() {
           {pinAllowed && (
             <Checkbox
               label={t("announcements.pin")}
-              hint="Pinned announcements stay above everything else."
+              hint={t("announcements.pinnedHint")}
               checked={form.isPinned}
               onChange={(e) => setForm((f) => ({ ...f, isPinned: e.target.checked }))}
             />

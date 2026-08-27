@@ -19,6 +19,7 @@ import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
 import type { Class, Teacher, Subject } from "@/types";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -53,28 +54,30 @@ const EMPTY_FORM: FormState = {
 // PURE HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const validate = (form: FormState): FormErrors => {
+// Module scope cannot call a hook, so the translator is passed in and every
+// call site hands over the one from useTranslation().
+const validate = (form: FormState, t: TFunction): FormErrors => {
   const errors: FormErrors = {};
   const name = form.name.trim();
 
   if (!name)
-    errors.name = "Subject name is required.";
+    errors.name = t("subjectsEdit.errNameRequired");
   else if (name.length < 2)
-    errors.name = "Subject name must be at least 2 characters.";
+    errors.name = t("subjectsEdit.errNameMin");
   else if (name.length > MAX_NAME_LENGTH)
-    errors.name = `Subject name cannot exceed ${MAX_NAME_LENGTH} characters.`;
+    errors.name = t("subjectsEdit.errNameMax", { max: MAX_NAME_LENGTH });
 
   if (!form.classId)
-    errors.classId = "Please select a class.";
+    errors.classId = t("subjectsEdit.errClassRequired");
 
   // Optional, but a coefficient of 0 or a typo would rescale every average in
   // the class, so anything present must be a sane positive number.
   const coeff = form.coefficient.trim();
   if (coeff !== "") {
     const n = Number(coeff);
-    if (!Number.isFinite(n)) errors.coefficient = "Coefficient must be a number.";
-    else if (n < 0.1)        errors.coefficient = "Coefficient must be at least 0.1.";
-    else if (n > 20)         errors.coefficient = "Coefficient cannot exceed 20.";
+    if (!Number.isFinite(n)) errors.coefficient = t("subjectsEdit.errCoefficientNumber");
+    else if (n < 0.1)        errors.coefficient = t("subjectsEdit.errCoefficientMin");
+    else if (n > 20)         errors.coefficient = t("subjectsEdit.errCoefficientMax");
   }
 
   return errors;
@@ -212,7 +215,7 @@ export default function EditSubjectPage() {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ??
         (err instanceof Error ? err.message : null) ??
-        "Failed to update subject. Please try again.";
+        t("subjectsEdit.saveFailed");
       setSubmitError(msg);
     },
   });
@@ -241,7 +244,7 @@ export default function EditSubjectPage() {
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const errs = validate(form);
+      const errs = validate(form, t);
       if (Object.keys(errs).length > 0) {
         setErrors(errs);
         return;
@@ -249,18 +252,18 @@ export default function EditSubjectPage() {
       setErrors({});
       mutation.mutate();
     },
-    [form, mutation]
+    [form, mutation, t]
   );
 
   const handleDiscard = useCallback(() => {
     if (hasChanges) {
-      if (window.confirm("Discard unsaved changes and go back?")) {
+      if (window.confirm(t("subjectsEdit.discardConfirm"))) {
         navigate(-1);
       }
     } else {
       navigate(-1);
     }
-  }, [hasChanges, navigate]);
+  }, [hasChanges, navigate, t]);
 
   // ── Loading ───────────────────────────────────────────────────────────────
 
@@ -268,7 +271,7 @@ export default function EditSubjectPage() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-gray-50">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-        <p className="text-sm font-medium text-gray-500">Loading subject…</p>
+        <p className="text-sm font-medium text-gray-500">{t("subjectsEdit.loading")}</p>
       </div>
     );
   }
@@ -283,7 +286,7 @@ export default function EditSubjectPage() {
         </div>
         <p className="text-lg font-bold text-gray-900">{t("subjectsEdit.notFound")}</p>
         <p className="text-sm text-gray-500">
-          The subject you are trying to edit does not exist or was deleted.
+          {t("subjectsEdit.notFoundHint")}
         </p>
         <button
           onClick={() => navigate("/subjects")}
@@ -313,7 +316,7 @@ export default function EditSubjectPage() {
         <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold text-gray-900">{t("subjectsEdit.title")}</h1>
           <p className="truncate text-sm text-gray-500">
-            {subject?.name ?? "Update subject details"}
+            {subject?.name ?? t("subjectsEdit.subtitle")}
           </p>
         </div>
 
@@ -326,7 +329,7 @@ export default function EditSubjectPage() {
           >
             {isBusy
               ? <RefreshCw size={14} className="animate-spin" />
-              : "Save"
+              : t("common.save")
             }
           </button>
         )}
@@ -341,7 +344,7 @@ export default function EditSubjectPage() {
               <div className="flex items-center gap-2 rounded-xl bg-blue-50 px-4 py-3">
                 <BookOpen size={15} className="shrink-0 text-blue-600" />
                 <p className="text-sm text-blue-800 font-medium">
-                  Editing:{" "}
+                  {t("subjectsEdit.editing")}{" "}
                   <span className="font-bold">"{subject.name}"</span>
                 </p>
               </div>
@@ -350,7 +353,7 @@ export default function EditSubjectPage() {
             {hasChanges && (
               <div className="flex items-center justify-between gap-3 rounded-xl bg-amber-50 px-4 py-2.5">
                 <p className="text-xs font-semibold text-amber-700">
-                  ✎ You have unsaved changes
+                  ✎ {t("subjectsEdit.unsaved")}
                 </p>
                 <button
                   type="button"
@@ -367,7 +370,7 @@ export default function EditSubjectPage() {
               label={t("subjects.nameLabel")}
               required
               error={errors.name}
-              hint="Use a clear, recognisable name."
+              hint={t("subjectsEdit.nameHint")}
             >
               <div
                 className={cn(
@@ -408,7 +411,7 @@ export default function EditSubjectPage() {
             {/* Subject code */}
             <Field
               label={t("subjects.codeLabel")}
-              hint="Optional short code, e.g. MATH101"
+              hint={t("subjectsEdit.codeHint")}
             >
               <input
                 type="text"
@@ -479,7 +482,9 @@ export default function EditSubjectPage() {
                   className="flex-1 bg-transparent py-3 text-sm text-gray-900 outline-none"
                 >
                   <option value="">
-                    {classesQuery.isLoading ? "Loading classes…" : "Select a class"}
+                    {classesQuery.isLoading
+                      ? t("subjectsEdit.loadingClasses")
+                      : t("classes.selectClass")}
                   </option>
                   {classes.map((c) => (
                     <option key={c._id} value={c._id}>{c.name}</option>
@@ -491,7 +496,7 @@ export default function EditSubjectPage() {
             {/* Teacher */}
             <Field
               label={t("classes.assignedTeacher")}
-              hint="Optional — leave blank to unassign."
+              hint={t("subjectsEdit.teacherHint")}
             >
               <select
                 value={form.teacherId}
@@ -507,11 +512,12 @@ export default function EditSubjectPage() {
               >
                 <option value="">
                   {teachersQuery.isLoading
-                    ? "Loading teachers…"
-                    : "No teacher assigned"}
+                    ? t("subjectsEdit.loadingTeachers")
+                    : t("subjects.noTeacher")}
                 </option>
-                {teachers.map((t) => (
-                  <option key={t._id} value={t._id}>{t.name}</option>
+                {/* Named `teacher`, not `t` — `t` here is the translator. */}
+                {teachers.map((teacher) => (
+                  <option key={teacher._id} value={teacher._id}>{teacher.name}</option>
                 ))}
               </select>
             </Field>
@@ -539,10 +545,10 @@ export default function EditSubjectPage() {
               {isBusy ? (
                 <>
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Saving…
+                  {t("common.saving")}
                 </>
               ) : (
-                "Save Changes"
+                t("subjectsEdit.saveChanges")
               )}
             </button>
 
@@ -552,7 +558,7 @@ export default function EditSubjectPage() {
               disabled={isBusy}
               className="w-full py-3 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
             >
-              {hasChanges ? "Discard Changes" : "Go Back"}
+              {hasChanges ? t("subjectsEdit.discardChanges") : t("common.goBack")}
             </button>
           </div>
 

@@ -16,6 +16,7 @@ import * as Sharing     from "expo-sharing";
 
 import { tableExists as _tableExists } from "../../../../src/db/dbHelpers";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -424,7 +425,7 @@ export default function ReportGeneratorScreen() {
         }
       } catch (err) {
         console.error("[ReportGenerator] load error:", err.message);
-        if (mounted) Alert.alert(t("reportGen.loadError"), err.message);
+        if (mounted) Alert.alert(t("reportGen.loadError"), errorText(t, err));
       } finally {
         if (mounted) setDataLoading(false);
       }
@@ -532,7 +533,7 @@ export default function ReportGeneratorScreen() {
             const { uri } = await Print.printToFileAsync({ html });
             successful.push({ studentName: student.name, uri });
           } catch (err) {
-            errors.push({ studentName: student.name, error: err.message });
+            errors.push({ studentName: student.name, error: errorText(t, err) });
           }
           setProgress(i + 1);
         }
@@ -567,7 +568,7 @@ export default function ReportGeneratorScreen() {
         }
       }
     } catch (err) {
-      Alert.alert(t("reportGen.errTitle"), err.message);
+      Alert.alert(t("reportGen.errTitle"), errorText(t, err));
     } finally {
       setGenerating(false);
     }
@@ -598,7 +599,7 @@ export default function ReportGeneratorScreen() {
 
       await generateAndPrintPdf(html);
     } catch (err) {
-      Alert.alert(t("reportGen.printError"), err.message);
+      Alert.alert(t("reportGen.printError"), errorText(t, err));
     }
   }, [selectedStudent, selectedClass, selectedExam, user]);
 

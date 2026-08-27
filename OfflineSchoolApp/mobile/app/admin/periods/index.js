@@ -160,7 +160,7 @@ export default function PeriodsScreen() {
               await PeriodsService.toggleActive(id);
               if (isMountedRef.current) loadPeriods();
             } catch (err) {
-              Alert.alert(t("periodsAdmin.errorTitle"), err.message || t("periodsAdmin.updateFailed"));
+              Alert.alert(t("periodsAdmin.errorTitle"), errorText(t, err, "periodsAdmin.updateFailed"));
             }
           },
         },
@@ -534,3 +534,4 @@ const styles = StyleSheet.create({
   },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

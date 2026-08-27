@@ -17,6 +17,7 @@ import {
   fetchExamById,
   clearMyExamResult,
 } from "../../../src/store/slices/resultsSlice";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -90,7 +91,7 @@ export default function StudentReportCardScreen() {
 
       await Share.share({ message: msg });
     } catch (err) {
-      Alert.alert(t("results.my.shareFailed"), err.message);
+      Alert.alert(t("results.my.shareFailed"), errorText(t, err));
     }
   };
 

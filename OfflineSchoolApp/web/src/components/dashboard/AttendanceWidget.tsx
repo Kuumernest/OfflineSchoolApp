@@ -54,7 +54,7 @@ export default function AttendanceWidget({
             aria-valuenow={pct}
             aria-valuemin={0}
             aria-valuemax={100}
-            aria-label="Attendance rate"
+            aria-label={t("dashboard.attendanceRateLabel")}
           >
             <div
               className={cn(

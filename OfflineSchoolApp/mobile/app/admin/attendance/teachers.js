@@ -107,7 +107,7 @@ export default function MarkTeacherAttendanceScreen() {
         [{ text: "OK", onPress: () => router.back() }]
       );
     } catch (err) {
-      Alert.alert(t("attAdmin.saveFailed"), err.message || t("attAdmin.pleaseTryAgain"));
+      Alert.alert(t("attAdmin.saveFailed"), errorText(t, err, "attAdmin.pleaseTryAgain"));
     } finally {
       setSaving(false);
     }
@@ -346,3 +346,4 @@ const styles = StyleSheet.create({
   emptyText: { fontSize: 14, color: "#9CA3AF" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

@@ -1,6 +1,7 @@
 // src/services/quiz.service.js
 
 import { getDatabase } from '../db/database';
+import { appError } from "../utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -324,7 +325,7 @@ export const createCategory = async ({
   parent_id   = null,
 }) => {
   if (!schoolId)     throw new Error('schoolId is required');
-  if (!name?.trim()) throw new Error('Category name is required');
+  if (!name?.trim()) throw appError("svcErr.categoryNameRequired", 'Category name is required');
 
   const db = await getDatabase();
   const id = generateId();
@@ -376,8 +377,8 @@ export const createQuestion = async ({
   options     = [],
 }) => {
   if (!schoolId)              throw new Error('schoolId is required');
-  if (!question_text?.trim()) throw new Error('Question text is required');
-  if (!question_type)         throw new Error('Question type is required');
+  if (!question_text?.trim()) throw appError("svcErr.questionTextRequired", 'Question text is required');
+  if (!question_type)         throw appError("svcErr.questionTypeRequired", 'Question type is required');
   if (!created_by)            throw new Error('Teacher ID is required');
 
   const dedupeKey = [
@@ -389,7 +390,7 @@ export const createQuestion = async ({
 
   if (_inflightQuestions.has(dedupeKey)) {
     console.warn('[createQuestion] duplicate call blocked:', dedupeKey);
-    throw new Error('This question is already being saved. Please wait.');
+    throw appError("svcErr.questionSaving", 'This question is already being saved. Please wait.');
   }
   _inflightQuestions.add(dedupeKey);
 
@@ -722,9 +723,9 @@ export const createQuiz = async ({
   show_explanation   = true,
   questionIds        = [],
 }) => {
-  if (!title?.trim())  throw new Error('Quiz title is required');
-  if (!class_id)       throw new Error('Please select a class for this quiz');
-  if (!subject_id)     throw new Error('Please select a subject for this quiz');
+  if (!title?.trim())  throw appError("svcErr.quizTitleRequired", 'Quiz title is required');
+  if (!class_id)       throw appError("svcErr.quizClassRequired", 'Please select a class for this quiz');
+  if (!subject_id)     throw appError("svcErr.quizSubjectRequired", 'Please select a subject for this quiz');
   if (!created_by)     throw new Error('Teacher ID is required');
   if (!schoolId)       throw new Error('School ID is required');
 
@@ -732,7 +733,7 @@ export const createQuiz = async ({
 
   if (_inflightQuizzes.has(dedupeKey)) {
     console.warn('[createQuiz] duplicate call blocked:', dedupeKey);
-    throw new Error('This quiz is already being saved. Please wait.');
+    throw appError("svcErr.quizSaving", 'This quiz is already being saved. Please wait.');
   }
   _inflightQuizzes.add(dedupeKey);
 
@@ -748,7 +749,8 @@ export const createQuiz = async ({
       .catch(() => null);
 
     if (!classRow) {
-      throw new Error(
+      throw appError(
+        "svcErr.quizClassNotSynced",
         `Class [${class_id}] not found in local database. ` +
         `Please sync before creating a quiz.`
       );
@@ -1157,11 +1159,11 @@ export const addQuestionToQuiz = async (
       .catch(() => null);
 
     if (!question) {
-      throw new Error(`Question ${questionId} not found.`);
+      throw appError("svcErr.questionNotFound", `Question ${questionId} not found.`);
     }
 
     if (!sameId(question.created_by, teacherId)) {
-      throw new Error('You can only add your own questions to a quiz.');
+      throw appError("svcErr.onlyOwnQuestions", 'You can only add your own questions to a quiz.');
     }
   }
 
@@ -1233,15 +1235,15 @@ export const checkAttemptEligibility = async (quizId, userId) => {
   const db   = await getDatabase();
   const quiz = await getQuizById(quizId);
 
-  if (!quiz)              return { canAttempt: false, reason: 'Quiz not found' };
-  if (!quiz.is_published) return { canAttempt: false, reason: 'Quiz is not published' };
+  if (!quiz)              return { canAttempt: false, reason: 'Quiz not found',        reasonKey: 'svcErr.quizNotFound' };
+  if (!quiz.is_published) return { canAttempt: false, reason: 'Quiz is not published', reasonKey: 'svcErr.quizNotPublished' };
 
   const now = new Date().toISOString();
 
   if (quiz.available_from  && now < quiz.available_from)
-    return { canAttempt: false, reason: 'Quiz has not started yet' };
+    return { canAttempt: false, reason: 'Quiz has not started yet', reasonKey: 'svcErr.quizNotStarted' };
   if (quiz.available_until && now > quiz.available_until)
-    return { canAttempt: false, reason: 'Quiz has ended' };
+    return { canAttempt: false, reason: 'Quiz has ended', reasonKey: 'svcErr.quizEnded' };
 
   if (quiz.max_attempts !== null) {
     const row = await db.getFirstAsync(
@@ -1254,11 +1256,12 @@ export const checkAttemptEligibility = async (quizId, userId) => {
       return {
         canAttempt: false,
         reason:     `Maximum attempts (${quiz.max_attempts}) reached`,
+        reasonKey:  'svcErr.quizMaxAttempts',
       };
     }
   }
 
-  return { canAttempt: true, reason: null };
+  return { canAttempt: true, reason: null, reasonKey: null };
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -1268,8 +1271,8 @@ export const checkAttemptEligibility = async (quizId, userId) => {
 export const startAttempt = async (quizId, userId) => {
   const db = await getDatabase();
 
-  const { canAttempt, reason } = await checkAttemptEligibility(quizId, userId);
-  if (!canAttempt) throw new Error(reason);
+  const { canAttempt, reason, reasonKey } = await checkAttemptEligibility(quizId, userId);
+  if (!canAttempt) throw appError(reasonKey, reason);
 
   const countRow = await db.getFirstAsync(
     `SELECT COUNT(*) AS count FROM quiz_attempts WHERE quiz_id = ? AND user_id = ?`,
@@ -1436,7 +1439,7 @@ export const submitAttempt = async (attemptId) => {
     [attemptId]
   );
 
-  if (!attempt)                          throw new Error('Attempt not found');
+  if (!attempt)                          throw appError("svcErr.attemptNotFound", 'Attempt not found');
   if (attempt.status !== 'in_progress') throw new Error(`Attempt already ${attempt.status}`);
 
   await db.runAsync(

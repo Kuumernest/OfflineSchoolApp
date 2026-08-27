@@ -157,7 +157,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         const data = await globalSearch(value, t);
         setResults(data);
       } catch {
-        setError("Search failed. Please try again.");
+        setError(t("search.failed"));
         setResults([]);
       } finally {
         setIsLoading(false);
@@ -322,7 +322,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 <div className="px-4 py-6 text-center">
                   <div className="flex items-center justify-center gap-2">
                     <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary-400 border-t-transparent" />
-                    <p className="text-sm text-ink-muted">Searching…</p>
+                    <p className="text-sm text-ink-muted">{t("search.searching")}</p>
                   </div>
                 </div>
               )}

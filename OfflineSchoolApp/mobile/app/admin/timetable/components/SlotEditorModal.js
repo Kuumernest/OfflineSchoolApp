@@ -26,6 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SubjectService } from "../../../../src/services/subject.service";
 import { TeacherService  } from "../../../../src/services/teacher.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
 
@@ -374,7 +375,7 @@ export default function SlotEditorModal({
       });
     } catch (err) {
       console.error("SlotEditorModal: save failed:", err.message);
-      Alert.alert(t("ttAdmin.saveFailedTitle"), err.message ?? t("ttAdmin.saveFailedBody"));
+      Alert.alert(t("ttAdmin.saveFailedTitle"), errorText(t, err, "ttAdmin.saveFailedBody"));
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
@@ -392,7 +393,7 @@ export default function SlotEditorModal({
       await onDelete();
     } catch (err) {
       console.error("SlotEditorModal: delete failed:", err.message);
-      Alert.alert(t("ttAdmin.deleteFailedTitle"), err.message ?? t("ttAdmin.removeFailed"));
+      Alert.alert(t("ttAdmin.deleteFailedTitle"), errorText(t, err, "ttAdmin.removeFailed"));
     } finally {
       if (isMountedRef.current) setSaving(false);
     }

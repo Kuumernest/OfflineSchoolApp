@@ -53,6 +53,7 @@ import {
 import { fetchWithFallback }                          from "../utils/syncHelpers";
 import { API, callWithFallback }                      from "./apiEndpoints";
 import api                                            from "./api";
+import { appError }                                   from "../utils/appError";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONSTANTS
@@ -1051,10 +1052,10 @@ export const TeacherService = {
     const cleanName  = name?.trim();
     const cleanEmail = email?.trim().toLowerCase();
 
-    if (!cleanName)  throw new Error("Teacher name is required");
-    if (!cleanEmail) throw new Error("Teacher email is required");
+    if (!cleanName)  throw appError("svcErr.teacherNameRequired", "Teacher name is required");
+    if (!cleanEmail) throw appError("svcErr.teacherEmailRequired", "Teacher email is required");
     if (!EMAIL_REGEX.test(cleanEmail)) {
-      throw new Error("Please enter a valid email address");
+      throw appError("svcErr.invalidEmail", "Please enter a valid email address");
     }
 
     const db           = await getDatabase();
@@ -1067,7 +1068,7 @@ export const TeacherService = {
        LIMIT 1`,
       [cleanEmail]
     );
-    if (duplicateTeacher) throw new Error("A teacher with this email already exists");
+    if (duplicateTeacher) throw appError("svcErr.teacherEmailExists", "A teacher with this email already exists");
 
     const otherRoleUser = await db.getFirstAsync(
       `SELECT id, role FROM ${USERS_TABLE}
@@ -1076,7 +1077,8 @@ export const TeacherService = {
       [cleanEmail]
     );
     if (otherRoleUser) {
-      throw new Error(
+      throw appError(
+        "svcErr.emailUsedByOtherRole",
         `This email is already used by a ${otherRoleUser.role ?? "user"} account`
       );
     }
@@ -1155,10 +1157,10 @@ export const TeacherService = {
     const cleanName  = name?.trim();
     const cleanEmail = email?.trim().toLowerCase();
 
-    if (!cleanName)  throw new Error("Teacher name is required");
-    if (!cleanEmail) throw new Error("Teacher email is required");
+    if (!cleanName)  throw appError("svcErr.teacherNameRequired", "Teacher name is required");
+    if (!cleanEmail) throw appError("svcErr.teacherEmailRequired", "Teacher email is required");
     if (!EMAIL_REGEX.test(cleanEmail)) {
-      throw new Error("Please enter a valid email address");
+      throw appError("svcErr.invalidEmail", "Please enter a valid email address");
     }
 
     const db           = await getDatabase();
@@ -1183,7 +1185,7 @@ export const TeacherService = {
        LIMIT 1`,
       existParams
     );
-    if (!existing) throw new Error("Teacher not found");
+    if (!existing) throw appError("svcErr.teacherNotFound", "Teacher not found");
 
     const duplicate = await db.getFirstAsync(
       `SELECT 1 FROM ${USERS_TABLE}
@@ -1191,7 +1193,7 @@ export const TeacherService = {
        LIMIT 1`,
       [cleanEmail, id]
     );
-    if (duplicate) throw new Error("A user with this email already exists");
+    if (duplicate) throw appError("svcErr.userEmailExists", "A user with this email already exists");
 
     const now = new Date().toISOString();
 
@@ -1241,7 +1243,7 @@ export const TeacherService = {
        LIMIT 1`,
       [teacherId]
     );
-    if (!teacher) throw new Error("Teacher does not exist");
+    if (!teacher) throw appError("svcErr.teacherNotExist", "Teacher does not exist");
 
     const subjectCols = await getTableColumns(db, SUBJECTS_TABLE);
     const classCol    = subjectCols.includes("class_id") ? "class_id" : "classId";
@@ -1254,7 +1256,7 @@ export const TeacherService = {
       [subjectId]
     );
     if (!subject?.classId) {
-      throw new Error("Subject does not exist or has no valid class");
+      throw appError("svcErr.subjectNotExist", "Subject does not exist or has no valid class");
     }
 
     const taCols = await resolveAssignmentCols();
@@ -1273,7 +1275,7 @@ export const TeacherService = {
 
     if (existing) {
       if (existing.teacherId === teacherId) return true;
-      throw new Error("Subject is already assigned to another teacher");
+      throw appError("svcErr.subjectAlreadyAssigned", "Subject is already assigned to another teacher");
     }
 
     const localAssignId = generateLocalId();
@@ -1383,7 +1385,7 @@ export const TeacherService = {
         return true;
       }
 
-      throw new Error("Subject is not assigned to this teacher");
+      throw appError("svcErr.subjectNotAssigned", "Subject is not assigned to this teacher");
     }
 
     const inTimetable = await db.getFirstAsync(
@@ -1393,7 +1395,7 @@ export const TeacherService = {
     ).catch(() => null);
 
     if (inTimetable) {
-      throw new Error("Cannot unassign — subject is used in the timetable");
+      throw appError("svcErr.subjectInTimetable", "Cannot unassign — subject is used in the timetable");
     }
 
     const now = new Date().toISOString();
@@ -1470,7 +1472,7 @@ export const TeacherService = {
        LIMIT 1`,
       existParams
     );
-    if (!teacher) throw new Error("Teacher not found");
+    if (!teacher) throw appError("svcErr.teacherNotFound", "Teacher not found");
 
     const taCols = await resolveAssignmentCols();
     const { filter: taFilter, params: taParams } =
@@ -1482,7 +1484,7 @@ export const TeacherService = {
       [id, ...taParams]
     );
     if (hasAssignments) {
-      throw new Error("Cannot delete — teacher has assigned subjects. Unassign first.");
+      throw appError("svcErr.teacherHasSubjects", "Cannot delete — teacher has assigned subjects. Unassign first.");
     }
 
     const inTimetable = await db.getFirstAsync(
@@ -1490,7 +1492,7 @@ export const TeacherService = {
       [id]
     ).catch(() => null);
     if (inTimetable) {
-      throw new Error("Cannot delete — teacher is referenced in the timetable");
+      throw appError("svcErr.teacherInTimetable", "Cannot delete — teacher is referenced in the timetable");
     }
 
     const now = new Date().toISOString();

@@ -28,6 +28,7 @@ import {
   pushEnrollments,
   getEnrollmentStatus,
 } from "../../../src/services/studentEnroll.service";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -62,7 +63,7 @@ function SimpleSelect({
   value,
   options = [],
   onChange,
-  placeholder = "Select…",
+  placeholder,
   error = false,
 }) {
   const [open, setOpen] = React.useState(false);
@@ -467,7 +468,7 @@ export default function AddStudentScreen() {
       }
     } catch (err) {
       setErrors({
-        general: err?.message || t("studentAdd.saveFailed"),
+        general: errorText(t, err, "studentAdd.saveFailed"),
       });
     } finally {
       setSaving(false);

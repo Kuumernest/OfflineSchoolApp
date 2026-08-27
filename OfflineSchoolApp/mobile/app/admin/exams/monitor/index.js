@@ -302,7 +302,7 @@ export default function SubmissionMonitorScreen() {
               });
               await loadSubmissions(true);
             } catch (err) {
-              Alert.alert(t("examMonitor.errTitle"), err.message);
+              Alert.alert(t("examMonitor.errTitle"), errorText(t, err));
             } finally {
               setActionLoading(null);
             }
@@ -326,7 +326,7 @@ export default function SubmissionMonitorScreen() {
       setRejectModal(null);
       await loadSubmissions(true);
     } catch (err) {
-      Alert.alert(t("examMonitor.errTitle"), err.message);
+      Alert.alert(t("examMonitor.errTitle"), errorText(t, err));
     } finally {
       setRejectLoading(false);
     }
@@ -817,3 +817,4 @@ const s = StyleSheet.create({
   rejectBtnText: { fontSize: 13, fontWeight: "700", color: C.white },
 });
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";

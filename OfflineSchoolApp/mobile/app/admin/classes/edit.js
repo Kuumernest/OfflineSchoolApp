@@ -8,6 +8,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassService } from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 const MAX_CLASS_NAME_LENGTH = 50;
 
@@ -115,7 +116,7 @@ export default function EditClass() {
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;
-      const message = err.response?.data?.message || err.message || t("classesAdmin.errUpdate");
+      const message = err.response?.data?.message || errorText(t, err, "classesAdmin.errUpdate");
       Alert.alert(t("classesAdmin.errTitle"), message);
     } finally {
       if (isMountedRef.current) setSaving(false);

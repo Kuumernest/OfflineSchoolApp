@@ -23,6 +23,7 @@ import * as Print from "expo-print";
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../src/i18n/format";
+import { errorText } from "../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -157,7 +158,7 @@ export default function ParentPortalScreen() {
       await Print.printAsync({ html });
     } catch (err) {
       if (!(await handle401(err))) {
-        Alert.alert(t("portal.receipt"), err?.message ?? String(err));
+        Alert.alert(t("portal.receipt"), errorText(t, err) || String(err));
       }
     } finally {
       setPrinting(null);

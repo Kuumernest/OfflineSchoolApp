@@ -100,7 +100,7 @@ export default function AddTeacherScreen() {
         message:      null,
       });
     } catch (err) {
-      const message = err?.message ?? t("teachersAdd.errGeneric");
+      const message = errorText(t, err, "teachersAdd.errGeneric");
 
       if (
         message.toLowerCase().includes("already exists") ||
@@ -416,7 +416,7 @@ export default function AddTeacherScreen() {
             disabled={saving}
             style={styles.discardBtn}
           >
-            <Text style={styles.discardText}>Discard &amp; Go Back</Text>
+            <Text style={styles.discardText}>{t("teachersAdd.discardGoBack")}</Text>
           </TouchableOpacity>
 
         </View>
@@ -548,3 +548,4 @@ const styles = StyleSheet.create({
   secondaryBtnText: { fontSize: 15, fontWeight: "700", color: "#374151" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

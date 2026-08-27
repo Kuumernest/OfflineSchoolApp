@@ -363,7 +363,7 @@ function TemplateCard({
         {isActioning ? (
           <div className="flex items-center gap-2 text-sm text-gray-500 py-1">
             <Loader2 size={14} className="animate-spin" />
-            <span>Processing…</span>
+            <span>{t("common.processing")}</span>
           </div>
         ) : (
           <>

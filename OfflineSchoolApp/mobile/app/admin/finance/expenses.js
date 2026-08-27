@@ -25,6 +25,7 @@ import ExpenseService     from "../../../src/services/expense.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { formatMoney, formatDateShort } from "../../../src/i18n/format";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { errorText } from "../../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -124,7 +125,7 @@ export default function ExpensesScreen() {
       setVendor("");
       await loadLocal();
     } catch (err) {
-      Alert.alert(t("expenses.record"), err?.message ?? String(err));
+      Alert.alert(t("expenses.record"), errorText(t, err) || String(err));
     } finally {
       setSaving(false);
     }
@@ -171,7 +172,7 @@ export default function ExpensesScreen() {
               }
               await loadLocal();
             } catch (err) {
-              Alert.alert(t("expenses.void"), err?.message ?? String(err));
+              Alert.alert(t("expenses.void"), errorText(t, err) || String(err));
             }
           },
         },

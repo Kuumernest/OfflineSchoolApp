@@ -20,6 +20,7 @@ import * as Sharing    from "expo-sharing";
 import * as SecureStore from "expo-secure-store";
 
 import api, { API_URL } from "./api";
+import { appError }     from "../utils/appError";
 
 const XLSX_MIME =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
@@ -76,7 +77,7 @@ export const fetchExport = async ({ schoolId, kind, lang = "en", params = {} }) 
   // behind. Sharing it would hand someone an unopenable attachment.
   if (!file.exists || file.size === 0) {
     try { file.delete(); } catch { /* ignore */ }
-    throw new Error("The export came back empty");
+    throw appError("svcErr.exportEmpty", "The export came back empty");
   }
 
   return { uri: file.uri, fileName, size: file.size };

@@ -26,6 +26,7 @@ import { useAuthStore }    from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import api                 from "../../../src/services/api";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 const STATUS_OPTIONS = [
   { value: "present", labelKey: "academic.present", color: "#059669", icon: "checkmark-circle" },
@@ -334,7 +335,7 @@ const MarkAttendance = React.forwardRef(({
           [{ text: "OK", onPress: onSaved }]
         );
       } catch (err) {
-        Alert.alert(t("attAdmin.saveFailed"), err.message || t("attAdmin.pleaseTryAgain"));
+        Alert.alert(t("attAdmin.saveFailed"), errorText(t, err, "attAdmin.pleaseTryAgain"));
       } finally {
         setSaving(false);
       }

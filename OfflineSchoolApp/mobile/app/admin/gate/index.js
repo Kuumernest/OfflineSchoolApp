@@ -25,6 +25,7 @@ import * as Haptics from "expo-haptics";
 import GateService        from "../../../src/services/gate.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { errorText } from "../../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -113,7 +114,7 @@ export default function GateScannerScreen() {
       }
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      setResult({ kind: "error", message: err.message });
+      setResult({ kind: "error", message: errorText(t, err) });
     } finally {
       // Re-armed on a timer rather than immediately, so the operator sees the
       // result before the next child's card replaces it.

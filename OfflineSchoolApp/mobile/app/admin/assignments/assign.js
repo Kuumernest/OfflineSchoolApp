@@ -12,6 +12,7 @@ import {
   getTeachersList, getClassesList, getSubjectsByClass,
   createAssignment, createBulkAssignments, getTeacherAssignments,
 } from "../../../src/services/assignment.service";
+import { errorText } from "../../../src/utils/appError";
 
 const normalizeId = (item) => {
   if (!item || typeof item !== "object") return null;
@@ -411,8 +412,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           [{ text: t("assignWork.ok"), onPress: () => router.back() }]
         );
       } else {
-        const message = err?.response?.data?.message || err.message
-          || t("assignWork.errCreate");
+        const message = err?.response?.data?.message || errorText(t, err, "assignWork.errCreate");
         Alert.alert(t("assignWork.failedTitle"), message);
       }
     } finally {

@@ -17,6 +17,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }        from "@expo/vector-icons";
 import AnnouncementService from "../../../src/services/announcement.service";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -118,7 +119,7 @@ export default function AnnouncementDetailScreen() {
       }
     } catch (err) {
       console.error("loadDetail error:", err.message);
-      setError(err.message || t("annAdmin.errLoad"));
+      setError(errorText(t, err, "annAdmin.errLoad"));
     } finally {
       setLoading(false);
     }
@@ -142,7 +143,7 @@ export default function AnnouncementDetailScreen() {
               await AnnouncementService.deleteAnnouncement(id);
               router.back();
             } catch (err) {
-              Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errDelete"));
+              Alert.alert(t("annAdmin.errorTitle"), errorText(t, err, "annAdmin.errDelete"));
               setDeleting(false);
             }
           },
@@ -159,7 +160,7 @@ export default function AnnouncementDetailScreen() {
         prev ? { ...prev, isPinned: pinned } : prev
       );
     } catch (err) {
-      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errPin"));
+      Alert.alert(t("annAdmin.errorTitle"), errorText(t, err, "annAdmin.errPin"));
     }
   };
 
@@ -172,7 +173,7 @@ export default function AnnouncementDetailScreen() {
       );
       Alert.alert(t("annAdmin.ackDoneTitle"), t("annAdmin.ackDoneBody"));
     } catch (err) {
-      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errAck"));
+      Alert.alert(t("annAdmin.errorTitle"), errorText(t, err, "annAdmin.errAck"));
     }
   };
 

@@ -127,24 +127,24 @@ export default function PeriodsPage() {
       invalidate();
     },
     onError: (err) =>
-      toast({ title: "Could not save", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("periods.errSave"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const removeMutation = useMutation({
     mutationFn: (id: string) => deletePeriod(id),
     onSuccess: () => {
-      toast({ title: "Period removed", kind: "success" });
+      toast({ title: t("periods.removed"), kind: "success" });
       invalidate();
     },
     onError: (err) =>
-      toast({ title: "Could not remove period", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("periods.errRemove"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const toggleMutation = useMutation({
     mutationFn: (id: string) => togglePeriodActive(id),
     onSuccess: invalidate,
     onError: (err) =>
-      toast({ title: "Could not change status", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("periods.errStatus"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const moveMutation = useMutation({
@@ -155,7 +155,7 @@ export default function PeriodsPage() {
       // The endpoint answers 400 for "already at the end", which is a no-op
       // rather than a failure — the arrows are disabled at the edges anyway,
       // so this only fires on a genuine race.
-      toast({ title: "Could not reorder", message: getErrorMessage(err), kind: "error" });
+      toast({ title: t("periods.errReorder"), message: getErrorMessage(err), kind: "error" });
     },
   });
 
@@ -432,7 +432,7 @@ export default function PeriodsPage() {
 
           <Checkbox
             label={t("periods.isBreak")}
-            hint="Breaks still appear on the timetable, but aren't counted as gaps."
+            hint={t("periods.breakHint")}
             checked={form.isBreak}
             onChange={(e) => setForm((f) => ({ ...f, isBreak: e.target.checked }))}
           />

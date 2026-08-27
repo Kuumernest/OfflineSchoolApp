@@ -42,6 +42,7 @@ import {
   fetchIdCardSettings,
   saveIdCardSettings,
 } from "../../../src/services/settings.service";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -925,7 +926,7 @@ const IdCardSection = ({ schoolId }) => {
         t("adminSettings.idCardSavedBody")
       );
     } catch (err) {
-      Alert.alert(t("adminSettings.errSaveTitle"), err.message);
+      Alert.alert(t("adminSettings.errSaveTitle"), errorText(t, err));
     } finally {
       setSaving(false);
     }

@@ -3,7 +3,8 @@
 import React            from "react";
 import { isStale }      from "../../hooks/useApplications";
 import { formatDate }   from "../../utils/formatDate";
-import type { NormalisedApplication } from "../../types/applications";
+import type { NormalisedApplication } from "../../types/applications";
+import { useTranslation } from "react-i18next";
 
 // ── Icons (inline SVGs to avoid external dependency) ─────────────────────
 
@@ -62,6 +63,7 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
   application,
   onReview,
 }) => {
+  const { t } = useTranslation();
   const stale    = isStale(application.created_at);
   const docCount = application.documents?.length ?? 0;
 
@@ -140,7 +142,7 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
                    focus:ring-2 focus:ring-amber-400 focus:ring-offset-2"
       >
         <Icon d={ICONS.eye} color="#fff" size={18} />
-        Review Application
+        {t("applications.reviewApplication")}
       </button>
     </div>
   );

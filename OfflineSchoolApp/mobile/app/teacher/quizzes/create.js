@@ -41,6 +41,7 @@ import {
   getTeacherClasses,
   getTeacherSubjectsForClass,
 } from "../../../src/services/quiz.service";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -900,7 +901,7 @@ export default function CreateQuizScreen() {
         console.warn("Save quiz error:", err.message);
         Alert.alert(
           t("quizCreate.errorTitle"),
-          err.message || t("quizCreate.errSaveQuiz")
+          errorText(t, err, "quizCreate.errSaveQuiz")
         );
       } finally {
         setSaving(false);
@@ -961,7 +962,7 @@ export default function CreateQuizScreen() {
         console.warn("Save question error:", err.message);
         Alert.alert(
           t("quizCreate.errorTitle"),
-          err.message || t("quizCreate.errSaveQuestion")
+          errorText(t, err, "quizCreate.errSaveQuestion")
         );
       } finally {
         setSavingQuestion(false);

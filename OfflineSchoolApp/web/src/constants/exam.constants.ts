@@ -45,12 +45,14 @@ export const EXAM_STATUS_OPTIONS = Object.entries(EXAM_STATUS_META).map(
   ([value, meta]) => ({ value, labelKey: meta.labelKey })
 );
 
+// `value` is the term as the backend stores it and must stay English;
+// `label` is only the fallback when a translation key is missing.
 export const TERM_OPTIONS = [
-  { value: "Term 1",      label: "Term 1"      },
-  { value: "Term 2",      label: "Term 2"      },
-  { value: "Term 3",      label: "Term 3"      },
-  { value: "Semester 1",  label: "Semester 1"  },
-  { value: "Semester 2",  label: "Semester 2"  },
+  { value: "Term 1",      label: "Term 1",     labelKey: "examTerms.term1"     },
+  { value: "Term 2",      label: "Term 2",     labelKey: "examTerms.term2"     },
+  { value: "Term 3",      label: "Term 3",     labelKey: "examTerms.term3"     },
+  { value: "Semester 1",  label: "Semester 1", labelKey: "examTerms.semester1" },
+  { value: "Semester 2",  label: "Semester 2", labelKey: "examTerms.semester2" },
 ];
 
 const year = new Date().getFullYear();

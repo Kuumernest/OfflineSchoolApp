@@ -22,6 +22,7 @@ import type { Exam, ExamStatus } from "@/types/exam.types";
 import api                    from "@/lib/api";
 import { useToast }           from "@/components/ui/Toast";
 import { useTranslation } from "react-i18next";
+import { currentLocale }      from "@/i18n";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -49,27 +50,52 @@ const STATUS_TRANSITIONS: Record<ExamStatus, ExamStatus[]> = {
   archived:  ["draft"],
 };
 
+// `value` is the sort key the table reads — it must not change. Only the
+// label is localised, resolved at render because module scope has no `t`.
 const SORT_OPTIONS = [
-  { value: "createdAt_desc", label: "Newest first"  },
-  { value: "createdAt_asc",  label: "Oldest first"  },
-  { value: "name_asc",       label: "Name A–Z"      },
-  { value: "name_desc",      label: "Name Z–A"      },
-  { value: "startDate_asc",  label: "Date ↑"        },
-  { value: "startDate_desc", label: "Date ↓"        },
+  { value: "createdAt_desc", labelKey: "exams.sortNewest"   },
+  { value: "createdAt_asc",  labelKey: "exams.sortOldest"   },
+  { value: "name_asc",       labelKey: "exams.sortNameAsc"  },
+  { value: "name_desc",      labelKey: "exams.sortNameDesc" },
+  { value: "startDate_asc",  labelKey: "exams.sortDateAsc"  },
+  { value: "startDate_desc", labelKey: "exams.sortDateDesc" },
 ];
 
-const MONTHS = [
-  "January","February","March","April","May","June",
-  "July","August","September","October","November","December",
+// `value` is the stored/queried term string; only the label is localised.
+const TERM_FILTER_OPTIONS = [
+  { value: "Term 1",    labelKey: "exams.term1"    },
+  { value: "Term 2",    labelKey: "exams.term2"    },
+  { value: "Term 3",    labelKey: "exams.term3"    },
+  { value: "Full Year", labelKey: "exams.fullYear" },
 ];
-const DAYS_SHORT = ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"];
+
+const VIEW_TITLE_KEYS: Record<ViewMode, string> = {
+  table:    "exams.viewTable",
+  calendar: "exams.viewCalendar",
+  timeline: "exams.viewTimeline",
+};
+
+/** Month and weekday names come from Intl so they follow the chosen language. */
+const monthLabel = (year: number, month: number) =>
+  new Date(year, month, 1).toLocaleDateString(currentLocale(), {
+    month: "long", year: "numeric",
+  });
+
+/** Monday-first short weekday names in the active language. */
+const shortWeekdays = () => {
+  // 2024-01-01 was a Monday; seven consecutive days give Mon…Sun.
+  const locale = currentLocale();
+  return Array.from({ length: 7 }, (_, i) =>
+    new Date(2024, 0, 1 + i).toLocaleDateString(locale, { weekday: "short" })
+  );
+};
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 const fmtDate = (d?: string | null) => {
   if (!d) return "—";
   try {
-    return new Date(d + "T00:00:00").toLocaleDateString("en-GB", {
+    return new Date(d + "T00:00:00").toLocaleDateString(currentLocale(), {
       day: "numeric", month: "short", year: "numeric",
     });
   } catch { return d; }
@@ -200,7 +226,7 @@ const AlertsPanel = ({
         {!alerts.length ? (
           <div className="px-4 py-8 text-center">
             <p className="text-2xl mb-2">🎉</p>
-            <p className="text-sm text-gray-400">No alerts — all clear!</p>
+            <p className="text-sm text-gray-400">{t("exams.noAlerts")}</p>
           </div>
         ) : (
           <div className="p-3 space-y-2">
@@ -238,17 +264,18 @@ const QuickActionsMenu = ({
   onArchiveCompleted: () => void;
   schoolId:           string;
 }) => {
+  const { t } = useTranslation();
   const { toast } = useToast();
 
   const navigate = useNavigate();
 
   const actions = [
     {
-      icon: "➕", label: "Schedule New Exam",
+      id: "schedule", icon: "➕", label: t("exams.qaSchedule"),
       onClick: () => { navigate("/exams/new"); onClose(); },
     },
     {
-      icon: "📊", label: "Export Results (CSV)",
+      id: "export", icon: "📊", label: t("exams.qaExportCsv"),
       onClick: async () => {
         try {
           const res = await api.get("/exams/reports/results", {
@@ -262,25 +289,25 @@ const QuickActionsMenu = ({
           a.click();
           URL.revokeObjectURL(url);
         } catch {
-          toast({ title: "Export failed — try again", kind: "error" });
+          toast({ title: t("exams.exportFailed"), kind: "error" });
         }
         onClose();
       },
     },
     {
-      icon: "🖨️", label: "Print Timetable",
+      id: "print", icon: "🖨️", label: t("exams.qaPrintTimetable"),
       onClick: () => { window.print(); onClose(); },
     },
     {
-      icon: "🗑️", label: "Archive Completed Exams",
+      id: "archive", icon: "🗑️", label: t("exams.qaArchiveCompleted"),
       onClick: () => { onArchiveCompleted(); onClose(); },
     },
     {
-      icon: "📋", label: "View Report Cards",
+      id: "cards", icon: "📋", label: t("exams.qaReportCards"),
       onClick: () => { navigate("/reports/cards"); onClose(); },
     },
     {
-      icon: "📈", label: "Results Analytics",
+      id: "analytics", icon: "📈", label: t("results.analytics"),
       onClick: () => { navigate("/exams/results"); onClose(); },
     },
   ];
@@ -289,7 +316,7 @@ const QuickActionsMenu = ({
     <div className="absolute right-0 top-10 w-52 bg-white rounded-xl shadow-xl
                     border border-gray-100 z-40 py-1 overflow-hidden">
       {actions.map((a) => (
-        <button key={a.label} onClick={a.onClick}
+        <button key={a.id} onClick={a.onClick}
           className="w-full text-left px-4 py-2.5 text-sm text-gray-700
                      hover:bg-gray-50 flex items-center gap-2.5 transition-colors">
           <span>{a.icon}</span>
@@ -360,7 +387,7 @@ const ExamRow = ({
       {/* Class */}
       <td className="px-4 py-3 text-sm text-gray-600 max-w-[140px]">
         <span className="truncate block">
-          {exam.classNames || exam.className || "All Classes"}
+          {exam.classNames || exam.className || t("exams.allClasses")}
         </span>
       </td>
 
@@ -373,7 +400,7 @@ const ExamRow = ({
         {exam.status === "scheduled" && days !== null && days >= 0 && days <= 7 && (
           <div className={`text-xs font-semibold mt-0.5
             ${days === 0 ? "text-red-600" : "text-orange-500"}`}>
-            {days === 0 ? "Today!" : `In ${days} day${days === 1 ? "" : "s"}`}
+            {days === 0 ? t("exams.today") : t("exams.inDays", { count: days })}
           </div>
         )}
       </td>
@@ -431,12 +458,12 @@ const ExamRow = ({
                   <Link to={`/exams/${exam._id}?tab=marks`}
                     className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
                     onClick={() => setMenuOpen(false)}>
-                    ✏️ Enter Marks
+                    ✏️ {t("exams.enterMarks")}
                   </Link>
                   <Link to={`/exams/${exam._id}?tab=results`}
                     className="block px-4 py-2 text-sm text-green-600 hover:bg-green-50"
                     onClick={() => setMenuOpen(false)}>
-                    📊 View Results
+                    📊 {t("exams.viewResults")}
                   </Link>
 
                   <hr className="my-1 border-gray-100" />
@@ -444,7 +471,7 @@ const ExamRow = ({
                     onClick={() => { onDelete(exam._id, exam.name); setMenuOpen(false); }}
                     className="w-full text-left px-4 py-2 text-sm text-red-600
                                hover:bg-red-50">
-                    🗑️ Delete
+                    🗑️ {t("common.delete")}
                   </button>
                 </div>
               )}
@@ -511,8 +538,8 @@ const CalendarView = ({
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <h3 className="font-semibold text-gray-900 text-lg">
-          {MONTHS[month]} {year}
+        <h3 className="font-semibold text-gray-900 text-lg capitalize">
+          {monthLabel(year, month)}
         </h3>
         <button onClick={nextMonth}
           className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
@@ -522,10 +549,10 @@ const CalendarView = ({
 
       {/* Day headers */}
       <div className="grid grid-cols-7 border-b border-gray-100 bg-gray-50">
-        {DAYS_SHORT.map((d) => (
-          <div key={d}
+        {shortWeekdays().map((label, i) => (
+          <div key={i}
             className="py-2 text-center text-xs font-semibold text-gray-400 uppercase">
-            {d}
+            {label}
           </div>
         ))}
       </div>
@@ -575,7 +602,7 @@ const CalendarView = ({
                 })}
                 {dayExams.length > 3 && (
                   <p className="text-xs text-gray-400 px-1">
-                    +{dayExams.length - 3} more
+                    {t("exams.moreCount", { count: dayExams.length - 3 })}
                   </p>
                 )}
               </div>
@@ -612,14 +639,14 @@ const TimelineView = ({
   const { t } = useTranslation();
   // Group by subject/name prefix
   const byType = useMemo(() => {
-    const map: Record<string, { label: string; exams: Exam[] }> = {};
+    const map: Record<string, { id: string; label: string; exams: Exam[] }> = {};
     for (const e of exams) {
       const key = e.type || "other";
-      if (!map[key]) map[key] = { label: examTypeLabel(t, key), exams: [] };
+      if (!map[key]) map[key] = { id: key, label: examTypeLabel(t, key), exams: [] };
       map[key].exams.push(e);
     }
     return Object.values(map);
-  }, [exams]);
+  }, [exams, t]);
 
   // Date range
   const allDates = exams
@@ -660,7 +687,7 @@ const TimelineView = ({
     const pct = ((cur.getTime() - startDate.getTime()) / totalMs) * 100;
     if (pct >= 0 && pct <= 100) {
       monthMarkers.push({
-        label: cur.toLocaleDateString("en-GB", { month: "short", year: "2-digit" }),
+        label: cur.toLocaleDateString(currentLocale(), { month: "short", year: "2-digit" }),
         pct,
       });
     }
@@ -692,8 +719,8 @@ const TimelineView = ({
           </div>
 
           {/* Rows */}
-          {byType.map(({ label, exams: typeExams }) => (
-            <div key={label}
+          {byType.map(({ id, label, exams: typeExams }) => (
+            <div key={id}
               className="flex border-b border-gray-50 hover:bg-gray-50/40 group">
               <div className="w-36 shrink-0 px-4 py-3 text-sm text-gray-700
                               font-medium truncate">
@@ -724,7 +751,10 @@ const TimelineView = ({
       </div>
 
       <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
-        Timeline from {fmtDate(allDates[0])} to {fmtDate(allDates[allDates.length - 1])}
+        {t("exams.timelineRange", {
+          from: fmtDate(allDates[0]),
+          to:   fmtDate(allDates[allDates.length - 1]),
+        })}
       </div>
     </div>
   );
@@ -779,17 +809,17 @@ const ExamDetailSlideOver = ({
           {/* Grid details */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             {[
-              ["Term",         exam.term                                 ],
-              ["Year",         exam.academicYear                         ],
-              ["Class",        exam.classNames || exam.className || "—" ],
-              ["Start Date",   fmtDate(exam.startDate)                  ],
-              ["End Date",     fmtDate(exam.endDate)                    ],
-              ["Total Marks",  String(exam.totalMarks)                  ],
-              ["Pass Mark",    String(exam.passMark)                    ],
-            ].map(([k, v]) => (
-              <div key={k as string}>
-                <p className="text-xs text-gray-400 font-medium">{k}</p>
-                <p className="font-semibold text-gray-800 mt-0.5">{v || "—"}</p>
+              { labelKey: "academic.term",         value: exam.term                                },
+              { labelKey: "academic.schoolYear",   value: exam.academicYear                        },
+              { labelKey: "academic.class",        value: exam.classNames || exam.className || "—" },
+              { labelKey: "common.startDate",      value: fmtDate(exam.startDate)                  },
+              { labelKey: "common.endDate",        value: fmtDate(exam.endDate)                    },
+              { labelKey: "examCreate.totalMarks", value: String(exam.totalMarks)                  },
+              { labelKey: "academic.passMark",     value: String(exam.passMark)                    },
+            ].map(({ labelKey, value }) => (
+              <div key={labelKey}>
+                <p className="text-xs text-gray-400 font-medium">{t(labelKey)}</p>
+                <p className="font-semibold text-gray-800 mt-0.5">{value || "—"}</p>
               </div>
             ))}
           </div>
@@ -940,36 +970,36 @@ export default function ExamsPage() {
     if (d.draft > 0) {
       derived.push({
         type:    "reminder",
-        message: `${d.draft} exam${d.draft > 1 ? "s are" : " is"} still in draft — schedule when ready`,
-        action:  "View Drafts",
+        message: t("exams.alertDraft", { count: d.draft }),
+        action:  t("exams.actionViewDrafts"),
       });
     }
     if (d.ongoing > 0) {
       derived.push({
         type:    "warning",
-        message: `${d.ongoing} exam${d.ongoing > 1 ? "s are" : " is"} currently ongoing`,
-        action:  "View Ongoing",
+        message: t("exams.alertOngoing", { count: d.ongoing }),
+        action:  t("exams.actionViewOngoing"),
       });
     }
     if (dashData?.dashboard?.results?.missingGrades ?? 0 > 0) {
       const missing = dashData!.dashboard.results.missingGrades;
       derived.push({
         type:    "warning",
-        message: `${missing} student score${missing > 1 ? "s are" : " is"} missing grades`,
-        action:  "Enter Results",
+        message: t("exams.alertMissingGrades", { count: missing }),
+        action:  t("exams.actionEnterResults"),
       });
     }
     if (dashData?.dashboard?.results?.pending ?? 0 > 0) {
       const pending = dashData!.dashboard.results.pending;
       derived.push({
         type:    "atRisk",
-        message: `${pending} result${pending > 1 ? "s have" : " has"} not been published yet`,
-        action:  "Publish Results",
+        message: t("exams.alertPending", { count: pending }),
+        action:  t("exams.actionPublishResults"),
       });
     }
 
     setAlerts(derived);
-  }, [d, dashData]);
+  }, [d, dashData, t]);
 
   // ── Close quick menu on outside click ────────────────────────────────────
   useEffect(() => {
@@ -1031,14 +1061,17 @@ export default function ExamsPage() {
   }, [updateStatus]);
 
   const handleDelete = useCallback((examId: string, name: string) => {
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    if (!window.confirm(t("exams.deleteConfirm", { name }))) return;
     deleteExam.mutate(examId);
-  }, [deleteExam]);
+  }, [deleteExam, t]);
 
   const handleArchiveCompleted = useCallback(async () => {
     const completed = (examsData?.exams ?? []).filter((e) => e.status === "completed");
-    if (!completed.length) { toast({ title: "No completed exams to archive", kind: "info" }); return; }
-    if (!window.confirm(`Archive ${completed.length} completed exam(s)?`)) return;
+    if (!completed.length) {
+      toast({ title: t("exams.noCompletedToArchive"), kind: "info" });
+      return;
+    }
+    if (!window.confirm(t("exams.archiveConfirm", { count: completed.length }))) return;
 
     let count = 0;
     for (const e of completed) {
@@ -1047,10 +1080,10 @@ export default function ExamsPage() {
         count++;
       } catch { /* continue */ }
     }
-    toast({ title: `Archived ${count} exam(s)`, kind: "success" });
+    toast({ title: t("exams.archivedCount", { count }), kind: "success" });
     refetch();
     refetchDash();
-  }, [examsData, schoolId, refetch, refetchDash]);
+  }, [examsData, schoolId, refetch, refetchDash, toast, t]);
 
   const handleRefresh = () => { refetch(); refetchDash(); };
 
@@ -1129,7 +1162,7 @@ export default function ExamsPage() {
               { key: "timeline", Icon: BarChart2},
             ] as const).map(({ key, Icon }) => (
               <button key={key} onClick={() => setView(key)}
-                title={key.charAt(0).toUpperCase() + key.slice(1)}
+                title={t(VIEW_TITLE_KEYS[key])}
                 className={`px-3 py-2 transition-colors
                   ${view === key
                     ? "bg-primary-600 text-white"
@@ -1215,7 +1248,7 @@ export default function ExamsPage() {
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
             icon={BookOpen}   color="bg-teal-50 text-teal-600"
-            sub="school avg"
+            sub={t("exams.schoolAvg")}
           />
         </div>
       )}
@@ -1227,13 +1260,13 @@ export default function ExamsPage() {
             <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
             <div className="flex flex-wrap gap-6">
               {[
-                { label: t("results.published"),      value: dashData.dashboard.results.published,          color: "text-purple-600" },
-                { label: "Pending",        value: dashData.dashboard.results.pending,             color: "text-amber-600"  },
-                { label: "Missing Grades", value: dashData.dashboard.results.missingGrades,       color: "text-red-600"    },
-                { label: "Avg Score",      value: `${dashData.dashboard.results.averagePerformance}%`, color: "text-green-600" },
-                { label: t("exams.passRate"),      value: `${dashData.dashboard.results.passRate}%`,       color: "text-primary-600"},
+                { id: "published", label: t("results.published"),     value: dashData.dashboard.results.published,               color: "text-purple-600" },
+                { id: "pending",   label: t("results.pending"),       value: dashData.dashboard.results.pending,                 color: "text-amber-600"  },
+                { id: "missing",   label: t("exams.missingGrades"),   value: dashData.dashboard.results.missingGrades,           color: "text-red-600"    },
+                { id: "avg",       label: t("exams.avgScore"),        value: `${dashData.dashboard.results.averagePerformance}%`, color: "text-green-600" },
+                { id: "passRate",  label: t("exams.passRate"),        value: `${dashData.dashboard.results.passRate}%`,          color: "text-primary-600"},
               ].map((item) => (
-                <div key={item.label} className="text-center">
+                <div key={item.id} className="text-center">
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
                   <p className="text-xs text-gray-400 font-medium">{item.label}</p>
                 </div>
@@ -1286,7 +1319,7 @@ export default function ExamsPage() {
                 : "border-gray-200 text-gray-600 hover:bg-gray-50"
               }`}>
             <Filter className="w-4 h-4" />
-            Filters
+            {t("exams.filters")}
             {activeFilterCount > 0 && (
               <span className="bg-primary-600 text-white text-xs rounded-full
                                w-4 h-4 flex items-center justify-center font-bold">
@@ -1301,7 +1334,7 @@ export default function ExamsPage() {
                        text-gray-600 focus:outline-none focus:ring-2
                        focus:ring-primary-500 bg-white">
             {SORT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
+              <option key={o.value} value={o.value}>{t(o.labelKey)}</option>
             ))}
           </select>
         </div>
@@ -1335,8 +1368,8 @@ export default function ExamsPage() {
               className="px-3 py-2 border border-gray-200 rounded-lg text-sm
                          focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
               <option value="">{t("exams.allTerms")}</option>
-              {["Term 1","Term 2","Term 3","Full Year"].map((t) => (
-                <option key={t} value={t}>{t}</option>
+              {TERM_FILTER_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
               ))}
             </select>
 
@@ -1395,8 +1428,8 @@ export default function ExamsPage() {
             <p className="font-semibold text-gray-700">{t("exams.none")}</p>
             <p className="text-gray-400 text-sm mt-1">
               {activeFilterCount > 0
-                ? "Try adjusting or clearing your filters"
-                : "Create your first exam to get started"
+                ? t("exams.adjustFilters")
+                : t("exams.createFirst")
               }
             </p>
             {activeFilterCount > 0 && (
@@ -1463,8 +1496,8 @@ export default function ExamsPage() {
 
             {/* Count footer */}
             <div className="px-4 py-3 border-t border-gray-100 text-xs text-gray-400">
-              Showing {filtered.length} exam{filtered.length !== 1 ? "s" : ""}
-              {activeFilterCount > 0 && " (filtered)"}
+              {t("exams.showingCount", { count: filtered.length })}
+              {activeFilterCount > 0 && ` ${t("exams.filteredNote")}`}
             </div>
           </div>
         )}

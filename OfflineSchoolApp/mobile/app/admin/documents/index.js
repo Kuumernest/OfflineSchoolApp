@@ -23,6 +23,7 @@ import { ClassService }   from "../../../src/services/class.service";
 import { StudentService } from "../../../src/services/student.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useAuthStore }   from "../../../src/store/auth.store";
+import { errorText } from "../../../src/utils/appError";
 
 const C = {
   primary:   "#3B4996",
@@ -114,7 +115,7 @@ export default function DocumentsScreen() {
       // is still better than no sheet, but the teacher should know which it is.
       if (stale) Alert.alert(t("doc.title"), t("doc.offline"));
     } catch (err) {
-      Alert.alert(t("doc.print"), err?.message ?? String(err));
+      Alert.alert(t("doc.print"), errorText(t, err) || String(err));
     } finally {
       setBusy(false);
     }

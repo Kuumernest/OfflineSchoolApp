@@ -752,7 +752,7 @@ export default function AdmissionsPage() {
       } else if (result.emailSent === false && result.tempPassword) {
         setFlash({
           kind:    "success",
-          title:   "Approved — Share Credentials Manually",
+          title:   t("admissions.approvedShare"),
           message:
             `${appName} has been approved.\n\n` +
             `Email delivery failed. Share these login details:\n\n` +
@@ -945,8 +945,7 @@ export default function AdmissionsPage() {
           <CheckCircle2 className="h-12 w-12 text-emerald-600" />
           <p className="mt-3 text-lg font-bold text-gray-900">{t("admissions.allCaughtUp")}</p>
           <p className="mt-1 max-w-md text-sm text-gray-400">
-            No pending applications at the moment. New submissions will appear
-            here for review.
+            {t("admissions.noPendingBody")}
           </p>
         </div>
       ) : (

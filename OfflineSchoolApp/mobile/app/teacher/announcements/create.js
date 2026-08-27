@@ -27,6 +27,7 @@ import { useTranslation }      from "../../../src/i18n/useTranslation";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { useAnnouncementStore } from "../../../src/store/announcement.store";
 import { getDatabase }          from "../../../src/db/database";
+import { errorText } from "../../../src/utils/appError";
 
 const PRIORITIES = [
   { key: "low",    icon: "remove-circle-outline", color: "#059669", bg: "#ECFDF5" },
@@ -359,7 +360,7 @@ export default function CreateAnnouncementScreen() {
     } catch (err) {
       Alert.alert(
         t("announceCreate.failedTitle"),
-        err.message || t("announceCreate.failedBody"),
+        errorText(t, err, "announceCreate.failedBody"),
         [{ text: "OK" }]
       );
     }

@@ -24,6 +24,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { uploadContent }   from "../../../src/services/content.service";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -443,8 +444,7 @@ function UploadNotesPage() {
       console.error("Upload failed:", err);
       const msg =
         err?.response?.data?.message ||
-        err?.message                 ||
-        t("uploadNotes.uploadFailedFallback");
+        errorText(t, err, "uploadNotes.uploadFailedFallback");
       setUploadError(msg);
       setUploading(false);
     }

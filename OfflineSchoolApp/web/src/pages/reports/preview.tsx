@@ -25,7 +25,7 @@ export default function TemplatePreviewPage() {
 
   useEffect(() => {
     if (!templateId) {
-      setError("No template ID provided.");
+      setError(t("templates.noTemplateId"));
       setLoading(false);
       return;
     }
@@ -89,8 +89,8 @@ export default function TemplatePreviewPage() {
                         border-blue-200 px-6 py-3 text-sm text-blue-700">
           <Info size={16} className="mt-0.5 shrink-0" />
           <p>
-            Showing layout only — placeholders are still visible.
-            Open with a real student to see filled data.
+            {t("templates.previewNote1")}{" "}
+            {t("templates.previewNote2")}
           </p>
         </div>
       )}
@@ -99,7 +99,7 @@ export default function TemplatePreviewPage() {
       {loading && (
         <div className="flex-1 flex items-center justify-center gap-3">
           <Loader2 size={32} className="animate-spin text-blue-600" />
-          <span className="text-gray-500 text-sm">Rendering preview…</span>
+          <span className="text-gray-500 text-sm">{t("templates.rendering")}</span>
         </div>
       )}
 

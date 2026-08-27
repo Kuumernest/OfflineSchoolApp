@@ -13,6 +13,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
 import { ExamService }  from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -326,7 +327,7 @@ export default function ExamsDashboardScreen() {
                 await ExamService.updateExamStatus(exam._id || exam.id, s, schoolId);
                 loadData(true);
               } catch (err) {
-                Alert.alert(t("examsDash.errTitle"), err.message || t("examsDash.errStatusUpdate"));
+                Alert.alert(t("examsDash.errTitle"), errorText(t, err, "examsDash.errStatusUpdate"));
               }
             },
           })),

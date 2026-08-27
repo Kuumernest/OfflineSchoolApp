@@ -5,6 +5,7 @@ import api             from "./api";
 import { getDatabase } from "../db/database";
 import NetInfo         from "@react-native-community/netinfo";
 import * as SecureStore from "expo-secure-store";
+import { appError }     from "../utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TABLE INIT CACHE
@@ -670,18 +671,18 @@ export const createAnnouncement = async ({
   publishAt     = null,
   expiresAt     = null,
 }) => {
-  if (!title?.trim()) throw new Error("Title is required");
-  if (!body?.trim())  throw new Error("Body is required");
+  if (!title?.trim()) throw appError("svcErr.titleRequired", "Title is required");
+  if (!body?.trim())  throw appError("svcErr.bodyRequired", "Body is required");
 
   const db   = await getDatabase();
   await ensureTable(db);
   const user = getCurrentUser();
 
   if (!user || isStudent(user)) {
-    throw new Error("Students cannot create announcements");
+    throw appError("svcErr.studentsCannotAnnounce", "Students cannot create announcements");
   }
   const endpoint = getPushEndpoint(user);
-  if (!endpoint) throw new Error("You do not have permission to create announcements");
+  if (!endpoint) throw appError("svcErr.noPermissionAnnounce", "You do not have permission to create announcements");
 
   let finalAudience      = audience;
   let finalTargetClasses = targetClasses;
@@ -690,7 +691,8 @@ export const createAnnouncement = async ({
     const teacherId       = user._id || user.id;
     const teacherClassIds = await getTeacherClassIds(teacherId, user.schoolId);
     if (!teacherClassIds.length) {
-      throw new Error(
+      throw appError(
+        "svcErr.noAssignedClasses",
         "You are not assigned to any classes. Contact your administrator."
       );
     }
@@ -702,7 +704,8 @@ export const createAnnouncement = async ({
         teacherClassIds.includes(cid)
       );
       if (!finalTargetClasses.length) {
-        throw new Error(
+        throw appError(
+          "svcErr.onlyOwnClasses",
           "You can only send to classes you are assigned to teach."
         );
       }
@@ -818,10 +821,10 @@ export const updateAnnouncement = async (id, updates) => {
     );
     const userId = user._id || user.id;
     if (row && row.author_id !== userId) {
-      throw new Error("You can only edit your own announcements");
+      throw appError("svcErr.onlyEditOwnAnnouncement", "You can only edit your own announcements");
     }
     if (updates.audience && updates.audience !== "students") {
-      throw new Error("Teachers can only send to students");
+      throw appError("svcErr.teachersSendStudentsOnly", "Teachers can only send to students");
     }
     if (updates.targetClasses?.length) {
       const teacherClassIds = await getTeacherClassIds(userId, user.schoolId);
@@ -886,7 +889,7 @@ export const deleteAnnouncement = async (id) => {
     );
     const userId = user._id || user.id;
     if (row && row.author_id !== userId) {
-      throw new Error("You can only delete your own announcements");
+      throw appError("svcErr.onlyDeleteOwnAnnouncement", "You can only delete your own announcements");
     }
   }
 
@@ -1072,7 +1075,7 @@ export const togglePin = async (id) => {
   const user = getCurrentUser();
 
   if (!isAdmin(user)) {
-    throw new Error("Only administrators can pin announcements");
+    throw appError("svcErr.onlyAdminsPin", "Only administrators can pin announcements");
   }
 
   const row    = await db.getFirstAsync(

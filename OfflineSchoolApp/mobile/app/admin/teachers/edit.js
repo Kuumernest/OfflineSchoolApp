@@ -277,7 +277,7 @@ export default function EditTeacher() {
       }
     } catch (err) {
       if (isMountedRef.current) {
-        Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errSave"));
+        Alert.alert(t("teachersEdit.errTitle"), errorText(t, err, "teachersEdit.errSave"));
       }
     } finally {
       if (isMountedRef.current) setSaving(false);
@@ -322,7 +322,7 @@ export default function EditTeacher() {
                   const exists = prev.some((s) => (s.subjectId ?? s.id) === sid);
                   return exists ? prev : [...prev, subject];
                 });
-                Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errUnassign"));
+                Alert.alert(t("teachersEdit.errTitle"), errorText(t, err, "teachersEdit.errUnassign"));
               }
             } finally {
               if (isMountedRef.current) {
@@ -386,7 +386,7 @@ export default function EditTeacher() {
           const exists = prev.some((s) => (s.subjectId ?? s.id) === sid);
           return exists ? prev : [...prev, subject];
         });
-        Alert.alert(t("teachersEdit.errTitle"), err.message || t("teachersEdit.errAssign"));
+        Alert.alert(t("teachersEdit.errTitle"), errorText(t, err, "teachersEdit.errAssign"));
       }
     } finally {
       if (isMountedRef.current) {
@@ -671,3 +671,4 @@ const styles = StyleSheet.create({
   retryText:  { fontSize: 13, color: "#DC2626", fontWeight: "700" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

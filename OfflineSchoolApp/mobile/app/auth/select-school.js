@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -281,7 +282,7 @@ export default function SelectSchoolScreen() {
         setPage(pageNum);
       } catch (err) {
         console.error("fetchSchools error:", err.message);
-        setError(err.message);
+        setError(errorText(t, err));
       } finally {
         setLoading(false);
         setRefreshing(false);

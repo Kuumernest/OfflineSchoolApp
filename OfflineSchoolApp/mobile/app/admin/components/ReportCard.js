@@ -12,6 +12,7 @@ import * as Print      from "expo-print";
 import * as Sharing    from "expo-sharing";
 import api             from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -494,7 +495,7 @@ export default function ReportCard({
       const html = await resolveHtml();
       await Print.printAsync({ html });
     } catch (err) {
-      Alert.alert(t("reportCardDoc.printError"), err.message);
+      Alert.alert(t("reportCardDoc.printError"), errorText(t, err));
     }
   }, [result, exam, schoolName, examId, studentId, schoolId]);
 
@@ -514,7 +515,7 @@ export default function ReportCard({
         }),
       });
     } catch (err) {
-      Alert.alert(t("reportCardDoc.shareError"), err.message);
+      Alert.alert(t("reportCardDoc.shareError"), errorText(t, err));
     }
   }, [result, exam, schoolName, examId, studentId, schoolId]);
 

@@ -27,6 +27,7 @@ import {
   canonicalDay,
   VALID_DAYS,
 }                          from "../utils/timetableMappers";
+import { appError }        from "../utils/appError";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONSTANTS
@@ -533,7 +534,7 @@ const assertNoConflict = async (db, slot, excludeId = null) => {
      LIMIT 1`,
     classParams
   );
-  if (classConflict) throw new Error("This class already has a lesson in this period");
+  if (classConflict) throw appError("svcErr.classSlotConflict", "This class already has a lesson in this period");
 
   const teacherParams = [teacherId, dayOfWeek, periodId];
   if (excludeId) teacherParams.push(excludeId);
@@ -548,7 +549,7 @@ const assertNoConflict = async (db, slot, excludeId = null) => {
      LIMIT 1`,
     teacherParams
   );
-  if (teacherConflict) throw new Error("This teacher is already teaching in this period");
+  if (teacherConflict) throw appError("svcErr.teacherSlotConflict", "This teacher is already teaching in this period");
 };
 
 // ═════════════════════════════════════════════════════════════════════════════

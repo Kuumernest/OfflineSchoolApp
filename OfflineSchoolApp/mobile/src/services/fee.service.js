@@ -29,6 +29,7 @@ import { ensureTableSchema }  from "../db/schemaManager";
 import { generateUUID }       from "../utils/idHelpers";
 import { MutationQueue }      from "./mutationQueue.service";
 import api                    from "./api";
+import { appError }           from "../utils/appError";
 
 const CHARGES  = "fee_charges";
 const PAYMENTS = "fee_payments";
@@ -121,7 +122,7 @@ export const recordPayment = async ({
   // rejected by the server after the bursar had already handed back change.
   const value = Number(amount);
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
-    throw new Error("Amount must be a whole number of XAF greater than zero");
+    throw appError("svcErr.amountWholeXaf", "Amount must be a whole number of XAF greater than zero");
   }
 
   const db = await getDatabase();

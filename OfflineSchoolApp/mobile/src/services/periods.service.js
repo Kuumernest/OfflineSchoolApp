@@ -11,6 +11,7 @@ import {
 }                            from "../db/dbHelpers";
 import { generateUUID }      from "../utils/idHelpers";
 import NetInfo               from "@react-native-community/netinfo";
+import { appError }          from "../utils/appError";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 const TABLE = "periods";
@@ -214,13 +215,13 @@ export const PeriodsService = {
   },
 
   async create({ name, startTime, endTime, isBreak = false, schoolId }) {
-    if (!name?.trim())          throw new Error("Period name is required");
-    if (!startTime || !endTime) throw new Error("Start and end time are required");
+    if (!name?.trim())          throw appError("svcErr.periodNameRequired", "Period name is required");
+    if (!startTime || !endTime) throw appError("svcErr.periodTimesRequired", "Start and end time are required");
 
     const startMin = toMinutes(startTime);
     const endMin   = toMinutes(endTime);
-    if (startMin === null || endMin === null) throw new Error("Invalid time format — use HH:MM");
-    if (endMin <= startMin) throw new Error("End time must be after start time");
+    if (startMin === null || endMin === null) throw appError("svcErr.invalidTimeFormat", "Invalid time format — use HH:MM");
+    if (endMin <= startMin) throw appError("svcErr.endAfterStart", "End time must be after start time");
 
     const id  = generateUUID();
     const net = await NetInfo.fetch();
@@ -258,7 +259,10 @@ export const PeriodsService = {
       const pStart = toMinutes(p.starttime);
       const pEnd   = toMinutes(p.endtime);
       if (pStart !== null && pEnd !== null && startMin < pEnd && endMin > pStart) {
-        throw new Error(`Time overlaps with existing period ${p.starttime}–${p.endtime}`);
+        throw appError(
+          "svcErr.periodOverlap",
+          `Time overlaps with existing period ${p.starttime}–${p.endtime}`
+        );
       }
     }
 
@@ -347,7 +351,7 @@ export const PeriodsService = {
     const row = await db.getFirstAsync(
       `SELECT isactive FROM ${TABLE} WHERE id = ?`, [id]
     ).catch(() => null);
-    if (!row) throw new Error("Period not found");
+    if (!row) throw appError("svcErr.periodNotFound", "Period not found");
 
     const next = row.isactive ? 0 : 1;
     const now  = new Date().toISOString();
@@ -449,7 +453,8 @@ export const PeriodsService = {
     }
 
     if (inUseLegacy || inUseNew) {
-      throw new Error(
+      throw appError(
+        "svcErr.periodInTimetable",
         "Period is referenced in the timetable. Remove those slots first."
       );
     }

@@ -8,6 +8,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassService } from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 const MAX_CLASS_NAME_LENGTH = 50;
 
@@ -72,7 +73,7 @@ export default function AddClass() {
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;
-      const message = err.response?.data?.message || err.message || t("classesAdmin.errCreate");
+      const message = err.response?.data?.message || errorText(t, err, "classesAdmin.errCreate");
       Alert.alert(t("classesAdmin.errTitle"), message);
     } finally {
       if (isMountedRef.current) setLoading(false);
@@ -110,7 +111,7 @@ export default function AddClass() {
           <View style={styles.infoBanner}>
             <Ionicons name="information-circle-outline" size={18} color="#2563EB" />
             <Text style={styles.infoBannerText}>
-              Class names will be visible to teachers, students, and parents throughout the system.
+              {t("classesAdmin.visibilityNote")}
             </Text>
           </View>
 

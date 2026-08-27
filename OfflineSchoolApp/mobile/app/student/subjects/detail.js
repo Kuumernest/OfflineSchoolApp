@@ -29,6 +29,7 @@ import {
   resolveTypeFromItem,
 } from "../../../src/services/student.content.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 let IntentLauncher = null;
 try {
@@ -163,9 +164,7 @@ const openLocalFile = async (localUri, mime) => {
       if (supported) { await Linking.openURL(localUri); return; }
     } catch { /* ignore */ }
     throw new Error(
-      "Cannot open this file in Expo Go.\n\n" +
-      "Build a development client:\n  npx expo run:android\n\n" +
-      "Or install VLC and try again."
+      t("studentSubj.expoGoHint")
     );
   } else {
     try {
@@ -218,7 +217,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
     console.warn("[downloadAndOpen]", err.message);
     Alert.alert(
       t("studentSubj.cannotOpenTitle"),
-      err.message,
+      errorText(t, err),
       [
         { text: t("common.cancel"), style: "cancel" },
         { text: t("studentSubj.openBrowser"), onPress: () => Linking.openURL(url).catch(() => {}) },
@@ -588,7 +587,7 @@ export default function SubjectDetailScreen() {
       }
     } catch (err) {
       console.warn("[SubjectDetail] load error:", err.message);
-      setError(err.message);
+      setError(errorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);

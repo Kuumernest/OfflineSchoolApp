@@ -18,6 +18,7 @@
 import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import api                   from "./api";
+import { appError }          from "../utils/appError";
 
 const CACHE = "finance_report_cache";
 
@@ -44,7 +45,7 @@ export const pullReport = async ({ schoolId, from, to, academicYear }) => {
     params: { schoolId, from, to, academicYear },
   });
   const report = data?.data;
-  if (!report) throw new Error("Empty report");
+  if (!report) throw appError("svcErr.emptyReport", "Empty report");
 
   const db = await getDatabase();
   await ensureSchema(db);

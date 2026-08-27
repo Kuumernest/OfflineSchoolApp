@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { errorText } from "../../src/utils/appError";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -48,7 +49,7 @@ export default function NewConversationScreen() {
     try {
       setRecipients(await MessageService.fetchRecipients(q));
     } catch (err) {
-      const msg = err?.response?.data?.error || err.message;
+      const msg = err?.response?.data?.error || errorText(t, err);
       setError(
         err?.response
           ? msg
@@ -82,7 +83,7 @@ export default function NewConversationScreen() {
       // it usually names a setting somebody can change.
       Alert.alert(
         t("msgMobile.cannotStart"),
-        err?.response?.data?.error || err.message
+        err?.response?.data?.error || errorText(t, err)
       );
     } finally {
       setOpening(null);

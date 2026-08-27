@@ -18,6 +18,7 @@ import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { getCurrentAuth }    from "../utils/authHelpers";
 import NetInfo               from "@react-native-community/netinfo";
+import { appError }          from "../utils/appError";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — SCHEMA
@@ -147,7 +148,7 @@ export const fetchProfile = async () => {
 export const updateProfile = async ({ name, email }) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Profile update requires an internet connection");
+    throw appError("svcErr.onlineProfileUpdate", "Profile update requires an internet connection");
   }
 
   const res     = await api.put("/admin/settings/profile", { name, email });
@@ -172,7 +173,7 @@ export const updateProfile = async ({ name, email }) => {
 export const changePassword = async ({ currentPassword, newPassword }) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Password change requires an internet connection");
+    throw appError("svcErr.onlinePasswordChange", "Password change requires an internet connection");
   }
 
   const res = await api.put("/admin/settings/profile/password", {
@@ -237,7 +238,7 @@ export const fetchGradingConfig = async (schoolId) => {
 export const saveGradingConfig = async (config) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Saving grading config requires an internet connection");
+    throw appError("svcErr.onlineGradingConfig", "Saving grading config requires an internet connection");
   }
 
   const res     = await api.put("/admin/settings/grading", config);
@@ -300,7 +301,7 @@ export const fetchSchoolSettings = async (schoolId) => {
 export const saveSchoolSettings = async (payload) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Saving school settings requires an internet connection");
+    throw appError("svcErr.onlineSchoolSettings", "Saving school settings requires an internet connection");
   }
 
   const res    = await api.put("/admin/school-info", payload);
@@ -328,7 +329,7 @@ export const saveSchoolSettings = async (payload) => {
 export const fetchAdmins = async (schoolId) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Admin list requires an internet connection");
+    throw appError("svcErr.onlineAdminList", "Admin list requires an internet connection");
   }
 
   const res = await api.get("/admin/settings/admins", { params: { schoolId } });
@@ -338,7 +339,7 @@ export const fetchAdmins = async (schoolId) => {
 export const createAdmin = async ({ name, email, role, schoolId }) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Creating an admin requires an internet connection");
+    throw appError("svcErr.onlineCreateAdmin", "Creating an admin requires an internet connection");
   }
 
   const res = await api.post("/admin/settings/admins", { name, email, role, schoolId });
@@ -348,7 +349,7 @@ export const createAdmin = async ({ name, email, role, schoolId }) => {
 export const removeAdmin = async (adminId) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Removing an admin requires an internet connection");
+    throw appError("svcErr.onlineRemoveAdmin", "Removing an admin requires an internet connection");
   }
 
   const res = await api.delete(`/admin/settings/admins/${adminId}`);
@@ -362,7 +363,7 @@ export const removeAdmin = async (adminId) => {
 export const fetchAnalytics = async (schoolId) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Analytics require an internet connection");
+    throw appError("svcErr.onlineAnalytics", "Analytics require an internet connection");
   }
 
   const res = await api.get("/admin/settings/analytics", { params: { schoolId } });
@@ -433,7 +434,7 @@ export const saveIdCardSettings = async ({
 }) => {
   const net = await NetInfo.fetch();
   if (!net.isConnected) {
-    throw new Error("Saving these settings requires an internet connection");
+    throw appError("svcErr.onlineSaveSettings", "Saving these settings requires an internet connection");
   }
 
   const { schoolId: authSchoolId } = getCurrentAuth();

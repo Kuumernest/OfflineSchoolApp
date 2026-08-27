@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/auth.store";
 import * as ExamService from "@/services/exam.service";
 import type { CreateExamForm } from "@/types/exam.types";
-import { useToast } from "@/components/ui/Toast";
+import { useToast } from "@/components/ui/Toast";
+import { useTranslation } from "react-i18next";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -51,6 +52,7 @@ export const useExamDashboard = () => {
 // ─── CREATE ───────────────────────────────────────────────────────────────────
 
 export const useCreateExam = () => {
+  const { t }    = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -62,7 +64,7 @@ export const useCreateExam = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: examQueryKeys.lists()             });
       qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId) });
-      toast({ title: "Exam created", kind: "success" });
+      toast({ title: t("exams.examCreated"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to create exam", kind: "error" }),
@@ -72,6 +74,7 @@ export const useCreateExam = () => {
 // ─── UPDATE STATUS ────────────────────────────────────────────────────────────
 
 export const useUpdateExamStatus = () => {
+  const { t } = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -84,7 +87,7 @@ export const useUpdateExamStatus = () => {
       qc.invalidateQueries({ queryKey: examQueryKeys.lists()             });
       qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId)      });
       qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId) });
-      toast({ title: "Status updated", kind: "success" });
+      toast({ title: t("exams.toastStatusUpdated"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to update status", kind: "error" }),
@@ -94,6 +97,7 @@ export const useUpdateExamStatus = () => {
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
 export const useDeleteExam = () => {
+  const { t }    = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -105,7 +109,7 @@ export const useDeleteExam = () => {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: examQueryKeys.lists()             });
       qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId) });
-      toast({ title: "Exam deleted", kind: "success" });
+      toast({ title: t("exams.examDeleted"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to delete exam", kind: "error" }),

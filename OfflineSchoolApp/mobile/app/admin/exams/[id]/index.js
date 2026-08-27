@@ -14,6 +14,7 @@ import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // UUID VALIDATOR
@@ -1073,7 +1074,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                err.message || t("examDetail.statusUpdateFailed")
+                errorText(t, err, "examDetail.statusUpdateFailed")
               );
             }
           },
@@ -1115,7 +1116,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.failedTitle"),
-                err.message || t("examDetail.processFailed")
+                errorText(t, err, "examDetail.processFailed")
               );
             } finally {
               setProcessing(false);
@@ -1143,7 +1144,7 @@ export default function ExamDetailScreen() {
             } catch (err) {
               Alert.alert(
                 t("examDetail.errorTitle"),
-                err.message || t("examDetail.publishFailed")
+                errorText(t, err, "examDetail.publishFailed")
               );
             }
           },
@@ -1163,7 +1164,7 @@ export default function ExamDetailScreen() {
       });
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), err.message);
+      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
     }
   }, [id, schoolId, loadData]);
 
@@ -1193,7 +1194,7 @@ export default function ExamDetailScreen() {
         );
       }
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), err.message);
+      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
     } finally {
       setCoeffSaving(false);
     }
@@ -1218,7 +1219,7 @@ export default function ExamDetailScreen() {
       setRejectModal(null);
       loadData(true);
     } catch (err) {
-      Alert.alert(t("examDetail.errorTitle"), err.message);
+      Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
     } finally {
       setRejectLoading(false);
     }

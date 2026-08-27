@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { getDatabase }    from "@/db/database";
 import api              from "@/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -220,8 +221,7 @@ export default function AddSubjectScreen() {
       } catch (err) {
         const msg =
           err?.response?.data?.message ||
-          err?.message ||
-          t("subjectsAdd.unknownError");
+          errorText(t, err, "subjectsAdd.unknownError");
         outcomes.push({ classId: cid, className: cls?.name ?? cid, ok: false, error: msg });
       }
     }
@@ -414,8 +414,7 @@ export default function AddSubjectScreen() {
               </View>
             ) : (
               <Text style={styles.hint}>
-                How much this subject counts toward the average. 1 is normal,
-                2 counts double. Leave blank for 1.
+                {t("subjectsAdd.coeffHint")}
               </Text>
             )}
           </View>

@@ -285,7 +285,7 @@ export default function TeacherMarkAttendanceScreen() {
           [{ text: "OK", onPress: () => router.back() }]
         );
       } catch (err) {
-        Alert.alert(t("attTeacher.saveFailedTitle"), err?.message || t("attTeacher.tryAgain"));
+        Alert.alert(t("attTeacher.saveFailedTitle"), errorText(t, err, "attTeacher.tryAgain"));
       } finally {
         setSaving(false);
       }
@@ -618,3 +618,4 @@ const styles = StyleSheet.create({
   emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

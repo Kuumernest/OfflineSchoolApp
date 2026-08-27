@@ -16,9 +16,9 @@ const EXAM_TYPE_OPTIONS = [
 ] as const;
 
 const TERM_OPTIONS = [
-{ value: "term-1", label: "Term 1" },
-{ value: "term-2", label: "Term 2" },
-{ value: "term-3", label: "Term 3" },
+{ value: "term-1", labelKey: "exams.term1" },
+{ value: "term-2", labelKey: "exams.term2" },
+{ value: "term-3", labelKey: "exams.term3" },
 ] as const;
 
 const ACADEMIC_YEAR_OPTIONS = [
@@ -182,7 +182,7 @@ text
                 : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
               }`}
           >
-            {opt.label}
+            {t(opt.labelKey)}
           </button>
         ))}
       </div>
@@ -1017,7 +1017,7 @@ text
                  text-sm font-semibold text-gray-600
                  hover:bg-gray-50 transition-colors"
     >
-      {step === 0 ? "Cancel" : "← Back"}
+      {step === 0 ? t("common.cancel") : `← ${t("common.back")}`}
     </button>
 
     {step < 2 ? (
@@ -1027,7 +1027,7 @@ text
                    text-white rounded-xl text-sm font-semibold
                    transition-colors"
       >
-        Next →
+        {t("exams.next")} →
       </button>
     ) : (
       <button
@@ -1042,7 +1042,7 @@ text
           <div className="w-4 h-4 border-2 border-white
                          border-t-transparent rounded-full animate-spin" />
         )}
-        {createExam.isPending ? "Creating…" : "✓ Create Exam"}
+        {createExam.isPending ? t("exams.creating") : `✓ ${t("exams.create")}`}
       </button>
     )}
   </div>

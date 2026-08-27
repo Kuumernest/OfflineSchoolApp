@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }    from "@/store/auth.store";
 import * as ExamService    from "@/services/exam.service";
 import { examQueryKeys }   from "./useExams";
-import { useToast }        from "@/components/ui/Toast";
+import { useToast }        from "@/components/ui/Toast";
+import { useTranslation } from "react-i18next";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ export const useSubmissions = (examId: string, classId?: string) => {
 // ─── APPROVE SUBMISSION ───────────────────────────────────────────────────────
 
 export const useApproveSubmission = (examId: string) => {
+  const { t } = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -51,7 +53,7 @@ export const useApproveSubmission = (examId: string) => {
       ExamService.approveSubmission(examId, examSubjectId, schoolId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["submissions", examId] });
-      toast({ title: "Marks approved ✅", kind: "success" });
+      toast({ title: t("exams.toastApproved"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to approve submission", kind: "error" }),
@@ -61,6 +63,7 @@ export const useApproveSubmission = (examId: string) => {
 // ─── REJECT SUBMISSION ────────────────────────────────────────────────────────
 
 export const useRejectSubmission = (examId: string) => {
+  const { t } = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -73,7 +76,7 @@ export const useRejectSubmission = (examId: string) => {
       ExamService.rejectSubmission(examId, examSubjectId, reason, schoolId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["submissions", examId] });
-      toast({ title: "Submission rejected", kind: "success" });
+      toast({ title: t("exams.toastRejected"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to reject submission", kind: "error" }),
@@ -83,6 +86,7 @@ export const useRejectSubmission = (examId: string) => {
 // ─── UPDATE EXAM SUBJECT (coefficient, max score, pass mark) ─────────────────
 
 export const useUpdateExamSubject = (examId: string) => {
+  const { t } = useTranslation();
   const qc        = useQueryClient();
   const { toast } = useToast();
   const schoolId  = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -107,11 +111,11 @@ export const useUpdateExamSubject = (examId: string) => {
       toast(
         data.reprocessRequired
           ? {
-              title: "Saved — results need reprocessing",
-              message: "Marks exist for this subject. Run “Process results” so averages use the new setting.",
+              title: t("exams.toastNeedsReprocess"),
+              message: t("exams.toastReprocessBody"),
               kind: "warning",
             }
-          : { title: "Subject updated", kind: "success" }
+          : { title: t("exams.toastSubjectUpdated"), kind: "success" }
       );
     },
     onError: (e: Error) =>
@@ -139,6 +143,7 @@ export const useScores = (
 // ─── SAVE BULK SCORES ─────────────────────────────────────────────────────────
 
 export const useSaveBulkScores = () => {
+  const { t } = useTranslation();
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
@@ -148,7 +153,7 @@ export const useSaveBulkScores = () => {
         queryKey: submissionKeys.scores(vars.examId, vars.subjectId, vars.classId),
       });
       qc.invalidateQueries({ queryKey: ["submissions", vars.examId] });
-      toast({ title: "Scores saved", kind: "success" });
+      toast({ title: t("exams.toastScoresSaved"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to save scores", kind: "error" }),

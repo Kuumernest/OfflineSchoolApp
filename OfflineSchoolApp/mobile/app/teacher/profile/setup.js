@@ -27,6 +27,7 @@ import DateField                from "../../../src/components/DateField";
 import { withRetry }            from "../../../src/utils/withRetry";
 import api                      from "../../../src/services/api";
 import { useTranslation }       from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -646,7 +647,7 @@ export default function TeacherProfileSetup() {
         }]
       );
     } catch (err) {
-      Alert.alert(t("profileTeacher.errorTitle"), err.message || t("profileTeacher.saveFailedBody"));
+      Alert.alert(t("profileTeacher.errorTitle"), errorText(t, err, "profileTeacher.saveFailedBody"));
     } finally {
       setSaving(false);
     }

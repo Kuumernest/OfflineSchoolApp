@@ -33,15 +33,17 @@ import { useTranslation } from "react-i18next";
 // ─────────────────────────────────────────────────────────────────────────────
 
 interface Rule {
-  label: string;
-  test:  (v: string) => boolean;
+  // Module scope cannot call a hook, so the rule carries its key and the
+  // component resolves it at render.
+  labelKey: string;
+  test:     (v: string) => boolean;
 }
 
 const RULES: Rule[] = [
-  { label: "At least 8 characters", test: (v) => v.length >= 8 },
-  { label: "One uppercase letter",  test: (v) => /[A-Z]/.test(v) },
-  { label: "One lowercase letter",  test: (v) => /[a-z]/.test(v) },
-  { label: "One number",            test: (v) => /\d/.test(v) },
+  { labelKey: "changePassword.rule8",     test: (v) => v.length >= 8 },
+  { labelKey: "changePassword.ruleUpper", test: (v) => /[A-Z]/.test(v) },
+  { labelKey: "changePassword.ruleLower", test: (v) => /[a-z]/.test(v) },
+  { labelKey: "changePassword.ruleDigit", test: (v) => /\d/.test(v) },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -87,14 +89,14 @@ export default function ChangePasswordPage() {
         confirmPassword: confirm,
       }),
     onSuccess: () => {
-      toast({ title: "Password updated", kind: "success" });
+      toast({ title: t("changePassword.success"), kind: "success" });
       // changePassword() writes the fresh token and user into the store, so
       // mustResetPassword is already false by the time we navigate.
       navigate("/dashboard", { replace: true });
     },
     onError: (err) =>
       toast({
-        title:   "Could not update password",
+        title:   t("changePassword.failed"),
         message: getErrorMessage(err),
         kind:    "error",
       }),
@@ -114,10 +116,9 @@ export default function ChangePasswordPage() {
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {user?.name
-              ? `Welcome, ${user.name}. `
+              ? `${t("changePassword.welcomeName", { name: user.name })} `
               : ""}
-            Your account still uses the temporary password you were given.
-            Pick your own to continue.
+            {t("changePassword.tempIntro")}
           </p>
         </div>
 
@@ -132,8 +133,8 @@ export default function ChangePasswordPage() {
           <Field
             label={
               mustReset
-                ? "Temporary password (optional)"
-                : "Current password"
+                ? t("changePassword.tempOptional")
+                : t("changePassword.current")
             }
             value={currentPassword}
             onChange={setCurrentPassword}
@@ -153,7 +154,7 @@ export default function ChangePasswordPage() {
                   type="button"
                   onClick={() => setReveal((r) => !r)}
                   className="text-gray-400 hover:text-gray-600"
-                  aria-label={reveal ? "Hide passwords" : "Show passwords"}
+                  aria-label={reveal ? t("login.hidePassword") : t("login.showPassword")}
                 >
                   {reveal ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
@@ -164,7 +165,7 @@ export default function ChangePasswordPage() {
             <ul className="mt-3 space-y-1">
               {checks.map((c) => (
                 <li
-                  key={c.label}
+                  key={c.labelKey}
                   className={cn(
                     "flex items-center gap-2 text-xs",
                     c.met ? "text-emerald-600" : "text-gray-400",
@@ -173,7 +174,7 @@ export default function ChangePasswordPage() {
                   {c.met
                     ? <Check className="w-3.5 h-3.5 shrink-0" />
                     : <X className="w-3.5 h-3.5 shrink-0" />}
-                  {c.label}
+                  {t(c.labelKey)}
                 </li>
               ))}
             </ul>
@@ -181,7 +182,7 @@ export default function ChangePasswordPage() {
             {/* Advice, not a requirement — the server does not demand a symbol. */}
             {allMet && !/[^A-Za-z0-9]/.test(newPassword) && (
               <p className="mt-2 text-xs text-gray-500">
-                Adding a symbol (!@#$…) would make this noticeably stronger.
+                {t("changePassword.symbolTip")}
               </p>
             )}
 

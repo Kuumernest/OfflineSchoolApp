@@ -15,6 +15,7 @@ import { useAuthStore }                 from "../../../../../../src/store/auth.s
 import api                              from "../../../../../../src/services/api";
 import ReportCard                       from "../../../../components/ReportCard";
 import { useTranslation }               from "../../../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -327,7 +328,7 @@ export default function StudentReportCardScreen() {
       }
     } catch (err) {
       console.error("loadReportCard:", err.message);
-      setError(err.message);
+      setError(errorText(t, err));
     } finally {
       setLoading(false);
     }
@@ -431,7 +432,7 @@ export default function StudentReportCardScreen() {
     } catch (err) {
       Alert.alert(
         t("studentResult.errorTitle"),
-        err.message || t("studentResult.calcFailed")
+        errorText(t, err, "studentResult.calcFailed")
       );
     } finally {
       setCalculating(false);
@@ -475,7 +476,7 @@ export default function StudentReportCardScreen() {
               const res = err?.response?.data;
               Alert.alert(
                 t("studentResult.reissueFailed"),
-                res?.detail || res?.error || err.message
+                res?.detail || res?.error || errorText(t, err)
               );
             } finally {
               setReissuing(false);
@@ -506,7 +507,7 @@ export default function StudentReportCardScreen() {
         `${t("studentResult.sharePassMark")} ${c?.passMark ?? passMark}/${c?.outOf ?? outOf}`;
       await Share.share({ message: msg });
     } catch (err) {
-      Alert.alert(t("results.my.shareFailed"), err.message);
+      Alert.alert(t("results.my.shareFailed"), errorText(t, err));
     } finally {
       setSharing(false);
     }

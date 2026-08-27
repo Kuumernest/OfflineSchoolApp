@@ -52,11 +52,26 @@ const GRADE_COLORS: Record<string, string> = {
   "F":  "bg-red-600",
 };
 
-const RANK_SCOPES: { key: RankScope; label: string }[] = [
-  { key: "class",  label: "By Class"  },
-  { key: "grade",  label: "By Grade"  },
-  { key: "school", label: "By School" },
+// `key` is the scope sent to the rankings endpoint — it must not change.
+// Module scope has no `t`, so the label is stored as a key and resolved
+// at render time.
+const RANK_SCOPES: { key: RankScope; labelKey: string }[] = [
+  { key: "class",  labelKey: "results.scopeClass"  },
+  { key: "grade",  labelKey: "results.scopeGrade"  },
+  { key: "school", labelKey: "results.scopeSchool" },
 ];
+
+const RANKINGS_TITLE_KEYS: Record<RankScope, string> = {
+  class:  "results.rankingsClass",
+  grade:  "results.rankingsGrade",
+  school: "results.rankingsSchool",
+};
+
+const SECTION_LABEL_KEYS = {
+  overview: "nav.overview",
+  rankings: "results.rankings",
+  subjects: "results.subjectAnalysis",
+} as const;
 
 // ─────────────────────────────────────────────────────────
 // SMALL SHARED COMPONENTS
@@ -156,20 +171,20 @@ const ExamPicker = ({
 const StatsOverview = ({ stats }: { stats: Stats }) => {
   const { t } = useTranslation();
   const cards = [
-    { label: t("academic.student_other"),  value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
-    { label: "Passed",    value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
-    { label: "Failed",    value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
-    { label: t("exams.passRate"), value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
-    { label: t("academic.average"),   value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
-    { label: t("results.highest"),   value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
-    { label: t("results.lowest"),    value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
-    { label: "Avg GPA",   value: stats.averageGpa.toFixed(2),     color: "text-purple-600",  bg: "bg-purple-50"   },
+    { id: "students", label: t("academic.student_other"), value: stats.totalStudents,             color: "text-primary-600", bg: "bg-primary-50"  },
+    { id: "passed",   label: t("results.passed"),         value: stats.passed,                    color: "text-green-600",   bg: "bg-green-50"    },
+    { id: "failed",   label: t("results.failed"),         value: stats.failed,                    color: "text-red-600",     bg: "bg-red-50"      },
+    { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate.toFixed(1)}%`, color: "text-amber-600",   bg: "bg-amber-50"    },
+    { id: "average",  label: t("academic.average"),       value: `${stats.average.toFixed(1)}%`,  color: "text-indigo-600",  bg: "bg-indigo-50"   },
+    { id: "highest",  label: t("results.highest"),        value: `${stats.highest}%`,             color: "text-emerald-600", bg: "bg-emerald-50"  },
+    { id: "lowest",   label: t("results.lowest"),         value: `${stats.lowest}%`,              color: "text-rose-600",    bg: "bg-rose-50"     },
+    { id: "gpa",      label: t("results.avgGpa"),         value: stats.averageGpa.toFixed(2),     color: "text-purple-600",  bg: "bg-purple-50"   },
   ];
 
   return (
     <div className="grid grid-cols-4 md:grid-cols-8 gap-3">
       {cards.map((c) => (
-        <div key={c.label}
+        <div key={c.id}
              className={`rounded-xl border border-gray-100 p-3 text-center ${c.bg}`}>
           <p className={`text-xl font-bold ${c.color}`}>{c.value}</p>
           <p className="text-xs text-gray-500 font-medium mt-0.5">{c.label}</p>
@@ -220,19 +235,19 @@ const PassFailDonut = ({
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-green-500 shrink-0" />
           <span className="text-sm text-gray-700">
-            Passed — <strong>{passed}</strong>
+            {t("results.passed")} — <strong>{passed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-red-500 shrink-0" />
           <span className="text-sm text-gray-700">
-            Failed — <strong>{failed}</strong>
+            {t("results.failed")} — <strong>{failed}</strong>
           </span>
         </div>
         <div className="flex items-center gap-2">
           <span className="w-3 h-3 rounded-full bg-gray-300 shrink-0" />
           <span className="text-sm text-gray-700">
-            Total — <strong>{total}</strong>
+            {t("common.total")} — <strong>{total}</strong>
           </span>
         </div>
       </div>
@@ -253,11 +268,11 @@ const ScoreDistributionBar = ({
   const { t } = useTranslation();
   return <div className="space-y-3">
     {[
-      { label: t("results.highest"), value: highest, color: "bg-emerald-500" },
-      { label: t("academic.average"), value: average, color: "bg-indigo-500"  },
-      { label: t("results.lowest"),  value: lowest,  color: "bg-red-500"     },
-    ].map(({ label, value, color }) => (
-      <div key={label} className="flex items-center gap-3">
+      { id: "highest", label: t("results.highest"),  value: highest, color: "bg-emerald-500" },
+      { id: "average", label: t("academic.average"), value: average, color: "bg-indigo-500"  },
+      { id: "lowest",  label: t("results.lowest"),   value: lowest,  color: "bg-red-500"     },
+    ].map(({ id, label, value, color }) => (
+      <div key={id} className="flex items-center gap-3">
         <span className="w-14 text-xs text-gray-500 text-right">{label}</span>
         <div className="flex-1 h-4 bg-gray-100 rounded-full overflow-hidden">
           <div
@@ -532,7 +547,7 @@ const RankingsTable = ({
                   {/* Student */}
                   <td className="px-4 py-3">
                     <p className="font-semibold text-gray-900">
-                      {r.studentName || "Unknown"}
+                      {r.studentName || t("results.unknownStudent")}
                     </p>
                     {r.admissionNo && (
                       <p className="text-xs text-gray-400">
@@ -583,7 +598,7 @@ const RankingsTable = ({
                         ? "bg-green-100 text-green-700"
                         : "bg-red-100 text-red-700"
                       }`}>
-                      {passing ? "Pass" : "Fail"}
+                      {passing ? t("results.pass") : t("results.fail")}
                     </span>
                   </td>
                 </tr>
@@ -594,7 +609,7 @@ const RankingsTable = ({
 
         {filtered.length === 0 && search && (
           <div className="text-center py-8 text-sm text-gray-400">
-            No students match "{search}"
+            {t("results.noStudentsMatch", { query: search })}
           </div>
         )}
       </div>
@@ -615,6 +630,7 @@ const TopBottomStudents = ({
   rankings: ResultSummary[];
   n?:       number;
 }) => {
+  const { t } = useTranslation();
   if (rankings.length === 0) return null;
 
   const sorted  = [...rankings].sort((a, b) => b.percentage - a.percentage);
@@ -629,7 +645,7 @@ const TopBottomStudents = ({
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-semibold text-gray-900 truncate">
-          {r.studentName || "Unknown"}
+          {r.studentName || t("results.unknownStudent")}
         </p>
         <p className="text-xs text-gray-400 truncate">
           {r.className || "—"}
@@ -653,7 +669,7 @@ const TopBottomStudents = ({
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">🏆</span>
           <h3 className="font-semibold text-gray-900 text-sm">
-            Top {n} Students
+            {t("results.topStudents", { count: n })}
           </h3>
         </div>
         {top.map((r, i) => (
@@ -666,7 +682,7 @@ const TopBottomStudents = ({
         <div className="flex items-center gap-2 mb-3">
           <span className="text-lg">📌</span>
           <h3 className="font-semibold text-gray-900 text-sm">
-            Needs Attention (Bottom {n})
+            {t("results.needsAttention", { count: n })}
           </h3>
         </div>
         {bottom.map((r, i) => (
@@ -731,7 +747,7 @@ export default function ExamResultsPage() {
             {t("results.analytics")}
           </h1>
           <p className="text-gray-500 text-sm mt-1">
-            Select a completed exam to view performance data and rankings
+            {t("results.selectCompletedExam")}
           </p>
         </div>
         <Link
@@ -740,7 +756,7 @@ export default function ExamResultsPage() {
                      text-sm font-semibold hover:bg-green-700
                      transition-colors"
         >
-          🖨️ Report Cards
+          🖨️ {t("reportCards.title")}
         </Link>
       </div>
 
@@ -766,7 +782,7 @@ export default function ExamResultsPage() {
               <EmptyState
                 icon="📊"
                 title={t("results.selectToView")}
-                subtitle="Choose a completed or published exam from the list on the left"
+                subtitle={t("results.chooseExam")}
               />
             </div>
           ) : statsLoading ? (
@@ -788,7 +804,7 @@ export default function ExamResultsPage() {
                                rounded-xl text-sm font-semibold
                                hover:bg-primary-700 transition-colors"
                   >
-                    → Go to Exam Results Tab
+                    → {t("results.goToResultsTab")}
                   </Link>
                 </div>
               )}
@@ -815,7 +831,7 @@ export default function ExamResultsPage() {
                     className="text-xs font-semibold text-primary-600
                                hover:text-primary-700"
                   >
-                    Manage Exam →
+                    {t("results.manageExam")} →
                   </Link>
                 </div>
               )}
@@ -827,16 +843,14 @@ export default function ExamResultsPage() {
                   <button
                     key={s}
                     onClick={() => setActiveSection(s)}
-                    className={`px-5 py-3 text-sm font-semibold capitalize
+                    className={`px-5 py-3 text-sm font-semibold
                       transition-colors
                       ${activeSection === s
                         ? "text-primary-600 border-b-2 border-primary-600"
                         : "text-gray-500 hover:text-gray-700"
                       }`}
                   >
-                    {s === "overview"  ? "Overview"         : ""}
-                    {s === "rankings"  ? "Rankings"         : ""}
-                    {s === "subjects"  ? "Subject Analysis" : ""}
+                    {t(SECTION_LABEL_KEYS[s])}
                   </button>
                 ))}
               </div>
@@ -911,7 +925,7 @@ export default function ExamResultsPage() {
                               : "bg-gray-100 text-gray-600 hover:bg-gray-200"
                             }`}
                         >
-                          {s.label}
+                          {t(s.labelKey)}
                         </button>
                       ))}
                     </div>
@@ -923,11 +937,9 @@ export default function ExamResultsPage() {
                     <div className="px-5 py-3 border-b border-gray-100
                                     flex items-center justify-between">
                       <h3 className="font-semibold text-gray-900 text-sm">
-                        {rankScope === "class"  ? "Class Rankings"  :
-                         rankScope === "grade"  ? "Grade Rankings"  :
-                                                  "School Rankings"}
+                        {t(RANKINGS_TITLE_KEYS[rankScope])}
                         <span className="ml-2 text-xs text-gray-400 font-normal">
-                          {rankings.length} student{rankings.length !== 1 ? "s" : ""}
+                          {t("results.studentCount", { count: rankings.length })}
                         </span>
                       </h3>
                     </div>
@@ -948,8 +960,7 @@ export default function ExamResultsPage() {
                       <h3 className="font-semibold text-gray-900 text-sm">
                         {t("results.bySubject")}
                         <span className="ml-2 text-xs text-gray-400 font-normal">
-                          {stats.subjectStats.length} subject
-                          {stats.subjectStats.length !== 1 ? "s" : ""}
+                          {t("results.subjectCount", { count: stats.subjectStats.length })}
                         </span>
                       </h3>
                     </div>

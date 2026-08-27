@@ -10,6 +10,7 @@ import { router }      from "expo-router";
 import { Ionicons }    from "@expo/vector-icons";
 import { ExamService } from "../../../src/services/exam.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -69,7 +70,7 @@ export default function ResultsProcessingCard({
       setProcessData(res);
       if (onProcessed) onProcessed();
     } catch (err) {
-      setProcessError(err.message || t("resultsCard.processingFailed"));
+      setProcessError(errorText(t, err, "resultsCard.processingFailed"));
     } finally {
       setProcessing(false);
     }
@@ -92,7 +93,7 @@ export default function ResultsProcessingCard({
               );
               if (onProcessed) onProcessed();
             } catch (err) {
-              Alert.alert(t("examDetail.errorTitle"), err.message);
+              Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
             } finally {
               setPublishLoading(false);
             }

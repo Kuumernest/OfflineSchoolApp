@@ -21,6 +21,7 @@ import {
 import { useFocusEffect, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { TeacherService } from "../../../src/services/teacher.service";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -327,8 +328,7 @@ export default function AdminTeachers() {
 
                   const message =
                     err.response?.data?.message ||
-                    err.message ||
-                    t("teachers.errDelete");
+                    errorText(t, err, "teachers.errDelete");
 
                   Alert.alert(t("teachers.errTitle"), message);
                 }
@@ -672,4 +672,4 @@ const styles = StyleSheet.create({
   },
   emptyButtonText: { fontSize: 14, fontWeight: "600", color: "#4F46E5" },
 });
-import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useTranslation } from "../../../src/i18n/useTranslation";

@@ -32,8 +32,13 @@ export interface QuickAction {
 
 export interface Module {
   id:          string;
+  /** English title — the fallback when a translation key is missing. */
   title:       string;
+  /** Key into modules.* — see src/i18n/locales. */
+  titleKey:    string;
   description: string;
+  /** Key into modules.*Desc — see src/i18n/locales. */
+  descKey:     string;
   icon:        LucideIcon;
   href:        string;
 }
@@ -76,91 +81,104 @@ export const ALL_MODULES: Module[] = [
     id:          "classes",
     title:       "Classes",
     description: "Create & manage classes",
-    icon:        School,
+    titleKey:    "modules.classes",
+    descKey:     "modules.classesDesc",    icon:        School,
     href:        "/classes",
   },
   {
     id:          "subjects",
     title:       "Subjects",
     description: "Create & link subjects",
-    icon:        BookOpen,
+    titleKey:    "modules.subjects",
+    descKey:     "modules.subjectsDesc",    icon:        BookOpen,
     href:        "/subjects",
   },
   {
     id:          "teachers",
     title:       "Teachers",
     description: "Manage teacher profiles",
-    icon:        Users,
+    titleKey:    "modules.teachers",
+    descKey:     "modules.teachersDesc",    icon:        Users,
     href:        "/teachers",
   },
   {
     id:          "applications",
     title:       "Applications",
     description: "Review student applications",
-    icon:        GraduationCap,
+    titleKey:    "modules.applications",
+    descKey:     "modules.applicationsDesc",    icon:        GraduationCap,
     href:        "/students/admissions",
   },
   {
     id:          "students",
     title:       "Students",
     description: "Approved student roster",
-    icon:        Users,
+    titleKey:    "modules.students",
+    descKey:     "modules.studentsDesc",    icon:        Users,
     href:        "/students",
   },
   {
     id:          "assignments",
     title:       "Assignments",
     description: "Teacher-subject allocation",
-    icon:        GitBranch,
+    titleKey:    "modules.assignments",
+    descKey:     "modules.assignmentsDesc",    icon:        GitBranch,
     href:        "/teachers/assignments",
   },
   {
     id:          "periods",
     title:       "Periods",
     description: "Manage time periods",
-    icon:        Clock,
+    titleKey:    "modules.periods",
+    descKey:     "modules.periodsDesc",    icon:        Clock,
     href:        "/periods",
   },
   {
     id:          "timetable",
     title:       "Timetable",
     description: "Schedule builder",
-    icon:        Clock,
+    titleKey:    "modules.timetable",
+    descKey:     "modules.timetableDesc",    icon:        Clock,
     href:        "/timetable",
   },
   {
     id:          "attendance",
     title:       "Attendance",
     description: "Tracking & reports",
-    icon:        Calendar,
+    titleKey:    "modules.attendance",
+    descKey:     "modules.attendanceDesc",    icon:        Calendar,
     href:        "/attendance",
   },
   {
     id:          "exams",
     title:       "Exams",
     description: "Exams & results",
-    icon:        Trophy,
+    titleKey:    "modules.exams",
+    descKey:     "modules.examsDesc",    icon:        Trophy,
     href:        "/exams",
   },
   {
     id:          "announcements",
     title:       "Announcements",
     description: "Broadcast system",
-    icon:        Megaphone,
+    titleKey:    "modules.announcements",
+    descKey:     "modules.announcementsDesc",    icon:        Megaphone,
     href:        "/announcements",
   },
   {
     id:          "report-templates",
     title:       "Report Templates",
     description: "Design report card layouts",
-    icon:        LayoutTemplate,
+    titleKey:    "modules.reportTemplates",
+    descKey:     "modules.reportTemplatesDesc",    icon:        LayoutTemplate,
     href:        "/reports/templates",
   },
   {
     id:          "settings",
     title:       "Settings",
     description: "System configuration",
-    icon:        Settings,
+    titleKey:    "modules.settings",
+    descKey:     "modules.settingsDesc",    icon:        Settings,
     href:        "/settings",
   },
 ];

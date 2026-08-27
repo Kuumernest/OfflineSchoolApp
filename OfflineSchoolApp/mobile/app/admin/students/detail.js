@@ -15,6 +15,7 @@ import StudentService     from "@/services/student.service";
 import api                from "@/services/api";
 import { getStudentStatusConfig } from "@/utils/studentStatus";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -150,8 +151,7 @@ function EnrollmentCard({ enrollmentNo, mustResetPassword, studentId }) {
               Alert.alert(
                 t("studentRecord.resetErrorTitle"),
                 err?.response?.data?.message ||
-                  err?.message ||
-                  t("studentRecord.tryAgain")
+                  errorText(t, err, "studentRecord.tryAgain")
               );
             } finally {
               setResetting(false);
@@ -365,7 +365,7 @@ export default function StudentDetailScreen() {
       );
       setClasses(cls);
     } catch (err) {
-      setError(err?.message || t("studentRecord.loadFailed"));
+      setError(errorText(t, err, "studentRecord.loadFailed"));
     } finally {
       setLoading(false);
     }
@@ -411,7 +411,7 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || err?.message || t("studentRecord.suspendFailed")
+        err?.response?.data?.message || errorText(t, err, "studentRecord.suspendFailed")
       );
     } finally {
       setIsBusy(false);
@@ -444,7 +444,7 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || err?.message || t("studentRecord.restoreFailed")
+        err?.response?.data?.message || errorText(t, err, "studentRecord.restoreFailed")
       );
     } finally {
       setIsBusy(false);
@@ -476,7 +476,7 @@ export default function StudentDetailScreen() {
       setIsBusy(false);
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || err?.message || t("studentRecord.deleteFailed")
+        err?.response?.data?.message || errorText(t, err, "studentRecord.deleteFailed")
       );
     }
   }, [student, studentId, router, withConfirm, t]);
@@ -508,7 +508,7 @@ export default function StudentDetailScreen() {
     } catch (err) {
       Alert.alert(
         t("studentRecord.error"),
-        err?.response?.data?.message || err?.message || t("studentRecord.moveFailed")
+        err?.response?.data?.message || errorText(t, err, "studentRecord.moveFailed")
       );
     } finally {
       setIsBusy(false);

@@ -20,6 +20,7 @@ import * as Sharing from "expo-sharing";
 import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import api                   from "./api";
+import { appError }          from "../utils/appError";
 
 const CACHE = "document_cache";
 
@@ -77,7 +78,7 @@ const fetchDocument = async ({ kind, path, id, schoolId, variant, lang }) => {
     });
 
     const html = typeof data === "string" ? data : String(data ?? "");
-    if (!html.trim()) throw new Error("Empty document");
+    if (!html.trim()) throw appError("svcErr.emptyDocument", "Empty document");
 
     await cachePut(key, schoolId, html);
     return { html, stale: false, fetchedAt: new Date().toISOString() };

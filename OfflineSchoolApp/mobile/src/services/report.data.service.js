@@ -4,6 +4,7 @@
 import { DB }                                         from "../db/dbService";
 import api                                            from "./api";
 import { resolveColumns, resolveColumnOptional, COL } from "../db/schemaUtils";
+import { appError }                                   from "../utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -395,7 +396,7 @@ export async function assembleReportData({
     [studentId]
   );
 
-  if (!student) throw new Error(`Student not found: ${studentId}`);
+  if (!student) throw appError("svcErr.studentNotFound", `Student not found: ${studentId}`);
   console.log("[ReportData] Student:", student.name);
 
   // ── 2. Class ───────────────────────────────────────────

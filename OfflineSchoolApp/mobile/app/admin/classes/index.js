@@ -21,6 +21,7 @@ import { useRouter, useFocusEffect } from "expo-router";
 import { Ionicons }                  from "@expo/vector-icons";
 import { ClassService }              from "../../../src/services/class.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 const BRAND = "#4F46E5";
 
@@ -243,7 +244,7 @@ export default function AdminClasses() {
               );
               Alert.alert(
                 t("classesAdmin.errTitle"),
-                err?.response?.data?.message || err?.message ||
+                err?.response?.data?.message || errorText(t, err) ||
                   `Failed to ${actionLabel.toLowerCase()} class`
               );
             }
@@ -279,7 +280,7 @@ export default function AdminClasses() {
               );
             } catch (err) {
               const status  = err?.response?.status;
-              const message = err?.response?.data?.message || err?.message || t("classesAdmin.errDelete");
+              const message = err?.response?.data?.message || errorText(t, err, "classesAdmin.errDelete");
 
               if (status === 409 || message.toLowerCase().includes("student")) {
                 Alert.alert(

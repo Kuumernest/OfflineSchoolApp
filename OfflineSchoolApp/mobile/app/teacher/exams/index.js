@@ -12,6 +12,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -287,7 +288,7 @@ export default function TeacherExamsScreen() {
 
     } catch (err) {
       console.error("[TeacherExams] load error:", err.message);
-      setError(err.message);
+      setError(errorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);

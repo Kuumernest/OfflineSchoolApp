@@ -14,6 +14,7 @@ import { getCurrentAuth }  from "../utils/authHelpers";
 import { API }             from "./apiEndpoints";
 import api                 from "./api";
 import NetInfo             from "@react-native-community/netinfo";
+import { appError }        from "../utils/appError";
 
 const TABLE = "classes";
 
@@ -385,7 +386,7 @@ export const ClassService = {
     await ensureSchema(db);
 
     const trimmed = name?.trim();
-    if (!trimmed) throw new Error("Class name is required");
+    if (!trimmed) throw appError("svcErr.classNameRequired", "Class name is required");
 
     const dupParams = [trimmed];
     let dupWhere = `WHERE LOWER(name) = LOWER(?) AND ${NOT_DELETED}`;
@@ -398,7 +399,7 @@ export const ClassService = {
       `SELECT id FROM ${TABLE} ${dupWhere} LIMIT 1`,
       dupParams
     );
-    if (exists) throw new Error("A class with this name already exists");
+    if (exists) throw appError("svcErr.classNameExists", "A class with this name already exists");
 
     const localId = generateLocalId();
     const now     = new Date().toISOString();
@@ -465,7 +466,7 @@ export const ClassService = {
     await ensureSchema(db);
 
     const trimmed = name?.trim();
-    if (!trimmed) throw new Error("Class name is required");
+    if (!trimmed) throw appError("svcErr.classNameRequired", "Class name is required");
 
     const existParams = [id];
     let existWhere = `WHERE id = ? AND ${NOT_DELETED}`;
@@ -478,7 +479,7 @@ export const ClassService = {
       `SELECT id FROM ${TABLE} ${existWhere} LIMIT 1`,
       existParams
     );
-    if (!existing) throw new Error("Class not found");
+    if (!existing) throw appError("svcErr.classNotFound", "Class not found");
 
     const dupParams = [trimmed, id];
     let dupWhere = `WHERE LOWER(name) = LOWER(?) AND id != ? AND ${NOT_DELETED}`;
@@ -491,7 +492,7 @@ export const ClassService = {
       `SELECT id FROM ${TABLE} ${dupWhere} LIMIT 1`,
       dupParams
     );
-    if (duplicate) throw new Error("A class with this name already exists");
+    if (duplicate) throw appError("svcErr.classNameExists", "A class with this name already exists");
 
     const now = new Date().toISOString();
     await db.runAsync(
@@ -531,7 +532,7 @@ export const ClassService = {
       `SELECT id, is_active FROM ${TABLE} ${where} LIMIT 1`,
       params
     );
-    if (!existing) throw new Error("Class not found");
+    if (!existing) throw appError("svcErr.classNotFound", "Class not found");
 
     const now             = new Date().toISOString();
     const newActive       = existing.is_active === 1 ? 0 : 1;
@@ -586,7 +587,7 @@ export const ClassService = {
       `SELECT id FROM ${TABLE} ${existWhere} LIMIT 1`,
       existParams
     );
-    if (!existing) throw new Error("Class not found");
+    if (!existing) throw appError("svcErr.classNotFound", "Class not found");
 
     const hasStudents = await db.getFirstAsync(
       `SELECT id FROM students WHERE class_id = ? LIMIT 1`,
@@ -594,7 +595,8 @@ export const ClassService = {
     ).catch(() => null);
 
     if (hasStudents) {
-      throw new Error(
+      throw appError(
+        "svcErr.classHasStudents",
         "Cannot delete a class that has students enrolled. Move or remove students first."
       );
     }
@@ -643,10 +645,13 @@ export const ClassService = {
         }
 
         if (err?.response?.status === 409) {
-          throw new Error(
-            err.response.data?.message ||
-            "Cannot delete a class that has students enrolled."
-          );
+          const serverMessage = err.response.data?.message;
+          throw serverMessage
+            ? new Error(serverMessage)
+            : appError(
+                "svcErr.classHasStudentsShort",
+                "Cannot delete a class that has students enrolled."
+              );
         }
 
         throw err;

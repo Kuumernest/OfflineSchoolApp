@@ -15,6 +15,7 @@ import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
 import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -1259,7 +1260,7 @@ export default function CreateExamScreen() {
       console.error("Create exam failed:", err.message);
       Alert.alert(
         t("examNew.alertErrorTitle"),
-        err.message || t("examNew.errCreateFailed")
+        errorText(t, err, "examNew.errCreateFailed")
       );
     } finally {
       setSaving(false);

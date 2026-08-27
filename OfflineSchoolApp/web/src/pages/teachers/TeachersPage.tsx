@@ -106,11 +106,11 @@ export default function TeachersPage() {
   const removeMutation = useMutation({
     mutationFn: (id: string) => deleteTeacher(id),
     onSuccess: () => {
-      toast({ title: "Teacher removed", kind: "success" });
+      toast({ title: t("teachers.removed"), kind: "success" });
       invalidate();
     },
     onError: (err) =>
-      toast({ title: "Could not remove teacher", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("teachers.errRemove"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const resetMutation = useMutation({
@@ -121,7 +121,7 @@ export default function TeachersPage() {
       // Putting it on screen when the teacher already has it in their inbox is
       // an unnecessary place for it to be read over someone's shoulder.
       toast({
-        title:    "Password reset",
+        title:    t("teachers.passwordReset"),
         message:  result?.emailSent
           ? "A new password has been emailed to the teacher."
           : result?.tempPassword
@@ -132,20 +132,17 @@ export default function TeachersPage() {
       });
     },
     onError: (err) =>
-      toast({ title: "Could not reset password", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("teachers.errResetPassword"), message: getErrorMessage(err), kind: "error" }),
   });
 
-  const askRemove = async (t: Teacher) => {
+  const askRemove = async (teacher: Teacher) => {
     const ok = await confirm({
-      title:        "Remove this teacher?",
-      message:
-        `${t.name} will lose access immediately. Their teaching assignments ` +
-        `are removed too, so any class they were the only teacher for will ` +
-        `be left uncovered.`,
-      confirmLabel: "Remove teacher",
+      title:        t("teachers.removeConfirm"),
+      message:      t("teachers.removeBody", { name: teacher.name }),
+      confirmLabel: t("teachers.removeConfirmLabel"),
       kind:         "danger",
     });
-    if (ok) removeMutation.mutate(t._id);
+    if (ok) removeMutation.mutate(teacher._id);
   };
 
   const askReset = async (teacher: Teacher) => {

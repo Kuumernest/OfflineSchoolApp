@@ -3,6 +3,7 @@
 import { create }       from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { API_URL }      from "../services/api";
+import { appError }     from "../utils/appError";
 
 // ── Safe imports ───────────────────────────────────────────────────────────
 let NetInfo = null;
@@ -271,8 +272,8 @@ export const useAuthStore = create((set, get) => ({
         }
       }
 
-      if (!password)               throw new Error("Password is required");
-      if (!email && !enrollmentNo) throw new Error("Email or enrollment number is required");
+      if (!password)               throw appError("svcErr.passwordRequired", "Password is required");
+      if (!email && !enrollmentNo) throw appError("svcErr.emailOrEnrollmentRequired", "Email or enrollment number is required");
 
       const isEnrollment = !!enrollmentNo;
       const requestBody  = isEnrollment
@@ -298,13 +299,17 @@ export const useAuthStore = create((set, get) => ({
         });
 
         const data = await res.json().catch(() => ({}));
-        if (!res.ok) throw new Error(data.message || "Login failed");
+        if (!res.ok) {
+          throw data.message
+            ? new Error(data.message)
+            : appError("svcErr.loginFailed", "Login failed");
+        }
 
         user         = normalizeUser(data.user);
         token        = data.token;
         refreshToken = data.refreshToken;
 
-        if (!token || !user?.role) throw new Error("Invalid server response");
+        if (!token || !user?.role) throw appError("svcErr.invalidServerResponse", "Invalid server response");
 
         await Promise.all([
           SecureStore.setItemAsync(TOKEN_KEY,         token),
@@ -370,7 +375,7 @@ export const useAuthStore = create((set, get) => ({
 
       // ── Offline path ───────────────────────────────────────────────────
       else {
-        if (!DB) throw new Error("Offline mode not available");
+        if (!DB) throw appError("svcErr.offlineUnavailable", "Offline mode not available");
 
         const queryFn = typeof DB.query === "function"
           ? (sql, params) => DB.query(sql, params)
@@ -390,11 +395,12 @@ export const useAuthStore = create((set, get) => ({
         );
 
         if (!rows?.length) {
-          throw new Error(
-            isEnrollment
-              ? "No offline account found for that enrollment number"
-              : "No offline account found"
-          );
+          throw isEnrollment
+            ? appError(
+                "svcErr.noOfflineAccountEnrollment",
+                "No offline account found for that enrollment number"
+              )
+            : appError("svcErr.noOfflineAccount", "No offline account found");
         }
 
         const cached = rows[0];
@@ -403,11 +409,12 @@ export const useAuthStore = create((set, get) => ({
           !cached.passwordSalt ||
           !comparePassword(password, cached.passwordSalt, cached.passwordHash)
         ) {
-          throw new Error(
-            isEnrollment
-              ? "Invalid enrollment number or password"
-              : "Invalid credentials"
-          );
+          throw isEnrollment
+            ? appError(
+                "svcErr.invalidEnrollmentOrPassword",
+                "Invalid enrollment number or password"
+              )
+            : appError("svcErr.invalidCredentials", "Invalid credentials");
         }
 
         const { passwordSalt, passwordHash, ...safeUser } = cached;

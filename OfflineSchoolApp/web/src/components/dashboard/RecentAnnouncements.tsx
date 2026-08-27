@@ -27,8 +27,9 @@ const priorityVariant = (p: string | undefined): BadgeVariant => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function Skeleton() {
+  const { t } = useTranslation();
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="Loading announcements">
+    <div className="space-y-3" aria-busy="true" aria-label={t("dashboard.loadingAnnouncements")}>
       {[1, 2, 3].map((i) => (
         <div key={i} className="p-3 rounded-lg space-y-2">
           <div className="h-4 w-3/4 animate-pulse rounded bg-canvas" />

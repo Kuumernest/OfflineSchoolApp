@@ -25,6 +25,7 @@ import * as FileSystem     from "expo-file-system/legacy";
 import { Ionicons }        from "@expo/vector-icons";
 import { API_URL }         from "../../src/services/api";
 import { useTranslation }  from "../../src/i18n/useTranslation";
+import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -525,7 +526,7 @@ export default function ApplyScreen() {
       setStep(2);
     } catch (e) {
       console.error("Submit error:", e);
-      setError(e.message);
+      setError(errorText(t, e));
     } finally {
       setLoading(false);
       setUploadStage("");

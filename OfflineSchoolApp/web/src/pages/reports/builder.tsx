@@ -15,100 +15,104 @@ import { useTranslation } from "react-i18next";
 // VARIABLE REFERENCE
 // ─────────────────────────────────────────────────────────
 
+// `key` is the placeholder token the render engine looks for and the exact
+// text inserted into the template — it is never translated. Module scope has
+// no `t`, so group names and descriptions are held as keys and resolved at
+// render time.
 const VARIABLE_GROUPS = [
   {
-    group: "Student",
+    labelKey: "builder.varGroups.student",
     vars: [
-      { key: "{{student_name}}",     desc: "Full name"         },
-      { key: "{{admission_number}}", desc: "Admission number"  },
-      { key: "{{gender}}",           desc: "Gender"            },
-      { key: "{{date_of_birth}}",    desc: "Date of birth"     },
-      { key: "{{class}}",            desc: "Class name"        },
-      { key: "{{stream}}",           desc: "Stream or section" },
-      { key: "{{student_photo}}",    desc: "Passport photo"    },
+      { key: "{{student_name}}",     labelKey: "builder.vars.studentName"      },
+      { key: "{{admission_number}}", labelKey: "builder.vars.admissionNumber"  },
+      { key: "{{gender}}",           labelKey: "builder.vars.gender"           },
+      { key: "{{date_of_birth}}",    labelKey: "builder.vars.dateOfBirth"      },
+      { key: "{{class}}",            labelKey: "builder.vars.className"        },
+      { key: "{{stream}}",           labelKey: "builder.vars.stream"           },
+      { key: "{{student_photo}}",    labelKey: "builder.vars.studentPhoto"     },
     ],
   },
   {
-    group: "Exam",
+    labelKey: "builder.varGroups.exam",
     vars: [
-      { key: "{{term}}",          desc: "Term"          },
-      { key: "{{academic_year}}", desc: "Academic year" },
+      { key: "{{term}}",          labelKey: "builder.vars.term"         },
+      { key: "{{academic_year}}", labelKey: "builder.vars.academicYear" },
     ],
   },
   {
-    group: "Performance",
+    labelKey: "builder.varGroups.performance",
     vars: [
-      { key: "{{average}}",          desc: "Average score"       },
-      { key: "{{grade}}",            desc: "Overall grade"       },
-      { key: "{{remark}}",           desc: "Overall remark"      },
-      { key: "{{position}}",         desc: "Position in class"   },
-      { key: "{{total_students}}",   desc: "Total in class"      },
-      { key: "{{promotion_status}}", desc: "Promoted / Repeated" },
+      { key: "{{average}}",          labelKey: "builder.vars.average"         },
+      { key: "{{grade}}",            labelKey: "builder.vars.grade"           },
+      { key: "{{remark}}",           labelKey: "builder.vars.remark"          },
+      { key: "{{position}}",         labelKey: "builder.vars.position"        },
+      { key: "{{total_students}}",   labelKey: "builder.vars.totalStudents"   },
+      { key: "{{promotion_status}}", labelKey: "builder.vars.promotionStatus" },
     ],
   },
   {
-    group: "Attendance",
+    labelKey: "builder.varGroups.attendance",
     vars: [
-      { key: "{{days_present}}",       desc: "Days present"          },
-      { key: "{{days_absent}}",        desc: "Days absent"           },
-      { key: "{{days_open}}",          desc: "Total school days"     },
-      { key: "{{attendance_percent}}", desc: "Attendance percentage" },
+      { key: "{{days_present}}",       labelKey: "builder.vars.daysPresent"       },
+      { key: "{{days_absent}}",        labelKey: "builder.vars.daysAbsent"        },
+      { key: "{{days_open}}",          labelKey: "builder.vars.daysOpen"          },
+      { key: "{{attendance_percent}}", labelKey: "builder.vars.attendancePercent" },
     ],
   },
   {
-    group: "School",
+    labelKey: "builder.varGroups.school",
     vars: [
-      { key: "{{school_name}}",    desc: "School name"    },
-      { key: "{{school_motto}}",   desc: "School motto"   },
-      { key: "{{school_address}}", desc: "School address" },
-      { key: "{{school_phone}}",   desc: "Phone number"   },
-      { key: "{{school_logo}}",    desc: "School logo"    },
+      { key: "{{school_name}}",    labelKey: "builder.vars.schoolName"    },
+      { key: "{{school_motto}}",   labelKey: "builder.vars.schoolMotto"   },
+      { key: "{{school_address}}", labelKey: "builder.vars.schoolAddress" },
+      { key: "{{school_phone}}",   labelKey: "builder.vars.schoolPhone"   },
+      { key: "{{school_logo}}",    labelKey: "builder.vars.schoolLogo"    },
     ],
   },
   {
-    group: "Staff",
+    labelKey: "builder.varGroups.staff",
     vars: [
-      { key: "{{principal_name}}",    desc: "Principal name"     },
-      { key: "{{class_teacher}}",     desc: "Class teacher name" },
-      { key: "{{teacher_comment}}",   desc: "Teacher comment"    },
-      { key: "{{principal_comment}}", desc: "Principal comment"  },
+      { key: "{{principal_name}}",    labelKey: "builder.vars.principalName"    },
+      { key: "{{class_teacher}}",     labelKey: "builder.vars.classTeacher"     },
+      { key: "{{teacher_comment}}",   labelKey: "builder.vars.teacherComment"   },
+      { key: "{{principal_comment}}", labelKey: "builder.vars.principalComment" },
     ],
   },
   {
-    group: "Tables",
+    labelKey: "builder.varGroups.tables",
     vars: [
-      { key: "{{subjects_table}}",   desc: "Full subjects table — auto-generated" },
-      { key: "{{attendance_table}}", desc: "Monthly attendance table"             },
+      { key: "{{subjects_table}}",   labelKey: "builder.vars.subjectsTable"   },
+      { key: "{{attendance_table}}", labelKey: "builder.vars.attendanceTable" },
     ],
   },
   {
-    group: "Subjects Loop",
+    labelKey: "builder.varGroups.subjectsLoop",
     vars: [
-      { key: "{{each subjects}}",     desc: "Start loop over subjects" },
-      { key: "{{subject.name}}",      desc: "Subject name (in loop)"   },
-      { key: "{{subject.caScore}}",   desc: "CA score (in loop)"       },
-      { key: "{{subject.examScore}}", desc: "Exam score (in loop)"     },
-      { key: "{{subject.total}}",     desc: "Total score (in loop)"    },
-      { key: "{{subject.grade}}",     desc: "Grade (in loop)"          },
-      { key: "{{subject.remark}}",    desc: "Remark (in loop)"         },
-      { key: "{{/each}}",             desc: "End loop"                 },
+      { key: "{{each subjects}}",     labelKey: "builder.vars.eachSubjects"  },
+      { key: "{{subject.name}}",      labelKey: "builder.vars.subjectName"   },
+      { key: "{{subject.caScore}}",   labelKey: "builder.vars.subjectCa"     },
+      { key: "{{subject.examScore}}", labelKey: "builder.vars.subjectExam"   },
+      { key: "{{subject.total}}",     labelKey: "builder.vars.subjectTotal"  },
+      { key: "{{subject.grade}}",     labelKey: "builder.vars.subjectGrade"  },
+      { key: "{{subject.remark}}",    labelKey: "builder.vars.subjectRemark" },
+      { key: "{{/each}}",             labelKey: "builder.vars.endEach"       },
     ],
   },
   {
-    group: "Conditionals",
+    labelKey: "builder.varGroups.conditionals",
     vars: [
-      { key: "{{if isPassing}}",   desc: "Show if student is passing"   },
-      { key: "{{if isRepeating}}", desc: "Show if student is repeating" },
-      { key: "{{else}}",           desc: "Else branch"                  },
-      { key: "{{endif}}",          desc: "End conditional"              },
+      { key: "{{if isPassing}}",   labelKey: "builder.vars.ifPassing"   },
+      { key: "{{if isRepeating}}", labelKey: "builder.vars.ifRepeating" },
+      { key: "{{else}}",           labelKey: "builder.vars.elseBranch"  },
+      { key: "{{endif}}",          labelKey: "builder.vars.endif"       },
     ],
   },
   {
-    group: "Extras",
+    labelKey: "builder.varGroups.extras",
     vars: [
-      { key: "{{qr_code}}",        desc: "QR code placeholder"   },
-      { key: "{{report_date}}",    desc: "Date report generated" },
-      { key: "{{next_term_date}}", desc: "Next term start date"  },
+      { key: "{{qr_code}}",        labelKey: "builder.vars.qrCode"       },
+      { key: "{{report_date}}",    labelKey: "builder.vars.reportDate"   },
+      { key: "{{next_term_date}}", labelKey: "builder.vars.nextTermDate" },
     ],
   },
 ];
@@ -117,7 +121,8 @@ const VARIABLE_GROUPS = [
 // STARTER TEMPLATE
 // ─────────────────────────────────────────────────────────
 
-const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px;">
+/** The default layout a school starts from; tokens stay untouched. */
+const buildStarterHtml = (t: (key: string) => string) => `<div style="font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 24px;">
 
   <!-- School Header -->
   <div style="text-align: center; border-bottom: 2px solid #2563EB; padding-bottom: 16px; margin-bottom: 16px;">
@@ -125,7 +130,7 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
     <h1 style="color: #1E40AF; margin: 8px 0 4px;">{{school_name}}</h1>
     <p style="color: #6B7280; font-style: italic; margin: 0;">{{school_motto}}</p>
     <h2 style="color: #2563EB; margin: 12px 0 0; font-size: 14px; letter-spacing: 2px;">
-      STUDENT REPORT CARD
+      ${t("builder.tplTitle")}
     </h2>
     <p style="margin: 4px 0; color: #374151; font-size: 13px;">
       {{term}} &mdash; {{academic_year}}
@@ -135,9 +140,9 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
   <!-- Student Info -->
   <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
     <tr>
-      <td style="padding: 6px; color: #6B7280; width: 140px; font-size: 12px;">Student Name</td>
+      <td style="padding: 6px; color: #6B7280; width: 140px; font-size: 12px;">${t("builder.tplStudentName")}</td>
       <td style="padding: 6px; font-weight: bold;">{{student_name}}</td>
-      <td style="padding: 6px; color: #6B7280; width: 140px; font-size: 12px;">Admission No</td>
+      <td style="padding: 6px; color: #6B7280; width: 140px; font-size: 12px;">${t("builder.tplAdmissionNo")}</td>
       <td style="padding: 6px; font-weight: bold;">{{admission_number}}</td>
     </tr>
     <tr>
@@ -147,16 +152,16 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
       <td style="padding: 6px;">{{gender}}</td>
     </tr>
     <tr>
-      <td style="padding: 6px; color: #6B7280; font-size: 12px;">Class Teacher</td>
+      <td style="padding: 6px; color: #6B7280; font-size: 12px;">${t("builder.tplClassTeacher")}</td>
       <td style="padding: 6px;">{{class_teacher}}</td>
-      <td style="padding: 6px; color: #6B7280; font-size: 12px;">Date of Birth</td>
+      <td style="padding: 6px; color: #6B7280; font-size: 12px;">${t("builder.tplDob")}</td>
       <td style="padding: 6px;">{{date_of_birth}}</td>
     </tr>
   </table>
 
   <!-- Subjects Table -->
   <h3 style="font-size: 13px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; margin-bottom: 8px;">
-    Academic Performance
+    ${t("builder.tplPerformance")}
   </h3>
   {{subjects_table}}
 
@@ -188,16 +193,16 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
   </h3>
   <div style="display: flex; gap: 12px; margin-bottom: 16px;">
     <div style="flex: 1; background: #F9FAFB; border-radius: 6px; padding: 8px 12px; font-size: 12px;">
-      Days Open: <strong>{{days_open}}</strong>
+      ${t("builder.tplDaysOpen")} <strong>{{days_open}}</strong>
     </div>
     <div style="flex: 1; background: #F9FAFB; border-radius: 6px; padding: 8px 12px; font-size: 12px;">
-      Present: <strong>{{days_present}}</strong>
+      ${t("builder.tplPresent")} <strong>{{days_present}}</strong>
     </div>
     <div style="flex: 1; background: #F9FAFB; border-radius: 6px; padding: 8px 12px; font-size: 12px;">
-      Absent: <strong>{{days_absent}}</strong>
+      ${t("builder.tplAbsent")} <strong>{{days_absent}}</strong>
     </div>
     <div style="flex: 1; background: #F9FAFB; border-radius: 6px; padding: 8px 12px; font-size: 12px;">
-      Rate: <strong>{{attendance_percent}}</strong>
+      ${t("builder.tplRate")} <strong>{{attendance_percent}}</strong>
     </div>
   </div>
 
@@ -205,7 +210,7 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
   <div style="display: flex; gap: 16px; margin-bottom: 16px;">
     <div style="flex: 1; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
       <div style="font-size: 11px; font-weight: bold; color: #6B7280; margin-bottom: 6px;">
-        CLASS TEACHER'S REMARK
+        ${t("builder.tplTeacherRemark")}
       </div>
       <p style="margin: 0; font-size: 12px; color: #374151;">{{teacher_comment}}</p>
       <div style="margin-top: 20px; border-top: 1px solid #9CA3AF; padding-top: 4px;
@@ -215,7 +220,7 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
     </div>
     <div style="flex: 1; border: 1px solid #E5E7EB; border-radius: 8px; padding: 12px;">
       <div style="font-size: 11px; font-weight: bold; color: #6B7280; margin-bottom: 6px;">
-        PRINCIPAL'S REMARK
+        ${t("builder.tplPrincipalRemark")}
       </div>
       <p style="margin: 0; font-size: 12px; color: #374151;">{{principal_comment}}</p>
       <div style="margin-top: 20px; border-top: 1px solid #9CA3AF; padding-top: 4px;
@@ -230,7 +235,7 @@ const STARTER_HTML = `<div style="font-family: Arial, sans-serif; max-width: 800
               border-top: 1px solid #E5E7EB; padding-top: 12px; margin-top: 8px;">
     <div>{{qr_code}}</div>
     <div style="text-align: right; font-size: 11px; color: #6B7280;">
-      <p style="margin: 0;">Next Term Begins: <strong>{{next_term_date}}</strong></p>
+      <p style="margin: 0;">${t("builder.tplNextTerm")} <strong>{{next_term_date}}</strong></p>
       <p style="margin: 4px 0 0;">Report Generated: {{report_date}}</p>
     </div>
   </div>
@@ -258,7 +263,7 @@ export default function TemplateBuilderPage() {
   const isEditing  = !!templateId;
 
   const [name,      setName]      = useState("");
-  const [html,      setHtml]      = useState(STARTER_HTML);
+  const [html,      setHtml]      = useState(() => buildStarterHtml(t));
   const [css,       setCss]       = useState("");
   const [isDefault, setIsDefault] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("html");
@@ -277,7 +282,7 @@ export default function TemplateBuilderPage() {
       .then((res) => {
         const tmpl = res.data?.template || res.data?.data || res.data;
         setName(tmpl.name           || "");
-        setHtml(tmpl.html           || STARTER_HTML);
+        setHtml(tmpl.html           || buildStarterHtml(t));
         setCss(tmpl.css             || "");
         setIsDefault(tmpl.isDefault || false);
       })
@@ -290,8 +295,8 @@ export default function TemplateBuilderPage() {
   // ── Save ───────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { alert("Please enter a template name."); return; }
-    if (!html.trim()) { alert("HTML cannot be empty.");          return; }
+    if (!name.trim()) { alert(t("builder.nameRequired")); return; }
+    if (!html.trim()) { alert(t("builder.htmlRequired")); return; }
 
     setSaving(true);
     setError(null);
@@ -317,7 +322,7 @@ export default function TemplateBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [name, html, css, isDefault, isEditing, templateId, schoolId, navigate]);
+  }, [name, html, css, isDefault, isEditing, templateId, schoolId, navigate, t]);
 
   // ── Keyboard shortcut Ctrl/Cmd + S ────────────────────
 
@@ -364,7 +369,7 @@ export default function TemplateBuilderPage() {
 
         <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-900">
-            {isEditing ? "Edit Template" : "New Template"}
+            {isEditing ? t("builder.editTemplate") : t("templates.new")}
           </h1>
           <p className="text-xs text-gray-500">{t("builder.title")}</p>
         </div>
@@ -410,7 +415,7 @@ export default function TemplateBuilderPage() {
             ? <Loader2 size={15} className="animate-spin" />
             : <Save size={15} />
           }
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("common.saving") : t("common.save")}
           <span className="text-green-300 text-xs hidden md:inline">⌘S</span>
         </button>
       </div>
@@ -419,7 +424,7 @@ export default function TemplateBuilderPage() {
       {error && (
         <div className="bg-red-50 border-b border-red-200 px-6 py-2
                         text-sm text-red-700 flex items-center gap-2">
-          <span className="font-semibold">Error:</span>
+          <span className="font-semibold">{t("builder.errorLabel")}</span>
           <span>{error}</span>
           <button
             onClick={() => setError(null)}
@@ -434,11 +439,9 @@ export default function TemplateBuilderPage() {
       {unknownTokens.length > 0 && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-2
                         text-sm text-amber-800 flex items-start gap-2">
-          <span className="font-semibold shrink-0">Saved, but:</span>
+          <span className="font-semibold shrink-0">{t("builder.savedBut")}</span>
           <span>
-            {unknownTokens.length === 1
-              ? "this placeholder is not recognised and will print as-is: "
-              : "these placeholders are not recognised and will print as-is: "}
+            {t("builder.unknownToken", { count: unknownTokens.length })}{" "}
             {unknownTokens.map((tok) => (
               <code
                 key={tok}
@@ -452,7 +455,7 @@ export default function TemplateBuilderPage() {
             onClick={() => navigate("/reports/templates")}
             className="ml-auto shrink-0 text-amber-800 underline font-medium"
           >
-            Continue anyway
+            {t("builder.continueAnyway")}
           </button>
           <button
             onClick={() => setUnknownTokens([])}
@@ -467,10 +470,11 @@ export default function TemplateBuilderPage() {
       <div className="bg-white border-b border-gray-200 px-6 flex shrink-0">
         {(
           [
-            { id: "html",    label: "HTML",      Icon: Code2   },
-            { id: "css",     label: "CSS",        Icon: Palette },
-            { id: "vars",    label: "Variables",  Icon: List    },
-            { id: "preview", label: "Preview",    Icon: Eye     },
+            // "HTML" and "CSS" are format names, identical in both languages.
+            { id: "html",    label: "HTML",                 Icon: Code2   },
+            { id: "css",     label: "CSS",                  Icon: Palette },
+            { id: "vars",    label: t("builder.variables"), Icon: List    },
+            { id: "preview", label: t("common.preview"),    Icon: Eye     },
           ] as { id: Tab; label: string; Icon: LucideIcon }[]
         ).map(({ id, label, Icon }) => (
           <button
@@ -529,10 +533,10 @@ export default function TemplateBuilderPage() {
               {t("builder.clickPlaceholder")}
             </p>
             {VARIABLE_GROUPS.map((group) => (
-              <div key={group.group}>
+              <div key={group.labelKey}>
                 <h3 className="text-xs font-bold text-gray-500 uppercase
                                tracking-wider mb-2">
-                  {group.group}
+                  {t(group.labelKey)}
                 </h3>
                 <div className="space-y-1">
                   {group.vars.map((v) => (
@@ -551,11 +555,11 @@ export default function TemplateBuilderPage() {
                         {v.key}
                       </code>
                       <span className="text-gray-500 text-xs flex-1">
-                        {v.desc}
+                        {t(v.labelKey)}
                       </span>
                       <span className="text-blue-400 text-xs opacity-0
                                        group-hover:opacity-100 transition-opacity">
-                        + Insert
+                        + {t("builder.insert")}
                       </span>
                     </button>
                   ))}
@@ -574,8 +578,7 @@ export default function TemplateBuilderPage() {
             <div className="bg-yellow-50 border-b border-yellow-200 px-6 py-2
                             text-xs text-yellow-700 flex items-center gap-2">
               <span className="font-semibold">{t("builder.layoutPreview")}</span>
-              — placeholders are still visible. Save then use the Preview
-              button on the templates list to see filled data.
+              {" — "}{t("builder.previewNote")}
             </div>
             <iframe
               srcDoc={`

@@ -515,7 +515,7 @@ export default function AddSubjectPage() {
             <Field
               id={codeId}
               label={t("subjects.codeLabel")}
-              hint="Optional short code, e.g. MATH101"
+              hint={t("subjects.codeHint")}
             >
               <input
                 id={codeId}
@@ -733,16 +733,15 @@ export default function AddSubjectPage() {
                     aria-label={t("subjectsAdd.creating")}
                   />
                   <span>
-                    Creating in {form.classIds.length}{" "}
-                    {form.classIds.length === 1 ? "class" : "classes"}…
+                    {t("subjects.creatingIn", { count: form.classIds.length })}
                   </span>
                 </>
               ) : (
                 <>
-                  Create Subject
+                  {t("subjects.createSubject")}
                   {form.classIds.length > 1 && (
                     <span className="ml-1 rounded-full bg-emerald-500 px-2 py-0.5 text-xs">
-                      {form.classIds.length} classes
+                      {t("subjects.classCount", { count: form.classIds.length })}
                     </span>
                   )}
                 </>
@@ -755,7 +754,7 @@ export default function AddSubjectPage() {
               disabled={isBusy}
               className="w-full py-3 text-sm font-medium text-gray-400 hover:text-gray-600 transition-colors disabled:opacity-50"
             >
-              Discard &amp; Go Back
+              {t("subjects.discardGoBack")}
             </button>
           </div>
 

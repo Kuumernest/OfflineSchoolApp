@@ -266,7 +266,7 @@ export default function AdminSubjects() {
             } catch (err) {
               const message =
                 err.response?.data?.message ||
-                (err instanceof Error ? err.message : null) ||
+                (err instanceof Error ? errorText(t, err) : null) ||
                 t("subjectsList.errDelete");
               Alert.alert(t("subjectsList.errTitle"), message);
               if (isMountedRef.current) loadData(true);
@@ -600,3 +600,4 @@ const styles = StyleSheet.create({
   emptyButtonText: { fontSize: 14, fontWeight: "600" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

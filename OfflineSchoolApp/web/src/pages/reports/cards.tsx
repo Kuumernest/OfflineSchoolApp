@@ -446,7 +446,7 @@ export default function ReportCardsPage() {
             {generating && (
               <div className="mb-4">
                 <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>Generating…</span>
+                  <span>{t("reportCards.generating")}</span>
                   <span>{progress.done} / {progress.total}</span>
                 </div>
                 <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
@@ -486,7 +486,7 @@ export default function ReportCardsPage() {
                 <>
                   <div className="w-4 h-4 border-2 border-white
                                  border-t-transparent rounded-full animate-spin" />
-                  Generating…
+                  {t("reportCards.generating")}
                 </>
               ) : (
                 <>

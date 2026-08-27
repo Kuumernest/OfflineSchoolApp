@@ -18,24 +18,26 @@ import {
 const MAX_NAME_LENGTH = 60;
 const EMAIL_REGEX     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+// Module scope cannot call a hook, so each step carries its key and the
+// component resolves it at render.
 const NEXT_STEPS = [
   {
-    icon:  Key,
-    color: "#4F46E5",
-    bg:    "bg-indigo-50",
-    text:  "A secure temporary password is generated automatically",
+    icon:     Key,
+    color:    "#4F46E5",
+    bg:       "bg-indigo-50",
+    labelKey: "teachersAdd.step1",
   },
   {
-    icon:  Mail,
-    color: "#0891B2",
-    bg:    "bg-cyan-50",
-    text:  "Login credentials are emailed to the teacher immediately",
+    icon:     Mail,
+    color:    "#0891B2",
+    bg:       "bg-cyan-50",
+    labelKey: "teachersAdd.step2",
   },
   {
-    icon:  Lock,
-    color: "#059669",
-    bg:    "bg-emerald-50",
-    text:  "Teacher sets a personal password on their first login",
+    icon:     Lock,
+    color:    "#059669",
+    bg:       "bg-emerald-50",
+    labelKey: "teachersAdd.step3",
   },
 ];
 
@@ -88,17 +90,17 @@ export default function AddTeacherPage() {
     const next: FormErrors = {};
 
     if (!trimmedName) {
-      next.name = "Teacher name is required.";
+      next.name = t("teachersAdd.errNameRequired");
     } else if (trimmedName.length < 2) {
-      next.name = "Name must be at least 2 characters.";
+      next.name = t("teachersAdd.errNameMin");
     } else if (trimmedName.length > MAX_NAME_LENGTH) {
-      next.name = `Name cannot exceed ${MAX_NAME_LENGTH} characters.`;
+      next.name = t("teachersAdd.errNameMax", { max: MAX_NAME_LENGTH });
     }
 
     if (!trimmedEmail) {
-      next.email = "Email address is required.";
+      next.email = t("teachersAdd.errEmailRequired");
     } else if (!EMAIL_REGEX.test(trimmedEmail)) {
-      next.email = "Please enter a valid email address.";
+      next.email = t("teachersAdd.errEmailInvalid");
     }
 
     setErrors(next);
@@ -106,7 +108,7 @@ export default function AddTeacherPage() {
     if (next.name)  { nameRef.current?.focus();  return false; }
     if (next.email) { emailRef.current?.focus(); return false; }
     return true;
-  }, [trimmedName, trimmedEmail]);
+  }, [trimmedName, trimmedEmail, t]);
 
   // ── Copy password ───────────────────────────────────────
   const handleCopy = useCallback(async (pwd: string) => {
@@ -161,22 +163,18 @@ export default function AddTeacherPage() {
         });
       } catch (err) {
         if (isConflict(err)) {
-          setErrors({
-            email:
-              "This email address is already registered. " +
-              "Check if the teacher already has an account or use a different email.",
-          });
+          setErrors({ email: t("teachersAdd.errEmailTaken") });
           emailRef.current?.focus();
         } else {
           setErrors({
-            name: getErrorMessage(err) || "Failed to create teacher. Please try again.",
+            name: getErrorMessage(err) || t("teachersAdd.createFailed"),
           });
         }
       } finally {
         setSaving(false);
       }
     },
-    [validate, trimmedName, trimmedEmail, user?.schoolId]
+    [validate, trimmedName, trimmedEmail, user?.schoolId, t]
   );
 
   // ─────────────────────────────────────────────────────────
@@ -204,16 +202,19 @@ export default function AddTeacherPage() {
             </div>
 
             <h2 className="text-xl font-bold text-gray-900 mb-1">
-              {success.emailSent ? "Teacher Added!" : "Teacher Created"}
+              {success.emailSent
+                ? t("teachersAdd.addedTitle")
+                : t("teachersAdd.createdTitle")}
             </h2>
 
             <p className="text-sm text-gray-500 mb-6">
               {success.emailSent
                 ? success.message ||
-                  `"${success.teacherName}" has been added. A welcome email with
-                   login instructions has been sent to ${success.teacherEmail}.`
-                : `Teacher created, but the welcome email failed to deliver.
-                   Share the credentials below with the teacher manually.`
+                  t("teachersAdd.addedBody", {
+                    name:  success.teacherName,
+                    email: success.teacherEmail,
+                  })
+                : t("teachersAdd.emailFailedBody")
               }
             </p>
 
@@ -225,13 +226,13 @@ export default function AddTeacherPage() {
                   {t("teachersAdd.shareManually")}
                 </p>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">📧 Email</p>
+                  <p className="text-xs text-yellow-700 font-medium">📧 {t("common.email")}</p>
                   <p className="text-sm font-mono text-gray-900 mt-0.5">
                     {success.teacherEmail}
                   </p>
                 </div>
                 <div>
-                  <p className="text-xs text-yellow-700 font-medium">🔑 Temp Password</p>
+                  <p className="text-xs text-yellow-700 font-medium">🔑 {t("students.tempPassword")}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-sm font-mono text-gray-900 flex-1">
                       {success.tempPassword}
@@ -291,11 +292,7 @@ export default function AddTeacherPage() {
         <div className="flex items-start gap-3 bg-blue-50 border border-blue-200
                         rounded-xl p-4 text-sm text-blue-700">
           <Mail size={18} className="mt-0.5 shrink-0 text-blue-600" />
-          <p>
-            A temporary password will be generated and emailed to the teacher
-            automatically. They will be asked to set a personal password on
-            their first login.
-          </p>
+          <p>{t("teachersAdd.infoBanner")}</p>
         </div>
 
         {/* Form card */}
@@ -398,7 +395,7 @@ export default function AddTeacherPage() {
               </p>
             ) : (
               <p className="text-xs text-gray-400">
-                Must be unique. Used for login and receiving credentials.
+                {t("teachersAdd.emailHint")}
               </p>
             )}
           </div>
@@ -415,7 +412,7 @@ export default function AddTeacherPage() {
               <>
                 <div className="w-4 h-4 border-2 border-white border-t-transparent
                                 rounded-full animate-spin" />
-                Creating…
+                {t("teachersAdd.creating")}
               </>
             ) : (
               <>
@@ -433,7 +430,7 @@ export default function AddTeacherPage() {
             className="w-full text-sm text-gray-400 hover:text-gray-600
                        font-medium py-2 transition-colors disabled:opacity-40"
           >
-            Discard &amp; Go Back
+            {t("teachersAdd.discardBack")}
           </button>
         </form>
 
@@ -443,14 +440,14 @@ export default function AddTeacherPage() {
             {t("teachersAdd.whatNext")}
           </h3>
           <div className="space-y-3">
-            {NEXT_STEPS.map(({ icon: Icon, color, bg, text }) => (
-              <div key={text} className="flex items-center gap-3">
+            {NEXT_STEPS.map(({ icon: Icon, color, bg, labelKey }) => (
+              <div key={labelKey} className="flex items-center gap-3">
                 <div className={`
                   w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${bg}
                 `}>
                   <Icon size={16} style={{ color }} />
                 </div>
-                <p className="text-sm text-gray-600">{text}</p>
+                <p className="text-sm text-gray-600">{t(labelKey)}</p>
               </div>
             ))}
           </div>

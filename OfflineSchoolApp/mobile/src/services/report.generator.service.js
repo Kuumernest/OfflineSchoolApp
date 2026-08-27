@@ -27,6 +27,7 @@ import {
 }                              from "./default.template";
 import api                     from "./api";
 import { tableExists as _tableExists } from "../db/dbHelpers";
+import { appError }                    from "../utils/appError";
 
 /**
  * One-argument wrapper — preserves the call signature used throughout this file.
@@ -471,14 +472,14 @@ async function generatePdf({ html, studentId, term, academicYear }) {
   const dest   = `${folder}${safeId}.pdf`;
   const result = await Print.printToFileAsync({ html, base64: true });
   const base64 = result?.base64;
-  if (!base64) throw new Error("PDF generation returned no base64 data");
+  if (!base64) throw appError("svcErr.pdfNoData", "PDF generation returned no base64 data");
 
   await FileSystem.writeAsStringAsync(dest, base64, {
     encoding: FileSystem.EncodingType.Base64,
   });
 
   const info = await FileSystem.getInfoAsync(dest);
-  if (!info.exists) throw new Error("PDF file was not created successfully");
+  if (!info.exists) throw appError("svcErr.pdfNotCreated", "PDF file was not created successfully");
   console.log("[ReportGenerator] PDF saved:", dest, "—", info.size, "bytes");
   return dest;
 }
@@ -647,9 +648,9 @@ export async function generateClassReports({
 
 export async function sharePdf(pdfPath, studentName) {
   const canShare = await Sharing.isAvailableAsync();
-  if (!canShare) throw new Error("Sharing is not available on this device");
+  if (!canShare) throw appError("svcErr.sharingUnavailable", "Sharing is not available on this device");
   const info = await FileSystem.getInfoAsync(pdfPath);
-  if (!info.exists) throw new Error("Report file not found. Please regenerate.");
+  if (!info.exists) throw appError("svcErr.reportFileMissing", "Report file not found. Please regenerate.");
   await Sharing.shareAsync(pdfPath, {
     mimeType: "application/pdf",
     dialogTitle: `${studentName || "Student"} — Report Card`,
@@ -659,6 +660,6 @@ export async function sharePdf(pdfPath, studentName) {
 
 export async function printPdf(pdfPath) {
   const info = await FileSystem.getInfoAsync(pdfPath);
-  if (!info.exists) throw new Error("Report file not found. Please regenerate.");
+  if (!info.exists) throw appError("svcErr.reportFileMissing", "Report file not found. Please regenerate.");
   await Print.printAsync({ uri: pdfPath });
 }

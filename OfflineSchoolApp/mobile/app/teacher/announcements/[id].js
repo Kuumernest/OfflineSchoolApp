@@ -91,7 +91,7 @@ export default function AnnouncementDetailScreen() {
         const data = await getAnnouncementById(id);
         setItem(data);
       } catch (err) {
-        setError(err.message);
+        setError(errorText(t, err));
       } finally {
         setLoading(false);
       }
@@ -126,7 +126,7 @@ export default function AnnouncementDetailScreen() {
       );
       Alert.alert(t("annTeacher.ackedTitle"), t("annTeacher.ackedBody"));
     } catch (err) {
-      Alert.alert(t("annTeacher.errorTitle"), err.message);
+      Alert.alert(t("annTeacher.errorTitle"), errorText(t, err));
     }
   }, [id, acknowledge]);
 
@@ -146,7 +146,7 @@ export default function AnnouncementDetailScreen() {
               await remove(String(id));
               router.back();
             } catch (err) {
-              Alert.alert(t("annTeacher.errorTitle"), err.message);
+              Alert.alert(t("annTeacher.errorTitle"), errorText(t, err));
               setDeleting(false);
             }
           },
@@ -556,3 +556,4 @@ const styles = StyleSheet.create({
   backBtnLargeText: { color: "#FFF", fontWeight: "600" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

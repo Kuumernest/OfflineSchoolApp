@@ -5,6 +5,7 @@ import api from "./api";
 import { MutationQueue } from "./mutationQueue.service";
 import { generateUUID } from "../utils/idHelpers";
 import * as ExamCache from "./examCache.service";
+import { appError }      from "../utils/appError";
 
 /**
  * ═══════════════════════════════════════════════════════════════════════════
@@ -842,7 +843,7 @@ const approveSubmission = async ({ examId, examSubjectId, schoolId }) =>
  * PATCH /exams/:examId/subjects/:examSubjectId/reject
  */
 const rejectSubmission = async ({ examId, examSubjectId, reason, schoolId }) => {
-  if (!reason?.trim()) throw new Error("A rejection reason is required");
+  if (!reason?.trim()) throw appError("svcErr.rejectionReasonRequired", "A rejection reason is required");
   return transitionSubmission({
     examId, examSubjectId,
     action: "reject", localStatus: "rejected",

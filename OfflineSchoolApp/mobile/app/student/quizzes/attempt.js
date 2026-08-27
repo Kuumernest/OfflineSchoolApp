@@ -29,8 +29,10 @@ import {
   getAttemptResult,
   toggleFlag,
   getAttemptProgress,
-} from "../../../src/services/quiz.service";
+} from "../../../src/services/quiz.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -536,7 +538,7 @@ export default function AttemptScreen() {
         console.warn("Failed to init attempt:", err.message);
         Alert.alert(
           t("studentQuiz.errTitle"),
-          err.message || t("studentQuiz.startFailed"),
+          errorText(t, err, "studentQuiz.startFailed"),
           [{ text: t("common.goBack"), onPress: () => router.back() }]
         );
       }

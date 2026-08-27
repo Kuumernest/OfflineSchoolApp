@@ -20,6 +20,7 @@ import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../../src/store/auth.store";
 import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS & VALIDATION RULES
@@ -210,8 +211,7 @@ export default function SetPasswordScreen() {
       console.error("set-password error:", err.message);
       const msg =
         err?.response?.data?.message ||
-        err?.message ||
-        t("setPassword.genericError");
+        errorText(t, err, "setPassword.genericError");
       setError(msg);
     } finally {
       setLoading(false);

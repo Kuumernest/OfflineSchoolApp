@@ -340,7 +340,7 @@ const DeleteDialog = ({
         from {subject.className}?
       </p>
       <p className="mt-1 text-xs text-amber-700">
-        This may affect teacher assignments and timetable entries.
+        {t("subjects.deleteWarning")}
       </p>
       <div className="mt-6 flex gap-3">
         <button
@@ -406,7 +406,7 @@ export default function AdminSubjectsPage() {
       setSubjects(safeSubjects.map((s) => normaliseSubject(s, classMap)));
     } catch (err: unknown) {
       console.error("[AdminSubjects] loadData failed:", err);
-      setError("Failed to load subjects. Click retry to try again.");
+      setError(t("subjects.loadFailed"));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -480,7 +480,7 @@ export default function AdminSubjectsPage() {
           title={t("classes.noneYet")}
           subtitle={t("subjects.needClass")}
           action={{
-            label:   "Add Class",
+            label:   t("subjects.addClass"),
             color:   "#4F46E5",
             onClick: () => navigate("/classes"),
           }}
@@ -545,7 +545,7 @@ export default function AdminSubjectsPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 bg-gray-50">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-emerald-600 border-t-transparent" />
-        <p className="text-sm font-medium text-gray-500">Loading subjects…</p>
+        <p className="text-sm font-medium text-gray-500">{t("subjects.loading")}</p>
       </div>
     );
   }

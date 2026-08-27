@@ -25,6 +25,7 @@ import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import * as ImagePicker from "expo-image-picker";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COLORS
@@ -307,8 +308,7 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
     } catch (err) {
       const msg =
         err?.response?.data?.message ||
-        err?.message                 ||
-        t("studentSettings.errChangeFailed");
+        errorText(t, err, "studentSettings.errChangeFailed");
       setError(msg);
     } finally {
       setSaving(false);
@@ -670,7 +670,7 @@ export default function StudentSettingsScreen() {
       // so it is shown rather than replaced with something generic.
       Alert.alert(
         t("studentSettings.photoSaveFailedTitle"),
-        err?.response?.data?.message || err.message || t("studentSettings.tryAgain")
+        err?.response?.data?.message || errorText(t, err, "studentSettings.tryAgain")
       );
     } finally {
       setPhotoBusy(false);
@@ -691,7 +691,7 @@ export default function StudentSettingsScreen() {
             await api.delete("/students/photo");
             setPhotoUrl(null);
           } catch (err) {
-            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), err.message);
+            Alert.alert(t("studentSettings.photoRemoveFailedTitle"), errorText(t, err));
           } finally {
             setPhotoBusy(false);
           }

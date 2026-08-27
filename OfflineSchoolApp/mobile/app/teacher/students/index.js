@@ -20,6 +20,7 @@ import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { tableExists as _tableExists } from "../../../src/db/dbHelpers";
+import { errorText } from "../../../src/utils/appError";
 
 /**
  * One-argument wrapper — preserves the existing call signature.
@@ -358,7 +359,7 @@ export default function TeacherStudentsScreen() {
   // ── Load ─────────────────────────────────────────────────
   const load = useCallback(async (isRefresh = false) => {
     if (!classId) {
-      setError("No class specified");
+      setError(t("teacher.students.noClassSpecified"));
       setLoading(false);
       return;
     }
@@ -381,7 +382,7 @@ export default function TeacherStudentsScreen() {
 
       if (mountedRef.current) setStudents(list);
     } catch (err) {
-      if (mountedRef.current) setError(err.message || "Failed to load students");
+      if (mountedRef.current) setError(errorText(t, err) || t("teacher.students.loadFailed"));
     } finally {
       if (mountedRef.current) {
         setLoading(false);

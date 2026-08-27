@@ -2,6 +2,7 @@
 
 import { getDatabase } from '../db/database';
 import { MutationQueue } from "./mutationQueue.service";
+import { appError }      from "../utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -273,7 +274,7 @@ export const createHomework = async ({
   if (!class_id)      throw new Error('class_id is required');
   if (!subject_id)    throw new Error('subject_id is required');
   if (!created_by)    throw new Error('Teacher ID is required');
-  if (!title?.trim()) throw new Error('Title is required');
+  if (!title?.trim()) throw appError("svcErr.titleRequired", 'Title is required');
 
   await ensureHomeworkTables();
   const db = await getDatabase();
@@ -632,13 +633,13 @@ export const submitHomework = async ({
   const db = await getDatabase();
 
   const hw = await getHomeworkById(homeworkId);
-  if (!hw) throw new Error('Homework not found');
+  if (!hw) throw appError("svcErr.homeworkNotFound", 'Homework not found');
 
   const now     = new Date().toISOString();
   const is_late = hw.due_date && now > hw.due_date ? 1 : 0;
 
   if (is_late && !hw.allow_late) {
-    throw new Error('This assignment no longer accepts submissions');
+    throw appError("svcErr.submissionsClosed", 'This assignment no longer accepts submissions');
   }
 
   const existing = await db.getFirstAsync(

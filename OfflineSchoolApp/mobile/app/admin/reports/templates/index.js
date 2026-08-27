@@ -11,6 +11,7 @@ import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../../src/store/auth.store";
 import { TemplateService } from "../../../../src/services/template.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -56,7 +57,7 @@ export default function TemplatesScreen() {
       const data = await TemplateService.getAll(schoolId);
       setTemplates(data);
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -79,7 +80,7 @@ export default function TemplatesScreen() {
               await TemplateService.setDefault(id);
               load();
             } catch (err) {
-              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
             }
           },
         },
@@ -107,7 +108,7 @@ export default function TemplatesScreen() {
       }
       load();
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
     } finally {
       setSeeding(false);
     }
@@ -119,7 +120,7 @@ export default function TemplatesScreen() {
       await TemplateService.duplicate(id, schoolId);
       load();
     } catch (err) {
-      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
+      Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
     }
   }, [schoolId, load]);
 
@@ -145,7 +146,7 @@ export default function TemplatesScreen() {
               await TemplateService.delete(id);
               load();
             } catch (err) {
-              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || err.message);
+              Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
             }
           },
         },
@@ -172,8 +173,7 @@ export default function TemplatesScreen() {
       <View style={s.banner}>
         <Ionicons name="information-circle-outline" size={18} color={C.primary} />
         <Text style={s.bannerText}>
-          Paste any HTML layout here. Set one as default and it will be
-          used automatically when generating reports.
+          {t("templatesList.hint1")}
         </Text>
       </View>
 
@@ -340,8 +340,7 @@ function EmptyState({ onSeed, seeding }) {
       </View>
       <Text style={s.emptyTitle}>{t("templates.none")}</Text>
       <Text style={s.emptyBody}>
-        Create your first report card template by pasting your
-        school's HTML layout.
+        {t("templatesList.emptyHint")}
       </Text>
       <TouchableOpacity
         style={s.emptyBtn}

@@ -314,7 +314,7 @@ export default function AnnouncementsScreen() {
             style:   "destructive",
             onPress: async () => {
               try { await remove(id); }
-              catch (err) { Alert.alert(t("annTeacher.errorTitle"), err.message); }
+              catch (err) { Alert.alert(t("annTeacher.errorTitle"), errorText(t, err)); }
             },
           },
         ]
@@ -733,3 +733,4 @@ const styles = StyleSheet.create({
   },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

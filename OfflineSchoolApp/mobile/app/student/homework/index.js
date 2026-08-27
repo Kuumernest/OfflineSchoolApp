@@ -33,8 +33,10 @@ import {
 } from "../../../src/services/homework.service";
 import {
   resolveStudentClassId,
-} from "../../../src/services/student.service";
+} from "../../../src/services/student.service";
+
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -216,7 +218,7 @@ const SubmitModal = memo(({
               onClose();
               Alert.alert(t("studentHw.submittedTitle"), t("studentHw.submittedBody"));
             } catch (err) {
-              Alert.alert(t("studentHw.errTitle"), err.message || t("studentHw.submitFailed"));
+              Alert.alert(t("studentHw.errTitle"), errorText(t, err, "studentHw.submitFailed"));
             } finally {
               setSubmitting(false);
             }

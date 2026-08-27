@@ -32,6 +32,7 @@ import { generateLocalId }   from "../utils/idHelpers";
 import { fetchWithFallback } from "../utils/syncHelpers";
 import { API }               from "./apiEndpoints";
 import api                   from "./api";
+import { appError }          from "../utils/appError";
 
 // ═══════════════════════════════════════════════════════════════════════
 // SECTION 1 — SCHEMA  (unchanged)
@@ -528,7 +529,7 @@ const ensureStudentUser = async (db, student) => {
 
   if (existing) {
     if (existing.role && existing.role !== "student") {
-      throw new Error("A non-student account already exists with this email");
+      throw appError("svcErr.nonStudentEmailExists", "A non-student account already exists with this email");
     }
     await updateRecord(db, "users", existing.id, {
       name, role: "student", is_active: 1, updated_at: ts, student_id: student.id,
@@ -798,7 +799,7 @@ export const StudentApplicationsService = {
 
   async approveApplication(studentId, classId) {
     if (!studentId) throw new Error("Student application ID is required");
-    if (!classId)   throw new Error("Please select a class before approving");
+    if (!classId)   throw appError("svcErr.selectClassBeforeApprove", "Please select a class before approving");
 
     const db = await getDatabase();
     await ensureSchema(db);
@@ -851,7 +852,11 @@ export const StudentApplicationsService = {
             tempPassword: null, warning: null, userId: null, enrollmentNo: null,
           };
         }
-        if (status === 400) throw new Error(message || "Invalid class selection");
+        if (status === 400) {
+          throw message
+            ? new Error(message)
+            : appError("svcErr.invalidClassSelection", "Invalid class selection");
+        }
 
         // Other errors → offline path
         console.warn("[studentApplications] approveOnServer failed:", message);
@@ -866,17 +871,17 @@ export const StudentApplicationsService = {
     const student = await db.getFirstAsync(
       `SELECT * FROM students WHERE id = ? LIMIT 1`, [studentId]
     );
-    if (!student) throw new Error("Student application not found");
+    if (!student) throw appError("svcErr.applicationNotFound", "Student application not found");
     if (student.status && student.status !== "pending") {
-      throw new Error("Only pending applications can be approved");
+      throw appError("svcErr.onlyPendingApprove", "Only pending applications can be approved");
     }
 
     if (await tableExists(db, "classes")) {
       const cls = await db.getFirstAsync(
         `SELECT id, is_active FROM classes WHERE id = ? LIMIT 1`, [classId]
       );
-      if (!cls)                        throw new Error("Selected class does not exist");
-      if (Number(cls.is_active) === 0) throw new Error("Cannot assign to inactive class");
+      if (!cls)                        throw appError("svcErr.selectedClassMissing", "Selected class does not exist");
+      if (Number(cls.is_active) === 0) throw appError("svcErr.inactiveClass", "Cannot assign to inactive class");
     }
 
     const localUserId = await ensureStudentUser(db, student);
@@ -942,9 +947,9 @@ export const StudentApplicationsService = {
     const student = await db.getFirstAsync(
       `SELECT status FROM students WHERE id = ? LIMIT 1`, [studentId]
     );
-    if (!student) throw new Error("Student application not found");
+    if (!student) throw appError("svcErr.applicationNotFound", "Student application not found");
     if (student.status && student.status !== "pending") {
-      throw new Error("Only pending applications can be rejected");
+      throw appError("svcErr.onlyPendingReject", "Only pending applications can be rejected");
     }
 
     await markLocalDecision(db, studentId, "rejected", null, false, reason);

@@ -38,6 +38,7 @@ import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID }      from "../utils/idHelpers";
 import { MutationQueue }     from "./mutationQueue.service";
 import api                   from "./api";
+import { appError }          from "../utils/appError";
 
 const CATEGORIES = "expense_categories";
 const EXPENSES   = "expenses";
@@ -118,7 +119,7 @@ export const recordExpense = async ({
   // rejected by the server long after the money had left the drawer.
   const value = Number(amount);
   if (!Number.isFinite(value) || !Number.isInteger(value) || value <= 0) {
-    throw new Error("Amount must be a whole number of XAF greater than zero");
+    throw appError("svcErr.amountWholeXaf", "Amount must be a whole number of XAF greater than zero");
   }
 
   const db = await getDatabase();
@@ -198,7 +199,7 @@ export const cancelUnsentExpense = async ({ id }) => {
 export const voidExpense = async ({ schoolId, id, reason }) => {
   const why = String(reason ?? "").trim();
   if (!id)  throw new Error("id is required");
-  if (!why) throw new Error("A reason is required to void an expense");
+  if (!why) throw appError("svcErr.voidReasonRequired", "A reason is required to void an expense");
 
   const db = await getDatabase();
   await ensureSchema(db);

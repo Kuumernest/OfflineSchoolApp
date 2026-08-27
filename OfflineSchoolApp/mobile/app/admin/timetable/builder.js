@@ -29,6 +29,7 @@ import {
 import { useTranslation } from "../../../src/i18n/useTranslation";
 
 import SlotEditorModal from "./components/SlotEditorModal";
+import { errorText } from "../../../src/utils/appError";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -352,7 +353,7 @@ export default function AdminTimetableBuilder() {
       await refreshUnsyncedCount();
       if (mountedRef.current) Alert.alert(t("ttAdmin.syncedTitle"), t("ttAdmin.syncedBody"));
     } catch (err) {
-      Alert.alert(t("ttAdmin.syncFailedTitle"), err.message || t("ttAdmin.syncFailedBody"));
+      Alert.alert(t("ttAdmin.syncFailedTitle"), errorText(t, err, "ttAdmin.syncFailedBody"));
     } finally {
       if (mountedRef.current) setSyncing(false);
     }
@@ -499,7 +500,7 @@ export default function AdminTimetableBuilder() {
       }
     } catch (err) {
       console.error("handleSaveSlot failed:", err);
-      Alert.alert(t("ttAdmin.saveFailedTitle"), err.message || t("ttAdmin.saveFailedBody"));
+      Alert.alert(t("ttAdmin.saveFailedTitle"), errorText(t, err, "ttAdmin.saveFailedBody"));
     }
   }, [modalMode, selectedSlot, selectedCell, loadSlots, closeModal, buildLookupMaps, t]);
 
@@ -527,7 +528,7 @@ export default function AdminTimetableBuilder() {
                 if (mountedRef.current) Alert.alert(t("ttAdmin.removedTitle"), t("ttAdmin.removedBody"));
               }
             } catch (err) {
-              Alert.alert(t("ttAdmin.errorTitle"), err.message || t("ttAdmin.removeFailed"));
+              Alert.alert(t("ttAdmin.errorTitle"), errorText(t, err, "ttAdmin.removeFailed"));
             }
           },
         },

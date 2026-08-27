@@ -25,6 +25,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { errorText } from "../../src/utils/appError";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -173,7 +174,7 @@ export default function ThreadScreen() {
       // already-uploaded attachments back so neither is lost.
       setDraft(body);
       setPending(attachments);
-      Alert.alert(t("msgMobile.saveFailTitle"), err.message);
+      Alert.alert(t("msgMobile.saveFailTitle"), errorText(t, err));
     } finally {
       setSending(false);
     }

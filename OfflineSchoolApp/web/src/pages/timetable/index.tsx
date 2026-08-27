@@ -562,8 +562,8 @@ export default function TimetablePage() {
           onRemove={async () => {
             if (!cell.existing) return;
             const ok = await confirm({
-              title:        "Remove this lesson?",
-              message:      "The period becomes free again. Nothing else changes.",
+              title:        t("timetable.removeLessonConfirm"),
+              message:      t("timetable.removeLessonHint"),
               confirmLabel: "Remove lesson",
               kind:         "danger",
             });

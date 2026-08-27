@@ -27,6 +27,8 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+import { appError } from "../utils/appError";
+
 // ── HTML Escape ───────────────────────────────────────────────────────────
 
 const escapeHtml = (str) => {
@@ -107,13 +109,13 @@ function parse(tokens) {
       }
 
       case "else":
-        if (top().type !== "if") throw new Error("{{else}} without {{if}}");
+        if (top().type !== "if") throw appError("svcErr.tplElseWithoutIf", "{{else}} without {{if}}");
         top().children.push({ _isElseMarker: true });
         break;
 
       case "endif": {
         const node = top();
-        if (node.type !== "if") throw new Error("{{endif}} without {{if}}");
+        if (node.type !== "if") throw appError("svcErr.tplEndifWithoutIf", "{{endif}} without {{if}}");
         const all = node.children;
         node.thenBody = [];
         node.elseBody = [];
@@ -141,7 +143,7 @@ function parse(tokens) {
       }
 
       case "endeach":
-        if (top().type !== "each") throw new Error("{{/each}} without {{each}}");
+        if (top().type !== "each") throw appError("svcErr.tplEachCloseWithoutOpen", "{{/each}} without {{each}}");
         stack.pop();
         break;
 
@@ -151,7 +153,8 @@ function parse(tokens) {
   }
 
   if (stack.length > 1) {
-    throw new Error(
+    throw appError(
+      "svcErr.tplUnclosedBlock",
       `Unclosed ${top().type === "if" ? "{{if}}" : "{{each}}"} block`
     );
   }

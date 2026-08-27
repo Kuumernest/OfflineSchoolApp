@@ -21,6 +21,7 @@ import { getDatabase } from "../db/database";
 import { safeAddColumn } from "../db/dbHelpers";
 import { generateUUID } from "../utils/idHelpers";
 import { MutationQueue, resolveId } from "./mutationQueue.service";
+import { appError }                 from "../utils/appError";
 
 const ENDPOINT = "/students";
 
@@ -81,10 +82,10 @@ export const enrollStudentLocally = async ({
   guardianEmail = null,
 }) => {
   if (!schoolId) throw new Error("schoolId is required");
-  if (!classId)  throw new Error("Please choose a class");
+  if (!classId)  throw appError("svcErr.chooseClass", "Please choose a class");
 
   const name = [firstName, lastName].map((s) => (s || "").trim()).filter(Boolean).join(" ");
-  if (!name) throw new Error("Student name is required");
+  if (!name) throw appError("svcErr.studentNameRequired", "Student name is required");
 
   const db = await getDatabase();
   await ensureStudentColumns(db);

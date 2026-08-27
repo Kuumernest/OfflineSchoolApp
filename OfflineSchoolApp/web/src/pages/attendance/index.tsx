@@ -203,7 +203,7 @@ export default function AttendancePage() {
         });
       } else {
         toast({
-          title:   "Register saved",
+          title:   t("attendance.registerSaved"),
           message: `${result.saved} ${result.saved === 1 ? "entry" : "entries"} recorded.`,
           kind:    "success",
         });
@@ -212,7 +212,7 @@ export default function AttendancePage() {
       qc.invalidateQueries({ queryKey: ["attendance"] });
     },
     onError: (err) =>
-      toast({ title: "Could not save the register", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("attendance.errSaveRegister"), message: getErrorMessage(err), kind: "error" }),
   });
 
   // ── Bulk helpers ───────────────────────────────────────────────────────────
@@ -238,7 +238,7 @@ export default function AttendancePage() {
 
   const discard = async () => {
     const ok = await confirm({
-      title:        "Discard unsaved changes?",
+      title:        t("attendance.discardConfirm"),
       message:      `${dirtyCount} ${dirtyCount === 1 ? "mark" : "marks"} will be lost.`,
       confirmLabel: t("common.discard"),
       kind:         "warning",

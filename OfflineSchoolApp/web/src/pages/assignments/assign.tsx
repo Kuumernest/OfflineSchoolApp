@@ -54,10 +54,10 @@ interface CreateResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { id: 1 as Step, title: "Select Teacher",   icon: Users       },
-  { id: 2 as Step, title: "Select Class",     icon: School      },
-  { id: 3 as Step, title: "Select Subjects",  icon: BookOpen    },
-  { id: 4 as Step, title: "Review & Confirm", icon: CheckSquare },
+  { id: 1 as Step, titleKey: "assignments.stepTeacher",   icon: Users       },
+  { id: 2 as Step, titleKey: "assignments.stepClass",     icon: School      },
+  { id: 3 as Step, titleKey: "assignments.stepSubjects",  icon: BookOpen    },
+  { id: 4 as Step, titleKey: "assignments.stepReview", icon: CheckSquare },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -113,6 +113,7 @@ const StepIndicator = ({
 );
 
 const StepCard = ({ step, children }: { step: Step; children: React.ReactNode }) => {
+  const { t } = useTranslation();
   const s = STEPS[step - 1];
   const Icon = s.icon;
   return (
@@ -123,7 +124,7 @@ const StepCard = ({ step, children }: { step: Step; children: React.ReactNode })
         </div>
         <div>
           <p className="text-xs font-medium text-gray-400">Step {step} of 4</p>
-          <p className="text-base font-bold text-gray-900">{s.title}</p>
+          <p className="text-base font-bold text-gray-900">{t(s.titleKey)}</p>
         </div>
       </div>
       {children}
@@ -342,7 +343,7 @@ export default function AssignTeacherPage() {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ??
         (err instanceof Error ? err.message : null) ??
-        "Failed to create assignment";
+        t("assignments.errCreate");
       setResults([{
         classId:   selectedClass?._id  ?? "",
         className: selectedClass?.name ?? "",
@@ -793,7 +794,7 @@ export default function AssignTeacherPage() {
                   ?.response?.data?.message ??
                   (mutation.error instanceof Error
                     ? mutation.error.message
-                    : "Failed to create assignment")}
+                    : t("assignments.errCreate"))}
               </p>
             </div>
           )}
@@ -819,7 +820,7 @@ export default function AssignTeacherPage() {
               {mutation.isPending ? (
                 <>
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Confirming…
+                  {t("assignments.confirming")}
                 </>
               ) : (
                 <>

@@ -33,6 +33,7 @@ import { StudentApplicationsService } from "../../../../src/services/studentAppl
 import { StudentService }             from "../../../../src/services/student.service";
 import { ClassService }               from "../../../../src/services/class.service";
 import { useTranslation }             from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -688,8 +689,7 @@ export default function StudentApplicationsScreen() {
               Alert.alert(
                 t("appsReview.approvalFailedTitle"),
                 err?.response?.data?.message ||
-                err?.message                 ||
-                t("appsReview.errApproveFailed")
+                errorText(t, err, "appsReview.errApproveFailed")
               );
               loadData(true);
             } finally {
@@ -742,8 +742,7 @@ export default function StudentApplicationsScreen() {
               Alert.alert(
                 t("appsReview.rejectionFailedTitle"),
                 err?.response?.data?.message ||
-                err?.message                 ||
-                t("appsReview.errRejectFailed")
+                errorText(t, err, "appsReview.errRejectFailed")
               );
               loadData(true);
             } finally {

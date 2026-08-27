@@ -171,7 +171,7 @@ export default function TeacherAssignmentDetailPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-        <p className="text-sm font-medium text-gray-400">Loading assignments…</p>
+        <p className="text-sm font-medium text-gray-400">{t("assignments.loading")}</p>
       </div>
     );
   }

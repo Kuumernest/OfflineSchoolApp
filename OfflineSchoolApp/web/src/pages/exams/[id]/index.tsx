@@ -65,10 +65,12 @@ interface RawScoreRow {
 // PAGE-SPECIFIC CONSTANTS
 // ─────────────────────────────────────────────────────────
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: "details", label: "Details"          },
-  { key: "marks",   label: "Marks & Approval" },
-  { key: "results", label: "Results"          },
+// `key` is the ?tab= URL value — it must not change. Only the label is
+// localised, and module scope has no `t`, so it is stored as a key.
+const TABS: { key: Tab; labelKey: string }[] = [
+  { key: "details", labelKey: "exams.tabDetails" },
+  { key: "marks",   labelKey: "exams.tabMarks"   },
+  { key: "results", labelKey: "nav.results"      },
 ];
 
 const NEXT_STATUSES: Record<string, ExamStatus[]> = {
@@ -185,7 +187,7 @@ const DetailsTab = ({
                 >
                   {changingStatus ? (
                     <span className="flex items-center gap-2">
-                      <Spinner size="sm" /> Updating…
+                      <Spinner size="sm" /> {t("exams.updating")}
                     </span>
                   ) : (
                     `→ ${t(EXAM_STATUS_META[s].labelKey)}`
@@ -202,19 +204,19 @@ const DetailsTab = ({
         <h3 className="font-semibold text-gray-900 mb-4">{t("exams.information")}</h3>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           {[
-            { label: "Type",          value: examTypeLabel(t, exam.type)},
-            { label: "Academic Year", value: exam.academicYear  },
-            { label: "Term",          value: exam.term          },
-            { label: "Classes",       value: exam.classNames || exam.className || "All" },
-            { label: "Start Date",    value: exam.startDate || "—" },
-            { label: "End Date",      value: exam.endDate   || "—" },
-            { label: "Total Marks",   value: String(exam.totalMarks) },
-            { label: "Pass Mark",     value: String(exam.passMark)   },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex flex-col">
+            { labelKey: "common.type",           value: examTypeLabel(t, exam.type) },
+            { labelKey: "academic.schoolYear",   value: exam.academicYear  },
+            { labelKey: "academic.term",         value: exam.term          },
+            { labelKey: "academic.class_other",  value: exam.classNames || exam.className || t("common.all") },
+            { labelKey: "common.startDate",      value: exam.startDate || "—" },
+            { labelKey: "common.endDate",        value: exam.endDate   || "—" },
+            { labelKey: "examCreate.totalMarks", value: String(exam.totalMarks) },
+            { labelKey: "academic.passMark",     value: String(exam.passMark)   },
+          ].map(({ labelKey, value }) => (
+            <div key={labelKey} className="flex flex-col">
               <dt className="text-xs font-semibold text-gray-400
                              uppercase tracking-wide">
-                {label}
+                {t(labelKey)}
               </dt>
               <dd className="font-semibold text-gray-900 mt-0.5">{value}</dd>
             </div>
@@ -263,7 +265,7 @@ const DetailsTab = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs text-gray-500">
-                      {entered}/{total} entered
+                      {t("exams.enteredOf", { entered, total })}
                     </span>
                     <span className={`text-xs font-bold px-2 py-0.5
                       rounded-full ${meta.color} ${meta.bg}`}>
@@ -413,7 +415,7 @@ const ScoreEntryPanel = ({
       });
       setSaved(true);
     } catch (err) {
-      alert(getErrorMessage(err) || "Save failed. Please try again.");
+      alert(getErrorMessage(err) || t("exams.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -444,11 +446,16 @@ const ScoreEntryPanel = ({
                       px-4 py-3 flex items-center justify-between">
         <div>
           <p className="font-semibold text-indigo-900 text-sm">
-            {sub.subjectName} — Score Entry
+            {sub.subjectName} — {t("exams.scoreEntry")}
           </p>
           <p className="text-xs text-indigo-500 mt-0.5">
-            Max: {maxScore} · Pass: {passMark} ·
-            {" "}{entered}/{students.length} entered ({progressPct}%)
+            {t("exams.scoreEntryMeta", {
+              max:     maxScore,
+              pass:    passMark,
+              entered,
+              total:   students.length,
+              pct:     progressPct,
+            })}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -462,7 +469,11 @@ const ScoreEntryPanel = ({
                 : "bg-primary-600 text-white hover:bg-primary-700"
               }`}
           >
-            {saving ? "Saving…" : saved ? "✓ Saved" : "Save Marks"}
+            {saving
+              ? t("common.saving")
+              : saved
+                ? `✓ ${t("exams.saved")}`
+                : t("exams.saveMarks")}
           </button>
           <button
             onClick={onClose}
@@ -498,13 +509,14 @@ const ScoreEntryPanel = ({
       {/* Table header */}
       <div className="grid grid-cols-[2fr_1fr_80px_100px]
                       bg-gray-50 border-b border-gray-200 px-4 py-2">
-        {["Student", "Admission #", "Absent", "Score"].map((h) => (
+        {["academic.student", "academic.admissionNo",
+          "academic.absent", "academic.score"].map((labelKey) => (
           <span
-            key={h}
+            key={labelKey}
             className="text-xs font-bold text-gray-500 uppercase
                        tracking-wide text-center first:text-left"
           >
-            {h}
+            {t(labelKey)}
           </span>
         ))}
       </div>
@@ -517,8 +529,8 @@ const ScoreEntryPanel = ({
       ) : filtered.length === 0 ? (
         <div className="text-center py-10 text-sm text-gray-400">
           {search
-            ? "No students match your search"
-            : "No students found in this class"}
+            ? t("exams.noStudentsMatch")
+            : t("exams.noStudentsInClass")}
         </div>
       ) : (
         <div className="max-h-96 overflow-y-auto">
@@ -551,7 +563,7 @@ const ScoreEntryPanel = ({
               >
                 {/* Name */}
                 <p className="text-sm font-medium text-gray-900">
-                  {student.studentName || student.name || "Unknown"}
+                  {student.studentName || student.name || t("results.unknownStudent")}
                 </p>
 
                 {/* Admission number */}
@@ -563,7 +575,7 @@ const ScoreEntryPanel = ({
                 <div className="flex justify-center">
                   <button
                     onClick={() => updateScore(sid, "isAbsent", !absent)}
-                    title={absent ? "Mark present" : "Mark absent"}
+                    title={absent ? t("exams.markPresent") : t("exams.markAbsent")}
                     className={`w-7 h-7 rounded-lg border-2 flex items-center
                       justify-center text-xs font-bold transition-colors
                       ${absent
@@ -663,7 +675,7 @@ const MarksTab = ({
     setOpenSubjectId((prev) => (prev === id ? null : id));
 
   const handleApprove = (sub: ExamSubject) => {
-    if (!window.confirm(`Approve marks for ${sub.subjectName}?`)) return;
+    if (!window.confirm(t("exams.approveConfirm", { subject: sub.subjectName }))) return;
     approve.mutate(sub._id);
   };
 
@@ -726,7 +738,7 @@ const MarksTab = ({
                 className="flex-1 py-2.5 bg-red-600 text-white rounded-xl
                            text-sm font-semibold disabled:opacity-50"
               >
-                {reject.isPending ? "Rejecting…" : "Reject"}
+                {reject.isPending ? t("exams.rejecting") : t("exams.reject")}
               </button>
             </div>
           </div>
@@ -736,8 +748,7 @@ const MarksTab = ({
       {/* Subject rows */}
       <div className="space-y-2">
         <p className="text-xs text-gray-400 font-medium mb-3">
-          Click a subject row to enter or review student scores inline.
-          Approve or reject teacher-submitted marks from here.
+          {t("exams.marksHint")}
         </p>
 
         {submissions.map((sub) => {
@@ -776,11 +787,11 @@ const MarksTab = ({
 
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-xs text-gray-400">
-                        {sub.teacherName || "No teacher assigned"}
+                        {sub.teacherName || t("exams.noTeacherAssigned")}
                       </span>
                       <span className="text-xs text-gray-300">·</span>
                       <span className="text-xs text-gray-400">
-                        {entered}/{total} scores entered
+                        {t("exams.scoresEntered", { entered, total })}
                       </span>
                       <span className="text-xs text-gray-300">·</span>
                       {editingCoeff === sub._id ? (
@@ -811,7 +822,7 @@ const MarksTab = ({
                             disabled={updateSubjectMut.isPending}
                             className="text-xs font-bold text-green-600
                                        hover:text-green-700 px-1"
-                            title="Save"
+                            title={t("common.save")}
                           >
                             ✓
                           </button>
@@ -819,7 +830,7 @@ const MarksTab = ({
                             onClick={() => setEditingCoeff(null)}
                             className="text-xs font-bold text-gray-400
                                        hover:text-gray-600 px-1"
-                            title="Cancel"
+                            title={t("common.cancel")}
                           >
                             ✕
                           </button>
@@ -893,7 +904,7 @@ const MarksTab = ({
                 {sub.submissionStatus === "rejected" && sub.rejectReason && (
                   <div className="mx-4 mb-3 px-3 py-2 bg-red-50 rounded-lg
                                   text-xs text-red-600 border border-red-100">
-                    ❌ Rejected: {sub.rejectReason}
+                    ❌ {t("exams.rejectedReason", { reason: sub.rejectReason })}
                   </div>
                 )}
               </div>
@@ -952,16 +963,12 @@ const ResultsTab = ({
     !resultsPublished ? 3 : 4;
 
   const handleProcess = () => {
-    if (!window.confirm(
-      "Calculate results? This will compute grades, averages and rankings for all students."
-    )) return;
+    if (!window.confirm(t("exams.processConfirm"))) return;
     processResults.mutate({ examId });
   };
 
   const handlePublish = () => {
-    if (!window.confirm(
-      "Publish results? Students will be able to see their scores and rankings."
-    )) return;
+    if (!window.confirm(t("exams.publishConfirm"))) return;
     publishResults.mutate(examId);
   };
 
@@ -983,13 +990,13 @@ const ResultsTab = ({
             <div className="flex-1">
               <p className={`text-sm font-semibold
                 ${allMarksEntered ? "text-green-800" : "text-amber-800"}`}>
-                Step 1 — All marks entered and approved
+                {t("exams.step1Title")}
               </p>
               <p className={`text-xs mt-0.5
                 ${allMarksEntered ? "text-green-600" : "text-amber-600"}`}>
                 {allMarksEntered
-                  ? "All subjects have scores entered."
-                  : "Some subjects are still missing scores or waiting for approval."}
+                  ? t("exams.step1Done")
+                  : t("exams.step1Todo")}
               </p>
               {!allMarksEntered && (
                 <Link
@@ -997,7 +1004,7 @@ const ResultsTab = ({
                   className="inline-block mt-2 text-xs font-semibold
                              text-amber-700 underline"
                 >
-                  → Go to Marks & Approval tab
+                  → {t("exams.goToMarksTab")}
                 </Link>
               )}
             </div>
@@ -1017,13 +1024,13 @@ const ResultsTab = ({
             <div className="flex-1">
               <p className={`text-sm font-semibold
                 ${resultsProcessed ? "text-green-800" : "text-indigo-800"}`}>
-                Step 2 — Calculate results
+                {t("exams.step2Title")}
               </p>
               <p className={`text-xs mt-0.5
                 ${resultsProcessed ? "text-green-600" : "text-indigo-500"}`}>
                 {resultsProcessed
-                  ? "Grades, averages and rankings have been calculated."
-                  : "Computes grades, averages and class rankings for every student."}
+                  ? t("exams.step2Done")
+                  : t("exams.step2Todo")}
               </p>
               {!resultsProcessed && currentStep === 2 && (
                 <button
@@ -1033,7 +1040,7 @@ const ResultsTab = ({
                              text-xs font-bold rounded-lg hover:bg-indigo-700
                              disabled:opacity-60 transition-colors"
                 >
-                  {processResults.isPending ? "Calculating…" : "Calculate Results"}
+                  {processResults.isPending ? t("exams.calculating") : t("exams.calculateResults")}
                 </button>
               )}
             </div>
@@ -1053,13 +1060,13 @@ const ResultsTab = ({
             <div className="flex-1">
               <p className={`text-sm font-semibold
                 ${resultsPublished ? "text-green-800" : "text-purple-800"}`}>
-                Step 3 — Publish to students
+                {t("exams.step3Title")}
               </p>
               <p className={`text-xs mt-0.5
                 ${resultsPublished ? "text-green-600" : "text-purple-500"}`}>
                 {resultsPublished
-                  ? "Results are live. Students can view their scores."
-                  : "Students cannot see results until you publish them."}
+                  ? t("exams.step3Done")
+                  : t("exams.step3Todo")}
               </p>
               {!resultsPublished && currentStep === 3 && (
                 <button
@@ -1069,7 +1076,7 @@ const ResultsTab = ({
                              text-xs font-bold rounded-lg hover:bg-purple-700
                              disabled:opacity-60 transition-colors"
                 >
-                  {publishResults.isPending ? "Publishing…" : "Publish Results"}
+                  {publishResults.isPending ? t("exams.publishing") : t("exams.publishResults")}
                 </button>
               )}
             </div>
@@ -1081,12 +1088,12 @@ const ResultsTab = ({
       {stats && (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
-            { label: "Students", value: stats.totalStudents, color: "text-primary-600" },
-            { label: "Passed",   value: stats.passed,        color: "text-green-600"   },
-            { label: "Failed",   value: stats.failed,        color: "text-red-600"     },
-            { label: "Pass Rate",value: `${stats.passRate}%`,color: "text-amber-600"   },
+            { id: "students", label: t("academic.student_other"), value: stats.totalStudents,  color: "text-primary-600" },
+            { id: "passed",   label: t("results.passed"),         value: stats.passed,         color: "text-green-600"   },
+            { id: "failed",   label: t("results.failed"),         value: stats.failed,         color: "text-red-600"     },
+            { id: "passRate", label: t("exams.passRate"),         value: `${stats.passRate}%`, color: "text-amber-600"   },
           ].map((s) => (
-            <div key={s.label}
+            <div key={s.id}
                  className="bg-white rounded-xl border border-gray-100
                             p-4 text-center">
               <p className={`text-2xl font-bold ${s.color}`}>{s.value}</p>
@@ -1110,8 +1117,8 @@ const ResultsTab = ({
             title={t("exams.noResultsYet")}
             subtitle={
               currentStep === 1
-                ? "Enter and approve all subject marks first"
-                : "Click Calculate Results above to generate rankings"
+                ? t("exams.enterMarksFirst")
+                : t("exams.clickCalculate")
             }
           />
         </div>
@@ -1121,14 +1128,14 @@ const ResultsTab = ({
           <div className="px-4 py-3 border-b border-gray-100 flex
                           items-center justify-between">
             <h3 className="font-semibold text-gray-900">
-              Rankings — {results.length} student{results.length !== 1 ? "s" : ""}
+              {t("exams.rankingsCount", { count: results.length })}
             </h3>
             <Link
               to={`/exams/results?examId=${examId}`}
               className="text-xs font-semibold text-primary-600
                          hover:text-primary-700"
             >
-              Full Dashboard →
+              {t("exams.fullDashboard")} →
             </Link>
           </div>
 
@@ -1137,11 +1144,12 @@ const ResultsTab = ({
               <thead className="bg-gray-50 text-xs font-bold text-gray-500
                                 uppercase tracking-wide">
                 <tr>
-                  {["Pos", "Student", "Class", "Score",
-                    "Average", "Grade", "Result"].map((h) => (
-                    <th key={h}
+                  {["results.pos", "academic.student", "academic.class",
+                    "academic.score", "academic.average", "academic.grade",
+                    "reportCards.result"].map((labelKey) => (
+                    <th key={labelKey}
                         className="px-4 py-3 text-left last:text-center">
-                      {h}
+                      {t(labelKey)}
                     </th>
                   ))}
                 </tr>
@@ -1165,7 +1173,7 @@ const ResultsTab = ({
                       </td>
                       <td className="px-4 py-3">
                         <p className="font-semibold text-gray-900">
-                          {r.studentName || "Unknown"}
+                          {r.studentName || t("results.unknownStudent")}
                         </p>
                         {r.admissionNo && (
                           <p className="text-xs text-gray-400">
@@ -1192,7 +1200,7 @@ const ResultsTab = ({
                             ? "bg-green-100 text-green-700"
                             : "bg-red-100 text-red-700"
                           }`}>
-                          {passing ? "Pass" : "Fail"}
+                          {passing ? t("results.pass") : t("results.fail")}
                         </span>
                       </td>
                     </tr>
@@ -1231,14 +1239,14 @@ export default function ExamDetailPage() {
   // Keep tab in sync with ?tab= URL param
   useEffect(() => {
     const tab = searchParams.get("tab") as Tab;
-    if (tab && TABS.find((t) => t.key === tab)) setActiveTab(tab);
+    if (tab && TABS.find((tb) => tb.key === tab)) setActiveTab(tab);
   }, [searchParams]);
 
   const handleStatusChange = (status: ExamStatus) => {
     if (!id) return;
-    if (!window.confirm(
-      `Change exam status to "${t(EXAM_STATUS_META[status].labelKey)}"?`
-    )) return;
+    if (!window.confirm(t("exams.statusChangeConfirm", {
+      status: t(EXAM_STATUS_META[status].labelKey),
+    }))) return;
     updateStatus.mutate({ examId: id, status });
   };
 
@@ -1280,7 +1288,7 @@ export default function ExamDetailPage() {
             onClick={() => navigate("/exams")}
             className="text-sm text-gray-400 hover:text-gray-600 mb-1 block"
           >
-            ← Back to Exams
+            ← {t("exams.backToExams")}
           </button>
           <h1 className="text-2xl font-bold text-gray-900">{exam.name}</h1>
           <p className="text-gray-500 text-sm mt-1">
@@ -1305,7 +1313,7 @@ export default function ExamDetailPage() {
                 : "text-gray-500 hover:text-gray-700"
               }`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
 
             {tab.key === "marks" && awaitingApproval > 0 && (
               <span className="ml-1.5 bg-red-500 text-white text-xs

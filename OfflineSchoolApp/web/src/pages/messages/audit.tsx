@@ -115,9 +115,7 @@ export default function MessageAuditPage() {
                         bg-amber-50 px-6 py-2 text-xs text-amber-800">
           <ShieldAlert size={14} className="mt-0.5 shrink-0" />
           <span>
-            This read is recorded. Deleted messages are shown in full here —
-            that is the point of an audit — and are not visible to
-            participants.
+            {t("messages.auditNotice")}
           </span>
         </div>
 

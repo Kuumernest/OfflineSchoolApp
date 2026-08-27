@@ -16,6 +16,7 @@ import { ExamService }  from "../../../src/services/exam.service";
 import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -1018,7 +1019,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
           ]
         );
       } catch (err) {
-        Alert.alert(t("marksEntry.saveFailed"), err.message || t("marksEntry.tryAgain"));
+        Alert.alert(t("marksEntry.saveFailed"), errorText(t, err, "marksEntry.tryAgain"));
       } finally {
         setSaving(false);
       }

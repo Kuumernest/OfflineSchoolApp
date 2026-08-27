@@ -226,7 +226,7 @@ export default function GuardianCodesPage() {
             <Input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="Mrs Tem (672 44 79 79)"
+              placeholder={t("codes.guardianPh")}
               autoFocus
             />
           </FormField>

@@ -25,6 +25,7 @@ import { Ionicons }         from "@expo/vector-icons";
 import AnnouncementService  from "../../../src/services/announcement.service";
 import { ClassService }     from "../../../src/services/class.service";
 import { useTranslation }   from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -205,7 +206,7 @@ export default function CreateAnnouncementScreen() {
         [{ text: t("annAdmin.ok"), onPress: () => router.back() }]
       );
     } catch (err) {
-      Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.errCreate"));
+      Alert.alert(t("annAdmin.errorTitle"), errorText(t, err, "annAdmin.errCreate"));
     } finally {
       setSaving(false);
     }

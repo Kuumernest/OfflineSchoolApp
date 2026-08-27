@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuthStore }   from "@/store/auth.store";
 import * as ExamService   from "@/services/exam.service";
 import { examQueryKeys }  from "./useExams";
-import { useToast }       from "@/components/ui/Toast";
+import { useToast }       from "@/components/ui/Toast";
+import { useTranslation } from "react-i18next";
 
 // ─── Query key factory ────────────────────────────────────────────────────────
 
@@ -72,6 +73,7 @@ export const useStudentResult = (examId: string, studentId: string) => {
 // ─── PROCESS RESULTS ──────────────────────────────────────────────────────────
 
 export const useProcessResults = () => {
+  const { t } = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -90,7 +92,7 @@ export const useProcessResults = () => {
       qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "grade")    });
       qc.invalidateQueries({ queryKey: resultKeys.rankings(examId, "school")   });
       qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId)            });
-      toast({ title: "Results calculated successfully 🎉", kind: "success" });
+      toast({ title: t("results.toastCalculated"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to process results", kind: "error" }),
@@ -100,6 +102,7 @@ export const useProcessResults = () => {
 // ─── PUBLISH RESULTS ──────────────────────────────────────────────────────────
 
 export const usePublishResults = () => {
+  const { t } = useTranslation();
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
@@ -113,7 +116,7 @@ export const usePublishResults = () => {
       qc.invalidateQueries({ queryKey: examQueryKeys.lists()                   });
       qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId)       });
       qc.invalidateQueries({ queryKey: resultKeys.results(examId)              });
-      toast({ title: "Results published! Students can now view their scores 📢", kind: "success" });
+      toast({ title: t("results.toastPublished"), kind: "success" });
     },
     onError: (e: Error) =>
       toast({ title: e.message || "Failed to publish results", kind: "error" }),

@@ -17,6 +17,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 import api              from "../../../src/services/api";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
+import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -347,7 +348,7 @@ function useStableLoader(asyncFn, deps) {
             data:       [],
             loading:    false,
             refreshing: false,
-            error:      err?.message || t("teacherExamSubjects.genericError"),
+            error:      errorText(t, err, "teacherExamSubjects.genericError"),
           });
         }
       })
@@ -592,7 +593,7 @@ function ScoreEntry({
       } catch (err) {
         Alert.alert(
           t("teacherExamSubjects.saveFailedTitle"),
-          err.message || t("teacherExamSubjects.tryAgain")
+          errorText(t, err, "teacherExamSubjects.tryAgain")
         );
       } finally {
         setSaving(false);

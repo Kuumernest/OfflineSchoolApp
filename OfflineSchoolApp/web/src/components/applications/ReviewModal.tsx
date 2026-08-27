@@ -351,7 +351,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
               <div className="flex items-start gap-2 bg-amber-50 rounded-xl p-3">
                 <span className="text-amber-600 mt-0.5">⚠️</span>
                 <p className="text-sm text-amber-700 font-medium">
-                  No active classes found. Create a class before approving.
+                  {t("applications.noActiveClasses")}
                 </p>
               </div>
             ) : (

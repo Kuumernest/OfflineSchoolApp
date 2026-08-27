@@ -172,7 +172,7 @@ export default function AdminAnnouncementsScreen() {
               const s = await AnnouncementService.getAnnouncementStats();
               if (isMounted.current) setStats(s);
             } catch (err) {
-              Alert.alert(t("annAdmin.errorTitle"), err.message || t("annAdmin.deleteFailed"));
+              Alert.alert(t("annAdmin.errorTitle"), errorText(t, err, "annAdmin.deleteFailed"));
             }
           },
         },
@@ -189,7 +189,7 @@ export default function AdminAnnouncementsScreen() {
         )
       );
     } catch (err) {
-      Alert.alert(t("annAdmin.errorTitle"), err.message);
+      Alert.alert(t("annAdmin.errorTitle"), errorText(t, err));
     }
   }, []);
 
@@ -882,3 +882,4 @@ const styles = StyleSheet.create({
   clearFilterText: { color: "#4F46E5", fontWeight: "600", fontSize: 13 },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { errorText } from "../../../src/utils/appError";

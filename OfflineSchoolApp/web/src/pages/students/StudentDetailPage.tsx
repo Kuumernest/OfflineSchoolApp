@@ -36,6 +36,7 @@ import {
 import { cn }                   from "@/utils/cn";
 import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import { Button }               from "@/components/ui/Button";
 import { getErrorMessage }      from "@/lib/api";
 import {
@@ -70,11 +71,14 @@ const QK = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+// The status VALUES stay English — they are what the API stores and what the
+// switch below compares against. Only the visible label is translated, and it
+// travels as a key because module scope cannot call a hook.
 const getStatusConfig = (status: string) => {
   switch (status?.toLowerCase()) {
     case "suspended":
       return {
-        label:  "Suspended",
+        labelKey: "studentDetail.statusSuspended",
         color:  "text-red-700",
         bg:     "bg-red-50",
         border: "border-red-200",
@@ -82,7 +86,7 @@ const getStatusConfig = (status: string) => {
       };
     case "inactive":
       return {
-        label:  "Inactive",
+        labelKey: "common.inactive",
         color:  "text-gray-600",
         bg:     "bg-gray-50",
         border: "border-gray-200",
@@ -90,7 +94,7 @@ const getStatusConfig = (status: string) => {
       };
     default:
       return {
-        label:  "Active",
+        labelKey: "common.active",
         color:  "text-emerald-700",
         bg:     "bg-emerald-50",
         border: "border-emerald-200",
@@ -111,11 +115,16 @@ const formatDate = (value?: string | null): string | null => {
       });
 };
 
-/** Extracts a human-readable message from any thrown error shape. */
-const extractMessage = (err: unknown): string =>
+/**
+ * Extracts a human-readable message from any thrown error shape.
+ *
+ * Takes the translator as a parameter — the fallback is shown to the user and
+ * module scope cannot call a hook.
+ */
+const extractMessage = (err: unknown, t: TFunction): string =>
   (err as { response?: { data?: { message?: string } } })
     ?.response?.data?.message ??
-  (err instanceof Error ? err.message : "Please try again.");
+  (err instanceof Error ? err.message : t("studentDetail.tryAgain"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SUB-COMPONENTS
@@ -268,7 +277,7 @@ function EnrollmentCard({
           : {
               message:
                 data?.message ||
-                "Password reset. New credentials were emailed to the student.",
+                t("studentDetail.resetEmailed"),
             }
       );
       setConfirming(false);
@@ -289,10 +298,7 @@ function EnrollmentCard({
       </div>
 
       <p className="text-xs text-indigo-600 mb-3 leading-relaxed">
-        The student uses this enrollment number to log in from any device.
-        Their first password is generated automatically — it was shown once
-        when the student was enrolled (or sent to their email). They will be
-        asked to set their own password at first login.
+        {t("studentDetail.credentialsHint")}
       </p>
 
       {/* Enrollment number display */}
@@ -309,7 +315,7 @@ function EnrollmentCard({
               : "bg-indigo-100 text-indigo-700 hover:bg-indigo-200"
           )}
         >
-          {copied ? "✓ Copied" : "Copy"}
+          {copied ? `✓ ${t("common.copied")}` : t("common.copy")}
         </button>
       </div>
 
@@ -319,8 +325,7 @@ function EnrollmentCard({
           <ShieldAlert className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
           <p className="text-xs text-amber-800 leading-relaxed">
             <span className="font-semibold">{t("studentDetail.passwordNotChangedYet")}</span>{" "}
-            The student is still using their generated first password. Ask them to
-            log in and change it.
+            {t("studentDetail.mustResetHint")}
           </p>
         </div>
       )}
@@ -333,27 +338,27 @@ function EnrollmentCard({
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-white px-3 py-1.5 text-xs font-semibold text-indigo-700 hover:bg-indigo-100 transition disabled:opacity-50"
         >
           <KeyRound className="h-3.5 w-3.5" />
-          Forgot password? Reset it
+          {t("studentDetail.resetPassword")}
         </button>
       )}
 
       {confirming && (
         <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2">
           <span className="flex-1 text-xs text-amber-800">
-            Generate a new password? The current one stops working immediately.
+            {t("studentDetail.resetConfirm")}
           </span>
           <button
             onClick={handleReset}
             disabled={resetting}
             className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-700 transition disabled:opacity-50"
           >
-            {resetting ? "Resetting…" : "Yes, reset"}
+            {resetting ? t("studentDetail.resetting") : t("studentDetail.resetYes")}
           </button>
           <button
             onClick={() => setConfirming(false)}
             className="rounded-lg px-2 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-700"
           >
-            Cancel
+            {t("common.cancel")}
           </button>
         </div>
       )}
@@ -367,7 +372,7 @@ function EnrollmentCard({
       {result?.tempPassword && (
         <div className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50 p-3">
           <p className="mb-2 text-xs font-bold text-emerald-800">
-            New temporary password — shown once:
+            {t("studentDetail.newTempPassword")}
           </p>
           <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-white px-3 py-2">
             <span className="flex-1 font-mono text-sm font-bold tracking-wider text-emerald-900 select-all">
@@ -382,12 +387,11 @@ function EnrollmentCard({
                   : "bg-emerald-600 text-white hover:bg-emerald-700"
               )}
             >
-              {newCopied ? "✓ Copied" : "Copy"}
+              {newCopied ? `✓ ${t("common.copied")}` : t("common.copy")}
             </button>
           </div>
           <p className="mt-2 text-xs leading-relaxed text-emerald-700">
-            Give it to the student now — it will not be shown again. They must
-            set a new password at next login.
+            {t("studentDetail.newTempHint")}
           </p>
         </div>
       )}
@@ -451,7 +455,7 @@ function MoveClassPicker({
                     {cls.name}
                   </p>
                   {cls.level && (
-                    <p className="text-xs text-gray-400">Level {cls.level}</p>
+                    <p className="text-xs text-gray-400">{t("common.level")} {cls.level}</p>
                   )}
                 </div>
               </button>
@@ -508,7 +512,7 @@ function PhotoCard({
       const base64 = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload  = () => resolve(String(reader.result).split(",")[1] ?? "");
-        reader.onerror = () => reject(new Error("Could not read that file"));
+        reader.onerror = () => reject(new Error(t("studentDetail.photoReadFailed")));
         reader.readAsDataURL(file);
       });
 
@@ -793,18 +797,26 @@ export default function StudentDetailPage() {
     mutationFn: () => suspendStudent(id!),
     onSuccess: () => {
       invalidate();
-      toast({ kind: "success", title: "Student Suspended", message: `${student?.name} has been suspended.` });
+      toast({
+        kind: "success",
+        title: t("studentDetail.suspendedTitle"),
+        message: t("studentDetail.suspendedBody", { name: student?.name }),
+      });
     },
-    onError: (err) => toast({ kind: "error", title: "Suspend Failed", message: extractMessage(err) }),
+    onError: (err) => toast({ kind: "error", title: t("studentDetail.suspendFailed"), message: extractMessage(err, t) }),
   });
 
   const restoreMutation = useMutation({
     mutationFn: () => restoreStudent(id!),
     onSuccess: () => {
       invalidate();
-      toast({ kind: "success", title: "Student Restored", message: `${student?.name} has been restored.` });
+      toast({
+        kind: "success",
+        title: t("studentDetail.restoredTitle"),
+        message: t("studentDetail.restoredBody", { name: student?.name }),
+      });
     },
-    onError: (err) => toast({ kind: "error", title: "Restore Failed", message: extractMessage(err) }),
+    onError: (err) => toast({ kind: "error", title: t("studentDetail.restoreFailed"), message: extractMessage(err, t) }),
   });
 
   const moveMutation = useMutation({
@@ -813,11 +825,18 @@ export default function StudentDetailPage() {
       setShowMovePicker(false);
       invalidate();
       const cls = classes.find((c) => String(c._id ?? c.id) === String(classId));
-      toast({ kind: "success", title: "Student Moved", message: `${student?.name} moved to ${cls?.name ?? "new class"}.` });
+      toast({
+        kind: "success",
+        title: t("studentDetail.movedTitle"),
+        message: t("studentDetail.movedBody", {
+          name:  student?.name,
+          class: cls?.name ?? t("studentDetail.newClass"),
+        }),
+      });
     },
     onError: (err) => {
       setShowMovePicker(false);
-      toast({ kind: "error", title: "Move Failed", message: extractMessage(err) });
+      toast({ kind: "error", title: t("studentDetail.moveFailed"), message: extractMessage(err, t) });
     },
   });
 
@@ -825,10 +844,14 @@ export default function StudentDetailPage() {
     mutationFn: () => deleteStudent(id!),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: QK.students(schoolId) });
-      toast({ kind: "success", title: "Student Deleted", message: `${student?.name} has been permanently removed.` });
+      toast({
+        kind: "success",
+        title: t("studentDetail.deletedTitle"),
+        message: t("studentDetail.deletedBody", { name: student?.name }),
+      });
       navigate("/students");
     },
-    onError: (err) => toast({ kind: "error", title: "Delete Failed", message: extractMessage(err) }),
+    onError: (err) => toast({ kind: "error", title: t("studentDetail.deleteFailed"), message: extractMessage(err, t) }),
   });
 
   // ── Action handlers ───────────────────────────────────────────────────────
@@ -836,8 +859,8 @@ export default function StudentDetailPage() {
   const handleSuspend = useCallback(async () => {
     const yes = await confirm({
       title:        t("studentDetail.suspend"),
-      message:      `Are you sure you want to suspend "${student?.name}"?\n\nThey will not be able to log in until restored.`,
-      confirmLabel: "Suspend",
+      message:      t("studentDetail.suspendConfirm", { name: student?.name }),
+      confirmLabel: t("studentDetail.suspendAction"),
       kind:         "warning",
     });
     if (yes) suspendMutation.mutate();
@@ -846,8 +869,8 @@ export default function StudentDetailPage() {
   const handleRestore = useCallback(async () => {
     const yes = await confirm({
       title:        t("studentDetail.restore"),
-      message:      `Restore "${student?.name}" and re-enable their account?`,
-      confirmLabel: "Restore",
+      message:      t("studentDetail.restoreConfirm", { name: student?.name }),
+      confirmLabel: t("studentDetail.restoreAction"),
       kind:         "default",
     });
     if (yes) restoreMutation.mutate();
@@ -856,8 +879,8 @@ export default function StudentDetailPage() {
   const handleDelete = useCallback(async () => {
     const yes = await confirm({
       title:        t("studentDetail.delete"),
-      message:      `Permanently delete "${student?.name}"?\n\nThis action cannot be undone.`,
-      confirmLabel: "Delete",
+      message:      t("studentDetail.deleteConfirm", { name: student?.name }),
+      confirmLabel: t("common.delete"),
       kind:         "danger",
     });
     if (yes) deleteMutation.mutate();
@@ -866,14 +889,14 @@ export default function StudentDetailPage() {
   const handleMoveSelect = useCallback(
     async (cls: SchoolClass) => {
       const yes = await confirm({
-        title:        "Move Student",
-        message:      `Move "${student?.name}" to "${cls.name}"?`,
-        confirmLabel: "Move",
+        title:        t("studentDetail.moveTitle"),
+        message:      t("studentDetail.moveConfirm", { name: student?.name, class: cls.name }),
+        confirmLabel: t("studentDetail.moveAction"),
         kind:         "default",
       });
       if (yes) moveMutation.mutate(String(cls._id ?? cls.id));
     },
-    [student, confirm, moveMutation]
+    [student, confirm, moveMutation, t]
   );
 
   // ── Derived state ─────────────────────────────────────────────────────────
@@ -897,7 +920,7 @@ export default function StudentDetailPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-        <p className="text-sm font-medium text-gray-400">Loading student…</p>
+        <p className="text-sm font-medium text-gray-400">{t("studentDetail.loading")}</p>
       </div>
     );
   }
@@ -1006,7 +1029,7 @@ export default function StudentDetailPage() {
                 )}
               >
                 <span className={cn("h-1.5 w-1.5 rounded-full", statusConfig.dot)} />
-                {statusConfig.label}
+                {t(statusConfig.labelKey)}
               </span>
 
               {/* Class badge */}

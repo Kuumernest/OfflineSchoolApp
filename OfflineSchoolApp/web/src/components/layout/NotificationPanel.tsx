@@ -279,7 +279,7 @@ export default function NotificationPanel() {
             {isLoading && notifications.length === 0 && (
               <div className="py-8 text-center">
                 <div className="w-5 h-5 border-2 border-primary-400 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-                <p className="text-sm text-gray-400">Loading…</p>
+                <p className="text-sm text-gray-400">{t("common.loading")}</p>
               </div>
             )}
 
@@ -428,7 +428,7 @@ export default function NotificationPanel() {
                 }}
                 className="w-full text-center text-xs font-medium text-primary-600 hover:text-primary-700 transition-colors"
               >
-                View all notifications →
+                {t("notifications.viewAll")}
               </button>
             </div>
           )}

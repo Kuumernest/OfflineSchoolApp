@@ -13,6 +13,7 @@ import { ExamService }  from "../../../../src/services/exam.service";
 import api              from "../../../../src/services/api";
 import DateField        from "../../../../src/components/DateField";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { errorText } from "../../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -375,7 +376,7 @@ export default function EditExamScreen() {
         setSelectedClasses([]);
       }
     } catch (err) {
-      Alert.alert(t("examEdit.errorTitle"), err.message || t("examEdit.loadFailed"));
+      Alert.alert(t("examEdit.errorTitle"), errorText(t, err, "examEdit.loadFailed"));
       router.back();
     } finally {
       setLoading(false);
@@ -512,7 +513,7 @@ export default function EditExamScreen() {
     } catch (err) {
       Alert.alert(
         t("examEdit.saveFailedTitle"),
-        err.message || t("examEdit.saveFailedBody")
+        errorText(t, err, "examEdit.saveFailedBody")
       );
     } finally {
       setSaving(false);
@@ -540,7 +541,7 @@ export default function EditExamScreen() {
             } catch (err) {
               Alert.alert(
                 t("examEdit.errorTitle"),
-                err.message || t("examEdit.deleteFailed")
+                errorText(t, err, "examEdit.deleteFailed")
               );
             }
           },

@@ -50,12 +50,12 @@ const PAGE_LIMIT = 20;
 // ✅ "all" is now an explicit option so the backend receives it correctly.
 // Backend buildStudentFilter() skips the status clause when status === "all"
 // which returns every student regardless of status — matching the DB total.
-const STATUS_OPTIONS: SelectOption[] = [
-  { value: "all",       label: "All Statuses" },
-  { value: "approved",  label: "Active"        },
-  { value: "pending",   label: "Pending"       },
-  { value: "suspended", label: "Suspended"     },
-  { value: "rejected",  label: "Rejected"      },
+const STATUS_OPTION_KEYS = [
+  { value: "all",       labelKey: "students.allStatuses" },
+  { value: "approved",  labelKey: "common.active"        },
+  { value: "pending",   labelKey: "common.pending"       },
+  { value: "suspended", labelKey: "students.suspended"   },
+  { value: "rejected",  labelKey: "students.rejected"    },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -63,6 +63,7 @@ const STATUS_OPTIONS: SelectOption[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const statusVariant = (status: string | undefined): BadgeVariant => {
+  const { t } = useTranslation();
   switch ((status ?? "").toLowerCase()) {
     case "approved":  return "success";
     case "suspended": return "danger";
@@ -396,11 +397,11 @@ export default function StudentsPage() {
             options={classOptions}
             placeholder={t("students.allClasses")}
           />
-          {/* ✅ No placeholder — "All Statuses" is the first explicit option */}
+          {/* ✅ No placeholder — t("students.allStatuses") is the first explicit option */}
           <Select
             value={status}
             onChange={handleStatusChange}
-            options={STATUS_OPTIONS}
+            options={STATUS_OPTION_KEYS.map((o) => ({ value: o.value, label: t(o.labelKey) }))}
           />
         </div>
       </div>
