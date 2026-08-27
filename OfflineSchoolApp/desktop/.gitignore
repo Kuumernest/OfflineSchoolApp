@@ -10,3 +10,4 @@ probe-log.txt
 # Installers.
 dist/
 out/
+seam-result.txt

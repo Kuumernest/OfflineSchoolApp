@@ -1,6 +1,7 @@
 // web/src/store/auth.store.ts
 import { create } from "zustand";
 import api        from "@/lib/axios";
+import { desktop } from "@/lib/offline/bridge";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STORAGE
@@ -169,6 +170,25 @@ const extractAuthPayload = (
 // remove when falsy — avoids storing the empty string "" as a sentinel.
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Tell the desktop application about the session.
+ *
+ * The main process cannot sign in and deliberately keeps no credential on disk,
+ * so the only way it can sync is to be handed the token by the window that
+ * obtained it. Done here rather than at the three call sites because this is
+ * where a token becomes the current one — login, setAuth and refresh all pass
+ * through it, and hooking each separately is how one gets missed.
+ *
+ * Fire-and-forget, and silent on failure: syncing is not something a sign-in
+ * should be able to fail on, and the engine reports its own state through
+ * window.school.sync.
+ */
+const tellDesktop = (token: string | null) => {
+  const bridge = desktop();
+  if (!bridge) return;
+  void bridge.sync.setToken(token).catch(() => { /* the engine reports its own health */ });
+};
+
 const persistAuth = (user: AuthUser, token: string, refreshToken: string | null) => {
   storage.setItem("token", token);
   storage.setItem("user",  JSON.stringify(user));
@@ -177,12 +197,16 @@ const persistAuth = (user: AuthUser, token: string, refreshToken: string | null)
   } else {
     storage.removeItem("refreshToken");
   }
+  tellDesktop(token);
 };
 
 const clearPersistedAuth = () => {
   storage.removeItem("token");
   storage.removeItem("user");
   storage.removeItem("refreshToken");
+  // Stops the sync loop as well as clearing the token: a signed-out machine
+  // should not be reaching the server on a timer.
+  tellDesktop(null);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

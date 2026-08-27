@@ -34,6 +34,17 @@ contextBridge.exposeInMainWorld("school", {
   /** Version, platform, where the data is, and this installation's code. */
   info: () => ipcRenderer.invoke("app:info"),
 
+  /**
+   * The server contract, answered from the local database.
+   *
+   * Called by the window's axios adapter, not by application code. A null
+   * answer means this request is not mirrored and should go to the network.
+   */
+  api: {
+    request: (req) => ipcRenderer.invoke("api:request", req),
+    routes:  ()    => ipcRenderer.invoke("api:routes"),
+  },
+
   /** Reading the local mirror. */
   docs: {
     get:   (collection, id)           => ipcRenderer.invoke("docs:get",   collection, id),

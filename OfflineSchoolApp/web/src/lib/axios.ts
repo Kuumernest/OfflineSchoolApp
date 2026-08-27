@@ -1,6 +1,7 @@
 // web/src/lib/axios.ts
 import axios            from "axios";
 import { getAuthState } from "@/store/auth.store";
+import { offlineAdapter } from "@/lib/offline/adapter";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // INSTANCE
@@ -13,6 +14,21 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? "/api",
   timeout: 15_000,
   headers: { "Content-Type": "application/json" },
+
+  /**
+   * On the desktop, reads are answered from the local database.
+   *
+   * This one line is the whole offline seam for the 225 api.* calls in this
+   * codebase. In a browser the adapter sees no bridge and hands every request
+   * straight to the network, so nothing about the web build changes.
+   *
+   * axios.getAdapter resolves the default — which is a LIST of names
+   * (["xhr","http","fetch"]) rather than a function, so it cannot simply be
+   * called. Resolved lazily, inside the fallback, because resolving it at module
+   * load would pick an adapter before axios has finished deciding which of those
+   * three this environment supports.
+   */
+  adapter: offlineAdapter((config) => axios.getAdapter(axios.defaults.adapter)(config)),
 });
 
 // ─────────────────────────────────────────────────────────────────────────────

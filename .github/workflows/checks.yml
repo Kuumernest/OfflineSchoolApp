@@ -95,10 +95,11 @@ jobs:
             process.exit(bad ? 1 : 0);
           '
 
-      # 90 + 67 + 33 pure assertions, then 42 + 6 + 68 + 41 + 42 + 56 + 60
-      # against the in-memory database, the last of those being the
-      # whole-journey smoke walk. See backend/package.json for the individual
-      # suites.
+      # 90 + 67 + 33 pure assertions, then 42 + 6 + 68 + 41 + 42 + 56 + 35 + 60
+      # against the in-memory database — the 35 being the desktop parity check,
+      # which loads the desktop app's offline handlers alongside the real Express
+      # router and compares their answers on identical data, and the 60 being the
+      # whole-journey smoke walk. See backend/package.json for the suites.
       #
       # mail:verify is deliberately NOT among them: it authenticates against a
       # real provider, which belongs in a human hand after editing .env rather

@@ -36,6 +36,7 @@ const store        = require("./db/store");
 const { outbox }   = require("./db/outbox");
 const { client }   = require("./sync/client");
 const { engine }   = require("./sync/engine");
+const localApi     = require("./api");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STARTUP
@@ -202,6 +203,20 @@ const registerHandlers = () => {
     dataDirectory: path.dirname(DB_FILE()),
     schemaVersion: store.SCHEMA_VERSION,
   }));
+
+  /**
+   * The server contract, answered locally.
+   *
+   * This is what the window's axios adapter calls for every read. Returning null
+   * means "not answered here", and the adapter then goes to the network exactly
+   * as it always did — so an endpoint that has no local handler yet behaves
+   * today the way it behaves in a browser.
+   */
+  ipcMain.handle("api:request", (_e, req) =>
+    localApi.handle(req, { docs, meta: metaBag, queue }));
+
+  /** Which routes are answered locally, for the diagnostics screen. */
+  ipcMain.handle("api:routes", () => localApi.routes());
 
   // ── Reading the mirror ──────────────────────────────────────────────────
   ipcMain.handle("docs:get",   (_e, collection, id)            => docs.get(collection, id));
