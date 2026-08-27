@@ -14,8 +14,9 @@
     "check:reminders": "node scripts/check-fee-reminders.js",
     "check:staff": "node scripts/check-staff-lifecycle.js",
     "check:login": "node scripts/check-login-response.js",
+    "check:smoke": "node scripts/smoke-bursar-path.js",
     "check": "npm run check:roles && npm run check:policy",
-    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login",
+    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login && npm run check:smoke",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

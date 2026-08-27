@@ -225,6 +225,8 @@ const main = async () => {
     schoolId, academicYear: YEAR, mode: "overdue", force: true, asOf: day("2025-10-06"),
   });
   check("counted as unreachable rather than queued", sendAll.skippedUnreachable, 1);
+  check("and named, because a count alone is a mystery",
+    (sendAll.unreachable ?? []).map((u) => u.name), ["Dele NoPhone"]);
 
   // ── PENALTIES ────────────────────────────────────────────────────────────
   console.log("--- the grace period holds the late fee back ---");
@@ -446,6 +448,51 @@ const main = async () => {
     });
   } catch (err) { dupeCode = err.code; }
   check("a second active plan is refused", dupeCode, 11000);
+
+  console.log("--- nor to a family reachable only on a channel this school does not use ---");
+
+  // The case the whole-journey smoke test found, and the ordinary case in a
+  // Cameroonian school: a phone number on file and no email address, at a
+  // school that sends by email.
+  //
+  // Both layers used to disagree about this. candidates() asked "any contact
+  // detail at all" and said reachable; the notification pipeline asked for an
+  // address the configured channel could use, found none, and wrote a skipped
+  // row. sendReminders counted that row as queued because enqueue had resolved
+  // without throwing — so the bursar was told the reminder went, the cooldown
+  // (which counts only sent and pending) never engaged, and pressing send
+  // again reported another success with the same result, indefinitely.
+  const phoneOnly = await makeStudent(schoolId, "Marthe PhoneOnly");
+  await Student.updateOne(
+    { _id: phoneOnly._id },
+    { $unset: { guardianEmail: "", email: "" }, $set: { guardianPhone: "+237670000099" } }
+  );
+  await charge(phoneOnly._id);
+
+  const withPhoneOnly = await reminders.candidates({
+    schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-06"),
+  });
+  const marthe = withPhoneOnly.find((r) => r.name === "Marthe PhoneOnly");
+  check("on the arrears list, where she belongs", Boolean(marthe), true);
+  check("but not described as reachable", marthe.reachable, false);
+
+  const sendPhoneOnly = await reminders.sendReminders({
+    schoolId, academicYear: YEAR, studentIds: [String(phoneOnly._id)],
+    mode: "overdue", force: true, asOf: day("2025-10-06"),
+  });
+  check("nothing is queued for her", sendPhoneOnly.queued, 0);
+  check("she is reported as unreachable", sendPhoneOnly.skippedUnreachable, 1);
+  check("with a reason a bursar can act on",
+    /address|email|phone/i.test((sendPhoneOnly.unreachable ?? [])[0]?.reason ?? ""), true);
+
+  // Nothing was sent, so nothing may suppress the next attempt — otherwise a
+  // family with no address would be silently dropped for a week at a time.
+  const retryHer = await reminders.sendReminders({
+    schoolId, academicYear: YEAR, studentIds: [String(phoneOnly._id)],
+    mode: "overdue", asOf: day("2025-10-07"),
+  });
+  check("and the cooldown does not pretend otherwise", retryHer.skippedRecent, 0);
+  check("she is still reported the next day", retryHer.skippedUnreachable, 1);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
 

@@ -45,6 +45,7 @@ const Notification = require("../db/models/Notification");
 const { balancesFor } = require("./fees.service");
 const { displayName } = require("../utils/studentName");
 const notify = require("./notification");
+const School = require("../db/models/School");
 
 /**
  * How long before the same family may be reminded again.
@@ -235,13 +236,16 @@ async function candidates({
 
   const studentIds = dated.map((d) => String(d._id));
 
-  const [students, balances, plans] = await Promise.all([
+  const [students, balances, plans, channel] = await Promise.all([
     Student.find({ _id: { $in: studentIds }, schoolId, deletedAt: null })
       .select("_id studentName name firstName lastName enrollmentNo classId " +
               "guardianName guardianPhone guardianEmail email phone")
       .lean(),
     balancesFor({ schoolId, studentIds, academicYear }),
     activePlans({ schoolId, studentIds, academicYear }),
+    // How this school sends, so "reachable" below answers the same question
+    // the notification pipeline will ask rather than a more generous one.
+    School.findById(schoolId).lean().then(notify.resolveChannel).catch(() => "email"),
   ]);
 
   const byId = new Map(students.map((s) => [String(s._id), s]));
@@ -323,11 +327,15 @@ async function candidates({
        * Reported rather than filtered on, because "we owe 40,000 and have no
        * phone number for them" is the single most useful line on an arrears
        * screen — and silently dropping those rows would hide it.
+       *
+       * Asked ON THE CHANNEL THE SCHOOL ACTUALLY USES. It used to be "any
+       * contact detail at all", which is a different question from the one the
+       * notification pipeline asks: a school on email needs an email address,
+       * and a phone number does not substitute. Every family in a school that
+       * records phone numbers and sends by email therefore read as reachable
+       * here and was skipped for want of an address one layer down.
        */
-      reachable: Boolean(
-        student.guardianEmail || student.email ||
-        student.guardianPhone || student.phone
-      ),
+      reachable: Boolean(notify.resolveRecipient(student, channel).to),
     });
   }
 
@@ -394,15 +402,20 @@ async function sendReminders({
     ? new Set()
     : await recentlyReminded(schoolId, chosen.map((r) => r.studentId), asOf);
 
-  let queued = 0, skippedRecent = 0, skippedUnreachable = 0;
+  let queued = 0, skippedRecent = 0, skippedUnreachable = 0, failed = 0;
   const rows = [];
+  const unreachable = [];
 
   for (const r of chosen) {
     if (recent.has(r.studentId)) { skippedRecent++; continue; }
-    if (!r.reachable)            { skippedUnreachable++; continue; }
+    if (!r.reachable)            {
+      skippedUnreachable++;
+      unreachable.push({ studentId: r.studentId, name: r.name, reason: "No address on file" });
+      continue;
+    }
 
     try {
-      await notify.enqueue({
+      const note = await notify.enqueue({
         schoolId,
         kind:      "fee.reminder",
         studentId: r.studentId,
@@ -419,21 +432,43 @@ async function sendReminders({
           planNextDue:  r.planNextDue,
         },
       });
-      queued++;
-      rows.push({ studentId: r.studentId, name: r.name, balance: r.balance });
+      // What enqueue DID, not that it returned.
+      //
+      // It resolves successfully whether it wrote a message to send or a row
+      // recording that it could not. Counting every resolution as queued told
+      // the bursar "3 reminders queued" when three families had no address the
+      // configured channel could use and nothing would ever be sent — and
+      // since the cooldown counts only sent and pending, pressing send again
+      // reported another three, indefinitely, with the same result. Its own
+      // doc comment asks the caller to read the status rather than assume.
+      if (note?.status === "skipped") {
+        skippedUnreachable++;
+        unreachable.push({
+          studentId: r.studentId, name: r.name,
+          reason: note.skipReason ?? "No address on file",
+        });
+      } else if (note?.status === "failed") {
+        failed++;
+      } else {
+        queued++;
+        rows.push({ studentId: r.studentId, name: r.name, balance: r.balance });
+      }
     } catch (err) {
       // One family's bad address must not stop the rest of the list.
       console.warn(`[feeReminders] could not queue for ${r.studentId}: ${err.message}`);
-      skippedUnreachable++;
+      failed++;
     }
   }
 
   console.log(
     `📨 fee reminders for ${schoolId}: ${queued} queued, ` +
-    `${skippedRecent} recently reminded, ${skippedUnreachable} unreachable`
+    `${skippedRecent} recently reminded, ${skippedUnreachable} unreachable, ` +
+    `${failed} failed`
   );
 
-  return { queued, skippedRecent, skippedUnreachable, rows };
+  // unreachable is named, not just counted: "nothing was sent" is a question a
+  // bursar has to be able to answer with WHO, or the number is just a mystery.
+  return { queued, skippedRecent, skippedUnreachable, failed, rows, unreachable };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
