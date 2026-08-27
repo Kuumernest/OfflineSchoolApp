@@ -1,0 +1,174 @@
+# .github/workflows/checks.yml
+#
+# The project has no test framework. Correctness is pinned by the assertion
+# scripts in backend/scripts, web/scripts and mobile/scripts, and until this
+# workflow existed they only ran when somebody remembered to type the command —
+# which is the same as not having them, a few weeks in.
+#
+# ── Why nothing is path-filtered ──────────────────────────────────────────
+#
+# It is tempting to skip the backend job on a web-only change. It would be
+# wrong: check-role-matrix.js reads web/src/i18n/locales to assert that every
+# permission has an English and a French label, so editing a web locale file can
+# genuinely break a backend check. The packages are not as separate as their
+# folders suggest, and a filter would hide exactly the failure that is hardest to
+# guess at.
+#
+# Three jobs rather than one so a red square says where the problem is without
+# opening the log.
+
+name: Checks
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# A second push to the same branch makes the first run pointless. Without this
+# they queue and the useful answer arrives last.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Matches the runtime the suites were written and run against locally. If
+  # production runs something else, change this to that — a CI that passes on a
+  # version nobody deploys is a weaker signal than it looks.
+  NODE_VERSION: "24.x"
+
+jobs:
+  backend:
+    name: Backend — roles, permissions, approvals, fees
+    runs-on: ubuntu-latest
+    # A ceiling rather than the six-hour default. Earned: the router-load step
+    # below hung the first time it ran, and an unattended workflow that stalls
+    # is worse than one that fails — it burns minutes and tells you nothing.
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/backend
+
+    env:
+      # Pinned so the cache path below is deterministic. Left to its default,
+      # mongodb-memory-server chooses a location that has moved between
+      # versions, and a cache that silently misses just costs 30s a run
+      # forever without ever failing.
+      MONGOMS_DOWNLOAD_DIR: ${{ github.workspace }}/.cache/mongodb-binaries
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/backend/package-lock.json
+
+      # Three of the five suites start a real MongoDB in memory. The binary is
+      # ~100MB and does not change between runs.
+      - name: Cache the MongoDB binary
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/.cache/mongodb-binaries
+          key: mongodb-binaries-${{ runner.os }}
+
+      - run: npm ci
+
+      # Catches an unbound require — the failure mode that passes `node --check`
+      # and then dies on the first request instead.
+      #
+      # process.exit is not decoration. Loading these routers pulls in the
+      # notification service, which sets a timer, so the process never becomes
+      # idle and node will not exit on its own. Without the explicit exit this
+      # step prints "all routers load" and then hangs until the job timeout —
+      # which is how it behaved the first time it was run.
+      - name: Every router and service loads
+        run: |
+          node -e '
+            const fs = require("fs");
+            let bad = 0;
+            for (const f of fs.readdirSync("src/routes").filter(x => x.endsWith(".routes.js"))) {
+              try { require("./src/routes/" + f); }
+              catch (e) { bad++; console.error("FAILS " + f + ": " + e.message.split("\n")[0]); }
+            }
+            console.log(bad ? "" : "all routers load");
+            process.exit(bad ? 1 : 0);
+          '
+
+      # 90 + 67 pure assertions, then 42 + 6 + 60 against the in-memory
+      # database. See backend/package.json for the individual suites.
+      - name: npm run check:all
+        run: npm run check:all
+
+  web:
+    name: Web — types, i18n, build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/web
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/web/package-lock.json
+
+      - run: npm ci
+
+      - name: Type check
+        run: npx tsc -b
+
+      # en against fr, plus every t("…") reference resolving. Both failure modes
+      # are invisible at runtime because i18next falls back silently.
+      - name: i18n parity
+        run: npm run i18n:check
+
+      # The artifact that actually ships. tsc covers most of it, but a bundle
+      # can still fail on something tsc is happy with.
+      - name: Production build
+        run: npx vite build
+
+      # ADVISORY, deliberately.
+      #
+      # `eslint .` currently reports 26 errors and 23 warnings, all pre-existing
+      # and mostly react-hooks/set-state-in-effect. Gating on that would make
+      # this workflow red on the day it was added, and a permanently red CI is
+      # one people learn to ignore — which costs more than the lint findings are
+      # worth.
+      #
+      # Left visible so the number can be driven down deliberately. Once it
+      # reaches zero, delete this comment and the continue-on-error line.
+      - name: Lint (advisory)
+        run: npx eslint .
+        continue-on-error: true
+
+  mobile:
+    name: Mobile — parse, i18n
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/mobile
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/mobile/package-lock.json
+
+      - run: npm ci
+
+      # There is no tsc pass and no eslint config here, so this is the floor:
+      # every screen and service parses through babel-preset-expo (what the
+      # bundler does, so a failure here cannot load on a device), and the two
+      # locale files match key for key. On a phone a missing key renders as the
+      # raw key, offline, with nobody watching a console.
+      - name: npm run check
+        run: npm run check
