@@ -238,6 +238,7 @@ const main = async () => {
   app.use(express.json());
   app.use("/api/admin", authenticate, require("../src/routes/admin.routes"));
   app.use("/api/fees",  authenticate, require("../src/routes/fees.routes"));
+  app.use("/api/finance", authenticate, require("../src/routes/finance.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
@@ -475,6 +476,127 @@ const main = async () => {
       // being used at all, which the roster parity above already pins.
       named.data.data.length > 0,
     true);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- what the school spent ---");
+
+  const Expense         = require("../src/db/models/Expense");
+  const ExpenseCategory = require("../src/db/models/ExpenseCategory");
+  await Promise.all([Expense.init(), ExpenseCategory.init()]);
+
+  await ExpenseCategory.collection.insertMany([
+    { _id: "ec-1", schoolId: SCHOOL, code: "SAL", label: "Salaries",  deletedAt: null, updatedAt: new Date() },
+    { _id: "ec-2", schoolId: SCHOOL, code: "UTL", label: "utilities", deletedAt: null, updatedAt: new Date() },
+    { _id: "ec-3", schoolId: SCHOOL, code: "MNT", label: "Maintenance", deletedAt: null, updatedAt: new Date() },
+    { _id: "ec-4", schoolId: SCHOOL, code: "OLD", label: "Retired", deletedAt: new Date(), updatedAt: new Date() },
+    { _id: "ec-9", schoolId: "other-school", code: "X", label: "Elsewhere", deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  // Boundary dates exactly on the ends of the range asked for below, because
+  // $gte/$lte are inclusive and an off-by-one at either end moves money between
+  // months.
+  await Expense.collection.insertMany([
+    { _id: "ex-1", schoolId: SCHOOL, categoryId: "ec-1", amount: 400000, note: "September salaries",
+      incurredAt: new Date("2026-09-01T00:00:00.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    { _id: "ex-2", schoolId: SCHOOL, categoryId: "ec-2", amount: 25000, note: "Electricity",
+      incurredAt: new Date("2026-09-15T12:00:00.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    { _id: "ex-3", schoolId: SCHOOL, categoryId: "ec-2", amount: 8000, note: "Water",
+      incurredAt: new Date("2026-09-30T23:59:59.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    // Voided: RETURNED in the list, EXCLUDED from the total.
+    { _id: "ex-4", schoolId: SCHOOL, categoryId: "ec-3", amount: 99000, note: "Cancelled repair",
+      incurredAt: new Date("2026-09-20T00:00:00.000Z"), deletedAt: null,
+      voidedAt: new Date("2026-09-21T00:00:00.000Z"), updatedAt: new Date() },
+    // Deleted: gone entirely.
+    { _id: "ex-5", schoolId: SCHOOL, categoryId: "ec-3", amount: 5000, note: "Removed",
+      incurredAt: new Date("2026-09-10T00:00:00.000Z"),
+      deletedAt: new Date("2026-09-11T00:00:00.000Z"), voidedAt: null, updatedAt: new Date() },
+    // Outside the range at each end, by one day.
+    { _id: "ex-6", schoolId: SCHOOL, categoryId: "ec-2", amount: 111, note: "August",
+      incurredAt: new Date("2026-08-31T23:59:59.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    { _id: "ex-7", schoolId: SCHOOL, categoryId: "ec-2", amount: 222, note: "October",
+      incurredAt: new Date("2026-10-01T00:00:01.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    { _id: "ex-9", schoolId: "other-school", categoryId: "ec-9", amount: 777, note: "Elsewhere",
+      incurredAt: new Date("2026-09-15T00:00:00.000Z"), deletedAt: null, voidedAt: null, updatedAt: new Date() },
+  ]);
+
+  const mirrorFinance = async () => {
+    docs.putMany("expenseCategory", JSON.parse(JSON.stringify(await ExpenseCategory.find({}).lean())));
+    docs.putMany("expense",         JSON.parse(JSON.stringify(await Expense.find({}).lean())));
+  };
+  await mirrorFinance();
+
+  await parity("expense categories", `/api/finance/expense-categories?schoolId=${SCHOOL}`);
+  await parity("all expenses",       `/api/finance/expenses?schoolId=${SCHOOL}`);
+  await parity("one category",       `/api/finance/expenses?schoolId=${SCHOOL}&categoryId=ec-2`);
+  await parity("a month, inclusive at both ends",
+    `/api/finance/expenses?schoolId=${SCHOOL}&from=2026-09-01&to=2026-09-30T23:59:59.000Z`);
+  await parity("from only", `/api/finance/expenses?schoolId=${SCHOOL}&from=2026-09-20`);
+  await parity("to only",   `/api/finance/expenses?schoolId=${SCHOOL}&to=2026-09-01T00:00:00.000Z`);
+  await parity("a range with nothing in it",
+    `/api/finance/expenses?schoolId=${SCHOOL}&from=2027-01-01&to=2027-01-31`);
+  await parity("a category with nothing in it",
+    `/api/finance/expenses?schoolId=${SCHOOL}&categoryId=ec-nothing`);
+
+  // Stated outright, so a failure names the rule.
+  const month = api.handle({
+    method: "GET", path: "/api/finance/expenses",
+    query: { schoolId: SCHOOL, from: "2026-09-01", to: "2026-09-30T23:59:59.000Z" },
+  }, { docs }).data;
+
+  check("the boundary rows are both included",
+    month.data.map((r) => r._id).includes("ex-1") && month.data.map((r) => r._id).includes("ex-3"),
+    true);
+  check("the days either side are not",
+    month.data.some((r) => r._id === "ex-6" || r._id === "ex-7"), false);
+  check("a deleted expense is gone entirely",
+    month.data.some((r) => r._id === "ex-5"), false);
+  // The two halves of the voided rule, which is the one most easily got wrong.
+  check("a voided expense IS in the list",
+    month.data.some((r) => r._id === "ex-4"), true);
+  check("and is NOT in the total", month.total, 400000 + 25000 + 8000);
+  check("newest first",
+    month.data.map((r) => r._id), ["ex-3", "ex-4", "ex-2", "ex-1"]);
+
+  // A malformed date is the server's to reject, not this layer's to interpret.
+  // Dropping the filter instead would WIDEN the period and put a year's spending
+  // under one month.
+  check("an unreadable date falls through to the network",
+    api.handle({
+      method: "GET", path: "/api/finance/expenses",
+      query: { schoolId: SCHOOL, from: "not-a-date" },
+    }, { docs }),
+    null);
+
+  // ── The 500 cap, and what it does to the total ────────────────────────
+  console.log("--- the 500-row cap, including its effect on the total ---");
+
+  // 520 rows in one category so the cap bites. The endpoint sums the RETURNED
+  // page, not everything matching — so the total is of 500 rows, not 520. That
+  // is arguably wrong of the endpoint, and it is what the endpoint does; a
+  // mirror that summed all 520 would disagree with the server on the one number
+  // the screen is about.
+  await Expense.collection.insertMany(
+    Array.from({ length: 520 }, (_, i) => ({
+      _id: `bulk-${String(i).padStart(3, "0")}`,
+      schoolId: SCHOOL, categoryId: "ec-bulk", amount: 100, note: `Bulk ${i}`,
+      // Distinct, ascending timestamps so "newest 500" is well defined.
+      incurredAt: new Date(Date.UTC(2027, 0, 1, 0, 0, i)),
+      deletedAt: null, voidedAt: null, updatedAt: new Date(),
+    }))
+  );
+  await mirrorFinance();
+
+  await parity("520 rows, capped at 500",
+    `/api/finance/expenses?schoolId=${SCHOOL}&categoryId=ec-bulk`);
+
+  const capped = api.handle({
+    method: "GET", path: "/api/finance/expenses",
+    query: { schoolId: SCHOOL, categoryId: "ec-bulk" },
+  }, { docs }).data;
+  check("exactly 500 returned", capped.count, 500);
+  check("the total is of the 500 returned, not the 520 matching", capped.total, 500 * 100);
+  check("and they are the newest 500",
+    [capped.data[0]._id, capped.data[499]._id], ["bulk-519", "bulk-020"]);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and the arithmetic, stated outright ---");
