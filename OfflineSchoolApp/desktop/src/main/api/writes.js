@@ -42,6 +42,10 @@
 
 const { randomUUID } = require("crypto");
 const { formatDeviceReceipt } = require("../../../../shared/receipts");
+const {
+  resolveThresholds,
+  requiresApprovalWith,
+} = require("../../../../shared/approvalThresholds");
 
 /**
  * The next receipt number for this school and year, on this installation.
@@ -150,5 +154,113 @@ module.exports = [
     },
   },
 ];
+
+module.exports.push({
+  route: "POST /api/finance/expenses",
+
+  /**
+   * Recording money the school has spent.
+   *
+   * ── Why this one can refuse ───────────────────────────────────────────────
+   *
+   * An expense at or above the school's threshold does not simply get written:
+   * the server records it as PENDING and raises an approval request, and the row
+   * does not count towards any total until somebody signs it off. That somebody
+   * is a second person, by design — and a second person is precisely what a
+   * machine with no connection does not have.
+   *
+   * So this reads the threshold from the mirrored School document and declines
+   * when approval would be needed, which sends the request to the server to be
+   * handled properly. The alternative would be to write a row locally and invent
+   * an approval object for the response; a bursar would then see "waiting for
+   * approval" against a request nobody has been asked to approve, and the
+   * approval queue would gain an entry only when the connection returned.
+   *
+   * Below the threshold — including the shipped default of no threshold at all —
+   * it behaves like any other queued write.
+   *
+   * ── Simpler than a payment in one way ─────────────────────────────────────
+   *
+   * There is no receipt number to invent. An expense has no counter behind it,
+   * so nothing here has to survive contact with the server's own numbering.
+   */
+  handler: ({ body }, { docs, queue }) => {
+    const schoolId   = body.schoolId ? String(body.schoolId).trim() : null;
+    const categoryId = body.categoryId ? String(body.categoryId).trim() : null;
+    if (!schoolId || !categoryId) return null;
+
+    // Whole XAF above zero, as the endpoint requires. Checked because the value
+    // goes into a local row that a total is computed from — a fractional amount
+    // would make the mirror disagree arithmetically rather than simply be
+    // refused.
+    const amount = Number(body.amount);
+    if (!Number.isInteger(amount) || amount <= 0) return null;
+
+    // The category must exist here, for the same reason the server checks: an
+    // expense against a category nobody can name is a figure with no account.
+    const category = docs.get("expenseCategory", categoryId);
+    if (!category || category.deletedAt) return null;
+
+    // ── Would this need a second signature? ────────────────────────────────
+    //
+    // The same rule the server applies, from the same module, against the
+    // school's own settings as this machine last saw them. If the mirror has no
+    // school document yet then the thresholds resolve to the shipped defaults —
+    // no threshold — which would be the wrong answer for a school that has set
+    // one. So a missing school document declines rather than assuming.
+    const school = docs.get("school", schoolId);
+    if (!school) return null;
+
+    const { required } = requiresApprovalWith(
+      resolveThresholds(school?.settings?.approvals),
+      "expense",
+      amount
+    );
+    if (required) return null;
+
+    const id  = body._id ? String(body._id) : randomUUID();
+    const now = new Date().toISOString();
+
+    const doc = {
+      _id: id,
+      schoolId, categoryId,
+      academicYear: body.academicYear ?? null,
+      amount,
+      description: body.description ?? null,
+      vendor:      body.vendor ?? null,
+      method:      body.method ?? "cash",
+      reference:   body.reference ?? null,
+      incurredAt:  body.incurredAt ? new Date(body.incurredAt).toISOString() : now,
+      // Stamped by the server from the authenticated user; inventing a value
+      // here would show the wrong name against the expense until sync landed.
+      recordedBy:  null,
+      // Not "pending": approval was checked above and is not required, so this
+      // is the status the server will give it.
+      status:      "approved",
+      approvalId:  null,
+      voidedAt:    null,
+      deletedAt:   null,
+      createdAt:   now,
+      updatedAt:   now,
+    };
+
+    return {
+      collection: "expense",
+      doc,
+      request: {
+        method:  "POST",
+        path:    "/api/finance/expenses",
+        body:    { ...body, _id: id },
+        idemKey: id,
+      },
+      // The endpoint's own answer for a created expense, including the two
+      // fields the screen reads to decide what to say.
+      response: {
+        status: 201,
+        data: { success: true, data: doc, approval: null, pendingApproval: false },
+      },
+    };
+  },
+});
 
 module.exports.nextReceipt = nextReceipt;

@@ -778,6 +778,110 @@ const main = async () => {
   // replay of second must add nothing.
   check("and only the genuinely new payments were created", after - before, 2);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- an expense recorded offline, and one it refuses to record ---");
+
+  const School = require("../src/db/models/School");
+  await School.collection.insertOne({
+    _id: SCHOOL, name: "Parity College", isActive: true, updatedAt: new Date(),
+  });
+  docs.putMany("school", JSON.parse(JSON.stringify(await School.find({}).lean())));
+
+  // With no threshold configured — the shipped default — every expense goes
+  // straight through and can be written offline.
+  const spent = api.handle({
+    method: "POST", path: "/api/finance/expenses", query: {},
+    body: { schoolId: SCHOOL, categoryId: "ec-2", amount: 12000, description: "Fuel" },
+  }, { docs, meta, queue });
+
+  check("it is accepted locally", spent?.status, 201);
+  check("and queued", spent?.queued, true);
+  check("recorded as approved, because approval was not required",
+    spent.data.data.status, "approved");
+  // Both fields the screen reads to choose between "saved" and "waiting for
+  // approval".
+  check("with no approval object", spent.data.approval, null);
+  check("and pendingApproval false", spent.data.pendingApproval, false);
+
+  const spentId = spent.data.data._id;
+  check("the expense list already shows it",
+    api.handle({
+      method: "GET", path: "/api/finance/expenses",
+      query: { schoolId: SCHOOL, categoryId: "ec-2" },
+    }, { docs }).data.data.some((r) => r._id === spentId),
+    true);
+
+  // ── Now the school sets a threshold ────────────────────────────────────
+  await School.collection.updateOne(
+    { _id: SCHOOL },
+    { $set: { "settings.approvals": { expenseThreshold: 50000 }, updatedAt: new Date() } }
+  );
+  docs.putMany("school", JSON.parse(JSON.stringify(await School.find({}).lean())));
+
+  const below = api.handle({
+    method: "POST", path: "/api/finance/expenses", query: {},
+    body: { schoolId: SCHOOL, categoryId: "ec-2", amount: 49999, description: "Just under" },
+  }, { docs, meta, queue });
+  check("just under the threshold is still written offline", below?.status, 201);
+
+  // AT the threshold, not merely above — the boundary the shared rule exists to
+  // keep in one place. The server would record this as pending and raise an
+  // approval request, and approval needs a second person who is not on this
+  // machine; inventing an approval object would show "waiting for approval"
+  // against a request nobody has been asked to approve.
+  check("exactly at the threshold is left to the server",
+    api.handle({
+      method: "POST", path: "/api/finance/expenses", query: {},
+      body: { schoolId: SCHOOL, categoryId: "ec-2", amount: 50000, description: "At the line" },
+    }, { docs, meta, queue }),
+    null);
+  check("and above it too",
+    api.handle({
+      method: "POST", path: "/api/finance/expenses", query: {},
+      body: { schoolId: SCHOOL, categoryId: "ec-2", amount: 80000, description: "Over" },
+    }, { docs, meta, queue }),
+    null);
+
+  // A category this machine does not know is the server's to reject, for the
+  // same reason it checks: a figure with no account behind it.
+  check("an unknown category falls through",
+    api.handle({
+      method: "POST", path: "/api/finance/expenses", query: {},
+      body: { schoolId: SCHOOL, categoryId: "ec-nope", amount: 100 },
+    }, { docs, meta, queue }),
+    null);
+  check("and a deleted one",
+    api.handle({
+      method: "POST", path: "/api/finance/expenses", query: {},
+      body: { schoolId: SCHOOL, categoryId: "ec-4", amount: 100 },
+    }, { docs, meta, queue }),
+    null);
+  check("a fractional amount falls through rather than being rounded",
+    api.handle({
+      method: "POST", path: "/api/finance/expenses", query: {},
+      body: { schoolId: SCHOOL, categoryId: "ec-2", amount: 100.5 },
+    }, { docs, meta, queue }),
+    null);
+
+  // ── And it reaches the server ──────────────────────────────────────────
+  const engExpense = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["expense"],
+  });
+  await engExpense.cycle();
+  engExpense.stop();
+
+  check("the queue drained", queue.summary().pending, 0);
+  check("nothing was blocked", queue.summary().blocked, 0);
+
+  const storedExpense = await Expense.findById(spentId).lean();
+  check("the expense is on the server", storedExpense?.amount, 12000);
+  check("with the status the local row predicted", storedExpense?.status, "approved");
+  check("and the local row has settled",
+    docs.get("expense", spentId)?._pending, false);
+  check("attributed by the server, not by the client",
+    storedExpense?.recordedBy, "admin-1");
+
   // ── A receipt number cannot be claimed twice ───────────────────────────
   console.log("--- and a receipt number cannot be reused ---");
 
