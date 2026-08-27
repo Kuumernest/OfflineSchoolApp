@@ -1,0 +1,12 @@
+node_modules/
+
+# Written by `npm run smoke` and `npm run probe` — findings about this machine,
+# not facts about the project.
+smoke-result.txt
+probe-result.txt
+smoke-log.txt
+probe-log.txt
+
+# Installers.
+dist/
+out/
