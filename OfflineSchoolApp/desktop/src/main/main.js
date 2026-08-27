@@ -34,6 +34,8 @@ const { app, BrowserWindow, ipcMain, shell, dialog } = require("electron");
 
 const store        = require("./db/store");
 const { outbox }   = require("./db/outbox");
+const { client }   = require("./sync/client");
+const { engine }   = require("./sync/engine");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STARTUP
@@ -60,6 +62,8 @@ let docs    = null;
 let queue   = null;
 let syncState = null;
 let metaBag = null;
+let api     = null;
+let sync    = null;
 
 const DB_FILE = () => path.join(app.getPath("userData"), "data", "school.db");
 
@@ -81,6 +85,21 @@ const openDatabase = () => {
 
     console.log(`[db] ${file}`);
     console.log(`[db] installation ${metaBag.deviceCode()}`);
+
+    api  = client({ meta: metaBag });
+    sync = engine({
+      docs, queue, state: syncState, client: api,
+      // No collection list: the server decides what this caller may mirror, so
+      // the desktop holds no copy of the feed table to drift from it.
+      onChange: (status) => {
+        // Pushed rather than polled, so a window can show "3 waiting to send"
+        // without asking every second.
+        for (const win of BrowserWindow.getAllWindows()) {
+          if (!win.isDestroyed()) win.webContents.send("sync:status", status);
+        }
+      },
+    });
+
     return true;
   } catch (err) {
     dialog.showErrorBox(
@@ -196,16 +215,18 @@ const registerHandlers = () => {
   // the school; a queued request with no local document is a screen that does
   // not show what the user just did. They commit together.
   ipcMain.handle("write:local", (_e, { collection, doc, request }) => {
-    db.exec("BEGIN");
-    try {
+    const result = docs.tx(() => {
       const id = docs.put(collection, doc, { pending: true });
       const queued = queue.add({ ...request, collection, docId: id });
-      db.exec("COMMIT");
       return { id, ...queued };
-    } catch (err) {
-      db.exec("ROLLBACK");
-      throw err;
-    }
+    });
+
+    // Tried straight away rather than waiting for the interval. Online, this
+    // makes a local write indistinguishable from a direct one; offline it costs
+    // a failed connection attempt, which the backoff then spaces out.
+    void sync.cycle();
+
+    return result;
   });
 
   // ── The state of the queue, for the UI to show ──────────────────────────
@@ -221,7 +242,39 @@ const registerHandlers = () => {
   });
 
   // ── Sync bookkeeping ────────────────────────────────────────────────────
-  ipcMain.handle("sync:state", () => syncState.all());
+  ipcMain.handle("sync:state",  () => syncState.all());
+  ipcMain.handle("sync:status", () => sync.status());
+
+  /**
+   * The renderer hands over its access token.
+   *
+   * The main process cannot obtain one itself — signing in is the UI's job, and
+   * refreshing it is the axios layer's. So the arrangement is: whenever the
+   * renderer's token changes, it says so, and the engine either starts or stops
+   * accordingly. Held in memory only; see sync/client.js.
+   */
+  ipcMain.handle("session:set", (_e, tokenValue) => {
+    api.setToken(tokenValue);
+    if (tokenValue) {
+      sync.start();
+      // Immediately, not on the next interval: somebody who has just signed in
+      // is waiting to see their data.
+      void sync.cycle();
+    } else {
+      sync.stop();
+    }
+    return sync.status();
+  });
+
+  /** Which server this installation belongs to. Persisted. */
+  ipcMain.handle("server:get", () => api.serverUrl() || null);
+  ipcMain.handle("server:set", (_e, url) => {
+    api.setServerUrl(url);
+    return api.serverUrl() || null;
+  });
+
+  /** Sync now — a button, or straight after a local write. */
+  ipcMain.handle("sync:now", () => sync.cycle());
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -263,6 +316,7 @@ app.whenReady().then(() => {
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
+  try { sync?.stop(); } catch { /* nothing useful to do while exiting */ }
   // Closed explicitly so WAL is checkpointed into the database file rather
   // than left beside it. It would recover either way, but a school that copies
   // school.db onto a memory stick as its backup should get a complete one.

@@ -8,9 +8,10 @@
     "start": "node scripts/launch.js",
     "smoke": "node scripts/launch.js --smoke",
     "probe": "node scripts/probe-launch.js",
-    "check": "npm run check:store && npm run check:outbox",
+    "check": "npm run check:store && npm run check:outbox && npm run check:sync",
     "check:store": "node scripts/check-doc-store.js",
-    "check:outbox": "node scripts/check-outbox.js"
+    "check:outbox": "node scripts/check-outbox.js",
+    "check:sync": "node scripts/check-sync-engine.js"
   },
   "devDependencies": {
     "electron": "^44.0.0"

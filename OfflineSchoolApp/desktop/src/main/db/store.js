@@ -128,6 +128,42 @@ const migrate = (db) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
+ * Run work inside a transaction, safely nested.
+ *
+ * SQLite has no nested transactions, so a BEGIN inside a BEGIN is an error. That
+ * matters here because the pieces that need atomicity compose: storing a page of
+ * documents is already a transaction, and storing a page TOGETHER WITH its sync
+ * cursor has to be one too — otherwise an interrupted sync commits the rows and
+ * loses its place, and the next attempt re-fetches everything from the start.
+ * On a first sync of a large school over a bad connection, that is the
+ * difference between resuming and never finishing.
+ *
+ * Depth counting rather than SAVEPOINTs: the inner work here never needs to roll
+ * back independently of the outer, so the extra machinery would buy nothing and
+ * hide which failure aborted what.
+ */
+const transactor = (db) => {
+  let depth = 0;
+
+  return (work) => {
+    if (depth > 0) { depth++; try { return work(); } finally { depth--; } }
+
+    db.exec("BEGIN");
+    depth = 1;
+    try {
+      const result = work();
+      db.exec("COMMIT");
+      return result;
+    } catch (err) {
+      try { db.exec("ROLLBACK"); } catch { /* the original error is what matters */ }
+      throw err;
+    } finally {
+      depth = 0;
+    }
+  };
+};
+
+/**
  * The document store, bound to one open database.
  *
  * Filters are a deliberately small language rather than anything resembling
@@ -142,6 +178,8 @@ const migrate = (db) => {
  *   { amount: { gt: 0 } }                  gt | gte | lt | lte
  */
 const documents = (db) => {
+  const tx = transactor(db);
+
   // ── Reading ──────────────────────────────────────────────────────────────
 
   /** Turns one field's condition into SQL plus its parameters. */
@@ -238,16 +276,58 @@ const documents = (db) => {
      */
     putMany(collection, docs, opts) {
       if (!docs.length) return 0;
-      db.exec("BEGIN");
-      try {
+      return tx(() => {
         for (const d of docs) this.put(collection, d, opts);
-        db.exec("COMMIT");
         return docs.length;
-      } catch (err) {
-        db.exec("ROLLBACK");
-        throw err;
-      }
+      });
     },
+
+    /**
+     * Store what the server sent, WITHOUT touching rows still waiting to be sent.
+     *
+     * The rule this exists for: a local write that has not reached the server
+     * yet must not be overwritten by the server's older copy of the same
+     * document. The engine pushes before it pulls, so by the time a page
+     * arrives our write has usually been accepted and the server's version is
+     * the newer one — but not if the push was refused and is sitting blocked in
+     * the outbox. Taking the server's version then would silently erase what
+     * somebody typed, which is the one outcome an offline app must never
+     * produce.
+     *
+     * Returns what it skipped AND the position of the first thing it skipped,
+     * because the caller cannot safely record a sync cursor past a document it
+     * did not store. Advancing over one would mean the server's version is
+     * never offered again once the local row settles, and the two would differ
+     * for ever with nothing to notice it.
+     */
+    merge(collection, incoming) {
+      return tx(() => {
+        const held = [];
+        let stored = 0;
+        let firstHeldIndex = -1;
+
+        for (const [i, doc] of incoming.entries()) {
+          const id = String(doc._id ?? doc.id ?? "");
+          const existing = db.prepare(
+            "SELECT pending FROM docs WHERE collection = ? AND id = ?"
+          ).get(collection, id);
+
+          if (existing?.pending === 1) {
+            held.push(id);
+            if (firstHeldIndex === -1) firstHeldIndex = i;
+            continue;
+          }
+
+          this.put(collection, doc);
+          stored++;
+        }
+
+        return { stored, held, firstHeldIndex };
+      });
+    },
+
+    /** Exposed so a caller can bracket several writes into one commit. */
+    tx,
 
     /** Mark a locally-written row as confirmed by the server. */
     settle(collection, id) {
@@ -381,4 +461,4 @@ const meta = (db) => {
   };
 };
 
-module.exports = { open, migrate, documents, state, meta, SCHEMA_VERSION };
+module.exports = { open, migrate, documents, state, meta, transactor, SCHEMA_VERSION };

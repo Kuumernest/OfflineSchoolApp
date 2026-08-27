@@ -56,8 +56,36 @@ contextBridge.exposeInMainWorld("school", {
     discard: (seq) => ipcRenderer.invoke("outbox:discard", seq),
   },
 
-  /** How far each collection has been pulled, and any last error. */
+  /**
+   * Syncing.
+   *
+   * setToken is how the main process gets a credential at all — it cannot sign
+   * in, and it deliberately keeps nothing on disk, so the renderer tells it
+   * whenever the session changes.
+   */
   sync: {
-    state: () => ipcRenderer.invoke("sync:state"),
+    state:    ()      => ipcRenderer.invoke("sync:state"),
+    status:   ()      => ipcRenderer.invoke("sync:status"),
+    now:      ()      => ipcRenderer.invoke("sync:now"),
+    setToken: (token) => ipcRenderer.invoke("session:set", token),
+
+    /**
+     * Called whenever a cycle changes phase.
+     *
+     * Returns its own unsubscribe rather than exposing removeListener: a
+     * renderer that could remove arbitrary listeners could remove another
+     * component's.
+     */
+    onStatus: (handler) => {
+      const wrapped = (_event, status) => handler(status);
+      ipcRenderer.on("sync:status", wrapped);
+      return () => ipcRenderer.removeListener("sync:status", wrapped);
+    },
+  },
+
+  /** Which server this installation syncs with. */
+  server: {
+    get: ()    => ipcRenderer.invoke("server:get"),
+    set: (url) => ipcRenderer.invoke("server:set", url),
   },
 });
