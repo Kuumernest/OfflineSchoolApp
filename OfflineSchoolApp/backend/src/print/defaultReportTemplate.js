@@ -18,9 +18,8 @@
  * to tokens that engine actually knows, or a seeded school starts with
  * literal braces printed on its report cards.
  *
- * A near-identical copy lives at mobile/src/services/default.template.js,
- * used only by the legacy on-device generator. The print path is server-side
- * now, so this copy is the one that matters.
+ * This is the only copy. A mirror used to live in the mobile app for an
+ * on-device generator; that path was removed once printing moved server-side.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 

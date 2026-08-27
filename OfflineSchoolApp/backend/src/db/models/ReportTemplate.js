@@ -24,8 +24,8 @@ const { v4: uuidv4 } = require("uuid");
  *     {{placeholders}}. Used to warn the admin of typos before saving.
  *
  *   isDefault
- *     When generateStudentReport() is called without an explicit
- *     templateId, the engine loads the template where isDefault = true
+ *     When a report is rendered without an explicit templateId, the
+ *     engine loads the template where isDefault = true
  *     for that school. Only one template per school should have this
  *     set. The PUT route enforces this by clearing isDefault on all
  *     other templates first.

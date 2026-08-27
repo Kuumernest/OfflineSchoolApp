@@ -6,13 +6,11 @@
  * PLACEHOLDER ENGINE — CommonJS (Server-Side)
  * ═══════════════════════════════════════════════════════════════════════════
  *
- * Backend copy of the placeholder engine.
- * Used by the template preview route to render templates server-side.
+ * The placeholder engine. Used by the template preview route and by
+ * reportHtml.service.js to render templates server-side.
  *
- * Keep in sync with the frontend version at:
- *   src/services/placeholder.engine.js
- *
- * The only difference is module.exports instead of export.
+ * This is the only copy. The mobile app mirrored it while report cards were
+ * generated on-device; that path was removed once printing moved here.
  *
  * Supports:
  *   {{variable}}              Simple variable substitution
