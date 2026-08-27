@@ -367,6 +367,16 @@ const KNOWN_GAPS = [
     because: "no capability grants a teacher any of them; their screens read " +
              "through /api/teacher and /sync/pull instead",
   },
+  {
+    who: "bursar",
+    collections: ["user"],
+    because: "a bursar holds payroll.view but not users.manage, so payslips " +
+             "mirror without the staff names the payroll screen joins on — the " +
+             "server reads those names gated only by payroll.view. The desktop " +
+             "declines that one view rather than showing a payroll with every " +
+             "name blank. Closing it properly means the feed being able to say " +
+             "\"names, not the account directory\", which it cannot yet",
+  },
 ];
 
 const byCollection = new Map(FEED.map((e) => [e.collection, e]));

@@ -599,6 +599,105 @@ const main = async () => {
     [capped.data[0]._id, capped.data[499]._id], ["bulk-519", "bulk-020"]);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- payroll runs, and the payslip join ---");
+
+  const PayrollRun    = require("../src/db/models/PayrollRun");
+  const SalaryPayment = require("../src/db/models/SalaryPayment");
+  await Promise.all([PayrollRun.init(), SalaryPayment.init()]);
+
+  await PayrollRun.collection.insertMany([
+    { _id: "run-2026-07", schoolId: SCHOOL, periodMonth: "2026-07", status: "confirmed",
+      totalNet: 1200000, deletedAt: null, updatedAt: new Date() },
+    { _id: "run-2026-09", schoolId: SCHOOL, periodMonth: "2026-09", status: "draft",
+      totalNet: 1350000, deletedAt: null, updatedAt: new Date() },
+    { _id: "run-2026-08", schoolId: SCHOOL, periodMonth: "2026-08", status: "confirmed",
+      totalNet: 1250000, deletedAt: null, updatedAt: new Date() },
+    { _id: "run-gone", schoolId: SCHOOL, periodMonth: "2026-06", status: "reversed",
+      totalNet: 0, deletedAt: new Date(), updatedAt: new Date() },
+    { _id: "run-other", schoolId: "other-school", periodMonth: "2026-09", status: "draft",
+      totalNet: 999, deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  // t1 and t2 already exist as teachers from the subjects fixtures.
+  await SalaryPayment.collection.insertMany([
+    { _id: "slip-1", schoolId: SCHOOL, runId: "run-2026-09", userId: "t1",
+      gross: 200000, net: 180000, deletedAt: null, updatedAt: new Date() },
+    { _id: "slip-2", schoolId: SCHOOL, runId: "run-2026-09", userId: "t2",
+      gross: 220000, net: 195000, deletedAt: null, updatedAt: new Date() },
+    { _id: "slip-gone", schoolId: SCHOOL, runId: "run-2026-09", userId: "t1",
+      gross: 1, net: 1, deletedAt: new Date(), updatedAt: new Date() },
+  ]);
+
+  docs.putMany("payrollRun",    JSON.parse(JSON.stringify(await PayrollRun.find({}).lean())));
+  docs.putMany("salaryPayment", JSON.parse(JSON.stringify(await SalaryPayment.find({}).lean())));
+
+  await parity("payroll runs", `/api/finance/payroll?schoolId=${SCHOOL}`);
+  await parity("one run with its payslips",
+    `/api/finance/payroll/run-2026-09?schoolId=${SCHOOL}`);
+  await parity("a run with no payslips",
+    `/api/finance/payroll/run-2026-07?schoolId=${SCHOOL}`);
+
+  const runs = api.handle({
+    method: "GET", path: "/api/finance/payroll", query: { schoolId: SCHOOL },
+  }, { docs }).data;
+  check("newest period first",
+    runs.data.map((r) => r.periodMonth), ["2026-09", "2026-08", "2026-07"]);
+  check("a deleted run is gone",
+    runs.data.some((r) => r._id === "run-gone"), false);
+  check("and another school's run is not here",
+    runs.data.some((r) => r._id === "run-other"), false);
+
+  const detail = api.handle({
+    method: "GET", path: "/api/finance/payroll/run-2026-09", query: { schoolId: SCHOOL },
+  }, { docs }).data;
+  check("the payslips are joined to their staff",
+    detail.data.payslips.map((p) => p.staff.name).sort(), ["M. Etoa", "Mme Fomba"]);
+  check("projected to what the server sends and no more",
+    Object.keys(detail.data.payslips[0].staff).sort(), ["_id", "email", "name", "role"]);
+  check("a deleted payslip is excluded",
+    detail.data.payslips.some((p) => p._id === "slip-gone"), false);
+
+  // A run this machine has never seen is the server's 404 to give: "not
+  // mirrored here" and "no such run" are different facts.
+  check("an unknown run falls through to the network",
+    api.handle({
+      method: "GET", path: "/api/finance/payroll/run-nope", query: { schoolId: SCHOOL },
+    }, { docs }),
+    null);
+
+  // ── The gap this handler declines on ──────────────────────────────────
+  console.log("--- and it declines rather than showing a payroll with no names ---");
+
+  // A bursar mirrors payroll runs and payslips but not users, while the server
+  // reads staff names gated only by payroll.view. Simulated by removing the one
+  // user the join needs — which is exactly the state a bursar's mirror is in.
+  docs.forget("user", "t2");
+
+  check("a payslip whose staff is not mirrored makes it decline",
+    api.handle({
+      method: "GET", path: "/api/finance/payroll/run-2026-09", query: { schoolId: SCHOOL },
+    }, { docs }),
+    null);
+  // The LIST is unaffected: it joins nothing, so a bursar reads it offline.
+  check("but the list of runs still answers",
+    api.handle({
+      method: "GET", path: "/api/finance/payroll", query: { schoolId: SCHOOL },
+    }, { docs })?.status,
+    200);
+  check("and the gap is recorded rather than left as a surprise",
+    require("../src/config/syncFeed").KNOWN_GAPS
+      .some((g) => g.who === "bursar" && g.collections.includes("user")),
+    true);
+
+  // Restored, so later sections are not affected by a removal made here.
+  docs.putMany("user", JSON.parse(JSON.stringify(await UserModel.find({}).lean())));
+  check("and the join works again once the user is back",
+    api.handle({
+      method: "GET", path: "/api/finance/payroll/run-2026-09", query: { schoolId: SCHOOL },
+    }, { docs })?.status,
+    200);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and the arithmetic, stated outright ---");
 
   // Named separately from the parity comparison so a failure says WHICH rule
