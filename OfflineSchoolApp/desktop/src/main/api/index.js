@@ -40,6 +40,7 @@ const reads = [
   ...require("./handlers/school"),
   ...require("./handlers/finance"),
   ...require("./handlers/payroll"),
+  ...require("./handlers/approvals"),
 ];
 
 /**

@@ -214,11 +214,39 @@ const main = async () => {
     );
   }
 
+  // The school itself, created once here rather than in whichever section first
+  // needs it. Two sections did need it — the approval summary reads its
+  // thresholds, and the expense write reads them to decide whether it may act —
+  // and each creating its own was how the second one came to insert a duplicate
+  // _id and the first came to run before the row existed at all.
+  const School = require("../src/db/models/School");
+  await School.init();
+
+  // An ObjectId _id, not the plain string every other fixture here uses.
+  //
+  // School is the only model in this project whose _id is an ObjectId —
+  // Student, User, FeeCharge and Class all use string UUIDs. So while schoolId
+  // is a STRING everywhere it appears as a foreign key, School.findById casts
+  // its argument to an ObjectId, and a school inserted with a raw string _id is
+  // invisible to it.
+  //
+  // That is what happened here: thresholdsFor() found no school and returned the
+  // shipped defaults, so the server reported no threshold while the local mirror
+  // reported 50,000 — and it read as the offline handler being wrong when the
+  // fixture was. In production the string in a token is the hex form of that
+  // ObjectId and the cast succeeds, which is why nothing else noticed.
+  await School.collection.insertOne({
+    _id: new mongoose.Types.ObjectId(SCHOOL),
+    name: "Parity College", isActive: true,
+    settings: { approvals: { expenseThreshold: 50000 } },
+    updatedAt: new Date(),
+  });
+
   // Mirror: read back through Mongo so the SQLite copy holds what the feed would
   // actually have sent, dates serialised and all.
   const db   = store.open(file);
   const docs = store.documents(db);
-  for (const [name, Model] of Object.entries(models)) {
+  for (const [name, Model] of Object.entries({ ...models, school: School })) {
     const rows = await Model.find({}).lean();
     docs.putMany(name, JSON.parse(JSON.stringify(rows)));
   }
@@ -239,22 +267,36 @@ const main = async () => {
   app.use("/api/admin", authenticate, require("../src/routes/admin.routes"));
   app.use("/api/fees",  authenticate, require("../src/routes/fees.routes"));
   app.use("/api/finance", authenticate, require("../src/routes/finance.routes"));
+  app.use("/api/approvals", authenticate, require("../src/routes/approvals.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
   /**
    * Ask both, and compare.
    */
-  const parity = async (label, pathAndQuery) => {
+  /**
+   * Ask both, as the same person, and compare.
+   *
+   * `as` names who is asking: a bearer token for the server and the matching
+   * session for the local handlers. It matters from the approvals list onwards,
+   * because that endpoint answers differently for somebody who may decide and
+   * somebody who may not — and comparing a decider's server answer against a
+   * non-decider's local one would "find" a difference that is only the harness
+   * asking two different questions.
+   */
+  const parity = async (label, pathAndQuery, as = null) => {
     const [pathname, qs = ""] = pathAndQuery.split("?");
     const query = Object.fromEntries(new URLSearchParams(qs));
 
     const res  = await fetch(`http://127.0.0.1:${port}${pathAndQuery}`, {
-      headers: { authorization: `Bearer ${token}` },
+      headers: { authorization: `Bearer ${as?.token ?? token}` },
     });
     const fromServer = await res.json();
 
-    const local = api.handle({ method: "GET", path: pathname, query }, { docs });
+    const local = api.handle(
+      { method: "GET", path: pathname, query },
+      { docs, meta: store.meta(db), queue: outbox(db), session: as?.session ?? null }
+    );
 
     if (!local) {
       // A handler declining is legitimate — it means "send this over the
@@ -698,6 +740,129 @@ const main = async () => {
     200);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the approval queue, which answers differently per person ---");
+
+  const ApprovalRequest = require("../src/db/models/ApprovalRequest");
+  await ApprovalRequest.init();
+
+  // A bursar who may VIEW but not DECIDE, which is the split this endpoint turns
+  // on: a decider sees the school's queue, everybody else sees only what they
+  // raised, because nobody can approve their own request.
+  const bursarToken = require("jsonwebtoken").sign(
+    { id: "bursar-p", role: ROLES.BURSAR, schoolId: SCHOOL },
+    process.env.JWT_SECRET, { expiresIn: "1h" }
+  );
+  await UserModel.collection.insertOne({
+    _id: "bursar-p", name: "Grace", email: "grace@x.com", role: ROLES.BURSAR,
+    schoolId: SCHOOL, isActive: true, password: "x", updatedAt: new Date(),
+  });
+
+  const { defaultsFor } = require("../src/services/permissions.service");
+  const asHead = {
+    token,
+    session: { userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+               permissions: defaultsFor(ROLES.SCHOOL_ADMIN) },
+  };
+  const asBursar = {
+    token: bursarToken,
+    session: { userId: "bursar-p", role: ROLES.BURSAR, schoolId: SCHOOL,
+               permissions: defaultsFor(ROLES.BURSAR) },
+  };
+
+  await ApprovalRequest.collection.insertMany([
+    { _id: "ap-1", schoolId: SCHOOL, kind: "expense", targetId: "ex-big", amount: 80000,
+      threshold: 50000, summary: "Generator repair", status: "pending",
+      requestedBy: "bursar-p", requestedAt: new Date("2026-09-10T08:00:00Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "ap-2", schoolId: SCHOOL, kind: "refund", targetId: "rf-1", amount: 60000,
+      threshold: 50000, summary: "Overpayment returned", status: "pending",
+      requestedBy: "admin-1", requestedAt: new Date("2026-09-11T08:00:00Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "ap-3", schoolId: SCHOOL, kind: "waiver", targetId: "wv-1", amount: 10000,
+      threshold: 5000, summary: "Hardship waiver", status: "approved",
+      requestedBy: "bursar-p", requestedAt: new Date("2026-09-05T08:00:00Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "ap-4", schoolId: SCHOOL, kind: "expense", targetId: "ex-x", amount: 70000,
+      threshold: 50000, summary: "Rejected purchase", status: "rejected",
+      requestedBy: "bursar-p", requestedAt: new Date("2026-09-06T08:00:00Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "ap-gone", schoolId: SCHOOL, kind: "expense", targetId: "ex-g", amount: 99000,
+      threshold: 50000, summary: "Removed", status: "pending",
+      requestedBy: "bursar-p", requestedAt: new Date("2026-09-07T08:00:00Z"),
+      deletedAt: new Date(), updatedAt: new Date() },
+    { _id: "ap-other", schoolId: "other-school", kind: "expense", targetId: "ex-o", amount: 1,
+      threshold: 1, summary: "Elsewhere", status: "pending",
+      requestedBy: "someone", requestedAt: new Date("2026-09-12T08:00:00Z"),
+      deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  docs.putMany("approvalRequest", JSON.parse(JSON.stringify(await ApprovalRequest.find({}).lean())));
+  docs.putMany("user",            JSON.parse(JSON.stringify(await UserModel.find({}).lean())));
+
+  // The head decides, so sees the school's queue.
+  await parity("the queue, as somebody who may decide",
+    `/api/approvals?schoolId=${SCHOOL}`, asHead);
+  await parity("all statuses, as the head",
+    `/api/approvals?schoolId=${SCHOOL}&status=all`, asHead);
+  await parity("one kind",
+    `/api/approvals?schoolId=${SCHOOL}&status=all&kind=expense`, asHead);
+  await parity("approved only",
+    `/api/approvals?schoolId=${SCHOOL}&status=approved`, asHead);
+
+  // The bursar does not decide, so sees only what they raised — the assertion
+  // this whole section exists for.
+  await parity("the queue, as somebody who may not decide",
+    `/api/approvals?schoolId=${SCHOOL}`, asBursar);
+  await parity("all statuses, as the bursar",
+    `/api/approvals?schoolId=${SCHOOL}&status=all`, asBursar);
+
+  await parity("the dashboard summary, as the head",
+    `/api/approvals/summary?schoolId=${SCHOOL}`, asHead);
+  await parity("the dashboard summary, as the bursar",
+    `/api/approvals/summary?schoolId=${SCHOOL}`, asBursar);
+
+  // Stated outright so a failure names the rule rather than showing a diff.
+  const headQueue = api.handle({
+    method: "GET", path: "/api/approvals", query: { schoolId: SCHOOL },
+  }, { docs, session: asHead.session }).data;
+  const bursarQueue = api.handle({
+    method: "GET", path: "/api/approvals", query: { schoolId: SCHOOL },
+  }, { docs, session: asBursar.session }).data;
+
+  check("the head sees both pending requests",
+    headQueue.data.map((r) => r._id).sort(), ["ap-1", "ap-2"]);
+  check("and is told they may decide", headQueue.canDecide, true);
+  check("the bursar sees only the one they raised",
+    bursarQueue.data.map((r) => r._id), ["ap-1"]);
+  check("and is told they may not", bursarQueue.canDecide, false);
+  check("newest first",
+    api.handle({
+      method: "GET", path: "/api/approvals",
+      query: { schoolId: SCHOOL, status: "all" },
+    }, { docs, session: asHead.session }).data.data.map((r) => r._id),
+    ["ap-2", "ap-1", "ap-4", "ap-3"]);
+  check("a deleted request is gone for everyone",
+    headQueue.data.some((r) => r._id === "ap-gone"), false);
+
+  const summary = api.handle({
+    method: "GET", path: "/api/approvals/summary", query: { schoolId: SCHOOL },
+  }, { docs, session: asBursar.session }).data.data;
+  // pending is the SCHOOL's total even for a non-decider — the tile says how
+  // much is held up, and `mine` says how much of it is theirs.
+  check("the summary counts the whole school's pending", summary.pending, 2);
+  check("and separately the ones this person raised", summary.mine, 1);
+  check("with the thresholds in force, so a screen can explain itself",
+    summary.thresholds.expenseThreshold, 50000);
+
+  // No identity means the difference between the two answers is exactly
+  // "requests other people raised", so it declines rather than guessing.
+  check("with no session it falls through to the network",
+    api.handle({
+      method: "GET", path: "/api/approvals", query: { schoolId: SCHOOL },
+    }, { docs, session: null }),
+    null);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and the arithmetic, stated outright ---");
 
   // Named separately from the parity comparison so a failure says WHICH rule
@@ -880,11 +1045,20 @@ const main = async () => {
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- an expense recorded offline, and one it refuses to record ---");
 
-  const School = require("../src/db/models/School");
-  await School.collection.insertOne({
-    _id: SCHOOL, name: "Parity College", isActive: true, updatedAt: new Date(),
-  });
+  // The threshold is cleared first, so this pair of assertions is about the
+  // shipped default — no threshold, everything straight through — before the
+  // school sets one below.
+  // School.updateOne, not School.collection.updateOne: the model casts the
+  // string to an ObjectId and the raw collection does not. Written raw at first,
+  // it matched nothing and silently did nothing — and because the amounts below
+  // are under the threshold anyway, every assertion still passed. A test passing
+  // for the wrong reason is worse than one failing, so the clearing is asserted.
+  await School.updateOne(
+    { _id: SCHOOL }, { $set: { "settings.approvals": {}, updatedAt: new Date() } }
+  );
   docs.putMany("school", JSON.parse(JSON.stringify(await School.find({}).lean())));
+  check("the threshold really is cleared before this section",
+    docs.get("school", SCHOOL)?.settings?.approvals?.expenseThreshold ?? null, null);
 
   // With no threshold configured — the shipped default — every expense goes
   // straight through and can be written offline.
@@ -911,11 +1085,13 @@ const main = async () => {
     true);
 
   // ── Now the school sets a threshold ────────────────────────────────────
-  await School.collection.updateOne(
+  await School.updateOne(
     { _id: SCHOOL },
     { $set: { "settings.approvals": { expenseThreshold: 50000 }, updatedAt: new Date() } }
   );
   docs.putMany("school", JSON.parse(JSON.stringify(await School.find({}).lean())));
+  check("and really is set before the boundary assertions",
+    docs.get("school", SCHOOL)?.settings?.approvals?.expenseThreshold, 50000);
 
   const below = api.handle({
     method: "POST", path: "/api/finance/expenses", query: {},

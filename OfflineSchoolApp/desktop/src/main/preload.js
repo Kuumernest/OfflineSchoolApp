@@ -71,7 +71,16 @@ contextBridge.exposeInMainWorld("school", {
     state:    ()      => ipcRenderer.invoke("sync:state"),
     status:   ()      => ipcRenderer.invoke("sync:status"),
     now:      ()      => ipcRenderer.invoke("sync:now"),
-    setToken: (token) => ipcRenderer.invoke("session:set", token),
+    /**
+     * The token, and who it belongs to.
+     *
+     * The identity is what lets a local handler answer a question about "me" —
+     * the approvals list shows a decider everything and everybody else only
+     * their own requests. It is not a permission check: the mirror already holds
+     * only what this user could pull, and every write is authorised by the
+     * server on replay.
+     */
+    setToken: (token, user) => ipcRenderer.invoke("session:set", token, user ?? null),
 
     /**
      * Called whenever a cycle changes phase.

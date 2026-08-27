@@ -66,6 +66,31 @@ let metaBag = null;
 let api     = null;
 let sync    = null;
 
+/**
+ * Who is signed in, as the window last told us.
+ *
+ * ── Why the main process needs this at all ────────────────────────────────
+ *
+ * Until now every local handler answered from the request alone: schoolId came
+ * from the query string, and nothing depended on the caller. The approvals list
+ * breaks that — it shows everything waiting to somebody who may decide, and only
+ * their own requests to somebody who may not, because a person cannot approve
+ * what they raised.
+ *
+ * ── Why it is trusted, and what that does and does not mean ───────────────
+ *
+ * The renderer supplies it, so it is not a security boundary and is not treated
+ * as one. It decides what this machine DRAWS from its own mirror — a mirror that
+ * already holds only what this user was permitted to pull. Every write still goes
+ * to the server as a real request and is authorised there, so a renderer claiming
+ * a capability it does not have gains nothing but a button that fails.
+ *
+ * Held in memory beside the token, never written to disk, and cleared on sign
+ * out — for the same reason as the token: an office machine is shared, and the
+ * next person to open the app is not necessarily the last one.
+ */
+let session = null;
+
 const DB_FILE = () => path.join(app.getPath("userData"), "data", "school.db");
 
 /**
@@ -213,7 +238,7 @@ const registerHandlers = () => {
    * today the way it behaves in a browser.
    */
   ipcMain.handle("api:request", (_e, req) => {
-    const result = localApi.handle(req, { docs, meta: metaBag, queue });
+    const result = localApi.handle(req, { docs, meta: metaBag, queue, session });
 
     // Something was queued: try to send it immediately rather than waiting for
     // the interval. Online this makes an offline-capable write indistinguishable
@@ -270,8 +295,22 @@ const registerHandlers = () => {
    * renderer's token changes, it says so, and the engine either starts or stops
    * accordingly. Held in memory only; see sync/client.js.
    */
-  ipcMain.handle("session:set", (_e, tokenValue) => {
+  ipcMain.handle("session:set", (_e, tokenValue, user = null) => {
     api.setToken(tokenValue);
+
+    // Kept together with the token deliberately: a token without an identity
+    // would let the sync loop run while the handlers had no idea whose data they
+    // were drawing, and the two becoming inconsistent is the sort of thing that
+    // shows one person another person's queue.
+    session = tokenValue && user
+      ? {
+          userId:      String(user._id ?? user.id ?? ""),
+          role:        user.role ?? null,
+          schoolId:    user.schoolId ?? null,
+          permissions: Array.isArray(user.permissions) ? user.permissions : [],
+        }
+      : null;
+
     if (tokenValue) {
       sync.start();
       // Immediately, not on the next interval: somebody who has just signed in

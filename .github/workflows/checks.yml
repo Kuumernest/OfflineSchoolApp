@@ -95,8 +95,8 @@ jobs:
             process.exit(bad ? 1 : 0);
           '
 
-      # 90 + 67 + 33 pure assertions, then 42 + 6 + 68 + 41 + 42 + 56 + 154 + 60
-      # against the in-memory database — the 154 being the desktop parity check,
+      # 90 + 67 + 33 pure assertions, then 42 + 6 + 68 + 41 + 42 + 56 + 182 + 60
+      # against the in-memory database — the 182 being the desktop parity check,
       # which loads the desktop app's offline handlers alongside the real Express
       # router and compares their answers on identical data, and the 60 being the
       # whole-journey smoke walk. See backend/package.json for the suites.

@@ -183,10 +183,15 @@ const extractAuthPayload = (
  * should be able to fail on, and the engine reports its own state through
  * window.school.sync.
  */
-const tellDesktop = (token: string | null) => {
+const tellDesktop = (token: string | null, user: AuthUser | null = null) => {
   const bridge = desktop();
   if (!bridge) return;
-  void bridge.sync.setToken(token).catch(() => { /* the engine reports its own health */ });
+  // The user goes with the token, because a local handler answering "show me my
+  // approval requests" needs to know whose. Not a permission check — see the
+  // note in the main process.
+  void bridge.sync
+    .setToken(token, user)
+    .catch(() => { /* the engine reports its own health */ });
 };
 
 const persistAuth = (user: AuthUser, token: string, refreshToken: string | null) => {
@@ -197,7 +202,7 @@ const persistAuth = (user: AuthUser, token: string, refreshToken: string | null)
   } else {
     storage.removeItem("refreshToken");
   }
-  tellDesktop(token);
+  tellDesktop(token, user);
 };
 
 const clearPersistedAuth = () => {

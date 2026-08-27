@@ -175,5 +175,50 @@ check("a missing path does not throw",
 check("a handler that throws falls through",
   handle({ method: "GET", path: "/api/admin/students", query: { schoolId: "s1" } }, {}), null);
 
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- every shared module this package imports actually resolves ---");
+
+// A require with one "../" too few does not fail loudly. Inside a handler, the
+// dispatcher catches the throw and turns it into "not answered here" — so the
+// endpoint quietly goes to the network and everything looks fine while the
+// offline path is dead.
+//
+// That happened once, in handlers/approvals.js: handlers/ is a directory deeper
+// than api/, and the import had been copied from writes.js with four levels
+// instead of five. The symptom was two parity checks reporting "answered by the
+// network", which reads like a deliberate decline.
+//
+// Two answers to it. Those requires moved to the top of their files, where a bad
+// path fails at load; and this, which checks every one of them at once.
+{
+  const fsMod   = require("fs");
+  const pathMod = require("path");
+  const broken  = [];
+  let checked   = 0;
+
+  const walk = (dir) => {
+    for (const entry of fsMod.readdirSync(dir, { withFileTypes: true })) {
+      const p = pathMod.join(dir, entry.name);
+      if (entry.isDirectory()) { walk(p); continue; }
+      if (!entry.name.endsWith(".js")) continue;
+
+      const src = fsMod.readFileSync(p, "utf8");
+      for (const m of src.matchAll(/require\("([^"]*shared\/[^"]+)"\)/g)) {
+        checked++;
+        try {
+          require.resolve(pathMod.resolve(pathMod.dirname(p), m[1]));
+        } catch {
+          broken.push(`${pathMod.relative(process.cwd(), p)} -> ${m[1]}`);
+        }
+      }
+    }
+  };
+  walk(pathMod.join(__dirname, "..", "src"));
+
+  // Guards against the check passing by finding nothing to check.
+  check("some shared imports were found", checked > 0, true);
+  check("and every one resolves", broken, []);
+}
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

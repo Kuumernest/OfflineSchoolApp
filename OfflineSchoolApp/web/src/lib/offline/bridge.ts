@@ -45,6 +45,20 @@ export interface SyncStatus {
   heldBack?:   string[];
 }
 
+/**
+ * What the main process needs to know about the signed-in user.
+ *
+ * Structurally the auth store's AuthUser, declared separately so this file does
+ * not depend on the store — the bridge is the boundary and should not import
+ * across it.
+ */
+export interface AuthUserLike {
+  _id:          string;
+  role:         string;
+  schoolId:     string;
+  permissions?: string[];
+}
+
 export interface DesktopInfo {
   platform:      string;
   appVersion:    string;
@@ -78,7 +92,7 @@ interface SchoolBridge {
     state:    () => Promise<Array<{ collection: string; cursor: string | null; last_pull_at: string | null; last_error: string | null }>>;
     status:   () => Promise<SyncStatus>;
     now:      () => Promise<SyncStatus>;
-    setToken: (token: string | null) => Promise<SyncStatus>;
+    setToken: (token: string | null, user?: AuthUserLike | null) => Promise<SyncStatus>;
     onStatus: (handler: (status: SyncStatus) => void) => () => void;
   };
   server: {
