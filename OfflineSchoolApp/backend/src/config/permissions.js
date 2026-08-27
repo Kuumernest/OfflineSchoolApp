@@ -266,6 +266,13 @@ const PERMISSION_DEFS = [
   // open to every signed-in account, students included, so there is no
   // capability to grade. Sending a direct message is not in here either — see
   // the note at the top of the file about the messaging matrix.
+  p("announcements.view", "announcements", STAFF_ROLES, true,
+    "Read the school's announcements. Separate from posting one, which is " +
+    "announcements.create — and added because nothing covered READING an " +
+    "announcement: those routes predate this layer and still gate on role " +
+    "names directly. It governs whether a device may mirror them for offline " +
+    "use (src/config/syncFeed.js); the read routes themselves are unchanged, " +
+    "and every staff role holds it, so nothing that worked stops working."),
   p("announcements.create", "announcements", TEACHING_ROLES, true,
     "A broadcast to the school. Fee reminders go to one family through " +
     "messages.send instead."),

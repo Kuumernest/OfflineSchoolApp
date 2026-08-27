@@ -1423,6 +1423,7 @@
       "exports.academic": "Export class history",
       "gate.scan": "Scan at the gate",
       "gate.manage": "Reissue cards and send alerts",
+      "announcements.view": "See announcements",
       "announcements.create": "Post an announcement",
       "announcements.manage": "Manage all announcements",
       "messages.audit": "Read other people's messages",

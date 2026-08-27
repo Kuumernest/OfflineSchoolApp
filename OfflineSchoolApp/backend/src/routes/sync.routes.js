@@ -4,6 +4,7 @@
 const express    = require("express");
 const router     = express.Router();
 const syncCtrl   = require("../controllers/sync.controller");
+const feedCtrl   = require("../controllers/syncFeed.controller");
 const { authenticate } = require("../../middleware/auth");
 const { requirePermission } = require("../../middleware/permissions");
 
@@ -34,6 +35,22 @@ const { requirePermission } = require("../../middleware/permissions");
  * The bursar is out of both writes for the ordinary reason: neither periods nor
  * promotion is a finance decision.
  */
+/**
+ * The desktop change feed.
+ *
+ * Behind authenticate alone at the route, and scoped per COLLECTION inside —
+ * see src/config/syncFeed.js. A single requirePermission here would be the
+ * wrong shape: the endpoint returns many collections with different audiences,
+ * and one capability covering all of them would be either uselessly broad or
+ * refuse the whole feed to a bursar because it also carries exam marks.
+ *
+ * What the caller may not have is REFUSED BY NAME in the response rather than
+ * silently omitted, so a desktop can tell "you have no payroll runs" from
+ * "payroll is not yours" — an empty screen with no explanation is how people
+ * conclude the software has lost their data.
+ */
+router.get( "/changes", authenticate, feedCtrl.changes);
+
 router.get( "/pull", authenticate, syncCtrl.pullChanges);
 router.post("/push", authenticate, requirePermission("sync.push"), syncCtrl.pushChanges);
 

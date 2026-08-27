@@ -1423,6 +1423,7 @@
       "exports.academic": "Exporter l'historique des classes",
       "gate.scan": "Scanner au portail",
       "gate.manage": "Rééditer les cartes et envoyer les alertes",
+      "announcements.view": "Voir les annonces",
       "announcements.create": "Publier un communiqué",
       "announcements.manage": "Gérer tous les communiqués",
       "messages.audit": "Lire les messages des autres",
