@@ -4,6 +4,7 @@ import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
   ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
+  KeyRound,
 } from "lucide-react";
 
 import PermissionsSection from "@/pages/settings/PermissionsSection";
@@ -1086,6 +1087,25 @@ function AdminsSection({
   // meant.
   const [newRole,    setNewRole]    = useState("school_admin");
 
+  /**
+   * The account just created, and whether the email actually went.
+   *
+   * Held in state rather than announced in a toast, because when the email
+   * failed this is the ONLY copy of the password. A toast disappears on a timer
+   * and takes the new person's only way in with it — which is exactly what used
+   * to happen: the API has always returned emailSent and tempPassword, and this
+   * screen read neither.
+   */
+  const [created, setCreated] = useState<{
+    name:         string;
+    email:        string;
+    role:         string;
+    tempPassword: string;
+    emailSent:    boolean;
+  } | null>(null);
+
+  const [copied, setCopied] = useState(false);
+
   const load = useCallback(async () => {
     try {
       const { data } = await api.get("/admin/settings/admins", { params: { schoolId } });
@@ -1111,18 +1131,67 @@ function AdminsSection({
         name: newName.trim(), email: newEmail.trim(), role: newRole, schoolId,
       });
       if (data?.admin) setAdmins((prev) => [data.admin, ...prev]);
-      toast({
-        kind: "success",
-        title: t("settings.adminCreated"),
-        message: t("settings.adminCreatedBody", { email: newEmail }),
+
+      // The modal switches to the credentials view rather than closing. It used
+      // to close and claim "login details sent to {{email}}" unconditionally —
+      // untrue whenever SMTP is unconfigured or the send failed, and the
+      // password that would have rescued the situation was discarded with the
+      // response. A new bursar then existed with a password nobody knew.
+      setCreated({
+        name:         newName.trim(),
+        email:        newEmail.trim(),
+        role:         newRole,
+        tempPassword: data?.tempPassword ?? "",
+        emailSent:    data?.emailSent === true,
       });
-      setShowModal(false);
-      setNewName(""); setNewEmail(""); setNewRole("admin");
+      setCopied(false);
+      setNewName(""); setNewEmail(""); setNewRole("school_admin");
     } catch (err) {
       toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
     } finally {
       setCreating(false);
     }
+  };
+
+  /**
+   * Re-issue somebody's password and show it.
+   *
+   * The endpoint has existed since staff accounts did and nothing called it, so
+   * an account whose welcome email never arrived had no route back in from the
+   * UI at all — the only fix was a database edit. That matters more than it
+   * looks: a school whose mail is misconfigured cannot onboard anybody, and
+   * will not discover why from this screen.
+   *
+   * Reuses the same credentials panel as creation, because it is the same
+   * problem: a password that exists in exactly one place and has to be read
+   * before the dialog closes.
+   */
+  const handleReset = async (admin: AdminUser) => {
+    if (!window.confirm(t("settings.resetPasswordConfirm", { name: admin.name }))) return;
+    try {
+      const { data } = await api.post(
+        `/admin/settings/admins/${admin._id}/reset-password`,
+        { schoolId }
+      );
+      setCreated({
+        name:         admin.name,
+        email:        admin.email,
+        role:         admin.role,
+        tempPassword: data?.tempPassword ?? "",
+        emailSent:    data?.emailSent === true,
+      });
+      setCopied(false);
+      setShowModal(true);
+    } catch (err) {
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
+    }
+  };
+
+  /** Closing the dialog from any of its three buttons. */
+  const closeModal = () => {
+    setShowModal(false);
+    setCreated(null);
+    setCopied(false);
   };
 
   const handleRemove = async (adminId: string, adminName: string) => {
@@ -1186,10 +1255,22 @@ function AdminsSection({
               )}>
                 {roleLabel(a.role, t)}
               </span>
+              {/* Available for everybody including yourself: re-issuing your
+                  own password is a normal thing to need, and unlike removal it
+                  cannot lock the school out. */}
+              <button
+                onClick={() => handleReset(a)}
+                title={t("settings.resetPassword")}
+                className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+              >
+                <KeyRound className="h-4 w-4" />
+              </button>
+
               {a._id !== currentUserId && (
                 <button
                   onClick={() => handleRemove(a._id, a.name)}
-                  className="ml-2 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
+                  title={t("settings.removeAccount")}
+                  className="ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1210,12 +1291,121 @@ function AdminsSection({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
-              <h3 className="text-lg font-bold text-gray-900">{t("settings.addAdmin")}</h3>
-              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600">
+              <h3 className="text-lg font-bold text-gray-900">
+                {created ? t("settings.credentials") : t("settings.addAdmin")}
+              </h3>
+              <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {/* ── The credentials, once the account exists ─────────────────
+                On screen and not in a toast: when the email did not go, this is
+                the only copy of the password, and a toast takes it away on a
+                timer. Same treatment the student enrolment screen already
+                gives, for the same reason. */}
+            {created ? (
+              <div className="space-y-4">
+                <p className="text-sm text-gray-500">
+                  {t("settings.accountReadyBody", {
+                    name: created.name,
+                    role: roleLabel(created.role, t),
+                  })}
+                </p>
+
+                <div className="space-y-2.5">
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                      {t("common.email")}
+                    </p>
+                    <p className="mt-0.5 break-all font-mono text-sm text-gray-900">
+                      {created.email}
+                    </p>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t("settings.signsInWithEmail")}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+                          {t("settings.tempPassword")}
+                        </p>
+                        <p className="mt-0.5 break-all font-mono text-sm text-gray-900">
+                          {created.tempPassword || "—"}
+                        </p>
+                      </div>
+
+                      {created.tempPassword && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            // Best-effort: the clipboard API needs a secure
+                            // context, and this screen may be served over plain
+                            // http on a school LAN. The password is on screen
+                            // either way, so a failure here is cosmetic.
+                            void navigator.clipboard
+                              ?.writeText(created.tempPassword)
+                              .then(() => setCopied(true))
+                              .catch(() => setCopied(false));
+                          }}
+                          className="shrink-0 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:bg-white"
+                        >
+                          {copied ? t("common.copied") : t("common.copy")}
+                        </button>
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-gray-500">
+                      {t("settings.mustChangeOnFirstSignIn")}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Honest about the email, which is the whole bug this fixes. */}
+                <div
+                  className={cn(
+                    "flex items-start gap-2.5 rounded-lg border px-3 py-2.5",
+                    created.emailSent
+                      ? "border-emerald-200 bg-emerald-50"
+                      : "border-amber-200 bg-amber-50"
+                  )}
+                >
+                  <AlertCircle
+                    className={cn(
+                      "mt-0.5 h-4 w-4 shrink-0",
+                      created.emailSent ? "text-emerald-600" : "text-amber-600"
+                    )}
+                  />
+                  <p
+                    className={cn(
+                      "text-xs",
+                      created.emailSent ? "text-emerald-800" : "text-amber-800"
+                    )}
+                  >
+                    {created.emailSent
+                      ? t("settings.emailSentTo", { email: created.email })
+                      : t("settings.emailNotSent")}
+                  </p>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => { setCreated(null); setCopied(false); }}
+                    className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 transition hover:bg-gray-50"
+                  >
+                    {t("settings.addAnother")}
+                  </button>
+                  <button
+                    onClick={closeModal}
+                    className="flex-1 rounded-xl bg-indigo-600 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                  >
+                    {t("common.done")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+            <>
             <div className="space-y-4">
               <div>
                 <FieldLabel>{t("common.fullName")}</FieldLabel>
@@ -1258,7 +1448,7 @@ function AdminsSection({
 
             <div className="mt-5 flex gap-3">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={closeModal}
                 className="flex-1 rounded-xl border border-gray-200 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50 transition"
               >
                 {t("common.cancel")}
@@ -1272,6 +1462,8 @@ function AdminsSection({
                 {creating ? t("settings.creating") : t("settings.createAdmin")}
               </button>
             </div>
+            </>
+            )}
           </div>
         </div>
       )}

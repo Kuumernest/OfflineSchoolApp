@@ -1306,7 +1306,19 @@
     "creating": "Création…",
     "createAdmin": "Créer le compte",
     "secPermissions": "Droits",
-    "secApprovals": "Validations"
+    "secApprovals": "Validations",
+    "accountReady": "Compte créé",
+    "accountReadyBody": "{{name}} peut désormais se connecter en tant que {{role}}. Voici ses identifiants.",
+    "signsInWithEmail": "C'est avec cela qu'il ou elle se connecte.",
+    "tempPassword": "Mot de passe temporaire",
+    "mustChangeOnFirstSignIn": "Il sera demandé d'en choisir un nouveau à la première connexion.",
+    "emailSentTo": "Ses identifiants ont également été envoyés à {{email}}.",
+    "emailNotSent": "Aucun e-mail n'a été envoyé : ce mot de passe est le seul exemplaire. Notez-le ou copiez-le avant de fermer. Le récupérer implique de réinitialiser le compte.",
+    "addAnother": "Ajouter un autre",
+    "credentials": "Identifiants",
+    "resetPassword": "Réinitialiser le mot de passe",
+    "removeAccount": "Supprimer le compte",
+    "resetPasswordConfirm": "Générer un nouveau mot de passe temporaire pour {{name}} ? L'actuel cesse immédiatement de fonctionner."
   },
   "permissions": {
     "title": "Qui peut faire quoi",

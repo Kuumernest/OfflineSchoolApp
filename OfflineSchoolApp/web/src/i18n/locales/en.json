@@ -1306,7 +1306,19 @@
     "creating": "Creating…",
     "createAdmin": "Create account",
     "secPermissions": "Permissions",
-    "secApprovals": "Approvals"
+    "secApprovals": "Approvals",
+    "accountReady": "Account created",
+    "accountReadyBody": "{{name}} can now sign in as {{role}}. These are their sign-in details.",
+    "signsInWithEmail": "This is what they sign in with.",
+    "tempPassword": "Temporary password",
+    "mustChangeOnFirstSignIn": "They will be asked to choose their own on first sign-in.",
+    "emailSentTo": "Their details have also been emailed to {{email}}.",
+    "emailNotSent": "No email was sent, so this password is the only copy — write it down or copy it before closing. Recovering it means resetting the account.",
+    "addAnother": "Add another",
+    "credentials": "Sign-in details",
+    "resetPassword": "Reset password",
+    "removeAccount": "Remove account",
+    "resetPasswordConfirm": "Issue a new temporary password for {{name}}? Their current one stops working immediately."
   },
   "permissions": {
     "title": "Who may do what",

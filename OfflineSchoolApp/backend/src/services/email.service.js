@@ -7,6 +7,21 @@ const nodemailer = require("nodemailer");
 // TRANSPORTER SETUP
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Credentials as pasted, cleaned up.
+ *
+ * Google displays an app password as four spaced groups — "abcd efgh ijkl
+ * mnop" — so it gets pasted into .env with the spaces still in it, and Gmail
+ * then rejects it with 535-5.7.8, which reads exactly like a wrong password.
+ * Stripping whitespace here removes one indistinguishable cause of a failure
+ * that is already hard to diagnose from the outside.
+ *
+ * It does not make a genuinely wrong credential work: 535-5.7.8 also means
+ * revoked, mistyped, or 2-Step Verification turned off on the account (which
+ * silently invalidates every app password it ever issued).
+ */
+const cred = (v) => (typeof v === "string" ? v.replace(/\s+/g, "") : v);
+
 const createTransporter = () => {
   // SendGrid
   if (process.env.SENDGRID_API_KEY) {
@@ -16,7 +31,7 @@ const createTransporter = () => {
       secure: false,
       auth: {
         user: "apikey",
-        pass: process.env.SENDGRID_API_KEY,
+        pass: cred(process.env.SENDGRID_API_KEY),
       },
     });
   }
@@ -28,8 +43,8 @@ const createTransporter = () => {
       port:   465,
       secure: true,
       auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_APP_PASSWORD,
+        user: (process.env.GMAIL_USER || "").trim(),
+        pass: cred(process.env.GMAIL_APP_PASSWORD),
       },
       tls: {
         rejectUnauthorized: false,
