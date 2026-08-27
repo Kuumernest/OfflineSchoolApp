@@ -34,10 +34,21 @@
  * exactly as it does today rather than failing in a new way.
  */
 
-const handlers = [
+const reads = [
   ...require("./handlers/students"),
   ...require("./handlers/fees"),
 ];
+
+/**
+ * Writes are a different kind of entry.
+ *
+ * A read handler answers. A write handler PREPARES: it returns the row to store,
+ * the request to queue and the response to give back, and the dispatcher commits
+ * the first two together. Keeping the commit here rather than in each handler
+ * means no handler can store a document without queueing the request that makes
+ * it real, or queue a request without showing the user what they just did.
+ */
+const writes = require("./writes");
 
 /**
  * Turn "/api/fees/students/:studentId" into something matchable.
@@ -68,7 +79,10 @@ const compile = (pattern) => {
   return { method: method.toUpperCase(), regex: new RegExp(`^${source}$`), names };
 };
 
-const table = handlers.map((h) => ({ ...h, ...compile(h.route) }));
+const table = [
+  ...reads.map((h)  => ({ ...h, kind: "read",  ...compile(h.route) })),
+  ...writes.map((h) => ({ ...h, kind: "write", ...compile(h.route) })),
+];
 
 /**
  * Answer a request from the mirror, or say that this one has to go out.
@@ -96,10 +110,29 @@ const handle = (req, ctx) => {
         body:  req.body  ?? {},
       }, ctx);
 
-      // A handler may itself decline — a query parameter it does not support,
-      // say — and that has to fall through to the network rather than return a
-      // subtly different answer.
-      return result ?? null;
+      // A handler may itself decline — a query parameter it does not support, a
+      // body it would rather the server validated — and that has to fall through
+      // to the network rather than return a subtly different answer.
+      if (!result) return null;
+
+      if (entry.kind === "read") return result;
+
+      // ── A write: the row and the queued request commit together ──────────
+      //
+      // Not two operations. A document stored with nothing queued is a change
+      // that will never reach the school; a request queued with no document is a
+      // screen that does not show what the user just did. Either alone is worse
+      // than neither.
+      const { collection, doc, request, response } = result;
+
+      const queued = ctx.docs.tx(() => {
+        const id = ctx.docs.put(collection, doc, { pending: true });
+        return ctx.queue.add({ ...request, collection, docId: id });
+      });
+
+      // `queued` sits on the envelope, not in the response body: the body is a
+      // contract the screens read and must match the server's exactly.
+      return { ...response, queued: true, seq: queued.seq, duplicate: queued.duplicate };
     } catch (err) {
       // A handler throwing is a bug in this file, not a server error. Reported
       // as one rather than dressed up as a 500, so it is visible in development
@@ -113,6 +146,6 @@ const handle = (req, ctx) => {
 };
 
 /** Which routes are answered locally — for the diagnostics screen. */
-const routes = () => table.map((e) => e.route);
+const routes = () => table.map((e) => `${e.kind === "write" ? "queue" : "read"} ${e.route}`);
 
 module.exports = { handle, routes, compile };

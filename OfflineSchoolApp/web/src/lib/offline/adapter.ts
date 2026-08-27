@@ -20,6 +20,18 @@
 // would mean rejecting the request with a fake error and reconstructing a
 // response from it in a response interceptor — two lies to arrange one truth.
 //
+// ── Writes are queued, never sent from here ───────────────────────────────
+//
+// A write that the main process accepts has been written to the local database
+// AND queued as the original HTTP request, in one transaction. It is not sent
+// from this adapter and does not wait for a connection: the sync loop replays it
+// when there is one, with every server-side guard applying at that moment.
+//
+// The response handed back is the shape the server would have sent, with nothing
+// added — deliberately no "queued" flag, because a field that exists only
+// offline is a field some component will come to depend on, and it would then
+// behave differently in a browser.
+//
 // ── Reads are local-first, not local-as-fallback ──────────────────────────
 //
 // A read that is answered locally is answered locally whether or not there is a
@@ -74,18 +86,27 @@ export const offlineAdapter = (fallback: AxiosAdapter): AxiosAdapter =>
     if (!bridge) return fallback(config);
 
     const method = String(config.method ?? "get").toUpperCase();
-
-    // Only reads, for now. A write has to go through the outbox so that it is
-    // queued, ordered and retried, and that is a separate change — sending one
-    // through here would record it locally with nothing arranging for it to
-    // reach the server.
-    if (method !== "GET") return fallback(config);
-
     const { path, query } = splitUrl(config);
+
+    // A write goes to the same place, and the main process decides whether it
+    // can be queued. If it cannot, it answers null and this falls through — so a
+    // write to an endpoint with no offline handling behaves exactly as it does
+    // today, including failing when there is no connection, rather than being
+    // accepted and quietly lost.
+    //
+    // config.data is what axios would have serialised. It arrives as a string
+    // when a caller set it themselves, so it is parsed back — the handlers read
+    // fields off the body, and a string body would silently match nothing.
+    let body: unknown;
+    if (method !== "GET" && config.data !== undefined) {
+      body = typeof config.data === "string"
+        ? (() => { try { return JSON.parse(config.data as string); } catch { return config.data; } })()
+        : config.data;
+    }
 
     let local: { status: number; data: unknown } | null;
     try {
-      local = await bridge.api.request({ method, path, query });
+      local = await bridge.api.request({ method, path, query, body });
     } catch (err) {
       // The bridge itself failing is not the same as the request failing. Fall
       // back rather than surfacing an IPC error as an HTTP one, and say so —

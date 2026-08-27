@@ -212,8 +212,17 @@ const registerHandlers = () => {
    * as it always did — so an endpoint that has no local handler yet behaves
    * today the way it behaves in a browser.
    */
-  ipcMain.handle("api:request", (_e, req) =>
-    localApi.handle(req, { docs, meta: metaBag, queue }));
+  ipcMain.handle("api:request", (_e, req) => {
+    const result = localApi.handle(req, { docs, meta: metaBag, queue });
+
+    // Something was queued: try to send it immediately rather than waiting for
+    // the interval. Online this makes an offline-capable write indistinguishable
+    // from a direct one; offline it costs one failed connection attempt, which
+    // the backoff then spaces out.
+    if (result?.queued) void sync.cycle();
+
+    return result;
+  });
 
   /** Which routes are answered locally, for the diagnostics screen. */
   ipcMain.handle("api:routes", () => localApi.routes());
@@ -229,20 +238,13 @@ const registerHandlers = () => {
   // written locally with no queued request is a change that will never reach
   // the school; a queued request with no local document is a screen that does
   // not show what the user just did. They commit together.
-  ipcMain.handle("write:local", (_e, { collection, doc, request }) => {
-    const result = docs.tx(() => {
-      const id = docs.put(collection, doc, { pending: true });
-      const queued = queue.add({ ...request, collection, docId: id });
-      return { id, ...queued };
-    });
-
-    // Tried straight away rather than waiting for the interval. Online, this
-    // makes a local write indistinguishable from a direct one; offline it costs
-    // a failed connection attempt, which the backoff then spaces out.
-    void sync.cycle();
-
-    return result;
-  });
+  // There was a write:local channel here, taking a document and a request from
+  // the renderer. It is gone: api:request now covers it, and the difference
+  // matters. With write:local the RENDERER decided what to store and what to
+  // queue — so the shape of a locally-created payment was defined in the UI,
+  // beside the form, where nothing could check it against the server's. Now a
+  // write is described once, in the main process, next to the read handler that
+  // has to agree with it and inside reach of the parity harness.
 
   // ── The state of the queue, for the UI to show ──────────────────────────
   ipcMain.handle("outbox:summary", () => queue.summary());

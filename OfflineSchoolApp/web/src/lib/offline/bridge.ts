@@ -68,8 +68,6 @@ interface SchoolBridge {
     find:  (collection: string, filter?: unknown, opts?: unknown) => Promise<unknown[]>;
     count: (collection: string, filter?: unknown) => Promise<number>;
   };
-  write: (payload: { collection: string; doc: unknown; request: unknown })
-    => Promise<{ id: string; seq: number; duplicate: boolean }>;
   outbox: {
     summary: () => Promise<OutboxSummary>;
     list:    () => Promise<OutboxEntry[]>;

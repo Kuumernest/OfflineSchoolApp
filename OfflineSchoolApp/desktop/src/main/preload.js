@@ -52,13 +52,6 @@ contextBridge.exposeInMainWorld("school", {
     count: (collection, filter)       => ipcRenderer.invoke("docs:count", collection, filter),
   },
 
-  /**
-   * Record something locally and queue the request that makes it real.
-   *
-   * One call, because the two must not come apart — see the handler.
-   */
-  write: (payload) => ipcRenderer.invoke("write:local", payload),
-
   /** What has not reached the server yet, and what is stuck. */
   outbox: {
     summary: ()    => ipcRenderer.invoke("outbox:summary"),

@@ -45,8 +45,11 @@ const mongoose = require("mongoose");
 // requires cleanly from here.
 const DESKTOP = path.join(__dirname, "..", "..", "desktop", "src", "main");
 
-const store = require(path.join(DESKTOP, "db", "store"));
-const api   = require(path.join(DESKTOP, "api"));
+const store      = require(path.join(DESKTOP, "db", "store"));
+const api        = require(path.join(DESKTOP, "api"));
+const { outbox } = require(path.join(DESKTOP, "db", "outbox"));
+const { client } = require(path.join(DESKTOP, "sync", "client"));
+const { engine } = require(path.join(DESKTOP, "sync", "engine"));
 
 const SCHOOL = "aaaaaaaaaaaaaaaaaaaaaaaa";
 const YEAR   = "2026-2027";
@@ -191,6 +194,20 @@ const main = async () => {
   };
 
   const models = { student: Student, feeStructure: FeeStructure, feeCharge: FeeCharge, feePayment: FeePayment };
+
+  // Indexes built before anything is inserted.
+  //
+  // Mongoose creates them lazily on first use, and these fixtures go in through
+  // collection.insertMany, which waits for nothing — so the unique index on
+  // { schoolId, receiptNo } did not exist when the duplicate-receipt assertion
+  // ran, and the server accepted a receipt number it should have refused. The
+  // assertion was right and the harness was not testing the real constraint.
+  //
+  // It is worth stating plainly what that means beyond this file: the 409 on a
+  // reused receipt number is enforced by that index, not by application code. A
+  // deployment where it was never built would accept duplicates silently.
+  await Promise.all(Object.values(models).map((M) => M.init()));
+
   for (const [name, rows] of Object.entries(seed)) {
     await models[name].collection.insertMany(
       rows.map((r) => ({ updatedAt: new Date("2026-09-20T00:00:00Z"), ...r }))
@@ -344,6 +361,161 @@ const main = async () => {
       query: { schoolId: SCHOOL, academicYear: YEAR },
     }, { docs }),
     null);
+
+  // Removed again, or every ledger read below this point would decline for the
+  // same correct reason and the failures would look like the write path was
+  // broken. Which is exactly how this read the first time it ran.
+  docs.forget("paymentPlan", "pl1");
+  check("and reads normally once the plan is gone",
+    api.handle({
+      method: "GET", path: "/api/fees/students/p1",
+      query: { schoolId: SCHOOL, academicYear: YEAR },
+    }, { docs })?.status,
+    200);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a payment taken with no connection, all the way to the server ---");
+
+  // The whole point of the offline layer, end to end and against the REAL
+  // endpoint: a bursar records money, prints a receipt, and the number on that
+  // paper is still the number in the school's record afterwards.
+  const meta  = store.meta(db);
+  const queue = outbox(db);
+  const deviceCode = meta.deviceCode();
+
+  const taken = api.handle({
+    method: "POST", path: "/api/fees/payments",
+    query: {},
+    body: { schoolId: SCHOOL, studentId: "p1", academicYear: YEAR, amount: 25000, method: "cash" },
+  }, { docs, meta, queue });
+
+  check("the write is accepted locally", taken?.status, 201);
+  check("and queued", taken?.queued, true);
+
+  const localPayment = taken.data.data;
+  check("with a receipt number carrying this installation's code",
+    localPayment.receiptNo, `RCT-${YEAR}-${deviceCode}-0001`);
+  check("the row is in the mirror",
+    docs.get("feePayment", localPayment._id)?.amount, 25000);
+  check("marked as not yet sent",
+    docs.get("feePayment", localPayment._id)?._pending, true);
+
+  // The ledger must already show it — a bursar who presses Save and sees no
+  // change assumes it failed and takes the money twice.
+  const ledgerNow = api.handle({
+    method: "GET", path: "/api/fees/students/p1",
+    query: { schoolId: SCHOOL, academicYear: YEAR },
+  }, { docs });
+  check("the ledger already includes it",
+    ledgerNow.data.data.payments.some((p) => p._id === localPayment._id), true);
+  check("and the balance has moved by the amount taken",
+    ledgerNow.data.data.totals.paid, 35000 + 25000);
+
+  // ── Now the connection comes back ──────────────────────────────────────
+  const apiClient = client({ meta });
+  apiClient.setServerUrl(`http://127.0.0.1:${port}`);
+  apiClient.setToken(token);
+
+  const eng = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    // Only this collection: the fixtures here are for parity, and a full pull
+    // would fetch every collection the feed offers.
+    feedCollections: ["feePayment"],
+  });
+
+  await eng.cycle();
+  eng.stop();
+
+  check("the queue drained", queue.all().length, 0);
+  check("and the row is settled",
+    docs.get("feePayment", localPayment._id)?._pending, false);
+
+  // THE ASSERTION THIS SECTION EXISTS FOR. The server normally issues receipt
+  // numbers from an atomic counter and would have replaced this one — leaving
+  // the parent holding a receipt whose number is in no record.
+  const stored = await FeePayment.findById(localPayment._id).lean();
+  check("the server kept the receipt number that was printed",
+    stored?.receiptNo, `RCT-${YEAR}-${deviceCode}-0001`);
+  check("and the mirror agrees with it",
+    docs.get("feePayment", localPayment._id)?.receiptNo, stored?.receiptNo);
+  check("the amount survived unchanged", stored?.amount, 25000);
+  check("attributed to the signed-in user by the server, not by the client",
+    stored?.receivedBy, "admin-1");
+
+  // A second offline payment counts on from the first, per year.
+  const second = api.handle({
+    method: "POST", path: "/api/fees/payments",
+    query: {},
+    body: { schoolId: SCHOOL, studentId: "p1", academicYear: YEAR, amount: 1000 },
+  }, { docs, meta, queue });
+  check("the next receipt continues the sequence",
+    second.data.data.receiptNo, `RCT-${YEAR}-${deviceCode}-0002`);
+
+  // A different year counts separately, as the server's counter does.
+  const otherYear = api.handle({
+    method: "POST", path: "/api/fees/payments",
+    query: {},
+    body: { schoolId: SCHOOL, studentId: "p1", academicYear: "2025-2026", amount: 1000 },
+  }, { docs, meta, queue });
+  check("a different year has its own sequence",
+    otherYear.data.data.receiptNo, `RCT-2025-2026-${deviceCode}-0001`);
+
+  // ── And the same request twice is one payment ──────────────────────────
+  console.log("--- a replayed write does not take the money twice ---");
+
+  const before = await FeePayment.countDocuments({});
+  // Exactly what happens when the response was lost: the request is still
+  // queued and goes again.
+  queue.add({
+    method: "POST", path: "/api/fees/payments",
+    body: { ...second.data.data, _id: second.data.data._id },
+    collection: "feePayment", docId: second.data.data._id,
+    idemKey: "replay-of-second",
+  });
+
+  const eng2 = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["feePayment"],
+  });
+  await eng2.cycle();
+  eng2.stop();
+
+  const after = await FeePayment.countDocuments({});
+  check("the queue accepted the replay", queue.all().length, 0);
+  // second and otherYear were both queued and both new, so two arrive; the
+  // replay of second must add nothing.
+  check("and only the genuinely new payments were created", after - before, 2);
+
+  // ── A receipt number cannot be claimed twice ───────────────────────────
+  console.log("--- and a receipt number cannot be reused ---");
+
+  const duplicate = await fetch(`http://127.0.0.1:${port}/api/fees/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      _id: "some-other-id", schoolId: SCHOOL, studentId: "p1",
+      academicYear: YEAR, amount: 500,
+      receiptNo: `RCT-${YEAR}-${deviceCode}-0001`,
+    }),
+  });
+  const duplicateBody = await duplicate.json();
+  check("the server refuses it", duplicate.status, 409);
+  check("naming what happened", duplicateBody.code, "RECEIPT_TAKEN");
+
+  // A number in the SERVER's format is not claimable at all — a client must not
+  // be able to reach into the counter's number space.
+  const impersonating = await fetch(`http://127.0.0.1:${port}/api/fees/payments`, {
+    method: "POST",
+    headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+    body: JSON.stringify({
+      _id: "impersonator", schoolId: SCHOOL, studentId: "p1",
+      academicYear: YEAR, amount: 500, receiptNo: `RCT-${YEAR}-9999`,
+    }),
+  });
+  const impersonatingBody = await impersonating.json();
+  check("a server-format number is ignored, not honoured", impersonating.status, 201);
+  check("and the counter issues one instead",
+    impersonatingBody.data.receiptNo !== `RCT-${YEAR}-9999`, true);
 
   server.close();
   db.close();

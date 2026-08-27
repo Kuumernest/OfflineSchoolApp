@@ -4,6 +4,9 @@
 const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
+// Shared with the desktop application, which issues the offline ones. See
+// OfflineSchoolApp/shared/receipts.js for why a client may name its own.
+const { parseDeviceReceipt } = require("../../../shared/receipts");
 
 const { requirePermission } = require("../../middleware/permissions");
 
@@ -371,18 +374,56 @@ router.post("/payments", canWrite, asyncHandler(async (req, res) => {
     return res.status(200).json({ success: true, replay: true, data: existing });
   }
 
-  const receiptNo = await nextReceiptNo(schoolId, academicYear);
+  /**
+   * A receipt number the client already issued, kept.
+   *
+   * The counter this endpoint normally draws from is precisely what a machine
+   * with no connection cannot reach, and a bursar taking money at the counter
+   * cannot hand a parent a blank receipt. So the desktop application issues one
+   * carrying its own installation code — RCT-2026-2027-CB6F-0041 — and this
+   * endpoint honours it rather than replacing it. If it replaced it, the paper
+   * the parent walked away with would not match the school's record, and the
+   * parent's copy is the one produced in an argument six months later.
+   *
+   * Accepted only in the exact device format, and only for the academic year
+   * this payment is actually for; anything else is ignored and the counter is
+   * used as before. The formats cannot collide — the server's has no letter
+   * group — and the unique index on { schoolId, receiptNo } is what makes the
+   * whole arrangement safe rather than merely tidy.
+   */
+  const claimed   = parseDeviceReceipt(req.body.receiptNo, academicYear);
+  const receiptNo = claimed
+    ? String(req.body.receiptNo).trim()
+    : await nextReceiptNo(schoolId, academicYear);
 
-  const payment = await FeePayment.create({
-    _id:        paymentId,
-    schoolId, studentId, academicYear, term,
-    classId:    student.classId ?? null,
-    amount, method, reference, note,
-    receiptNo,
-    receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
-    receivedBy: req.user?._id ? String(req.user._id) : null,
-    source,
-  });
+  let payment;
+  try {
+    payment = await FeePayment.create({
+      _id:        paymentId,
+      schoolId, studentId, academicYear, term,
+      classId:    student.classId ?? null,
+      amount, method, reference, note,
+      receiptNo,
+      receivedAt: receivedAt ? new Date(receivedAt) : new Date(),
+      receivedBy: req.user?._id ? String(req.user._id) : null,
+      source,
+    });
+  } catch (err) {
+    // The unique index refusing a receipt number. Only reachable for a claimed
+    // one — the counter cannot repeat itself — and it means two installations
+    // ended up with the same code, or the same one issued twice. Answered as a
+    // conflict rather than a 500 so the outbox blocks it and names it for a
+    // person, instead of retrying a request that will never succeed.
+    if (err?.code === 11000 && claimed) {
+      return res.status(409).json({
+        success: false,
+        code:    "RECEIPT_TAKEN",
+        message: `Receipt ${receiptNo} already exists in this school. It was ` +
+                 `issued offline; the payment needs a new number.`,
+      });
+    }
+    throw err;
+  }
 
   const totals = await balanceFor({ schoolId, studentId, academicYear });
 
