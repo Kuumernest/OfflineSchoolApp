@@ -1,77 +1,11 @@
 // backend/services/email.service.js
 "use strict";
 
-const nodemailer = require("nodemailer");
-
-// ─────────────────────────────────────────────────────────────────────────────
-// TRANSPORTER SETUP
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Credentials as pasted, cleaned up.
- *
- * Google displays an app password as four spaced groups — "abcd efgh ijkl
- * mnop" — so it gets pasted into .env with the spaces still in it, and Gmail
- * then rejects it with 535-5.7.8, which reads exactly like a wrong password.
- * Stripping whitespace here removes one indistinguishable cause of a failure
- * that is already hard to diagnose from the outside.
- *
- * It does not make a genuinely wrong credential work: 535-5.7.8 also means
- * revoked, mistyped, or 2-Step Verification turned off on the account (which
- * silently invalidates every app password it ever issued).
- */
-const cred = (v) => (typeof v === "string" ? v.replace(/\s+/g, "") : v);
-
-const createTransporter = () => {
-  // SendGrid
-  if (process.env.SENDGRID_API_KEY) {
-    return nodemailer.createTransport({
-      host:   "smtp.sendgrid.net",
-      port:   587,
-      secure: false,
-      auth: {
-        user: "apikey",
-        pass: cred(process.env.SENDGRID_API_KEY),
-      },
-    });
-  }
-
-  // Gmail — port 465 + secure:true avoids TLS handshake errors
-  if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
-    return nodemailer.createTransport({
-      host:   "smtp.gmail.com",
-      port:   465,
-      secure: true,
-      auth: {
-        user: (process.env.GMAIL_USER || "").trim(),
-        pass: cred(process.env.GMAIL_APP_PASSWORD),
-      },
-      tls: {
-        rejectUnauthorized: false,
-      },
-      connectionTimeout: 10000,
-      greetingTimeout:   10000,
-      socketTimeout:     15000,
-    });
-  }
-
-  // Generic SMTP fallback
-  return nodemailer.createTransport({
-    host:   process.env.SMTP_HOST || "smtp.mailtrap.io",
-    port:   parseInt(process.env.SMTP_PORT, 10) || 587,
-    secure: process.env.SMTP_SECURE === "true",
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-    tls: {
-      rejectUnauthorized: false,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout:   10000,
-    socketTimeout:     15000,
-  });
-};
+// Where mail goes is decided in one place, shared with the notification queue.
+// This file used to answer that question itself, and notification/channels.js
+// answered it differently — see src/services/email.transport.js for what that
+// cost.
+const mail = require("./email.transport");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED STYLE HELPERS
@@ -857,14 +791,11 @@ const sendEmail = async ({ to, template, data }) => {
     return { success: false, error: msg };
   }
 
-  console.log("===== EMAIL CONFIG =====");
-  console.log("TEMPLATE:            ", template);
-  console.log("TO:                  ", to);
-  console.log("GMAIL_USER:          ", process.env.GMAIL_USER      || "(not set)");
-  console.log("SENDGRID_KEY_SET:    ", !!process.env.SENDGRID_API_KEY);
-  console.log("APP_PASSWORD_SET:    ", !!process.env.GMAIL_APP_PASSWORD);
-  console.log("APP_PASSWORD_LENGTH: ", process.env.GMAIL_APP_PASSWORD?.length ?? 0);
-  console.log("========================");
+  // The block that used to be here dumped GMAIL_USER and the app password's
+  // length into the log on EVERY send — a school's address and a measurement of
+  // its credential, in a file that gets pasted into support threads. Whether
+  // mail is configured is a question to ask once, deliberately:
+  // `npm run mail:verify`.
 
   let subject, html, text;
   try {
@@ -877,15 +808,22 @@ const sendEmail = async ({ to, template, data }) => {
     return { success: false, error: `Template error: ${templateErr.message}` };
   }
 
+  // Answered before a socket is opened. Unconfigured used to mean a connection
+  // attempt against a default SMTP host this project does not own, which failed
+  // with a message about credentials rather than about configuration.
+  const issues = mail.problems();
+  if (issues.length) {
+    console.warn(`⚠️  Email not sent to ${to} [${template}]: ${issues[0]}`);
+    return { success: false, error: issues[0], code: "CHANNEL_NOT_CONFIGURED" };
+  }
+
   try {
-    const transporter = createTransporter();
+    const transporter = mail.transport();
 
     const info = await transporter.sendMail({
-      from: `"${data.schoolName || "School App"}" <${
-        process.env.EMAIL_FROM  ||
-        process.env.GMAIL_USER  ||
-        "noreply@schoolapp.com"
-      }>`,
+      // The school's name in front of the verified sender. A parent should see
+      // who it is from before deciding whether to open it.
+      from: `"${data.schoolName || "School App"}" <${mail.fromAddress()}>`,
       to,
       subject,
       html,

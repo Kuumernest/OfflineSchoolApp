@@ -1,7 +1,7 @@
 // backend/src/services/notification/channels.js
 "use strict";
 
-const nodemailer = require("nodemailer");
+const mail = require("../email.transport");
 
 /**
  * How a notification physically leaves the building.
@@ -21,53 +21,34 @@ const nodemailer = require("nodemailer");
 // EMAIL
 // ─────────────────────────────────────────────────────────────────────────────
 
-let transporter = null;
-
-/**
- * One transporter, reused.
- *
- * Built lazily rather than at module load: the config lives in environment
- * variables, and constructing it at import time makes every test and every
- * script that merely requires this file open an SMTP connection.
- */
-const emailTransport = () => {
-  if (transporter) return transporter;
-
-  const user = process.env.GMAIL_USER;
-  const pass = process.env.GMAIL_APP_PASSWORD;
-
-  if (!user || !pass) {
-    const err = new Error("Email is not configured (GMAIL_USER / GMAIL_APP_PASSWORD)");
-    err.code = "CHANNEL_NOT_CONFIGURED";
-    throw err;
-  }
-
-  transporter = nodemailer.createTransport({
-    service: "gmail",
-    auth: { user, pass },
-  });
-
-  return transporter;
-};
-
 const emailChannel = {
   name: "email",
 
-  /** Whether this channel could work at all, before we try to use it. */
-  isConfigured: () =>
-    Boolean(process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD),
+  /**
+   * Whether this channel could work at all, before we try to use it.
+   *
+   * This used to ask specifically about GMAIL_USER and GMAIL_APP_PASSWORD, and
+   * that made it a trap. resolveChannel() consults exactly this answer, and its
+   * fallback chain ends at the log channel — which always "succeeds". So a
+   * school configured on SendGrid got welcome emails (email.service.js knew
+   * about SendGrid) while every fee reminder was written to stdout and reported
+   * as sent. The provider question has one answer now, in email.transport.js.
+   */
+  isConfigured: () => mail.isConfigured(),
 
   /** An address, loosely — enough to catch an empty or obviously wrong field. */
   accepts: (to) => typeof to === "string" && /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(to),
 
   send: async ({ to, subject, text, html, fromName }) => {
-    const tx   = emailTransport();
-    const user = process.env.GMAIL_USER;
+    // Throws CHANNEL_NOT_CONFIGURED, which the dispatcher records as a skip
+    // rather than a delivery failure to retry forever.
+    const tx   = mail.transport();
+    const from = mail.fromAddress();
 
     const info = await tx.sendMail({
-      // The school's name in the From, its address underneath. A parent should
-      // see who it is from before deciding whether to open it.
-      from: fromName ? `"${fromName}" <${user}>` : user,
+      // The school's name in the From, the verified sender underneath. A parent
+      // should see who it is from before deciding whether to open it.
+      from: fromName ? `"${fromName}" <${from}>` : from,
       to, subject, text, html,
     });
 
