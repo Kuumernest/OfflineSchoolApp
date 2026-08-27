@@ -70,13 +70,6 @@
  * Two areas therefore have no keys yet, and both are honest gaps rather than
  * oversights:
  *
- *   admin.routes.js is a single 3000-line router covering classes, subjects,
- *   teacher accounts, grading and school settings behind one guard. Splitting
- *   it is its own change; until then those modules keep the role guard and a
- *   school cannot adjust them. When it is split, the keys it wants are
- *   classes.manage, subjects.view, subjects.manage, teachers.view,
- *   settings.view and settings.manage.
- *
  *   Messaging is governed by a matrix, not a capability: who may talk to whom
  *   depends on both parties and on per-school switches, which is what
  *   services/communication/policy.service.js exists for. Only messages.audit
@@ -171,7 +164,12 @@ const PERMISSION_DEFS = [
   p("students.admit",   "students", ADMIN_ROLES, false,
     "Approve or reject an application. Who joins the school is not delegated."),
   p("students.delete",  "students", ADMIN_ROLES, false, null),
+  p("students.viewFull", "students", ADMIN_ROLES, true,
+    "The whole student record in the admission console, as opposed to the " +
+    "roster fields students.view opens."),
 
+  p("teachers.view",    "teachers", ADMIN_ROLES, true,
+    "The staff list and one member of staff's record."),
   p("teachers.manage",  "teachers", ADMIN_ROLES, false,
     "Create, edit and deactivate staff accounts, and assign them to classes. " +
     "Assignment decides who may enter marks for whom."),
@@ -182,6 +180,12 @@ const PERMISSION_DEFS = [
   // ── The academic frame ────────────────────────────────────────────────────
   p("classes.view",     "classes", OFFICE_ROLES, true,
     "The class list. The bursar needs it: a fee structure is billed to classes."),
+  p("classes.manage",   "classes", ADMIN_ROLES, true,
+    "Create, rename and remove a class."),
+
+  p("subjects.view",    "subjects", ADMIN_ROLES, true, null),
+  p("subjects.manage",  "subjects", ADMIN_ROLES, true,
+    "Create, edit and remove a subject, and set its coefficient."),
 
   p("school.view",      "school", OFFICE_ROLES, true,
     "The school's own name, logo and address — the letterhead on every receipt " +
@@ -274,6 +278,20 @@ const PERMISSION_DEFS = [
     "The question bank, answers included."),
 
   // ── The machinery ─────────────────────────────────────────────────────────
+  //
+  // dashboard.view covers /api/admin/stats and the per-module /*/stats
+  // endpoints behind it. One capability rather than six, because they are one
+  // screen: the figures on the admin dashboard. Splitting them would mean a
+  // school could grant half a dashboard, which is not a state anybody wants.
+  p("dashboard.view",   "dashboard", ADMIN_ROLES, true,
+    "The school-wide figures on the administrator dashboard."),
+
+  p("settings.view",    "settings", ADMIN_ROLES, true,
+    "Read school configuration: grading, ID cards, analytics."),
+  p("settings.manage",  "settings", ADMIN_ROLES, false,
+    "Change school configuration, grading and the academic year. Locked: these " +
+    "decide how every mark in the school is interpreted."),
+
   p("permissions.manage", "permissions", ADMIN_ROLES, false,
     "This screen. A role that can grant itself permissions has no ceiling."),
   p("sync.push",        "sync", ADMIN_ROLES, false,

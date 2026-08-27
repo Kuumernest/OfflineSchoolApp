@@ -442,110 +442,61 @@ const createStaffAccount = async ({
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
-// SECTION 2 — ADMIN GUARD
+// SECTION 2 — GUARDS
 // ═════════════════════════════════════════════════════════════════════════════
 
+// OFFICE_ROLES is still needed further down: it is the set of roles the
+// staff-account endpoints will create and list, which is a different question
+// from who may reach them.
 const {
-  ADMIN_ROLES,
-  OFFICE_ROLES,
   ROLES,
+  OFFICE_ROLES,
+  STAFF_ROLES,
   normalizeRole,
 } = require("../config/roles");
-
-const permissions = require("../services/permissions.service");
+const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 
 /**
- * Reads in this router that the bursar may also make. GET only, exact paths.
+ * Every route in this file carries its own capability.
  *
- * This router is the school's control panel — users, classes, subjects,
- * grading, settings — and the bursar is shut out of all of it. One exception,
- * and it is a real requirement rather than a convenience: a fee structure is
- * billed to a set of classes, and the arrears report is read class by class.
- * Without the class list the fee module cannot be operated at all.
+ * ── What this replaced ────────────────────────────────────────────────────
  *
- * /school-info is the second, and it is what a receipt is printed on. Both
- * clients render the school heading — name, logo, address — into every
- * document, and the mobile school.service reaches for /admin/school-info first
- * and /teacher/school/info second. A bursar is refused by both, so a receipt
- * handed to a parent would come out with a blank letterhead.
+ * One router-level guard requiring ADMIN_ROLES, plus a hand-maintained
+ * allowlist of four GET paths the bursar was let through on. That worked, and
+ * it did not scale: the whole school control panel — classes, subjects, staff
+ * accounts, grading, settings — was a single locked block, so a school could
+ * not delegate "may rename a class" without delegating everything, and the only
+ * way to open one more path was to add a line to a bespoke Map.
  *
- * The student roster is the third and fourth. A payment has to be posted
- * against a real child in a real class, a fee statement carries their name, and
- * an arrears call needs the guardian phone number — and on mobile the roster is
- * what fills the local SQLite the offline fee desk reads. What these return is
- * demographic: name, admission number, class, guardian, contact, status. No
- * mark, no report card, no fee figure.
+ * The allowlist is gone. classes.view, school.view and students.view now sit on
+ * the routes that were in it, which is the same decision expressed where it can
+ * be read next to the handler it governs.
  *
- * /students/pending is deliberately NOT here. That is the admission queue, and
- * deciding who joins the school is not a finance decision.
+ * ── Why the file was not split instead ────────────────────────────────────
  *
- * An allowlist keyed on method and path, rather than moving the routes above
- * the guard, because route order in a 3000-line router is not a security
- * mechanism anybody can verify by reading it. Everything not named here needs
- * ADMIN_ROLES, so a route added tomorrow is closed by default.
+ * Because its size was never the problem. Moving three thousand lines of
+ * handlers and their shared helpers into per-module routers buys exactly what
+ * the line below buys, and risks a great deal more. The one thing a split would
+ * add is that a new route lands in a module with a guard already on it, and
+ * scripts/check-role-matrix.js closes that gap instead: it fails if any route
+ * in this file has no capability.
  *
- * Note what an entry does NOT grant: the bursar can read /students, but every
- * write against a student — approve, reject, suspend, move, delete — is a
- * separate route and stays admin-only. Read and write were the same guard
- * before this file learned the difference.
+ * ── The backstop ──────────────────────────────────────────────────────────
  *
- * Each entry names a CAPABILITY rather than a role, so a school that adjusts
- * students.view or classes.view on the permissions screen changes what happens
- * here too. The fallback for every other path is still the role set: there is
- * no single capability meaning "the whole school control panel", and inventing
- * one would be a checkbox nobody could reason about. Splitting this router into
- * per-module routers is what would fix that, and it is its own change.
+ * STAFF_ROLES, not ADMIN_ROLES. It is deliberately NOT the authorisation — the
+ * per-route capabilities are — and it exists so that the worst case of a route
+ * added without a guard is exposure to staff rather than to a pupil. Students
+ * and unrecognised roles never reach a handler here at all.
  */
-const OFFICE_READABLE = new Map([
-  ["/classes",           "classes.view"],
-  ["/school-info",       "school.view"],
-  ["/students",          "students.view"],
-  ["/students/approved", "students.view"],
-]);
+router.use(authorize(STAFF_ROLES));
 
-const adminOnly = async (req, res, next) => {
-  if (!req.user) return sendError(res, 401, "Not authenticated");
-  const { role } = req.user;
-
-  // Trailing slashes are normalised so "/classes/" cannot slip past the
-  // allowlist — or, worse, past it in the wrong direction.
-  const raw  = req.path || "/";
-  const path = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
-
-  const needed = req.method === "GET" ? OFFICE_READABLE.get(path) : null;
-
-  try {
-    if (needed) {
-      if (await permissions.can(req.user, needed)) return next();
-      console.warn(
-        `⛔ Access denied for role "${role}" on ${req.method} ${path} — needs ${needed}`
-      );
-      return sendError(
-        res, 403,
-        `Access denied. This action requires "${needed}".`
-      );
-    }
-
-    if (!ADMIN_ROLES.includes(role)) {
-      console.warn(`⛔ Access denied for role "${role}" on ${req.method} ${path}`);
-      return sendError(
-        res, 403,
-        `Admin only. Your role "${role}" is not permitted.`
-      );
-    }
-    return next();
-  } catch (err) {
-    return next(err);
-  }
-};
-
-router.use(adminOnly);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 3 — DASHBOARD STATS
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/stats", asyncHandler(async (req, res) => {
+router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
   const baseQuery = schoolId ? { schoolId } : {};
 
@@ -762,7 +713,7 @@ router.get("/stats", asyncHandler(async (req, res) => {
   return sendSuccess(res, { stats, data: stats });
 }));
 
-router.get("/debug/counts", asyncHandler(async (req, res) => {
+router.get("/debug/counts", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
   const baseQuery = schoolId ? { schoolId } : {};
   const teacherQuery = { ...baseQuery, role: "teacher", isActive: true };
@@ -831,7 +782,7 @@ router.get("/debug/counts", asyncHandler(async (req, res) => {
 // SECTION 4 — PER-ENTITY STATS
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/students/stats", asyncHandler(async (req, res) => {
+router.get("/students/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -863,7 +814,7 @@ router.get("/students/stats", asyncHandler(async (req, res) => {
   return sendSuccess(res, { total, active, new: newCount });
 }));
 
-router.get("/teachers/stats", asyncHandler(async (req, res) => {
+router.get("/teachers/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -876,7 +827,7 @@ router.get("/teachers/stats", asyncHandler(async (req, res) => {
   return sendSuccess(res, { total, active });
 }));
 
-router.get("/classes/stats", asyncHandler(async (req, res) => {
+router.get("/classes/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -904,14 +855,14 @@ router.get("/classes/stats", asyncHandler(async (req, res) => {
   return sendSuccess(res, { total, withSubjects });
 }));
 
-router.get("/subjects/stats", asyncHandler(async (req, res) => {
+router.get("/subjects/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
   const total = await Subject.countDocuments({ schoolId });
   return sendSuccess(res, { total });
 }));
 
-router.get("/exams/stats", asyncHandler(async (req, res) => {
+router.get("/exams/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -935,7 +886,7 @@ router.get("/exams/stats", asyncHandler(async (req, res) => {
   return sendSuccess(res, { total, ongoing, completed, draft, scheduled });
 }));
 
-router.get("/attendance/stats", asyncHandler(async (req, res) => {
+router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -987,7 +938,7 @@ router.get("/attendance/stats", asyncHandler(async (req, res) => {
 // SECTION 5 — TEACHERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/teachers", asyncHandler(async (req, res) => {
+router.get("/teachers", requirePermission("teachers.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const query = { role: "teacher", isActive: true };
@@ -1004,7 +955,7 @@ router.get("/teachers", asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: teachers, teachers });
 }));
 
-router.post("/teachers", asyncHandler(async (req, res) => {
+router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
   const { id, name, email, schoolId } = req.body;
   if (!name?.trim() || !email) {
     return sendError(res, 400, "name and email are required");
@@ -1063,7 +1014,7 @@ router.post("/teachers", asyncHandler(async (req, res) => {
   }, 201);
 }));
 
-router.get("/teachers/:id", asyncHandler(async (req, res) => {
+router.get("/teachers/:id", requirePermission("teachers.view"), asyncHandler(async (req, res) => {
   const teacher = await User.findOne({
     ...getTenantQuery(req, req.params.id),
     role: "teacher",
@@ -1073,7 +1024,7 @@ router.get("/teachers/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: teacher });
 }));
 
-router.put("/teachers/:id", asyncHandler(async (req, res) => {
+router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
   const { name, email, isActive, schoolId } = req.body;
   const updateFields = {
     ...(name                   && { name: name.trim() }),
@@ -1102,7 +1053,7 @@ router.put("/teachers/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { data: teacher.toObject() });
 }));
 
-router.delete("/teachers/:id", asyncHandler(async (req, res) => {
+router.delete("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
   const teacher = await User.findOneAndUpdate(
     { ...getTenantQuery(req, req.params.id), role: "teacher" },
     { isActive: false },
@@ -1114,7 +1065,7 @@ router.delete("/teachers/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Teacher deactivated" });
 }));
 
-router.post("/teachers/:id/reset-password", asyncHandler(async (req, res) => {
+router.post("/teachers/:id/reset-password", requirePermission("teachers.manage"), asyncHandler(async (req, res) => {
   const teacher = await User.findOne({
     ...getTenantQuery(req, req.params.id),
     role: "teacher",
@@ -1151,7 +1102,7 @@ router.post("/teachers/:id/reset-password", asyncHandler(async (req, res) => {
 // SECTION 6 — CLASSES
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/classes", asyncHandler(async (req, res) => {
+router.get("/classes", requirePermission("classes.view"), asyncHandler(async (req, res) => {
   const schoolId        = resolveSchoolId(req, req.query.schoolId);
   const includeInactive = req.query.includeInactive === "true";
 
@@ -1167,7 +1118,7 @@ router.get("/classes", asyncHandler(async (req, res) => {
   return sendSuccess(res, { classes });
 }));
 
-router.post("/classes", asyncHandler(async (req, res) => {
+router.post("/classes", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
   const { id, name, level, section, schoolId } = req.body;
   if (!name?.trim()) return sendError(res, 400, "name is required");
 
@@ -1206,7 +1157,7 @@ router.post("/classes", asyncHandler(async (req, res) => {
   }, 201);
 }));
 
-router.put("/classes/:id", asyncHandler(async (req, res) => {
+router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
   const { name, level, section, isActive } = req.body;
   const cls = await Class.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
@@ -1224,7 +1175,7 @@ router.put("/classes/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { class: cls.toObject() });
 }));
 
-router.delete("/classes/:id", asyncHandler(async (req, res) => {
+router.delete("/classes/:id", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
   const classId = req.params.id;
   const cls     = await Class.findOne(getTenantQuery(req, classId)).lean();
   if (!cls) return sendError(res, 404, "Class not found");
@@ -1274,7 +1225,7 @@ router.delete("/classes/:id", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/classes/:classId/subjects", asyncHandler(async (req, res) => {
+router.get("/classes/:classId/subjects", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
   const classIdStr  = String(req.params.classId).trim();
   const classRecord = await Class.findOne(
     getTenantQuery(req, classIdStr)
@@ -1294,7 +1245,7 @@ router.get("/classes/:classId/subjects", asyncHandler(async (req, res) => {
 // SECTION 7 — SUBJECTS
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/subjects", asyncHandler(async (req, res) => {
+router.get("/subjects", requirePermission("subjects.view"), asyncHandler(async (req, res) => {
   const schoolId    = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
 
@@ -1377,7 +1328,7 @@ router.get("/subjects", asyncHandler(async (req, res) => {
   return sendSuccess(res, { subjects: deduped });
 }));
 
-router.post("/subjects", asyncHandler(async (req, res) => {
+router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(async (req, res) => {
   const { id, name, code, classId, schoolId, coefficient } = req.body;
   if (!name?.trim()) return sendError(res, 400, "name is required");
   if (!classId)      return sendError(res, 400, "classId is required");
@@ -1440,7 +1391,7 @@ router.post("/subjects", asyncHandler(async (req, res) => {
   }, 201);
 }));
 
-router.put("/subjects/:id", asyncHandler(async (req, res) => {
+router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(async (req, res) => {
   const { name, code, classId, coefficient } = req.body;
 
   const coeff = parseCoefficient(coefficient);
@@ -1494,7 +1445,7 @@ router.put("/subjects/:id", asyncHandler(async (req, res) => {
   });
 }));
 
-router.delete("/subjects/:id", asyncHandler(async (req, res) => {
+router.delete("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(async (req, res) => {
   const inUse = await TeacherAssignment.findOne({
     subject: req.params.id,
   }).lean();
@@ -1527,7 +1478,7 @@ router.delete("/subjects/:id", asyncHandler(async (req, res) => {
  * Old behaviour: fetchAllStudents() returned Student results early and
  * never reached StudentApplication — Ken (the applicant) was invisible.
  */
-router.get("/students/pending", asyncHandler(async (req, res) => {
+router.get("/students/pending", requirePermission("students.admit"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const query = addNotDeleted({
@@ -1556,7 +1507,7 @@ router.get("/students/pending", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/students/approved", asyncHandler(async (req, res) => {
+router.get("/students/approved", requirePermission("students.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   let query = { status: { $in: ["approved", "active"] } };
@@ -1617,7 +1568,7 @@ router.get("/students/approved", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/students", asyncHandler(async (req, res) => {
+router.get("/students", requirePermission("students.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   let query = {};
@@ -1652,7 +1603,7 @@ router.get("/students", asyncHandler(async (req, res) => {
 // ─── Student approve / reject ─────────────────────────────────────────────────
 
 
-router.put("/students/:id/approve", asyncHandler(async (req, res) => {
+router.put("/students/:id/approve", requirePermission("students.admit"), asyncHandler(async (req, res) => {
   const { classId } = req.body;
   if (!classId) return sendError(res, 400, "classId is required");
 
@@ -2052,7 +2003,7 @@ router.put("/students/:id/approve", asyncHandler(async (req, res) => {
   });
 }));
 
-router.put("/students/:id/reject", asyncHandler(async (req, res) => {
+router.put("/students/:id/reject", requirePermission("students.admit"), asyncHandler(async (req, res) => {
   const { reason } = req.body;
   const studentId  = String(req.params.id).trim();
 
@@ -2125,7 +2076,7 @@ router.put("/students/:id/reject", asyncHandler(async (req, res) => {
 
 // ─── Student suspend / restore / delete / move ────────────────────────────────
 
-router.patch("/students/:id/suspend", asyncHandler(async (req, res) => {
+router.patch("/students/:id/suspend", requirePermission("students.manage"), asyncHandler(async (req, res) => {
   const S = getStudent();
   if (!S) return sendError(res, 503, "Student model not available");
 
@@ -2142,7 +2093,7 @@ router.patch("/students/:id/suspend", asyncHandler(async (req, res) => {
   });
 }));
 
-router.patch("/students/:id/restore", asyncHandler(async (req, res) => {
+router.patch("/students/:id/restore", requirePermission("students.manage"), asyncHandler(async (req, res) => {
   const S = getStudent();
   if (!S) return sendError(res, 503, "Student model not available");
 
@@ -2159,7 +2110,7 @@ router.patch("/students/:id/restore", asyncHandler(async (req, res) => {
   });
 }));
 
-router.delete("/students/:id", asyncHandler(async (req, res) => {
+router.delete("/students/:id", requirePermission("students.delete"), asyncHandler(async (req, res) => {
   const S   = getStudent();
   const App = getStudentApplication();
   const id  = req.params.id;
@@ -2185,7 +2136,7 @@ router.delete("/students/:id", asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Student deleted" });
 }));
 
-router.patch("/students/:id/move", asyncHandler(async (req, res) => {
+router.patch("/students/:id/move", requirePermission("students.manage"), asyncHandler(async (req, res) => {
   const { classId } = req.body;
   if (!classId) return sendError(res, 400, "classId is required");
 
@@ -2212,7 +2163,7 @@ router.patch("/students/:id/move", asyncHandler(async (req, res) => {
 // Add this route BEFORE router.get("/students/:id", ...)
 // Place it right after the router.patch("/students/:id/move", ...) handler
 
-router.post("/students/:id/enrollment-number", asyncHandler(async (req, res) => {
+router.post("/students/:id/enrollment-number", requirePermission("students.manage"), asyncHandler(async (req, res) => {
   const studentId        = String(req.params.id).trim();
   const resolvedSchoolId = resolveSchoolId(req, req.body.schoolId || req.query.schoolId);
 
@@ -2316,7 +2267,7 @@ router.post("/students/:id/enrollment-number", asyncHandler(async (req, res) => 
   return sendSuccess(res, { enrollmentNo });
 }));
 
-router.get("/students/:id", asyncHandler(async (req, res) => {
+router.get("/students/:id", requirePermission("students.viewFull"), asyncHandler(async (req, res) => {
   const id = String(req.params.id).trim();
   const S   = getStudent();
   const App = getStudentApplication();
@@ -2614,15 +2565,15 @@ const handleDeleteAssignment = asyncHandler(async (req, res) => {
   return sendSuccess(res, { message: "Assignment removed" });
 });
 
-router.get("/teacher-assignments",        handleGetAssignments);
-router.post("/teacher-assignments/bulk",  handleBulkCreate);
-router.post("/teacher-assignments",       handleCreateAssignment);
-router.delete("/teacher-assignments/:id", handleDeleteAssignment);
+router.get("/teacher-assignments", requirePermission("teachers.manage"),        handleGetAssignments);
+router.post("/teacher-assignments/bulk", requirePermission("teachers.manage"),  handleBulkCreate);
+router.post("/teacher-assignments", requirePermission("teachers.manage"),       handleCreateAssignment);
+router.delete("/teacher-assignments/:id", requirePermission("teachers.manage"), handleDeleteAssignment);
 
-router.get("/assignments",        handleGetAssignments);
-router.post("/assignments/bulk",  handleBulkCreate);
-router.post("/assignments",       handleCreateAssignment);
-router.delete("/assignments/:id", handleDeleteAssignment);
+router.get("/assignments", requirePermission("teachers.manage"),        handleGetAssignments);
+router.post("/assignments/bulk", requirePermission("teachers.manage"),  handleBulkCreate);
+router.post("/assignments", requirePermission("teachers.manage"),       handleCreateAssignment);
+router.delete("/assignments/:id", requirePermission("teachers.manage"), handleDeleteAssignment);
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 10 — SETTINGS: GRADING
@@ -2648,7 +2599,7 @@ const getDefaultGradingConfig = (schoolId) => ({
   gradingType: "percentage",
 });
 
-router.get("/settings/grading", asyncHandler(async (req, res) => {
+router.get("/settings/grading", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.query.schoolId);
   const GradingConfig = getGradingConfig();
   if (!GradingConfig) {
@@ -2660,7 +2611,7 @@ router.get("/settings/grading", asyncHandler(async (req, res) => {
   return sendSuccess(res, { grading: config });
 }));
 
-router.put("/settings/grading", asyncHandler(async (req, res) => {
+router.put("/settings/grading", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.body.schoolId);
   const GradingConfig = getGradingConfig();
   const { grades, passMark, useGpa, gpaScale, gradingType } = req.body;
@@ -2699,7 +2650,7 @@ router.put("/settings/grading", asyncHandler(async (req, res) => {
 // where an account with school-wide authority is created, suspended and reset,
 // and a bursar is one of those. A role the settings screen cannot create is a
 // role no school will ever use.
-router.get("/settings/admins", asyncHandler(async (req, res) => {
+router.get("/settings/admins", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const admins   = await User.find({
     schoolId,
@@ -2709,7 +2660,7 @@ router.get("/settings/admins", asyncHandler(async (req, res) => {
   return sendSuccess(res, { admins });
 }));
 
-router.post("/settings/admins", asyncHandler(async (req, res) => {
+router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const { name, email, role, schoolId } = req.body;
   if (!name?.trim() || !email?.trim()) {
     return sendError(res, 400, "name and email are required");
@@ -2787,7 +2738,7 @@ router.post("/settings/admins", asyncHandler(async (req, res) => {
   }, 201);
 }));
 
-router.post("/settings/admins/:id/reset-password", asyncHandler(async (req, res) => {
+router.post("/settings/admins/:id/reset-password", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   const admin = await User.findOne(getTenantQuery(req, req.params.id));
   if (!admin) return sendError(res, 404, "Admin not found");
 
@@ -2817,7 +2768,7 @@ router.post("/settings/admins/:id/reset-password", asyncHandler(async (req, res)
   });
 }));
 
-router.delete("/settings/admins/:id", asyncHandler(async (req, res) => {
+router.delete("/settings/admins/:id", requirePermission("users.manage"), asyncHandler(async (req, res) => {
   if (String(req.params.id) === String(req.user?._id)) {
     return sendError(res, 400, "You cannot remove yourself as admin");
   }
@@ -2836,13 +2787,13 @@ router.delete("/settings/admins/:id", asyncHandler(async (req, res) => {
 // SECTION 12 — SETTINGS: PROFILE
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/settings/profile", asyncHandler(async (req, res) => {
+router.get("/settings/profile", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const user = await User.findById(req.user?._id).select("-password").lean();
   if (!user) return sendError(res, 404, "User not found");
   return sendSuccess(res, { profile: user });
 }));
 
-router.put("/settings/profile", asyncHandler(async (req, res) => {
+router.put("/settings/profile", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const { name, email } = req.body;
   const userId          = req.user?._id;
   if (!name?.trim()) return sendError(res, 400, "Name is required");
@@ -2867,7 +2818,7 @@ router.put("/settings/profile", asyncHandler(async (req, res) => {
   return sendSuccess(res, { profile: user.toObject() });
 }));
 
-router.put("/settings/profile/password", asyncHandler(async (req, res) => {
+router.put("/settings/profile/password", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const { currentPassword, newPassword } = req.body;
   const userId = req.user?._id;
 
@@ -2895,7 +2846,7 @@ router.put("/settings/profile/password", asyncHandler(async (req, res) => {
 // SECTION 13 — SETTINGS: ANALYTICS
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/settings/analytics", asyncHandler(async (req, res) => {
+router.get("/settings/analytics", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
   const baseQuery = schoolId ? { schoolId } : {};
 
@@ -3082,7 +3033,7 @@ const probeLogo = async (objectId) => {
  * bytes never leave it) that lets a client tell whether the copy it already
  * cached is current. Pass ?includeLogo=1 to actually download it.
  */
-router.get("/school-info", asyncHandler(async (req, res) => {
+router.get("/school-info", requirePermission("school.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -3136,7 +3087,7 @@ router.get("/school-info", asyncHandler(async (req, res) => {
   });
 }));
 
-router.put("/school-info", asyncHandler(async (req, res) => {
+router.put("/school-info", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(
     req, req.body.schoolId || req.query.schoolId
   );
@@ -3213,7 +3164,7 @@ const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
  * screen can show what an empty field actually means — "leave blank and cards
  * expire 31 August 2026" is an answer; an empty box is a guess.
  */
-router.get("/settings/id-card", asyncHandler(async (req, res) => {
+router.get("/settings/id-card", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -3246,7 +3197,7 @@ router.get("/settings/id-card", asyncHandler(async (req, res) => {
  * them. An empty string for validUntil is meaningful and IS accepted: it means
  * "go back to the academic-year default".
  */
-router.put("/settings/id-card", asyncHandler(async (req, res) => {
+router.put("/settings/id-card", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 

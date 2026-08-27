@@ -221,64 +221,61 @@ const ADMIN_ROUTES_SRC = () =>
   fs.readFileSync(path.join(ROUTE_DIR, "admin.routes.js"), "utf8");
 
 /**
- * The [path, permission] pairs in admin.routes.js OFFICE_READABLE.
+ * Every route registration line in admin.routes.js.
  *
- * Shared by the allowlist section and the usage scan below — the capabilities
- * named in that Map are genuine call sites, and a scan that only looked for
- * requirePermission() reported them as dead.
- *
- * @returns {Array<[string,string]>|null} sorted by path, or null if not found
+ * Used to assert that each one names a capability. The stronger check — that
+ * the guard actually RUNS, in the right order, with the right capability — is
+ * scripts/check-admin-guards.js, which mounts the real router and makes a real
+ * request to all 56 paths. A source scan cannot tell a guard in the wrong
+ * position from one in the right place; this is the half that needs no
+ * database, so it lives in the pure suite.
  */
-const officeAllowlist = (src) => {
-  const block = /const OFFICE_READABLE = new Map\(\[([\s\S]*?)\]\);/.exec(src);
-  if (!block) return null;
+const adminRouteLines = (src) =>
+  src.split(/\r?\n/).filter((l) =>
+    /^router\.(get|post|put|patch|delete)\(/.test(l)
+  );
 
-  // Each entry is ["<path>", "<permission>"]. Both halves are asserted: a path
-  // added without a capability, or pointed at the wrong one, is the mistake
-  // this is here to catch.
-  return [...block[1].matchAll(/\[\s*"([^"]+)"\s*,\s*"([^"]+)"\s*\]/g)]
-    .map((m) => [m[1], m[2]])
-    .sort((a, b) => a[0].localeCompare(b[0]));
-};
+const checkAdminRouterShape = () => {
+  console.log("--- the admin router: every route carries its own capability ---");
 
-const checkOfficeAllowlist = () => {
-  console.log("--- the office allowlist on /api/admin ---");
+  const src   = ADMIN_ROUTES_SRC();
+  const lines = adminRouteLines(src);
 
-  const src = ADMIN_ROUTES_SRC();
+  check("the router still has its routes", lines.length > 50, true);
 
-  const entries = officeAllowlist(src);
-  if (!entries) {
-    fail++;
-    console.log("  FAIL OFFICE_READABLE not found in admin.routes.js");
-    return;
-  }
+  // The bespoke allowlist must not come back. It was a second place where
+  // access was decided, invisible from the routes it governed — and while it
+  // existed, "who may reach GET /classes" could only be answered by reading a
+  // Map three hundred lines above the handler.
+  check("OFFICE_READABLE is gone", src.includes("OFFICE_READABLE"), false);
 
-  const paths = entries.map(([p]) => p);
+  // The router-level guard is now a backstop and not the authorisation. If this
+  // ever reads ADMIN_ROLES again, every per-route capability below it becomes
+  // decoration: an admin passes them all and nobody else gets that far.
+  check("the router-level guard is the staff backstop",
+    src.includes("router.use(authorize(STAFF_ROLES))"), true);
 
-  check("exactly these four paths, GET only", paths,
-    ["/classes", "/school-info", "/students", "/students/approved"]);
+  const unguarded = lines
+    .filter((l) => !l.includes("requirePermission("))
+    .map((l) => l.slice(0, 64));
+  check("no route without a capability", unguarded, []);
 
-  check("each one names the capability it should", entries, [
-    ["/classes",           "classes.view"],
-    ["/school-info",       "school.view"],
-    ["/students",          "students.view"],
-    ["/students/approved", "students.view"],
-  ]);
+  // Every capability named must be one that exists. A typo here answers 403 to
+  // everybody including a super admin, which reads as a broken feature.
+  const named = [...src.matchAll(/requirePermission\("([^"]+)"\)/g)].map((m) => m[1]);
+  check("no capability named that does not exist",
+    [...new Set(named)].filter((k) => !PERMS.isPermission(k)), []);
 
-  check("every capability it names is real",
-    paths.length && entries.filter(([, k]) => !PERMS.isPermission(k)), []);
-
-  // None of these may be a locked one. A locked capability reached through the
-  // allowlist would be enforcement a school could neither see nor adjust.
-  check("none of them is locked",
-    entries.filter(([, k]) => PERMS.LOCKED_KEYS.includes(k)), []);
-
-  // The admission queue is the boundary case: it sits one path segment away
-  // from a roster read and is a different kind of decision entirely.
-  check("the admission queue is not on it",
-    paths.includes("/students/pending"), false);
-  check("nothing under /settings is on it",
-    paths.filter((p) => p.startsWith("/settings")), []);
+  // The three that carry the bursar's access into this router. If any of them
+  // became locked or admin-only, the fee desk loses the class list, the
+  // letterhead or the roster — and the failure would show up as a blank receipt
+  // rather than as a permission error.
+  check("the office reads are still delegable",
+    ["classes.view", "school.view", "students.view"]
+      .filter((k) => PERMS.LOCKED_KEYS.includes(k)), []);
+  check("and still held by the bursar",
+    ["classes.view", "school.view", "students.view"]
+      .filter((k) => !PERMS.DEFAULTS_BY_ROLE.bursar.includes(k)), []);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -377,7 +374,7 @@ const checkPermissions = () => {
   const mustBeLocked = [
     "results.edit", "results.publish", "exams.manage", "reports.manage",
     "users.manage", "teachers.manage", "permissions.manage",
-    "promotion.run", "messages.audit", "sync.push",
+    "promotion.run", "messages.audit", "sync.push", "settings.manage",
     "students.admit", "students.delete", "payroll.setSalary",
     "documents.manage",
     // The countersignature. A school that could grant approvals.decide to the
@@ -485,10 +482,6 @@ const checkPermissionUsage = () => {
     }
   }
 
-  // The admin router consults its capabilities through a lookup table rather
-  // than a call, so they are read from the table itself.
-  (officeAllowlist(ADMIN_ROUTES_SRC()) ?? []).forEach(([, k]) => used.add(k));
-
   const unknown = [...used]
     // middleware/permissions.js names the offending key in its own throw, which
     // the regex reads as a call site. A template placeholder is not a key.
@@ -500,9 +493,70 @@ const checkPermissionUsage = () => {
   check("no permission the code never checks", unused, []);
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// 9. EVERY CAPABILITY HAS A NAME A HUMAN CAN READ
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The permissions screen renders one row per capability and falls back to the
+// raw key when a translation is missing — so a missing label is invisible in
+// testing and shows an administrator "students.viewFull" where a sentence
+// should be. It caught thirteen the first time it ran, five of them from the
+// approvals work two changes earlier.
+//
+// The backend owns the capability list, which is why this lives here rather
+// than in the web package's i18n check: that script compares en against fr and
+// cannot know what the set is meant to contain.
+
+const checkPermissionLabels = () => {
+  console.log("--- every capability is labelled, in both languages ---");
+
+  const localeDir = path.join(__dirname, "..", "..", "web", "src", "i18n", "locales");
+
+  if (!fs.existsSync(localeDir)) {
+    // A backend checkout without the web package alongside it. Skipped loudly
+    // rather than silently passing, because a skipped check that reads as green
+    // is worse than one that is not there.
+    console.log("  SKIPPED — web/src/i18n/locales not found next to this package");
+    return;
+  }
+
+  for (const lang of ["en", "fr"]) {
+    const file = path.join(localeDir, `${lang}.json`);
+    if (!fs.existsSync(file)) {
+      fail++;
+      console.log(`  FAIL ${lang}.json is missing`);
+      continue;
+    }
+
+    const json = JSON.parse(fs.readFileSync(file, "utf8"));
+    const keys    = json?.permissions?.key    ?? {};
+    const modules = json?.permissions?.module ?? {};
+
+    check(`${lang}: no capability without a label`,
+      PERMS.PERMISSION_KEYS.filter((k) => !(k in keys)), []);
+    check(`${lang}: no module without a heading`,
+      PERMS.MODULES.filter((m) => !(m in modules)), []);
+
+    // And nothing left over: a label for a capability that no longer exists is
+    // dead weight that will outlive anybody's memory of what it described.
+    check(`${lang}: no label for a capability that is gone`,
+      Object.keys(keys).filter((k) => !PERMS.isPermission(k)), []);
+  }
+
+  // Every locked capability should say WHY, because "why can I not tick this"
+  // is the question the permissions screen exists to answer in place.
+  const en = path.join(localeDir, "en.json");
+  if (fs.existsSync(en)) {
+    const notes = JSON.parse(fs.readFileSync(en, "utf8"))?.permissions?.note ?? {};
+    check("every lock explains itself",
+      PERMS.LOCKED_KEYS.filter((k) => !(k in notes)), []);
+  }
+};
+
 checkModel();
 checkRouteFiles();
-checkOfficeAllowlist();
+checkAdminRouterShape();
+checkPermissionLabels();
 const { rejects } = checkPermissions();
 checkPermissionUsage();
 

@@ -10,8 +10,9 @@
     "check:roles": "node scripts/check-role-matrix.js",
     "check:policy": "node scripts/check-communication-policy.js",
     "check:approvals": "node scripts/check-approvals.js",
+    "check:admin": "node scripts/check-admin-guards.js",
     "check": "npm run check:roles && npm run check:policy",
-    "check:all": "npm run check && npm run check:approvals",
+    "check:all": "npm run check && npm run check:approvals && npm run check:admin",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

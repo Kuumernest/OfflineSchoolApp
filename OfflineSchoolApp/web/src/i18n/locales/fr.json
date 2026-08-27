@@ -1352,7 +1352,11 @@
       "homework": "Devoirs",
       "quiz": "Quiz",
       "permissions": "Droits",
-      "sync": "Synchronisation"
+      "sync": "Synchronisation",
+      "approvals": "Validations",
+      "subjects": "Matières",
+      "dashboard": "Tableau de bord",
+      "settings": "Paramètres de l'établissement"
     },
     "key": {
       "fees.view": "Consulter le registre des frais",
@@ -1402,7 +1406,20 @@
       "homework.manage": "Donner et noter les devoirs",
       "quiz.author": "Rédiger quiz et questions",
       "permissions.manage": "Modifier ces droits",
-      "sync.push": "Envoyer des modifications depuis un appareil"
+      "sync.push": "Envoyer des modifications depuis un appareil",
+      "fees.refund": "Rembourser",
+      "fees.waive": "Réduire ou annuler des frais",
+      "approvals.view": "Voir les demandes en attente",
+      "approvals.decide": "Valider ou refuser une demande",
+      "approvals.configure": "Définir les seuils de validation",
+      "students.viewFull": "Consulter le dossier complet d'un élève",
+      "teachers.view": "Consulter la liste du personnel",
+      "classes.manage": "Ajouter et supprimer des classes",
+      "subjects.view": "Consulter toutes les matières",
+      "subjects.manage": "Ajouter, modifier et supprimer des matières",
+      "dashboard.view": "Consulter les chiffres du tableau de bord",
+      "settings.view": "Consulter les paramètres",
+      "settings.manage": "Modifier les paramètres"
     },
     "note": {
       "payroll.setSalary": "Jamais la personne qui verse la paie. Quelqu'un qui peut à la fois augmenter un salaire et le payer n'est pas réellement contrôlé.",
@@ -1420,7 +1437,13 @@
       "permissions.manage": "Un rôle qui peut s'attribuer des droits n'a plus de limite, ni les personnes qu'il nomme.",
       "sync.push": "Écrit les créneaux et les décisions de passage directement depuis un appareil.",
       "students.view": "Noms, matricules, classes et coordonnées des parents. Aucune note.",
-      "gate.scan": "Dans un petit établissement, la personne au portail à huit heures est celle qui est là."
+      "gate.scan": "Dans un petit établissement, la personne au portail à huit heures est celle qui est là.",
+      "approvals.decide": "Jamais la personne qui a soumis la demande — vérifié demande par demande, par utilisateur, y compris pour un super administrateur.",
+      "approvals.configure": "Les montants à partir desquels une seconde signature est requise.",
+      "settings.manage": "Notation, année scolaire, cartes d'identité. Ces réglages déterminent l'interprétation de toutes les notes de l'établissement.",
+      "students.viewFull": "Le dossier complet dans la console d'admission, par opposition aux données d'identité dont le service financier a besoin.",
+      "fees.refund": "Au-delà du seuil de remboursement, cette action crée une demande au lieu de verser l'argent.",
+      "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture."
     }
   },
   "approvals": {

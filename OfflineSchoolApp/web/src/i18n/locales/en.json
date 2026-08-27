@@ -1352,7 +1352,11 @@
       "homework": "Homework",
       "quiz": "Quizzes",
       "permissions": "Permissions",
-      "sync": "Synchronisation"
+      "sync": "Synchronisation",
+      "approvals": "Approvals",
+      "subjects": "Subjects",
+      "dashboard": "Dashboard",
+      "settings": "School settings"
     },
     "key": {
       "fees.view": "See the fee ledger",
@@ -1402,7 +1406,20 @@
       "homework.manage": "Set and grade homework",
       "quiz.author": "Write quizzes and questions",
       "permissions.manage": "Change these permissions",
-      "sync.push": "Send changes from a device"
+      "sync.push": "Send changes from a device",
+      "fees.refund": "Give money back",
+      "fees.waive": "Reduce or write off a charge",
+      "approvals.view": "See what is waiting for a decision",
+      "approvals.decide": "Approve or reject a request",
+      "approvals.configure": "Set the approval thresholds",
+      "students.viewFull": "See a full student record",
+      "teachers.view": "See the staff list",
+      "classes.manage": "Add and remove classes",
+      "subjects.view": "See all subjects",
+      "subjects.manage": "Add, edit and remove subjects",
+      "dashboard.view": "See the dashboard figures",
+      "settings.view": "See school settings",
+      "settings.manage": "Change school settings"
     },
     "note": {
       "payroll.setSalary": "Never the person who pays it. Somebody who can both raise a salary and pay it is not meaningfully supervised.",
@@ -1420,7 +1437,13 @@
       "permissions.manage": "A role that can grant itself capabilities has no ceiling, and neither does anybody it appoints.",
       "sync.push": "Writes period definitions and promotion decisions straight from a device.",
       "students.view": "Names, admission numbers, classes and guardian contacts. No marks.",
-      "gate.scan": "In a small school the person on the gate at eight in the morning is whoever is standing there."
+      "gate.scan": "In a small school the person on the gate at eight in the morning is whoever is standing there.",
+      "approvals.decide": "Never the person who raised the request — that is enforced per request, by user, and holds for a super admin too.",
+      "approvals.configure": "The amounts above which a second signature is required.",
+      "settings.manage": "Grading, the academic year, ID cards. These decide how every mark in the school is interpreted.",
+      "students.viewFull": "The whole record in the admission console, as opposed to the roster fields the fee desk needs.",
+      "fees.refund": "Above the school's refund threshold this raises a request instead of paying the money out.",
+      "fees.waive": "Above the waiver threshold this raises a request instead of reducing the bill."
     }
   },
   "approvals": {
