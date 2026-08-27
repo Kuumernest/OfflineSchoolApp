@@ -11,16 +11,54 @@ const {
   effectiveFor,
   defaultsFor,
 } = require("../services/permissions.service");
+const { normalizeRole } = require("../config/roles");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Something to compare against when there is no user.
+ *
+ * Both failures answer "Invalid email or password", but they used to take
+ * markedly different times: a real account meant a bcrypt comparison at cost
+ * 12, and an unknown address returned immediately. That difference is
+ * measurable over the network, which turns the login form into a way of asking
+ * whether an address holds an account here — worth knowing for a school's
+ * bursar or head teacher, whose addresses are often public.
+ *
+ * Hashed once at startup rather than per request; the value is a constant and
+ * never matches anything.
+ */
+const DUMMY_HASH = bcrypt.hashSync("dummy-timing-guard-value", 12);
+
+/**
+ * An access token, short-lived while a temporary password is still in force.
+ *
+ * Thirty days is right for a teacher in a school with intermittent power and
+ * worse connectivity — being signed out is a real cost there. It is the wrong
+ * answer for an account whose password was typed into a chat message or read
+ * aloud across an office, which is how a temporary password reaches somebody
+ * when the welcome email does not arrive. Fifteen minutes bounds how long that
+ * credential is worth anything: change the password and the next token is a
+ * normal one.
+ *
+ * Ported from a helper in an auth controller that had this exactly right and
+ * was required by no file in the project — so the running app signed thirty
+ * days for everybody while the reasoning for not doing that sat in a comment
+ * nothing executed. That file has since been deleted, its three good ideas
+ * moved here: this, the timing guard below, and the reuse check in
+ * change-password.
+ */
 const signAccessToken = (user) =>
   jwt.sign(
     { id: user._id, role: user.role, schoolId: user.schoolId ?? null },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || "30d" }
+    {
+      expiresIn: user.mustResetPassword
+        ? "15m"
+        : (process.env.JWT_EXPIRES_IN || "30d"),
+    }
   );
 
 const signRefreshToken = (user) => {
@@ -44,9 +82,8 @@ const signRefreshToken = (user) => {
  * every capability-gated control in the console was drawn disabled or hidden
  * for everybody, school admins included.
  *
- * The correct resolver existed the whole time, in a controller nothing mounts:
- * src/controllers/auth.controller.js has withPermissions() and is required by
- * no file in the project. This is the mounted router.
+ * The correct resolver existed the whole time, in an auth controller nothing
+ * mounted — deleted now that what was worth keeping lives here.
  *
  * ── Why a failure here does not fail the login ────────────────────────────
  *
@@ -76,7 +113,12 @@ const serializeUser = (user, permissions = []) => ({
   name:              user.name              ?? null,
   email:             user.email             ?? null,
   enrollmentNo:      user.enrollmentNo      ?? null,
-  role:              user.role,
+  // Canonicalised for the same reason middleware/auth.js does it at the door:
+  // this payload is what both clients store and route on, and it is read
+  // straight off the document rather than through the middleware. A legacy
+  // "admin" row would otherwise hand the web app a role string its navigation
+  // does not know, and that user would be shown the not-for-you wall.
+  role:              normalizeRole(user.role) ?? user.role,
   schoolId:          user.schoolId          ?? null,
   isActive:          user.isActive          ?? true,
   mustResetPassword: user.mustResetPassword ?? false,
@@ -130,6 +172,8 @@ router.post("/login", async (req, res) => {
 
       if (!user) {
         console.log("User found: NO");
+        // Spend what a real comparison would have spent — see DUMMY_HASH.
+        await bcrypt.compare(password, DUMMY_HASH);
         return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
       if (user.role === "student") {
@@ -152,6 +196,7 @@ router.post("/login", async (req, res) => {
 
       if (!user) {
         console.log("Student found: NO");
+        await bcrypt.compare(password, DUMMY_HASH);
         return res.status(401).json({
           success: false,
           message: "Invalid enrollment number or password",
@@ -300,17 +345,27 @@ router.post("/change-password", authenticate, async (req, res) => {
       return res.status(404).json({ success: false, message: "User not found" });
     }
 
+    // Checked for everybody, including a first sign-in.
+    //
+    // It used to sit inside the branch below, so an account on a temporary
+    // password could "change" it to the same string: the flag cleared, the
+    // screen said success, and the credential that had been read out over a
+    // phone went on working — with nothing left to prompt a real change. That
+    // is the one case where reuse matters most.
+    const isSame = await bcrypt.compare(newPassword, user.password);
+    if (isSame) {
+      return res.status(400).json({
+        success: false,
+        message: "New password must be different from your current password",
+      });
+    }
+
+    // The current password is still waived for a forced reset: the user was
+    // signed in with something they may never have typed themselves, and the
+    // token that got them here is a fifteen-minute one.
     if (!user.mustResetPassword) {
       if (!currentPassword) {
         return res.status(400).json({ success: false, message: "currentPassword is required" });
-      }
-
-      const isSame = await bcrypt.compare(newPassword, user.password);
-      if (isSame) {
-        return res.status(400).json({
-          success: false,
-          message: "New password must be different from your current password",
-        });
       }
 
       const isMatch = await bcrypt.compare(currentPassword, user.password);

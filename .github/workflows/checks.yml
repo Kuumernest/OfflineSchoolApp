@@ -95,7 +95,7 @@ jobs:
             process.exit(bad ? 1 : 0);
           '
 
-      # 90 + 67 pure assertions, then 42 + 6 + 60 + 41 + 27 against the in-memory
+      # 90 + 67 pure assertions, then 42 + 6 + 60 + 41 + 42 against the in-memory
       # database. See backend/package.json for the individual suites.
       - name: npm run check:all
         run: npm run check:all
