@@ -42,13 +42,25 @@ export default function StaffOnly({ children }: { children: React.ReactNode }) {
   // No user at all is ProtectedRoute's business, not ours.
   if (!user) return <Navigate to="/login" replace />;
 
-  if (STAFF_ROLES.has(user.role)) return <>{children}</>;
-
-  // A student who still has to choose a password should finish that first —
-  // otherwise they land here and cannot act on the email that sent them.
+  // ── Anybody still on a temporary password finishes that first ───────────
+  //
+  // Above the staff check, and that ordering is the fix. This used to sit
+  // BELOW it, so the branch was unreachable for the only people who could get
+  // into the console: staff were handed their children and the flag was never
+  // consulted. A bursar created with a temporary password was prompted to
+  // change it by exactly one thing — an effect on LoginPage — which fires only
+  // while that page is mounted. Reload the console, open a bookmarked URL,
+  // restore a saved session, or navigate away from /change-password, and they
+  // carried on with the temporary password indefinitely, with nothing to come
+  // back and ask again.
+  //
+  // /change-password sits outside this gate, so there is no loop, and the page
+  // clears the flag before it navigates on.
   if (user.mustResetPassword) {
     return <Navigate to="/change-password" replace />;
   }
+
+  if (STAFF_ROLES.has(user.role)) return <>{children}</>;
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-10">

@@ -7,6 +7,10 @@ const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const User     = require("../db/models/User");
 const { authenticate } = require("../../middleware/auth");
+const {
+  effectiveFor,
+  defaultsFor,
+} = require("../services/permissions.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -28,7 +32,45 @@ const signRefreshToken = (user) => {
   );
 };
 
-const serializeUser = (user) => ({
+/**
+ * The caller's effective capabilities, for the client to draw a menu with.
+ *
+ * ── What was here before ──────────────────────────────────────────────────
+ *
+ * `permissions: user.permissions ?? []`. There is no permissions field on the
+ * User schema — capabilities are computed from the role and the school's
+ * overrides — so that expression evaluated to [] for every user who has ever
+ * signed in. The web app's usePermission() hook reads exactly this list, so
+ * every capability-gated control in the console was drawn disabled or hidden
+ * for everybody, school admins included.
+ *
+ * The correct resolver existed the whole time, in a controller nothing mounts:
+ * src/controllers/auth.controller.js has withPermissions() and is required by
+ * no file in the project. This is the mounted router.
+ *
+ * ── Why a failure here does not fail the login ────────────────────────────
+ *
+ * Resolving overrides reads the school. If that read fails, falling back to []
+ * would sign the user in with an empty menu — the same invisible failure, and
+ * harder to spot because it would be intermittent. defaultsFor() is pure and
+ * needs no database, and answers what the role holds before any school
+ * adjustment, so a school that has customised nothing gets exactly the right
+ * answer and one that has customised something gets a stale one rather than an
+ * empty one. Every route still checks for itself either way.
+ */
+const permissionsFor = async (user) => {
+  try {
+    return await effectiveFor(user.role, user.schoolId);
+  } catch (err) {
+    console.warn(
+      `permissions lookup failed for ${user.email ?? user._id} — ` +
+      `falling back to role defaults: ${err.message}`
+    );
+    return defaultsFor(user.role);
+  }
+};
+
+const serializeUser = (user, permissions = []) => ({
   id:                user._id,
   _id:               user._id,
   name:              user.name              ?? null,
@@ -38,19 +80,20 @@ const serializeUser = (user) => ({
   schoolId:          user.schoolId          ?? null,
   isActive:          user.isActive          ?? true,
   mustResetPassword: user.mustResetPassword ?? false,
-  permissions:       user.permissions       ?? [],
+  // Passed in, not read off the document — see permissionsFor above.
+  permissions,
   createdAt:         user.createdAt         ?? null,
   updatedAt:         user.updatedAt         ?? null,
 });
 
-const buildTokenResponse = (user) => {
+const buildTokenResponse = async (user) => {
   const token        = signAccessToken(user);
   const refreshToken = signRefreshToken(user);
   return {
     success: true,
     token,
     ...(refreshToken !== null ? { refreshToken } : {}),
-    user: serializeUser(user),
+    user: serializeUser(user, await permissionsFor(user)),
   };
 };
 
@@ -134,7 +177,7 @@ router.post("/login", async (req, res) => {
     }
 
     console.log(`🔐 Login success: ${user.name} (${user.role})`);
-    return res.json(buildTokenResponse(user));
+    return res.json(await buildTokenResponse(user));
 
   } catch (err) {
     console.error("Login error:", err.message);
@@ -182,7 +225,7 @@ router.post("/refresh", async (req, res, next) => {
     }
 
     console.log(`🔄 Token refreshed (A): ${user.enrollmentNo ?? user.email}`);
-    return res.json(buildTokenResponse(user));
+    return res.json(await buildTokenResponse(user));
 
   } catch (err) {
     console.error("Refresh error (A):", err.message);
@@ -201,7 +244,7 @@ router.post("/refresh", authenticate, async (req, res) => {
       });
     }
     console.log(`🔄 Token refreshed (B): ${user.enrollmentNo ?? user.email}`);
-    return res.json(buildTokenResponse(user));
+    return res.json(await buildTokenResponse(user));
   } catch (err) {
     console.error("Refresh error (B):", err.message);
     return res.status(500).json({ success: false, message: "Token refresh failed" });
@@ -292,7 +335,7 @@ router.post("/change-password", authenticate, async (req, res) => {
     return res.json({
       success: true,
       message: "Password updated successfully",
-      ...buildTokenResponse(user),
+      ...(await buildTokenResponse(user)),
     });
 
   } catch (err) {
@@ -317,7 +360,10 @@ router.get("/me", authenticate, async (req, res) => {
       return res.status(401).json({ success: false, message: "Account is deactivated" });
     }
 
-    return res.json({ success: true, user: serializeUser(user) });
+    return res.json({
+      success: true,
+      user: serializeUser(user, await permissionsFor(user)),
+    });
 
   } catch (err) {
     console.error("GET /auth/me error:", err.message);
