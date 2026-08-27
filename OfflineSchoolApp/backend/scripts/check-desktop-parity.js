@@ -345,6 +345,98 @@ const main = async () => {
     ["Form 1", "Form 2", "Zebra", "apple", "form 10"]);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- subjects, with the class and teacher joined on ---");
+
+  // Three collections merged, and the fixtures below exist to hit each decision
+  // the endpoint makes rather than to look like a school:
+  //
+  //   sub-1  a subject under `classId`, with a teacher who exists
+  //   sub-2  a subject under `class` instead — both spellings are in the data
+  //   sub-3  two assignments; the FIRST one read wins and the second is ignored
+  //   sub-4  an assignment recorded under teacherId, which the endpoint does
+  //          not read, so no teacher is attached
+  //   sub-5  a teacher id resolving to no user at all — populate leaves the id
+  //          behind with empty strings, which is different from no teacher
+  //   sub-6  a duplicate name in the same class, which the dedupe drops
+  //   sub-7  soft-deleted, and STILL returned, because this endpoint applies no
+  //          deleted filter and a mirror must not be cleverer than it
+  const Subject           = require("../src/db/models/Subject");
+  const TeacherAssignment = require("../src/db/models/TeacherAssignment");
+  const UserModel         = require("../src/db/models/User");
+  await Promise.all([Subject.init(), TeacherAssignment.init()]);
+
+  await UserModel.collection.insertMany([
+    { _id: "t1", schoolId: SCHOOL, name: "Mme Fomba", email: "fomba@x.com",
+      role: "teacher", isActive: true, password: "x", updatedAt: new Date() },
+    { _id: "t2", schoolId: SCHOOL, name: "M. Etoa", email: "etoa@x.com",
+      role: "teacher", isActive: true, password: "x", updatedAt: new Date() },
+  ]);
+
+  await Subject.collection.insertMany([
+    { _id: "sub-1", schoolId: SCHOOL, name: "Mathematics", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-2", schoolId: SCHOOL, name: "Biology",     class:   "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-3", schoolId: SCHOOL, name: "Chemistry",   classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-4", schoolId: SCHOOL, name: "Physics",     classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-5", schoolId: SCHOOL, name: "History",     classId: "cls-2", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-6", schoolId: SCHOOL, name: "mathematics", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-7", schoolId: SCHOOL, name: "Removed",     classId: "cls-1",
+      deletedAt: new Date("2026-05-01"), updatedAt: new Date() },
+    { _id: "sub-8", schoolId: "other-school", name: "Elsewhere", classId: "cls-9", deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  await TeacherAssignment.collection.insertMany([
+    { _id: "as-1", schoolId: SCHOOL, subject: "sub-1", teacher: "t1", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "as-2", schoolId: SCHOOL, subject: "sub-2", teacher: "t2", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    // Two on one subject: the first read wins.
+    { _id: "as-3", schoolId: SCHOOL, subject: "sub-3", teacher: "t1", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    { _id: "as-4", schoolId: SCHOOL, subject: "sub-3", teacher: "t2", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    // Recorded under teacherId, which the endpoint does not read.
+    { _id: "as-5", schoolId: SCHOOL, subject: "sub-4", teacherId: "t1", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    // A teacher who does not exist.
+    { _id: "as-6", schoolId: SCHOOL, subject: "sub-5", teacher: "ghost", classId: "cls-2", deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  for (const [name, Model] of Object.entries({
+    subject: Subject, teacherAssignment: TeacherAssignment, user: UserModel,
+  })) {
+    docs.putMany(name, JSON.parse(JSON.stringify(await Model.find({}).lean())));
+  }
+
+  await parity("all subjects",       `/api/admin/subjects?schoolId=${SCHOOL}`);
+  await parity("one class by classId", `/api/admin/subjects?schoolId=${SCHOOL}&classId=cls-1`);
+  // The other spelling: sub-2 is filed under `class`, and the endpoint matches
+  // either — asserted through cls-2 as well so both branches are exercised.
+  await parity("one class, the other spelling",
+    `/api/admin/subjects?schoolId=${SCHOOL}&classId=cls-2`);
+  await parity("a class with no subjects", `/api/admin/subjects?schoolId=${SCHOOL}&classId=cls-empty`);
+
+  // Stated outright, so a failure names the decision rather than showing a diff.
+  const subs = api.handle({
+    method: "GET", path: "/api/admin/subjects", query: { schoolId: SCHOOL },
+  }, { docs }).data.subjects;
+  const bySub = new Map(subs.map((s) => [s._id, s]));
+
+  check("a teacher is joined on by name and email",
+    [bySub.get("sub-1").teacher.name, bySub.get("sub-1").teacher.email],
+    ["Mme Fomba", "fomba@x.com"]);
+  check("the joined class is projected, not sent whole",
+    Object.keys(bySub.get("sub-1").classObj).sort(),
+    ["_id", "level", "name", "section"]);
+  check("two assignments on one subject shows the first",
+    bySub.get("sub-3").teacher._id, "t1");
+  check("an assignment under teacherId attaches no teacher",
+    bySub.get("sub-4").teacher, null);
+  // populate sets the field to null when it finds nothing, so the subject comes
+  // back unassigned rather than with a nameless teacher. This handler had it the
+  // other way round and this assertion is what corrected it.
+  check("a teacher id resolving to nobody yields no teacher at all",
+    bySub.get("sub-5").teacher, null);
+  check("the duplicate name in the same class is dropped",
+    subs.filter((s) => (s.name || "").toLowerCase() === "mathematics").length, 1);
+  check("and a soft-deleted subject is STILL returned, as the endpoint returns it",
+    Boolean(bySub.get("sub-7")), true);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the arrears list ---");
 
   // The screen a bursar works down, and the one where a wrong sum is read out

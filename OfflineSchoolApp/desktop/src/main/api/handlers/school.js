@@ -60,17 +60,141 @@ module.exports = [
     },
   },
 
-  // GET /api/admin/subjects is NOT here yet, and the reason is worth recording
-  // rather than leaving as an absence.
-  //
-  // It looks like a sibling of the classes list and is not. The endpoint joins
-  // Class records for a className, and populated TeacherAssignments to attach a
-  // teacher name and email to each subject — so the response carries three
-  // collections merged, not one listed. It also does NOT filter deleted rows,
-  // and it matches a classId against BOTH `class` and `classId`.
-  //
-  // A handler returning bare subject documents would be shaped almost right,
-  // which is the worst outcome available: the screen would render with an empty
-  // teacher column and nobody would know whether that meant "unassigned" or
-  // "offline". Left to the network until it can be done with the join.
+  {
+    route: "GET /api/admin/subjects",
+
+    /**
+     * Subjects, with their class and the teacher who takes them.
+     *
+     * Three collections merged rather than one listed, and almost every line
+     * below is reproducing a specific decision the endpoint makes rather than an
+     * obvious one:
+     *
+     *   · NO deleted filter. The endpoint does not apply one, so neither does
+     *     this — a mirror that "improved" on it would show fewer subjects than
+     *     the server and the difference would look like missing data.
+     *
+     *   · classId matches EITHER `class` OR `classId` on the document. Both
+     *     spellings are in the data and the endpoint accepts both.
+     *
+     *   · The joined class is PROJECTED to name, section and level. The mirror
+     *     holds whole class documents, so sending the whole thing would attach
+     *     fields the server never sends.
+     *
+     *   · The teacher map takes the FIRST assignment for a subject and ignores
+     *     the rest. Two teachers on one subject is possible in the data, and the
+     *     endpoint shows one of them — the first it happens to read.
+     *
+     *   · A teacher id that resolves to no user produces NO teacher. That is
+     *     what populate does when it finds nothing — it sets the field to null
+     *     rather than leaving the id behind, so the endpoint's `if (t)` fails
+     *     and the subject comes back unassigned. This handler had it the other
+     *     way round at first, attaching a teacher with empty strings for name
+     *     and email, and the parity harness caught it.
+     *
+     *     One consequence is worth naming: locally, "no such user" also covers
+     *     "that user has not synced to this machine yet", so a freshly-installed
+     *     desktop can show a subject as unassigned when the server knows who
+     *     teaches it. It corrects itself when the user collection arrives, and
+     *     the alternative — a teacher with a blank name — would be a worse thing
+     *     to put on a screen.
+     *
+     *   · Finally deduped by lower-cased name plus class, first wins.
+     */
+    handler: ({ query }, { docs }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : null;
+      if (!schoolId) return null;
+
+      const classId = query.classId ? String(query.classId).trim() : null;
+
+      // No deletedAt condition — see the note above.
+      let raw = docs.find("subject", { schoolId });
+
+      if (classId) {
+        raw = raw.filter((s) =>
+          String(s.class ?? "") === classId || String(s.classId ?? "") === classId);
+      }
+
+      raw = raw.sort(byMongoName);
+      if (!raw.length) return ok({ subjects: [] });
+
+      // ── The class join, projected as the server projects it ──────────────
+      const classIds = [...new Set(
+        raw.map((s) => s.class || s.classId).filter(Boolean).map(String)
+      )];
+
+      const classMap = new Map();
+      for (const id of classIds) {
+        const record = docs.get("class", id);
+        if (!record) continue;
+        // .select("name section level") — plus _id, which Mongo always returns.
+        classMap.set(id, {
+          _id:     record._id,
+          name:    record.name,
+          section: record.section,
+          level:   record.level,
+        });
+      }
+
+      // ── The teacher join ────────────────────────────────────────────────
+      const subjectIds = new Set(raw.map((s) => String(s._id)));
+      const assignments = docs.find("teacherAssignment", { schoolId });
+
+      const subjectTeacher = new Map();
+      for (const a of assignments) {
+        const sid = String(a.subject?._id ?? a.subject ?? "");
+        if (!sid || !subjectIds.has(sid) || subjectTeacher.has(sid)) continue;
+
+        // `teacher` only. The endpoint reads a.teacher and nothing else, so an
+        // assignment recorded under teacherId attaches no teacher there either —
+        // reproducing that rather than being cleverer than it.
+        const ref = a.teacher;
+        if (!ref) continue;
+
+        const id   = String(ref?._id ?? ref);
+        const user = docs.get("user", id);
+
+        // No user, no teacher — populate sets the field to null when it finds
+        // nothing, so the endpoint attaches nothing. See the note above.
+        if (!user) continue;
+
+        subjectTeacher.set(sid, {
+          _id:   id,
+          name:  user.name  ?? "",
+          email: user.email ?? "",
+        });
+      }
+
+      const subjects = raw.map((s) => {
+        const canonicalClassId = s.class || s.classId || null;
+        const classRecord = canonicalClassId
+          ? classMap.get(String(canonicalClassId)) ?? null
+          : null;
+        const teacher = subjectTeacher.get(String(s._id)) ?? null;
+
+        return {
+          ...s,
+          class:    canonicalClassId,
+          classId:  canonicalClassId,
+          classObj: classRecord ? { _id: String(classRecord._id), ...classRecord } : null,
+          teacherId:   teacher?._id  || s.teacherId  || s.teacher_id || null,
+          teacher_id:  teacher?._id  || s.teacher_id || s.teacherId  || null,
+          teacherName: teacher?.name || s.teacherName || null,
+          teacher:     teacher       || null,
+        };
+      });
+
+      // Deduped on name and class, first kept. Two subjects with the same name
+      // in the same class is a data-entry artefact the endpoint hides.
+      const seen = new Set();
+      const deduped = subjects.filter((s) => {
+        const key = `${(s.name || "").toLowerCase().trim()}|${s.class || s.classId || ""}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      return ok({ subjects: deduped });
+    },
+  },
 ];
