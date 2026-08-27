@@ -191,13 +191,36 @@ exports.pullChanges = async (req, res) => {
 
     const since = sinceFilter(effectiveDate);
 
+    // ── Who is asking ────────────────────────────────────────────────────
+    //
+    // This route scoped hard by TENANT and not at all by ROLE, so a pupil's
+    // phone received the same payload as the head teacher's: every approved
+    // student's name, email, phone, GUARDIAN NAME and GUARDIAN PHONE, plus
+    // every teacher's email and account state.
+    //
+    // The tenancy guard above is untouched — it was always right. What is added
+    // is a narrower slice for a student caller. Narrowed rather than refused,
+    // because the student app is built on this payload and blocking the route
+    // would take every student device offline permanently.
+    const role       = req.user?.role ?? null;
+    const isStudent  = role === "student";
+    const callerId   = String(req.user?._id ?? req.user?.id ?? "");
+
+    // A student keeps teacher NAMES — the timetable shows who teaches each
+    // period and is unreadable without them — and loses everything else. An
+    // email address and a mustResetPassword flag together tell a pupil which
+    // staff accounts have never been signed into.
+    const teacherFields = isStudent
+      ? "name role schoolId createdAt updatedAt"
+      : "name email role schoolId isActive mustResetPassword enrollmentNo createdAt updatedAt";
+
     // ── Fetch all entity types in parallel ───────────────────────────────
     const [classes, teachers, subjects, periods, assignments, rawStudents] =
       await Promise.all([
         Class.find({ schoolId, ...since, ...NOT_DELETED }).lean(),
 
         User.find({ schoolId, role: "teacher", ...since })
-          .select("name email role schoolId isActive mustResetPassword enrollmentNo createdAt updatedAt")
+          .select(teacherFields)
           .lean(),
 
         Subject.find({ schoolId, ...since, ...NOT_DELETED }).lean(),
@@ -215,6 +238,17 @@ exports.pullChanges = async (req, res) => {
               schoolId,
               status:   "approved",
               isActive: true,
+              // A student gets their own row and nobody else's. Their own is
+              // still sent rather than dropped, because the local students
+              // table is what several student screens read their class and
+              // admission number from — an empty table would break them.
+              //
+              // Matched on either key because the link between a User and a
+              // Student is recorded as userId on most rows and as the shared
+              // _id on older ones.
+              ...(isStudent
+                ? { $or: [{ userId: callerId }, { _id: callerId }] }
+                : {}),
               ...since,
               ...NOT_DELETED,
             }).lean()
@@ -224,9 +258,10 @@ exports.pullChanges = async (req, res) => {
     const students = rawStudents.map(normaliseStudentForSync).filter(Boolean);
 
     console.log(
-      `📦 Pull results — classes: ${classes.length}, teachers: ${teachers.length}, ` +
-      `subjects: ${subjects.length}, periods: ${periods.length}, ` +
-      `assignments: ${assignments.length}, students: ${students.length}`
+      `📦 Pull results (${role ?? "unknown"}) — classes: ${classes.length}, ` +
+      `teachers: ${teachers.length}, subjects: ${subjects.length}, ` +
+      `periods: ${periods.length}, assignments: ${assignments.length}, ` +
+      `students: ${students.length}`
     );
 
     return res.json({

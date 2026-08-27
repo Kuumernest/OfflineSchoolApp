@@ -526,7 +526,9 @@
     "creatingIn": "Creating in {{count}} class…",
     "creatingIn_other": "Creating in {{count}} classes…",
     "classCount": "{{count}} class",
-    "classCount_other": "{{count}} classes"
+    "classCount_other": "{{count}} classes",
+    "noneAssigned": "No subjects assigned to you yet",
+    "noneAssignedHint": "Subjects appear here once an administrator assigns you to teach them."
   },
   "classes": {
     "title": "Classes",

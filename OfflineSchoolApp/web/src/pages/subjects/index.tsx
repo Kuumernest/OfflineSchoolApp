@@ -167,6 +167,15 @@ interface SubjectCardProps {
   onEdit:          (s: Subject) => void;
   onDelete:        (s: Subject) => void;
   hideClassBadge?: boolean;
+  /**
+   * Whether to draw Edit and Delete at all.
+   *
+   * Creating and deleting a subject posts to /admin/subjects, which a teacher
+   * cannot reach. Drawn anyway they are two buttons that throw — and Delete
+   * that throws after a confirmation dialog is worse than most, because the
+   * user has already decided and been asked to be sure.
+   */
+  canManage?:      boolean;
 }
 
 const SubjectCard = ({
@@ -174,6 +183,7 @@ const SubjectCard = ({
   onEdit,
   onDelete,
   hideClassBadge = false,
+  canManage = true,
 }: SubjectCardProps) => {
   const { t } = useTranslation();
   return <div className="flex items-center gap-4 rounded-2xl border border-gray-200 bg-white p-4">
@@ -213,22 +223,24 @@ const SubjectCard = ({
       </div>
     </div>
 
-    <div className="flex shrink-0 items-center gap-1">
-      <button
-        onClick={() => onEdit(subject)}
-        className="rounded-lg p-2 text-indigo-500 transition-colors hover:bg-indigo-50"
-        title={t("subjects.edit")}
-      >
-        <Pencil size={17} />
-      </button>
-      <button
-        onClick={() => onDelete(subject)}
-        className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
-        title={t("subjects.delete")}
-      >
-        <Trash2 size={17} />
-      </button>
-    </div>
+    {canManage && (
+      <div className="flex shrink-0 items-center gap-1">
+        <button
+          onClick={() => onEdit(subject)}
+          className="rounded-lg p-2 text-indigo-500 transition-colors hover:bg-indigo-50"
+          title={t("subjects.edit")}
+        >
+          <Pencil size={17} />
+        </button>
+        <button
+          onClick={() => onDelete(subject)}
+          className="rounded-lg p-2 text-red-500 transition-colors hover:bg-red-50"
+          title={t("subjects.delete")}
+        >
+          <Trash2 size={17} />
+        </button>
+      </div>
+    )}
   </div>;
 };
 
@@ -372,6 +384,17 @@ export default function AdminSubjectsPage() {
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
 
+  /**
+   * Whether this person may change the subject catalogue.
+   *
+   * A teacher reaches this page to see what they have been assigned to teach.
+   * Creating, editing and deleting a subject all post to /admin/subjects, which
+   * they cannot reach — so the controls are not drawn rather than drawn and
+   * broken. The server refuses either way; this is about not making a promise
+   * on its behalf.
+   */
+  const canManage = user?.role !== "teacher";
+
   const [subjects,        setSubjects]        = useState<Subject[]>([]);
   const [classes,         setClasses]         = useState<Class[]>([]);
   const [selectedClassId, setSelectedClassId] = useState<string | null>(null);
@@ -391,6 +414,11 @@ export default function AdminSubjectsPage() {
         subjectService.getAll({
           schoolId,
           classId: selectedClassId ?? undefined,
+          // A teacher gets the subjects assigned to them; everybody else gets
+          // the school's. The sidebar has offered teachers this page all along
+          // and it answered 403 for them, because the service asked the
+          // admin-only route regardless of who was calling.
+          role: user?.role,
         }),
         fetchClasses(schoolId),
       ]);
@@ -492,17 +520,26 @@ export default function AdminSubjectsPage() {
       return (
         <EmptyState
           icon={BookOpen}
-          title={t("subjects.none")}
+          title={canManage ? t("subjects.none") : t("subjects.noneAssigned")}
           subtitle={
-            selectedClassId
-              ? "No subjects in this class yet. Add one to get started."
-              : "Add your first subject and link it to a class."
+            !canManage
+              ? t("subjects.noneAssignedHint")
+              : selectedClassId
+                ? "No subjects in this class yet. Add one to get started."
+                : "Add your first subject and link it to a class."
           }
-          action={{
-            label:   t("subjects.add"),
-            color:   "#059669",
-            onClick: () => navigate("/subjects/add"),
-          }}
+          // No "Add your first subject" for somebody who cannot add one. An
+          // empty page that invites an action it will then refuse is the worst
+          // version of this screen for a teacher with no assignments yet.
+          action={
+            canManage
+              ? {
+                  label:   t("subjects.add"),
+                  color:   "#059669",
+                  onClick: () => navigate("/subjects/add"),
+                }
+              : undefined
+          }
         />
       );
     }
@@ -521,6 +558,7 @@ export default function AdminSubjectsPage() {
               onEdit={(s) => navigate(`/subjects/edit/${s.id}`)}
               onDelete={setDeleteTarget}
               hideClassBadge
+              canManage={canManage}
             />
           ))}
         </ClassSection>
@@ -535,6 +573,7 @@ export default function AdminSubjectsPage() {
             subject={subject}
             onEdit={(s) => navigate(`/subjects/edit/${s.id}`)}
             onDelete={setDeleteTarget}
+            canManage={canManage}
           />
         ))}
       </div>

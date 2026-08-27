@@ -63,6 +63,12 @@ export interface GetAllSubjectsParams {
   teacherId?: string;
   limit?:     number;
   page?:      number;
+  /**
+   * The caller's role. When it is "teacher" the request goes to
+   * /teacher/my-subjects instead of /admin/subjects — see fetchSubjects for
+   * why these are two different lists rather than one route with a filter.
+   */
+  role?:      string;
 }
 
 // ─── Response envelopes ───────────────────────────────────────────────────────
@@ -101,10 +107,33 @@ export const createSubject = async (
   return unwrapSingle(data);
 };
 
-export const fetchSubjects = async (schoolId: string): Promise<RawSubject[]> => {
+/**
+ * The subject list, from whichever endpoint the caller is entitled to.
+ *
+ * The sidebar has always offered teachers a Subjects link, and this function
+ * has always asked /admin/subjects — which is admin-only. So for a teacher the
+ * link rendered a page of 403s: the nav promised something the API refused.
+ *
+ * Fixed on the client rather than by widening the admin route, because the two
+ * are not the same list. /admin/subjects is every subject in the school, which
+ * is an administrator's view. A teacher wants the subjects they have been
+ * assigned to teach, and /teacher/my-subjects already answers exactly that from
+ * their TeacherAssignment rows. Opening the admin route to teachers would have
+ * given them the whole catalogue and called it a fix.
+ *
+ * Both endpoints answer { subjects: [...] }, so unwrapList handles either.
+ */
+export const fetchSubjects = async (
+  schoolId: string,
+  role?: string
+): Promise<RawSubject[]> => {
+  const mine = role === "teacher";
+
   const { data } = await api.get<SubjectListEnvelope | RawSubject[]>(
-    "/admin/subjects",
-    { params: { schoolId } }
+    mine ? "/teacher/my-subjects" : "/admin/subjects",
+    // my-subjects reads the school from the token; passing schoolId would be
+    // ignored, and passing it anyway invites the idea that it could be changed.
+    mine ? undefined : { params: { schoolId } }
   );
   return unwrapList(data);
 };
@@ -134,10 +163,16 @@ export const deleteSubject = async (subjectId: string): Promise<void> => {
 // ─── Service object ───────────────────────────────────────────────────────────
 
 export const subjectService = {
-  getAll: async (params: GetAllSubjectsParams): Promise<RawSubject[]> => {
+  getAll: async ({ role, ...params }: GetAllSubjectsParams): Promise<RawSubject[]> => {
+    const mine = role === "teacher";
+
     const { data } = await api.get<SubjectListEnvelope | RawSubject[]>(
-      "/admin/subjects",
-      { params }
+      mine ? "/teacher/my-subjects" : "/admin/subjects",
+      // my-subjects takes the teacher and the school from the token. classId is
+      // dropped with the rest deliberately: the endpoint already returns only
+      // the classes they teach, and a filter it ignores would leave the class
+      // selector on the page looking broken rather than absent.
+      mine ? undefined : { params }
     );
     return unwrapList(data);
   },

@@ -526,7 +526,9 @@
     "creatingIn": "Création dans {{count}} classe…",
     "creatingIn_other": "Création dans {{count}} classes…",
     "classCount": "{{count}} classe",
-    "classCount_other": "{{count}} classes"
+    "classCount_other": "{{count}} classes",
+    "noneAssigned": "Aucune matière ne vous est encore attribuée",
+    "noneAssignedHint": "Les matières apparaissent ici dès qu'un administrateur vous les attribue."
   },
   "classes": {
     "title": "Classes",
