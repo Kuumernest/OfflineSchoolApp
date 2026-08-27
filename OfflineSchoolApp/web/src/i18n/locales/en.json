@@ -1421,7 +1421,8 @@
       "settings.view": "See school settings",
       "settings.manage": "Change school settings",
       "fees.remind": "Send fee reminders",
-      "fees.penalize": "Add late fees"
+      "fees.penalize": "Add late fees",
+      "fees.plan": "Agree instalment plans"
     },
     "note": {
       "payroll.setSalary": "Never the person who pays it. Somebody who can both raise a salary and pay it is not meaningfully supervised.",
@@ -1446,7 +1447,8 @@
       "students.viewFull": "The whole record in the admission console, as opposed to the roster fields the fee desk needs.",
       "fees.refund": "Above the school's refund threshold this raises a request instead of paying the money out.",
       "fees.waive": "Above the waiver threshold this raises a request instead of reducing the bill.",
-      "fees.penalize": "Adds money to a family's bill, so it is never automatic — the bursar raises them from a preview."
+      "fees.penalize": "Adds money to a family's bill, so it is never automatic — the bursar raises them from a preview.",
+      "fees.plan": "Changes when fees are due, never how much is owed. A family keeping to a plan is not chased and not charged late fees."
     }
   },
   "approvals": {
@@ -1654,6 +1656,35 @@
     "penaltiesRaised": "{{count}} late fee added",
     "penaltiesRaised_other": "{{count}} late fees added",
     "penaltyFailed": "The late fees could not be added"
+  },
+  "plan": {
+    "title": "Instalment plan",
+    "none": "This family pays the whole balance by the due date on their fee structure.",
+    "agree": "Agree a plan",
+    "agreeTitle": "Agree an instalment plan",
+    "agreeBlurb": "Split the {{amount}} outstanding across several dates. This changes when the fees are due, not how much is owed — use a waiver to reduce a bill.",
+    "split": "Split into",
+    "due": "Due",
+    "addInstalment": "Add an instalment",
+    "totalMatches": "The instalments match what is outstanding",
+    "totalMismatch": "The instalments come to {{planned}}, but {{outstanding}} is outstanding",
+    "reason": "Why the school agreed to this",
+    "reasonHint": "Asked about a year later by an auditor, or by the next bursar deciding whether to grant another.",
+    "reasonPlaceholder": "Hardship — father lost work, agreed with the head",
+    "agreed": "Instalment plan agreed",
+    "agreeFailed": "The plan could not be saved",
+    "onTrack": "On track",
+    "onTrackHint": "While this family keeps to the plan they are not sent reminders and not charged late fees.",
+    "behind": "{{amount}} behind",
+    "behindHint": "They have fallen behind the agreed schedule, so reminders and late fees apply again.",
+    "summary": "{{count}} instalments, {{total}} in total",
+    "summary_other": "{{count}} instalments, {{total}} in total",
+    "cancel": "Cancel the plan",
+    "cancelTitle": "Cancel this instalment plan",
+    "cancelBlurb": "From now on this family is measured against the original due date on their fee structure, which means reminders and late fees apply as normal. The plan stays on the record.",
+    "cancelPlaceholder": "Stopped paying, no contact since November",
+    "cancelled": "Plan cancelled",
+    "cancelFailed": "The plan could not be cancelled"
   },
   "method": {
     "cash": "Cash",

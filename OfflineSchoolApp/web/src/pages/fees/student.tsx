@@ -32,6 +32,7 @@ import {
   reversePayment,
 } from "@/services/fee.service";
 import type { PaymentMethod } from "@/types/fees.types";
+import PaymentPlanPanel from "@/pages/fees/PaymentPlanPanel";
 
 const METHODS: PaymentMethod[] = [
   "cash", "mobile_money", "bank", "cheque", "waiver", "other",
@@ -151,6 +152,19 @@ export default function StudentFeeAccountPage() {
             </Button>
           </>
         }
+      />
+
+      {/* The arrangement, directly under the balance it reschedules.
+          Renders nothing when there is no plan and nothing outstanding, and
+          nothing at all if the school has taken fees.plan away from this role. */}
+      <PaymentPlanPanel
+        schoolId={schoolId}
+        studentId={studentId}
+        academicYear={year}
+        balance={balance}
+        paid={totals?.paid ?? 0}
+        plan={account?.plan ?? null}
+        status={account?.planStatus ?? null}
       />
 
       {/* Balance first — it is the reason anyone opens this page. */}

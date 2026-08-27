@@ -146,7 +146,21 @@ const TEMPLATES = {
             ? "Please settle it at the school office by that date."
             : "Merci de le régler au secrétariat avant cette date.");
 
-    const lines = [opening, middle, closing].filter(Boolean);
+    // A family on an agreed schedule is told which schedule is meant. Without
+    // this the message reads as a demand for the whole balance, which is the
+    // opposite of what the arrangement said and exactly the confusion that
+    // makes a parent stop opening these.
+    const arrangement = !d.onPlan
+      ? null
+      : Number(d.planBehindBy) > 0
+        ? (en
+            ? `Under the payment arrangement agreed with the school, <b>${money(d.planBehindBy, lang)}</b> of this should have been paid by now.`
+            : `Selon l'échéancier convenu avec l'établissement, <b>${money(d.planBehindBy, lang)}</b> de cette somme devait déjà être réglée.`)
+        : (en
+            ? `This is the next instalment of the arrangement agreed with the school.`
+            : `Il s'agit de la prochaine échéance de l'échéancier convenu avec l'établissement.`);
+
+    const lines = [opening, middle, arrangement, closing].filter(Boolean);
 
     const subject = en
       ? (late ? "Overdue school fees" : "School fees due")

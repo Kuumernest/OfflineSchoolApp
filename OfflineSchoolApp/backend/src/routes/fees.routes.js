@@ -8,6 +8,7 @@ const { v4: uuidv4 } = require("uuid");
 const { requirePermission } = require("../../middleware/permissions");
 
 const FeeStructure = require("../db/models/FeeStructure");
+const PaymentPlan  = require("../db/models/PaymentPlan");
 const FeeCharge    = require("../db/models/FeeCharge");
 const FeePayment   = require("../db/models/FeePayment");
 const Student      = require("../db/models/Student");
@@ -66,6 +67,7 @@ const canRead   = requirePermission("fees.view");
 const canWrite  = requirePermission("fees.manage");
 const canRefund   = requirePermission("fees.refund");
 const canWaive    = requirePermission("fees.waive");
+const canPlan     = requirePermission("fees.plan");
 const canRemind   = requirePermission("fees.remind");
 const canPenalize = requirePermission("fees.penalize");
 
@@ -292,13 +294,31 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
   const scope = { schoolId, studentId, deletedAt: null };
   if (academicYear) scope.academicYear = academicYear;
 
-  const [charges, payments, totals] = await Promise.all([
+  const [charges, payments, totals, plan] = await Promise.all([
     FeeCharge.find(scope).sort({ createdAt: 1 }).lean(),
     FeePayment.find(scope).sort({ receivedAt: 1 }).lean(),
     balanceFor({ schoolId, studentId, academicYear }),
+    // The active plan, if there is one. Returned with the ledger rather than
+    // from a second call because the two are read together every time: what a
+    // family owes is meaningless on this screen without knowing what they
+    // agreed to pay and when.
+    PaymentPlan.findOne({
+      schoolId, studentId, status: "active", deletedAt: null,
+      ...(academicYear ? { academicYear } : {}),
+    }).lean(),
   ]);
 
-  return res.json({ success: true, data: { charges, payments, totals } });
+  // Where they stand against it, computed here so the browser never has to do
+  // the cumulative arithmetic — and so the ledger screen and the arrears list
+  // cannot disagree about whether a family is behind.
+  const planStatus = plan
+    ? reminders.planStatus(plan, totals.paid, new Date())
+    : null;
+
+  return res.json({
+    success: true,
+    data: { charges, payments, totals, plan, planStatus },
+  });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -425,6 +445,176 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
   });
 
   return res.status(201).json({ success: true, data: reversal, totals });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INSTALMENT PLANS
+//
+// An arrangement with ONE family: they cannot pay the term in one go, so the
+// school agrees a schedule of dated amounts instead.
+//
+// Not a school-wide payment schedule — a school billing in three tranches
+// already has that in three fee structures, one per term, each with its own due
+// date. Two mechanisms for the same thing would give one deadline two homes.
+//
+// A plan changes WHEN, never HOW MUCH. Nothing here writes to the ledger, and
+// balanceFor() does not know this collection exists. A school that wants to
+// reduce a bill uses a waiver, which is a different act with an approval behind
+// it. What a plan changes is the date reminders and late fees measure against.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// GET /api/fees/plans?academicYear=&studentId=&status=
+router.get("/plans", canPlan, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const filter = { schoolId, deletedAt: null };
+  if (req.query.studentId)    filter.studentId    = req.query.studentId;
+  if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+  filter.status = req.query.status && req.query.status !== "all"
+    ? req.query.status
+    : { $in: ["active", "completed", "cancelled"] };
+
+  const rows = await PaymentPlan.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(500)
+    .lean();
+
+  return res.json({ success: true, count: rows.length, data: rows });
+}));
+
+// POST /api/fees/plans
+router.post("/plans", canPlan, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const { studentId, academicYear, term = null } = req.body;
+  if (!studentId)    return bad(res, "studentId is required");
+  if (!academicYear) return bad(res, "academicYear is required");
+
+  const reason = req.body.reason ? String(req.body.reason).trim() : null;
+  if (!reason) {
+    // Required, like a refund and a waiver. A plan is a concession the school
+    // granted, and "why" is the question asked about it a year later — by an
+    // auditor, or by the next bursar wondering whether to grant another.
+    return bad(res, "A reason is required for an instalment plan", "REASON_REQUIRED");
+  }
+
+  if (!Array.isArray(req.body.instalments) || req.body.instalments.length < 2) {
+    return bad(
+      res,
+      "A plan needs at least two instalments — one is just a due date",
+      "TOO_FEW_INSTALMENTS"
+    );
+  }
+
+  const student = await Student.findOne({ _id: studentId, schoolId, deletedAt: null })
+    .select("_id").lean();
+  if (!student) {
+    return res.status(404).json({
+      success: false, code: "STUDENT_NOT_FOUND",
+      message: "No student with that id in this school",
+    });
+  }
+
+  const instalments = [];
+  for (const [i, raw] of req.body.instalments.entries()) {
+    const amount = asWholeAmount(raw?.amount);
+    if (amount === null || amount <= 0) {
+      return bad(
+        res,
+        `Instalment ${i + 1} must be a whole number of XAF greater than zero`,
+        "INVALID_AMOUNT"
+      );
+    }
+
+    const dueDate = asDueDate(raw?.dueDate);
+    if (dueDate === undefined || dueDate === null) {
+      return bad(
+        res,
+        `Instalment ${i + 1} needs a date like 2026-09-15`,
+        "INVALID_DATE"
+      );
+    }
+
+    instalments.push({ seq: i + 1, amount, dueDate });
+  }
+
+  // The schedule has to add up to what is actually owed. A plan for less would
+  // quietly forgive the difference — which is a waiver, and waivers go through
+  // approval. A plan for more would have the family chased for money the
+  // ledger says they do not owe.
+  const totals = await balanceFor({ schoolId, studentId, academicYear });
+  const planned = instalments.reduce((s, i) => s + i.amount, 0);
+
+  if (totals.balance <= 0) {
+    return bad(
+      res,
+      "This family has nothing outstanding for that year",
+      "NOTHING_OUTSTANDING"
+    );
+  }
+  if (planned !== totals.balance) {
+    return bad(
+      res,
+      `The instalments add up to ${planned}, but ${totals.balance} is outstanding. ` +
+      `A plan reschedules what is owed; it cannot change the amount — use a waiver for that.`,
+      "PLAN_TOTAL_MISMATCH"
+    );
+  }
+
+  try {
+    const plan = await PaymentPlan.create({
+      schoolId, studentId, academicYear, term,
+      instalments, reason,
+      agreedBy: req.user?._id ? String(req.user._id) : null,
+    });
+    return res.status(201).json({ success: true, data: plan });
+  } catch (err) {
+    if (err?.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        code:    "PLAN_EXISTS",
+        message: "This family already has an active plan for that year and term. " +
+                 "Cancel it before agreeing a new one.",
+      });
+    }
+    throw err;
+  }
+}));
+
+// POST /api/fees/plans/:id/cancel
+router.post("/plans/:id/cancel", canPlan, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const reason = req.body.reason ? String(req.body.reason).trim() : null;
+  if (!reason) {
+    return bad(res, "A reason is required to cancel a plan", "REASON_REQUIRED");
+  }
+
+  const plan = await PaymentPlan.findOne({
+    _id: req.params.id, schoolId, deletedAt: null,
+  });
+  if (!plan) {
+    return res.status(404).json({
+      success: false, code: "NOT_FOUND", message: "Plan not found",
+    });
+  }
+  if (plan.status !== "active") {
+    return bad(res, `This plan is already ${plan.status}`, "NOT_ACTIVE");
+  }
+
+  // Cancelled, never deleted. "We gave them a plan and they broke it" is
+  // something a school needs to be able to see next year — and from the moment
+  // it is cancelled the family is measured against the original due date again.
+  plan.status          = "cancelled";
+  plan.cancelledBy     = req.user?._id ? String(req.user._id) : null;
+  plan.cancelledAt     = new Date();
+  plan.cancelledReason = reason;
+  await plan.save();
+
+  return res.json({ success: true, data: plan });
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════

@@ -38,6 +38,7 @@
 
 const FeeCharge   = require("../db/models/FeeCharge");
 const FeeStructure = require("../db/models/FeeStructure");
+const PaymentPlan = require("../db/models/PaymentPlan");
 const Student     = require("../db/models/Student");
 const Notification = require("../db/models/Notification");
 
@@ -94,6 +95,94 @@ const fail = (message, code, status = 400) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AN AGREED SCHEDULE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Where a family stands against an instalment plan.
+ *
+ * The one piece of arithmetic both jobs share, and the reason it is a function
+ * rather than two similar loops: reminders decide who to write to and late fees
+ * decide who to charge, and those two must never disagree about whether a family
+ * is keeping to its arrangement.
+ *
+ * CUMULATIVE, not per instalment. By the third date a family should have paid
+ * the first three instalments in total — so somebody who paid double on the
+ * first and nothing on the second is exactly on track. Checking instalments one
+ * by one would flag them as behind, which is wrong and is precisely the kind of
+ * wrong that makes a bursar stop trusting the list.
+ *
+ * @param {{instalments: Array<{seq:number,amount:number,dueDate:Date}>}} plan
+ * @param {number} paid  what the family has actually paid, from the ledger
+ * @param {Date}   asOf
+ * @returns {{
+ *   dueByNow: number, behindBy: number, isBehind: boolean,
+ *   nextDue: Date|null, nextAmount: number, missedSince: Date|null, settled: boolean
+ * }}
+ */
+function planStatus(plan, paid, asOf = new Date()) {
+  const schedule = [...(plan?.instalments ?? [])].sort((a, b) => a.seq - b.seq);
+
+  let dueByNow    = 0;
+  let nextDue     = null;
+  let nextAmount  = 0;
+  let missedSince = null;
+  let running     = 0;
+
+  for (const inst of schedule) {
+    running += inst.amount;
+
+    // Due if its day has ended. endOfDay for the same reason as everywhere
+    // else: an instalment due on the 15th is not late on the 15th.
+    if (endOfDay(inst.dueDate) < asOf) {
+      dueByNow = running;
+      // The earliest date by which the family had fallen short. Walking
+      // forwards means the FIRST shortfall wins, which is the date a reminder
+      // should quote — not the most recent one.
+      if (missedSince === null && paid < running) missedSince = inst.dueDate;
+    } else if (nextDue === null) {
+      nextDue    = inst.dueDate;
+      nextAmount = inst.amount;
+    }
+  }
+
+  const behindBy = Math.max(0, dueByNow - paid);
+
+  return {
+    dueByNow,
+    behindBy,
+    isBehind: behindBy > 0,
+    nextDue,
+    nextAmount,
+    missedSince,
+    /** Every instalment covered, whether or not the dates have passed. */
+    settled: paid >= running,
+  };
+}
+
+/**
+ * Active plans for a set of students, keyed by student id.
+ *
+ * One query rather than one per student: the arrears list is the screen this
+ * feeds, and a school with two hundred families on plans would otherwise make
+ * two hundred round trips to draw it.
+ */
+async function activePlans({ schoolId, studentIds, academicYear = null }) {
+  if (!studentIds?.length) return new Map();
+
+  const filter = {
+    schoolId,
+    studentId: { $in: studentIds },
+    status:    "active",
+    deletedAt: null,
+  };
+  if (academicYear) filter.academicYear = academicYear;
+
+  const plans = await PaymentPlan.find(filter).lean();
+  return new Map(plans.map((p) => [String(p.studentId), p]));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // WHO OWES, AND WHEN IT WAS DUE
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -146,12 +235,13 @@ async function candidates({
 
   const studentIds = dated.map((d) => String(d._id));
 
-  const [students, balances] = await Promise.all([
+  const [students, balances, plans] = await Promise.all([
     Student.find({ _id: { $in: studentIds }, schoolId, deletedAt: null })
       .select("_id studentName name firstName lastName enrollmentNo classId " +
               "guardianName guardianPhone guardianEmail email phone")
       .lean(),
     balancesFor({ schoolId, studentIds, academicYear }),
+    activePlans({ schoolId, studentIds, academicYear }),
   ]);
 
   const byId = new Map(students.map((s) => [String(s._id), s]));
@@ -171,9 +261,35 @@ async function candidates({
     const balance = totals?.balance ?? 0;
     if (balance <= 0) continue;   // settled, or in credit
 
-    const due       = d.earliestDue;
-    const isOverdue = endOfDay(due) < asOf;
-    const isDueSoon = !isOverdue && due <= soonCutoff;
+    // ── An agreed plan replaces the structure's deadline ─────────────────
+    //
+    // This is the point of plans. A family who cannot pay the term in one go
+    // and has agreed four dates with the school must be measured against those
+    // dates — chasing them on the original deadline while they keep to an
+    // arrangement the school itself proposed is worse than having no plans.
+    //
+    // "Behind" is cumulative; see planStatus.
+    const plan   = plans.get(id);
+    const status = plan ? planStatus(plan, totals?.paid ?? 0, asOf) : null;
+
+    let due, isOverdue, isDueSoon;
+
+    if (status) {
+      // Behind on the plan: the deadline to quote is the first date by which
+      // they had fallen short, not the last one to pass.
+      isOverdue = status.isBehind;
+      due       = status.isBehind ? status.missedSince : status.nextDue;
+
+      // A family on track with nothing left to pay is not a candidate at all —
+      // and one with no next date has finished the schedule.
+      if (!due) continue;
+
+      isDueSoon = !isOverdue && due <= soonCutoff;
+    } else {
+      due       = d.earliestDue;
+      isOverdue = endOfDay(due) < asOf;
+      isDueSoon = !isOverdue && due <= soonCutoff;
+    }
 
     if (mode === "overdue" && !isOverdue) continue;
     if (mode === "dueSoon" && !isDueSoon) continue;
@@ -192,6 +308,15 @@ async function candidates({
       datedCharges: d.datedCharges,
       isOverdue,
       daysOverdue: isOverdue ? daysBetween(asOf, due) : 0,
+
+      // The plan, when there is one. Reported rather than folded into
+      // `balance`: what a family owes and what they were meant to have paid by
+      // now are two different numbers, and a screen that conflates them cannot
+      // explain either.
+      onPlan:       Boolean(status),
+      planBehindBy: status?.behindBy ?? 0,
+      planNextDue:  status?.nextDue ?? null,
+      planDueByNow: status?.dueByNow ?? 0,
       /**
        * Whether a message can actually reach this family.
        *
@@ -287,6 +412,11 @@ async function sendReminders({
           dueDate:     r.earliestDue,
           isOverdue:   r.isOverdue,
           daysOverdue: r.daysOverdue,
+          // Only for a family on a plan, so the template can quote the
+          // arrangement instead of the original bill.
+          onPlan:       r.onPlan,
+          planBehindBy: r.planBehindBy,
+          planNextDue:  r.planNextDue,
         },
       });
       queued++;
@@ -380,11 +510,12 @@ async function penaltyPreview({ schoolId, academicYear = null, structureId = nul
     const ids  = billed.map(String).filter((id) => !done.has(id));
     if (!ids.length) continue;
 
-    const [students, balances] = await Promise.all([
+    const [students, balances, plans] = await Promise.all([
       Student.find({ _id: { $in: ids }, schoolId, deletedAt: null })
         .select("_id studentName name firstName lastName enrollmentNo classId")
         .lean(),
       balancesFor({ schoolId, studentIds: ids, academicYear: structure.academicYear }),
+      activePlans({ schoolId, studentIds: ids, academicYear: structure.academicYear }),
     ]);
 
     const byId = new Map(students.map((s) => [String(s._id), s]));
@@ -393,10 +524,27 @@ async function penaltyPreview({ schoolId, academicYear = null, structureId = nul
       const student = byId.get(id);
       if (!student) continue;
 
-      const outstanding = balances.get(id)?.balance ?? 0;
+      const totals      = balances.get(id);
+      const outstanding = totals?.balance ?? 0;
       // Paid up. A family that settled during the grace period owes no penalty,
       // which is the whole point of having one.
       if (outstanding <= 0) continue;
+
+      // ── An agreed plan, being kept to, is an exemption ─────────────────
+      //
+      // A late fee for missing a deadline the school itself replaced would make
+      // the arrangement worthless. So a family on an active plan is charged
+      // only if they are behind on THAT schedule.
+      //
+      // Not a blanket exemption: a plan-holder who has paid nothing is behind
+      // from the first date, and is penalised like anybody else. If a school
+      // wants to stop honouring an arrangement entirely it cancels the plan,
+      // which is a deliberate act with a reason attached.
+      const plan = plans.get(id);
+      if (plan) {
+        const status = planStatus(plan, totals?.paid ?? 0, asOf);
+        if (!status.isBehind) continue;
+      }
 
       const amount = penaltyFor(structure, outstanding);
       if (amount <= 0) continue;
@@ -416,6 +564,8 @@ async function penaltyPreview({ schoolId, academicYear = null, structureId = nul
         mode:        structure.penalty.mode,
         rate:        structure.penalty.amount,
         amount,
+        /** So a preview can say why a plan-holder is on the list. */
+        onPlan:      Boolean(plan),
       });
     }
   }
@@ -495,6 +645,8 @@ async function applyPenalties({
 }
 
 module.exports = {
+  planStatus,
+  activePlans,
   REMINDER_COOLDOWN_DAYS,
   DUE_SOON_DAYS,
   PENALTY_CODE,

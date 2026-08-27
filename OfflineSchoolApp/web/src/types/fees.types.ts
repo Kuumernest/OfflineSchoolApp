@@ -95,10 +95,60 @@ export interface FeeTotals {
   balance: number;
 }
 
+/** One dated amount in an agreed schedule. */
+export interface Instalment {
+  seq:     number;
+  amount:  number;
+  dueDate: string;
+}
+
+/**
+ * An agreement with ONE family to pay across several dates.
+ *
+ * Changes WHEN the fees are due, never how much is owed — the ledger does not
+ * know this exists. Reminders and late fees measure a plan-holder against these
+ * dates instead of the fee structure's due date.
+ */
+export interface PaymentPlan {
+  _id:          string;
+  studentId:    string;
+  academicYear: string;
+  term:         string | null;
+  instalments:  Instalment[];
+  status:       "active" | "completed" | "cancelled";
+  reason:       string | null;
+  total?:       number;
+  finalDueDate?: string | null;
+  agreedAt?:    string;
+  cancelledAt?: string | null;
+  cancelledReason?: string | null;
+}
+
+/**
+ * Where a family stands against their plan, computed server-side.
+ *
+ * Cumulative: by the third date they should have paid the first three
+ * instalments in total, so paying double early and nothing next is on track.
+ * Never recomputed in the browser — the ledger screen and the arrears list must
+ * not be able to disagree about whether a family is behind.
+ */
+export interface PlanStatus {
+  dueByNow:    number;
+  behindBy:    number;
+  isBehind:    boolean;
+  nextDue:     string | null;
+  nextAmount:  number;
+  missedSince: string | null;
+  settled:     boolean;
+}
+
 export interface StudentFeeAccount {
   charges:  FeeCharge[];
   payments: FeePayment[];
   totals:   FeeTotals;
+  /** The active plan, if the family is on one. */
+  plan?:       PaymentPlan | null;
+  planStatus?: PlanStatus | null;
 }
 
 export interface OutstandingRow extends FeeTotals {

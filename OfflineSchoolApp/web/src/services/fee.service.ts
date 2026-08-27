@@ -1,6 +1,7 @@
 // web/src/services/fee.service.ts
 import api from "@/services/api";
 import type {
+  PaymentPlan,
   FeeStructure,
   FeeItem,
   StudentFeeAccount,
@@ -129,6 +130,43 @@ export async function reversePayment(
     reversal: unwrap<FeePayment>(data),
     totals:   (data as { totals: FeeTotals }).totals,
   };
+}
+
+// ─── Instalment plans ─────────────────────────────────────────────────────────
+
+export async function fetchPlans(
+  schoolId: string,
+  opts: { studentId?: string; academicYear?: string; status?: string } = {}
+): Promise<PaymentPlan[]> {
+  const { data } = await api.get(`${BASE}/plans${qs({ schoolId, ...opts })}`);
+  return (data?.data as PaymentPlan[]) ?? [];
+}
+
+/**
+ * Agree a plan.
+ *
+ * The instalments must add up to exactly what is outstanding — the server
+ * refuses anything else, because a plan for less would quietly forgive the
+ * difference (that is a waiver, and waivers go through approval) and a plan for
+ * more would chase money the ledger says is not owed.
+ */
+export async function createPlan(payload: {
+  schoolId:     string;
+  studentId:    string;
+  academicYear: string;
+  term?:        string | null;
+  reason:       string;
+  instalments:  Array<{ amount: number; dueDate: string }>;
+}): Promise<PaymentPlan> {
+  const { data } = await api.post(`${BASE}/plans`, payload);
+  return unwrap<PaymentPlan>(data);
+}
+
+export async function cancelPlan(
+  id: string, schoolId: string, reason: string
+): Promise<PaymentPlan> {
+  const { data } = await api.post(`${BASE}/plans/${id}/cancel`, { schoolId, reason });
+  return unwrap<PaymentPlan>(data);
 }
 
 // ─── Chasing arrears ──────────────────────────────────────────────────────────

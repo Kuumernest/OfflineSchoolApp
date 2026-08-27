@@ -1421,7 +1421,8 @@
       "settings.view": "Consulter les paramètres",
       "settings.manage": "Modifier les paramètres",
       "fees.remind": "Envoyer des rappels de frais",
-      "fees.penalize": "Ajouter des pénalités de retard"
+      "fees.penalize": "Ajouter des pénalités de retard",
+      "fees.plan": "Convenir des échéanciers"
     },
     "note": {
       "payroll.setSalary": "Jamais la personne qui verse la paie. Quelqu'un qui peut à la fois augmenter un salaire et le payer n'est pas réellement contrôlé.",
@@ -1446,7 +1447,8 @@
       "students.viewFull": "Le dossier complet dans la console d'admission, par opposition aux données d'identité dont le service financier a besoin.",
       "fees.refund": "Au-delà du seuil de remboursement, cette action crée une demande au lieu de verser l'argent.",
       "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture.",
-      "fees.penalize": "Ajoute de l'argent à la facture d'une famille : jamais automatique, l'économe les crée depuis un aperçu."
+      "fees.penalize": "Ajoute de l'argent à la facture d'une famille : jamais automatique, l'économe les crée depuis un aperçu.",
+      "fees.plan": "Modifie la date d'exigibilité, jamais le montant dû. Une famille qui respecte son échéancier n'est ni relancée ni pénalisée."
     }
   },
   "approvals": {
@@ -1654,6 +1656,35 @@
     "penaltiesRaised": "{{count}} pénalité ajoutée",
     "penaltiesRaised_other": "{{count}} pénalités ajoutées",
     "penaltyFailed": "Les pénalités n'ont pas pu être ajoutées"
+  },
+  "plan": {
+    "title": "Échéancier",
+    "none": "Cette famille règle la totalité du solde avant l'échéance prévue par sa grille tarifaire.",
+    "agree": "Convenir d'un échéancier",
+    "agreeTitle": "Convenir d'un échéancier",
+    "agreeBlurb": "Répartissez les {{amount}} restants sur plusieurs dates. Cela modifie la date d'exigibilité, pas le montant dû — utilisez une exonération pour réduire une facture.",
+    "split": "Répartir en",
+    "due": "Échéance",
+    "addInstalment": "Ajouter une échéance",
+    "totalMatches": "Les échéances correspondent au solde dû",
+    "totalMismatch": "Les échéances totalisent {{planned}}, mais {{outstanding}} restent dus",
+    "reason": "Motif de l'accord",
+    "reasonHint": "Question posée un an plus tard par un auditeur, ou par le prochain économe qui devra décider d'en accorder un autre.",
+    "reasonPlaceholder": "Difficultés — le père a perdu son emploi, accord du chef d'établissement",
+    "agreed": "Échéancier enregistré",
+    "agreeFailed": "L'échéancier n'a pas pu être enregistré",
+    "onTrack": "À jour",
+    "onTrackHint": "Tant que cette famille respecte l'échéancier, elle ne reçoit pas de rappels et n'est pas pénalisée.",
+    "behind": "{{amount}} de retard",
+    "behindHint": "Elle a pris du retard sur l'échéancier convenu : les rappels et les pénalités s'appliquent de nouveau.",
+    "summary": "{{count}} échéances, {{total}} au total",
+    "summary_other": "{{count}} échéances, {{total}} au total",
+    "cancel": "Annuler l'échéancier",
+    "cancelTitle": "Annuler cet échéancier",
+    "cancelBlurb": "À partir de maintenant, cette famille est évaluée selon l'échéance d'origine de sa grille tarifaire : rappels et pénalités s'appliquent normalement. L'échéancier reste au dossier.",
+    "cancelPlaceholder": "Paiements interrompus, sans nouvelles depuis novembre",
+    "cancelled": "Échéancier annulé",
+    "cancelFailed": "L'échéancier n'a pas pu être annulé"
   },
   "method": {
     "cash": "Espèces",

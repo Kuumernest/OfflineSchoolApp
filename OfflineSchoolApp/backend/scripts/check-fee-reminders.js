@@ -28,6 +28,7 @@ const reminders = require("../src/services/feeReminders.service");
 const { balanceFor } = require("../src/services/fees.service");
 
 const FeeStructure = require("../src/db/models/FeeStructure");
+const PaymentPlan  = require("../src/db/models/PaymentPlan");
 const FeeCharge    = require("../src/db/models/FeeCharge");
 const FeePayment   = require("../src/db/models/FeePayment");
 const Notification = require("../src/db/models/Notification");
@@ -87,6 +88,7 @@ const main = async () => {
     FeeCharge.syncIndexes(),
     FeeStructure.syncIndexes(),
     FeePayment.syncIndexes(),
+    PaymentPlan.syncIndexes(),
   ]);
 
   const school = await School.create({ name: "Test School" });
@@ -302,6 +304,148 @@ const main = async () => {
     (await reminders.candidates({
       schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2026-06-01"),
     })).some((r) => r.name === "Efe Second"), true);
+
+  // ── INSTALMENT PLANS ─────────────────────────────────────────────────────
+  //
+  // The point of a plan: a family who cannot pay in one go agrees dates with
+  // the school and is measured against THOSE. Chasing them on the original
+  // deadline while they keep to an arrangement the school itself proposed is
+  // worse than having no plans at all, so these are the assertions that matter
+  // most in this file.
+  console.log("--- the cumulative rule ---");
+
+  const schedule = [
+    { seq: 1, amount: 20_000, dueDate: day("2025-09-15") },
+    { seq: 2, amount: 20_000, dueDate: day("2025-10-15") },
+    { seq: 3, amount: 20_000, dueDate: day("2025-11-15") },
+  ];
+  const status = (paidSoFar, asOf) =>
+    reminders.planStatus({ instalments: schedule }, paidSoFar, day(asOf));
+
+  check("before the first date, nothing is due",
+    status(0, "2025-09-10").dueByNow, 0);
+  check("and they are not behind",
+    status(0, "2025-09-10").isBehind, false);
+  check("the day after, 20,000 was due",
+    status(0, "2025-09-16").dueByNow, 20_000);
+  check("so they are behind by that much",
+    status(0, "2025-09-16").behindBy, 20_000);
+  check("paying it on time clears them",
+    status(20_000, "2025-09-16").isBehind, false);
+
+  // The assertion the whole design turns on.
+  check("paying double early and nothing next is ON TRACK",
+    status(40_000, "2025-10-16").isBehind, false);
+  check("and the next date is the third",
+    status(40_000, "2025-10-16").nextDue.toISOString().slice(0, 10), "2025-11-15");
+  check("the quoted date is the FIRST shortfall, not the last",
+    status(0, "2025-11-16").missedSince.toISOString().slice(0, 10), "2025-09-15");
+  check("paying everything up front settles it",
+    status(60_000, "2025-11-16").settled, true);
+
+  console.log("--- a family on a plan is measured against the plan ---");
+
+  const onPlan = await makeStudent(schoolId, "Fola OnPlan");
+  await FeeCharge.create({
+    schoolId, studentId: String(onPlan._id), academicYear: YEAR, term: "3",
+    structureId: null, code: "TUIT3", label: "Tuition 3",
+    amount: 60_000, dueDate: day("2025-09-15"),
+  });
+
+  await PaymentPlan.create({
+    schoolId, studentId: String(onPlan._id), academicYear: YEAR, term: null,
+    instalments: schedule, reason: "Hardship, agreed with the head",
+  });
+  await FeePayment.create({
+    schoolId, studentId: String(onPlan._id), academicYear: YEAR,
+    amount: 20_000, method: "cash",
+  });
+
+  const chased = await reminders.candidates({
+    schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-01"),
+  });
+  check("keeping to the plan means not chased",
+    chased.some((r) => r.name === "Fola OnPlan"), false);
+
+  const soonOnPlan = await reminders.candidates({
+    schoolId, academicYear: YEAR, mode: "dueSoon", asOf: day("2025-10-05"),
+  });
+  const fola = soonOnPlan.find((r) => r.name === "Fola OnPlan");
+  check("but due soon against the NEXT instalment", Boolean(fola), true);
+  check("which is the plan date, not the bill date",
+    fola.earliestDue.toISOString().slice(0, 10), "2025-10-15");
+  check("and flagged as being on a plan", fola.onPlan, true);
+
+  const fallenBehind = await reminders.candidates({
+    schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-20"),
+  });
+  const behind = fallenBehind.find((r) => r.name === "Fola OnPlan");
+  check("missing an instalment does put them on the list", Boolean(behind), true);
+  check("behind by the second instalment", behind.planBehindBy, 20_000);
+  check("and the full balance is still reported", behind.balance, 40_000);
+
+  console.log("--- a plan being kept to exempts them from late fees ---");
+
+  const penaltyStructure = await FeeStructure.create({
+    schoolId, academicYear: YEAR, term: "4", classIds: [],
+    items:   [{ code: "TUIT4", label: "Tuition 4", amount: 60_000 }],
+    dueDate: day("2025-09-15"),
+    penalty: { mode: "fixed", amount: 5_000, graceDays: 0 },
+  });
+
+  const exempt = await makeStudent(schoolId, "Gita Exempt");
+  const liable = await makeStudent(schoolId, "Hama Liable");
+
+  for (const s of [exempt, liable]) {
+    await FeeCharge.create({
+      schoolId, studentId: String(s._id), academicYear: YEAR, term: "4",
+      structureId: String(penaltyStructure._id), code: "TUIT4",
+      label: "Tuition 4", amount: 60_000, dueDate: penaltyStructure.dueDate,
+    });
+    await PaymentPlan.create({
+      schoolId, studentId: String(s._id), academicYear: YEAR, term: "4",
+      instalments: schedule, reason: "Agreed",
+    });
+  }
+
+  // Both have a plan; only one is keeping to it.
+  await FeePayment.create({
+    schoolId, studentId: String(exempt._id), academicYear: YEAR,
+    amount: 20_000, method: "cash",
+  });
+
+  const liableList = await reminders.penaltyPreview({
+    schoolId, academicYear: YEAR, structureId: String(penaltyStructure._id),
+    asOf: day("2025-10-01"),
+  });
+  check("a plan being kept to is exempt",
+    liableList.some((r) => r.name === "Gita Exempt"), false);
+  check("a plan being broken is not",
+    liableList.some((r) => r.name === "Hama Liable"), true);
+  check("and the row says it is a plan-holder",
+    liableList.find((r) => r.name === "Hama Liable").onPlan, true);
+
+  console.log("--- cancelling a plan restores the original deadline ---");
+  await PaymentPlan.updateOne(
+    { schoolId, studentId: String(exempt._id) },
+    { $set: { status: "cancelled", cancelledReason: "Broke the arrangement" } }
+  );
+  const afterCancel = await reminders.penaltyPreview({
+    schoolId, academicYear: YEAR, structureId: String(penaltyStructure._id),
+    asOf: day("2025-10-01"),
+  });
+  check("now liable like anybody else",
+    afterCancel.some((r) => r.name === "Gita Exempt"), true);
+
+  console.log("--- one active plan per student per term ---");
+  let dupeCode = "no error";
+  try {
+    await PaymentPlan.create({
+      schoolId, studentId: String(liable._id), academicYear: YEAR, term: "4",
+      instalments: schedule, reason: "A second one",
+    });
+  } catch (err) { dupeCode = err.code; }
+  check("a second active plan is refused", dupeCode, 11000);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
 

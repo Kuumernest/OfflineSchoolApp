@@ -136,6 +136,9 @@ const PERMISSION_DEFS = [
   p("fees.waive",       "fees", FINANCE_ROLES, true,
     "Reduce or write off a charge. Above the waiver threshold this raises a " +
     "request rather than reducing the bill."),
+  p("fees.plan",        "fees", FINANCE_ROLES, true,
+    "Agree an instalment plan with a family. Changes when the fees are due, " +
+    "never how much is owed — a reduction is a waiver, which needs approval."),
   p("fees.remind",      "fees", FINANCE_ROLES, true,
     "Send a family a reminder about what is outstanding. Reads the due date " +
     "entered on the fee structure to decide who is late."),
