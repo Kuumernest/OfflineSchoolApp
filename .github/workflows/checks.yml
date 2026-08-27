@@ -173,10 +173,16 @@ jobs:
 
       - run: npm ci
 
-      # There is no tsc pass and no eslint config here, so this is the floor:
-      # every screen and service parses through babel-preset-expo (what the
-      # bundler does, so a failure here cannot load on a device), and the two
-      # locale files match key for key. On a phone a missing key renders as the
-      # raw key, offline, with nobody watching a console.
+      # Every screen and service parses through babel-preset-expo (what the
+      # bundler does, so a failure here cannot load on a device), the two locale
+      # files match key for key — on a phone a missing key renders as the raw
+      # key, offline, with nobody watching a console — and, since this package
+      # now type-checks cleanly, tsc runs too.
+      #
+      # It could not before: index.ts imported "./App", which resolved to the
+      # app/ directory by case-insensitive luck on Windows and would have failed
+      # on Linux. That file was dead — package.json points "main" at
+      # expo-router/entry — and deleting it left tsc with nothing to complain
+      # about, so it became worth running.
       - name: npm run check
         run: npm run check

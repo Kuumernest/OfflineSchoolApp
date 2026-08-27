@@ -47,7 +47,8 @@
     "typescript": "~5.8.3"
   },
   "scripts": {
-    "check": "node scripts/check.js",
+    "check": "node scripts/check.js && npm run check:types",
+    "check:types": "tsc --noEmit -p tsconfig.json",
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
