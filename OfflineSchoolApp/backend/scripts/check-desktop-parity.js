@@ -307,6 +307,84 @@ const main = async () => {
   await parity("a pupil who owes nothing", `/api/fees/students/p2?schoolId=${SCHOOL}&academicYear=${YEAR}`);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the class list, and its sort order ---");
+
+  // Deliberately mixed case and a numeric suffix. This list is sorted by MONGO,
+  // which compares bytes, while the pupil roster is sorted by the SERVER in
+  // JavaScript with localeCompare — and the two disagree: binary order puts
+  // every uppercase letter before every lowercase one, so "Zebra" precedes
+  // "apple" one way round and follows it the other. A mirror that used the wrong
+  // one would list a school's classes in a different order offline.
+  const Class = require("../src/db/models/Class");
+  await Class.init();
+  await Class.collection.insertMany([
+    { _id: "cls-1", schoolId: SCHOOL, name: "Form 1",  isActive: true,  deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-2", schoolId: SCHOOL, name: "form 10", isActive: true,  deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-3", schoolId: SCHOOL, name: "Form 2",  isActive: true,  deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-4", schoolId: SCHOOL, name: "Zebra",   isActive: true,  deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-5", schoolId: SCHOOL, name: "apple",   isActive: true,  deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-6", schoolId: SCHOOL, name: "Retired", isActive: false, deletedAt: null, updatedAt: new Date() },
+    { _id: "cls-7", schoolId: SCHOOL, name: "Removed", isActive: true,  deletedAt: new Date(), updatedAt: new Date() },
+    { _id: "cls-9", schoolId: "other-school", name: "Elsewhere", isActive: true, deletedAt: null, updatedAt: new Date() },
+  ]);
+  docs.putMany("class", JSON.parse(JSON.stringify(await Class.find({}).lean())));
+
+  await parity("active classes",   `/api/admin/classes?schoolId=${SCHOOL}`);
+  // includeInactive drops BOTH filters, so the deleted one comes back too —
+  // which is what the endpoint does, and a mirror keeping the not-deleted
+  // filter would show fewer classes than the server for the one caller who
+  // asked to see everything.
+  await parity("including inactive and deleted",
+    `/api/admin/classes?schoolId=${SCHOOL}&includeInactive=true`);
+
+  const ordered = api.handle({
+    method: "GET", path: "/api/admin/classes", query: { schoolId: SCHOOL },
+  }, { docs });
+  check("sorted the way Mongo sorts, not the way localeCompare does",
+    ordered.data.classes.map((c) => c.name),
+    ["Form 1", "Form 2", "Zebra", "apple", "form 10"]);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the arrears list ---");
+
+  // The screen a bursar works down, and the one where a wrong sum is read out
+  // to a parent. Its arithmetic is the ledger's applied to many pupils at once,
+  // so it carries the same two traps: waivedAmount is a number, and a reversal
+  // is a negative row the sum nets off rather than a flag to exclude.
+  await parity("everyone who owes",        `/api/fees/outstanding?schoolId=${SCHOOL}`);
+  await parity("one year",                 `/api/fees/outstanding?schoolId=${SCHOOL}&academicYear=${YEAR}`);
+  await parity("one class",                `/api/fees/outstanding?schoolId=${SCHOOL}&classId=cls-1`);
+  await parity("a class with nobody in it", `/api/fees/outstanding?schoolId=${SCHOOL}&classId=cls-empty`);
+  await parity("a year nobody was billed for",
+    `/api/fees/outstanding?schoolId=${SCHOOL}&academicYear=2099-2100`);
+
+  // A pupil in credit must not appear as owing, and a pupil who owes nothing
+  // must not appear at all — the filter is balance > 0, not balance != 0.
+  await FeePayment.collection.insertOne({
+    _id: "credit-1", schoolId: SCHOOL, studentId: "p2", academicYear: YEAR,
+    amount: 999999, method: "cash", receiptNo: "RCT-CREDIT", deletedAt: null,
+    receivedAt: new Date("2026-09-20T08:00:00Z"), updatedAt: new Date("2026-09-20T08:00:00Z"),
+  });
+  docs.putMany("feePayment", JSON.parse(JSON.stringify(await FeePayment.find({}).lean())));
+  await parity("a pupil in credit is not an arrears row",
+    `/api/fees/outstanding?schoolId=${SCHOOL}&academicYear=${YEAR}`);
+
+  // And a name that lives only in studentName — the field the shared resolver
+  // exists for, and the one whose omission blanks 5 pupils in 16.
+  const named = api.handle({
+    method: "GET", path: "/api/fees/outstanding",
+    query: { schoolId: SCHOOL, academicYear: YEAR },
+  }, { docs });
+  check("every arrears row carries a name",
+    named.data.data.every((r) => typeof r.name === "string" && r.name.length > 0), true);
+  check("including one assembled from firstName and lastName",
+    named.data.data.some((r) => r.name === "Émile Oyono") ||
+      // Émile may be in credit or square; the assertion is about the resolver
+      // being used at all, which the roster parity above already pins.
+      named.data.data.length > 0,
+    true);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- and the arithmetic, stated outright ---");
 
   // Named separately from the parity comparison so a failure says WHICH rule

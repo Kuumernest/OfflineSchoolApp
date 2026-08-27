@@ -32,6 +32,8 @@
  * Which is the argument for checking parity rather than reimplementing carefully.
  */
 
+const { displayName } = require("../../../../../shared/studentName");
+
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 /**
@@ -107,6 +109,100 @@ module.exports = [
       // `data`, not `students`-style aliases: this endpoint answers
       // { success, count, data }.
       return ok({ count: sorted.length, data: sorted });
+    },
+  },
+
+  {
+    route: "GET /api/fees/outstanding",
+
+    /**
+     * Who owes money — the screen a bursar works down.
+     *
+     * The arithmetic is balancesFor() in the server's fees.service, which is the
+     * same sums as one pupil's totals applied to many, and it has the same two
+     * traps: waivedAmount is a number, and a reversal is a negative row that the
+     * sum nets off rather than a flag to exclude.
+     *
+     * One SQL statement per collection rather than one per pupil, for the same
+     * reason the server uses two aggregations: a school with six hundred pupils
+     * would otherwise mean twelve hundred queries to draw one screen.
+     */
+    handler: ({ query }, { docs }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : null;
+      if (!schoolId) return null;
+
+      const academicYear = query.academicYear || null;
+      const classId      = query.classId || null;
+
+      // status: "approved" — an applicant who has not been admitted is not
+      // somebody the school chases for fees.
+      const students = docs.find("student", {
+        schoolId, deletedAt: null, status: "approved",
+        ...(classId ? { classId } : {}),
+      });
+      if (!students.length) {
+        return ok({ count: 0, totalOutstanding: 0, data: [] });
+      }
+
+      const yearClause = academicYear ? "AND json_extract(json,'$.academicYear') = ?" : "";
+      const yearParam  = academicYear ? [academicYear] : [];
+
+      const charged = docs.sql(`
+        SELECT json_extract(json,'$.studentId') AS studentId,
+               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS charged,
+               COALESCE(SUM(COALESCE(json_extract(json,'$.waivedAmount'), 0)), 0) AS waived
+        FROM docs
+        WHERE collection = 'feeCharge'
+          AND school_id = ?
+          AND deleted_at IS NULL
+          AND json_extract(json,'$.voidedAt') IS NULL
+          ${yearClause}
+        GROUP BY studentId
+      `, schoolId, ...yearParam);
+
+      const paid = docs.sql(`
+        SELECT json_extract(json,'$.studentId') AS studentId,
+               COALESCE(SUM(json_extract(json,'$.amount')), 0) AS paid
+        FROM docs
+        WHERE collection = 'feePayment'
+          AND school_id = ?
+          AND deleted_at IS NULL
+          ${yearClause}
+        GROUP BY studentId
+      `, schoolId, ...yearParam);
+
+      const balances = new Map();
+      const ensure = (id) => {
+        if (!balances.has(id)) balances.set(id, { charged: 0, waived: 0, paid: 0, balance: 0 });
+        return balances.get(id);
+      };
+      for (const row of charged) {
+        const b = ensure(String(row.studentId));
+        b.charged = row.charged ?? 0;
+        b.waived  = row.waived  ?? 0;
+      }
+      for (const row of paid) ensure(String(row.studentId)).paid = row.paid ?? 0;
+      for (const b of balances.values()) b.balance = b.charged - b.waived - b.paid;
+
+      const rows = students
+        .map((s) => ({
+          studentId:    String(s._id),
+          // The shared resolver, not a field read: a pupil's name lives in one
+          // of three fields and reading the wrong one blanks them.
+          name:         displayName(s) || null,
+          enrollmentNo: s.enrollmentNo ?? null,
+          classId:      s.classId ?? null,
+          ...(balances.get(String(s._id)) ?? { charged: 0, waived: 0, paid: 0, balance: 0 }),
+        }))
+        // A zero balance is not an arrears row, and a credit is not either.
+        .filter((r) => r.balance > 0)
+        .sort((a, b) => b.balance - a.balance);
+
+      return ok({
+        count: rows.length,
+        totalOutstanding: rows.reduce((sum, r) => sum + r.balance, 0),
+        data: rows,
+      });
     },
   },
 

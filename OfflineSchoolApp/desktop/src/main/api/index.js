@@ -37,6 +37,7 @@
 const reads = [
   ...require("./handlers/students"),
   ...require("./handlers/fees"),
+  ...require("./handlers/school"),
 ];
 
 /**

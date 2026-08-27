@@ -176,11 +176,27 @@ const transactor = (db) => {
  *   { deletedAt: null }                    IS NULL
  *   { voidedAt: { not: null } }            IS NOT NULL
  *   { amount: { gt: 0 } }                  gt | gte | lt | lte
+ *   { isActive: true }                      booleans, see bindable() below
  */
 const documents = (db) => {
   const tx = transactor(db);
 
   // ── Reading ──────────────────────────────────────────────────────────────
+
+  /**
+   * A value SQLite will accept as a parameter.
+   *
+   * SQLite has no boolean type and node:sqlite refuses to bind one — "Provided
+   * value cannot be bound to SQLite parameter". JSON booleans come back from
+   * json_extract as 1 and 0, so that is what a boolean has to become.
+   *
+   * Found by a handler filtering { isActive: true }, which threw and fell
+   * through to the network — so the screen worked and the offline path silently
+   * did not. Every boolean field in this schema would have done the same:
+   * isActive on a class, isOptional on a fee item, waived on a charge.
+   */
+  const bindable = (value) =>
+    typeof value === "boolean" ? (value ? 1 : 0) : value;
 
   /** Turns one field's condition into SQL plus its parameters. */
   const clause = (field, cond) => {
@@ -197,22 +213,25 @@ const documents = (db) => {
     if (cond === null)      return { sql: `${ref} IS NULL`,     params: [] };
     if (cond === undefined) return { sql: "1=1",                params: [] };
 
-    if (typeof cond !== "object") return { sql: `${ref} = ?`, params: [cond] };
+    if (typeof cond !== "object") return { sql: `${ref} = ?`, params: [bindable(cond)] };
 
     if ("in" in cond) {
       const list = cond.in ?? [];
       // An empty IN () is not valid SQL and, more importantly, means "nothing
       // matches" — which has to be said explicitly or SQLite would error.
       if (!list.length) return { sql: "1=0", params: [] };
-      return { sql: `${ref} IN (${list.map(() => "?").join(",")})`, params: list };
+      return {
+        sql:    `${ref} IN (${list.map(() => "?").join(",")})`,
+        params: list.map(bindable),
+      };
     }
     if ("not" in cond) {
       return cond.not === null
         ? { sql: `${ref} IS NOT NULL`, params: [] }
-        : { sql: `${ref} <> ?`,        params: [cond.not] };
+        : { sql: `${ref} <> ?`,        params: [bindable(cond.not)] };
     }
     for (const [op, sql] of [["gt", ">"], ["gte", ">="], ["lt", "<"], ["lte", "<="]]) {
-      if (op in cond) return { sql: `${ref} ${sql} ?`, params: [cond[op]] };
+      if (op in cond) return { sql: `${ref} ${sql} ?`, params: [bindable(cond[op])] };
     }
 
     throw new Error(`Unsupported filter on "${field}": ${JSON.stringify(cond)}`);

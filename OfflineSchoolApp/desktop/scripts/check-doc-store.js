@@ -151,6 +151,30 @@ const main = () => {
   check("an empty IN matches nothing rather than erroring",
     docs.find("feeCharge", { code: { in: [] } }).length, 0);
 
+  // ── Booleans ─────────────────────────────────────────────────────────────
+  //
+  // SQLite has no boolean type and node:sqlite refuses to bind one, while
+  // json_extract returns JSON booleans as 1 and 0. Filtering { isActive: true }
+  // therefore threw — and because a throwing handler falls through to the
+  // network, the screen worked and the offline path silently did not. Every
+  // boolean in this schema was affected: isActive on a class, isOptional on a
+  // fee item, waived on a charge.
+  docs.putMany("class", [
+    { _id: "k1", schoolId: "sch-1", name: "Form 1", isActive: true,  deletedAt: null },
+    { _id: "k2", schoolId: "sch-1", name: "Form 2", isActive: false, deletedAt: null },
+    { _id: "k3", schoolId: "sch-1", name: "Form 3", isActive: true,  deletedAt: null },
+  ]);
+
+  check("true matches", docs.find("class", { isActive: true }).map((c) => c._id), ["k1", "k3"]);
+  check("false matches", docs.find("class", { isActive: false }).map((c) => c._id), ["k2"]);
+  check("alongside other conditions",
+    docs.find("class", { schoolId: "sch-1", isActive: true, deletedAt: null }).length, 2);
+  check("negated", docs.find("class", { isActive: { not: true } }).map((c) => c._id), ["k2"]);
+  check("in a membership test",
+    docs.find("class", { isActive: { in: [true, false] } }).length, 3);
+  check("and counting them",
+    docs.count("class", { isActive: true }), 2);
+
   check("ordering, descending, by a JSON field",
     docs.find("feeCharge", { schoolId: "sch-1" }, { order: "amount", dir: "DESC" })
         .map((d) => d.amount),
