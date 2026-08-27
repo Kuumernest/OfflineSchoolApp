@@ -49,7 +49,10 @@ const dateRange = (from, to) => {
 
 const students = {
   key: "students",
-  roles: ["admin", "school_admin", "super_admin", "teacher"],
+  // exports.roster defaults to every member of staff, bursar included: a fee
+  // statement or an arrears call needs the child's name, class and guardian,
+  // and this is where that comes from. It carries no marks and no money.
+  permission: "exports.roster",
   build: async ({ schoolId, query, L }) => {
     const filter = { schoolId, deletedAt: null };
     filter.status = query.status || "approved";
@@ -103,7 +106,7 @@ const students = {
 
 const arrears = {
   key: "arrears",
-  roles: ["admin", "school_admin", "super_admin"],
+  permission: "exports.finance",
   build: async ({ schoolId, query, L }) => {
     const year = query.academicYear;
     const match = { schoolId, deletedAt: null };
@@ -175,7 +178,7 @@ const arrears = {
 
 const payments = {
   key: "payments",
-  roles: ["admin", "school_admin", "super_admin"],
+  permission: "exports.finance",
   build: async ({ schoolId, query, L }) => {
     const filter = { schoolId, deletedAt: null };
     const range = dateRange(query.from, query.to);
@@ -228,8 +231,12 @@ const payments = {
 
 const expenses = {
   key: "expenses",
-  roles: ["admin", "school_admin", "super_admin"],
+  permission: "exports.finance",
   build: async ({ schoolId, query, L }) => {
+    // Unlike the report, this workbook keeps pending and rejected rows: a
+    // spreadsheet is what somebody reconciles against the books, and a row
+    // missing from it with no explanation is worse than a row marked "pending".
+    // The status column below is what makes that safe.
     const filter = { schoolId, deletedAt: null };
     const range = dateRange(query.from, query.to);
     if (range) filter.incurredAt = range;
@@ -258,6 +265,18 @@ const expenses = {
           // against a file that quietly dropped them cannot ever balance.
           { label: L.voided,      width: 12, cell: (r) => text(r.voidedAt ? L.yes : "") },
           { label: L.voidReason,  width: 28, cell: (r) => text(r.voidReason) },
+          // Same argument as voided, one step earlier in the life of the row.
+          // Blank means it counts — which is what an expense from before
+          // approvals existed also shows, correctly.
+          {
+            label: L.approvalStatus, width: 20,
+            cell: (r) =>
+              text(
+                r.status === "pending"  ? L.awaitingApproval :
+                r.status === "rejected" ? L.rejected :
+                ""
+              ),
+          },
         ],
       }],
     };
@@ -270,7 +289,7 @@ const expenses = {
 
 const payroll = {
   key: "payroll",
-  roles: ["admin", "school_admin", "super_admin"],
+  permission: "exports.finance",
   build: async ({ schoolId, query, L }) => {
     const filter = { schoolId, deletedAt: null };
     if (query.periodMonth) filter.periodMonth = query.periodMonth;
@@ -329,7 +348,13 @@ const payroll = {
 
 const enrollments = {
   key: "enrollments",
-  roles: ["admin", "school_admin", "super_admin"],
+  // The one workbook here the bursar cannot build by default. Class history is
+  // the record of who was promoted, held back or moved — an academic archive,
+  // and the spreadsheet you would reach for to reconstruct or dispute a
+  // promotion decision. exports.academic rather than exports.finance for that
+  // reason; it is delegable, so a school that wants its bursar to have it can
+  // say so deliberately.
+  permission: "exports.academic",
   build: async ({ schoolId, query, L }) => {
     const filter = { schoolId, deletedAt: null };
     if (query.academicYear) filter.academicYear = query.academicYear;
@@ -377,15 +402,27 @@ const KINDS = Object.keys(EXPORTS);
  * worse than not offering it — and listing every kind regardless of role would
  * do exactly that.
  */
-const kindsFor = (role) =>
-  KINDS.filter((k) => EXPORTS[k].roles.includes(role));
+/**
+ * Which workbooks this caller may build.
+ *
+ * Takes the caller's EFFECTIVE permissions rather than their role, so a school
+ * that has granted its bursar exports.academic sees the extra tile appear
+ * without a release. The client builds its menu from this, which is why it
+ * matters: a tile that 403s when tapped is worse than no tile.
+ *
+ * @param {string[]} held from permissions.service.effectiveFor()
+ */
+const kindsFor = (held) => {
+  const has = new Set(Array.isArray(held) ? held : []);
+  return KINDS.filter((k) => has.has(EXPORTS[k].permission));
+};
 
 /**
  * Build one export.
  *
  * @returns {Promise<{ buffer: Buffer, fileName: string, rowCount: number }>}
  */
-const buildExport = async ({ kind, schoolId, query, lang, role }) => {
+const buildExport = async ({ kind, schoolId, query, lang, held }) => {
   const def = EXPORTS[kind];
   if (!def) {
     const err = new Error(`Unknown export: ${kind}`);
@@ -393,7 +430,10 @@ const buildExport = async ({ kind, schoolId, query, lang, role }) => {
     err.code = "UNKNOWN_EXPORT";
     throw err;
   }
-  if (!def.roles.includes(role)) {
+  // Checked here as well as in the route: this is the function that reads the
+  // rows, and a caller who reached it without the capability must not get a
+  // file back regardless of how they got here.
+  if (!(Array.isArray(held) && held.includes(def.permission))) {
     const err = new Error("You do not have access to that export");
     err.status = 403;
     err.code = "FORBIDDEN_EXPORT";

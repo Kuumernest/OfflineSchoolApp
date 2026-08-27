@@ -7,6 +7,11 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
+    "check:roles": "node scripts/check-role-matrix.js",
+    "check:policy": "node scripts/check-communication-policy.js",
+    "check:approvals": "node scripts/check-approvals.js",
+    "check": "npm run check:roles && npm run check:policy",
+    "check:all": "npm run check && npm run check:approvals",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

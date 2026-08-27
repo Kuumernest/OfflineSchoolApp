@@ -16,6 +16,22 @@ const {
   unknownTokens,
 } = require("../../engine/placeholder.engine");
 
+const { requirePermission } = require("../../middleware/permissions");
+
+/**
+ * Report-card configuration. Admin only, whole router.
+ *
+ * Like periods, this had no authorisation beyond being signed in — any account
+ * could rewrite the template every report card in the school is rendered from,
+ * or delete it. The only clients are the admin template screens on web and
+ * mobile, so closing the whole router costs nothing and shuts the hole.
+ *
+ * The bursar is out for the reason the spec gives: a report card is the
+ * school's academic statement about a child, and the person collecting the
+ * fees does not get to shape what it says.
+ */
+router.use(requirePermission("reports.manage"));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────

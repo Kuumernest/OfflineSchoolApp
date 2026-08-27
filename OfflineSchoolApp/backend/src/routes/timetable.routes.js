@@ -145,36 +145,24 @@ const normalizeSlot = (s) => ({
 // ROLE GUARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const staffOnly = (req, res, next) => {
-  const ALLOWED = new Set(["super_admin", "school_admin", "admin", "teacher"]);
-  if (!req.user) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-  if (!ALLOWED.has(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: `Access denied. Your role "${req.user.role}" is not permitted.`,
-    });
-  }
-  next();
-};
+// timetable.view defaults to TEACHING_ROLES, not STAFF_ROLES: a timetable is an
+// academic artefact and the bursar has no stake in it. Nothing here is financial.
+const { isAdmin } = require("../config/roles");
+const { requirePermission } = require("../../middleware/permissions");
 
-const adminOnly = (req, res, next) => {
-  const ALLOWED = new Set(["super_admin", "school_admin", "admin"]);
-  if (!req.user) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-  if (!ALLOWED.has(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: `Admin only. Your role "${req.user.role}" is not permitted.`,
-    });
-  }
-  next();
-};
+const staffOnly = requirePermission("timetable.view");
+const adminOnly = requirePermission("timetable.manage");
 
-const isAdminRole = (user) =>
-  new Set(["super_admin", "school_admin", "admin"]).has(user?.role);
+/**
+ * Deliberately still a ROLE check and not a permission one.
+ *
+ * This does not decide whether the caller may see the timetable — staffOnly has
+ * already said yes. It decides WHOSE timetable they are asking for: an admin
+ * gets the query they typed, and anybody else is narrowed to their own rows.
+ * That is a question about identity, not capability, and no permission grant
+ * should ever turn "my timetable" into "everyone's".
+ */
+const isAdminRole = (user) => isAdmin(user?.role);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // GET /api/admin/timetable

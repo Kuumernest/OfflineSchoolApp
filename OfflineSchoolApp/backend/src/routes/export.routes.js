@@ -4,7 +4,8 @@
 const express = require("express");
 const router  = express.Router();
 
-const { authorize } = require("../../middleware/auth");
+const { requireAnyPermission } = require("../../middleware/permissions");
+const permissions = require("../services/permissions.service");
 const { kindsFor, buildExport } = require("../export/exports");
 
 const asyncHandler = (fn) => (req, res, next) =>
@@ -15,14 +16,25 @@ const resolveSchoolId = (req, provided) => {
   return req.user?.schoolId;
 };
 
-// Teachers reach only the student roster; every other export checks its own
-// roles inside buildExport, so a teacher asking for payroll gets 403 rather
-// than an empty file that looks like the school has no staff.
-router.use(authorize("admin", "school_admin", "super_admin", "teacher"));
+// Anyone holding any export capability may reach this router; which workbooks
+// they can actually build is decided per kind, so a teacher asking for payroll
+// gets 403 rather than an empty file that looks like the school has no staff.
+//
+// GET / answers with only the kinds THIS caller may build, so neither client
+// ever draws a tile that 403s when tapped.
+router.use(requireAnyPermission(
+  "exports.roster",
+  "exports.finance",
+  "exports.academic"
+));
+
+/** The caller's effective capabilities, which is what every kind is keyed on. */
+const heldBy = (req) =>
+  permissions.effectiveFor(req.user?.role, req.user?.schoolId);
 
 /** What THIS user may export — the client builds its menu from this. */
 router.get("/", asyncHandler(async (req, res) => {
-  return res.json({ success: true, data: kindsFor(req.user?.role) });
+  return res.json({ success: true, data: kindsFor(await heldBy(req)) });
 }));
 
 /**
@@ -45,7 +57,7 @@ router.get("/:kind", asyncHandler(async (req, res) => {
       schoolId,
       query:    req.query,
       lang:     req.query.lang,
-      role:     req.user?.role,
+      held:     await heldBy(req),
     });
 
     res.setHeader(

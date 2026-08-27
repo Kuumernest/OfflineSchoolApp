@@ -14,6 +14,7 @@ const fs          = require("fs");
 const connectDatabase = require("./config/database");
 const errorHandler    = require("../middleware/errorHandler");
 const auth            = require("../middleware/auth");
+const { requirePermission } = require("../middleware/permissions");
 const { ensureStudentGateTokenIndex } = require("./db/ensureStudentIndexes");
 
 const app  = express();
@@ -415,19 +416,21 @@ app.post(
 // ENROLLMENT NUMBER ROUTE
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Issuing an enrolment number creates the student's LOGIN — it mints or
+// updates their User account and their password. students.manage, therefore,
+// and the guard is declared with the route rather than hand-rolled inside the
+// handler.
+//
+// This one was missed in the role sweep and it is worth saying why: the sweep
+// scanned src/routes, and this route is defined here in server.js. It still
+// carried the dead "admin" string that every other guard had shed. The check
+// script now reads this file too.
 app.post(
   "/api/students/:id/enrollment-number",
   auth.authenticate,
+  requirePermission("students.manage"),
   async (req, res) => {
     try {
-      const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
-      if (!ADMIN_ROLES.includes(req.user?.role)) {
-        return res.status(403).json({
-          success: false,
-          message: "Admin access required",
-        });
-      }
-
       const Student        = require("./db/models/Student");
       const User           = require("./db/models/User");
       const bcrypt         = require("bcryptjs");
@@ -627,7 +630,7 @@ app.use("/api/exams",
   loadRoute("./routes/exam.routes")
 );
 
-// Fees. The router applies its own bursar-only authorisation, so authenticate
+// Fees. The router applies its own finance-role authorisation, so authenticate
 // here is only establishing who is asking.
 app.use("/api/fees",
   auth.authenticate,
@@ -635,6 +638,14 @@ app.use("/api/fees",
 );
 
 // Expenses and payroll. Admin-only, enforced inside the router.
+// Approvals. Mounted next to finance because that is what it gates today, and
+// at its own top-level prefix rather than under /api/finance because a payroll
+// signature is not a finance READ — the queue is a head teacher's screen.
+app.use("/api/approvals",
+  auth.authenticate,
+  loadRoute("./routes/approvals.routes")
+);
+
 app.use("/api/finance",
   auth.authenticate,
   loadRoute("./routes/finance.routes")
@@ -693,6 +704,14 @@ app.use("/api/teacher",
 // ─────────────────────────────────────────────────────────────────────────────
 // ADMIN ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Mounted above /api/admin, like periods and timetable below it: the admin
+// router is a catch-all for that prefix, so a more specific path has to be
+// registered first or it never sees a request.
+app.use("/api/admin/permissions",
+  auth.authenticate,
+  loadRoute("./routes/permissions.routes")
+);
 
 app.use("/api/admin/periods",
   auth.authenticate,

@@ -274,7 +274,13 @@ const asyncHandler = (fn) => (req, res, next) =>
 // TEACHER GUARD
 // ═════════════════════════════════════════════════════════════════════════════
 
-const TEACHER_ROLES = new Set(["teacher", "super_admin", "school_admin", "admin"]);
+// Every route here answers "what am I teaching?" — my classes, my register,
+// my homework. The bursar teaches nothing, so TEACHING_ROLES is the whole set;
+// admins stay in because they cover for absent staff and need to see the same
+// screens to support them.
+const { TEACHING_ROLES } = require("../config/roles");
+
+const TEACHER_ROLES = new Set(TEACHING_ROLES);
 
 const teacherOnly = (req, res, next) => {
   if (!req.user) return res.status(401).json({ message: "Not authenticated" });

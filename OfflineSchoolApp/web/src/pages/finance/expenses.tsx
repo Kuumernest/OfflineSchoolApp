@@ -189,6 +189,12 @@ export default function ExpensesPage() {
             <TBody>
               {rows.map((e) => {
                 const void_ = Boolean(e.voidedAt);
+                // A missing status is an expense from before approvals existed
+                // and counts, exactly as the server reads it. Only an explicit
+                // "pending" or "rejected" is outside the accounts.
+                const waiting  = e.status === "pending";
+                const refused  = e.status === "rejected";
+                const excluded = void_ || waiting || refused;
                 return (
                   <Tr key={e._id}>
                     <Td className="text-ink-muted">{fmt.dateShort(e.incurredAt)}</Td>
@@ -199,13 +205,26 @@ export default function ExpensesPage() {
                     <Td className="text-ink-muted">{e.vendor ?? "—"}</Td>
                     <Td
                       numeric
-                      className={void_ ? "text-ink-faint line-through" : "font-medium text-ink"}
+                      className={
+                        excluded ? "text-ink-faint line-through" : "font-medium text-ink"
+                      }
                     >
+                      {/*
+                        Struck through while waiting, and that is the honest
+                        rendering: the row exists, the money has left, and it is
+                        not in the school's figures until somebody signs it off.
+                        Showing it as a normal amount would have the bursar
+                        reconcile against a total the reports do not contain.
+                      */}
                       {fmt.money(e.amount)}
                     </Td>
                     <Td numeric>
                       {void_ ? (
                         <Badge variant="default">{t("expenses.voided")}</Badge>
+                      ) : waiting ? (
+                        <Badge variant="warning">{t("expenses.awaitingApproval")}</Badge>
+                      ) : refused ? (
+                        <Badge variant="default">{t("expenses.rejected")}</Badge>
                       ) : (
                         <button
                           type="button"

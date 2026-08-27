@@ -23,8 +23,13 @@ import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui/Card";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth.store";
+import { type UserRole } from "@/types";
 
-const STAFF_ROLES = new Set(["super_admin", "school_admin", "admin", "teacher"]);
+// The bursar is staff. This gate answers one question — is the console for
+// this person at all — and which parts of it they get is decided by the rail in
+// config/navigation.ts and by RequireRole on the routes themselves.
+const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar", "teacher"];
+const STAFF_ROLES = new Set<string>(STAFF);
 
 export default function StaffOnly({ children }: { children: React.ReactNode }) {
   const { t }          = useTranslation();

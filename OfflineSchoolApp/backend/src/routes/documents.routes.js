@@ -4,7 +4,7 @@
 const express = require("express");
 const router  = express.Router();
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 
 const School        = require("../db/models/School");
 const Student       = require("../db/models/Student");
@@ -97,9 +97,13 @@ const schoolHeading = async (schoolId) => {
   };
 };
 
-// Printing a register or a transcript is staff work. Teachers need class lists,
-// so they are included here — unlike the finance and rollover routers.
-router.use(authorize("admin", "school_admin", "super_admin", "teacher"));
+// Printing a register or a transcript is teaching work. Teachers need class
+// lists, so they are included here — unlike the finance and rollover routers.
+//
+// The bursar is not: class lists, ID cards and transcripts are academic
+// documents, and the financial paperwork a bursar prints — receipts, fee
+// statements — is rendered by the clients from the fee ledger, not here.
+router.use(requirePermission("documents.print"));
 
 /**
  * The office, not the staffroom.
@@ -109,7 +113,7 @@ router.use(authorize("admin", "school_admin", "super_admin", "teacher"));
  * record or hand out a guardian's credentials, so they carry their own narrower
  * guard rather than inheriting the permissive one above.
  */
-const officeOnly = authorize("admin", "school_admin", "super_admin");
+const officeOnly = requirePermission("documents.manage");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CLASS LIST

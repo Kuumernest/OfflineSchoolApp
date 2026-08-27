@@ -5289,12 +5289,18 @@
     "qa_review_apps": "Candidatures",
     "qa_build_timetable": "Emploi du temps",
     "controlCenter": "Centre de contrôle",
+    "financeCenter": "Bureau des finances",
     "loading": "Chargement du tableau de bord…",
     "loadFailed": "Échec du chargement. Tirez pour réessayer.",
     "systemHealth": "État du système",
     "quickActions": "Actions rapides",
     "modules": "Modules",
     "showLess": "Voir moins",
+    "showMore": "Afficher {{count}} de plus",
+    "syncOverwrites": {
+      "one": "1 écrasement à la synchronisation — vos modifications ont été remplacées",
+      "other": "{{count}} écrasements à la synchronisation — vos modifications ont été remplacées"
+    },
     "logout": "Déconnexion",
     "logoutBody": "Voulez-vous vraiment vous déconnecter ?",
     "navErrTitle": "Erreur de navigation",

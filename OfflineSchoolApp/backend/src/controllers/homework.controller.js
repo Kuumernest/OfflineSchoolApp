@@ -3,10 +3,17 @@
 const Homework = require("../db/models/Homework");
 const { z } = require("zod");
 
-const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
-const canManage = (user) => ADMIN_ROLES.has(user?.role) || user?.role === "teacher";
-const assertManager = (req) => {
-  if (!canManage(req.user)) {
+// homework.manage defaults to TEACHING_ROLES, which is exactly what this
+// predicate spelled out by hand — including "admin", a string no account can
+// hold. The bursar is not in it: setting homework is not a finance job.
+//
+// Now async, because a capability can be adjusted per school and that means
+// reading the school. Every caller was already inside an async handler, so the
+// only change at the call sites is an await.
+const permissions = require("../services/permissions.service");
+
+const assertManager = async (req) => {
+  if (!(await permissions.can(req.user, "homework.manage"))) {
     const err = new Error("Only teachers and administrators can manage homework");
     err.statusCode = 403;
     throw err;
@@ -76,7 +83,7 @@ exports.list = async (req, res, next) => {
 
 exports.upsert = async (req, res, next) => {
   try {
-    assertManager(req);
+    await assertManager(req);
     const parsed = homeworkInput.safeParse(req.body);
     if (!parsed.success) return res.status(422).json({ success: false, error: "Invalid homework", details: parsed.error.issues });
     req.body = parsed.data;
@@ -113,7 +120,7 @@ exports.upsert = async (req, res, next) => {
 
 exports.remove = async (req, res, next) => {
   try {
-    assertManager(req);
+    await assertManager(req);
     const existing = await Homework.findOne({ _id: req.params.id, schoolId: schoolIdFor(req, req.query.schoolId || req.body.schoolId) }).lean();
     if (existing && req.user.role === "teacher" && existing.createdBy !== String(req.user._id || req.user.id)) {
       return res.status(403).json({ message: "You do not own this homework" });
@@ -152,7 +159,7 @@ exports.submit = async (req, res, next) => {
 
 exports.grade = async (req, res, next) => {
   try {
-    assertManager(req);
+    await assertManager(req);
     const input = z.object({ score: z.number().finite().min(0), feedback: z.string().max(5000).nullable().optional() }).strict().safeParse(req.body);
     if (!input.success) return res.status(422).json({ success: false, error: "Invalid grade", details: input.error.issues });
     const homework = await Homework.findOne({ _id: req.params.id, schoolId: schoolIdFor(req, req.body.schoolId), deletedAt: null });

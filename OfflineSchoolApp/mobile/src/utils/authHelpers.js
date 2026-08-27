@@ -115,12 +115,53 @@ export const requireAuth = (operationName = "operation") => {
  * @returns {boolean}
  *
  * @example
- * if (hasRole(["admin", "school_admin"])) { ... }
+ * if (hasRole(["school_admin", "bursar"])) { ... }
  */
 export const hasRole = (requiredRoles) => {
   const { role } = getCurrentAuth();
   const allowed  = Array.isArray(requiredRoles) ? requiredRoles : [requiredRoles];
   return allowed.includes(role);
+};
+
+/**
+ * The capabilities the server said this account holds, or null if it did not
+ * say.
+ *
+ * Null is a real and common answer on a phone, which is why it is
+ * distinguished from the empty array. A session stored before the permission
+ * layer shipped has no list, and this app is built to keep working from stored
+ * credentials for weeks without a successful sign-in. Treating "no list" as
+ * "no capabilities" would blank the tiles on every one of those devices after
+ * an update.
+ *
+ * @returns {string[] | null}
+ */
+export const getPermissions = () => {
+  const { user } = getCurrentAuth();
+  return Array.isArray(user?.permissions) ? user.permissions : null;
+};
+
+/**
+ * May the current user do this, as far as the phone knows?
+ *
+ * Falls back to `fallbackRoles` when the session carries no permission list —
+ * see getPermissions above. Pass the roles that held the capability by default
+ * so an old session behaves exactly as it did before the update.
+ *
+ * Like every client-side permission test, this decides what to OFFER. The
+ * server checks each request for itself, and this copy is stale the moment a
+ * school changes something. A phone that has been offline for a fortnight is
+ * working from a fortnight-old answer, which is fine for drawing a tile and
+ * would not be fine as the last word on anything.
+ *
+ * @param {string} key           e.g. "fees.manage"
+ * @param {string[]} [fallbackRoles]
+ * @returns {boolean}
+ */
+export const hasPermission = (key, fallbackRoles = []) => {
+  const held = getPermissions();
+  if (held) return held.includes(key);
+  return hasRole(fallbackRoles);
 };
 
 /**

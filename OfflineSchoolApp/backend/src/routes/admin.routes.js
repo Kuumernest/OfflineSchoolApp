@@ -445,20 +445,98 @@ const createStaffAccount = async ({
 // SECTION 2 — ADMIN GUARD
 // ═════════════════════════════════════════════════════════════════════════════
 
-const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
+const {
+  ADMIN_ROLES,
+  OFFICE_ROLES,
+  ROLES,
+  normalizeRole,
+} = require("../config/roles");
 
-const adminOnly = (req, res, next) => {
+const permissions = require("../services/permissions.service");
+
+/**
+ * Reads in this router that the bursar may also make. GET only, exact paths.
+ *
+ * This router is the school's control panel — users, classes, subjects,
+ * grading, settings — and the bursar is shut out of all of it. One exception,
+ * and it is a real requirement rather than a convenience: a fee structure is
+ * billed to a set of classes, and the arrears report is read class by class.
+ * Without the class list the fee module cannot be operated at all.
+ *
+ * /school-info is the second, and it is what a receipt is printed on. Both
+ * clients render the school heading — name, logo, address — into every
+ * document, and the mobile school.service reaches for /admin/school-info first
+ * and /teacher/school/info second. A bursar is refused by both, so a receipt
+ * handed to a parent would come out with a blank letterhead.
+ *
+ * The student roster is the third and fourth. A payment has to be posted
+ * against a real child in a real class, a fee statement carries their name, and
+ * an arrears call needs the guardian phone number — and on mobile the roster is
+ * what fills the local SQLite the offline fee desk reads. What these return is
+ * demographic: name, admission number, class, guardian, contact, status. No
+ * mark, no report card, no fee figure.
+ *
+ * /students/pending is deliberately NOT here. That is the admission queue, and
+ * deciding who joins the school is not a finance decision.
+ *
+ * An allowlist keyed on method and path, rather than moving the routes above
+ * the guard, because route order in a 3000-line router is not a security
+ * mechanism anybody can verify by reading it. Everything not named here needs
+ * ADMIN_ROLES, so a route added tomorrow is closed by default.
+ *
+ * Note what an entry does NOT grant: the bursar can read /students, but every
+ * write against a student — approve, reject, suspend, move, delete — is a
+ * separate route and stays admin-only. Read and write were the same guard
+ * before this file learned the difference.
+ *
+ * Each entry names a CAPABILITY rather than a role, so a school that adjusts
+ * students.view or classes.view on the permissions screen changes what happens
+ * here too. The fallback for every other path is still the role set: there is
+ * no single capability meaning "the whole school control panel", and inventing
+ * one would be a checkbox nobody could reason about. Splitting this router into
+ * per-module routers is what would fix that, and it is its own change.
+ */
+const OFFICE_READABLE = new Map([
+  ["/classes",           "classes.view"],
+  ["/school-info",       "school.view"],
+  ["/students",          "students.view"],
+  ["/students/approved", "students.view"],
+]);
+
+const adminOnly = async (req, res, next) => {
   if (!req.user) return sendError(res, 401, "Not authenticated");
   const { role } = req.user;
-  console.log(`🔐 adminOnly — user: ${req.user.email}, role: "${role}"`);
-  if (!ADMIN_ROLES.has(role)) {
-    console.warn(`⛔ Access denied for role "${role}"`);
-    return sendError(
-      res, 403,
-      `Admin only. Your role "${role}" is not permitted.`
-    );
+
+  // Trailing slashes are normalised so "/classes/" cannot slip past the
+  // allowlist — or, worse, past it in the wrong direction.
+  const raw  = req.path || "/";
+  const path = raw.length > 1 && raw.endsWith("/") ? raw.slice(0, -1) : raw;
+
+  const needed = req.method === "GET" ? OFFICE_READABLE.get(path) : null;
+
+  try {
+    if (needed) {
+      if (await permissions.can(req.user, needed)) return next();
+      console.warn(
+        `⛔ Access denied for role "${role}" on ${req.method} ${path} — needs ${needed}`
+      );
+      return sendError(
+        res, 403,
+        `Access denied. This action requires "${needed}".`
+      );
+    }
+
+    if (!ADMIN_ROLES.includes(role)) {
+      console.warn(`⛔ Access denied for role "${role}" on ${req.method} ${path}`);
+      return sendError(
+        res, 403,
+        `Admin only. Your role "${role}" is not permitted.`
+      );
+    }
+    return next();
+  } catch (err) {
+    return next(err);
   }
-  return next();
 };
 
 router.use(adminOnly);
@@ -2615,11 +2693,17 @@ router.put("/settings/grading", asyncHandler(async (req, res) => {
 // SECTION 11 — SETTINGS: ADMIN MANAGEMENT
 // ═════════════════════════════════════════════════════════════════════════════
 
+// The office accounts: admins and the bursar.
+//
+// The bursar is listed here rather than on a screen of its own because this is
+// where an account with school-wide authority is created, suspended and reset,
+// and a bursar is one of those. A role the settings screen cannot create is a
+// role no school will ever use.
 router.get("/settings/admins", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const admins   = await User.find({
     schoolId,
-    role:     { $in: ["super_admin", "school_admin"] },
+    role:     { $in: OFFICE_ROLES },
     isActive: true,
   }).select("-password -tempPassword").lean();
   return sendSuccess(res, { admins });
@@ -2636,19 +2720,28 @@ router.post("/settings/admins", asyncHandler(async (req, res) => {
     return sendError(res, 400, "A valid email is required");
   }
 
-  const ROLE_ALIASES   = { admin: "school_admin" };
-  const requestedRole  = String(role || "school_admin").trim().toLowerCase();
-  const normalizedRole = ROLE_ALIASES[requestedRole] || requestedRole;
+// The local { admin: "school_admin" } alias table lived here; it is in
+  // config/roles.js now, so the one place that translates a role name is the
+  // one place every guard reads its names from.
+  // An omitted role still defaults to school_admin, but an unrecognised one
+  // must NOT: normalizeRole answers null for a name outside the enum, and
+  // falling back would quietly hand out an admin account to a caller who
+  // asked for something else entirely. null fails the ALLOWED_ROLES check
+  // below and comes back as a 400 naming what was asked for.
+  const normalizedRole = role ? normalizeRole(role) : ROLES.SCHOOL_ADMIN;
 
-  if (normalizedRole === "super_admin" && req.user?.role !== "super_admin") {
+  if (normalizedRole === ROLES.SUPER_ADMIN && req.user?.role !== ROLES.SUPER_ADMIN) {
     return sendError(res, 403, "Only super admins can create super admins");
   }
 
-  const ALLOWED_ROLES = ["super_admin", "school_admin"];
+  // A school admin may appoint a bursar. That is the point: the person who
+  // runs the school decides who handles its money, and does not have to hand
+  // out their own account to do it.
+  const ALLOWED_ROLES = OFFICE_ROLES;
   if (!ALLOWED_ROLES.includes(normalizedRole)) {
     return sendError(
       res, 400,
-      `Invalid role "${role}". Allowed: school_admin, super_admin`
+      `Invalid role "${role}". Allowed: ${ALLOWED_ROLES.join(", ")}`
     );
   }
 

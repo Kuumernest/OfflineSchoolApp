@@ -16,14 +16,16 @@
 //   on every navigation, making the whole shell flicker.
 
 import { Suspense, lazy } from "react";
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Navigate, Outlet, Route, Routes } from "react-router-dom";
 
 import ProtectedRoute   from "@/components/auth/ProtectedRoute";
 import StaffOnly       from "@/components/auth/StaffOnly";
+import RequireRole     from "@/components/auth/RequireRole";
 import DashboardLayout  from "@/components/layout/DashboardLayout";
 import RouteErrorBoundary from "@/components/layout/RouteErrorBoundary";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/auth.store";
+import { type UserRole } from "@/types";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // LAZY PAGES
@@ -32,6 +34,7 @@ import { useAuthStore } from "@/store/auth.store";
 const LoginPage        = lazy(() => import("@/pages/LoginPage"));
 const ChangePassword   = lazy(() => import("@/pages/auth/ChangePasswordPage"));
 const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
+const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPage"));
 const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
@@ -76,6 +79,7 @@ const TemplatePreview  = lazy(() => import("@/pages/reports/preview"));
 
 const SettingsPage     = lazy(() => import("@/pages/settings/SettingsPage"));
 
+const ApprovalsPage    = lazy(() => import("@/pages/approvals/index"));
 const FeesPage         = lazy(() => import("@/pages/fees/index"));
 const FeeStructures    = lazy(() => import("@/pages/fees/structures"));
 const StudentFees      = lazy(() => import("@/pages/fees/student"));
@@ -106,6 +110,58 @@ const page = (node: React.ReactNode) => (
     <Suspense fallback={<PageSpinner />}>{node}</Suspense>
   </RouteErrorBoundary>
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ROLE GROUPS
+//
+// These mirror the sets in backend/src/config/roles.js, name for name, and are
+// the second half of an authorisation decision the server has already made.
+// The server is the authority; what these buy is that a person who types a URL
+// they may not have gets told so, rather than getting a rendered page whose
+// every request then fails with a 403.
+//
+// Keep a group here identical to the guard on the matching router. Where they
+// disagree, the server wins and the user sees a broken screen — which is the
+// exact failure this is here to remove.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Governance, configuration, academic authority, approval. */
+const ADMIN: UserRole[] = ["super_admin", "school_admin"];
+
+/** The ledger. Admins stay in because they are the ones who approve. */
+const FINANCE: UserRole[] = ["super_admin", "school_admin", "bursar"];
+
+/** The office rather than the staffroom: deals with parents and money. */
+const OFFICE: UserRole[] = ["super_admin", "school_admin", "bursar"];
+
+/** Academic work. The bursar is deliberately absent. */
+const TEACHING: UserRole[] = ["super_admin", "school_admin", "teacher"];
+
+/** Anyone the school employs. Reads, and messages. */
+const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar", "teacher"];
+
+/** Wraps a group of routes in one role gate. */
+const gate = (roles: UserRole[]) => (
+  <RequireRole roles={roles}>
+    <Outlet />
+  </RequireRole>
+);
+
+/**
+ * /dashboard is one path and two pages.
+ *
+ * A bursar opening the admin dashboard would get eight simultaneous 403s — it
+ * reads enrolment, exam, attendance and admission endpoints, none of which they
+ * may touch. They get a page about money instead.
+ *
+ * Resolved here rather than by giving the bursar their own path, so that the
+ * sidebar entry, the post-login redirect and every "back to dashboard" link in
+ * the app keep working without any of them knowing the role.
+ */
+function DashboardHome() {
+  const role = useAuthStore((s) => s.user?.role);
+  return role === "bursar" ? <BursarDashboard /> : <DashboardPage />;
+}
 
 /** Sends an already-signed-in user away from /login instead of showing it. */
 function PublicOnly({ children }: { children: React.ReactNode }) {
@@ -156,85 +212,126 @@ export default function App() {
         <Route element={<StaffOnly><DashboardLayout /></StaffOnly>}>
 
           <Route index element={<Navigate to="/dashboard" replace />} />
-          <Route path="/dashboard" element={page(<DashboardPage />)} />
-          <Route path="/watchlist" element={page(<WatchlistPage />)} />
 
-          {/* ── Students ───────────────────────────────────────────────── */}
-          <Route path="/students"              element={page(<StudentsPage />)} />
-          <Route path="/students/new"          element={page(<AddStudentPage />)} />
-          <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
-          <Route path="/students/applications" element={page(<ApplicationsPage />)} />
-          {/* Last: ":id" would otherwise swallow "new" / "admissions". */}
-          <Route path="/students/:id"          element={page(<StudentDetail />)} />
+          {/* Every member of staff has a dashboard; which one is by role. */}
+          <Route element={gate(STAFF)}>
+            <Route path="/dashboard" element={page(<DashboardHome />)} />
+            <Route path="/exports"   element={page(<ExportsPage />)} />
 
-          {/* ── Teachers ───────────────────────────────────────────────── */}
-          <Route path="/teachers"                    element={page(<TeachersPage />)} />
-          <Route path="/teachers/new"                element={page(<AddTeacherPage />)} />
-          <Route path="/teachers/assignments"        element={page(<AssignmentsPage />)} />
-          <Route path="/teachers/assignments/assign" element={page(<AssignPage />)} />
-          <Route path="/teachers/assignments/:id"    element={page(<AssignmentDetail />)} />
-          <Route path="/teachers/:id/edit"           element={page(<EditTeacherPage />)} />
+            {/* The bursar sends fee reminders and payment confirmations from
+                here. /messages/audit is under ADMIN below: sending a message
+                and reading someone else's are separate rights, and the API
+                draws the same line. */}
+            <Route path="/messages"  element={page(<MessagesPage />)} />
+          </Route>
 
-          {/* ── Academic ───────────────────────────────────────────────── */}
-          <Route path="/classes"          element={page(<ClassesPage />)} />
-          <Route path="/subjects"         element={page(<SubjectsPage />)} />
-          <Route path="/subjects/add"     element={page(<AddSubjectPage />)} />
-          <Route path="/subjects/edit/:id" element={page(<EditSubjectPage />)} />
-          <Route path="/timetable"        element={page(<TimetablePage />)} />
-          <Route path="/periods"          element={page(<PeriodsPage />)} />
+          {/* ── The office: parents and money ──────────────────────────── */}
+          <Route element={gate(OFFICE)}>
+            {/*
+              Both audiences, one route. A head teacher sees the school's queue
+              with Approve and Reject; a bursar sees the requests they raised and
+              can only withdraw them. The server decides which, from
+              approvals.decide — so the gate here is only "is this your business
+              at all", and OFFICE is exactly that set.
+            */}
+            <Route path="/approvals" element={page(<ApprovalsPage />)} />
 
-          {/* ── Attendance ─────────────────────────────────────────────── */}
-          <Route path="/attendance"         element={page(<AttendancePage />)} />
-          <Route path="/attendance/reports" element={page(<AttendanceReport />)} />
+            {/* Named by fee arrears, so teachers are out and the bursar is in.
+                Read-only — the endpoint has no write route at all. */}
+            <Route path="/watchlist" element={page(<WatchlistPage />)} />
+          </Route>
 
-          {/* ── Exams ──────────────────────────────────────────────────── */}
-          <Route path="/exams"         element={page(<ExamsPage />)} />
-          <Route path="/exams/new"     element={page(<CreateExamPage />)} />
-          <Route path="/exams/results" element={page(<ExamResultsPage />)} />
-          {/* Report cards used to live here. They are one section under
-              /reports now; this keeps old links and bookmarks working. */}
-          <Route path="/exams/reports" element={<Navigate to="/reports/cards" replace />} />
-          <Route path="/exams/:id"     element={page(<ExamDetailPage />)} />
+          {/* ── The ledger ─────────────────────────────────────────────── */}
+          <Route element={gate(FINANCE)}>
+            {/* Fees: money coming in. The arrears list is the landing screen;
+                structures and a single student's ledger hang off it. */}
+            <Route path="/fees" element={page(<FeesPage />)} />
+            <Route path="/fees/structures" element={page(<FeeStructures />)} />
+            <Route path="/fees/students/:studentId" element={page(<StudentFees />)} />
 
-          {/* ── Announcements ──────────────────────────────────────────── */}
-          <Route path="/announcements" element={page(<AnnouncementsPage />)} />
+            {/* Finance: money going out. Kept apart from /fees so a bursar
+                reconciling receipts is never one mis-click from payroll.
 
-          {/* ── Messages ───────────────────────────────────────────────── */}
-          <Route path="/messages"       element={page(<MessagesPage />)} />
-          <Route path="/messages/audit" element={page(<MessageAuditPage />)} />
+                /finance/salaries is here rather than under ADMIN because the
+                bursar must read a salary to pay it. The New button on that page
+                posts to an admin-only endpoint and will 403 for them, which is
+                the intended boundary: preparing the payroll is theirs, setting
+                what somebody earns is not. */}
+            <Route path="/finance/expenses" element={page(<ExpensesPage />)} />
+            <Route path="/finance/salaries" element={page(<SalariesPage />)} />
+            <Route path="/finance/payroll" element={page(<PayrollPage />)} />
+            <Route path="/finance/reports" element={page(<FinanceReports />)} />
+          </Route>
 
-          {/* ── Reports ────────────────────────────────────────────────── */}
-          <Route path="/reports"           element={page(<ReportsOverview />)} />
-          <Route path="/reports/cards"     element={page(<ReportCardsPage />)} />
-          <Route path="/reports/templates" element={page(<TemplatesPage />)} />
-          <Route path="/reports/builder"   element={page(<TemplateBuilder />)} />
-          <Route path="/reports/preview"   element={page(<TemplatePreview />)} />
+          {/* ── Academic work ──────────────────────────────────────────── */}
+          <Route element={gate(TEACHING)}>
+            {/* Students. The bursar may read a student record through the API
+                but not here: these are the admission and approval screens, and
+                they read from /admin/students, which is admin-only. */}
+            <Route path="/students"              element={page(<StudentsPage />)} />
+            <Route path="/students/new"          element={page(<AddStudentPage />)} />
+            <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
+            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
+            {/* Last: ":id" would otherwise swallow "new" / "admissions". */}
+            <Route path="/students/:id"          element={page(<StudentDetail />)} />
 
-          {/* ── Settings ───────────────────────────────────────────────── */}
-          {/* Fees. The arrears list is the landing screen; structures and a
-              single student's ledger hang off it. */}
-          <Route path="/fees" element={page(<FeesPage />)} />
-          <Route path="/fees/structures" element={page(<FeeStructures />)} />
-          <Route path="/fees/students/:studentId" element={page(<StudentFees />)} />
+            <Route path="/subjects"          element={page(<SubjectsPage />)} />
+            <Route path="/subjects/add"      element={page(<AddSubjectPage />)} />
+            <Route path="/subjects/edit/:id" element={page(<EditSubjectPage />)} />
+            <Route path="/timetable"         element={page(<TimetablePage />)} />
 
-          {/* Finance: money going out. Kept apart from /fees, which is money
-              coming in. */}
-          <Route path="/finance/expenses" element={page(<ExpensesPage />)} />
-          <Route path="/finance/salaries" element={page(<SalariesPage />)} />
-          <Route path="/finance/payroll" element={page(<PayrollPage />)} />
-          <Route path="/finance/reports" element={page(<FinanceReports />)} />
+            <Route path="/attendance"         element={page(<AttendancePage />)} />
+            <Route path="/attendance/reports" element={page(<AttendanceReport />)} />
 
-          {/* End-of-year rollover. Progression must be set before a run can
-              place anybody. */}
-          <Route path="/promotion" element={page(<PromotionPage />)} />
-          <Route path="/promotion/progression" element={page(<ProgressionPage />)} />
+            <Route path="/exams"         element={page(<ExamsPage />)} />
+            <Route path="/exams/new"     element={page(<CreateExamPage />)} />
+            <Route path="/exams/results" element={page(<ExamResultsPage />)} />
+            {/* Report cards used to live here. They are one section under
+                /reports now; this keeps old links and bookmarks working. */}
+            <Route path="/exams/reports" element={<Navigate to="/reports/cards" replace />} />
+            <Route path="/exams/:id"     element={page(<ExamDetailPage />)} />
 
-          {/* Printing desk: class lists and transcripts. */}
-          <Route path="/documents" element={page(<DocumentsPage />)} />
-          <Route path="/exports" element={page(<ExportsPage />)} />
-          <Route path="/portal-codes" element={page(<PortalCodesPage />)} />
+            <Route path="/announcements" element={page(<AnnouncementsPage />)} />
 
-          <Route path="/settings" element={page(<SettingsPage />)} />
+            {/* Printing desk: class lists, ID cards and transcripts — academic
+                documents. A receipt or a fee statement prints from /fees. */}
+            <Route path="/documents" element={page(<DocumentsPage />)} />
+          </Route>
+
+          {/* ── Governance, configuration, academic authority ───────────── */}
+          <Route element={gate(ADMIN)}>
+            <Route path="/teachers"                    element={page(<TeachersPage />)} />
+            <Route path="/teachers/new"                element={page(<AddTeacherPage />)} />
+            <Route path="/teachers/assignments"        element={page(<AssignmentsPage />)} />
+            <Route path="/teachers/assignments/assign" element={page(<AssignPage />)} />
+            <Route path="/teachers/assignments/:id"    element={page(<AssignmentDetail />)} />
+            <Route path="/teachers/:id/edit"           element={page(<EditTeacherPage />)} />
+
+            <Route path="/classes" element={page(<ClassesPage />)} />
+            <Route path="/periods" element={page(<PeriodsPage />)} />
+
+            {/* Reading a thread you are not part of is recorded server-side and
+                is the strongest right in the messaging module. Admins only. */}
+            <Route path="/messages/audit" element={page(<MessageAuditPage />)} />
+
+            {/* Report-card configuration: the template every card in the school
+                is rendered from. */}
+            <Route path="/reports"           element={page(<ReportsOverview />)} />
+            <Route path="/reports/cards"     element={page(<ReportCardsPage />)} />
+            <Route path="/reports/templates" element={page(<TemplatesPage />)} />
+            <Route path="/reports/builder"   element={page(<TemplateBuilder />)} />
+            <Route path="/reports/preview"   element={page(<TemplatePreview />)} />
+
+            {/* End-of-year rollover. Progression must be set before a run can
+                place anybody. */}
+            <Route path="/promotion" element={page(<PromotionPage />)} />
+            <Route path="/promotion/progression" element={page(<ProgressionPage />)} />
+
+            {/* Issuing a guardian code hands out credentials. */}
+            <Route path="/portal-codes" element={page(<PortalCodesPage />)} />
+
+            <Route path="/settings" element={page(<SettingsPage />)} />
+          </Route>
 
           <Route path="*" element={page(<NotFoundPage />)} />
         </Route>

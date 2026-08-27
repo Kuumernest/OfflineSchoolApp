@@ -5,7 +5,10 @@ const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
 
-const { authorize } = require("../../middleware/auth");
+const {
+  requirePermission,
+  requireAnyPermission,
+} = require("../../middleware/permissions");
 
 const ExpenseCategory = require("../db/models/ExpenseCategory");
 const Expense         = require("../db/models/Expense");
@@ -21,6 +24,7 @@ const {
 } = require("../services/payroll.service");
 
 const financeReports = require("../services/financeReports.service");
+const approvals      = require("../services/approvals.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -62,15 +66,47 @@ const cleanComponents = (list) => {
   return { rows, error: null };
 };
 
-// Expenses and payroll are back-office work: server-authoritative, admin-only,
-// and never queued from a phone.
-router.use(authorize("admin", "school_admin", "super_admin"));
+// Expenses and payroll are back-office work: server-authoritative, never
+// queued from a phone, and the bursar's job rather than the admin's.
+//
+// The router-level guard is the union, because this one router serves three
+// modules; each route below then names the capability it actually needs. That
+// is what lets a school hand somebody the expense book without the payroll.
+router.use(requireAnyPermission(
+  "expenses.view",
+  "payroll.view",
+  "finance.reports"
+));
+
+const canReadExpenses  = requirePermission("expenses.view");
+const canWriteExpenses = requirePermission("expenses.manage");
+const canReadPayroll   = requirePermission("payroll.view");
+const canRunPayroll    = requirePermission("payroll.process");
+const canReadReports   = requirePermission("finance.reports");
+
+/**
+ * What the bursar prepares but does not decide.
+ *
+ * Segregation of duties, at the one point in this router where it can be
+ * enforced today: the bursar calculates the payroll and pays it, but what a
+ * member of staff is owed is set by the school, not by the person writing the
+ * cheque. Someone who can both raise their own salary and pay it has no
+ * meaningful control over them at all.
+ *
+ * payroll.setSalary is marked non-delegable in config/permissions.js, so this
+ * is not a default a school can quietly reverse on a busy afternoon.
+ *
+ * Expense and payroll APPROVAL want the same treatment and still cannot get it
+ * from a guard of any kind — an expense has no approval state to gate on. That
+ * is the next pass, not something to fake here.
+ */
+const canSetSalary = requirePermission("payroll.setSalary");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // EXPENSE CATEGORIES
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/expense-categories", asyncHandler(async (req, res) => {
+router.get("/expense-categories", canReadExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -79,7 +115,7 @@ router.get("/expense-categories", asyncHandler(async (req, res) => {
   return res.json({ success: true, count: rows.length, data: rows });
 }));
 
-router.post("/expense-categories", asyncHandler(async (req, res) => {
+router.post("/expense-categories", canWriteExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -113,7 +149,7 @@ router.post("/expense-categories", asyncHandler(async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // GET /api/finance/expenses?from=&to=&categoryId=
-router.get("/expenses", asyncHandler(async (req, res) => {
+router.get("/expenses", canReadExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -133,7 +169,7 @@ router.get("/expenses", asyncHandler(async (req, res) => {
   return res.json({ success: true, count: rows.length, total, data: rows });
 }));
 
-router.post("/expenses", asyncHandler(async (req, res) => {
+router.post("/expenses", canWriteExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -170,19 +206,71 @@ router.post("/expenses", asyncHandler(async (req, res) => {
     return res.status(200).json({ success: true, replay: true, data: existing });
   }
 
+  // ── Does this need a second signature? ─────────────────────────────────
+  //
+  // The row is written either way, with its category, its reference and its
+  // receipt — the money has already left, and asking a bursar to hold a paper
+  // receipt until the head is next in the building is not a workflow. What
+  // approval gates is whether it COUNTS: a pending expense is excluded from
+  // every total until somebody signs it off.
+  //
+  // With no threshold set — the shipped default — this is false and the row is
+  // written approved, exactly as before.
+  const { required, threshold } = await approvals.requiresApproval({
+    schoolId, kind: "expense", amount,
+  });
+
   const row = await Expense.create({
     _id: expenseId,
     schoolId, categoryId, academicYear,
     amount, description, vendor, method, reference,
     incurredAt: incurredAt ? new Date(incurredAt) : new Date(),
     recordedBy: req.user?._id ? String(req.user._id) : null,
+    status: required ? "pending" : "approved",
   });
 
-  return res.status(201).json({ success: true, data: row });
+  let approval = null;
+  if (required) {
+    try {
+      approval = await approvals.raise({
+        schoolId,
+        kind:        "expense",
+        targetId:    row._id,
+        amount,
+        threshold,
+        reason:      req.body.reason ?? null,
+        summary:     [category.label, vendor, description]
+                       .filter(Boolean).join(" — ") || "Expense",
+        requestedBy: req.user?._id ? String(req.user._id) : null,
+      });
+      row.approvalId = approval._id;
+      await row.save();
+    } catch (err) {
+      // The expense exists and is pending, and raising the request failed. Left
+      // pending rather than quietly promoted to approved: a row that nobody can
+      // see waiting is better than one that slipped into the accounts without
+      // the signature the school asked for. The message says what to do.
+      console.error(`[finance] expense ${row._id} pending with no request: ${err.message}`);
+      return res.status(201).json({
+        success: true,
+        data:    row,
+        warning: "The expense was recorded but the approval request could not be " +
+                 "raised. It will not count until that is resolved.",
+      });
+    }
+  }
+
+  return res.status(201).json({
+    success:  true,
+    data:     row,
+    approval: approval,
+    /** So the client can say "recorded, waiting for approval" rather than "saved". */
+    pendingApproval: required,
+  });
 }));
 
 // POST /api/finance/expenses/:id/void   { reason }
-router.post("/expenses/:id/void", asyncHandler(async (req, res) => {
+router.post("/expenses/:id/void", canWriteExpenses, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const reason   = (req.body.reason || "").trim();
   if (!reason) return bad(res, "A reason is required to void an expense", "REASON_REQUIRED");
@@ -216,7 +304,7 @@ router.post("/expenses/:id/void", asyncHandler(async (req, res) => {
 // opposite ends, but they are NOT the same kind of figure: the summary is a
 // flow over an interval, arrears are a position at a moment. The response keeps
 // them in separate objects so a caller cannot accidentally add them together.
-router.get("/reports/summary", asyncHandler(async (req, res) => {
+router.get("/reports/summary", canReadReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -248,7 +336,7 @@ router.get("/reports/summary", asyncHandler(async (req, res) => {
  * /admin/teachers only returns role "teacher", which would leave the head and
  * the bursar off the payroll entirely — so payroll asks for its own list.
  */
-router.get("/staff", asyncHandler(async (req, res) => {
+router.get("/staff", canReadPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -265,7 +353,7 @@ router.get("/staff", asyncHandler(async (req, res) => {
 // SALARY STRUCTURES
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/salary-structures", asyncHandler(async (req, res) => {
+router.get("/salary-structures", canReadPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -292,7 +380,10 @@ router.get("/salary-structures", asyncHandler(async (req, res) => {
   });
 }));
 
-router.post("/salary-structures", asyncHandler(async (req, res) => {
+// adminOnly: what a member of staff is owed is the school's decision. The
+// bursar reads the structure, calculates against it, and pays it — the three
+// steps below in this router — but does not get to set the figure.
+router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -344,7 +435,7 @@ router.post("/salary-structures", asyncHandler(async (req, res) => {
 // PAYROLL
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/payroll", asyncHandler(async (req, res) => {
+router.get("/payroll", canReadPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -353,7 +444,7 @@ router.get("/payroll", asyncHandler(async (req, res) => {
   return res.json({ success: true, count: rows.length, data: rows });
 }));
 
-router.get("/payroll/:runId", asyncHandler(async (req, res) => {
+router.get("/payroll/:runId", canReadPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -381,7 +472,7 @@ router.get("/payroll/:runId", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/finance/payroll/generate   { periodMonth }
-router.post("/payroll/generate", asyncHandler(async (req, res) => {
+router.post("/payroll/generate", canRunPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -415,9 +506,94 @@ router.post("/payroll/generate", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/finance/payroll/:runId/confirm   { method }
-router.post("/payroll/:runId/confirm", asyncHandler(async (req, res) => {
+/**
+ * POST /api/finance/payroll/:runId/request-approval
+ *
+ * Put a draft run up for signature. Separate from generate because a run is
+ * reviewed and corrected first — the point of a draft — and because a school
+ * with payroll approval turned off never needs this at all.
+ */
+router.post("/payroll/:runId/request-approval", canRunPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
+
+  const run = await PayrollRun.findOne({
+    _id: req.params.runId, schoolId, deletedAt: null,
+  }).lean();
+
+  if (!run) {
+    return res.status(404).json({
+      success: false, code: "NOT_FOUND", message: "Payroll run not found",
+    });
+  }
+  if (run.status !== "draft") {
+    return res.status(409).json({
+      success: false, code: "NOT_DRAFT",
+      message: `This run is already ${run.status}`,
+    });
+  }
+
+  try {
+    const approval = await approvals.raise({
+      schoolId,
+      kind:        "payroll",
+      targetId:    run._id,
+      amount:      run.totalNet ?? 0,
+      reason:      req.body.reason ?? null,
+      summary:     `Payroll ${run.periodMonth} — ${run.staffCount} staff`,
+      requestedBy: req.user?._id ? String(req.user._id) : null,
+    });
+    return res.status(201).json({ success: true, data: approval });
+  } catch (err) {
+    return res.status(err.status ?? 500).json({
+      success: false, code: err.code ?? "ERROR", message: err.message,
+    });
+  }
+}));
+
+router.post("/payroll/:runId/confirm", canRunPayroll, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  // ── The §4 separation, at the one point where money actually moves ───────
+  //
+  // With payroll approval on, a draft cannot be confirmed: it has to be
+  // approved by somebody who did not prepare it, and only then paid. Checked
+  // here rather than inside confirmRun because the service is also reachable
+  // from a script, and "was this school asking for a signature" is a request-
+  // level question.
+  const { required } = await approvals.requiresApproval({
+    schoolId, kind: "payroll", amount: 0,
+  });
+
+  if (required) {
+    const run = await PayrollRun.findOne({
+      _id: req.params.runId, schoolId, deletedAt: null,
+    }).select("status approvedBy").lean();
+
+    if (run && run.status === "draft") {
+      return res.status(409).json({
+        success: false,
+        code:    "APPROVAL_REQUIRED",
+        message: "This school requires payroll to be approved before it is paid. " +
+                 "Request approval, then confirm once it has been given.",
+      });
+    }
+
+    // Four eyes at the point of payment as well as at the point of signature.
+    // Approving your own run and then paying it would satisfy the state machine
+    // and defeat the purpose.
+    if (
+      run?.approvedBy &&
+      String(run.approvedBy) === String(req.user?._id ?? "")
+    ) {
+      return res.status(403).json({
+        success: false,
+        code:    "SELF_APPROVAL",
+        message: "You approved this run, so somebody else has to be the one to pay it.",
+      });
+    }
+  }
 
   try {
     const result = await confirmRun({
@@ -436,7 +612,7 @@ router.post("/payroll/:runId/confirm", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/finance/payroll/:runId/reverse   { reason }
-router.post("/payroll/:runId/reverse", asyncHandler(async (req, res) => {
+router.post("/payroll/:runId/reverse", canRunPayroll, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const reason   = (req.body.reason || "").trim();
   if (!reason) return bad(res, "A reason is required to reverse a payroll run", "REASON_REQUIRED");

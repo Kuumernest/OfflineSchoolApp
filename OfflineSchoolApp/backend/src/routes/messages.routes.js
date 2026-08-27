@@ -29,6 +29,7 @@ const Message      = require("../db/models/Message");
 
 const policy = require("../services/communication/policy.service");
 const svc    = require("../services/communication/conversation.service");
+const permissions = require("../services/permissions.service");
 
 // Optional, exactly as the content routes treat it: a deployment without
 // multer should lose file attachments, not the whole messaging module.
@@ -467,7 +468,12 @@ router.get("/audit/conversations", asyncHandler(async (req, res) => {
   const me = requirePrincipal(req, res);
   if (!me) return;
 
-  if (policy.principalKind(me) !== "admin") {
+  // A capability rather than a persona: reading a thread you are not part of is
+  // the strongest right in this module, and messages.audit is non-delegable so
+  // a school cannot hand it out. Equivalent to the persona check it replaces —
+  // messages.audit defaults to ADMIN_ROLES, and a guardian principal carries no
+  // role at all, so can() answers false for them as principalKind did.
+  if (!(await permissions.can(me, "messages.audit"))) {
     return res.status(403).json({ success: false, error: "Administrator access required" });
   }
 

@@ -4,6 +4,8 @@
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
 const User   = require("../db/models/User");
+const { normalizeRole } = require("../config/roles");
+const permissions       = require("../services/permissions.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -50,7 +52,7 @@ const validatePasswordStrength = (pw) => {
  */
 const generateAccessToken = (user) =>
   jwt.sign(
-    { id: user._id, schoolId: user.schoolId ?? null, role: user.role },
+    { id: user._id, schoolId: user.schoolId ?? null, role: normalizeRole(user.role) },
     process.env.JWT_SECRET,
     {
       expiresIn: user.mustResetPassword
@@ -81,11 +83,19 @@ const serializeUser = (user) => ({
   name:              user.name              ?? null,
   email:             user.email             ?? null,
   enrollmentNo:      user.enrollmentNo      ?? null,
-  role:              user.role,
+  // Canonicalised for the same reason the auth middleware does it: this
+  // response is what both clients store and route on, and it is read straight
+  // off the document rather than through the middleware. A legacy "admin" row
+  // would otherwise get a role string no client navigation knows.
+  role:              normalizeRole(user.role),
   schoolId:          user.schoolId          ?? null,
   isActive:          user.isActive          ?? true,
   mustResetPassword: user.mustResetPassword ?? false,
-  permissions:       user.permissions       ?? [],
+  // Filled in by withPermissions() below rather than here, because resolving
+  // them reads the school. Left as the empty array on the rare path that skips
+  // that step, which is the safe default: a client that receives no permissions
+  // offers nothing, rather than offering everything.
+  permissions:       [],
   createdAt:         user.createdAt         ?? null,
   updatedAt:         user.updatedAt         ?? null,
 });
@@ -95,7 +105,23 @@ const serializeUser = (user) => ({
  * success envelope.  Accepts an optional `extra` object that is merged
  * into the response (e.g. { message: "Password updated" }).
  */
-const issueTokens = (user, extra = {}) => {
+/**
+ * Attach the caller's effective capabilities to a serialised user.
+ *
+ * Both clients need these to decide what to OFFER — which tiles to draw, which
+ * buttons to enable. It is not what decides whether an action is allowed: every
+ * route checks for itself, and this list is a copy that goes stale the moment a
+ * school changes a permission. Treat it as a menu, never as a lock.
+ *
+ * Sent at sign-in and refreshed by GET /api/auth/me, which is the seam a client
+ * uses to pick up a change without making the user sign in again.
+ */
+const withPermissions = async (payload, user) => ({
+  ...payload,
+  permissions: await permissions.effectiveFor(user.role, user.schoolId),
+});
+
+const issueTokens = async (user, extra = {}) => {
   const token        = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);
 
@@ -104,7 +130,7 @@ const issueTokens = (user, extra = {}) => {
     ...extra,
     token,
     ...(refreshToken ? { refreshToken } : {}),
-    user: serializeUser(user),
+    user: await withPermissions(serializeUser(user), user),
   };
 };
 
@@ -193,7 +219,7 @@ exports.login = async (req, res) => {
       `✅ Login success: ${logLabel} (${user.role}) | mustReset: ${user.mustResetPassword}`
     );
 
-    return res.json(issueTokens(user));
+    return res.json(await issueTokens(user));
 
   } catch (err) {
     console.error("🔴 Login error:", err.message, err.stack);
@@ -247,7 +273,7 @@ exports.refresh = async (req, res) => {
     const logLabel = user.enrollmentNo ?? user.email;
     console.log(`🔄 Token refreshed: ${logLabel}`);
 
-    return res.json(issueTokens(user));
+    return res.json(await issueTokens(user));
 
   } catch (err) {
     console.error("🔴 Refresh error:", err.message);
@@ -327,7 +353,7 @@ exports.changePassword = async (req, res) => {
     console.log(`✅ Password changed: ${logLabel} (${user.role})`);
 
     return res.json(
-      issueTokens(user, { message: "Password updated successfully" })
+      await issueTokens(user, { message: "Password updated successfully" })
     );
 
   } catch (err) {
@@ -354,7 +380,10 @@ exports.me = async (req, res) => {
       });
     }
 
-    return res.json({ success: true, user: serializeUser(user) });
+    return res.json({
+      success: true,
+      user: await withPermissions(serializeUser(user), user),
+    });
 
   } catch (err) {
     console.error("🔴 /me error:", err.message);

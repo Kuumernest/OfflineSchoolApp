@@ -70,7 +70,21 @@ const summary = async ({ schoolId, from, to }) => {
   const feeMatch = { schoolId, deletedAt: null };
   if (range) feeMatch.receivedAt = range;
 
-  const expMatch = { schoolId, deletedAt: null, voidedAt: null };
+  // status is the approval state, and this filter is as load-bearing as the
+  // payroll one above it.
+  //
+  //   pending   recorded, waiting for a second signature. Counting it would
+  //             tell a head the money is gone before anybody agreed it should
+  //             be, and the figure would change under them on approval.
+  //   rejected  somebody said no. Kept for the record, never counted.
+  //
+  // $nin rather than $eq: expenses written before this field existed have no
+  // status at all, and a missing field is not in the list — so every historic
+  // row keeps counting exactly as it did.
+  const expMatch = {
+    schoolId, deletedAt: null, voidedAt: null,
+    status: { $nin: ["pending", "rejected"] },
+  };
   if (range) expMatch.incurredAt = range;
 
   // See rule 3 above. This filter is load-bearing.

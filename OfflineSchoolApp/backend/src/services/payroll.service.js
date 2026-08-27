@@ -182,7 +182,15 @@ const confirmRun = async ({ schoolId, runId, method, confirmedBy }) => {
     err.status = 404;
     throw err;
   }
-  if (run.status !== "draft") {
+  // "approved" is confirmable as well as "draft". A school with payroll
+  // approval on moves the run draft → approved → confirmed, and this check
+  // named only "draft" — which would have refused every run that had just been
+  // signed off, the one path the approval step exists to create.
+  //
+  // Whether approval was REQUIRED is decided at the route, not here: this
+  // service is also reachable from a script, and the state machine's job is
+  // only to refuse a run that has already been paid or reversed.
+  if (!["draft", "approved"].includes(run.status)) {
     const err = new Error(`This run is already ${run.status}`);
     err.code   = "NOT_DRAFT";
     err.status = 409;

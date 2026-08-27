@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
 import { getErrorMessage }  from "@/lib/api";
+import { usePermission }    from "@/lib/permissions";
 import {
   fetchStaff, fetchSalaryStructures, createSalaryStructure,
 } from "@/services/finance.service";
@@ -38,6 +39,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 export default function SalariesPage() {
   const { t }    = useTranslation();
   const fmt      = useFormat();
+  const canSetSalary = usePermission("payroll.setSalary");
   const qc       = useQueryClient();
   const { toast } = useToast();
   const schoolId = useUser()?.schoolId ?? "";
@@ -168,11 +170,25 @@ export default function SalariesPage() {
       <PageHeader
         title={t("salaries.title")}
         description={t("salaries.blurb")}
+        meta={
+          /*
+            The bursar reaches this page because they cannot prepare a payroll
+            without reading what staff are owed. Setting the figure is somebody
+            else's decision — POST /finance/salary-structures requires
+            payroll.setSalary, which is non-delegable — so the button below is
+            disabled for them rather than absent, with the reason said out loud.
+
+            Absent would have been easier and worse: a bursar who cannot find
+            the control assumes the page is broken and asks. A disabled control
+            with a sentence next to it answers the question where it is asked.
+          */
+          !canSetSalary ? <span>{t("salaries.readOnlyNote")}</span> : undefined
+        }
         actions={
           <Button
             icon={<Wallet className="h-4 w-4" />}
             onClick={() => setOpen(true)}
-            disabled={staff.length === 0}
+            disabled={staff.length === 0 || !canSetSalary}
           >
             {t("salaries.setSalary")}
           </Button>

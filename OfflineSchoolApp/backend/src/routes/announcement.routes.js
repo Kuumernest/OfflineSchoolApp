@@ -13,23 +13,14 @@ const User         = require("../db/models/User");
 // ROLE GUARDS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const adminOnly = (req, res, next) => {
-  const allowed = ["super_admin", "school_admin"];
-  if (!req.user || !allowed.includes(req.user.role)) {
-    return res.status(403).json({
-      message: `Admin only. Your role "${req.user?.role}" is not permitted.`,
-    });
-  }
-  next();
-};
+// The bursar is absent from both guards below, and that is the §9 rule: fee
+// reminders and payment confirmations go to one family through /api/messages,
+// where the recipient is a specific guardian. An announcement is a broadcast
+// to the whole school, and "school closes Friday" is not a finance decision.
+const { requirePermission } = require("../../middleware/permissions");
 
-const adminOrTeacher = (req, res, next) => {
-  const allowed = ["super_admin", "school_admin", "teacher"];
-  if (!req.user || !allowed.includes(req.user.role)) {
-    return res.status(403).json({ message: "Not authorized" });
-  }
-  next();
-};
+const adminOnly      = requirePermission("announcements.manage");
+const adminOrTeacher = requirePermission("announcements.create");
 
 const authenticated = (req, res, next) => {
   if (!req.user) {

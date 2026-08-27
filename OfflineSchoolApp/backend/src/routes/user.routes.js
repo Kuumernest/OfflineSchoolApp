@@ -20,7 +20,15 @@ const PRIVATE_FIELDS = "-password -passwordHash -passwordSalt -tempPassword -__v
  * Roles that are allowed to fetch any user's profile.
  * Using a Set for O(1) lookup instead of Array.includes.
  */
-const ADMIN_ROLES = new Set(["admin", "school_admin", "super_admin"]);
+// users.manage is what decides whether you may read somebody ELSE's profile.
+// Non-delegable: staff contact details and account state are not the bursar's
+// business, and the bursar reads students through /api/students, which carries
+// what a fee statement needs and nothing more.
+//
+// Checked inside the handler rather than as route middleware because the answer
+// is not "admit or refuse" — a caller without it may still read their own
+// profile from the same route.
+const permissions = require("../services/permissions.service");
 
 /**
  * Returns true when the provided string is a syntactically valid
@@ -92,7 +100,7 @@ router.get("/:id", requireAuth, async (req, res) => {
     const requesterId = String(req.user._id);
     const targetId    = req.params.id;
     const role        = req.user.role;
-    const isAdmin     = ADMIN_ROLES.has(role);
+    const isAdmin     = await permissions.can(req.user, "users.manage");
 
     // FIX #CAST — reject obviously invalid ids before hitting Mongoose
     if (!isValidObjectId(targetId)) {

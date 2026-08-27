@@ -4,7 +4,7 @@
 const express = require("express");
 const router  = express.Router();
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 const earlyWarning  = require("../services/earlyWarning.service");
 
 /**
@@ -26,7 +26,11 @@ const resolveSchoolId = (req, provided) => {
 // Office only, teachers excluded — the list names children by fee arrears,
 // which is bursar knowledge, not staffroom knowledge. A per-class teacher
 // view would first need the money signal stripped.
-router.use(authorize("admin", "school_admin", "super_admin"));
+//
+// insights.view defaults to OFFICE_ROLES rather than ADMIN_ROLES, because the
+// bursar is precisely who that sentence was describing. Read-only either way:
+// this router owns no collection and has no write route.
+router.use(requirePermission("insights.view"));
 
 /**
  * GET /api/insights/early-warning?days=30

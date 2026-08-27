@@ -29,6 +29,9 @@ const teacher  = { kind: "user", role: "teacher",      id: "t1", schoolId: S };
 const teacher2 = { kind: "user", role: "teacher",      id: "t2", schoolId: S };
 const student  = { kind: "user", role: "student",      id: "s1", schoolId: S };
 const student2 = { kind: "user", role: "student",      id: "s2", schoolId: S };
+const bursar   = { kind: "user", role: "bursar",       id: "b1", schoolId: S };
+const bursar2  = { kind: "user", role: "bursar",       id: "b2", schoolId: S };
+const legacy   = { kind: "user", role: "admin",        id: "a9", schoolId: S };
 const guardian = { kind: "guardian", id: "g1", schoolId: S, studentIds: ["s1"] };
 const guardian2= { kind: "guardian", id: "g2", schoolId: S, studentIds: ["s2"] };
 const foreign  = { kind: "user", role: "teacher", id: "t9", schoolId: "school-2" };
@@ -107,6 +110,41 @@ const collide = { schoolId: S, participants: [{ kind: "guardian", id: "s1" }] };
 check("user s1 is NOT the guardian s1", P.canPostToConversation(student, collide).allowed, false);
 check("guardian s1 is",
   P.canPostToConversation({ kind: "guardian", id: "s1", schoolId: S }, collide).allowed, true);
+
+console.log("--- the bursar sends like a teacher ---");
+check("bursar->guardian", M(bursar, guardian), true);
+check("bursar->student",  M(bursar, student),  true);
+check("bursar->teacher",  M(bursar, teacher),  true);
+check("bursar->admin",    M(bursar, admin),    true);
+check("bursar->bursar",   M(bursar, bursar2),  true);
+check("teacher->bursar",  M(teacher, bursar),  true);
+check("guardian->bursar", M(guardian, bursar), true);
+check("student->bursar",  M(student, bursar),  true);
+check("bursar cross-school denied", M(bursar, foreign), false);
+check("bursar self denied",         M(bursar, bursar),  false);
+
+console.log("--- the office switches cover the fee desk too ---");
+check("student->bursar OFF with studentToAdmin",
+  M(student, bursar, { studentToAdmin: false }), false);
+check("guardian->bursar OFF with guardianToAdmin",
+  M(guardian, bursar, { guardianToAdmin: false }), false);
+
+console.log("--- and reads like nobody: no audit right ---");
+// The single most important assertion in this file for the bursar. If the
+// bursar ever resolves to the "admin" persona, this flips to true and the fee
+// desk silently gains the ability to read every private thread in the school.
+check("bursar cannot audit",        P.canReadConversation(bursar, convo).allowed, false);
+check("bursar is not auto-member",  P.canPostToConversation(bursar, convo).allowed, false);
+check("bursar cannot post readonly",
+  P.canPostToConversation({ ...bursar, id: "t1" }, readOnly).allowed, false);
+check("bursar persona is its own",  P.principalKind(bursar), "bursar");
+check("bursar is not an admin role", P.isAdminRole("bursar"), false);
+
+console.log("--- the legacy \"admin\" role name still resolves ---");
+// A row stored before the enum existed. It must behave as school_admin rather
+// than as an unknown principal with no privileges at all.
+check("legacy admin persona", P.principalKind(legacy), "admin");
+check("legacy admin can audit", P.canReadConversation(legacy, convo).allowed, true);
 
 console.log("--- settings defaults ---");
 const d = P.resolveSettings(undefined);

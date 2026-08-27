@@ -13,16 +13,28 @@ const TeacherAssignment = require("../db/models/TeacherAssignment");
 // MIDDLEWARE — Admin guard
 // ─────────────────────────────────────────────────────────────────────────────
 
-const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
+// Assigning a teacher to a class is a staffing decision, and it decides who may
+// enter marks for whom — which is why teachers.manage is non-delegable. A school
+// that could hand this out could route mark-entry rights anywhere.
+const { requirePermission } = require("../../middleware/permissions");
+const { ROLES, normalizeRole } = require("../config/roles");
 
-const adminOnly = (req, res, next) => {
-  if (!req.user || !ADMIN_ROLES.has(req.user.role)) {
-    return res.status(403).json({ message: "Admin only" });
-  }
-  next();
-};
+router.use(requirePermission("teachers.manage"));
 
-router.use(adminOnly);
+/**
+ * Is this account one that may hold a teaching assignment?
+ *
+ * About the person being assigned, not the person doing the assigning — which
+ * is why it is a role test and not a permission one. An assignment is the record
+ * of who teaches what, and it is read downstream to decide who may enter marks
+ * for a class; handing one to an account that is not a teacher routes
+ * mark-entry rights somewhere nobody intended.
+ *
+ * Previously this rejected administrators and nothing else, which let a STUDENT
+ * account be assigned to teach a class — and would have let a bursar. Inverted
+ * to an allowlist: only a teacher, and every other role is refused by default.
+ */
+const canBeAssigned = (user) => normalizeRole(user?.role) === ROLES.TEACHER;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -222,9 +234,9 @@ router.post("/", async (req, res) => {
     if (!classDoc)   return res.status(404).json({ message: "Class not found" });
     if (!subjectDoc) return res.status(404).json({ message: "Subject not found" });
 
-    if (ADMIN_ROLES.has(teacher.role)) {
+    if (!canBeAssigned(teacher)) {
       return res.status(400).json({
-        message: `User "${teacher.name}" has role "${teacher.role}" — cannot be assigned as a teacher`,
+        message: `User "${teacher.name}" has role "${teacher.role}" — only a teacher can be assigned to a class`,
       });
     }
 
@@ -301,9 +313,9 @@ router.post("/bulk", async (req, res) => {
       return res.status(404).json({ message: "Teacher not found" });
     }
 
-    if (ADMIN_ROLES.has(teacher.role)) {
+    if (!canBeAssigned(teacher)) {
       return res.status(400).json({
-        message: `User "${teacher.name}" has role "${teacher.role}" — cannot be assigned as a teacher`,
+        message: `User "${teacher.name}" has role "${teacher.role}" — only a teacher can be assigned to a class`,
       });
     }
 

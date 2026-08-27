@@ -4,10 +4,21 @@
 // AUTH
 // ─────────────────────────────────────────────────────────
 
+/**
+ * The five roles the API can issue, and the only five it will accept.
+ *
+ * Mirrors backend/src/config/roles.js, which is the authority — the server
+ * canonicalises the role on every token and every login response, so nothing
+ * outside this union ever reaches the client.
+ *
+ * "admin" was here and is gone. It was never a value the User schema could
+ * store, so no account has ever held it; it merely made every roles array in
+ * config/navigation.ts one item longer than it needed to be.
+ */
 export type UserRole =
   | "super_admin"
   | "school_admin"
-  | "admin"
+  | "bursar"
   | "teacher"
   | "student";
 

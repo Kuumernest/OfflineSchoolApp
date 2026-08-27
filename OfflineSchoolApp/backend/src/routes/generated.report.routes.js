@@ -10,6 +10,23 @@ const GeneratedReport = require("../db/models/GeneratedReport");
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
+const { requirePermission } = require("../../middleware/permissions");
+
+/**
+ * The frozen copies of issued report cards.
+ *
+ * Third router found with no authorisation at all. What is stored here is the
+ * rendered card a parent may already be holding, so writing it is an admin
+ * act: replacing one silently supersedes a document already in circulation.
+ *
+ * Reads stay open to teachers, who legitimately look up what a class was
+ * issued. Guardians and students do not come through here at all — they read
+ * their own cards through /api/portal and /api/students, which scope to the
+ * child from the token rather than from a parameter.
+ */
+const readReports  = requirePermission("reports.viewIssued");
+const writeReports = requirePermission("reports.manage");
+
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -28,7 +45,7 @@ const resolveSchoolId = (req, provided) => {
 // the existing record rather than creating a duplicate.
 // ─────────────────────────────────────────────────────────
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", writeReports, asyncHandler(async (req, res) => {
   const {
     studentId,
     examId,
@@ -109,7 +126,7 @@ router.post("/", asyncHandler(async (req, res) => {
 // (too large — fetch individual record for those).
 // ─────────────────────────────────────────────────────────
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", readReports, asyncHandler(async (req, res) => {
   const {
     examId,
     studentId,
@@ -165,7 +182,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // Get a single generated report including the frozen HTML.
 // ─────────────────────────────────────────────────────────
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", readReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const report = await GeneratedReport.findOne({
@@ -189,7 +206,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // Update a generated report (e.g. publish it).
 // ─────────────────────────────────────────────────────────
 
-router.put("/:id", asyncHandler(async (req, res) => {
+router.put("/:id", writeReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const { isPublished } = req.body;
 
@@ -223,7 +240,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // Soft delete a generated report.
 // ─────────────────────────────────────────────────────────
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", writeReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const report = await GeneratedReport.findOneAndUpdate(
@@ -252,7 +269,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
 // All reports for a specific student.
 // ─────────────────────────────────────────────────────────
 
-router.get("/student/:studentId", asyncHandler(async (req, res) => {
+router.get("/student/:studentId", readReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { studentId } = req.params;
   const { academicYear, term } = req.query;
@@ -282,7 +299,7 @@ router.get("/student/:studentId", asyncHandler(async (req, res) => {
 // All reports for a specific exam.
 // ─────────────────────────────────────────────────────────
 
-router.get("/exam/:examId", asyncHandler(async (req, res) => {
+router.get("/exam/:examId", readReports, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId } = req.params;
 

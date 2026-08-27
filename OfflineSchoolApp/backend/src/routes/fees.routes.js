@@ -5,7 +5,7 @@ const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 
 const FeeStructure = require("../db/models/FeeStructure");
 const FeeCharge    = require("../db/models/FeeCharge");
@@ -19,6 +19,7 @@ const {
   applyStructure,
 } = require("../services/fees.service");
 const { displayName } = require("../utils/studentName");
+const approvals = require("../services/approvals.service");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -48,10 +49,24 @@ const asWholeAmount = (value) => {
   return n;
 };
 
-// Money is staff-only throughout. Teachers do not touch the ledger.
-const bursar = authorize("admin", "school_admin", "super_admin");
+// The ledger. Teachers never touch it; the bursar owns it.
+//
+// This guard was once the admin guard under a variable named "bursar" — the
+// role did not exist, so the only way to run a fee desk was to hand somebody
+// school_admin, and with it every grade and account in the school.
+//
+// Now split in two, which the single role set could not express: reading the
+// ledger and writing to it are different rights. Both default to the same
+// accounts as before — fees.view and fees.manage are FINANCE_ROLES in
+// config/permissions.js — so nothing changes until a school decides it should.
+// What it buys is a front-desk clerk who can look up what a parent owes and
+// take no money, which is a real job and previously unexpressable.
+const canRead   = requirePermission("fees.view");
+const canWrite  = requirePermission("fees.manage");
+const canRefund = requirePermission("fees.refund");
+const canWaive  = requirePermission("fees.waive");
 
-router.use(bursar);
+router.use(canRead);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STRUCTURES
@@ -72,7 +87,7 @@ router.get("/structures", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fees/structures
-router.post("/structures", asyncHandler(async (req, res) => {
+router.post("/structures", canWrite, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -134,7 +149,7 @@ router.post("/structures", asyncHandler(async (req, res) => {
 }));
 
 // PATCH /api/fees/structures/:id/deactivate
-router.patch("/structures/:id/deactivate", asyncHandler(async (req, res) => {
+router.patch("/structures/:id/deactivate", canWrite, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const updated = await FeeStructure.findOneAndUpdate(
     { _id: req.params.id, schoolId },
@@ -150,7 +165,7 @@ router.patch("/structures/:id/deactivate", asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // POST /api/fees/structures/:id/apply   { classId? }
-router.post("/structures/:id/apply", asyncHandler(async (req, res) => {
+router.post("/structures/:id/apply", canWrite, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -222,7 +237,7 @@ router.get("/students/:studentId", asyncHandler(async (req, res) => {
 //
 // The phone generates _id before it ever reaches the network, so a retry
 // upserts the same row instead of taking the money twice.
-router.post("/payments", asyncHandler(async (req, res) => {
+router.post("/payments", canWrite, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
@@ -283,7 +298,7 @@ router.post("/payments", asyncHandler(async (req, res) => {
 }));
 
 // POST /api/fees/payments/:id/reverse   { reason }
-router.post("/payments/:id/reverse", asyncHandler(async (req, res) => {
+router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const reason   = (req.body.reason || "").trim();
   if (!reason) {
@@ -338,6 +353,214 @@ router.post("/payments/:id/reverse", asyncHandler(async (req, res) => {
   });
 
   return res.status(201).json({ success: true, data: reversal, totals });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// REFUNDS
+//
+// Money going back to a family, and NOT the same thing as a reversal.
+//
+//   A reversal says the payment should never have been recorded — a mistyped
+//   amount, the wrong student — and appends a row pointing at the original with
+//   reversesId. Both rows stay, and they cancel.
+//
+//   A refund says the payment was real and the money is being returned. It
+//   stands alone as a negative payment, and the student's balance rises by what
+//   went back, which is exactly right: they no longer have that credit.
+//
+// Above the school's refund threshold, nothing is written until somebody else
+// agrees. The intent is held on the approval request and the payment row is
+// created when it is approved — see approvals.service.js, which explains why
+// the refund defers creation where the expense does not.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// POST /api/fees/refunds
+router.post("/refunds", canRefund, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const { studentId, academicYear, term = null, method = "cash", reference = null } = req.body;
+
+  if (!studentId)    return bad(res, "studentId is required");
+  if (!academicYear) return bad(res, "academicYear is required");
+
+  const amount = asWholeAmount(req.body.amount);
+  if (amount === null || amount <= 0) {
+    return bad(res, "amount must be a whole number of XAF greater than zero", "INVALID_AMOUNT");
+  }
+
+  const reason = req.body.reason ? String(req.body.reason).trim() : null;
+  if (!reason) {
+    // Required, unlike on a payment. Money leaving the school towards a family
+    // is the transaction most likely to be asked about a year later, and "why"
+    // is not reconstructable from the ledger afterwards.
+    return bad(res, "A reason is required for a refund", "REASON_REQUIRED");
+  }
+
+  const student = await Student.findOne({ _id: studentId, schoolId, deletedAt: null })
+    .select("_id studentName name firstName lastName classId enrollmentNo")
+    .lean();
+  if (!student) {
+    return res.status(404).json({
+      success: false, code: "STUDENT_NOT_FOUND",
+      message: "No student with that id in this school",
+    });
+  }
+
+  // Refunding more than the family has actually paid would put the account into
+  // a credit that never existed. Checked against the ledger as it stands now.
+  const totals = await balanceFor({ schoolId, studentId, academicYear });
+  if (amount > totals.paid) {
+    return bad(
+      res,
+      `Cannot refund ${amount} — only ${totals.paid} has been paid this year`,
+      "REFUND_EXCEEDS_PAID"
+    );
+  }
+
+  const { required, threshold } = await approvals.requiresApproval({
+    schoolId, kind: "refund", amount,
+  });
+
+  if (required) {
+    try {
+      const approval = await approvals.raise({
+        schoolId,
+        kind:    "refund",
+        amount,
+        threshold,
+        reason,
+        summary: `Refund to ${displayName(student) ?? "student"} — ${academicYear}`,
+        payload: { studentId, academicYear, term, amount, method, reference, note: reason },
+        requestedBy: req.user?._id ? String(req.user._id) : null,
+      });
+      return res.status(202).json({
+        success: true,
+        pendingApproval: true,
+        data: approval,
+        message: "The refund needs approval before the money can go back.",
+      });
+    } catch (err) {
+      return res.status(err.status ?? 500).json({
+        success: false, code: err.code ?? "ERROR", message: err.message,
+      });
+    }
+  }
+
+  // Under the threshold, or no threshold set: written immediately, exactly as a
+  // payment is.
+  const payment = await FeePayment.create({
+    schoolId,
+    studentId,
+    academicYear,
+    term,
+    classId:    student.classId ?? null,
+    amount:     -amount,
+    method,
+    reference,
+    receiptNo:  await nextReceiptNo(schoolId, academicYear),
+    receivedAt: new Date(),
+    receivedBy: req.user?._id ? String(req.user._id) : null,
+    note:       reason,
+    source:     "web",
+  });
+
+  return res.status(201).json({
+    success: true,
+    data:    payment,
+    totals:  await balanceFor({ schoolId, studentId, academicYear }),
+  });
+}));
+
+// ═════════════════════════════════════════════════════════════════════════════
+// WAIVERS
+//
+// Reducing or writing off a charge — a scholarship, a hardship case, a sibling
+// discount. The FeeCharge has carried waivedAmount and waiverReason since it
+// was written, and until now NO ROUTE COULD SET THEM: every screen read the
+// field and nothing wrote it, so the reduction had to be done by editing the
+// database. This is that missing endpoint, gated from the start.
+//
+// Discounts and scholarships are not separate concepts here on purpose. Both
+// are "this family owes less than the structure says, for a stated reason",
+// which is precisely a waiver with the reason filled in. A parallel model would
+// duplicate the arithmetic in balancesFor and give the same number two names.
+// ═════════════════════════════════════════════════════════════════════════════
+
+// POST /api/fees/charges/:chargeId/waive
+router.post("/charges/:chargeId/waive", canWaive, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const waived = asWholeAmount(req.body.waivedAmount);
+  if (waived === null || waived <= 0) {
+    return bad(res, "waivedAmount must be a whole number of XAF greater than zero", "INVALID_AMOUNT");
+  }
+
+  const reason = req.body.reason ? String(req.body.reason).trim() : null;
+  if (!reason) return bad(res, "A reason is required for a waiver", "REASON_REQUIRED");
+
+  const charge = await FeeCharge.findOne({
+    _id: req.params.chargeId, schoolId, deletedAt: null,
+  });
+  if (!charge) {
+    return res.status(404).json({
+      success: false, code: "CHARGE_NOT_FOUND",
+      message: "No fee charge with that id in this school",
+    });
+  }
+  if (charge.voidedAt) {
+    return bad(res, "That charge has been voided", "CHARGE_VOID");
+  }
+  if (waived > charge.amount) {
+    return bad(
+      res,
+      `A waiver of ${waived} exceeds the charge of ${charge.amount}`,
+      "WAIVER_TOO_LARGE"
+    );
+  }
+
+  const { required, threshold } = await approvals.requiresApproval({
+    schoolId, kind: "waiver", amount: waived,
+  });
+
+  if (required) {
+    try {
+      const approval = await approvals.raise({
+        schoolId,
+        kind:     "waiver",
+        targetId: charge._id,
+        amount:   waived,
+        threshold,
+        reason,
+        summary:  `Waive ${waived} of ${charge.label} (${charge.academicYear})`,
+        payload:  { waivedAmount: waived, waiverReason: reason },
+        requestedBy: req.user?._id ? String(req.user._id) : null,
+      });
+      return res.status(202).json({
+        success: true,
+        pendingApproval: true,
+        data: approval,
+        message: "The waiver needs approval before it reduces the bill.",
+      });
+    } catch (err) {
+      return res.status(err.status ?? 500).json({
+        success: false, code: err.code ?? "ERROR", message: err.message,
+      });
+    }
+  }
+
+  charge.waivedAmount = waived;
+  charge.waiverReason = reason;
+  await charge.save();
+
+  return res.json({
+    success: true,
+    data:    charge,
+    totals:  await balanceFor({
+      schoolId, studentId: charge.studentId, academicYear: charge.academicYear,
+    }),
+  });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

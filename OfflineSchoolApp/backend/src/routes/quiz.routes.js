@@ -19,6 +19,33 @@ const {
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
+const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
+const { ADMIN_ROLES, TEACHING_ROLES, ROLES } = require("../config/roles");
+
+/**
+ * Authorisation, which this router had none of.
+ *
+ * Found while auditing every guard in the codebase for the bursar, and it is a
+ * bigger problem than the bursar: mounted behind authenticate only, every route
+ * below was reachable by any signed-in account. A STUDENT could GET /questions
+ * and read the school question bank — answers included — and could POST, PUT
+ * and DELETE against it. Sitting an exam is not much of a test when the
+ * candidate can read the paper and then delete it.
+ *
+ * The split:
+ *
+ *   authoring   Categories, questions, quizzes, analytics. Teachers and the
+ *               office. A bursar has no part in any of it.
+ *
+ *   sitting     Attempts. Students, plus staff who need to look at one.
+ *
+ *   /sync       Keeps its own per-role branching below, which is the point of
+ *               it: each role is handed a different slice.
+ */
+const authoring = requirePermission("quiz.author");
+const sitting   = authorize(TEACHING_ROLES, ROLES.STUDENT);
+
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
@@ -152,6 +179,23 @@ router.get("/sync", asyncHandler(async (req, res) => {
   }
 
   // ── ADMIN / SUPER_ADMIN SYNC ──────────────────────────────
+  //
+  // This branch was the plain fall-through: not a student, not a teacher,
+  // therefore everything in the school. That was safe only for as long as
+  // exactly three roles existed. A bursar would have walked into it and been
+  // handed every question, quiz and attempt in the building.
+  //
+  // Stated explicitly now, and anything unrecognised is refused rather than
+  // promoted. A role this router has no slice for should be told so, not given
+  // the largest one by default.
+  if (!ADMIN_ROLES.includes(role)) {
+    return res.status(403).json({
+      success: false,
+      code:    "FORBIDDEN",
+      message: `The quiz module has nothing for the role "${role}".`,
+    });
+  }
+
   const [categories, questions, quizzes, attempts] = await Promise.all([
     QuestionCategory.find({ schoolId, updatedAt: { $gt: since } }),
     Question.find({ schoolId, updatedAt: { $gt: since } }),
@@ -179,7 +223,7 @@ router.get("/sync", asyncHandler(async (req, res) => {
 // CATEGORIES
 // ─────────────────────────────────────────────────────────────
 
-router.get("/categories", asyncHandler(async (req, res) => {
+router.get("/categories", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const cats = await QuestionCategory.find({
     schoolId,
@@ -188,7 +232,7 @@ router.get("/categories", asyncHandler(async (req, res) => {
   res.json({ success: true, categories: cats });
 }));
 
-router.post("/categories", asyncHandler(async (req, res) => {
+router.post("/categories", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const cat = await QuestionCategory.create({
     schoolId,
@@ -202,13 +246,13 @@ router.post("/categories", asyncHandler(async (req, res) => {
 // QUESTIONS
 // ─────────────────────────────────────────────────────────────
 
-router.get("/questions", asyncHandler(async (req, res) => {
+router.get("/questions", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const questions = await Question.find({ schoolId, deleted_at: null });
   res.json({ success: true, questions });
 }));
 
-router.post("/questions", asyncHandler(async (req, res) => {
+router.post("/questions", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const question = await Question.create({
     ...req.body,
@@ -218,7 +262,7 @@ router.post("/questions", asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, question });
 }));
 
-router.put("/questions/:id", asyncHandler(async (req, res) => {
+router.put("/questions/:id", authoring, asyncHandler(async (req, res) => {
   const q = await Question.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -227,7 +271,7 @@ router.put("/questions/:id", asyncHandler(async (req, res) => {
   res.json({ success: true, question: q });
 }));
 
-router.delete("/questions/:id", asyncHandler(async (req, res) => {
+router.delete("/questions/:id", authoring, asyncHandler(async (req, res) => {
   await Question.findByIdAndUpdate(req.params.id, {
     deleted_at: new Date(),
   });
@@ -238,13 +282,13 @@ router.delete("/questions/:id", asyncHandler(async (req, res) => {
 // QUIZZES
 // ─────────────────────────────────────────────────────────────
 
-router.get("/quizzes", asyncHandler(async (req, res) => {
+router.get("/quizzes", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const quizzes  = await Quiz.find({ schoolId, deleted_at: null });
   res.json({ success: true, quizzes });
 }));
 
-router.post("/quizzes", asyncHandler(async (req, res) => {
+router.post("/quizzes", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
 
   const { title, class_id, subject_id } = req.body;
@@ -303,7 +347,7 @@ router.post("/quizzes", asyncHandler(async (req, res) => {
   res.status(201).json({ success: true, quiz });
 }));
 
-router.put("/quizzes/:id", asyncHandler(async (req, res) => {
+router.put("/quizzes/:id", authoring, asyncHandler(async (req, res) => {
   const quiz = await Quiz.findByIdAndUpdate(
     req.params.id,
     req.body,
@@ -312,7 +356,7 @@ router.put("/quizzes/:id", asyncHandler(async (req, res) => {
   res.json({ success: true, quiz });
 }));
 
-router.delete("/quizzes/:id", asyncHandler(async (req, res) => {
+router.delete("/quizzes/:id", authoring, asyncHandler(async (req, res) => {
   await Quiz.findByIdAndUpdate(req.params.id, {
     deleted_at: new Date(),
   });
@@ -323,12 +367,12 @@ router.delete("/quizzes/:id", asyncHandler(async (req, res) => {
 // ATTEMPTS
 // ─────────────────────────────────────────────────────────────
 
-router.post("/attempts", asyncHandler(async (req, res) => {
+router.post("/attempts", sitting, asyncHandler(async (req, res) => {
   const attempt = await QuizAttempt.create(req.body);
   res.status(201).json({ success: true, attempt });
 }));
 
-router.get("/attempts/:id", asyncHandler(async (req, res) => {
+router.get("/attempts/:id", sitting, asyncHandler(async (req, res) => {
   const attempt = await QuizAttempt.findById(req.params.id);
   res.json({ success: true, attempt });
 }));
@@ -337,7 +381,7 @@ router.get("/attempts/:id", asyncHandler(async (req, res) => {
 // ANALYTICS
 // ─────────────────────────────────────────────────────────────
 
-router.get("/analytics/quizzes/:quizId", asyncHandler(async (req, res) => {
+router.get("/analytics/quizzes/:quizId", authoring, asyncHandler(async (req, res) => {
   const summary = await QuizAnalytics.findOne({
     quiz_id: req.params.quizId,
   });

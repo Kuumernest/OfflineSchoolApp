@@ -18,18 +18,55 @@ import { getSchoolInfo }          from "../../../src/services/school.service";
 import SyncOverwriteService       from "../../../src/services/sync-overwrite.service";
 import { toDisplayUri }           from "../../../src/utils/logoUri";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { hasPermission, hasRole } from "../../../src/utils/authHelpers";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
+// Who sees which tile.
+//
+// Every tile carries a capability AND the roles that hold it by default. The
+// capability is what decides, so a school that has granted its bursar
+// gate.scan on the web console sees the gate tile appear here too. The role
+// list is the fallback for a session stored before permissions were sent —
+// which on an offline-first phone can be weeks old, and must keep working
+// exactly as it did.
+//
+// Offering a tile that cannot work is worse than offering none: a control that
+// 403s still looks like a promise the app made. The server remains the
+// authority; these lists decide only what is drawn.
+const ADMIN   = ["super_admin", "school_admin"];
+const FINANCE = ["super_admin", "school_admin", "bursar"];
+
+/**
+ * Is this tile for this user?
+ *
+ * Capability where one exists, role where one does not. The gap is real rather
+ * than laziness: classes, subjects, staff accounts and school settings all live
+ * behind a single guard in the backend admin router, which has not been split
+ * into per-module routers yet, so there is no capability to name for them. They
+ * keep the role list, and a school cannot adjust them — which is exactly what
+ * is true of them on the web console too.
+ *
+ * Either way the server decides. These lists only decide what is drawn.
+ */
+const visible = (item) =>
+  item.permission
+    ? hasPermission(item.permission, item.roles ?? [])
+    : hasRole(item.roles ?? []);
+
 const QUICK_ACTIONS = [
+  // First for everyone, and the only reason a bursar opens this app: taking
+  // cash at a desk with no signal.
   {
     id:    "collect-fees",
     titleKey: "dashAdmin.qa_collect_fees",
     icon:  "cash-outline",
     color: "#3B4996",
     route: "/admin/fees",
+    roles: FINANCE,
+    permission: "fees.manage",
   },
   {
     id:    "print-register",
@@ -37,6 +74,8 @@ const QUICK_ACTIONS = [
     icon:  "print-outline",
     color: "#4F5A70",
     route: "/admin/documents",
+    roles: ADMIN,
+    permission: "documents.print",
   },
   {
     id:    "gate-scan",
@@ -44,6 +83,9 @@ const QUICK_ACTIONS = [
     icon:  "qr-code-outline",
     color: "#12683A",
     route: "/admin/gate",
+    roles: ADMIN,
+    // Delegable, and the tile a small school is most likely to want moved.
+    permission: "gate.scan",
   },
   {
     id:    "record-expense",
@@ -51,6 +93,8 @@ const QUICK_ACTIONS = [
     icon:  "receipt-outline",
     color: "#9F2318",
     route: "/admin/finance/expenses",
+    roles: FINANCE,
+    permission: "expenses.manage",
   },
   {
     id:    "add-student",
@@ -58,6 +102,8 @@ const QUICK_ACTIONS = [
     icon:  "person-add-outline",
     color: "#0891B2",
     route: "/admin/students/add",
+    roles: ADMIN,
+    permission: "students.manage",
   },
   {
     id:    "add-class",
@@ -65,6 +111,7 @@ const QUICK_ACTIONS = [
     icon:  "add-circle-outline",
     color: "#4F46E5",
     route: "/admin/classes/add",
+    roles: ADMIN,
   },
   {
     id:    "add-subject",
@@ -72,6 +119,7 @@ const QUICK_ACTIONS = [
     icon:  "add-circle-outline",
     color: "#059669",
     route: "/admin/subjects/add",
+    roles: ADMIN,
   },
   {
     id:    "add-teacher",
@@ -79,6 +127,7 @@ const QUICK_ACTIONS = [
     icon:  "add-circle-outline",
     color: "#7C3AED",
     route: "/admin/teachers/add",
+    roles: ADMIN,
   },
   {
     id:    "assign-teacher",
@@ -86,6 +135,8 @@ const QUICK_ACTIONS = [
     icon:  "git-branch-outline",
     color: "#DB2777",
     route: "/admin/assignments",
+    roles: ADMIN,
+    permission: "teachers.manage",
   },
   {
     id:    "review-apps",
@@ -93,6 +144,8 @@ const QUICK_ACTIONS = [
     icon:  "clipboard-outline",
     color: "#D97706",
     route: "/admin/students/applications",
+    roles: ADMIN,
+    permission: "students.admit",
   },
   {
     id:    "build-timetable",
@@ -100,6 +153,8 @@ const QUICK_ACTIONS = [
     icon:  "time-outline",
     color: "#DC2626",
     route: "/admin/timetable",
+    roles: ADMIN,
+    permission: "timetable.manage",
   },
 ];
 
@@ -111,6 +166,8 @@ const ALL_MODULES = [
     color:       "#3B4996",
     route:       "/admin/fees",
     descKey:     "dashAdmin.modSub_fees",
+    roles:       FINANCE,
+    permission:  "fees.view",
   },
   {
     id:          "expenses",
@@ -119,6 +176,8 @@ const ALL_MODULES = [
     color:       "#9F2318",
     route:       "/admin/finance/expenses",
     descKey:     "dashAdmin.modSub_expenses",
+    roles:       FINANCE,
+    permission:  "expenses.view",
   },
   {
     id:          "payroll",
@@ -127,6 +186,8 @@ const ALL_MODULES = [
     color:       "#12683A",
     route:       "/admin/finance/payroll",
     descKey:     "dashAdmin.modSub_payroll",
+    roles:       FINANCE,
+    permission:  "payroll.view",
   },
   {
     id:          "fin-reports",
@@ -135,6 +196,8 @@ const ALL_MODULES = [
     color:       "#3B4996",
     route:       "/admin/finance/reports",
     descKey:     "dashAdmin.modSub_fin_reports",
+    roles:       FINANCE,
+    permission:  "finance.reports",
   },
   {
     id:          "promotion",
@@ -143,6 +206,8 @@ const ALL_MODULES = [
     color:       "#1B4F8A",
     route:       "/admin/promotion",
     descKey:     "dashAdmin.modSub_promotion",
+    roles:       ADMIN,
+    permission:  "promotion.run",
   },
   {
     id:          "printing",
@@ -151,6 +216,8 @@ const ALL_MODULES = [
     color:       "#4F5A70",
     route:       "/admin/documents",
     descKey:     "dashAdmin.modSub_printing",
+    roles:       ADMIN,
+    permission:  "documents.print",
   },
   {
     id:          "exports",
@@ -159,6 +226,10 @@ const ALL_MODULES = [
     color:       "#12683A",
     route:       "/admin/exports",
     descKey:     "dashAdmin.modSub_exports",
+    roles:       FINANCE,
+    // The screen itself asks the server which workbooks to offer, so this only
+    // has to answer "is there anything here for you at all".
+    permission:  "exports.roster",
   },
   {
     id:          "classes",
@@ -167,6 +238,7 @@ const ALL_MODULES = [
     color:       "#4F46E5",
     route:       "/admin/classes",
     descKey:     "dashAdmin.modSub_classes",
+    roles:       ADMIN,
   },
   {
     id:          "subjects",
@@ -175,6 +247,7 @@ const ALL_MODULES = [
     color:       "#059669",
     route:       "/admin/subjects",
     descKey:     "dashAdmin.modSub_subjects",
+    roles:       ADMIN,
   },
   {
     id:          "teachers",
@@ -183,6 +256,7 @@ const ALL_MODULES = [
     color:       "#7C3AED",
     route:       "/admin/teachers",
     descKey:     "dashAdmin.modSub_teachers",
+    roles:       ADMIN,
   },
   {
     id:          "applications",
@@ -191,6 +265,8 @@ const ALL_MODULES = [
     color:       "#D97706",
     route:       "/admin/students/applications",
     descKey:     "dashAdmin.modSub_applications",
+    roles:       ADMIN,
+    permission:  "students.admit",
   },
   {
     id:          "students",
@@ -199,6 +275,7 @@ const ALL_MODULES = [
     color:       "#059669",
     route:       "/admin/students/approved",
     descKey:     "dashAdmin.modSub_students",
+    roles:       ADMIN,
   },
   {
     id:          "teacher-assignments",
@@ -207,6 +284,8 @@ const ALL_MODULES = [
     color:       "#DB2777",
     route:       "/admin/assignments",
     descKey:     "dashAdmin.modSub_teacher_assignments",
+    roles:       ADMIN,
+    permission:  "teachers.manage",
   },
   {
     id:          "timetable",
@@ -215,6 +294,8 @@ const ALL_MODULES = [
     color:       "#DC2626",
     route:       "/admin/timetable",
     descKey:     "dashAdmin.modSub_timetable",
+    roles:       ADMIN,
+    permission:  "timetable.view",
   },
   {
     id:          "attendance",
@@ -223,6 +304,10 @@ const ALL_MODULES = [
     color:       "#059669",
     route:       "/admin/attendance",
     descKey:     "dashAdmin.modSub_attendance",
+    roles:       ADMIN,
+    // attendance.mark rather than attendance.view: this screen exists to mark a
+    // register, and the bursar holds the read and not the write.
+    permission:  "attendance.mark",
   },
   {
     id:          "exams",
@@ -231,6 +316,8 @@ const ALL_MODULES = [
     color:       "#7C3AED",
     route:       "/admin/exams",
     descKey:     "dashAdmin.modSub_exams",
+    roles:       ADMIN,
+    permission:  "exams.view",
   },
   {
     id:          "announcements",
@@ -239,6 +326,8 @@ const ALL_MODULES = [
     color:       "#DB2777",
     route:       "/admin/announcements",
     descKey:     "dashAdmin.modSub_announcements",
+    roles:       ADMIN,
+    permission:  "announcements.create",
   },
   {
     id:          "settings",
@@ -247,6 +336,7 @@ const ALL_MODULES = [
     color:       "#6B7280",
     route:       "/admin/settings",
     descKey:     "dashAdmin.modSub_settings",
+    roles:       ADMIN,
   },
 ];
 
@@ -452,6 +542,16 @@ export default function AdminDashboard() {
   const logout   = useAuthStore((s) => s.logout);
   const schoolId = useAuthStore((s) => s.user?.schoolId);
 
+  const role = user?.role ?? null;
+
+  // System Health and the alerts derived from it are the academic state of the
+  // school: applications pending, teachers unassigned, timetable conflicts.
+  // Every count behind them comes from admin-only data, and none of it is a
+  // bursar concern. The flag turns off the fetch as well as the rendering —
+  // showing the section and letting it fail would put a row of zeros on screen,
+  // which reads as "nothing is wrong" rather than "you cannot see this".
+  const showSchoolHealth = role !== "bursar";
+
   const [stats,          setStats]          = useState(null);
   const [school,         setSchool]         = useState(null);
   const [loading,        setLoading]        = useState(true);
@@ -479,23 +579,39 @@ export default function AdminDashboard() {
 
         const [data, schoolData, owCount] = await Promise.all([
           (async () => {
+            // Both of these read admin-only endpoints, so for a bursar they
+            // are skipped rather than attempted: the assignment sync pulls the
+            // teacher-to-class map, and the stats recount is of academic
+            // records. Attempting them would cost two guaranteed 403s on every
+            // pull-to-refresh and leave the error banner permanently up.
+            if (!showSchoolHealth) return null;
+
             await syncTeacherAssignments(forceSync);
             // Counts come from SQLite — the same source every feature screen
             // reads — so the dashboard and the screens can no longer disagree.
             // Pull-to-refresh syncs first, then recounts.
             return getAdminStats({ refresh: isRefresh });
           })(),
+          // School name and logo. Reachable by a bursar: it is the letterhead
+          // on every receipt, and /admin/school-info is on the office
+          // allowlist server-side for that reason.
           getSchoolInfo(schoolId),
           SyncOverwriteService.getUnseenCount(schoolId),
         ]);
 
         if (!mountedRef.current) return;
 
-        setStats({
-          ...data,
-          assignedSubjects:
-            data?.assignedSubjects ?? data?.totalAssignments ?? 0,
-        });
+        setStats(
+          data
+            ? {
+                ...data,
+                assignedSubjects:
+                  data?.assignedSubjects ?? data?.totalAssignments ?? 0,
+              }
+            // An empty object rather than null: the loading screen below waits
+            // on stats being set, and a bursar never gets one.
+            : {}
+        );
 
         if (schoolData) setSchool(schoolData);
         setOverwriteCount(owCount);
@@ -511,7 +627,7 @@ export default function AdminDashboard() {
         initialLoadDoneRef.current = true;
       }
     },
-    [schoolId]
+    [schoolId, showSchoolHealth]
   );
 
   // Initial load on mount
@@ -559,6 +675,23 @@ export default function AdminDashboard() {
   const alerts = useMemo(() => {
     if (!stats) return [];
     const list = [];
+
+    // Sync overwrites are the exception and are appended at the end for
+    // everybody: "your edits were replaced" is about the caller's own work, and
+    // a bursar whose fee entry was overwritten needs to hear it more than
+    // anyone. Everything between here and there is academic state.
+    if (!showSchoolHealth) {
+      if (overwriteCount > 0) {
+        list.push({
+          id:      "sync-overwrites",
+          type:    "warning",
+          icon:    "sync-outline",
+          message: t("dashAdmin.syncOverwrites", { count: overwriteCount }),
+          route:   "/admin/sync-overwrites",
+        });
+      }
+      return list;
+    }
 
     if (stats.stalePendingApps > 0) {
       list.push({
@@ -655,19 +788,31 @@ export default function AdminDashboard() {
     }
 
     return list;
-  }, [stats, overwriteCount]);
+  }, [stats, overwriteCount, showSchoolHealth]);
 
   const statValue = useCallback(
     (key) => stats?.[key] ?? 0,
     [stats]
   );
 
+// Recomputed when the role changes, which is also when a fresh sign-in has
+  // replaced the stored permission list — the two arrive together.
+  const quickActions = useMemo(
+    () => QUICK_ACTIONS.filter(visible),
+    [role]
+  );
+
+  const modules = useMemo(
+    () => ALL_MODULES.filter(visible),
+    [role]
+  );
+
   const visibleModules = useMemo(
     () =>
       showAllModules
-        ? ALL_MODULES
-        : ALL_MODULES.slice(0, MODULES_PREVIEW_COUNT),
-    [showAllModules]
+        ? modules
+        : modules.slice(0, MODULES_PREVIEW_COUNT),
+    [showAllModules, modules]
   );
 
   // ── Loading screen ────────────────────────────────────
@@ -692,15 +837,21 @@ export default function AdminDashboard() {
           <Text style={styles.userName} numberOfLines={1}>
             {user?.name || t("dashAdmin.adminFallback")}
           </Text>
-          <Text style={styles.subtitle}>{t("dashAdmin.controlCenter")}</Text>
+          <Text style={styles.subtitle}>
+            {showSchoolHealth
+              ? t("dashAdmin.controlCenter")
+              : t("dashAdmin.financeCenter")}
+          </Text>
         </View>
-        <TouchableOpacity
-          onPress={() => navigate("/admin/settings", t("dashAdmin.settings"))}
-          activeOpacity={0.75}
-          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        >
-          <Ionicons name="person-circle-outline" size={46} color="#4F46E5" />
-        </TouchableOpacity>
+        {showSchoolHealth && (
+          <TouchableOpacity
+            onPress={() => navigate("/admin/settings", t("dashAdmin.settings"))}
+            activeOpacity={0.75}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="person-circle-outline" size={46} color="#4F46E5" />
+          </TouchableOpacity>
+        )}
       </View>
 
       <ScrollView
@@ -733,19 +884,21 @@ export default function AdminDashboard() {
         )}
 
         {/* ── System Health Stats ───────────────────── */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>{t("dashAdmin.systemHealth")}</Text>
-          {STAT_ROWS.map((row) => (
-            <View
-              key={row.map((s) => s.key).join("-")}
-              style={styles.statsRow}
-            >
-              {row.map((s) => (
-                <StatCard key={s.key} item={s} value={statValue(s.key)} />
-              ))}
-            </View>
-          ))}
-        </View>
+        {showSchoolHealth && (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t("dashAdmin.systemHealth")}</Text>
+            {STAT_ROWS.map((row) => (
+              <View
+                key={row.map((s) => s.key).join("-")}
+                style={styles.statsRow}
+              >
+                {row.map((s) => (
+                  <StatCard key={s.key} item={s} value={statValue(s.key)} />
+                ))}
+              </View>
+            ))}
+          </View>
+        )}
 
         {/* ── Alerts ────────────────────────────────── */}
         {alerts.length > 0 && (
@@ -768,7 +921,7 @@ export default function AdminDashboard() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>{t("dashAdmin.quickActions")}</Text>
           <View style={styles.actionsGrid}>
-            {QUICK_ACTIONS.map((a) => (
+            {quickActions.map((a) => (
               <ActionButton
                 key={a.id}
                 action={a}
@@ -788,7 +941,7 @@ export default function AdminDashboard() {
               onPress={() => navigate(m.route, t(m.titleKey))}
             />
           ))}
-          {ALL_MODULES.length > MODULES_PREVIEW_COUNT && (
+          {modules.length > MODULES_PREVIEW_COUNT && (
             <TouchableOpacity
               style={styles.showMoreBtn}
               onPress={() => setShowAllModules((v) => !v)}
@@ -797,7 +950,9 @@ export default function AdminDashboard() {
               <Text style={styles.showMoreText}>
                 {showAllModules
                   ? t("dashAdmin.showLess")
-                  : `Show ${ALL_MODULES.length - MODULES_PREVIEW_COUNT} More`}
+                  : t("dashAdmin.showMore", {
+                      count: modules.length - MODULES_PREVIEW_COUNT,
+                    })}
               </Text>
               <Ionicons
                 name={showAllModules ? "chevron-up" : "chevron-down"}

@@ -4,7 +4,7 @@
 const express = require("express");
 const router  = express.Router();
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 
 const Class             = require("../db/models/Class");
 const Enrollment        = require("../db/models/Enrollment");
@@ -35,8 +35,11 @@ const fail = (res, err) =>
 
 const YEAR = /^\d{4}[/-]\d{4}$/;
 
-// Rolling the school over is the head's decision, not a teacher's.
-router.use(authorize("admin", "school_admin", "super_admin"));
+// Rolling the school over is the head's decision — not a teacher's, and not
+// the bursar's. Promotion rewrites which class every child belongs to, which is
+// the single most consequential academic act in the system, and promotion.run
+// is non-delegable in consequence.
+router.use(requirePermission("promotion.run"));
 
 // ═════════════════════════════════════════════════════════════════════════════
 // CLASS PROGRESSION

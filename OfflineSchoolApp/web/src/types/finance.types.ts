@@ -29,6 +29,13 @@ export interface Expense {
   /** Voided rows stay in the list but drop out of every total. */
   voidedAt?:    string | null;
   voidReason?:  string | null;
+  /**
+   * Approval state. Absent on rows written before approvals existed, which the
+   * server treats as counting — so the UI must read a missing value the same
+   * way and not as "pending".
+   */
+  status?:      "approved" | "pending" | "rejected";
+  approvalId?:  string | null;
 }
 
 export interface SalaryComponent {

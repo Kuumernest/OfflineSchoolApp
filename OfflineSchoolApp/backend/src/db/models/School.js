@@ -178,6 +178,68 @@ const settingsSchema = new mongoose.Schema(
       adminAudit:        { type: Boolean, default: true  },
     },
 
+    /**
+     * Per-school permission overrides, for the bursar and teacher roles.
+     *
+     * Read through permissions.service.js effectiveFor(), which supplies the
+     * defaults from config/permissions.js — so a school created before this
+     * existed behaves exactly like one that accepted every default, which is
+     * the same contract settings.communication above has.
+     *
+     * Stored as two lists per role rather than one resolved list, and that
+     * matters: a school that has granted the bursar gate.scan should keep
+     * tracking every OTHER capability as the product changes. Storing the
+     * resolved set would freeze the bursar as they were on the day somebody
+     * opened this screen, and a permission added in a later release would
+     * silently never reach them.
+     *
+     * Nothing here can widen a locked permission or reach super_admin,
+     * school_admin or student — the service filters both, so a hand-edited
+     * database row cannot grant results.edit to the fee desk.
+     */
+    permissions: {
+      bursar: {
+        granted: { type: [String], default: undefined },
+        revoked: { type: [String], default: undefined },
+      },
+      teacher: {
+        granted: { type: [String], default: undefined },
+        revoked: { type: [String], default: undefined },
+      },
+    },
+
+    /**
+     * When a second signature is required.
+     *
+     * Each threshold is a whole XAF amount: an action at or above it has to be
+     * approved by somebody who did not raise it. Null means never — which is
+     * the default, and the only safe one. Turning approvals on for every school
+     * at once would mean that on the morning after an upgrade no bursar could
+     * record the day's cash expenses until a head teacher signed in, and a
+     * safeguard that stops the school working gets switched off within a week.
+     *
+     * A threshold of 0 means "always", which is a real setting: a school that
+     * wants every refund countersigned, however small, sets 0 rather than 1.
+     *
+     * Read through approvals.service.js resolveThresholds(), which supplies the
+     * defaults — the same contract settings.communication and
+     * settings.permissions already have.
+     */
+    approvals: {
+      /** Expenses at or above this need approval before they count. */
+      expenseThreshold: { type: Number, default: null, min: 0 },
+      /** Refunds at or above this need approval before money goes back. */
+      refundThreshold:  { type: Number, default: null, min: 0 },
+      /** Fee waivers at or above this need approval before they reduce a bill. */
+      waiverThreshold:  { type: Number, default: null, min: 0 },
+      /**
+       * Whether a payroll run needs a second signature between preparing it and
+       * paying it. A switch rather than a threshold: the amount is whatever the
+       * month costs, and a school either wants the step or does not.
+       */
+      payrollRequired:  { type: Boolean, default: false },
+    },
+
     currency: {
       type:    String,
       default: "USD",

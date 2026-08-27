@@ -78,43 +78,40 @@ const resolveStudentIds = async (userId, schoolId) => {
 //     screen calls it and filters client-side.
 //
 //   • Teachers keep everything they had. Marking a class register is their
-//     job, so the student-attendance routes are staffOnly, not adminOnly.
+//     job, so the student-attendance writes are teachingOnly, not adminOnly.
 //
 //   • Writing STAFF attendance is adminOnly. A teacher marking a colleague
 //     present is not a teacher's job, and both clients already assume this —
 //     the web console hides the staff register from teachers entirely.
+//
+//   • The bursar reads attendance and never writes it. Chasing arrears is
+//     easier when you can see that a child stopped coming in March, and
+//     marking a register is not a finance job in any school.
+//
+// That last point is why there are three guards below where there were two.
+// One guard covering both a GET and a POST is exactly how read-only access
+// quietly becomes write access.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const STAFF_ROLES = new Set(["super_admin", "school_admin", "admin", "teacher"]);
-const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
+const { requirePermission } = require("../../middleware/permissions");
 
 const isStudentRole = (req) => req.user?.role === "student";
 
-const staffOnly = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-  if (!STAFF_ROLES.has(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: `Access denied. Your role "${req.user.role}" is not permitted.`,
-    });
-  }
-  next();
-};
+// Three capabilities where this file had three hand-rolled role checks. The
+// defaults are the same sets those checks used — attendance.view is
+// STAFF_ROLES, attendance.mark is TEACHING_ROLES, attendance.markStaff is
+// ADMIN_ROLES — so nobody's access moves. What changes is that a school can now
+// say "our bursar marks the register on Fridays" without a code change, and
+// cannot say "our bursar edits results", because that key is locked.
 
-const adminOnly = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({ success: false, message: "Not authenticated" });
-  }
-  if (!ADMIN_ROLES.has(req.user.role)) {
-    return res.status(403).json({
-      success: false,
-      message: `Admin only. Your role "${req.user.role}" is not permitted.`,
-    });
-  }
-  next();
-};
+/** Anyone the school employs. READS ONLY — never guard a write with this. */
+const staffRead = requirePermission("attendance.view");
+
+/** Whoever may mark a student register: teachers and the office. */
+const teachingOnly = requirePermission("attendance.mark");
+
+/** The staff register. */
+const adminOnly = requirePermission("attendance.markStaff");
 
 /**
  * For a student caller, resolve which Student ids actually belong to them and
@@ -200,7 +197,7 @@ router.get("/students/me", async (req, res) => {
 
 // ── GET /api/attendance/students/roster ──────────────────────────────────────
 // Used by teachers/admins to get the list of students in a class.
-router.get("/students/roster", staffOnly, async (req, res) => {
+router.get("/students/roster", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
     const classId  = req.query.classId;
@@ -236,7 +233,7 @@ router.get("/students/roster", staffOnly, async (req, res) => {
 // ── GET /api/attendance/students/today ───────────────────────────────────────
 // Used by teachers/admins to view today's attendance for a class.
 // ⚠️  Does NOT scope to a single student — that's what /students/me is for.
-router.get("/students/today", staffOnly, async (req, res) => {
+router.get("/students/today", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
     const classId  = req.query.classId;
@@ -323,7 +320,7 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
     // way. scopeToSelfForStudents fails closed, so an unresolvable identity
     // yields an empty list rather than everything.
     //
-    // The route stays open to students (rather than staffOnly) because the
+    // The route stays open to students (rather than staffRead) because the
     // mobile student attendance screen calls it directly and filters
     // client-side; blocking it would break that screen.
     if (isStudentRole(req)) {
@@ -358,7 +355,7 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
 
 // ── POST /api/attendance/students/bulk ───────────────────────────────────────
 // Used by teachers/admins to mark attendance for an entire class at once.
-router.post("/students/bulk", staffOnly, async (req, res) => {
+router.post("/students/bulk", teachingOnly, async (req, res) => {
   try {
     const {
       schoolId,
@@ -472,7 +469,7 @@ router.post("/students/bulk", staffOnly, async (req, res) => {
 
 // ── POST /api/attendance/students ────────────────────────────────────────────
 // Used by teachers/admins to mark a single student's attendance.
-router.post("/students", staffOnly, async (req, res) => {
+router.post("/students", teachingOnly, async (req, res) => {
   try {
     const {
       schoolId,
@@ -564,7 +561,7 @@ router.post("/students", staffOnly, async (req, res) => {
 
 // ── GET /api/attendance/teachers/me ──────────────────────────────────────────
 // Teacher-only: returns the authenticated teacher's own attendance records.
-router.get("/teachers/me", staffOnly, async (req, res) => {
+router.get("/teachers/me", staffRead, async (req, res) => {
   try {
     const teacherId = String(req.user?._id || req.user?.id || "");
     const schoolId  = req.query.schoolId || req.user?.schoolId;
@@ -604,7 +601,7 @@ router.get("/teachers/me", staffOnly, async (req, res) => {
 
 // ── GET /api/attendance/teachers/roster ──────────────────────────────────────
 // Used by admins to get the list of all teachers in a school.
-router.get("/teachers/roster", staffOnly, async (req, res) => {
+router.get("/teachers/roster", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
 
@@ -635,7 +632,7 @@ router.get("/teachers/roster", staffOnly, async (req, res) => {
 
 // ── GET /api/attendance/teachers/today ───────────────────────────────────────
 // Used by admins to view all teachers' attendance today.
-router.get("/teachers/today", staffOnly, async (req, res) => {
+router.get("/teachers/today", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
     const today    = todayStr();
@@ -682,7 +679,7 @@ router.get("/teachers/today", staffOnly, async (req, res) => {
 // ── GET /api/attendance/teachers ─────────────────────────────────────────────
 // Used by admins to view teacher attendance records.
 // ⚠️  NO role-based scoping — admins need to see all teachers.
-router.get("/teachers", staffOnly, async (req, res) => {
+router.get("/teachers", staffRead, async (req, res) => {
   try {
     const {
       schoolId: qSchoolId,
@@ -902,7 +899,7 @@ router.post("/teachers", adminOnly, async (req, res) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── GET /api/attendance/report/overview ──────────────────────────────────────
-router.get("/report/overview", staffOnly, async (req, res) => {
+router.get("/report/overview", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
     const date     = dateStr(req.query.date);
@@ -960,7 +957,7 @@ router.get("/report/overview", staffOnly, async (req, res) => {
 });
 
 // ── GET /api/attendance/report/weekly ────────────────────────────────────────
-router.get("/report/weekly", staffOnly, async (req, res) => {
+router.get("/report/weekly", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
 
@@ -1031,7 +1028,7 @@ router.get("/report/weekly", staffOnly, async (req, res) => {
 });
 
 // ── GET /api/attendance/report/class/:classId ─────────────────────────────────
-router.get("/report/class/:classId", staffOnly, async (req, res) => {
+router.get("/report/class/:classId", staffRead, async (req, res) => {
   try {
     const schoolId  = req.query.schoolId || req.user?.schoolId;
     const classId   = req.params.classId;

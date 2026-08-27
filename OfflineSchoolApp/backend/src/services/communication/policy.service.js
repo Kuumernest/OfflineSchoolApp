@@ -31,16 +31,41 @@
  *   student   student    configurable per school, OFF by default
  *   student   teacher    yes
  *   student   admin      yes
+ *   student   bursar     yes, same school switch as student -> admin
  *   student   guardian   no
  *   teacher   student    yes
  *   teacher   teacher    yes
  *   teacher   guardian   yes
  *   teacher   admin      yes
+ *   teacher   bursar     yes
+ *   bursar    guardian   yes
+ *   bursar    student    yes
+ *   bursar    teacher    yes
+ *   bursar    admin      yes
+ *   bursar    bursar     yes
  *   guardian  teacher    yes
  *   guardian  admin      yes
+ *   guardian  bursar     yes
  *   guardian  student    only their own child
  *   guardian  guardian   no
  *   admin     anyone     yes
+ *
+ * ── Why the bursar is a kind of its own ───────────────────────────────────
+ *
+ * A bursar has to be able to write to a parent: "your child's fees are
+ * 125,000 FCFA outstanding", "your payment of 75,000 has been received". That
+ * is a direct message to one family, and it needs the same reach a teacher
+ * has. What it must NOT come with is the admin's audit right — the ability to
+ * read a conversation you are not part of. Folding the bursar into "admin"
+ * would have granted exactly that, silently, as a side effect of letting them
+ * send a fee reminder.
+ *
+ * So: bursar sends like a teacher, and reads like nobody. See
+ * canReadConversation, where the audit branch stays admin-only.
+ *
+ * Broadcasting is a separate matter and is not decided here — a fee reminder
+ * addresses one family, whereas "school closes on Friday" addresses everyone.
+ * announcement.routes.js keeps the bursar out of announcements for that reason.
  *
  * ── Two notes on the defaults ─────────────────────────────────────────────
  *
@@ -58,10 +83,12 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
-const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
+const roles = require("../../config/roles");
+
+const ADMIN_ROLES = new Set(roles.ADMIN_ROLES);
 
 /** Unknown roles get no privileges. */
-const isAdminRole = (role) => ADMIN_ROLES.has(String(role || ""));
+const isAdminRole = (role) => ADMIN_ROLES.has(roles.normalizeRole(role));
 
 /**
  * Describe a principal in one word, so the matrix reads plainly.
@@ -71,9 +98,13 @@ function principalKind(p) {
   if (!p) return "unknown";
   if (p.kind === "guardian") return "guardian";
   if (p.kind !== "user")     return "unknown";
-  if (isAdminRole(p.role))   return "admin";
-  if (p.role === "teacher")  return "teacher";
-  if (p.role === "student")  return "student";
+
+  const role = roles.normalizeRole(p.role);
+
+  if (isAdminRole(role))            return "admin";
+  if (role === roles.ROLES.BURSAR)  return "bursar";
+  if (role === roles.ROLES.TEACHER) return "teacher";
+  if (role === roles.ROLES.STUDENT) return "student";
   return "unknown";
 }
 
@@ -147,15 +178,30 @@ function canMessage(from, to, settings) {
   if (a === "admin") return allow();
 
   if (a === "teacher") {
-    if (b === "student" || b === "guardian" || b === "teacher" || b === "admin") {
+    if (b === "student" || b === "guardian" || b === "teacher" ||
+        b === "admin"   || b === "bursar") {
       return allow();
     }
     return deny("Teachers may not message this kind of recipient");
   }
 
+  // The fee desk. Reaches a family directly, which is the whole point: a
+  // reminder or a receipt confirmation is addressed to one guardian, not
+  // posted to the school.
+  if (a === "bursar") {
+    if (b === "guardian" || b === "student" || b === "teacher" ||
+        b === "admin"    || b === "bursar") {
+      return allow();
+    }
+    return deny("The bursar may not message this kind of recipient");
+  }
+
   if (a === "student") {
     if (b === "teacher") return allow();
-    if (b === "admin") {
+    // The bursar sits behind the same switch as the admin: both are "the
+    // office" from a pupil's side of the counter, and a school that has closed
+    // pupil-to-office messaging did not mean to leave the fee desk open.
+    if (b === "admin" || b === "bursar") {
       return cfg.studentToAdmin
         ? allow()
         : deny("This school has disabled student messages to administrators");
@@ -175,7 +221,12 @@ function canMessage(from, to, settings) {
         ? allow()
         : deny("This school has disabled guardian messages to teachers");
     }
-    if (b === "admin") {
+    // A parent must be able to reply about their own child's fees. Gated with
+    // the admin switch rather than left ungated, so a school that has closed
+    // guardian-to-office messaging closes all of it — but note that closing it
+    // means fee threads become one-way, which is worth saying on the settings
+    // screen if it ever grows a description.
+    if (b === "admin" || b === "bursar") {
       return cfg.guardianToAdmin
         ? allow()
         : deny("This school has disabled guardian messages to administrators");
@@ -249,6 +300,10 @@ function canReadConversation(principal, conversation, settings) {
   // Participants keep their history, including after archiving.
   if (isParticipant(principal, conversation)) return allow();
 
+  // Admin only, and deliberately not OFFICE_ROLES. Reading a conversation you
+  // are not part of is the strongest right in this module, and no part of
+  // running a fee desk requires it. A bursar who needs to see a thread joins
+  // it, like everybody else.
   if (principalKind(principal) === "admin") {
     return resolveSettings(settings).adminAudit
       ? allow("admin-audit")

@@ -4,6 +4,7 @@
 const mongoose = require("mongoose");
 const bcrypt   = require("bcryptjs");
 const { generateUUID } = require("../../utils/uuid");
+const { ALL_ROLES, ROLES, STAFF_ROLES } = require("../../config/roles");
 
 const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
 
@@ -59,13 +60,17 @@ const userSchema = new mongoose.Schema(
     },
 
     // ── Authorization ─────────────────────────────────────────────────────────
+    // The list lives in config/roles.js, which is also what every route guard
+    // reads. A role added here and nowhere else would be storable and
+    // powerless; a role added there and not here would be authorised and
+    // unsaveable. One list avoids both.
     role: {
       type: String,
       enum: {
-        values:  ["super_admin", "school_admin", "teacher", "student"],
-        message: "Role must be super_admin, school_admin, teacher, or student",
+        values:  ALL_ROLES,
+        message: "Role must be one of: " + ALL_ROLES.join(", "),
       },
-      default: "teacher",
+      default: ROLES.TEACHER,
     },
 
     // ── School & Class ────────────────────────────────────────────────────────
@@ -310,10 +315,15 @@ userSchema.statics.findByEnrollmentNo = function (
  * Return all active staff in a school (excludes students).
  */
 userSchema.statics.findStaffBySchool = function (schoolId) {
+  // Driven by STAFF_ROLES rather than a hand-written list. This named
+  // school_admin and teacher only, so a bursar would have been invisible to
+  // every caller — staff attendance and the payroll roster included.
+  // super_admin is excluded because they are the deployment's operator, not a
+  // member of any one school's staff.
   return this.find({
     schoolId,
     isActive: true,
-    role:     { $in: ["school_admin", "teacher"] },
+    role:     { $in: STAFF_ROLES.filter((r) => r !== ROLES.SUPER_ADMIN) },
   }).sort({ name: 1 });
 };
 
@@ -333,7 +343,7 @@ userSchema.statics.findBySchoolAndRole = function (schoolId, role) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 userSchema.virtual("isStaff").get(function () {
-  return ["super_admin", "school_admin", "teacher"].includes(this.role);
+  return STAFF_ROLES.includes(this.role);
 });
 
 userSchema.virtual("isStudent").get(function () {

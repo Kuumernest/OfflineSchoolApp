@@ -14,7 +14,7 @@ const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 const {
   guardResultWrite,
   logResultChange,
@@ -25,8 +25,15 @@ const {
 // its own, so any signed-in account — including a student — could call
 // PATCH /:examId/unlock and clear the lock on every result in the school.
 // Enforcing a lock that anybody may remove is not enforcement.
-const staffOnly = authorize("admin", "school_admin", "super_admin", "teacher");
-const adminOnly = authorize("admin", "school_admin", "super_admin");
+// exams.view defaults to TEACHING_ROLES, not STAFF_ROLES: the bursar has no
+// business in the exam module. Setting papers, entering scores and locking
+// results are academic acts, and the one thing this separation exists to
+// prevent is the person who collects the fees altering the marks.
+//
+// exams.manage is non-delegable for the same reason — this is not a capability
+// a school should be able to hand to the fee desk by ticking a box.
+const staffOnly = requirePermission("exams.view");
+const adminOnly = requirePermission("exams.manage");
 
 // ─────────────────────────────────────────────────────────
 // HELPERS

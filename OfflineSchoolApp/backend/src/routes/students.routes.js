@@ -385,16 +385,40 @@ const getPagination = (req) => {
 // SECTION 3 — ROLE GUARDS
 // ═════════════════════════════════════════════════════════════════════════════
 
-const adminOnly = (req, res, next) => {
-  const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
-  if (!req.user || !ADMIN_ROLES.includes(req.user.role)) {
-    return sendError(
-      res, 403,
-      `Admin only. Your role "${req.user?.role}" is not permitted.`
-    );
-  }
-  next();
-};
+const { requirePermission } = require("../../middleware/permissions");
+
+/**
+ * One "admin only" guard used to cover five different decisions, and they are
+ * not the same decision at all: editing a record, deciding who joins the
+ * school, and erasing somebody are three different kinds of authority that
+ * happened to have the same holder.
+ *
+ * All three default to ADMIN_ROLES, so nothing moves today. Two of them —
+ * students.admit and students.delete — are non-delegable, so this is also where
+ * the school stops being able to hand the whole student console to the fee desk
+ * by ticking one box.
+ */
+const canManage = requirePermission("students.manage");
+const canAdmit  = requirePermission("students.admit");
+const canDelete = requirePermission("students.delete");
+
+/**
+ * The office desk: admins and the bursar, READS ONLY.
+ *
+ * A bursar cannot do their job without the roster. Every fee statement needs a
+ * name, every arrears call needs a guardian's phone number, and every payment
+ * has to be posted against a real child in a real class. Denying that would
+ * simply mean the school hands the bursar an admin account instead, which is
+ * the outcome this whole separation exists to avoid.
+ *
+ * What it opens is demographic only — name, admission number, class, guardian,
+ * contact, status. Marks and report cards live in /api/results, which grades
+ * the bursar's access separately and lets them read nothing else.
+ *
+ * Never guard a write with this. Admission, approval, suspension and deletion
+ * each carry their own capability above, and they stay that way.
+ */
+const officeRead = requirePermission("students.view");
 
 const studentOnly = (req, res, next) => {
   if (!req.user || req.user.role !== "student") {
@@ -406,16 +430,10 @@ const studentOnly = (req, res, next) => {
   next();
 };
 
-const teacherOrAdmin = (req, res, next) => {
-  const ALLOWED = ["super_admin", "school_admin", "admin", "teacher"];
-  if (!req.user || !ALLOWED.includes(req.user.role)) {
-    return sendError(
-      res, 403,
-      `Teachers and admins only. Your role "${req.user?.role}" is not permitted.`
-    );
-  }
-  next();
-};
+// "The students I teach" — a question the bursar has no version of, which is
+// why it is a capability of its own rather than a wider reading of
+// students.view.
+const teacherOrAdmin = requirePermission("students.viewTaught");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 4 — SHARED DOMAIN LOGIC
@@ -1221,7 +1239,7 @@ router.post(
 // SECTION 9 — ADMIN LIST / READ ROUTES
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.get("/stats/summary", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.get("/stats/summary", authenticate, officeRead, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -1261,7 +1279,7 @@ router.get("/stats/summary", authenticate, adminOnly, asyncHandler(async (req, r
 // ─── GET /pending ─────────────────────────────────────────────────────────────
 // Reads from BOTH StudentApplication (public form) and Student (direct enroll)
 
-router.get("/pending", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.get("/pending", authenticate, canAdmit, asyncHandler(async (req, res) => {
   const { since, classId, search } = req.query;
   const { page, limit, skip }      = getPagination(req);
   const schoolId                   = resolveSchoolId(req);
@@ -1377,7 +1395,7 @@ router.get("/pending", authenticate, adminOnly, asyncHandler(async (req, res) =>
 }));
 
 // ─── DEBUG ROUTE — remove after confirming counts match ───────────────────────
-router.get("/debug-count", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.get("/debug-count", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId   = resolveSchoolId(req);
   const StudentApp = getStudentApp();
 
@@ -1420,7 +1438,7 @@ router.get("/debug-count", authenticate, adminOnly, asyncHandler(async (req, res
 }));
 
 // GET / — generic admin list
-router.get("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.get("/", authenticate, officeRead, asyncHandler(async (req, res) => {
   const { classId, since, search, status = "approved" } = req.query;
   const { page, limit, skip }                           = getPagination(req);
   const schoolId                                        = resolveSchoolId(req);
@@ -1448,7 +1466,7 @@ router.get("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 // POST / — direct enrollment by admin
-router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
@@ -1609,7 +1627,7 @@ router.post("/", authenticate, adminOnly, asyncHandler(async (req, res) => {
 // emails it when the student has an address on file, and otherwise returns
 // it ONCE in the response so the office can hand it over — the same
 // show-once contract as enrollment itself.
-router.post("/:id/reset-password", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.post("/:id/reset-password", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
 
   const student = await Student.findOne({
@@ -1862,8 +1880,8 @@ const handleApprove = asyncHandler(async (req, res) => {
 });
 
 // ── FIXED: approve route registrations were missing ───────────────────────────
-router.post("/:id/approve", authenticate, adminOnly, handleApprove);
-router.put( "/:id/approve", authenticate, adminOnly, handleApprove);
+router.post("/:id/approve", authenticate, canAdmit, handleApprove);
+router.put( "/:id/approve", authenticate, canAdmit, handleApprove);
 
 // ── Reject ────────────────────────────────────────────────────────────────────
 // FIXED: handleReject was defined in the previous session but never included
@@ -1953,11 +1971,11 @@ const handleReject = asyncHandler(async (req, res) => {
   });
 });
 
-router.post("/:id/reject", authenticate, adminOnly, handleReject);
-router.put( "/:id/reject", authenticate, adminOnly, handleReject);
+router.post("/:id/reject", authenticate, canAdmit, handleReject);
+router.put( "/:id/reject", authenticate, canAdmit, handleReject);
 
 // ─── Delete ────────────────────────────────────────────────────────────────────
-router.delete("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.delete("/:id", authenticate, canDelete, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
@@ -1980,7 +1998,7 @@ router.delete("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => 
 }));
 
 // ─── Suspend ───────────────────────────────────────────────────────────────────
-router.patch("/:id/suspend", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.patch("/:id/suspend", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
@@ -2012,7 +2030,7 @@ router.patch("/:id/suspend", authenticate, adminOnly, asyncHandler(async (req, r
 }));
 
 // ─── Restore ───────────────────────────────────────────────────────────────────
-router.patch("/:id/restore", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.patch("/:id/restore", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
@@ -2044,7 +2062,7 @@ router.patch("/:id/restore", authenticate, adminOnly, asyncHandler(async (req, r
 }));
 
 // ─── Move class ────────────────────────────────────────────────────────────────
-router.patch("/:id/move", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res) => {
   const { classId }   = req.body;
   if (!classId) return sendError(res, 400, "classId is required");
 
@@ -2088,7 +2106,7 @@ router.patch("/:id/move", authenticate, adminOnly, asyncHandler(async (req, res)
 }));
 
 // ── GET /:id — MUST be last ────────────────────────────────────────────────────
-router.get("/:id", authenticate, adminOnly, asyncHandler(async (req, res) => {
+router.get("/:id", authenticate, officeRead, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
   const { id }   = req.params;
 

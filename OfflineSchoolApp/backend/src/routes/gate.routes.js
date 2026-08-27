@@ -4,7 +4,7 @@
 const express = require("express");
 const router  = express.Router();
 
-const { authorize } = require("../../middleware/auth");
+const { requirePermission } = require("../../middleware/permissions");
 const gate   = require("../services/gate.service");
 const notify = require("../services/notification");
 
@@ -22,10 +22,19 @@ const bad = (res, message, code) =>
 /**
  * The gate.
  *
- * Staff only, and teachers are included: the person on the gate in the morning
- * is usually a teacher on duty, not an administrator.
+ * Teachers are included: the person on the gate in the morning is usually a
+ * teacher on duty, not an administrator. The bursar is not — arrivals and
+ * departures are a safeguarding record, and nothing about collecting fees
+ * needs it.
  */
-router.use(authorize("admin", "school_admin", "super_admin", "teacher"));
+// Delegable, and this is the clearest case for it: in a small school the person
+// on the gate at eight in the morning is whoever is standing there, and gate.scan
+// is exactly the sort of capability a head should be able to hand the bursar
+// without also handing them the register.
+router.use(requirePermission("gate.scan"));
+
+/** Reissuing a card and flushing the notification queue are office decisions. */
+const officeOnly = requirePermission("gate.manage");
 
 /**
  * POST /api/gate/scan   { token, at?, station? }
@@ -135,7 +144,7 @@ router.get("/today", asyncHandler(async (req, res) => {
  */
 router.post(
   "/token/:studentId",
-  authorize("admin", "school_admin", "super_admin"),
+  officeOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     if (!schoolId) return bad(res, "schoolId is required");
@@ -160,7 +169,7 @@ router.post(
  */
 router.post(
   "/dispatch",
-  authorize("admin", "school_admin", "super_admin"),
+  officeOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     return res.json({ success: true, ...(await notify.dispatch({ schoolId })) });

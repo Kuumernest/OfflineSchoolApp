@@ -47,6 +47,35 @@ const expenseSchema = new mongoose.Schema(
     incurredAt: { type: Date, default: Date.now, index: true },
     recordedBy: { type: String, default: null },
 
+    /**
+     * Whether this counts yet.
+     *
+     *   approved  Counts in every total. The default, and what every row
+     *             written before approvals existed effectively is.
+     *   pending   Recorded, waiting for a second signature, and excluded from
+     *             the accounts until it gets one.
+     *   rejected  Somebody said no. Kept, never counted — deleting it would
+     *             erase the fact that it was asked for.
+     *
+     * The default is "approved" rather than "pending" on purpose. A school that
+     * has set no expense threshold has not asked for approvals, and making them
+     * opt out would freeze the fee desk of every existing deployment on upgrade
+     * morning. approvals.service.js decides which one a new row gets.
+     *
+     * Rows written before this field existed have no value at all, which is why
+     * every report filters with $nin rather than $eq: a missing field is not in
+     * ["pending", "rejected"], so historic expenses keep counting.
+     */
+    status: {
+      type:    String,
+      enum:    ["approved", "pending", "rejected"],
+      default: "approved",
+      index:   true,
+    },
+
+    /** The ApprovalRequest that gated this, when one did. */
+    approvalId: { type: String, default: null, index: true },
+
     /** Scan or photo of the receipt, stored like the school logo. */
     attachmentPath: { type: String, default: null },
 

@@ -3,8 +3,11 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
-  ChevronRight, AlertCircle, X, CreditCard,
+  ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
 } from "lucide-react";
+
+import PermissionsSection from "@/pages/settings/PermissionsSection";
+import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
@@ -75,12 +78,19 @@ interface Analytics {
 // `value` / `id` fields stay English — they are compared, stored and sent to
 // the API.
 const SECTIONS = [
-  { id: "school",    labelKey: "settings.secSchool",    icon: Building2     },
-  { id: "profile",   labelKey: "settings.secProfile",   icon: User          },
-  { id: "grading",   labelKey: "settings.secGrading",   icon: GraduationCap },
-  { id: "admins",    labelKey: "settings.secAdmins",    icon: Shield        },
-  { id: "idcards",   labelKey: "settings.secIdCards",   icon: CreditCard    },
-  { id: "analytics", labelKey: "settings.secAnalytics", icon: BarChart3     },
+  { id: "school",      labelKey: "settings.secSchool",      icon: Building2     },
+  { id: "profile",     labelKey: "settings.secProfile",     icon: User          },
+  { id: "grading",     labelKey: "settings.secGrading",     icon: GraduationCap },
+  { id: "admins",      labelKey: "settings.secAdmins",      icon: Shield        },
+  // Sits next to Office accounts on purpose: appointing somebody and deciding
+  // what they may do are two halves of one job, and a head who has just created
+  // a bursar is exactly who wants this screen next.
+  { id: "permissions", labelKey: "settings.secPermissions", icon: ShieldCheck   },
+  // Next to Permissions, because the two answer neighbouring questions: what
+  // may somebody do, and what may they do WITHOUT a second signature.
+  { id: "approvals",   labelKey: "settings.secApprovals",   icon: ShieldAlert   },
+  { id: "idcards",     labelKey: "settings.secIdCards",     icon: CreditCard    },
+  { id: "analytics",   labelKey: "settings.secAnalytics",   icon: BarChart3     },
 ] as const;
 
 type SectionId = typeof SECTIONS[number]["id"];
@@ -111,9 +121,14 @@ const DAYS_OF_WEEK = [
   { value: "Saturday",  labelKey: "settings.daySat" },
 ];
 
+// "admin" is kept in both maps below, and only in the maps. It is not a role
+// the API will store — see backend/src/config/roles.js — but a school whose
+// database predates the enum could still hold a row saying it, and a badge
+// reading "admin" is better than one reading nothing.
 const ROLE_COLORS: Record<string, string> = {
   super_admin:  "bg-red-100 text-red-700",
   school_admin: "bg-purple-100 text-purple-700",
+  bursar:       "bg-amber-100 text-amber-700",
   admin:        "bg-indigo-100 text-indigo-700",
   teacher:      "bg-emerald-100 text-emerald-700",
 };
@@ -121,6 +136,7 @@ const ROLE_COLORS: Record<string, string> = {
 const ROLE_LABEL_KEYS: Record<string, string> = {
   super_admin:  "settings.roleSuperAdmin",
   school_admin: "settings.schoolAdmin",
+  bursar:       "settings.roleBursar",
   admin:        "settings.roleAdmin",
   teacher:      "academic.teacher",
 };
@@ -1065,7 +1081,10 @@ function AdminsSection({
   const [creating,   setCreating]   = useState(false);
   const [newName,    setNewName]    = useState("");
   const [newEmail,   setNewEmail]   = useState("");
-  const [newRole,    setNewRole]    = useState("admin");
+  // school_admin, not "admin": the latter is not a role the API stores, so the
+  // default selection was relying on the server aliasing it back. Say what is
+  // meant.
+  const [newRole,    setNewRole]    = useState("school_admin");
 
   const load = useCallback(async () => {
     try {
@@ -1216,10 +1235,24 @@ function AdminsSection({
                     text-sm outline-none focus:border-indigo-400
                   "
                 >
-                  {/* Values are role identifiers the API stores — labels only. */}
-                  <option value="admin">{t("settings.roleAdmin")}</option>
+                  {/* Values are the role identifiers the API stores. */}
                   <option value="school_admin">{t("settings.schoolAdmin")}</option>
+                  <option value="bursar">{t("settings.roleBursar")}</option>
                 </select>
+
+                {/*
+                  Said here rather than left to be discovered, because the two
+                  options are not two flavours of the same thing. A school admin
+                  runs the school; a bursar runs its money and cannot reach a
+                  grade, a class list or these settings. Appointing the wrong one
+                  is the difference between delegating the fee desk and handing
+                  over the whole school.
+                */}
+                <p className="mt-2 text-xs text-gray-500">
+                  {newRole === "bursar"
+                    ? t("settings.roleBursarHint")
+                    : t("settings.roleAdminHint")}
+                </p>
               </div>
             </div>
 
@@ -1612,6 +1645,8 @@ export default function SettingsPage() {
             {activeSection === "profile"   && <ProfileSection />}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
             {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
+            {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
+            {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}
             {activeSection === "idcards"   && <IdCardSection    schoolId={schoolId} />}
             {activeSection === "analytics" && <AnalyticsSection schoolId={schoolId} />}
           </div>

@@ -5289,12 +5289,18 @@
     "mod_settings": "Settings",
     "modSub_settings": "System config",
     "controlCenter": "Control Center",
+    "financeCenter": "Finance Desk",
     "loading": "Loading dashboard…",
     "loadFailed": "Failed to load dashboard data. Pull down to retry.",
     "systemHealth": "System Health",
     "quickActions": "Quick Actions",
     "modules": "Modules",
     "showLess": "Show Less",
+    "showMore": "Show {{count}} more",
+    "syncOverwrites": {
+      "one": "1 sync overwrite — your edits were replaced",
+      "other": "{{count}} sync overwrites — your edits were replaced"
+    },
     "logout": "Logout",
     "logoutBody": "Are you sure you want to logout?",
     "navErrTitle": "Navigation Error",

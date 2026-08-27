@@ -401,7 +401,13 @@ export const useAuthError         = () => useAuthStore((s) => s.error);
 export const useEnrollmentNo      = () => useAuthStore((s) => s.user?.enrollmentNo ?? null);
 export const useMustResetPassword = () => useAuthStore((s) => s.user?.mustResetPassword ?? false);
 export const useIsStudent         = () => useAuthStore((s) => s.user?.role === "student");
+// The bursar is NOT an admin, which is the entire point of the role — do not
+// widen this to cover them. Somebody wanting "may see the money" wants a
+// separate selector, because the two questions have different answers.
+//
+// "admin" is gone from the list: it was never a role the User schema could
+// store, and the API canonicalises whatever it is given before it answers.
 export const useIsAdmin           = () => useAuthStore((s) =>
-  ["admin", "school_admin", "super_admin"].includes(s.user?.role ?? ""),
+  ["school_admin", "super_admin"].includes(s.user?.role ?? ""),
 );
 export const useIsTeacher = () => useAuthStore((s) => s.user?.role === "teacher");
