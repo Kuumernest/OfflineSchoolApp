@@ -6,7 +6,9 @@ const bcrypt   = require("bcryptjs");
 const { generateUUID } = require("../../utils/uuid");
 const { ALL_ROLES, ROLES, STAFF_ROLES } = require("../../config/roles");
 
-const emailRegex = /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/;
+// Shared with the routes, which is the point — see src/utils/email.js for the
+// two-disagreeing-definitions bug this replaced.
+const { EMAIL_REGEX } = require("../../utils/email");
 
 const uuidSchema = {
   type:    String,
@@ -38,7 +40,7 @@ const userSchema = new mongoose.Schema(
       type:      String,
       lowercase: true,
       trim:      true,
-      match:     [emailRegex, "Please provide a valid email"],
+      match:     [EMAIL_REGEX, "Please provide a valid email"],
       default:   null,
     },
 

@@ -12,6 +12,7 @@ import {
   Pencil,
   Trash2,
   KeyRound,
+  RotateCcw,
   Mail,
   School,
   Users,
@@ -32,6 +33,7 @@ import { useToast } from "@/components/ui/Toast";
 import {
   fetchTeachers,
   deleteTeacher,
+  createTeacher,
 } from "@/services/teacher.service";
 import api from "@/lib/axios";
 import { API } from "@/services/apiEndpoints";
@@ -50,8 +52,12 @@ const QK = {
 
 // Keys, not text: this is module scope, where there is no translator, and a
 // constant evaluated once at import could never react to a language change.
+// The empty value used to mean "all" and did not: an omitted status left the
+// API on its active-only default, so "All" and "Active only" returned the same
+// rows and "Inactive only" returned none at all. This filter had been on the
+// screen since it was written and could never answer. It says what it means now.
 const STATUS_OPTIONS = [
-  { value: "",         labelKey: "teachers.all"      },
+  { value: "all",      labelKey: "teachers.all"          },
   { value: "active",   labelKey: "teachers.activeOnly"   },
   { value: "inactive", labelKey: "teachers.inactiveOnly" },
 ];
@@ -66,7 +72,9 @@ export default function TeachersPage() {
   const schoolId = user?.schoolId ?? "";
 
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState("");
+  // Active by default — the roster this screen has always opened with. Removed
+  // teachers are now a view you can choose, rather than rows that do not exist.
+  const [status, setStatus] = useState("active");
   const [page,   setPage]   = useState(1);
 
   const deferredSearch = useDeferredValue(search);
@@ -134,6 +142,50 @@ export default function TeachersPage() {
     onError: (err) =>
       toast({ title: t("teachers.errResetPassword"), message: getErrorMessage(err), kind: "error" }),
   });
+
+  /**
+   * Bring a removed teacher back.
+   *
+   * Posts to the create endpoint with their existing address. The endpoint
+   * recognises a dormant teacher at this school on that email and reactivates
+   * THAT row rather than inserting a new one, so their subject assignments,
+   * marks and attendance still point at them — which is the whole reason
+   * removal deactivates instead of deleting.
+   *
+   * Before this, the address stayed spent: re-adding them answered 409 "Email
+   * already registered", naming a row this screen could not show.
+   */
+  const restoreMutation = useMutation({
+    mutationFn: (teacher: Teacher) =>
+      createTeacher({ name: teacher.name, email: teacher.email, schoolId }),
+    onSuccess: (result) => {
+      const res = (result ?? {}) as { tempPassword?: string; emailSent?: boolean };
+      // Same rule as resetMutation above: the password goes on screen only when
+      // the email did not carry it, and then the toast does not time out.
+      toast({
+        title:   t("teachers.restored"),
+        message: res.emailSent
+          ? t("teachers.restoredEmailed")
+          : res.tempPassword
+            ? t("teachers.restoredPassword", { password: res.tempPassword })
+            : t("teachers.restoredNoPassword"),
+        kind:     "success",
+        duration: res.emailSent ? 4000 : 0,
+      });
+      invalidate();
+    },
+    onError: (err) =>
+      toast({ title: t("teachers.errRestore"), message: getErrorMessage(err), kind: "error" }),
+  });
+
+  const askRestore = async (teacher: Teacher) => {
+    const ok = await confirm({
+      title:        t("teachers.restoreConfirm"),
+      message:      t("teachers.restoreBody", { name: teacher.name }),
+      confirmLabel: t("teachers.restore"),
+    });
+    if (ok) restoreMutation.mutate(teacher);
+  };
 
   const askRemove = async (teacher: Teacher) => {
     const ok = await confirm({
@@ -333,25 +385,40 @@ export default function TeachersPage() {
 
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
-                        <IconAction
-                          title={t("common.edit")}
-                          onClick={() => navigate(`/teachers/${teacher._id}/edit`)}
-                        >
-                          <Pencil className="w-4 h-4" />
-                        </IconAction>
-                        <IconAction
-                          title={t("teachers.resetPassword")}
-                          onClick={() => askReset(teacher)}
-                        >
-                          <KeyRound className="w-4 h-4" />
-                        </IconAction>
-                        <IconAction
-                          title={t("common.remove")}
-                          danger
-                          onClick={() => askRemove(teacher)}
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </IconAction>
+                        {/* A removed teacher gets one action. Editing or
+                            resetting the password of a deactivated account is
+                            not something to offer — the only useful move is
+                            bringing it back. */}
+                        {teacher.isActive ? (
+                          <>
+                            <IconAction
+                              title={t("common.edit")}
+                              onClick={() => navigate(`/teachers/${teacher._id}/edit`)}
+                            >
+                              <Pencil className="w-4 h-4" />
+                            </IconAction>
+                            <IconAction
+                              title={t("teachers.resetPassword")}
+                              onClick={() => askReset(teacher)}
+                            >
+                              <KeyRound className="w-4 h-4" />
+                            </IconAction>
+                            <IconAction
+                              title={t("common.remove")}
+                              danger
+                              onClick={() => askRemove(teacher)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </IconAction>
+                          </>
+                        ) : (
+                          <IconAction
+                            title={t("teachers.restore")}
+                            onClick={() => askRestore(teacher)}
+                          >
+                            <RotateCcw className="w-4 h-4" />
+                          </IconAction>
+                        )}
                       </div>
                     </td>
                   </tr>

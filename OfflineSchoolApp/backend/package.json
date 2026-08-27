@@ -12,8 +12,9 @@
     "check:approvals": "node scripts/check-approvals.js",
     "check:admin": "node scripts/check-admin-guards.js",
     "check:reminders": "node scripts/check-fee-reminders.js",
+    "check:staff": "node scripts/check-staff-lifecycle.js",
     "check": "npm run check:roles && npm run check:policy",
-    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders",
+    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],

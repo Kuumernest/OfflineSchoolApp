@@ -499,7 +499,15 @@
     "removeConfirm": "Supprimer cet enseignant ?",
     "removed": "Enseignant supprimé",
     "passwordReset": "Mot de passe réinitialisé",
-    "removeConfirmLabel": "Supprimer l’enseignant"
+    "removeConfirmLabel": "Supprimer l’enseignant",
+    "restore": "Restaurer",
+    "restoreConfirm": "Restaurer cet enseignant ?",
+    "restoreBody": "{{name}} pourra se reconnecter, avec ses matières, ses notes et ses présences intactes. Un nouveau mot de passe temporaire est généré.",
+    "restored": "Enseignant restauré",
+    "restoredEmailed": "Un nouveau mot de passe lui a été envoyé par e-mail.",
+    "restoredPassword": "Mot de passe temporaire : {{password}}",
+    "restoredNoPassword": "Il devra définir un nouveau mot de passe à la prochaine connexion.",
+    "errRestore": "Impossible de restaurer cet enseignant"
   },
   "subjects": {
     "title": "Matières",
@@ -1318,7 +1326,12 @@
     "credentials": "Identifiants",
     "resetPassword": "Réinitialiser le mot de passe",
     "removeAccount": "Supprimer le compte",
-    "resetPasswordConfirm": "Générer un nouveau mot de passe temporaire pour {{name}} ? L'actuel cesse immédiatement de fonctionner."
+    "resetPasswordConfirm": "Générer un nouveau mot de passe temporaire pour {{name}} ? L'actuel cesse immédiatement de fonctionner.",
+    "removed": "Supprimé",
+    "restore": "Restaurer",
+    "restoreConfirm": "Restaurer le compte de {{name}} ? Ses données reviennent avec lui, et un nouveau mot de passe temporaire est généré.",
+    "accountRestored": "Compte restauré",
+    "accountRestoredBody": "{{name}} est de nouveau actif en tant que {{role}}, avec tout ce qui avait été enregistré sur son compte. Communiquez-lui le mot de passe ci-dessous — l'ancien ne fonctionne plus."
   },
   "permissions": {
     "title": "Qui peut faire quoi",

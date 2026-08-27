@@ -399,9 +399,10 @@ const generateTempPassword = () => {
   return `${adj}${noun}${digits}`;
 };
 
-const isValidEmail = (email) =>
-  typeof email === "string" &&
-  /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+// Same rule the User model enforces at save(), which it did not used to be:
+// this one was the more permissive of the two, so an address accepted here
+// could still throw on save and reach the caller as a 500. src/utils/email.js.
+const { isValidEmail } = require("../utils/email");
 
 const getSchoolName = async (schoolId) => {
   const fallback = process.env.SCHOOL_NAME || "Your School";
@@ -422,6 +423,101 @@ const sendEmailSafe = async ({ to, template, data, context = "" }) => {
     );
     return { success: false };
   }
+};
+
+/**
+ * ?status=active | inactive | all — default active.
+ *
+ * The default stays active-only deliberately. These lists also feed
+ * subject-assignment pickers and dashboard counts, and a deactivated teacher
+ * offered as somebody who could teach a class would be a worse bug than the one
+ * this parameter fixes. A caller that wants dormant accounts asks for them.
+ */
+const statusFilter = (raw) => {
+  const s = String(raw ?? "").toLowerCase();
+  if (s === "all")      return {};
+  if (s === "inactive") return { isActive: false };
+  return { isActive: true };
+};
+
+/**
+ * The email is taken. By whom, and may this caller have it back?
+ *
+ * ── The bug this replaces ─────────────────────────────────────────────────
+ *
+ * Both staff-create endpoints answered this with findOne({ email }) → 409
+ * "Email already registered". But removal here is a DEACTIVATION, not a delete,
+ * and both list endpoints hid inactive rows. So removing somebody and adding
+ * them again — the most ordinary correction there is — failed with a message
+ * about a duplicate, naming a row the screen no longer showed. There was no way
+ * to resolve it from the UI at all; the only fix was a database edit.
+ *
+ * Deactivating rather than deleting is right, and stays: a bursar who recorded
+ * payments and a teacher who entered marks are referenced by that history, and
+ * removing the row would orphan an audit trail a school may need years later.
+ * What was missing was the way back.
+ *
+ * Answers exactly one of:
+ *   { free: true }             nobody holds it
+ *   { restore: <doc> }         a dormant account this caller may reclaim
+ *   { conflict: "<message>" }  held, and not by anything to reactivate
+ */
+const claimStaffEmail = async ({ email, schoolId, allowedRoles }) => {
+  // Not a student: students share emails deliberately (siblings), and the
+  // pre("save") uniqueness hook on User scopes itself the same way. Matching
+  // that scope is what keeps this honest — anything the hook would refuse has
+  // to be refused here with a message, or it reaches save() and surfaces as a
+  // raw E11000 with no explanation attached.
+  const existing = await User.findOne({ email, role: { $ne: ROLES.STUDENT } });
+  if (!existing) return { free: true };
+
+  if (existing.isActive) return { conflict: "Email already registered" };
+
+  // Another school's dormant row. Same message as an active account on purpose:
+  // this caller cannot act on it either way, and has no business learning which
+  // school holds the address.
+  if (String(existing.schoolId) !== String(schoolId)) {
+    return { conflict: "Email already registered" };
+  }
+
+  // Dormant, but the wrong KIND of account. Reactivating it here would flip a
+  // removed teacher into a bursar while their class and subject assignments
+  // carried on pointing at them, so this says where the row actually lives
+  // instead of quietly converting it.
+  if (!allowedRoles.includes(existing.role)) {
+    return {
+      conflict:
+        `That email belongs to a removed ${existing.role.replace(/_/g, " ")} ` +
+        `account. Restore it from that screen rather than creating a new one.`,
+    };
+  }
+
+  return { restore: existing };
+};
+
+/**
+ * Bring a dormant staff account back, with a password somebody knows.
+ *
+ * A fresh temporary password every time: the old one has been unusable for as
+ * long as the account was off, and nobody holds a record of it. Reusing the row
+ * rather than inserting a new one is the whole point — the account keeps its
+ * id, so every mark, payment and audit entry pointing at this person still
+ * resolves to them.
+ */
+const restoreStaffAccount = async ({ doc, name, role }) => {
+  const tempPassword = generateTempPassword();
+
+  doc.isActive          = true;
+  if (name?.trim()) doc.name = name.trim();
+  if (role)         doc.role = role;
+  doc.password          = tempPassword;
+  doc.mustResetPassword = true;
+
+  // save(), not an update: the pre("save") hook is what hashes the password.
+  // A findOneAndUpdate here would store it in clear text.
+  await doc.save();
+
+  return { user: doc, tempPassword };
 };
 
 const createStaffAccount = async ({
@@ -941,7 +1037,9 @@ router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandle
 router.get("/teachers", requirePermission("teachers.view"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
-  const query = { role: "teacher", isActive: true };
+  // The web teachers screen has shipped an "Inactive only" filter since it was
+  // written, and this line is why it could never return a row.
+  const query = { role: "teacher", ...statusFilter(req.query.status) };
   if (schoolId)                query.schoolId = schoolId;
   if (req.query.email?.trim()) query.email    = req.query.email.toLowerCase().trim();
 
@@ -966,11 +1064,52 @@ router.post("/teachers", requirePermission("teachers.manage"), asyncHandler(asyn
     return sendError(res, 400, "A valid email is required");
   }
 
-  const existing = await User.findOne({ email: emailClean }).lean();
-  if (existing) return sendError(res, 409, "Email already registered");
-
+  // Resolved before the email check, which needs to know the school to tell a
+  // reclaimable row from another tenant's.
   const resolvedSchoolId = resolveSchoolId(req, schoolId);
   const schoolName       = await getSchoolName(resolvedSchoolId);
+
+  const claim = await claimStaffEmail({
+    email:        emailClean,
+    schoolId:     resolvedSchoolId,
+    allowedRoles: ["teacher"],
+  });
+  if (claim.conflict) return sendError(res, 409, claim.conflict);
+
+  if (claim.restore) {
+    const { user, tempPassword: restoredPassword } = await restoreStaffAccount({
+      doc: claim.restore, name,
+    });
+
+    const restoreEmail = await sendEmailSafe({
+      to:       emailClean,
+      template: "teacherWelcome",
+      data: {
+        teacherName: user.name, email: emailClean,
+        tempPassword: restoredPassword, schoolName,
+        loginUrl: process.env.APP_LOGIN_URL || null,
+      },
+      context: "teacherWelcome (restore)",
+    });
+
+    const restoredObj = user.toObject();
+    delete restoredObj.password;
+    delete restoredObj.tempPassword;
+
+    console.log(`♻️  Teacher restored: ${user.name} (${user._id})`);
+    return sendSuccess(res, {
+      data:      restoredObj,
+      teacher:   restoredObj,
+      restored:  true,
+      emailSent: restoreEmail.success,
+      // Returned whether or not the email went, unlike the create branch below.
+      // On a restore the caller is usually looking straight at the person they
+      // brought back and needs to read it out to them.
+      tempPassword: restoredPassword,
+      message: "Teacher restored with their previous records. New password issued.",
+    });
+  }
+
   const tempPassword     = generateTempPassword();
 
   const userData = {
@@ -2654,8 +2793,8 @@ router.get("/settings/admins", requirePermission("users.manage"), asyncHandler(a
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const admins   = await User.find({
     schoolId,
-    role:     { $in: OFFICE_ROLES },
-    isActive: true,
+    role: { $in: OFFICE_ROLES },
+    ...statusFilter(req.query.status),
   }).select("-password -tempPassword").lean();
   return sendSuccess(res, { admins });
 }));
@@ -2701,10 +2840,55 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
     return sendError(res, 400, "schoolId is required to create an admin");
   }
 
-  const existing = await User.findOne({ email: emailClean }).lean();
-  if (existing) return sendError(res, 409, "Email already registered");
-
   const schoolName = await getSchoolName(resolvedSchoolId);
+
+  const claim = await claimStaffEmail({
+    email:    emailClean,
+    schoolId: resolvedSchoolId,
+    // OFFICE_ROLES includes super_admin, and a dormant super_admin is not a row
+    // a school admin may reclaim. Nothing is escalated if they did — the account
+    // comes back as whatever role was requested, and requesting super_admin is
+    // already refused above — but it would let them resurrect a platform account
+    // as their own bursar. Same rule as creation, applied to reactivation.
+    allowedRoles: req.user?.role === ROLES.SUPER_ADMIN
+      ? OFFICE_ROLES
+      : OFFICE_ROLES.filter((r) => r !== ROLES.SUPER_ADMIN),
+  });
+  if (claim.conflict) return sendError(res, 409, claim.conflict);
+
+  if (claim.restore) {
+    // The role comes along: a removed school_admin may legitimately be brought
+    // back as the bursar, and both are office accounts, so nothing else has to
+    // move for that to be true.
+    const { user, tempPassword: restoredPassword } = await restoreStaffAccount({
+      doc: claim.restore, name, role: normalizedRole,
+    });
+
+    const restoreEmail = await sendEmailSafe({
+      to:       emailClean,
+      template: "adminWelcome",
+      data: {
+        adminName: user.name, email: emailClean,
+        tempPassword: restoredPassword, role: user.role, schoolName,
+        loginUrl: process.env.APP_LOGIN_URL || null,
+      },
+      context: "adminWelcome (restore)",
+    });
+
+    const restoredObj = user.toObject();
+    delete restoredObj.password;
+    delete restoredObj.tempPassword;
+
+    console.log(`♻️  Staff account restored: ${user.name} (${user._id})`);
+    return sendSuccess(res, {
+      admin:        restoredObj,
+      restored:     true,
+      emailSent:    restoreEmail.success,
+      tempPassword: restoredPassword,
+      message:      "Account restored with its previous records. New password issued.",
+    });
+  }
+
   const { user: admin, tempPassword } = await createStaffAccount({
     name:      name.trim(),
     email:     emailClean,
@@ -2730,6 +2914,7 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
 
   return sendSuccess(res, {
     admin:     adminObj,
+    restored:  false,
     emailSent: emailResult.success,
     tempPassword,
     message:   emailResult.success

@@ -59,6 +59,10 @@ interface AdminUser {
   name:  string;
   email: string;
   role:  string;
+  // Removing an account deactivates it rather than deleting it, because
+  // payments and audit entries reference the row. The list asks for dormant
+  // accounts too now, so this decides how each one is drawn.
+  isActive?: boolean;
 }
 
 interface Analytics {
@@ -1102,13 +1106,22 @@ function AdminsSection({
     role:         string;
     tempPassword: string;
     emailSent:    boolean;
+    // A restore reuses the existing row and everything attached to it. Worth
+    // saying, rather than reporting it as a new account.
+    restored:     boolean;
   } | null>(null);
 
   const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     try {
-      const { data } = await api.get("/admin/settings/admins", { params: { schoolId } });
+      // status=all, because the accounts this screen hid were the ones the
+      // person using it most needed to see: a removed bursar was invisible here
+      // and yet still held their email address, so re-adding them failed with
+      // "Email already registered" against a row that appeared not to exist.
+      const { data } = await api.get("/admin/settings/admins", {
+        params: { schoolId, status: "all" },
+      });
       setAdmins(data?.admins || []);
     } catch (err) {
       toast({ kind: "error", title: t("settings.loadFailed"), message: extractMessage(err, t) });
@@ -1130,7 +1143,11 @@ function AdminsSection({
       const { data } = await api.post("/admin/settings/admins", {
         name: newName.trim(), email: newEmail.trim(), role: newRole, schoolId,
       });
-      if (data?.admin) setAdmins((prev) => [data.admin, ...prev]);
+      // Reloaded rather than prepended. This request may have RESTORED a
+      // dormant account instead of creating one, and prepending would then show
+      // the same person twice — once as new, once as the removed row further
+      // down. The server knows which it did; the list is cheap; ask it.
+      await load();
 
       // The modal switches to the credentials view rather than closing. It used
       // to close and claim "login details sent to {{email}}" unconditionally —
@@ -1138,11 +1155,12 @@ function AdminsSection({
       // password that would have rescued the situation was discarded with the
       // response. A new bursar then existed with a password nobody knew.
       setCreated({
-        name:         newName.trim(),
-        email:        newEmail.trim(),
-        role:         newRole,
+        name:         data?.admin?.name  ?? newName.trim(),
+        email:        data?.admin?.email ?? newEmail.trim(),
+        role:         data?.admin?.role  ?? newRole,
         tempPassword: data?.tempPassword ?? "",
         emailSent:    data?.emailSent === true,
+        restored:     data?.restored === true,
       });
       setCopied(false);
       setNewName(""); setNewEmail(""); setNewRole("school_admin");
@@ -1179,6 +1197,39 @@ function AdminsSection({
         role:         admin.role,
         tempPassword: data?.tempPassword ?? "",
         emailSent:    data?.emailSent === true,
+        restored:     false,
+      });
+      setCopied(false);
+      setShowModal(true);
+    } catch (err) {
+      toast({ kind: "error", title: t("settings.failed"), message: extractMessage(err, t) });
+    }
+  };
+
+  /**
+   * Bring a removed account back.
+   *
+   * Posts to the same create endpoint the form uses. That is not a shortcut:
+   * the endpoint recognises a dormant account of its own kind at this school and
+   * reactivates that row rather than inserting a new one, so the person keeps
+   * their id and every payment, mark and audit entry still points at them. One
+   * path, and typing the email into the form again does exactly the same thing —
+   * which is what somebody will try first.
+   */
+  const handleRestore = async (admin: AdminUser) => {
+    if (!window.confirm(t("settings.restoreConfirm", { name: admin.name }))) return;
+    try {
+      const { data } = await api.post("/admin/settings/admins", {
+        name: admin.name, email: admin.email, role: admin.role, schoolId,
+      });
+      await load();
+      setCreated({
+        name:         admin.name,
+        email:        admin.email,
+        role:         admin.role,
+        tempPassword: data?.tempPassword ?? "",
+        emailSent:    data?.emailSent === true,
+        restored:     data?.restored !== false,
       });
       setCopied(false);
       setShowModal(true);
@@ -1235,9 +1286,19 @@ function AdminsSection({
         </div>
 
         <div className="divide-y divide-gray-100">
-          {admins.map((a) => (
-            <div key={a._id} className="flex items-center gap-3 py-3">
-              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-sm font-bold text-indigo-600">
+          {admins.map((a) => {
+            // A removed account is drawn faded, still holding its email address,
+            // with the one action that applies to it. It used to be omitted, so
+            // the address it holds looked unclaimed and the failure on re-adding
+            // it looked like a bug in the app.
+            const removed = a.isActive === false;
+
+            return (
+            <div key={a._id} className={cn("flex items-center gap-3 py-3", removed && "opacity-60")}>
+              <div className={cn(
+                "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-sm font-bold",
+                removed ? "bg-gray-100 text-gray-400" : "bg-indigo-50 text-indigo-600"
+              )}>
                 {(a.name || "?").charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
@@ -1249,34 +1310,56 @@ function AdminsSection({
                 </p>
                 <p className="text-xs text-gray-500">{a.email}</p>
               </div>
+
+              {removed && (
+                <span className="rounded-full bg-gray-100 px-2.5 py-1 text-xs font-semibold text-gray-500">
+                  {t("settings.removed")}
+                </span>
+              )}
+
               <span className={cn(
                 "rounded-full px-2.5 py-1 text-xs font-semibold",
-                ROLE_COLORS[a.role] || "bg-gray-100 text-gray-600"
+                removed
+                  ? "bg-gray-100 text-gray-500"
+                  : ROLE_COLORS[a.role] || "bg-gray-100 text-gray-600"
               )}>
                 {roleLabel(a.role, t)}
               </span>
-              {/* Available for everybody including yourself: re-issuing your
-                  own password is a normal thing to need, and unlike removal it
-                  cannot lock the school out. */}
-              <button
-                onClick={() => handleReset(a)}
-                title={t("settings.resetPassword")}
-                className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
-              >
-                <KeyRound className="h-4 w-4" />
-              </button>
 
-              {a._id !== currentUserId && (
+              {removed ? (
                 <button
-                  onClick={() => handleRemove(a._id, a.name)}
-                  title={t("settings.removeAccount")}
-                  className="ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
+                  onClick={() => handleRestore(a)}
+                  className="ml-2 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs font-semibold text-gray-600 transition hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-600"
                 >
-                  <X className="h-4 w-4" />
+                  {t("settings.restore")}
                 </button>
+              ) : (
+                <>
+                  {/* Available for everybody including yourself: re-issuing your
+                      own password is a normal thing to need, and unlike removal
+                      it cannot lock the school out. */}
+                  <button
+                    onClick={() => handleReset(a)}
+                    title={t("settings.resetPassword")}
+                    className="ml-2 rounded-lg p-1.5 text-gray-400 transition hover:bg-indigo-50 hover:text-indigo-600"
+                  >
+                    <KeyRound className="h-4 w-4" />
+                  </button>
+
+                  {a._id !== currentUserId && (
+                    <button
+                      onClick={() => handleRemove(a._id, a.name)}
+                      title={t("settings.removeAccount")}
+                      className="ml-1 rounded-lg p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 transition"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </>
               )}
             </div>
-          ))}
+            );
+          })}
 
           {admins.length === 0 && (
             <p className="py-6 text-center text-sm text-gray-400">
@@ -1292,7 +1375,9 @@ function AdminsSection({
           <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl">
             <div className="mb-5 flex items-center justify-between">
               <h3 className="text-lg font-bold text-gray-900">
-                {created ? t("settings.credentials") : t("settings.addAdmin")}
+                {created
+                  ? (created.restored ? t("settings.accountRestored") : t("settings.credentials"))
+                  : t("settings.addAdmin")}
               </h3>
               <button onClick={closeModal} className="text-gray-400 hover:text-gray-600">
                 <X className="h-5 w-5" />
@@ -1307,10 +1392,15 @@ function AdminsSection({
             {created ? (
               <div className="space-y-4">
                 <p className="text-sm text-gray-500">
-                  {t("settings.accountReadyBody", {
-                    name: created.name,
-                    role: roleLabel(created.role, t),
-                  })}
+                  {created.restored
+                    ? t("settings.accountRestoredBody", {
+                        name: created.name,
+                        role: roleLabel(created.role, t),
+                      })
+                    : t("settings.accountReadyBody", {
+                        name: created.name,
+                        role: roleLabel(created.role, t),
+                      })}
                 </p>
 
                 <div className="space-y-2.5">

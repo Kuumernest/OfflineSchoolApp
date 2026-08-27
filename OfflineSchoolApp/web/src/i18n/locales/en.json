@@ -499,7 +499,15 @@
     "removeConfirm": "Remove this teacher?",
     "removed": "Teacher removed",
     "passwordReset": "Password reset",
-    "removeConfirmLabel": "Remove teacher"
+    "removeConfirmLabel": "Remove teacher",
+    "restore": "Restore",
+    "restoreConfirm": "Restore this teacher?",
+    "restoreBody": "{{name}} will be able to sign in again, with their subjects, marks and attendance intact. A new temporary password is issued.",
+    "restored": "Teacher restored",
+    "restoredEmailed": "A new password has been emailed to them.",
+    "restoredPassword": "Temporary password: {{password}}",
+    "restoredNoPassword": "They must set a new password at next sign-in.",
+    "errRestore": "Could not restore this teacher"
   },
   "subjects": {
     "title": "Subjects",
@@ -1318,7 +1326,12 @@
     "credentials": "Sign-in details",
     "resetPassword": "Reset password",
     "removeAccount": "Remove account",
-    "resetPasswordConfirm": "Issue a new temporary password for {{name}}? Their current one stops working immediately."
+    "resetPasswordConfirm": "Issue a new temporary password for {{name}}? Their current one stops working immediately.",
+    "removed": "Removed",
+    "restore": "Restore",
+    "restoreConfirm": "Restore {{name}}'s account? Their records come back with it, and a new temporary password is issued.",
+    "accountRestored": "Account restored",
+    "accountRestoredBody": "{{name}} is active again as {{role}}, with everything previously recorded against their account. Give them the password below — the old one no longer works."
   },
   "permissions": {
     "title": "Who may do what",
