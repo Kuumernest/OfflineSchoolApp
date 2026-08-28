@@ -30,21 +30,121 @@
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 /** Today, as the server writes it. */
-const todayStr = () => new Date().toISOString().slice(0, 10);
+/**
+ * ── Which day a mark belongs to, defined once ─────────────────────────────
+ *
+ * This file used to carry its own copy of todayStr and dateStr, with a comment
+ * admitting they duplicated attendance.routes.js and were "not an improvement to
+ * make on one side only". They come from shared/attendance.js now, so there is
+ * no side to make it on: the endpoint and this handler agree by construction.
+ *
+ * It matters more than tidiness. dateStr falls back to TODAY on anything
+ * unparseable, so two implementations that disagreed by a character would write
+ * a queued register against one day and apply it against another — and the two
+ * would disagree about who was in the room with nothing to show why.
+ */
+const { dateStr } = require("../../../../../shared/attendance");
 
 /**
- * A calendar day as the server stores it.
+ * A calendar-day filter, as both teacher and pupil queries build it.
  *
- * Falls back to today on anything unparseable, which is what dateStr() in
- * attendance.routes.js does. Not an improvement to make on one side only.
+ * A date wins outright; otherwise startDate and endDate bound a range, either
+ * end of which may be absent. Dates are stored as "YYYY-MM-DD" strings, so a
+ * lexical comparison is a chronological one — which is why the endpoints can
+ * use $gte on them at all.
  */
-const dateStr = (d) => {
-  if (!d) return todayStr();
-  const parsed = new Date(d);
-  return Number.isNaN(parsed.getTime()) ? todayStr() : parsed.toISOString().slice(0, 10);
+const withinDates = (rows, query) => {
+  if (query.date) {
+    const only = dateStr(query.date);
+    return rows.filter((r) => String(r.date) === only);
+  }
+  if (!query.startDate && !query.endDate) return rows;
+
+  const from = query.startDate ? dateStr(query.startDate) : null;
+  const to   = query.endDate   ? dateStr(query.endDate)   : null;
+
+  return rows.filter((r) => {
+    const d = String(r.date ?? "");
+    if (from && d < from) return false;
+    if (to   && d > to)   return false;
+    return true;
+  });
 };
 
 module.exports = [
+  {
+    route: "GET /api/attendance/teachers/roster",
+
+    /**
+     * The staff a school may mark present.
+     *
+     * ── isActive: true here, unlike the pupil roster ────────────────────────
+     *
+     * The student roster uses isActive: { $ne: false }, which includes a record
+     * that never had the field. This one requires it to be exactly true. The
+     * difference looks like an inconsistency and is faithfully reproduced: an
+     * account created without the field is absent from this list on the server,
+     * and a mirror that included it would offer a name the office cannot mark
+     * through the web.
+     *
+     * ── The endpoint imposes no order ───────────────────────────────────────
+     *
+     * There is no .sort(), so the server returns whatever order the storage
+     * engine gives. Any order is therefore as faithful as any other, and this
+     * sorts by name so the desktop at least shows a stable one — a list that
+     * reshuffles between reads is its own kind of wrong.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const teachers = docs
+        .find("user", { schoolId, role: "teacher", isActive: true })
+        .map((t) => ({ _id: t._id, name: t.name, email: t.email, role: t.role }))
+        .sort((a, b) => {
+          const an = String(a.name ?? "");
+          const bn = String(b.name ?? "");
+          if (an === bn) return String(a._id).localeCompare(String(b._id));
+          return an < bn ? -1 : 1;
+        });
+
+      return ok({ teachers, count: teachers.length });
+    },
+  },
+
+  {
+    route: "GET /api/attendance/teachers",
+
+    /**
+     * Staff attendance records, for the admin screens.
+     *
+     * Sorted by day and then by when the mark was made, both descending, as the
+     * endpoint sorts them. Neither is unique, so an _id tie-break is added here:
+     * without one the order of two marks made in the same moment is whatever
+     * SQLite happens to return, and a screen would show them differently on two
+     * reads of the same data.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const filter = { schoolId };
+      if (query.teacherId) filter.teacherId = String(query.teacherId);
+      if (query.status)    filter.status    = String(query.status);
+
+      const records = withinDates(docs.find("teacherAttendance", filter), query)
+        .sort((a, b) => {
+          const byDate = String(b.date ?? "").localeCompare(String(a.date ?? ""));
+          if (byDate !== 0) return byDate;
+          const byMark = String(b.markedAt ?? "").localeCompare(String(a.markedAt ?? ""));
+          if (byMark !== 0) return byMark;
+          return String(a._id).localeCompare(String(b._id));
+        });
+
+      return ok({ records, count: records.length });
+    },
+  },
+
   {
     route: "GET /api/attendance/students/roster",
 
@@ -124,23 +224,11 @@ module.exports = [
       if (query.studentId) filter.studentId = String(query.studentId).trim();
       if (query.status)    filter.status    = String(query.status).trim();
 
-      let rows;
-      if (query.date) {
-        // An exact day. Note this wins over any range, as it does on the server.
-        rows = docs.find("studentAttendance", { ...filter, date: dateStr(query.date) });
-      } else {
-        rows = docs.find("studentAttendance", filter);
-        // Inclusive at both ends, and applied after the query because the
-        // store's filter language takes one operator per field.
-        if (query.startDate) {
-          const from = dateStr(query.startDate);
-          rows = rows.filter((r) => String(r.date ?? "") >= from);
-        }
-        if (query.endDate) {
-          const to = dateStr(query.endDate);
-          rows = rows.filter((r) => String(r.date ?? "") <= to);
-        }
-      }
+      // An exact day wins over any range, as it does on the server, and a range
+      // is inclusive at both ends. Applied after the query because the store's
+      // filter language takes one operator per field. Shared with the staff
+      // version below, which builds its filter the same way.
+      let rows = withinDates(docs.find("studentAttendance", filter), query);
 
       // date descending, then markedAt descending — the server's sort. The
       // second key matters when a register is corrected: the later mark is the

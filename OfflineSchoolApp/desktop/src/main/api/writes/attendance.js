@@ -30,9 +30,11 @@
  */
 
 const {
-  STATUSES,
+  STUDENT_STATUSES,
+  TEACHER_STATUSES,
   dateStr,
   attendanceId,
+  teacherAttendanceId,
 } = require("../../../../../shared/attendance");
 
 /**
@@ -94,6 +96,40 @@ const markFor = (docs, { schoolId, classId, subjectId, periodId, studentId, date
   };
 };
 
+/**
+ * The row for one member of staff, keyed on (school, teacher, day).
+ *
+ * The same merge-over-existing rule as markFor above: a second marking is an
+ * update, and $setOnInsert does not fire on one, so the moment the register was
+ * first taken is not overwritten.
+ */
+const teacherMarkFor = (docs, { schoolId, teacherId, date, status, note, checkInTime, checkOutTime, by }) => {
+  const _id = teacherAttendanceId({ schoolId, teacherId, date });
+  const now = new Date().toISOString();
+
+  const { _pending, ...existing } = docs.get("teacherAttendance", _id) ?? {};
+
+  return {
+    _id,
+    schoolId,
+    teacherId: String(teacherId),
+    date,
+    createdAt: existing.createdAt ?? now,
+    deletedAt: existing.deletedAt ?? null,
+
+    ...existing,
+
+    status,
+    checkInTime:  checkInTime  || null,
+    checkOutTime: checkOutTime || null,
+    note:         note || null,
+    // Required by the model, so a row without it would be refused outright.
+    markedBy:     by ?? null,
+    markedAt:     now,
+    updatedAt:    now,
+  };
+};
+
 module.exports = [
   {
     route: "POST /api/attendance/students/bulk",
@@ -134,7 +170,7 @@ module.exports = [
       for (const row of body.records) {
         // The endpoint's own two reasons, with its own wording — a screen shows
         // them to whoever is marking.
-        if (!row.studentId || !STATUSES.includes(row.status)) {
+        if (!row.studentId || !STUDENT_STATUSES.includes(row.status)) {
           failed.push({ ...row, reason: "Invalid studentId or status" });
           continue;
         }
@@ -198,7 +234,7 @@ module.exports = [
 
       // The endpoint's 400s.
       if (!body.classId || !body.studentId || !body.status) return null;
-      if (!STATUSES.includes(body.status)) return null;
+      if (!STUDENT_STATUSES.includes(body.status)) return null;
 
       const classId = String(body.classId);
 
@@ -226,6 +262,144 @@ module.exports = [
         request: {
           method: "POST",
           path:   "/api/attendance/students",
+          body,
+        },
+        response: { status: 201, data: { success: true, record: doc } },
+      };
+    },
+  },
+
+  {
+    route: "POST /api/attendance/teachers/bulk",
+
+    /**
+     * Marking the staff present, a whole school at a time.
+     *
+     * ── Three ways this differs from the pupil register ─────────────────────
+     *
+     * A DIFFERENT SET OF STATUSES. A teacher may be on_leave and may not be
+     * excused; a pupil the reverse. Both models enforce it with an enum, so
+     * using the pupil set here would queue a mark the server rejects.
+     *
+     * A DIFFERENT PERMISSION. attendance.markStaff, not attendance.mark —
+     * marking a colleague absent is not the same act as marking a child absent,
+     * and the school decides separately who may do it.
+     *
+     * NO CLASS. The natural key is (school, teacher, day): a teacher is present
+     * for the day rather than for a lesson, so there is no subject either. That
+     * is why teacherAttendanceId() is its own function rather than a flag on the
+     * pupil one — neither key can be built in the other's shape and quietly
+     * produce an id belonging to the wrong collection.
+     *
+     * ── The staff directory has to be mirrored ─────────────────────────────
+     *
+     * The endpoint verifies each id is a teacher in this school, and that check
+     * reads the user collection, which needs users.manage to mirror. A machine
+     * without it declines, which is right: queueing a mark for an id this
+     * machine cannot vouch for is how attendance rows appear for people who are
+     * not in the school, and no route can delete one.
+     */
+    handler: ({ body }, { docs, session }) => {
+      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+      if (!session?.permissions?.includes("attendance.markStaff")) return null;
+
+      // The endpoint's 400 — note it wants only records[], with no classId.
+      if (!Array.isArray(body.records) || body.records.length === 0) return null;
+
+      const date = dateStr(body.date);
+
+      const known = new Set(
+        docs.find("user", { schoolId, role: "teacher" }).map((t) => String(t._id))
+      );
+      // An empty directory means this machine does not mirror it, not that the
+      // school has no teachers. Either way there is nothing to vouch with.
+      if (known.size === 0) return null;
+
+      const rows   = [];
+      const failed = [];
+
+      for (const row of body.records) {
+        if (!row.teacherId || !TEACHER_STATUSES.includes(row.status)) {
+          failed.push({ ...row, reason: "Invalid teacherId or status" });
+          continue;
+        }
+        if (!known.has(String(row.teacherId))) {
+          failed.push({ ...row, reason: "Teacher not found in this school" });
+          continue;
+        }
+        rows.push(teacherMarkFor(docs, {
+          schoolId, teacherId: row.teacherId, date,
+          status: row.status, note: row.note,
+          checkInTime: row.checkInTime, checkOutTime: row.checkOutTime,
+          by: session?.userId,
+        }));
+      }
+
+      // Nothing would be written, so there is nothing to queue.
+      if (rows.length === 0) return null;
+
+      const [primary, ...rest] = rows;
+
+      return {
+        collection: "teacherAttendance",
+        doc:        primary,
+        also:       rest.map((doc) => ({ collection: "teacherAttendance", doc })),
+        request: {
+          method: "POST",
+          path:   "/api/attendance/teachers/bulk",
+          body,
+        },
+        response: {
+          status: 201,
+          data: {
+            success:       true,
+            saved:         rows.length,
+            failed:        failed.length,
+            failedRecords: failed,
+          },
+        },
+      };
+    },
+  },
+
+  {
+    route: "POST /api/attendance/teachers",
+
+    /** One member of staff — a correction, or somebody arriving late. */
+    handler: ({ body }, { docs, session }) => {
+      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+      if (!session?.permissions?.includes("attendance.markStaff")) return null;
+
+      // The endpoint's 400s.
+      if (!body.teacherId || !body.status) return null;
+      if (!TEACHER_STATUSES.includes(body.status)) return null;
+
+      // Its 404. See the note on the batch: the directory may not be mirrored,
+      // and an unverifiable id must not be queued.
+      const teacher = docs.get("user", String(body.teacherId));
+      if (!teacher) return null;
+      if (String(teacher.schoolId) !== String(schoolId)) return null;
+      if (teacher.role !== "teacher") return null;
+
+      const doc = teacherMarkFor(docs, {
+        schoolId,
+        teacherId:    body.teacherId,
+        date:         dateStr(body.date),
+        status:       body.status,
+        note:         body.note,
+        checkInTime:  body.checkInTime,
+        checkOutTime: body.checkOutTime,
+        by:           session?.userId,
+      });
+
+      return {
+        collection: "teacherAttendance",
+        doc,
+        request: {
+          method: "POST",
+          path:   "/api/attendance/teachers",
           body,
         },
         response: { status: 201, data: { success: true, record: doc } },

@@ -28,7 +28,8 @@ const Student = require("../db/models/Student");
  * file for the duplicate this prevents.
  */
 const {
-  STATUSES,
+  STUDENT_STATUSES,
+  TEACHER_STATUSES,
   todayStr,
   dateStr,
   attendanceId,
@@ -386,7 +387,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
 
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
-    const validStatuses    = STATUSES;
+    const validStatuses    = STUDENT_STATUSES;
 
     // ── Verify the students actually exist in this class ─────────────────────
     // Previously the only check was `!row.studentId`, a truthiness test, so any
@@ -509,9 +510,9 @@ router.post("/students", teachingOnly, async (req, res) => {
       });
     }
 
-    if (!STATUSES.includes(status)) {
+    if (!STUDENT_STATUSES.includes(status)) {
       return res.status(400).json({
-        message: `status must be one of: ${STATUSES.join(", ")}`,
+        message: `status must be one of: ${STUDENT_STATUSES.join(", ")}`,
       });
     }
 
@@ -763,7 +764,7 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
 
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
-    const validStatuses    = ["present", "absent", "late", "on_leave"];
+    const validStatuses    = TEACHER_STATUSES;
 
     // Verify the teachers exist and belong to this school — one query for the
     // batch. Without this the upsert creates staff attendance rows for
@@ -870,7 +871,7 @@ router.post("/teachers", adminOnly, async (req, res) => {
       });
     }
 
-    const validStatuses = ["present", "absent", "late", "on_leave"];
+    const validStatuses = TEACHER_STATUSES;
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
         message: `status must be one of: ${validStatuses.join(", ")}`,

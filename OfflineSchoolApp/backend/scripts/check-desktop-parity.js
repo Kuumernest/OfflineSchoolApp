@@ -2870,6 +2870,171 @@ const main = async () => {
     }),
     1);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- staff attendance, marked with no connection ---");
+
+  /**
+   * ── Near-identical to the pupil register, and different in three ways ─────
+   *
+   * A different set of statuses (on_leave, not excused), a different permission
+   * (attendance.markStaff), and a natural key with no class or subject in it — a
+   * teacher is present for the day rather than for a lesson.
+   *
+   * Each of those is a way for code copied from the pupil path to be quietly
+   * wrong, so each is asserted rather than assumed.
+   */
+  const TeacherAttendanceModel = require("../src/db/models/Attendance").TeacherAttendance;
+  const { teacherAttendanceId: derivedStaffId } = require("../../shared/attendance");
+
+  const STAFF_DAY = "2026-10-07";
+
+  const staffSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["attendance.markStaff", "attendance.view"],
+  };
+  const staffCtx = { docs, meta, queue, session: staffSession };
+
+  // ── The roster ─────────────────────────────────────────────────────────
+  //
+  // The endpoint has no .sort(), so it returns whatever order the storage engine
+  // gives and any order is as faithful as another. Compared as a SET for that
+  // reason — a list comparison here would be asserting Mongo's storage order,
+  // which is not a promise the endpoint makes.
+  {
+    const localRoster = api.handle({
+      method: "GET", path: "/api/attendance/teachers/roster",
+      query: { schoolId: SCHOOL },
+    }, staffCtx).data.teachers;
+
+    const res = await fetch(
+      "http://127.0.0.1:" + port + "/api/attendance/teachers/roster?schoolId=" + SCHOOL,
+      { headers: { authorization: "Bearer " + token } }
+    );
+    const serverRoster = (await res.json()).teachers;
+
+    check("the staff roster holds the same people",
+      localRoster.map((t) => t._id).sort().join(),
+      serverRoster.map((t) => t._id).sort().join());
+    check("with the four fields the endpoint selects",
+      Object.keys(localRoster[0]).sort().join(),
+      ["_id", "email", "name", "role"].join());
+    check("and the same count", localRoster.length, serverRoster.length);
+  }
+
+  // ── Marking them ───────────────────────────────────────────────────────
+  const staffMarked = api.handle({
+    method: "POST", path: "/api/attendance/teachers/bulk", query: {},
+    body: {
+      schoolId: SCHOOL, date: STAFF_DAY,
+      records: [
+        { teacherId: "t1", status: "present", checkInTime: "07:45" },
+        { teacherId: "t2", status: "on_leave", note: "bereavement" },
+        // "excused" is a PUPIL status. A handler that reused the pupil set would
+        // accept this and queue a mark the model's enum refuses.
+        { teacherId: "t1", status: "excused" },
+        { teacherId: "nobody", status: "present" },
+      ],
+    },
+  }, staffCtx);
+
+  check("the staff register is accepted locally", staffMarked?.status, 201);
+  check("two marks saved", staffMarked.data.saved, 2);
+  check("two rejected", staffMarked.data.failed, 2);
+  check("a pupil status is not a staff status",
+    staffMarked.data.failedRecords.find((r) => r.status === "excused")?.reason,
+    "Invalid teacherId or status");
+  check("and an unknown id is named as such",
+    staffMarked.data.failedRecords.find((r) => r.teacherId === "nobody")?.reason,
+    "Teacher not found in this school");
+
+  check("the rows are keyed on school, teacher and day",
+    Boolean(docs.get("teacherAttendance",
+      derivedStaffId({ schoolId: SCHOOL, teacherId: "t1", date: STAFF_DAY }))),
+    true);
+  check("as one queued request", queue.summary().pending, 1);
+
+  // ── What must not be queued ────────────────────────────────────────────
+  check("marking staff without attendance.markStaff is not queued",
+    api.handle({
+      method: "POST", path: "/api/attendance/teachers", query: {},
+      body: { schoolId: SCHOOL, teacherId: "t1", date: STAFF_DAY, status: "present" },
+    }, { docs, meta, queue, session: { ...staffSession, permissions: ["attendance.mark"] } }),
+    null);
+
+  check("nor a status only a pupil may have",
+    api.handle({
+      method: "POST", path: "/api/attendance/teachers", query: {},
+      body: { schoolId: SCHOOL, teacherId: "t1", date: STAFF_DAY, status: "excused" },
+    }, staffCtx),
+    null);
+
+  check("nor somebody who is not a teacher in this school",
+    api.handle({
+      method: "POST", path: "/api/attendance/teachers", query: {},
+      body: { schoolId: SCHOOL, teacherId: "admin-1", date: STAFF_DAY, status: "present" },
+    }, staffCtx),
+    null);
+
+  // The staff directory needs users.manage to mirror. Without it this machine
+  // cannot vouch for an id, and queueing a mark it cannot vouch for is how
+  // attendance rows appear for people outside the school.
+  {
+    const staffRows = JSON.parse(JSON.stringify(await UserModel.find({}).lean()));
+    for (const row of staffRows) docs.forget("user", row._id);
+
+    check("a machine without the staff directory declines rather than guessing",
+      api.handle({
+        method: "POST", path: "/api/attendance/teachers/bulk", query: {},
+        body: { schoolId: SCHOOL, date: STAFF_DAY,
+                records: [{ teacherId: "t1", status: "present" }] },
+      }, staffCtx),
+      null);
+
+    docs.putMany("user", staffRows);
+  }
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  {
+    const staffEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["teacherAttendance"],
+    });
+    // The fixtures are dated ahead of the clock — see the note beside
+    // encodeCursor, and in the reversal section above.
+    db.prepare("DELETE FROM sync_state WHERE collection = ?").run("teacherAttendance");
+    await staffEngine.cycle();
+    staffEngine.stop();
+  }
+
+  check("the staff register reached the server", queue.all().length, 0);
+
+  const t1Rows = await TeacherAttendanceModel.find({
+    schoolId: SCHOOL, teacherId: "t1", date: STAFF_DAY,
+  }).lean();
+  check("one row for that teacher on that day", t1Rows.length, 1);
+  check("under the id both sides derive",
+    t1Rows[0]?._id,
+    derivedStaffId({ schoolId: SCHOOL, teacherId: "t1", date: STAFF_DAY }));
+  check("holding what was marked", t1Rows[0]?.status, "present");
+  check("including the time they arrived", t1Rows[0]?.checkInTime, "07:45");
+  check("attributed to whoever marked it", Boolean(t1Rows[0]?.markedBy), true);
+
+  check("and the one on leave is recorded too",
+    (await TeacherAttendanceModel.findOne({
+      schoolId: SCHOOL, teacherId: "t2", date: STAFF_DAY,
+    }).lean())?.status,
+    "on_leave");
+
+  await parity("staff attendance for a day",
+    "/api/attendance/teachers?schoolId=" + SCHOOL + "&date=" + STAFF_DAY);
+  await parity("one member of staff",
+    "/api/attendance/teachers?schoolId=" + SCHOOL + "&teacherId=t1");
+  await parity("narrowed to a status",
+    "/api/attendance/teachers?schoolId=" + SCHOOL + "&status=on_leave");
+  await parity("and over a range of days",
+    "/api/attendance/teachers?schoolId=" + SCHOOL +
+    "&startDate=2026-10-01&endDate=2026-10-31");
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
