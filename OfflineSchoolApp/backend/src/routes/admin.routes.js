@@ -1671,11 +1671,11 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
   let source  = null;
 
   if (S) {
-    student = await S.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await S.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
     if (student) source = "student";
   }
   if (!student && App) {
-    student = await App.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await App.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
     if (student) source = "application";
   }
 
@@ -2067,11 +2067,11 @@ router.put("/students/:id/reject", requirePermission("students.admit"), asyncHan
   let source  = null;
 
   if (S) {
-    student = await S.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await S.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
     if (student) source = "student";
   }
   if (!student && App) {
-    student = await App.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await App.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
     if (student) source = "application";
   }
 
@@ -2133,8 +2133,11 @@ router.patch("/students/:id/suspend", requirePermission("students.manage"), asyn
   const S = getStudent();
   if (!S) return sendError(res, 503, "Student model not available");
 
+  // getTenantQuery, not a bare _id: this route had no school check at all, so a
+  // students.manage holder could suspend another school's pupil by id. The
+  // parallel implementation in students.routes.js has always checked.
   const student = await S.findOneAndUpdate(
-    { _id: req.params.id },
+    getTenantQuery(req, req.params.id),
     { status: "suspended", isActive: false },
     { new: true }
   );
@@ -2151,7 +2154,7 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
   if (!S) return sendError(res, 503, "Student model not available");
 
   const student = await S.findOneAndUpdate(
-    { _id: req.params.id },
+    getTenantQuery(req, req.params.id),
     { status: "approved", isActive: true },
     { new: true }
   );
@@ -2171,8 +2174,9 @@ router.delete("/students/:id", requirePermission("students.delete"), asyncHandle
   let deleted = false;
 
   if (S) {
-    const result = await S.findByIdAndUpdate(
-      id, { deletedAt: new Date(), isActive: false }, { new: true }
+    const result = await S.findOneAndUpdate(
+      getTenantQuery(req, id),
+      { deletedAt: new Date(), isActive: false }, { new: true }
     ).catch(() => null);
     if (result) deleted = true;
   }
@@ -2193,14 +2197,17 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   const { classId } = req.body;
   if (!classId) return sendError(res, 400, "classId is required");
 
-  const cls = await Class.findById(classId).lean();
+  // Scoped to the caller's school. Unscoped, this moved a pupil into ANOTHER
+  // school's class — corrupting the register at both ends, and reading as a
+  // successful move on the screen that did it.
+  const cls = await Class.findOne(getTenantQuery(req, classId)).lean();
   if (!cls)  return sendError(res, 400, "Class not found");
 
   const S  = getStudent();
   if (!S)  return sendError(res, 503, "Student model not available");
 
-  const student = await S.findByIdAndUpdate(
-    req.params.id,
+  const student = await S.findOneAndUpdate(
+    getTenantQuery(req, req.params.id),
     { classId, class_id: classId },
     { new: true }
   );
@@ -2227,10 +2234,10 @@ router.post("/students/:id/enrollment-number", requirePermission("students.manag
   let student = null;
 
   if (S) {
-    student = await S.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await S.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
   }
   if (!student && App) {
-    student = await App.findOne({ _id: studentId }).lean().catch(() => null);
+    student = await App.findOne(getTenantQuery(req, studentId)).lean().catch(() => null);
   }
 
   if (!student) {
