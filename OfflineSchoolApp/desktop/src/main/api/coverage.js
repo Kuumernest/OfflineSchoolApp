@@ -177,6 +177,44 @@ const ONLINE_ONLY = [
       "the file format offline is a second implementation of an export, and the " +
       "screens that offer it can say it needs a connection.",
   },
+  // ── Reminders and late fees ─────────────────────────────────────────────
+  //
+  // Four endpoints, and the reason is the same one twice over: two of them are
+  // real computations rather than shapes, and two of them act on the result.
+  {
+    endpoint: "GET /fees/reminders",
+    because:
+      "The candidate list, computed by services/feeReminders across charges, " +
+      "students, balances, active plans and a notification channel, then filtered " +
+      "by a cooldown window so a family is not chased twice in a week. Real " +
+      "logic, not a query — and it decides who gets told they owe money. A " +
+      "second implementation that disagreed would chase a family who had just " +
+      "paid, or leave one nobody had spoken to off the list.",
+  },
+  {
+    endpoint: "POST /fees/reminders",
+    because:
+      "Sending them. Queueing this would be the worst kind of wrong: a bursar " +
+      "presses send, sees the list go out, and the messages actually leave four " +
+      "hours later — by which time some of those families have paid at the " +
+      "counter. A reminder that visibly did not send beats one that sends late.",
+  },
+  {
+    endpoint: "GET /fees/penalties",
+    because:
+      "The late-fee preview, which is grace-period arithmetic over each " +
+      "structure's own penalty rule — two classes on different price lists have " +
+      "different late fees and different grace days. Getting the boundary wrong " +
+      "by a day adds money to a bill that had not yet earned it.",
+  },
+  {
+    endpoint: "POST /fees/penalties",
+    because:
+      "Raising them: money added to families' bills, one charge per student, " +
+      "from the computation above. An unbounded number of documents from one " +
+      "request, and every one of them is a real amount somebody has to pay.",
+  },
+
   {
     endpoint: "GET /insights/early-warning",
     because:

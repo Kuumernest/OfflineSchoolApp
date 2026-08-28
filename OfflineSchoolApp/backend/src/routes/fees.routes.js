@@ -47,12 +47,23 @@ const resolveSchoolId = (req, provided) => {
 const bad = (res, message, code) =>
   res.status(400).json({ success: false, code: code ?? "BAD_REQUEST", message });
 
-/** Whole XAF only. Rejects floats, strings that are not numbers, and NaN. */
-const asWholeAmount = (value) => {
-  const n = Number(value);
-  if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
-  return n;
-};
+/**
+ * ── These live in shared/feeStructures.js now ─────────────────────────────
+ *
+ * Because the desktop application has to validate a fee structure identically,
+ * and not for tidiness: a write queued while offline is replayed later, and a
+ * REFUSED write stops the whole outbox and waits for a person. A structure that
+ * passed on the desktop and failed here would hold up every payment queued
+ * behind it. One definition, so the two answers cannot drift apart.
+ */
+const {
+  asWholeAmount,
+  asDueDate,
+  cleanPenalty,
+  cleanItems,
+  normaliseClassIds,
+  clashesWith,
+} = require("../../../shared/feeStructures");
 
 // The ledger. Teachers never touch it; the bursar owns it.
 //
@@ -74,47 +85,8 @@ const canPlan     = requirePermission("fees.plan");
 const canRemind   = requirePermission("fees.remind");
 const canPenalize = requirePermission("fees.penalize");
 
-/**
- * A calendar day from the client, as a Date.
- *
- * Accepts "2026-09-15" and rejects anything else, rather than handing whatever
- * arrived to new Date() — which turns "next friday" into an Invalid Date and
- * stores null, so a structure would silently end up with no deadline and its
- * families would never be reminded.
- */
-const asDueDate = (value) => {
-  if (value === null || value === undefined || value === "") return null;
-  const s = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return undefined;   // undefined = invalid
-  const d = new Date(`${s}T00:00:00.000Z`);
-  return Number.isNaN(d.getTime()) ? undefined : d;
-};
-
-/** The penalty rule from a request body, or an error string. */
-const cleanPenalty = (raw) => {
-  if (!raw || raw.mode === undefined || raw.mode === null || raw.mode === "none") {
-    return { value: { mode: "none", amount: 0, graceDays: 0 }, error: null };
-  }
-
-  if (!["fixed", "percent"].includes(raw.mode)) {
-    return { value: null, error: `penalty.mode must be none, fixed or percent` };
-  }
-
-  const amount = asWholeAmount(raw.amount);
-  if (amount === null || amount < 0) {
-    return { value: null, error: "penalty.amount must be a whole number" };
-  }
-  if (raw.mode === "percent" && amount > 100) {
-    return { value: null, error: "A percentage penalty cannot exceed 100" };
-  }
-
-  const graceDays = asWholeAmount(raw.graceDays ?? 0);
-  if (graceDays === null || graceDays < 0 || graceDays > 365) {
-    return { value: null, error: "penalty.graceDays must be between 0 and 365" };
-  }
-
-  return { value: { mode: raw.mode, amount, graceDays }, error: null };
-};
+// asDueDate, cleanPenalty, cleanItems, normaliseClassIds and clashesWith all
+// come from shared/feeStructures.js — see the note on the require above.
 
 router.use(canRead);
 
@@ -169,39 +141,14 @@ router.post("/structures", canWrite, asyncHandler(async (req, res) => {
   const penalty = cleanPenalty(req.body.penalty);
   if (penalty.error) return bad(res, penalty.error, "INVALID_PENALTY");
 
-  // A structure may bill several classes. `classId` is still accepted as a
-  // single value so an older client is not broken by the change; an empty list
-  // means every class in the school.
-  const classIds = Array.isArray(req.body.classIds)
-    ? [...new Set(req.body.classIds.map(String).map((s) => s.trim()).filter(Boolean))]
-    : req.body.classId
-      ? [String(req.body.classId).trim()]
-      : [];
-  if (!Array.isArray(items) || items.length === 0) {
-    return bad(res, "At least one fee item is required");
-  }
+  // A structure may bill several classes; an empty list means every class in the
+  // school. Both spellings and the item validation come from shared/, so the
+  // desktop cannot queue a structure this endpoint would refuse.
+  const classIds = normaliseClassIds(req.body);
 
-  const clean = [];
-  for (const item of items) {
-    const amount = asWholeAmount(item?.amount);
-    if (!item?.code || !item?.label) {
-      return bad(res, "Every fee item needs a code and a label");
-    }
-    if (amount === null || amount < 0) {
-      return bad(
-        res,
-        `"${item.label}" must be a whole number of XAF — the currency has no minor unit`,
-        "INVALID_AMOUNT"
-      );
-    }
-    clean.push({
-      code:       String(item.code).trim(),
-      label:      String(item.label).trim(),
-      labelFr:    item.labelFr ? String(item.labelFr).trim() : null,
-      amount,
-      isOptional: Boolean(item.isOptional),
-    });
-  }
+  const cleaned = cleanItems(items);
+  if (cleaned.error) return bad(res, cleaned.error, cleaned.code ?? undefined);
+  const clean = cleaned.value;
 
   try {
     const structure = await FeeStructure.create({

@@ -81,6 +81,49 @@ const totalsFor = (docs, { schoolId, studentId, academicYear }) => {
 
 module.exports = [
   {
+    route: "GET /api/fees/plans",
+
+    /**
+     * The instalment arrangements a school has agreed.
+     *
+     * ── status is a filter with a default that is not "everything" ───────────
+     *
+     * Absent or "all" means active, completed and cancelled — which is every
+     * status the collection has, so it reads as "everything" and is not: a plan
+     * in any other state would be invisible. Reproduced as the three named
+     * values rather than "no filter", because the two stop being the same the
+     * day a fourth status is added, and a screen would silently start listing
+     * something the server never showed it.
+     *
+     * ── The 500 is the server's, and it is kept ─────────────────────────────
+     *
+     * Sorted newest first and capped. A mirror answering with more rows than the
+     * endpoint would is not more helpful — it is a different answer, and a
+     * screen that pages through it would disagree with the same screen online.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const filter = { schoolId, deletedAt: null };
+      if (query.studentId)    filter.studentId    = String(query.studentId);
+      if (query.academicYear) filter.academicYear = String(query.academicYear);
+
+      const wanted = query.status && query.status !== "all"
+        ? [String(query.status)]
+        : ["active", "completed", "cancelled"];
+
+      const rows = docs
+        .find("paymentPlan", filter)
+        .filter((p) => wanted.includes(String(p.status)))
+        .sort((a, b) => String(b.createdAt ?? "").localeCompare(String(a.createdAt ?? "")))
+        .slice(0, 500);
+
+      return ok({ count: rows.length, data: rows });
+    },
+  },
+
+  {
     route: "GET /api/fees/structures",
     handler: ({ query }, { docs }) => {
       const schoolId = query.schoolId ? String(query.schoolId).trim() : null;

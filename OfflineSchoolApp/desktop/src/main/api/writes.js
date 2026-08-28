@@ -285,5 +285,6 @@ module.exports.push({
  */
 module.exports.push(...require("./writes/exams"));
 module.exports.push(...require("./writes/examSubjects"));
+module.exports.push(...require("./writes/fees"));
 
 module.exports.nextReceipt = nextReceipt;

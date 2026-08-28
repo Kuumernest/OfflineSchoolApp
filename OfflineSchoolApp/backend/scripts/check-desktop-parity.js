@@ -1895,6 +1895,7 @@ const main = async () => {
    * so a request the server would 400 or 409 does not merely fail — it holds up
    * everything behind it, including work with nothing to do with exams.
    */
+  const PaymentPlanModel = require("../src/db/models/PaymentPlan");
   const StudentScore = require("../src/db/models/StudentScore");
   const ExamSubject  = require("../src/db/models/ExamSubject");
 
@@ -2208,6 +2209,230 @@ const main = async () => {
   check("and the mirror agrees",
     docs.get("examSubject", mathsSubject._id)?.submissionStatus, "approved");
   check("the queue is empty", queue.all().length, 0);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a price list published with no connection ---");
+
+  /**
+   * ── Every decline is checked against a real refusal ──────────────────────
+   *
+   * A local handler that declines too readily is invisible: the request goes to
+   * the network, the screen behaves as it always did, and nobody notices the
+   * offline path is dead. A handler that declines too rarely is worse — it
+   * queues a request the server will refuse, and a refused write STOPS the
+   * outbox and waits for a person, holding up every payment behind it.
+   *
+   * So each decline below is paired with the same request sent to the REAL
+   * endpoint, asserting it really would have been a 4xx. That is the only way
+   * to know a decline is a judgement about the server rather than a guess.
+   */
+  const feesSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["fees.manage", "fees.plan", "fees.view"],
+  };
+  const feesCtx = { docs, meta, queue, session: feesSession };
+
+  /** The same body, straight at the endpoint, so the refusal is not assumed. */
+  const askServer = async (path, body, method = "POST") => {
+    const res = await fetch("http://127.0.0.1:" + port + path, {
+      method,
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  const validStructure = {
+    schoolId: SCHOOL, academicYear: YEAR, term: "Term 3",
+    classIds: ["cls-3"], dueDate: "2027-04-15",
+    items: [{ code: "TUITION", label: "Tuition", amount: 80000 }],
+  };
+
+  const published = api.handle({
+    method: "POST", path: "/api/fees/structures", query: {}, body: validStructure,
+  }, feesCtx);
+
+  check("a valid price list is accepted locally", published?.status, 201);
+  check("and queued", published?.queued, true);
+  const structureId = published.data.data._id;
+  check("the due date is stored as an instant, not the string that arrived",
+    published.data.data.dueDate, "2027-04-15T00:00:00.000Z");
+  check("with no penalty rule unless one was asked for",
+    published.data.data.penalty, { mode: "none", amount: 0, graceDays: 0 });
+  check("and it is in the mirror", docs.get("feeStructure", structureId)?.isActive, true);
+
+  // ── The multikey clash, which is the subtle one ─────────────────────────
+  //
+  // fs1 bills cls-1 AND cls-2 for Term 1. A new structure for cls-2 and cls-3
+  // collides on cls-2 though neither list equals the other, because the unique
+  // index is over the classIds ARRAY.
+  const overlapping = {
+    schoolId: SCHOOL, academicYear: YEAR, term: "Term 1",
+    classIds: ["cls-2", "cls-3"], dueDate: "2026-09-20",
+    items: [{ code: "TUITION", label: "Tuition", amount: 70000 }],
+  };
+  check("a structure overlapping an active one on ONE class is not queued",
+    api.handle({ method: "POST", path: "/api/fees/structures", query: {}, body: overlapping }, feesCtx),
+    null);
+  const overlapRefused = await askServer("/api/fees/structures", overlapping);
+  check("and the server really would have refused it", overlapRefused.status, 409);
+  check("naming what happened", overlapRefused.body.code, "STRUCTURE_EXISTS");
+
+  // A different term is a different key, so it is allowed — the check must not
+  // be "any structure for this class".
+  check("but the same classes in another term are fine",
+    api.handle({
+      method: "POST", path: "/api/fees/structures", query: {},
+      body: { ...overlapping, term: "Term 9" },
+    }, feesCtx)?.status,
+    201);
+
+  // An INACTIVE structure does not hold the key: the index is partial, and
+  // deactivating is exactly how a school publishes a replacement.
+  check("and a year whose only structure is inactive is fine too",
+    api.handle({
+      method: "POST", path: "/api/fees/structures", query: {},
+      body: { ...validStructure, academicYear: "2025-2026", term: "Term 1", classIds: ["cls-1"] },
+    }, feesCtx)?.status,
+    201);
+
+  // ── The validations, each against the real refusal ──────────────────────
+  const rejections = [
+    ["no academic year",        { ...validStructure, academicYear: undefined, term: "Term 4" }],
+    ["a due date that is prose", { ...validStructure, dueDate: "next friday", term: "Term 4" }],
+    ["no due date at all",       { ...validStructure, dueDate: undefined, term: "Term 4" }],
+    ["an empty item list",       { ...validStructure, items: [], term: "Term 4" }],
+    ["an item with no code",     { ...validStructure, term: "Term 4",
+                                   items: [{ label: "Tuition", amount: 5000 }] }],
+    // XAF has no minor unit, so this is a typo rather than a rounding question.
+    ["a fractional amount",      { ...validStructure, term: "Term 4",
+                                   items: [{ code: "T", label: "Tuition", amount: 7500.5 }] }],
+    ["a percentage penalty over 100", { ...validStructure, term: "Term 4",
+                                   penalty: { mode: "percent", amount: 150 } }],
+  ];
+
+  for (const [what, body] of rejections) {
+    check("not queued: " + what,
+      api.handle({ method: "POST", path: "/api/fees/structures", query: {}, body }, feesCtx),
+      null);
+    const refused = await askServer("/api/fees/structures", body);
+    check("and the server refuses it: " + what, refused.status >= 400 && refused.status < 500, true);
+  }
+
+  // Publishing a price list is fees.manage, and a queued 403 would stop the
+  // outbox as surely as a 409.
+  check("somebody without fees.manage is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/structures", query: {},
+      body: { ...validStructure, term: "Term 5" },
+    }, { docs, meta, queue, session: { ...feesSession, permissions: ["fees.view"] } }),
+    null);
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  const feesEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["feeStructure", "paymentPlan"],
+  });
+  await feesEngine.cycle();
+
+  check("the queue drained", queue.all().length, 0);
+  const storedStructure = await FeeStructure.findById(structureId).lean();
+  check("the server has the structure under the client's id",
+    Boolean(storedStructure), true);
+  check("with the items as published", storedStructure?.items?.[0]?.amount, 80000);
+  check("and the due date the bursar typed",
+    storedStructure?.dueDate?.toISOString(), "2027-04-15T00:00:00.000Z");
+
+  await parity("the price lists, after a round trip",
+    "/api/fees/structures?schoolId=" + SCHOOL);
+
+  // ── Taking one out of use ──────────────────────────────────────────────
+  const deactivated = api.handle({
+    method: "PATCH", path: "/api/fees/structures/" + structureId + "/deactivate",
+    query: {}, body: { schoolId: SCHOOL },
+  }, feesCtx);
+  check("deactivating is accepted locally", deactivated?.status, 200);
+  check("and shows at once", docs.get("feeStructure", structureId)?.isActive, false);
+
+  await feesEngine.cycle();
+  check("the server agrees",
+    (await FeeStructure.findById(structureId).lean())?.isActive, false);
+
+  // Which releases the key: the classes it billed can be published again. This
+  // is the whole point of deactivating rather than deleting.
+  check("so those classes can be billed by a replacement",
+    api.handle({
+      method: "POST", path: "/api/fees/structures", query: {},
+      body: { ...validStructure, dueDate: "2027-04-20" },
+    }, feesCtx)?.status,
+    201);
+  await feesEngine.cycle();
+  check("and the server takes the replacement too",
+    await FeeStructure.countDocuments({
+      schoolId: SCHOOL, academicYear: YEAR, term: "Term 3", isActive: true,
+    }),
+    1);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- an instalment plan cancelled with no connection ---");
+
+  // A plan the school agreed. Inserted on the server and pulled, so the row
+  // under test is the server's own shape rather than one written here.
+  await PaymentPlanModel.collection.insertOne({
+    _id: "pl-offline", schoolId: SCHOOL, studentId: "p1", academicYear: YEAR,
+    term: null, status: "active", reason: "Family paying monthly",
+    instalments: [
+      { seq: 1, amount: 20000, dueDate: new Date("2026-10-01") },
+      { seq: 2, amount: 20000, dueDate: new Date("2026-11-01") },
+    ],
+    deletedAt: null, createdAt: new Date(), updatedAt: new Date(),
+  });
+  await feesEngine.cycle();
+  check("the plan reached the mirror",
+    docs.get("paymentPlan", "pl-offline")?.status, "active");
+
+  await parity("the plans a school has agreed", "/api/fees/plans?schoolId=" + SCHOOL);
+  await parity("only the cancelled ones",
+    "/api/fees/plans?schoolId=" + SCHOOL + "&status=cancelled");
+
+  // A reason is required, and the endpoint says so with a 400.
+  check("cancelling with no reason is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/plans/pl-offline/cancel",
+      query: {}, body: { schoolId: SCHOOL },
+    }, feesCtx),
+    null);
+  const noReason = await askServer("/api/fees/plans/pl-offline/cancel", { schoolId: SCHOOL });
+  check("as the server confirms", noReason.status, 400);
+  check("with its code", noReason.body.code, "REASON_REQUIRED");
+
+  const cancelled = api.handle({
+    method: "POST", path: "/api/fees/plans/pl-offline/cancel",
+    query: {}, body: { schoolId: SCHOOL, reason: "  Family stopped paying  " },
+  }, feesCtx);
+  check("cancelling with one is accepted", cancelled?.status, 200);
+  check("the reason is trimmed", cancelled.data.data.cancelledReason, "Family stopped paying");
+  check("and the status changes", cancelled.data.data.status, "cancelled");
+
+  // Cancelling a cancelled plan is a 400, and a screen showing a stale list
+  // could easily provoke it.
+  check("cancelling it twice is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/plans/pl-offline/cancel",
+      query: {}, body: { schoolId: SCHOOL, reason: "again" },
+    }, feesCtx),
+    null);
+
+  await feesEngine.cycle();
+  feesEngine.stop();
+
+  const finalPlan = await PaymentPlanModel.findById("pl-offline").lean();
+  check("the server cancelled it", finalPlan?.status, "cancelled");
+  check("keeping the reason for next year", finalPlan?.cancelledReason, "Family stopped paying");
+  check("and it is still there, not deleted", Boolean(finalPlan), true);
+  check("the queue is empty", queue.all().length, 0);
+
+  await parity("the plans once one is cancelled", "/api/fees/plans?schoolId=" + SCHOOL);
 
   server.close();
   db.close();
