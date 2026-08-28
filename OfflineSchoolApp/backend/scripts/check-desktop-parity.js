@@ -333,6 +333,92 @@ const main = async () => {
   await parity("a class with nobody in it", `/api/admin/students?schoolId=${SCHOOL}&classId=cls-empty`);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the admissions queue, merged from two collections ---");
+
+  // An admission exists as a StudentApplication until it is approved and as a
+  // Student afterwards — and during the overlap, as BOTH. The fixtures cover all
+  // three states, because the merge rule (Student wins, _source stamped) is the
+  // whole content of this endpoint.
+  const StudentApplication = require("../src/db/models/StudentApplication");
+  await StudentApplication.init();
+
+  await StudentApplication.collection.insertMany([
+    // Application only.
+    { _id: "app-1", schoolId: SCHOOL, studentName: "Applicant One", status: "pending",
+      classId: "cls-1", guardianName: "Mr One", guardianPhone: "+237670000011",
+      createdAt: new Date("2026-08-03"), deletedAt: null, updatedAt: new Date() },
+    { _id: "app-2", schoolId: SCHOOL, studentName: "Applicant Two", status: "pending",
+      classId: "cls-1", createdAt: new Date("2026-08-05"), deletedAt: null, updatedAt: new Date() },
+    // In BOTH collections: the Student document must win, and _source must say so.
+    { _id: "app-both", schoolId: SCHOOL, studentName: "Stale Application Copy",
+      status: "pending", classId: "cls-1",
+      createdAt: new Date("2026-08-01"), deletedAt: null, updatedAt: new Date() },
+    // No createdAt at all: new Date(undefined || 0) is the epoch, so it sorts last.
+    { _id: "app-undated", schoolId: SCHOOL, studentName: "Undated Applicant",
+      status: "pending", classId: "cls-1", deletedAt: null, updatedAt: new Date() },
+    // Not pending, and another school's — neither belongs in the queue.
+    { _id: "app-approved", schoolId: SCHOOL, studentName: "Already In", status: "approved",
+      classId: "cls-1", createdAt: new Date("2026-08-02"), deletedAt: null, updatedAt: new Date() },
+    { _id: "app-other", schoolId: "other-school", studentName: "Elsewhere", status: "pending",
+      classId: "cls-9", createdAt: new Date("2026-08-04"), deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  await Student.collection.insertMany([
+    { _id: "app-both", schoolId: SCHOOL, studentName: "Fresh Student Record",
+      status: "pending", classId: "cls-1",
+      createdAt: new Date("2026-08-06"), deletedAt: null, updatedAt: new Date() },
+    { _id: "stu-pending", schoolId: SCHOOL, studentName: "Pending Student", status: "pending",
+      classId: "cls-2", createdAt: new Date("2026-08-04"), deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  for (const [name, Model] of Object.entries({
+    student: Student, studentApplication: StudentApplication,
+  })) {
+    docs.putMany(name, JSON.parse(JSON.stringify(await Model.find({}).lean())));
+  }
+
+  // No `as` argument: this handler reads no session, and both sides then use the
+  // default admin token — the same person on each. asHead is defined further
+  // down, with the approvals fixtures, which is why passing it here failed.
+  await parity("the pending queue", `/api/admin/students/pending?schoolId=${SCHOOL}`);
+
+  const pendingQueue = api.handle({
+    method: "GET", path: "/api/admin/students/pending", query: { schoolId: SCHOOL },
+  }, { docs }).data;
+
+  check("applications and students both appear",
+    pendingQueue.students.map((s) => s.id).includes("app-1") &&
+      pendingQueue.students.map((s) => s.id).includes("stu-pending"),
+    true);
+  // THE MERGE RULE. A record in both collections must show the Student version:
+  // the application copy is the stale one, and showing it would mean an office
+  // reading details the school has already corrected.
+  check("a record in both collections shows the Student version",
+    pendingQueue.students.find((s) => s.id === "app-both")?.name, "Fresh Student Record");
+  check("and says which collection it came from",
+    pendingQueue.students.find((s) => s.id === "app-both")?._source, "student");
+  check("an application-only record says so too",
+    pendingQueue.students.find((s) => s.id === "app-1")?._source, "application");
+  check("newest first",
+    pendingQueue.students.slice(0, 3).map((s) => s.id), ["app-both", "app-2", "stu-pending"]);
+  // Asserted as a relation rather than a position. The roster fixtures earlier in
+  // this file also contain an undated pending pupil, so "the last row" is not
+  // uniquely app-undated — an expectation that named it failed for a reason that
+  // said nothing about the sort.
+  {
+    const ids = pendingQueue.students.map((s) => s.id);
+    check("an undated record sorts after a dated one",
+      ids.indexOf("app-undated") > ids.indexOf("app-2"), true);
+  }
+  check("an approved record is not in the queue",
+    pendingQueue.students.some((s) => s.id === "app-approved"), false);
+  check("nor another school's",
+    pendingQueue.students.some((s) => s.id === "app-other"), false);
+  check("the envelope is students, data and total",
+    Object.keys(pendingQueue).sort(), ["data", "students", "success", "total"]);
+  check("with total matching the list", pendingQueue.total, pendingQueue.students.length);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- fee structures ---");
 
   await parity("all structures",     `/api/fees/structures?schoolId=${SCHOOL}`);
