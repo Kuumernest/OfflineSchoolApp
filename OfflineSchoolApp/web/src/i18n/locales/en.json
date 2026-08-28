@@ -2267,5 +2267,22 @@
     "reportTemplatesDesc": "Design report card layouts",
     "settings": "Settings",
     "settingsDesc": "System configuration"
+  },
+  "sync": {
+    "title": "Sending to the school",
+    "allSent": "Everything here has reached the school.",
+    "waiting": "{{count}} waiting",
+    "waitingBody": "{{count}} change(s) recorded on this computer have not been sent yet. They will go as soon as there is a connection.",
+    "offline": "Offline",
+    "offlineBody": "The school's server cannot be reached. Work carries on here and is sent when the connection returns.",
+    "syncing": "Syncing",
+    "blocked": "{{count}} need attention",
+    "needsAttention": "Refused by the server",
+    "refused": "The server refused this change.",
+    "tryAgain": "Try again",
+    "discard": "Discard",
+    "discardConfirm": "Discard this change? What was recorded on this computer will be removed and never sent.",
+    "syncNow": "Check now",
+    "lastChecked": "Last checked at {{time}}"
   }
 }

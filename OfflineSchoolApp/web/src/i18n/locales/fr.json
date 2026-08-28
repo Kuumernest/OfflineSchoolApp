@@ -2267,5 +2267,22 @@
     "reportTemplatesDesc": "Concevoir la mise en page des bulletins",
     "settings": "Paramètres",
     "settingsDesc": "Configuration du système"
+  },
+  "sync": {
+    "title": "Envoi vers l'école",
+    "allSent": "Tout a bien été transmis à l'école.",
+    "waiting": "{{count}} en attente",
+    "waitingBody": "{{count}} modification(s) enregistrée(s) sur cet ordinateur n'ont pas encore été envoyées. Elles partiront dès qu'une connexion sera disponible.",
+    "offline": "Hors ligne",
+    "offlineBody": "Le serveur de l'école est injoignable. Le travail continue ici et sera envoyé au retour de la connexion.",
+    "syncing": "Synchronisation",
+    "blocked": "{{count}} à vérifier",
+    "needsAttention": "Refusé par le serveur",
+    "refused": "Le serveur a refusé cette modification.",
+    "tryAgain": "Réessayer",
+    "discard": "Abandonner",
+    "discardConfirm": "Abandonner cette modification ? Ce qui a été enregistré sur cet ordinateur sera supprimé et jamais envoyé.",
+    "syncNow": "Vérifier maintenant",
+    "lastChecked": "Dernière vérification à {{time}}"
   }
 }

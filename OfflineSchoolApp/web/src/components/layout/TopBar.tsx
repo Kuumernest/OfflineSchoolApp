@@ -14,6 +14,7 @@ import {
   type SearchResult,
 }                                                   from "@/utils/search";
 import NotificationPanel                            from "@/components/layout/NotificationPanel";
+import SyncIndicator                                from "@/components/offline/SyncIndicator";
 import { LanguageSwitcher }                           from "@/components/ui/LanguageSwitcher";
 
 interface TopBarProps {
@@ -452,8 +453,13 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         </div>
       </div>
 
-      {/* ── Right: notifications + profile ───────────────────────────────── */}
+      {/* ── Right: sync + notifications + profile ────────────────────────── */}
       <div className="flex shrink-0 items-center gap-1">
+
+        {/* Whether this machine has sent everything it is holding. Renders
+            nothing in a browser, and nothing on the desktop when there is
+            nothing to report. */}
+        <SyncIndicator />
 
         {/* Notification bell */}
         <NotificationPanel />
