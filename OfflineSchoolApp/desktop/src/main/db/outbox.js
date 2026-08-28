@@ -61,13 +61,22 @@ const BACKOFF_SECONDS = [5, 15, 60, 300, 600];
  *
  * A replay landing on something already stored must NOT reach here as a 409:
  * the endpoints that accept client-generated ids answer 200 with replay:true
- * for exactly that reason (see POST /api/fees/payments). An endpoint that
- * returns 409 on a replay would block this queue on a success, so any new
- * offline-writable endpoint has to be checked for that.
+ * for exactly that reason (see POST /api/fees/payments), and everything else is
+ * covered by the Idempotency-Key the sync client now sends, which returns the
+ * stored response rather than a conflict.
+ *
+ * ── The one 409 that IS retryable ─────────────────────────────────────────
+ *
+ * IDEMPOTENCY_IN_PROGRESS. The server answers it when an identical request is
+ * still being processed, with Retry-After — it means "ask again shortly", not
+ * "no". Treating it as a refusal blocked the queue permanently and required a
+ * person to release a request that was merely mid-flight, which is the opposite
+ * of what the mechanism is for.
  */
-const isRetryable = (status) => {
+const isRetryable = (status, code = null) => {
   if (!status) return true;
   if (status === 408 || status === 429) return true;
+  if (status === 409 && code === "IDEMPOTENCY_IN_PROGRESS") return true;
   return status >= 500;
 };
 
@@ -78,26 +87,50 @@ const outbox = (db) => {
     /**
      * Queue a request.
      *
-     * @param idemKey  The client-generated id inside the body. Unique, and what
-     *                 makes a replay safe on the server. Generated here if the
-     *                 caller has none, so an endpoint without client ids is
-     *                 still protected against a double-click queueing twice.
+     * @param idemKey    Sent as Idempotency-Key so a replay is answered with the
+     *                   response the server already gave. Identifies ONE
+     *                   OPERATION; a fresh one is generated per call, and it is
+     *                   passed explicitly only by tests that assert on it.
+     * @param dedupeKey  Identifies an INTENT — pass it where submitting the same
+     *                   thing twice should be ignored, such as a create behind a
+     *                   button somebody may double-click. Omit it for edits.
+     *
+     * ── These were one value, and that lost data ─────────────────────────────
+     *
+     * idemKey defaulted to docId. Since it is UNIQUE, a queued EDIT to a
+     * document with a queued CREATE was reported as a duplicate and dropped: the
+     * mirror showed the change, the queue drained, and the server never heard.
+     * Only two create-shaped endpoints existed at the time, so nothing hit it.
      */
-    add({ method, path, body = null, collection = null, docId = null, idemKey = null }) {
-      const key = idemKey ?? docId ?? randomUUID();
+    add({
+      method, path, body = null, collection = null, docId = null,
+      idemKey = null, dedupeKey = null,
+    }) {
+      // Never derived from the document: two operations on one document are two
+      // operations, and the server must be able to tell them apart.
+      const key = idemKey ?? randomUUID();
+
+      if (dedupeKey) {
+        // Only against what is still queued. Once an intent has drained, doing
+        // the same thing again is a person's decision, not a stray click.
+        const pending = db.prepare(
+          "SELECT seq, status FROM outbox WHERE dedupe_key = ?"
+        ).get(dedupeKey);
+        if (pending) return { seq: Number(pending.seq), duplicate: true };
+      }
 
       const existing = db.prepare("SELECT seq, status FROM outbox WHERE idem_key = ?").get(key);
       if (existing) {
-        // Already queued. A double-click, or a retry from a UI that did not
-        // realise the first attempt was accepted locally.
+        // An explicit key reused — a caller replaying its own request.
         return { seq: Number(existing.seq), duplicate: true };
       }
 
       const res = db.prepare(`
-        INSERT INTO outbox (idem_key, method, path, body, collection, doc_id, created_at, next_try_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO outbox
+          (idem_key, dedupe_key, method, path, body, collection, doc_id, created_at, next_try_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
-        key, method.toUpperCase(), path,
+        key, dedupeKey, method.toUpperCase(), path,
         body === null ? null : JSON.stringify(body),
         collection, docId, nowIso(), nowIso()
       );
@@ -136,13 +169,13 @@ const outbox = (db) => {
      *
      * @returns {"retry"|"blocked"} what was decided, so the caller can stop.
      */
-    markFailed(seq, { status = null, message = "" } = {}) {
+    markFailed(seq, { status = null, message = "", code = null } = {}) {
       const row = db.prepare("SELECT attempts FROM outbox WHERE seq = ?").get(seq);
       if (!row) return "retry";
 
       const attempts = Number(row.attempts) + 1;
 
-      if (!isRetryable(status)) {
+      if (!isRetryable(status, code)) {
         db.prepare(`
           UPDATE outbox SET status='blocked', attempts=?, last_error=?, last_status=?, next_try_at=NULL
           WHERE seq = ?

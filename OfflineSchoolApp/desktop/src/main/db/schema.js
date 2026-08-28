@@ -113,9 +113,15 @@ const MIGRATIONS = [
         -- earlier has to arrive after it.
         seq         INTEGER PRIMARY KEY AUTOINCREMENT,
 
-        -- The client-generated id inside the request body, which is what makes
-        -- a replay idempotent server-side. Unique so the same intent cannot be
-        -- queued twice by a double-click.
+        -- Sent as Idempotency-Key, so backend/middleware/idempotency.js answers
+        -- a repeat with the response it already gave rather than acting twice.
+        --
+        -- It identifies ONE OPERATION, not one document. Storing the document id
+        -- here — which this did at first — breaks both halves of the job: the
+        -- server scopes stored responses by (key, userId) and ignores the path,
+        -- so an edit would receive the CREATE's stored response; and the unique
+        -- constraint below made a second write to the same document look like a
+        -- duplicate and get dropped. See add() in outbox.js.
         idem_key    TEXT NOT NULL UNIQUE,
 
         method      TEXT NOT NULL,
@@ -149,6 +155,38 @@ const MIGRATIONS = [
     `,
   },
 ];
+
+MIGRATIONS.push({
+  version: 2,
+  name:    "separate replay identity from double-submit identity",
+  /**
+   * ── Why a second column ──────────────────────────────────────────────────
+   *
+   * idem_key was doing two incompatible jobs. It was set to the document id, and
+   * being UNIQUE it also served as the guard against a form submitted twice.
+   *
+   * Both jobs were done wrongly by one value. A queued edit to a document that
+   * already had a queued create hit the unique constraint, was reported as a
+   * duplicate and was DISCARDED — somebody's change disappeared with the UI
+   * showing it applied. And had it reached the server, the idempotency
+   * middleware scopes stored responses by (key, userId) without the path, so the
+   * edit would have been answered with the create's response.
+   *
+   * So: idem_key identifies an operation and is unique per queued request, while
+   * dedupe_key identifies an INTENT and is supplied only where resubmitting the
+   * same intent should be ignored — a create from a double-clicked button. It is
+   * checked against entries still queued, so the same intent is legitimately
+   * repeatable later.
+   */
+  up: `
+    ALTER TABLE outbox ADD COLUMN dedupe_key TEXT;
+
+    -- Not unique: the same intent may recur once the earlier one has drained,
+    -- which is a person doing the same thing twice on purpose.
+    CREATE INDEX IF NOT EXISTS outbox_dedupe ON outbox(dedupe_key)
+      WHERE dedupe_key IS NOT NULL;
+  `,
+});
 
 const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 

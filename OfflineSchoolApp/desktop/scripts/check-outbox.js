@@ -13,6 +13,8 @@
  *   sending out of order   a payment lands for a student who does not exist yet
  *   skipping a failure     three of four changes applied, silently
  *   retrying a refusal     a queue that never drains and nobody is told why
+ *   DROPPING a write       the mirror shows a change the server never received,
+ *                          and only a disagreeing report ever reveals it
  *
  * Every assertion below is one of those. The rules being pinned are that the
  * queue is strictly FIFO, that a permanent refusal STOPS it rather than being
@@ -80,17 +82,20 @@ const main = () => {
   const a = q.add({
     method: "post", path: "/api/admin/students",
     body: { _id: "stu-1", studentName: "Ada Nkeng" },
-    collection: "student", docId: "stu-1", idemKey: "stu-1",
+    collection: "student", docId: "stu-1",
+    dedupeKey: "create-student#stu-1",
   });
   check("the first request is queued", a.duplicate, false);
   check("with a sequence number", a.seq > 0, true);
 
-  // The double-click. Two identical intents must be one request, or the school
-  // gets two students or two payments.
+  // The double-click, modelled by the INTENT being repeated rather than by an
+  // id being reused. A caller that reaches here twice has generated two ids, so
+  // a guard keyed on the document would never have seen it.
   const again = q.add({
     method: "post", path: "/api/admin/students",
-    body: { _id: "stu-1", studentName: "Ada Nkeng" },
-    collection: "student", docId: "stu-1", idemKey: "stu-1",
+    body: { _id: "stu-2", studentName: "Ada Nkeng" },
+    collection: "student", docId: "stu-2",
+    dedupeKey: "create-student#stu-1",
   });
   check("queueing the same intent twice is refused", again.duplicate, true);
   check("pointing at the request already queued", again.seq, a.seq);
@@ -99,7 +104,7 @@ const main = () => {
   const b = q.add({
     method: "post", path: "/api/fees/payments",
     body: { _id: "pay-1", studentId: "stu-1", amount: 30000 },
-    collection: "feePayment", docId: "pay-1", idemKey: "pay-1",
+    collection: "feePayment", docId: "pay-1",
   });
   check("a different intent is queued", b.duplicate, false);
   check("behind the first", b.seq > a.seq, true);
@@ -210,6 +215,60 @@ const main = () => {
       (w) => Math.abs(w - BACKOFF_SECONDS[BACKOFF_SECONDS.length - 1]) <= 1
     ),
     true);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- two operations on one document are two operations ---");
+
+  /**
+   * ── The bug this pins ────────────────────────────────────────────────────
+   *
+   * idem_key is UNIQUE, and add() used to default it to the document id. So the
+   * SECOND write to any document found its key already taken: the edit was
+   * reported as a duplicate and thrown away, while the mirror showed it applied
+   * and the queue drained clean. Nothing would have surfaced it until a report
+   * disagreed with the office's own screen, months later.
+   *
+   * It could not bite while the only offline writes were two creates — which is
+   * precisely why it had to be pinned before the first edit shape was added.
+   */
+  const created = q.add({
+    method: "post", path: "/api/exams", body: { _id: "exam-9", title: "Mock" },
+    collection: "exam", docId: "exam-9",
+  });
+  const edited = q.add({
+    method: "put", path: "/api/exams/exam-9",
+    body: { _id: "exam-9", title: "Mock (revised)" },
+    collection: "exam", docId: "exam-9",
+  });
+  check("the edit is queued rather than swallowed", edited.duplicate, false);
+  check("as its own entry, behind the create", edited.seq > created.seq, true);
+
+  const renamed = q.add({
+    method: "put", path: "/api/exams/exam-9",
+    body: { _id: "exam-9", title: "Mock (again)" },
+    collection: "exam", docId: "exam-9",
+  });
+  check("and a second edit is not swallowed either", renamed.duplicate, false);
+
+  // The server tells one attempt from another by this header alone. Two queued
+  // operations sharing a key would have the later answered with the earlier's
+  // stored response — a PUT receiving the POST's 201.
+  const keys = q.all().map((r) => r.idem_key);
+  check("every queued operation carries its own key", new Set(keys).size, keys.length);
+
+  // Where dedup does earn its place: a DELETE queued twice meets a document
+  // already gone on the second attempt, and a 404 is not retryable, so the whole
+  // queue stops on work that had in fact succeeded.
+  const removed = q.add({
+    method: "delete", path: "/api/exams/exam-9",
+    collection: "exam", docId: "exam-9", dedupeKey: "DELETE /api/exams/exam-9",
+  });
+  const removedTwice = q.add({
+    method: "delete", path: "/api/exams/exam-9",
+    collection: "exam", docId: "exam-9", dedupeKey: "DELETE /api/exams/exam-9",
+  });
+  check("deleting the same thing twice queues once", removedTwice.duplicate, true);
+  check("pointing at the entry already waiting", removedTwice.seq, removed.seq);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the queue survives the machine being switched off ---");

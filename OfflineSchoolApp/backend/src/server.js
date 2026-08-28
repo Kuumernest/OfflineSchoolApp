@@ -15,7 +15,10 @@ const connectDatabase = require("./config/database");
 const errorHandler    = require("../middleware/errorHandler");
 const auth            = require("../middleware/auth");
 const { requirePermission } = require("../middleware/permissions");
-const { ensureStudentGateTokenIndex } = require("./db/ensureStudentIndexes");
+const {
+  ensureStudentGateTokenIndex,
+  ensureIdempotencyIndex,
+} = require("./db/ensureStudentIndexes");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -877,6 +880,13 @@ async function startServer() {
     // Repair a stale non-sparse unique index on students.gateToken (see the
     // module docstring). Runs every boot, no-ops once the DB is correct.
     await ensureStudentGateTokenIndex();
+
+    // The index middleware/idempotency.js depends on. Nothing created it on
+    // purpose before this line existed — mongoose built it in the background,
+    // and without it the middleware waves every repeated write through while
+    // looking as though it is protecting them. See the module docstring.
+    await ensureIdempotencyIndex();
+
     console.log("✅ Indexes verified");
 
     const server = app.listen(PORT, "0.0.0.0", () => {

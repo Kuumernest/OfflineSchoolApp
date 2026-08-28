@@ -51,7 +51,10 @@ const client = ({ meta }) => {
   const baseUrl = () =>
     (meta.get("serverUrl") || process.env.SCHOOL_SERVER_URL || "").replace(/\/+$/, "");
 
-  const request = async (method, path, body) => {
+  /**
+   * @param {string} [idemKey] Sent as Idempotency-Key. See replay() below.
+   */
+  const request = async (method, path, body, idemKey) => {
     const base = baseUrl();
     if (!base)  throw new SyncError("No server address configured", { code: "NO_SERVER" });
     if (!token) throw new SyncError("Not signed in", { code: "NO_TOKEN" });
@@ -66,6 +69,7 @@ const client = ({ meta }) => {
         headers: {
           "content-type": "application/json",
           authorization:  `Bearer ${token}`,
+          ...(idemKey ? { "Idempotency-Key": String(idemKey) } : {}),
         },
         body:   body === undefined || body === null ? undefined : JSON.stringify(body),
         signal: AbortSignal.timeout(TIMEOUT_MS),
@@ -112,9 +116,29 @@ const client = ({ meta }) => {
       return request("GET", `/api/sync/changes?${params}`);
     },
 
-    /** Replay one queued write, exactly as the UI made it. */
-    replay({ method, path, body }) {
-      return request(method, path, body);
+    /**
+     * Replay one queued write, exactly as the UI made it.
+     *
+     * ── The Idempotency-Key is what makes this safe at all ──────────────────
+     *
+     * A queued request can be sent more than once: the commonest case is a
+     * connection that dropped after the request arrived and before the response
+     * came back, which is indistinguishable from one that never arrived.
+     *
+     * Two of the endpoints mirrored so far survive that because they accept a
+     * client-generated _id and answer a replay with the row they already have.
+     * Almost none of the others do — POST /api/exams hard-codes uuidv4(), so a
+     * replay would create a SECOND exam — and this layer replayed everything
+     * with no protection at all.
+     *
+     * The server already has the general answer: middleware/idempotency.js is
+     * mounted on all of /api and, given this header, records the first attempt
+     * and returns the STORED RESPONSE to any repeat. So every write becomes
+     * replayable without changing a hundred endpoints, and the outbox's own
+     * unique idem_key is exactly the value it wants.
+     */
+    replay({ method, path, body, idem_key: idemKey }) {
+      return request(method, path, body, idemKey);
     },
 
     request,

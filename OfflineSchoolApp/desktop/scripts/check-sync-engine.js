@@ -15,6 +15,10 @@
  *   still pull when blocked or one stuck document freezes the whole machine
  *   take the server's copy   or a receipt number printed locally never matches
  *     back after a write        the record
+ *   send a STABLE idem key   or a replayed write creates a second record, and a
+ *                            fresh key per attempt defeats the mechanism
+ *   an in-flight 409 waits   or the queue blocks on a request that was about to
+ *                            succeed on its own
  *
  * Each has an assertion below, driven against a REAL HTTP server that can be
  * told to fail, refuse or vanish — because every one of these failures is about
@@ -66,6 +70,11 @@ const fakeServer = () => {
     refuse:  {},
     // Every write is remembered by its id so a replay can be detected.
     written: new Set(),
+    // The Idempotency-Key each write arrived with. What the server does with it
+    // is asserted against the real middleware in the parity harness; here the
+    // question is only whether the client sends one, and whether it is the same
+    // one on a second attempt.
+    keys:    [],
     unauthorized: false,
     pageSize: 100,
   };
@@ -76,6 +85,9 @@ const fakeServer = () => {
     req.on("data", (c) => { body += c; });
     req.on("end", () => {
       st.seen.push(`${req.method} ${url.pathname}`);
+      if (req.method !== "GET") {
+        st.keys.push({ path: url.pathname, key: req.headers["idempotency-key"] ?? null });
+      }
 
       const send = (status, payload) => {
         res.writeHead(status, { "content-type": "application/json" });
@@ -349,6 +361,88 @@ const main = async () => {
   await eng.cycle();
   check("the second attempt is accepted", queue.all().length, 0);
   check("and the row settles rather than blocking", docs.get("feePayment", "pay-1")._pending, false);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a replayed write carries a stable idempotency key ---");
+
+  /**
+   * ── Why the header at all ───────────────────────────────────────────────
+   *
+   * The first two endpoints mirrored accept a client-generated _id, so a replay
+   * finds the row already there and answers 200. Almost nothing else does —
+   * POST /api/exams hard-codes its own uuid, so a replay would create a SECOND
+   * exam — and for a while this layer replayed every queued write with no
+   * protection whatever.
+   *
+   * backend/middleware/idempotency.js is mounted across /api and answers a
+   * repeat with the STORED response, which makes any write replay-safe without
+   * touching a hundred endpoints. It works only if the key is stable across
+   * attempts: a fresh key per attempt looks like a fresh request and defeats the
+   * entire mechanism. That is the second assertion below, and it is the one a
+   * well-meaning change is most likely to break.
+   */
+  st.keys.length = 0;
+  st.refuse["/api/exams"] = { status: 500, body: { message: "database unavailable" } };
+
+  docs.tx(() => {
+    docs.put("exam", { _id: "exam-1", schoolId: "sch-1", title: "Term 2 Maths" }, { pending: true });
+    queue.add({
+      method: "post", path: "/api/exams",
+      body: { _id: "exam-1", schoolId: "sch-1", title: "Term 2 Maths" },
+      collection: "exam", docId: "exam-1", idemKey: "exam-1-create",
+    });
+  });
+
+  await eng.cycle();
+  check("the first attempt sent a key", st.keys.at(-1)?.key, "exam-1-create");
+  check("a 500 leaves it queued", queue.summary().pending, 1);
+
+  // The passage of time, as in check-outbox.js: the entry is waiting out its
+  // backoff, and nothing else would make it due.
+  db.prepare("UPDATE outbox SET next_try_at = ?").run("2000-01-01T00:00:00.000Z");
+  delete st.refuse["/api/exams"];
+
+  await eng.cycle();
+  check("the retry reused the same key",
+    st.keys.filter((k) => k.path === "/api/exams").map((k) => k.key),
+    ["exam-1-create", "exam-1-create"]);
+  check("and it drained", queue.summary().pending, 0);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a request already in flight is not a refusal ---");
+
+  /**
+   * The server answers 409 IDEMPOTENCY_IN_PROGRESS, with Retry-After, when an
+   * identical request is still being processed. It means "ask again shortly".
+   * Every OTHER 409 is a refusal, and treating this one as one blocked the queue
+   * on a request that was merely mid-flight — so a person had to release
+   * something that was about to succeed on its own.
+   */
+  st.refuse["/api/exams"] = {
+    status: 409,
+    body: { success: false, code: "IDEMPOTENCY_IN_PROGRESS", message: "already being processed" },
+  };
+  queue.add({
+    method: "post", path: "/api/exams", body: { _id: "exam-2", title: "Term 2 English" },
+    collection: "exam", docId: "exam-2", idemKey: "exam-2-create",
+  });
+
+  await eng.cycle();
+  check("it is not blocked", queue.summary().blocked, 0);
+  check("it waits and tries again", queue.summary().pending, 1);
+
+  // A genuine conflict must still stop the queue, or a write the server will
+  // never accept retries at the backoff cap for ever.
+  st.refuse["/api/exams"] = {
+    status: 409, body: { code: "RECEIPT_TAKEN", message: "that receipt number is taken" },
+  };
+  db.prepare("UPDATE outbox SET next_try_at = ?").run("2000-01-01T00:00:00.000Z");
+
+  await eng.cycle();
+  check("but a real conflict still blocks", queue.summary().blocked, 1);
+
+  queue.discard(queue.summary().stuck[0].seq);
+  delete st.refuse["/api/exams"];
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- a refused collection is reported and then left alone ---");

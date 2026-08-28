@@ -110,6 +110,9 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
 
         const decision = queue.markFailed(item.seq, {
           status:  err.status,
+          // The server's own code, so the queue can tell a refusal from a
+          // request that is simply still being processed.
+          code:    err.code,
           message: err.message,
         });
 

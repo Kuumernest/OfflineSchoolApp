@@ -125,11 +125,21 @@ module.exports = [
 
       // The request that will be replayed, with the id and the receipt number in
       // it — so the server stores exactly what is on the printed paper.
+      //
+      // ── No dedupe key, deliberately ────────────────────────────────────────
+      //
+      // This carried one, set to the payment id, and it protected nothing: the id
+      // is generated per call, so a double-clicked button produces two ids and
+      // two payments regardless. The only key that WOULD collapse them is one
+      // derived from the amount, student and term — and that would silently drop
+      // a parent's genuine second payment of the same amount on the same day.
+      //
+      // A duplicate a bursar can see and void beats money that vanished. Not
+      // queueing twice is the button's job, not the queue's.
       const request = {
         method:  "POST",
         path:    "/api/fees/payments",
         body:    { ...body, _id: id, receiptNo },
-        idemKey: id,
       };
 
       return {
@@ -248,10 +258,11 @@ module.exports.push({
       collection: "expense",
       doc,
       request: {
-        method:  "POST",
-        path:    "/api/finance/expenses",
-        body:    { ...body, _id: id },
-        idemKey: id,
+        method: "POST",
+        path:   "/api/finance/expenses",
+        body:   { ...body, _id: id },
+        // As payments: no dedupe key, because the id is fresh per call and any
+        // key that collapsed two identical expenses would drop a real one.
       },
       // The endpoint's own answer for a created expense, including the two
       // fields the screen reads to decide what to say.
