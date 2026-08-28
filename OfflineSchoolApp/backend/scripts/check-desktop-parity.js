@@ -269,6 +269,7 @@ const main = async () => {
   app.use("/api/finance", authenticate, require("../src/routes/finance.routes"));
   app.use("/api/approvals", authenticate, require("../src/routes/approvals.routes"));
   app.use("/api/attendance", authenticate, require("../src/routes/attendance.routes"));
+  app.use("/api/exams", authenticate, require("../src/routes/exam.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
@@ -965,6 +966,99 @@ const main = async () => {
     api.handle({
       method: "GET", path: "/api/attendance/students", query: {},
     }, { docs, session: null }),
+    null);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- exams, and the pagination block ---");
+
+  const Exam = require("../src/db/models/Exam");
+  await Exam.init();
+
+  // 7 exams so a limit of 3 gives an uneven last page — the case where
+  // Math.ceil matters and an off-by-one in totalPages shows up. Distinct
+  // createdAt values so "newest first" is well defined.
+  const examRows = Array.from({ length: 7 }, (_, i) => ({
+    _id: `exam-${i}`,
+    schoolId: SCHOOL,
+    title: `Assessment ${i}`,
+    status: i % 2 === 0 ? "published" : "draft",
+    academicYear: YEAR,
+    term: "Term 1",
+    classId: i < 4 ? "cls-1" : null,
+    // Several classes on one exam: the endpoint matches classId OR a member of
+    // classIds, and Mongo does the array case implicitly where SQLite does not.
+    classIds: i >= 4 ? ["cls-2", "cls-1"] : undefined,
+    createdAt: new Date(Date.UTC(2026, 8, 1 + i)),
+    deletedAt: null,
+    updatedAt: new Date(),
+  }));
+  examRows.push({
+    _id: "exam-gone", schoolId: SCHOOL, title: "Removed", status: "draft",
+    academicYear: YEAR, term: "Term 1", classId: "cls-1",
+    createdAt: new Date(Date.UTC(2026, 8, 20)),
+    deletedAt: new Date(), updatedAt: new Date(),
+  });
+  examRows.push({
+    _id: "exam-other", schoolId: "other-school", title: "Elsewhere", status: "published",
+    academicYear: YEAR, term: "Term 1", classId: "cls-9",
+    createdAt: new Date(Date.UTC(2026, 8, 21)), deletedAt: null, updatedAt: new Date(),
+  });
+
+  await Exam.collection.insertMany(examRows);
+  docs.putMany("exam", JSON.parse(JSON.stringify(await Exam.find({}).lean())));
+
+  await parity("the default page",   `/api/exams?schoolId=${SCHOOL}`, asHead);
+  await parity("a small page size",  `/api/exams?schoolId=${SCHOOL}&limit=3`, asHead);
+  await parity("the second page",    `/api/exams?schoolId=${SCHOOL}&limit=3&page=2`, asHead);
+  await parity("the uneven last page", `/api/exams?schoolId=${SCHOOL}&limit=3&page=3`, asHead);
+  await parity("a page past the end", `/api/exams?schoolId=${SCHOOL}&limit=3&page=9`, asHead);
+  await parity("by status",          `/api/exams?schoolId=${SCHOOL}&status=published`, asHead);
+  await parity("by year and term",   `/api/exams?schoolId=${SCHOOL}&academicYear=${YEAR}&term=Term 1`, asHead);
+  await parity("by class, matching classId",  `/api/exams?schoolId=${SCHOOL}&classId=cls-1`, asHead);
+  await parity("by class, matching classIds", `/api/exams?schoolId=${SCHOOL}&classId=cls-2`, asHead);
+  await parity("a class with no exams",      `/api/exams?schoolId=${SCHOOL}&classId=cls-none`, asHead);
+  await parity("a status nothing has",       `/api/exams?schoolId=${SCHOOL}&status=cancelled`, asHead);
+
+  // Stated outright, because every one of these is a number a screen draws
+  // page controls from.
+  const paged = api.handle({
+    method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, limit: "3", page: "2" },
+  }, { docs }).data;
+
+  check("total is over the whole query, not the page", paged.pagination.total, 7);
+  check("totalPages rounds up", paged.pagination.totalPages, 3);
+  check("page and limit come back as numbers, not strings",
+    [typeof paged.pagination.page, typeof paged.pagination.limit], ["number", "number"]);
+  check("the page holds the right slice", paged.exams.length, 3);
+  check("newest first across pages",
+    api.handle({
+      method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, limit: "3", page: "1" },
+    }, { docs }).data.exams.map((e) => e._id),
+    ["exam-6", "exam-5", "exam-4"]);
+  check("a deleted exam is excluded",
+    api.handle({ method: "GET", path: "/api/exams", query: { schoolId: SCHOOL } }, { docs })
+      .data.exams.some((e) => e._id === "exam-gone"),
+    false);
+
+  const empty = api.handle({
+    method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, status: "cancelled" },
+  }, { docs }).data;
+  // Zero exams is zero pages, not one. A screen drawing "Page 1 of 1" over an
+  // empty list is a screen saying there is something to look at.
+  check("nothing matching is zero pages", empty.pagination.totalPages, 0);
+  check("and an empty list", empty.exams, []);
+
+  // A page the server would throw on is left to the server, rather than this
+  // layer inventing a second version of the same failure.
+  check("a non-numeric page falls through",
+    api.handle({
+      method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, page: "abc" },
+    }, { docs }),
+    null);
+  check("and a zero limit",
+    api.handle({
+      method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, limit: "0" },
+    }, { docs }),
     null);
 
   // ═══════════════════════════════════════════════════════════════════════
