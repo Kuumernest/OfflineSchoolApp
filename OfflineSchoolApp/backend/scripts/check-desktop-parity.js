@@ -2645,6 +2645,231 @@ const main = async () => {
 
   reverseEngine.stop();
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a register taken in a classroom with no connection ---");
+
+  /**
+   * ── The case the whole layer exists for ──────────────────────────────────
+   *
+   * A classroom is where a school is least likely to have a connection and most
+   * certain to need one. The register is taken at a fixed moment for a room full
+   * of children and cannot wait.
+   *
+   * The interesting part is not the queueing, which is by now ordinary. It is
+   * IDENTITY. The endpoints upsert on (school, class, subject, student, day), so
+   * marking twice corrects the row rather than adding one — but the row's _id
+   * used to be a fresh uuid invented by whoever inserted first, and that turns a
+   * correction into a duplicate the moment two machines are involved. The
+   * scenario is played out below with the office marking the same class from the
+   * web while the classroom is offline.
+   */
+  const StudentAttendanceModel = require("../src/db/models/Attendance").StudentAttendance;
+  const { attendanceId: derivedId } = require("../../shared/attendance");
+
+  const REGISTER_DAY = "2026-10-06";
+
+  const teachSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["attendance.mark", "attendance.view", "students.view"],
+  };
+  const teachCtx = { docs, meta, queue, session: teachSession };
+
+  // ── The roster the screen lists ────────────────────────────────────────
+  await parity("the register roster for a class",
+    "/api/attendance/students/roster?schoolId=" + SCHOOL + "&classId=cls-1");
+  await parity("and for the whole school",
+    "/api/attendance/students/roster?schoolId=" + SCHOOL);
+
+  // The projection is nine named fields. A mirror answering with the whole
+  // student document would hand a screen a guardian's telephone number the
+  // server never sent it.
+  const roster = api.handle({
+    method: "GET", path: "/api/attendance/students/roster",
+    query: { schoolId: SCHOOL, classId: "cls-1" },
+  }, teachCtx).data.students;
+  check("the roster carries only the fields the endpoint selects",
+    Object.keys(roster[0]).sort().join(),
+    ["_id", "admissionNo", "className", "classId", "email", "firstName",
+     "grade", "lastName", "studentName"].sort().join());
+  check("and nothing from the rest of the record",
+    roster.some((s) => "guardianPhone" in s), false);
+
+  // ── The register itself ────────────────────────────────────────────────
+  const marked = api.handle({
+    method: "POST", path: "/api/attendance/students/bulk", query: {},
+    body: {
+      schoolId: SCHOOL, classId: "cls-1", date: REGISTER_DAY,
+      records: [
+        { studentId: "p1", status: "present" },
+        { studentId: "p2", status: "absent", note: "sick" },
+        // Two the endpoint rejects without failing the batch: a status it does
+        // not know, and a pupil who is not in this class.
+        { studentId: "p3", status: "present" },
+        { studentId: "p1", status: "here" },
+      ],
+    },
+  }, teachCtx);
+
+  check("the register is accepted locally", marked?.status, 201);
+  check("and queued", marked?.queued, true);
+  check("two marks saved", marked.data.saved, 2);
+  check("two rejected", marked.data.failed, 2);
+  check("a pupil from another class is named as such",
+    marked.data.failedRecords.find((r) => r.studentId === "p3")?.reason,
+    "Student not found in this class");
+  check("and an unknown status likewise",
+    marked.data.failedRecords.find((r) => r.status === "here")?.reason,
+    "Invalid studentId or status");
+
+  // Every saved mark is a row, and the whole batch is one queue entry.
+  check("both rows are in the mirror",
+    docs.count("studentAttendance", { classId: "cls-1", date: REGISTER_DAY }), 2);
+  check("as one request, not two", queue.summary().pending, 1);
+  check("with the id derived from the natural key",
+    Boolean(docs.get("studentAttendance", derivedId({
+      schoolId: SCHOOL, classId: "cls-1", subjectId: null,
+      studentId: "p1", date: REGISTER_DAY,
+    }))),
+    true);
+
+  // A batch in which nothing at all would be saved is not queued: the endpoint
+  // would write nothing either.
+  check("a register where no id belongs to the class is not queued",
+    api.handle({
+      method: "POST", path: "/api/attendance/students/bulk", query: {},
+      body: {
+        schoolId: SCHOOL, classId: "cls-1", date: REGISTER_DAY,
+        records: [{ studentId: "p3", status: "present" }],
+      },
+    }, teachCtx),
+    null);
+
+  check("nor one with no records",
+    api.handle({
+      method: "POST", path: "/api/attendance/students/bulk", query: {},
+      body: { schoolId: SCHOOL, classId: "cls-1", records: [] },
+    }, teachCtx),
+    null);
+
+  /**
+   * ── THE DUPLICATE THIS DESIGN PREVENTS ───────────────────────────────────
+   *
+   * While the classroom register sits in the queue, the office marks the same
+   * pupil for the same day from the web. The server now holds that row — and
+   * under the old design it held it under an id this machine had never seen, so
+   * the queued request would update the server's row and the next pull would
+   * deliver a SECOND row for one child on one day.
+   *
+   * A register showing a pupil twice is visible. A report counting them twice is
+   * not, which is why this is asserted rather than trusted.
+   */
+  const fromTheOffice = await fetch(
+    "http://127.0.0.1:" + port + "/api/attendance/students",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify({
+        schoolId: SCHOOL, classId: "cls-1", studentId: "p1",
+        date: REGISTER_DAY, status: "late",
+      }),
+    }
+  );
+  check("the office's mark is accepted by the server", fromTheOffice.status, 201);
+  check("under the id both sides derive",
+    (await fromTheOffice.json()).record._id,
+    derivedId({ schoolId: SCHOOL, classId: "cls-1", subjectId: null,
+                studentId: "p1", date: REGISTER_DAY }));
+
+  // Now the classroom reconnects.
+  const registerEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["studentAttendance"],
+  });
+
+  // These fixtures are dated across a school year, so the cursor is ahead of the
+  // real clock and nothing written during this run would be pulled. See the note
+  // in the reversal section above, and beside encodeCursor.
+  db.prepare("DELETE FROM sync_state WHERE collection = ?").run("studentAttendance");
+
+  await registerEngine.cycle();
+  registerEngine.stop();
+
+  check("the register reached the server", queue.all().length, 0);
+
+  const p1Rows = await StudentAttendanceModel.find({
+    schoolId: SCHOOL, classId: "cls-1", studentId: "p1", date: REGISTER_DAY,
+  }).lean();
+  check("the server has ONE row for that pupil on that day", p1Rows.length, 1);
+  // The classroom marked present after the office marked late, and the
+  // classroom's request arrived last.
+  check("holding what the register said", p1Rows[0]?.status, "present");
+
+  // THE ASSERTION THE DERIVED ID EXISTS FOR.
+  check("and this machine has ONE row for them too",
+    docs.count("studentAttendance", {
+      classId: "cls-1", studentId: "p1", date: REGISTER_DAY,
+    }),
+    1);
+  check("which is the same row the server has",
+    docs.get("studentAttendance", p1Rows[0]._id)?.status, "present");
+
+  await parity("the marks for that day",
+    "/api/attendance/students?schoolId=" + SCHOOL + "&classId=cls-1&date=" + REGISTER_DAY);
+
+  // ── A correction, which must not look like a new mark ──────────────────
+  const firstTaken = docs.get("studentAttendance", p1Rows[0]._id).createdAt;
+
+  const corrected = api.handle({
+    method: "POST", path: "/api/attendance/students", query: {},
+    body: {
+      schoolId: SCHOOL, classId: "cls-1", studentId: "p1",
+      date: REGISTER_DAY, status: "late", note: "arrived at 9",
+    },
+  }, teachCtx);
+  check("a correction is accepted", corrected?.status, 201);
+  check("on the same row", corrected.data.record._id, p1Rows[0]._id);
+  check("changing the mark", corrected.data.record.status, "late");
+  // $setOnInsert does not apply on an update, so the moment the register was
+  // first taken is not overwritten.
+  check("and leaving the moment it was first taken alone",
+    corrected.data.record.createdAt, firstTaken);
+  check("still one row", docs.count("studentAttendance", {
+    classId: "cls-1", studentId: "p1", date: REGISTER_DAY,
+  }), 1);
+
+  check("a status the endpoint does not know is not queued",
+    api.handle({
+      method: "POST", path: "/api/attendance/students", query: {},
+      body: { schoolId: SCHOOL, classId: "cls-1", studentId: "p1",
+              date: REGISTER_DAY, status: "maybe" },
+    }, teachCtx),
+    null);
+
+  check("nor a pupil who is not in the class",
+    api.handle({
+      method: "POST", path: "/api/attendance/students", query: {},
+      body: { schoolId: SCHOOL, classId: "cls-1", studentId: "p3",
+              date: REGISTER_DAY, status: "present" },
+    }, teachCtx),
+    null);
+
+  {
+    const engine2 = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["studentAttendance"],
+    });
+    await engine2.cycle();
+    engine2.stop();
+  }
+  check("the correction drained", queue.all().length, 0);
+  check("and the server took it",
+    (await StudentAttendanceModel.findById(p1Rows[0]._id).lean())?.status, "late");
+  check("with still one row for the day",
+    await StudentAttendanceModel.countDocuments({
+      schoolId: SCHOOL, classId: "cls-1", studentId: "p1", date: REGISTER_DAY,
+    }),
+    1);
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);

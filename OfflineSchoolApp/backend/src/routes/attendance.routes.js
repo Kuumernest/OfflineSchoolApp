@@ -15,13 +15,25 @@ const Student = require("../db/models/Student");
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const todayStr = () => new Date().toISOString().slice(0, 10);
-
-const dateStr = (d) => {
-  if (!d) return todayStr();
-  const parsed = new Date(d);
-  return isNaN(parsed) ? todayStr() : parsed.toISOString().slice(0, 10);
-};
+/**
+ * ── These live in shared/attendance.js now ────────────────────────────────
+ *
+ * Because the desktop application marks registers with no connection and has to
+ * agree with this file about two things: which calendar day a mark belongs to,
+ * and what identifies one mark.
+ *
+ * The second is the important one. attendanceId() derives a row's _id from its
+ * natural key instead of inventing a uuid, so two machines marking the same
+ * register arrive at the same id whoever writes first — see the note in that
+ * file for the duplicate this prevents.
+ */
+const {
+  STATUSES,
+  todayStr,
+  dateStr,
+  attendanceId,
+  teacherAttendanceId,
+} = require("../../../shared/attendance");
 
 /**
  * Given a user's auth _id, find all Student document IDs that belong to them.
@@ -374,7 +386,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
 
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
-    const validStatuses    = ["present", "absent", "late", "excused"];
+    const validStatuses    = STATUSES;
 
     // ── Verify the students actually exist in this class ─────────────────────
     // Previously the only check was `!row.studentId`, a truthiness test, so any
@@ -432,7 +444,16 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
               note:     row.note || null,
             },
             $setOnInsert: {
-              _id:       uuidv4(),
+              // Derived from the natural key, not invented — so a machine that
+              // marked this register offline computed the same id and its queued
+              // request lands on this row rather than creating a second one.
+              _id: attendanceId({
+                schoolId:  resolvedSchoolId,
+                classId,
+                subjectId: subjectId || null,
+                studentId: row.studentId,
+                date:      resolvedDate,
+              }),
               schoolId:  resolvedSchoolId,
               classId,
               subjectId: subjectId || null,
@@ -488,10 +509,9 @@ router.post("/students", teachingOnly, async (req, res) => {
       });
     }
 
-    const validStatuses = ["present", "absent", "late", "excused"];
-    if (!validStatuses.includes(status)) {
+    if (!STATUSES.includes(status)) {
       return res.status(400).json({
-        message: `status must be one of: ${validStatuses.join(", ")}`,
+        message: `status must be one of: ${STATUSES.join(", ")}`,
       });
     }
 
@@ -530,7 +550,15 @@ router.post("/students", teachingOnly, async (req, res) => {
           note:     note || null,
         },
         $setOnInsert: {
-          _id:       uuidv4(),
+          // See the bulk route above: derived, so an offline register and this
+          // one cannot end up as two rows for the same child on the same day.
+          _id: attendanceId({
+            schoolId:  resolvedSchoolId,
+            classId,
+            subjectId: subjectId || null,
+            studentId,
+            date:      resolvedDate,
+          }),
           schoolId:  resolvedSchoolId,
           classId,
           subjectId: subjectId || null,
@@ -784,7 +812,12 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
               note:         row.note         || null,
             },
             $setOnInsert: {
-              _id:       uuidv4(),
+              // Derived from (school, teacher, day) — see shared/attendance.js.
+              _id: teacherAttendanceId({
+                schoolId:  resolvedSchoolId,
+                teacherId: row.teacherId,
+                date:      resolvedDate,
+              }),
               schoolId:  resolvedSchoolId,
               teacherId: row.teacherId,
               date:      resolvedDate,
@@ -872,7 +905,12 @@ router.post("/teachers", adminOnly, async (req, res) => {
           note:         note         || null,
         },
         $setOnInsert: {
-          _id:       uuidv4(),
+          // As the bulk route above — derived, never invented.
+          _id: teacherAttendanceId({
+            schoolId:  resolvedSchoolId,
+            teacherId,
+            date:      resolvedDate,
+          }),
           schoolId:  resolvedSchoolId,
           teacherId,
           date:      resolvedDate,

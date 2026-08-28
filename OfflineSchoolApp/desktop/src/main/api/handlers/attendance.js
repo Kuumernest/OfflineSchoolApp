@@ -46,6 +46,62 @@ const dateStr = (d) => {
 
 module.exports = [
   {
+    route: "GET /api/attendance/students/roster",
+
+    /**
+     * Who is in the class, for the register screen to list.
+     *
+     * ── Three things here are easy to get wrong ─────────────────────────────
+     *
+     * THE PROJECTION. The endpoint selects nine named fields and nothing else. A
+     * mirror answering with the whole student document would send a screen more
+     * than the server does — including, on this collection, a home address and a
+     * guardian's telephone number. Reproduced field for field.
+     *
+     * isActive: { $ne: false }. Not "isActive is true": a student whose record
+     * never had the field is included, and most do not have it. Reading it as
+     * true-only empties the register for a whole school.
+     *
+     * DELETED STUDENTS ARE NOT EXCLUDED. There is no deletedAt filter on this
+     * query, so a withdrawn pupil still appears. That looks like an oversight and
+     * is not this layer's to correct — a register that disagreed with the
+     * server's about who is in the room would be a worse problem than the one it
+     * fixed, and silently.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const filter = { schoolId };
+      if (query.classId) filter.classId = String(query.classId);
+
+      const students = docs
+        .find("student", filter)
+        .filter((s) => s.isActive !== false)
+        .map((s) => ({
+          _id:          s._id,
+          studentName:  s.studentName,
+          firstName:    s.firstName,
+          lastName:     s.lastName,
+          email:        s.email,
+          classId:      s.classId,
+          className:    s.className,
+          grade:        s.grade,
+          admissionNo:  s.admissionNo,
+        }))
+        // .sort({ studentName: 1 }) on the server: byte order, not a locale's.
+        .sort((a, b) => {
+          const an = String(a.studentName ?? "");
+          const bn = String(b.studentName ?? "");
+          if (an === bn) return 0;
+          return an < bn ? -1 : 1;
+        });
+
+      return ok({ students, count: students.length });
+    },
+  },
+
+  {
     route: "GET /api/attendance/students",
     handler: ({ query }, { docs, session }) => {
       // schoolId comes from the query OR the token, in that order — the same

@@ -23,6 +23,13 @@
  * BASE constant. An earlier version of this count missed every BASE-composed
  * call and reported 100 endpoints where there are 180 — so the number here is a
  * floor, and it says so rather than implying precision.
+ *
+ * It also cannot tell a template hole that is an id from one that is a literal
+ * chosen from a short list. The register screens call `${BASE}/${kind}` with
+ * kind as "students" or "teachers", and reading that as ":id" understated the
+ * work in both directions — two endpoints appeared as one line of backlog, and
+ * the handler answering one of them matched nothing and credited nothing. Those
+ * families are declared in src/main/api/coverage.js and expanded below.
  */
 
 const fs   = require("fs");
@@ -30,10 +37,31 @@ const path = require("path");
 
 const WEB = path.join(__dirname, "..", "..", "web", "src");
 
-const { ONLINE_ONLY, PARTIAL } = require("../src/main/api/coverage");
+const { ONLINE_ONLY, PARTIAL, PARAMETERISED } = require("../src/main/api/coverage");
 const { routes }      = require("../src/main/api");
 
 // ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A composed path, as the endpoints it really stands for.
+ *
+ * Only the segment directly after a declared prefix is expanded, and only when
+ * the parser turned it into ":id" — so "/attendance/report/class/:id" comes back
+ * unchanged, because "report" is a literal and that :id is a real class id.
+ */
+const expand = (route) => {
+  for (const family of PARAMETERISED) {
+    if (!route.startsWith(family.prefix)) continue;
+
+    const rest = route.slice(family.prefix.length);
+    const [segment, ...tail] = rest.split("/");
+    if (segment !== ":id") continue;
+
+    return family.values.map((value) =>
+      [family.prefix + value, ...tail].join("/"));
+  }
+  return [route];
+};
 
 /** Every endpoint the console calls, as "METHOD /path" with :id for parameters. */
 const consoleCalls = () => {
@@ -72,9 +100,13 @@ const consoleCalls = () => {
 
         if (!route.startsWith("/")) continue;
 
-        const key = `${m[1].toUpperCase()} ${route}`;
-        if (!found.has(key)) found.set(key, new Set());
-        found.get(key).add(path.relative(WEB, p));
+        // One call site, several real endpoints — see the note above and the
+        // declarations in src/main/api/coverage.js.
+        for (const concrete of expand(route)) {
+          const key = `${m[1].toUpperCase()} ${concrete}`;
+          if (!found.has(key)) found.set(key, new Set());
+          found.get(key).add(path.relative(WEB, p));
+        }
       }
     }
   };

@@ -275,3 +275,4 @@ module.exports.push(...require("./writes/exams"));
 module.exports.push(...require("./writes/examSubjects"));
 module.exports.push(...require("./writes/fees"));
 module.exports.push(...require("./writes/feePayments"));
+module.exports.push(...require("./writes/attendance"));

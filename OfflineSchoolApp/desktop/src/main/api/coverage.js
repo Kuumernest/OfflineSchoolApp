@@ -277,8 +277,49 @@ const PARTIAL = [
   },
 ];
 
+/**
+ * ── Call sites whose ":id" is not an id ───────────────────────────────────
+ *
+ * The register screens call `${BASE}/${kind}` and `${BASE}/${kind}/roster`,
+ * where kind is the literal "students" or "teachers" — one screen, two
+ * collections. The path parser in scripts/coverage.js cannot know that: it turns
+ * every template hole into ":id", so those calls arrive as "/attendance/:id"
+ * and "/attendance/:id/roster".
+ *
+ * Which made the count wrong in BOTH directions at once. The two real endpoints
+ * were listed as one line of backlog, and the handler answering
+ * /attendance/students matched nothing, so implementing it credited nothing —
+ * GET /api/attendance/students had been answered offline for weeks and the
+ * report had never counted it.
+ *
+ * Declared here so the expansion is a stated assumption rather than a guess
+ * inside the parser. A family lists the segment position and the literals it can
+ * take; the report expands the call sites against it, so the backlog names
+ * "/attendance/teachers" rather than something no route could ever match.
+ */
+
+/**
+ * @typedef  {object} Family
+ * @property {string}   prefix   The path up to the composed segment.
+ * @property {string[]} values   Every literal that segment can be.
+ * @property {string}   because  Why the parser cannot see this.
+ */
+
+/** @type {Family[]} */
+const PARAMETERISED = [
+  {
+    prefix: "/attendance/",
+    values: ["students", "teachers"],
+    because:
+      "One set of register screens serves pupils and staff, calling " +
+      "`${BASE}/${kind}` with kind as a literal. Only the segment straight " +
+      "after /attendance/ is expanded, so /attendance/report/class/:id is left " +
+      "alone — the :id there is a real class id.",
+  },
+];
+
 /** Quick membership tests for the coverage report. */
 const isOnlineOnly = (endpoint) => ONLINE_ONLY.some((e) => e.endpoint === endpoint);
 const isPartial    = (endpoint) => PARTIAL.some((e) => e.endpoint === endpoint);
 
-module.exports = { ONLINE_ONLY, PARTIAL, isOnlineOnly, isPartial };
+module.exports = { ONLINE_ONLY, PARTIAL, PARAMETERISED, isOnlineOnly, isPartial };
