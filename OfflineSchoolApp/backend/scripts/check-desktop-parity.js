@@ -6921,6 +6921,310 @@ const main = async () => {
 
   await parity("the plans once one is agreed", "/api/fees/plans?schoolId=" + SCHOOL);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the end-of-year rollover, as far as it can go offline ---");
+
+  /**
+   * ── What is mirrored here, and what is deliberately not ──────────────────
+   *
+   * Four reads, the progression RULE, and the override of one pupil's proposed
+   * decision. Generating a run, committing one, reversing one and discarding one
+   * are online-only: they mint their own ids, they rewrite every pupil's class,
+   * and "done" appearing on a screen while nothing had happened would have a
+   * school printing next year's class lists off it.
+   *
+   * The override is queueable for a reason worth stating: a decision is a
+   * PROPOSAL inside a draft. Nothing about the pupil's class, enrolment or status
+   * changes until the run is committed, so the worst an offline override can be
+   * is a draft that differs from the school's for a few hours — which is what a
+   * draft is for.
+   *
+   * These handlers were written by an agent that did not survive to verify them,
+   * and were left unregistered until this section existed. That is the rule: a
+   * handler nobody has checked does not get to answer.
+   */
+  const PromotionRunModel      = require("../src/db/models/PromotionRun");
+  const PromotionDecisionModel = require("../src/db/models/PromotionDecision");
+
+  app.use("/api/promotion", authenticate, require("../src/routes/promotion.routes"));
+
+  const promoSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["promotion.run", "promotion.view", "classes.view"],
+  };
+  const promoCtx = { docs, meta, queue, session: promoSession };
+  const asPromo  = { token, session: promoSession };
+
+  const promoAsk = async (method, path, body) => {
+    const res = await fetch("http://127.0.0.1:" + port + path, {
+      method,
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  // ── The progression rule ───────────────────────────────────────────────
+  await parity("the progression rule", `/api/promotion/progression?schoolId=${SCHOOL}`,
+    asPromo);
+
+  {
+    const rule = api.handle({
+      method: "GET", path: "/api/promotion/progression", query: { schoolId: SCHOOL },
+    }, promoCtx).data;
+
+    // The count the screen acts on: a class that is neither a final year nor
+    // pointed anywhere will strand its pupils when a run is generated, and this
+    // is where it is still cheap to fix.
+    check("every class is reported as incomplete to begin with",
+      rule.incomplete, rule.count);
+    // .select() does not invent a field the document lacks, so a class with no
+    // level or nextClassId comes back with only the keys it has. The claim worth
+    // asserting is the other direction: nothing OUTSIDE the projection leaks.
+    const allowed = new Set(["_id", "name", "level", "nextClassId", "isFinalYear"]);
+    check("nothing outside the projection is returned",
+      rule.data.flatMap((c) => Object.keys(c)).filter((k) => !allowed.has(k)), []);
+    check("and the classes carry no schoolId, which the endpoint withholds",
+      rule.data.some((c) => "schoolId" in c), false);
+  }
+
+  // ── Setting it: one request, several classes ───────────────────────────
+  const promoEntries = [
+    { classId: "cls-1", nextClassId: "cls-3" },
+    { classId: "cls-3", nextClassId: "cls-2" },
+    { classId: "cls-2", nextClassId: null, isFinalYear: true },
+  ];
+
+  const promoSaved = api.handle({
+    method: "PUT", path: "/api/promotion/progression", query: {},
+    body: { schoolId: SCHOOL, entries: promoEntries },
+  }, promoCtx);
+
+  check("the rule is accepted locally", promoSaved?.status, 200);
+  check("and queued", promoSaved?.queued, true);
+  check("all three classes are in the mirror already", [
+    docs.get("class", "cls-1")?.nextClassId,
+    docs.get("class", "cls-3")?.nextClassId,
+    docs.get("class", "cls-2")?.isFinalYear,
+  ], ["cls-3", "cls-2", true]);
+
+  /**
+   * THE ASSERTION THE `also` SHAPE EXISTS FOR.
+   *
+   * One request touched three rows. If only the first were named on the queue
+   * entry, the other two would stay pending for ever — and a pending row is
+   * deliberately never overwritten by a pull, so they would disagree with the
+   * school's own record permanently rather than until the next sync.
+   */
+  check("every touched row is provisional, not just the first", [
+    docs.get("class", "cls-1")._pending,
+    docs.get("class", "cls-3")._pending,
+    docs.get("class", "cls-2")._pending,
+  ], [true, true, true]);
+
+  // ── What must not be queued ────────────────────────────────────────────
+  const promoRejections = [
+    // A class leading to itself would promote a year group into the room it just
+    // left, which reads as a successful rollover and is not one.
+    ["a class that leads to itself",
+      { schoolId: SCHOOL, entries: [{ classId: "cls-1", nextClassId: "cls-1" }] }],
+    ["a class from another school",
+      { schoolId: SCHOOL, entries: [{ classId: "cls-9", nextClassId: "cls-1" }] }],
+    ["entries that are not an array",
+      { schoolId: SCHOOL, entries: "cls-1" }],
+  ];
+
+  for (const [what, body] of promoRejections) {
+    check("not queued: " + what,
+      api.handle({ method: "PUT", path: "/api/promotion/progression", query: {}, body },
+        promoCtx),
+      null);
+    const refused = await promoAsk("PUT", "/api/promotion/progression", body);
+    check("and the server refuses it: " + what,
+      refused.status >= 400 && refused.status < 500, true);
+  }
+
+  check("somebody without promotion.run is not queued",
+    api.handle({
+      method: "PUT", path: "/api/promotion/progression", query: {},
+      body: { schoolId: SCHOOL, entries: promoEntries },
+    }, { docs, meta, queue, session: { ...promoSession, permissions: ["classes.view"] } }),
+    null);
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  {
+    const promoEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["class", "promotionRun", "promotionDecision"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?, ?)")
+      .run("class", "promotionRun", "promotionDecision");
+    await promoEngine.cycle();
+    promoEngine.stop();
+  }
+
+  check("the rule reached the server", queue.all().length, 0);
+  check("and all three rows settled", [
+    docs.get("class", "cls-1")._pending,
+    docs.get("class", "cls-3")._pending,
+    docs.get("class", "cls-2")._pending,
+  ], [false, false, false]);
+
+  {
+    const onServer = new Map(
+      (await Class.find({ schoolId: SCHOOL }).lean()).map((c) => [c._id, c])
+    );
+    check("the server took the whole rule, not just the first entry", [
+      onServer.get("cls-1").nextClassId,
+      onServer.get("cls-3").nextClassId,
+      onServer.get("cls-2").isFinalYear,
+    ], ["cls-3", "cls-2", true]);
+  }
+
+  await parity("the progression rule, after a round trip",
+    `/api/promotion/progression?schoolId=${SCHOOL}`, asPromo);
+
+  // ── A draft run, and overriding one pupil in it ────────────────────────
+  //
+  // Inserted on the server and pulled, so the rows under test are the server's
+  // own shape rather than ones written here.
+  await PromotionRunModel.collection.insertOne({
+    _id: "run-1", schoolId: SCHOOL, fromYear: YEAR, toYear: "2027-2028",
+    status: "draft",
+    counts: { total: 2, promoted: 2, repeated: 0, graduated: 0, unassigned: 0 },
+    generatedBy: "admin-1", generatedAt: new Date(), deletedAt: null,
+    createdAt: new Date(), updatedAt: new Date(),
+  });
+  await PromotionDecisionModel.collection.insertMany([
+    { _id: "dec-1", runId: "run-1", schoolId: SCHOOL, studentId: "p1",
+      studentName: "Ada Nkeng", fromClassId: "cls-1", fromClassName: "Form 1",
+      toClassId: "cls-3", toClassName: "Form 2", outcome: "promoted",
+      basis: "average", average: 62, overridden: false, deletedAt: null,
+      createdAt: new Date(), updatedAt: new Date() },
+    { _id: "dec-2", runId: "run-1", schoolId: SCHOOL, studentId: "p2",
+      studentName: "Émile Oyono", fromClassId: "cls-1", fromClassName: "Form 1",
+      toClassId: "cls-3", toClassName: "Form 2", outcome: "promoted",
+      basis: "average", average: 71, overridden: false, deletedAt: null,
+      createdAt: new Date(), updatedAt: new Date() },
+  ]);
+
+  {
+    const promoEngine2 = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["promotionRun", "promotionDecision"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?)")
+      .run("promotionRun", "promotionDecision");
+    await promoEngine2.cycle();
+    promoEngine2.stop();
+  }
+  check("the draft run is in the mirror", docs.get("promotionRun", "run-1")?.status, "draft");
+  check("with both decisions", docs.count("promotionDecision", { runId: "run-1" }), 2);
+
+  await parity("the runs a school has", `/api/promotion/runs?schoolId=${SCHOOL}`, asPromo);
+  await parity("one run with its decisions",
+    `/api/promotion/runs/run-1?schoolId=${SCHOOL}`, asPromo);
+  await parity("one pupil's promotion history",
+    `/api/promotion/students/p1/history?schoolId=${SCHOOL}`, asPromo);
+
+  // The override. Note the URL carries the PUPIL's id, not the decision's — the
+  // service looks the row up by { runId, studentId }.
+  /**
+   * A REPEAT needs a destination class, which is not obvious and is the
+   * service's own rule: "A destination class is required for that outcome",
+   * thrown for promoted and repeated alike. Only graduating lands nowhere.
+   *
+   * The first version of this assertion omitted it and the handler declined —
+   * correctly. Worth pinning in both directions.
+   */
+  check("a repeat with no destination class is not queued",
+    api.handle({
+      method: "PATCH", path: "/api/promotion/runs/run-1/decisions/p1", query: {},
+      body: { schoolId: SCHOOL, outcome: "repeated" },
+    }, promoCtx),
+    null);
+  check("and the server refuses it too",
+    (await promoAsk("PATCH", "/api/promotion/runs/run-1/decisions/p1",
+      { schoolId: SCHOOL, outcome: "repeated" })).status,
+    400);
+
+  const overridden = api.handle({
+    method: "PATCH", path: "/api/promotion/runs/run-1/decisions/p1", query: {},
+    body: { schoolId: SCHOOL, outcome: "repeated", toClassId: "cls-1" },
+  }, promoCtx);
+
+  check("the override is accepted locally", overridden?.status, 200);
+  check("the decision changes", overridden.data.data.outcome, "repeated");
+  check("and is marked as overridden", overridden.data.data.overridden, true);
+
+  /**
+   * The run's counts, recomputed. This is the second document, and the reason it
+   * has to be: the counts block is derived from every decision of the run, so a
+   * mirror that changed one decision and left the run alone would put a wrong
+   * total on a screen — and the run row is stored PENDING, which a pull refuses
+   * to overwrite, so the wrong total would stay.
+   */
+  check("the run's counts move with it",
+    [overridden.data.counts.promoted, overridden.data.counts.repeated], [1, 1]);
+  check("and the run row is provisional too",
+    docs.get("promotionRun", "run-1")._pending, true);
+
+  check("an outcome the endpoint does not know is not queued",
+    api.handle({
+      method: "PATCH", path: "/api/promotion/runs/run-1/decisions/p1", query: {},
+      body: { schoolId: SCHOOL, outcome: "expelled", toClassId: "cls-1" },
+    }, promoCtx),
+    null);
+  check("nor a pupil with no decision in this run",
+    api.handle({
+      method: "PATCH", path: "/api/promotion/runs/run-1/decisions/p3", query: {},
+      body: { schoolId: SCHOOL, outcome: "repeated", toClassId: "cls-1" },
+    }, promoCtx),
+    null);
+  check("nor a run this machine does not hold",
+    api.handle({
+      method: "PATCH", path: "/api/promotion/runs/run-nope/decisions/p1", query: {},
+      body: { schoolId: SCHOOL, outcome: "repeated", toClassId: "cls-1" },
+    }, promoCtx),
+    null);
+
+  {
+    const promoEngine3 = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["promotionRun", "promotionDecision"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?)")
+      .run("promotionRun", "promotionDecision");
+    await promoEngine3.cycle();
+    promoEngine3.stop();
+  }
+
+  check("the override reached the server", queue.all().length, 0);
+  check("both rows settled", [
+    docs.get("promotionDecision", "dec-1")._pending,
+    docs.get("promotionRun", "run-1")._pending,
+  ], [false, false]);
+  check("the server has the new outcome",
+    (await PromotionDecisionModel.findById("dec-1").lean())?.outcome, "repeated");
+  check("and recomputed the same counts",
+    (await PromotionRunModel.findById("run-1").lean())?.counts?.repeated, 1);
+
+  await parity("the run after an override",
+    `/api/promotion/runs/run-1?schoolId=${SCHOOL}`, asPromo);
+
+  // ── The four that are online-only, asserted as declining ───────────────
+  for (const [what, method, path] of [
+    ["generating a run",  "POST",   "/api/promotion/runs"],
+    ["committing one",    "POST",   "/api/promotion/runs/run-1/commit"],
+    ["reversing one",     "POST",   "/api/promotion/runs/run-1/reverse"],
+    ["discarding one",    "DELETE", "/api/promotion/runs/run-1"],
+  ]) {
+    check(what + " is not answered locally",
+      api.handle({ method, path, query: { schoolId: SCHOOL }, body: { schoolId: SCHOOL } },
+        promoCtx),
+      null);
+  }
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);

@@ -47,6 +47,7 @@ const reads = [
   ...require("./handlers/announcements"),
   ...require("./handlers/templates"),
   ...require("./handlers/settings"),
+  ...require("./handlers/promotion"),
 ];
 
 /**

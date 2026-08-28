@@ -282,3 +282,4 @@ module.exports.push(...require("./writes/templates"));
 module.exports.push(...require("./writes/settings"));
 module.exports.push(...require("./writes/structure"));
 module.exports.push(...require("./writes/finance"));
+module.exports.push(...require("./writes/promotion"));
