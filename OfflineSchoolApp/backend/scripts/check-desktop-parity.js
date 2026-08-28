@@ -7225,6 +7225,216 @@ const main = async () => {
       null);
   }
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the staff directory reads ---");
+
+  /**
+   * ── Four reads, and a capability gap that decides who can use them ────────
+   *
+   * All four answer from the `user` collection, and the feed gates that on
+   * users.manage. The ENDPOINTS are gated on something else and something
+   * weaker: teachers.view for the list and the detail, dashboard.view for the
+   * stats, teachers.manage for the assignments. Every one of those is delegable,
+   * so a school can hand them to somebody who does not mirror a single user row.
+   *
+   * That machine must decline rather than answer. An empty staff list is not a
+   * smaller answer than the server's — it is a different one, and "this school
+   * has no teachers" is a sentence somebody would act on. So each handler
+   * requires the endpoint's own permission AND users.manage, which is the same
+   * shape as the bursar/payroll gap already recorded in KNOWN_GAPS.
+   *
+   * Writing staff is not here at all: POST, PUT and DELETE /admin/teachers mint
+   * credentials and send email, and PUT /admin/permissions changes what somebody
+   * may do. Those are online-only.
+   */
+  const staffSess = {
+    userId: "admin-1", schoolId: SCHOOL,
+    // subjects.view and classes.view are here because the assignments read joins
+    // four collections and the feed gates each separately — see the note on that
+    // handler. A session short of one of them declines, correctly, and the first
+    // version of this section was short of two.
+    permissions: [
+      "users.manage", "teachers.view", "teachers.manage", "dashboard.view",
+      "subjects.view", "classes.view",
+    ],
+  };
+  const staffCtx2 = { docs, meta, queue, session: staffSess };
+  const asStaff   = { token, session: staffSess };
+
+  /**
+   * Three accounts the existing fixtures do not have, and every filter below
+   * turns on one of them: an inactive teacher, one predating the isActive field,
+   * and one belonging to another school.
+   */
+  await UserModel.collection.insertMany([
+    { _id: "t-off", name: "Retired Teacher", email: "retired@x.com", role: "teacher",
+      schoolId: SCHOOL, isActive: false, password: "x", tempPassword: "plain-text",
+      updatedAt: new Date() },
+    { _id: "t-noflag", name: "Legacy Teacher", email: "legacy@x.com", role: "teacher",
+      schoolId: SCHOOL, password: "x", updatedAt: new Date() },
+    { _id: "t-other", name: "Elsewhere Teacher", email: "elsewhere@x.com", role: "teacher",
+      schoolId: "other-school", isActive: true, password: "x", updatedAt: new Date() },
+  ]);
+  // Mirrored the way the feed sends them: without password or tempPassword.
+  docs.putMany("user", JSON.parse(JSON.stringify(
+    (await UserModel.find({}).lean()).map(({ password, tempPassword, ...rest }) => rest)
+  )));
+
+  // ── The list, and what ?status means ───────────────────────────────────
+  /**
+   * ── Compared BY TEACHER, because the endpoint imposes no order ───────────
+   *
+   * GET /admin/teachers has no .sort(), so the server returns whatever order the
+   * storage engine gives. A list comparison asserts Mongo's storage order, which
+   * the endpoint does not promise — and duly failed here with sixty
+   * "differences" that were the same people in a different sequence.
+   *
+   * This is the fourth section in this file to need it, which is why the desktop
+   * handler sorts by id: an unordered list is faithful, but one that reshuffles
+   * between reads is its own kind of wrong.
+   */
+  const staffListParity = async (label, path) => {
+    const [pathname, qs = ""] = path.split("?");
+    const res = await fetch("http://127.0.0.1:" + port + path,
+      { headers: { authorization: "Bearer " + asStaff.token } });
+    const fromServer = await res.json();
+
+    const local = api.handle(
+      { method: "GET", path: pathname, query: Object.fromEntries(new URLSearchParams(qs)) },
+      staffCtx2
+    );
+    if (!local) { console.log("  ---- " + label + ": answered by the network"); return; }
+
+    check(label + ": status", local.status, res.status);
+    check(label + ": the same people",
+      local.data.teachers.map((t) => t._id).sort().join(),
+      fromServer.teachers.map((t) => t._id).sort().join());
+
+    const byId = new Map(fromServer.teachers.map((t) => [String(t._id), t]));
+    const wrong = local.data.teachers.filter(
+      (mine) => JSON.stringify(mine) !== JSON.stringify(byId.get(String(mine._id)))
+    );
+    check(label + ": and the same record for each of them",
+      wrong.map((t) => t._id), []);
+  };
+
+  await staffListParity("the teachers, active by default",
+    `/api/admin/teachers?schoolId=${SCHOOL}`);
+  await staffListParity("only the inactive ones",
+    `/api/admin/teachers?schoolId=${SCHOOL}&status=inactive`);
+  await staffListParity("and all of them",
+    `/api/admin/teachers?schoolId=${SCHOOL}&status=all`);
+  await staffListParity("one by email",
+    `/api/admin/teachers?schoolId=${SCHOOL}&email=legacy@x.com&status=all`);
+
+  {
+    const listed = (q) => api.handle({
+      method: "GET", path: "/api/admin/teachers", query: { schoolId: SCHOOL, ...q },
+    }, staffCtx2).data.teachers.map((t) => t._id);
+
+    /**
+     * THE ASSERTION THE DEFAULT IS ABOUT. statusFilter returns
+     * { isActive: true } for anything that is not "all" or "inactive" — and
+     * Mongo's `isActive: true` does NOT match a document without the field. So a
+     * teacher whose record predates isActive is missing from the default list,
+     * and reading it as `{ $ne: false }` would silently add them.
+     */
+    check("the legacy teacher is absent from the default list",
+      listed({}).includes("t-noflag"), false);
+    check("and so is the retired one", listed({}).includes("t-off"), false);
+    check("but ?status=all shows both",
+      ["t-noflag", "t-off"].every((id) => listed({ status: "all" }).includes(id)), true);
+    // Not an exact list: the finance section adds inactive staff of its own, and
+    // a constant here would be a hostage to whatever ran before. The claim is
+    // that the filter selects on isActive === false and nothing else.
+    check("?status=inactive includes the retired one",
+      listed({ status: "inactive" }).includes("t-off"), true);
+    check("and excludes every active one",
+      listed({ status: "inactive" }).some((id) => ["t1", "t2"].includes(id)), false);
+    check("and no school sees another's staff",
+      listed({ status: "all" }).includes("t-other"), false);
+  }
+
+  // The projection is an EXCLUSION, so everything but two fields comes back —
+  // and tempPassword is NOT select:false on the model, so it would travel out of
+  // a plain find(). It must not appear on either side.
+  {
+    const rows = api.handle({
+      method: "GET", path: "/api/admin/teachers",
+      query: { schoolId: SCHOOL, status: "all" },
+    }, staffCtx2).data.teachers;
+    check("no password reaches the caller",
+      rows.some((r) => "password" in r), false);
+    check("nor a temporary one, which the model does not hide",
+      rows.some((r) => "tempPassword" in r), false);
+  }
+
+  // ── One teacher, and the stats ─────────────────────────────────────────
+  await parity("one teacher by id", `/api/admin/teachers/t1?schoolId=${SCHOOL}`, asStaff);
+  await parity("the retired one is still fetchable",
+    `/api/admin/teachers/t-off?schoolId=${SCHOOL}`, asStaff);
+  await parity("the staff stats", `/api/admin/teachers/stats?schoolId=${SCHOOL}`, asStaff);
+
+  {
+    const stats = api.handle({
+      method: "GET", path: "/api/admin/teachers/stats", query: { schoolId: SCHOOL },
+    }, staffCtx2).data;
+
+    // total counts every teacher of the school; active counts only isActive
+    // true. The legacy row is in one and not the other, which is the whole
+    // difference and the reason both are asserted rather than one.
+    check("total counts every teacher, flagged or not", stats.total > stats.active, true);
+    check("and neither counts another school's",
+      stats.total,
+      docs.count("user", { schoolId: SCHOOL, role: "teacher" }));
+  }
+
+  check("a teacher from another school is not answered locally",
+    api.handle({
+      method: "GET", path: "/api/admin/teachers/t-other", query: { schoolId: SCHOOL },
+    }, staffCtx2),
+    null);
+
+  // ── The assignments ────────────────────────────────────────────────────
+  await parity("who teaches what",
+    `/api/admin/teacher-assignments?schoolId=${SCHOOL}`, asStaff);
+
+  // ── THE CAPABILITY GAP ─────────────────────────────────────────────────
+  //
+  // Each endpoint's own permission is delegable, and holding it does not mirror
+  // a single user row. A machine in that position must decline.
+  for (const [what, path, held] of [
+    ["the list",        "/api/admin/teachers",           ["teachers.view"]],
+    ["one teacher",     "/api/admin/teachers/t1",        ["teachers.view"]],
+    ["the stats",       "/api/admin/teachers/stats",     ["dashboard.view"]],
+    ["the assignments", "/api/admin/teacher-assignments", ["teachers.manage"]],
+  ]) {
+    check("without users.manage, " + what + " declines rather than answering empty",
+      api.handle({ method: "GET", path, query: { schoolId: SCHOOL } },
+        { docs, meta, queue, session: { ...staffSess, permissions: held } }),
+      null);
+  }
+
+  // And the endpoint's own permission is still required on top of it.
+  check("users.manage alone does not open the assignments",
+    api.handle({
+      method: "GET", path: "/api/admin/teacher-assignments", query: { schoolId: SCHOOL },
+    }, { docs, meta, queue, session: { ...staffSess, permissions: ["users.manage"] } }),
+    null);
+
+  // ── The writes that are online-only ────────────────────────────────────
+  for (const [what, method, path] of [
+    ["creating a teacher",     "POST",   "/api/admin/teachers"],
+    ["editing one",            "PUT",    "/api/admin/teachers/t1"],
+    ["removing one",           "DELETE", "/api/admin/teachers/t1"],
+    ["changing a permission",  "PUT",    "/api/admin/permissions/t1"],
+  ]) {
+    check(what + " is not answered locally",
+      api.handle({ method, path, query: { schoolId: SCHOOL },
+        body: { schoolId: SCHOOL, name: "X", email: "x@y.com" } }, staffCtx2),
+      null);
+  }
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
