@@ -25,6 +25,8 @@
 
 const express  = require("express");
 const mongoose = require("mongoose");
+const fs       = require("fs");
+const path     = require("path");
 
 const SCHOOL_A = "aaaaaaaaaaaaaaaaaaaaaaaa";
 const SCHOOL_B = "bbbbbbbbbbbbbbbbbbbbbbbb";
@@ -72,6 +74,32 @@ const main = async () => {
   check("collection names are unique",
     feed.FEED.length, new Set(feed.FEED.map((e) => e.collection)).size);
 
+  // ── And every model NAME is one Mongoose knows ──────────────────────────
+  //
+  // The boot check in syncFeed.js works from filenames, because it runs before
+  // any model is registered. That leaves a hole: a file may register models
+  // under names that are not its filename, and a feed entry naming something
+  // unregistered does not throw. The endpoint answers
+  // { error: "MODEL_NOT_REGISTERED" } for that collection and the client stores
+  // nothing — so the collection is silently never mirrored, for ever.
+  //
+  // That is exactly what happened to attendance: Attendance.js registers
+  // StudentAttendance and TeacherAttendance and nothing called "Attendance",
+  // which the feed had asked for. Nothing failed; attendance simply never
+  // arrived on any device.
+  for (const file of fs.readdirSync(path.join(__dirname, "..", "src", "db", "models"))) {
+    if (file.endsWith(".js")) require(path.join(__dirname, "..", "src", "db", "models", file));
+  }
+  const registered = new Set(Object.keys(mongoose.models));
+
+  check("every model the feed names is registered with Mongoose",
+    feed.FEED.filter((e) => !registered.has(e.model))
+             .map((e) => `${e.collection} -> ${e.model}`), []);
+
+  // Guards the guard: if loading the model files ever stopped working, the
+  // check above would pass by comparing against an empty set.
+  check("and the registry was actually populated", registered.size > 20, true);
+
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- nothing carrying a credential is mirrored ---");
 
@@ -117,7 +145,10 @@ const main = async () => {
     [ROLES.BURSAR,  "student",         true,  "the roster, because they bill it"],
     [ROLES.TEACHER, "student",         true,  "a teacher's pupils — via viewTaught"],
     [ROLES.TEACHER, "examScore",       true,  "and the marks they enter"],
-    [ROLES.TEACHER, "attendance",      true,  ""],
+    [ROLES.TEACHER, "studentAttendance", true, ""],
+    // The staff register reads on attendance.view too — markStaff gates writing
+    // it — so a bursar mirrors it, which matches what the route allows them.
+    [ROLES.BURSAR,  "teacherAttendance", true, "the staff register reads on attendance.view"],
     [ROLES.TEACHER, "feeCharge",       false, "a teacher is not in the money"],
     [ROLES.TEACHER, "feePayment",      false, ""],
     [ROLES.TEACHER, "payrollRun",      false, ""],

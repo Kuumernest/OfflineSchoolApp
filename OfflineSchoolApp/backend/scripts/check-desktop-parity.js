@@ -268,6 +268,7 @@ const main = async () => {
   app.use("/api/fees",  authenticate, require("../src/routes/fees.routes"));
   app.use("/api/finance", authenticate, require("../src/routes/finance.routes"));
   app.use("/api/approvals", authenticate, require("../src/routes/approvals.routes"));
+  app.use("/api/attendance", authenticate, require("../src/routes/attendance.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
@@ -859,6 +860,110 @@ const main = async () => {
   check("with no session it falls through to the network",
     api.handle({
       method: "GET", path: "/api/approvals", query: { schoolId: SCHOOL },
+    }, { docs, session: null }),
+    null);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the register ---");
+
+  const { StudentAttendance } = require("../src/db/models/Attendance");
+  await StudentAttendance.init();
+
+  // Two marks on one day for one pupil, on DIFFERENT SUBJECTS.
+  //
+  // The first version of this fixture gave the same pupil two marks for the same
+  // day and class, meaning to represent a corrected register — and the insert
+  // failed on a unique index nobody had mentioned:
+  // { schoolId, classId, studentId, subjectId, date }. So a register cannot be
+  // corrected by adding a row; there is one mark per pupil per subject per day,
+  // and a correction updates it.
+  //
+  // Which narrows what the markedAt secondary sort is for: ordering marks taken
+  // in different lessons on the same day. Worth knowing, and worth the fixture
+  // being the shape the data can actually take.
+  await StudentAttendance.collection.insertMany([
+    { _id: "at-1", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-14",
+      status: "present", markedAt: new Date("2026-09-14T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-2", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
+      status: "absent",  markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-3", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
+      subjectId: "sub-1",
+      status: "present", markedAt: new Date("2026-09-15T11:30:00Z"), updatedAt: new Date() },
+    { _id: "at-4", schoolId: SCHOOL, studentId: "p2", classId: "cls-1", date: "2026-09-15",
+      status: "late",    markedAt: new Date("2026-09-15T08:20:00Z"), updatedAt: new Date() },
+    { _id: "at-5", schoolId: SCHOOL, studentId: "p3", classId: "cls-2", date: "2026-09-16",
+      status: "present", markedAt: new Date("2026-09-16T08:05:00Z"), updatedAt: new Date() },
+    // The endpoint applies NO deleted filter, so this must still come back.
+    { _id: "at-6", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-17",
+      status: "present", markedAt: new Date("2026-09-17T08:05:00Z"),
+      deletedAt: new Date("2026-09-18T00:00:00Z"), updatedAt: new Date() },
+    { _id: "at-9", schoolId: "other-school", studentId: "px", classId: "cls-9", date: "2026-09-15",
+      status: "present", markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
+  ]);
+
+  docs.putMany("studentAttendance",
+    JSON.parse(JSON.stringify(await StudentAttendance.find({}).lean())));
+
+  await parity("the whole register",     `/api/attendance/students?schoolId=${SCHOOL}`, asHead);
+  await parity("one class",             `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1`, asHead);
+  await parity("one pupil",             `/api/attendance/students?schoolId=${SCHOOL}&studentId=p1`, asHead);
+  await parity("one status",            `/api/attendance/students?schoolId=${SCHOOL}&status=absent`, asHead);
+  await parity("one exact day",         `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-15`, asHead);
+  await parity("a range, inclusive",    `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-15&endDate=2026-09-16`, asHead);
+  await parity("from only",             `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-16`, asHead);
+  await parity("to only",              `/api/attendance/students?schoolId=${SCHOOL}&endDate=2026-09-14`, asHead);
+  await parity("a day nobody was marked", `/api/attendance/students?schoolId=${SCHOOL}&date=2020-01-01`, asHead);
+  await parity("class and status together",
+    `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1&status=present`, asHead);
+
+  // An exact date wins over a range on the server — both are set on the same
+  // query key, so the later assignment replaces the earlier.
+  await parity("an exact date beats a range",
+    `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-14&startDate=2026-09-15&endDate=2026-09-16`, asHead);
+
+  // Surprising, and therefore worth pinning: an unreadable date becomes TODAY
+  // rather than an error. Reproduced rather than improved on, because a mirror
+  // that refused what the server accepts would answer differently from the
+  // request it declined to handle.
+  await parity("an unreadable date becomes today, as the server does",
+    `/api/attendance/students?schoolId=${SCHOOL}&date=not-a-date`, asHead);
+
+  const register = api.handle({
+    method: "GET", path: "/api/attendance/students",
+    query: { schoolId: SCHOOL, studentId: "p1" },
+  }, { docs, session: asHead.session }).data;
+
+  check("newest day first, and within a day the later lesson first",
+    register.records.map((r) => r._id), ["at-6", "at-3", "at-2", "at-1"]);
+  check("a soft-deleted mark IS returned, as this endpoint returns it",
+    register.records.some((r) => r._id === "at-6"), true);
+  check("this endpoint answers with records, not data",
+    Object.keys(api.handle({
+      method: "GET", path: "/api/attendance/students", query: { schoolId: SCHOOL },
+    }, { docs, session: asHead.session }).data).sort(),
+    ["count", "records", "success"]);
+
+  // schoolId from the session when the query omits it — the endpoint's own
+  // fallback, and the reason this handler consults the session at all.
+  //
+  // Asserted as a PROPERTY rather than against a count: omitting schoolId must
+  // give the same answer as passing it. The first version of this compared
+  // against a hand-counted 7 and failed at 6, which said nothing about the
+  // fallback and everything about my arithmetic.
+  const explicit = api.handle({
+    method: "GET", path: "/api/attendance/students", query: { schoolId: SCHOOL },
+  }, { docs, session: asHead.session }).data;
+  const implied = api.handle({
+    method: "GET", path: "/api/attendance/students", query: {},
+  }, { docs, session: asHead.session }).data;
+
+  check("omitting schoolId gives the same answer as passing it",
+    implied.records.map((r) => r._id), explicit.records.map((r) => r._id));
+  check("and it is this school only",
+    implied.records.every((r) => r.schoolId === SCHOOL), true);
+  check("with no session and no schoolId it declines",
+    api.handle({
+      method: "GET", path: "/api/attendance/students", query: {},
     }, { docs, session: null }),
     null);
 

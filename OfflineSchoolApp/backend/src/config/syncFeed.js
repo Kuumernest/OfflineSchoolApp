@@ -171,7 +171,25 @@ const FEED = [
   { collection: "approvalRequest", model: "ApprovalRequest", permission: "approvals.view" },
 
   // ── Academic ─────────────────────────────────────────────────────────────
-  { collection: "attendance",   model: "Attendance",   permission: "attendance.view" },
+  /**
+   * TWO models, not one, and this entry used to name a third that does not exist.
+   *
+   * src/db/models/Attendance.js registers StudentAttendance and
+   * TeacherAttendance and nothing called "Attendance". A feed entry naming an
+   * unregistered model does not throw — the endpoint answers
+   * { error: "MODEL_NOT_REGISTERED" } for that collection and the client stores
+   * nothing — so attendance was silently never mirrored at all. The boot check
+   * below could not catch it either, because it verifies that every model FILE
+   * is classified and a file may register whatever names it likes.
+   * scripts/check-sync-feed.js now asserts registration as well.
+   *
+   * Both are gated on attendance.view, which is what the read routes use:
+   * staffRead in attendance.routes.js is requirePermission("attendance.view")
+   * for the staff register as much as for the pupils'. markStaff gates WRITING
+   * it, which is a different question.
+   */
+  { collection: "studentAttendance", model: "StudentAttendance", permission: "attendance.view" },
+  { collection: "teacherAttendance", model: "TeacherAttendance", permission: "attendance.view" },
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
   { collection: "examScore",    model: "ExamScore",    permission: "results.view" },
@@ -196,6 +214,13 @@ const FEED = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EXCLUDED = {
+  // The FILE, whose two registered models are in the FEED above as
+  // studentAttendance and teacherAttendance. Listed here so the filename-based
+  // classification check is satisfied without implying the data is unmirrored.
+  Attendance:
+    "Not a model name at all — the file registers StudentAttendance and " +
+    "TeacherAttendance, both of which ARE mirrored. See the note on them.",
+
   // ── Holds secrets ───────────────────────────────────────────────────────
   Notification:
     "The rendered message body, which for adminWelcome and every password " +
