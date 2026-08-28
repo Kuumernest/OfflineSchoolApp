@@ -260,6 +260,59 @@ const main = async () => {
     await IdempotencyKey.findOne({ key: "op-broken" }).lean(), null);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a create with a client id is idempotent on its own ---");
+
+  /**
+   * ── Why the header is not enough by itself ───────────────────────────────
+   *
+   * IdempotencyKey records expire after a fortnight. A machine that has been
+   * off for longer than that — a school closed over a long holiday, a laptop in
+   * a drawer — replays its queue with nothing stored to match, and the
+   * middleware waves it straight through to the handler.
+   *
+   * So a create also has to be idempotent in itself, which means accepting the
+   * id the client already wrote into its own mirror. POST /api/exams called
+   * uuidv4() unconditionally: the reply would have described an exam the client
+   * had never heard of, while the row it did create sat orphaned — one exam on
+   * screen, a different one in the database.
+   *
+   * Asserted with NO Idempotency-Key at all, so it is the handler being tested
+   * and not the middleware standing in front of it.
+   */
+  const withClientId = async (id, name) => {
+    const res = await fetch(`http://127.0.0.1:${port}/api/exams`, {
+      method:  "POST",
+      headers: { "content-type": "application/json" },
+      body:    JSON.stringify({ _id: id, name, academicYear: "2026-2027", term: "term_1" }),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  const before  = await examCount();
+  const claimed = await withClientId("exam-from-a-laptop", "Holiday Mock");
+  check("the id the client chose is the id that is stored",
+    claimed.body.serverId, "exam-from-a-laptop");
+  check("and it was created", claimed.status, 201);
+  check("as one exam", await examCount(), before + 1);
+
+  const longOffline = await withClientId("exam-from-a-laptop", "Holiday Mock");
+  check("replaying it without any key is accepted, not a conflict", longOffline.status, 200);
+  check("and says so, so the queue can mark it done", longOffline.body.replay, true);
+  check("returning the exam already stored",
+    longOffline.body.serverId, "exam-from-a-laptop");
+  check("without creating a second one", await examCount(), before + 1);
+
+  // The one case that IS a conflict: somebody else's school already holds that
+  // id. Retrying cannot fix it, so it must stop the queue and ask a person.
+  actor = { ...actor, schoolId: "bbbbbbbbbbbbbbbbbbbbbbbb" };
+  const otherSchool = await withClientId("exam-from-a-laptop", "Holiday Mock");
+  check("an id belonging to another school is refused", otherSchool.status, 409);
+  check("with a code the queue can act on", otherSchool.body.code, "EXAM_ID_TAKEN");
+  check("and a 409 like that stops the queue",
+    isRetryable(otherSchool.status, otherSchool.body.code), false);
+  actor = { ...actor, schoolId: SCHOOL };
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- a completed attempt keeps what it needs to answer with ---");
 
   const stored = await IdempotencyKey.find({ userId: "admin-1" }).lean();

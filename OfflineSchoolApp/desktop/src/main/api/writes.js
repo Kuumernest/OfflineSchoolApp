@@ -274,4 +274,15 @@ module.exports.push({
   },
 });
 
+/**
+ * The rest of the writes, by area.
+ *
+ * The two above stay in this file because the notes at the top of it are about
+ * them — the receipt number that must survive the server, the approval
+ * threshold read before acting. Everything since has gone into writes/, next to
+ * the read handlers' own directory, because there are around a hundred writes to
+ * mirror and one file of them would be unreadable long before the end.
+ */
+module.exports.push(...require("./writes/exams"));
+
 module.exports.nextReceipt = nextReceipt;

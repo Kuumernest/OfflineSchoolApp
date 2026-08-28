@@ -530,12 +530,51 @@ router.post("/", asyncHandler(async (req, res) => {
   if (!academicYear)  return res.status(400).json({ message: "academicYear is required" });
   if (!term)          return res.status(400).json({ message: "term is required" });
 
-  const schoolId    = resolveSchoolId(req, req.body.schoolId);
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+
+  /**
+   * ── An id the client may have chosen ─────────────────────────────────────
+   *
+   * This called uuidv4() unconditionally, which is fine for a browser and wrong
+   * for a machine that was offline. The desktop application writes the exam to
+   * its own mirror first and queues this request; if the server then invents a
+   * different id, the reply describes a document the client has never heard of
+   * and the row it actually created is orphaned — one exam on screen, another in
+   * the database, neither aware of the other.
+   *
+   * So a supplied _id is kept, exactly as POST /api/fees/payments does. It also
+   * makes the create idempotent in its own right, which is the belt to
+   * middleware/idempotency.js's braces.
+   */
+  const examId = req.body._id || uuidv4();
+
+  const existing = await Exam.findById(examId).lean();
+  if (existing) {
+    // Two ways to arrive here. Ordinarily the idempotency middleware answers a
+    // repeat before it reaches this handler — but its records expire after a
+    // fortnight, and a machine that was offline for longer than that replays
+    // with nothing stored. Returning the row rather than a duplicate-key error
+    // lets the queue mark the write done, which it is.
+    if (String(existing.schoolId) !== String(schoolId)) {
+      return res.status(409).json({
+        success: false, code: "EXAM_ID_TAKEN",
+        message: "That exam id already belongs to another school",
+      });
+    }
+    const subjects = await ExamSubject.find({ examId, deletedAt: null }).lean();
+    return res.status(200).json({
+      success:  true,
+      replay:   true,
+      exam:     { ...existing, subjects },
+      serverId: existing._id,
+    });
+  }
+
   const resolvedIds = resolveClassIdsFromBody(req.body);
   const classData   = await resolveClassData(resolvedIds);
 
   const exam = await Exam.create({
-    _id:          uuidv4(),
+    _id:          examId,
     schoolId,
     classId:      classData.primaryClassId,
     className:    classData.primaryClassName,

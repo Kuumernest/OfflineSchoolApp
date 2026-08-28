@@ -186,7 +186,50 @@ const ONLINE_ONLY = [
   },
 ];
 
-/** Quick membership test for the coverage report. */
-const isOnlineOnly = (endpoint) => ONLINE_ONLY.some((e) => e.endpoint === endpoint);
+/**
+ * ── Endpoints that are answered offline EXCEPT in a named case ─────────────
+ *
+ * The count in scripts/coverage.js is per endpoint, so a handler that answers
+ * most requests to a path and declines one shape counts as done — which is very
+ * nearly true and, left unwritten, becomes a small lie that grows. Somebody
+ * reading "answered offline" has no way to know a case falls through.
+ *
+ * Recorded here and reported, so the number stays a number you can check. A
+ * decline is never a failure: the request goes over the network exactly as it
+ * did before, and the screen behaves as it does today.
+ */
 
-module.exports = { ONLINE_ONLY, isOnlineOnly };
+/**
+ * @typedef  {object} Partial
+ * @property {string} endpoint  "METHOD /path", as in ONLINE_ONLY.
+ * @property {string} except    The case that goes to the network.
+ * @property {string} because   Why, in terms somebody can act on or overturn.
+ */
+
+/** @type {Partial[]} */
+const PARTIAL = [
+  {
+    endpoint: "POST /exams",
+    except:   "a create carrying a subjects array",
+    because:
+      "The endpoint then creates an ExamSubject per entry with ids it generates " +
+      "itself — one request and several documents. This layer's write contract " +
+      "is one row and one request, and rows written under ids the server will " +
+      "not agree with are orphans. POST /exams/:examId/subjects adds them one " +
+      "at a time and is queueable, so nothing is out of reach.",
+  },
+  {
+    endpoint: "PATCH /exams/:id/status",
+    except:   'setting the status to "published"',
+    because:
+      "Publishing also marks every ResultSummary for the exam published — an " +
+      "unbounded number of documents from one request. Every other status is " +
+      "answered offline.",
+  },
+];
+
+/** Quick membership tests for the coverage report. */
+const isOnlineOnly = (endpoint) => ONLINE_ONLY.some((e) => e.endpoint === endpoint);
+const isPartial    = (endpoint) => PARTIAL.some((e) => e.endpoint === endpoint);
+
+module.exports = { ONLINE_ONLY, PARTIAL, isOnlineOnly, isPartial };

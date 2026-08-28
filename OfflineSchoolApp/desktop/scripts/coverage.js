@@ -30,7 +30,7 @@ const path = require("path");
 
 const WEB = path.join(__dirname, "..", "..", "web", "src");
 
-const { ONLINE_ONLY } = require("../src/main/api/coverage");
+const { ONLINE_ONLY, PARTIAL } = require("../src/main/api/coverage");
 const { routes }      = require("../src/main/api");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -108,6 +108,17 @@ console.log(`  endpoints the console calls   ${all.length}`);
 console.log(`  answered offline              ${String(done.length).padStart(3)}   ${pct(done.length)}`);
 console.log(`  deliberately online-only      ${String(onlineOnly.length).padStart(3)}   ${pct(onlineOnly.length)}`);
 console.log(`  still to do                   ${String(todo.length).padStart(3)}   ${pct(todo.length)}`);
+
+// Answered, but with a case that still goes to the network. Counted above as
+// answered, because they are — and listed here so the count does not quietly
+// become a claim it cannot support.
+if (PARTIAL.length) {
+  console.log("");
+  console.log("  answered offline except in one case:");
+  for (const p of PARTIAL) {
+    console.log(`    ${p.endpoint.padEnd(30)} ${p.except}`);
+  }
+}
 
 // Declared online-only but no longer called: worth knowing, because a reason
 // recorded for an endpoint nobody calls is a reason nobody will ever read.

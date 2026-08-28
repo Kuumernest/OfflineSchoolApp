@@ -271,6 +271,20 @@ const main = async () => {
   app.use("/api/attendance", authenticate, require("../src/routes/attendance.routes"));
   app.use("/api/exams", authenticate, require("../src/routes/exam.routes"));
   app.use("/api/results", authenticate, require("../src/routes/results.routes"));
+
+  /**
+   * ── The half of the reconnect this harness was missing ───────────────────
+   *
+   * engine.cycle() pushes and then PULLS, and until this line the pull had
+   * nowhere to go: /api/sync was not mounted, so every cycle in this file
+   * quietly failed at the halfway point. The sections above assert the push, so
+   * nothing showed it — the exam round trip is the first to check a value that
+   * only a pull can deliver, and it read the client's timestamps instead of the
+   * server's.
+   *
+   * Mounted as src/server.js mounts it, so a cycle here is a whole cycle.
+   */
+  app.use("/api/sync", authenticate, require("../src/routes/sync.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
@@ -1625,6 +1639,245 @@ const main = async () => {
   check("a server-format number is ignored, not honoured", impersonating.status, 201);
   check("and the counter issues one instead",
     impersonatingBody.data.receiptNo !== `RCT-${YEAR}-9999`, true);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- an exam created, edited and archived with no connection ---");
+
+  /**
+   * ── The first CRUD round trip in this layer ──────────────────────────────
+   *
+   * Payments and expenses are creates. This is create, then EDIT, then archive —
+   * the shapes most of the remaining hundred writes have, so what goes wrong here
+   * goes wrong everywhere.
+   *
+   * Two properties are worth more than the rest:
+   *
+   *   an edit queued behind a create must be its own request. They share a
+   *   document, and the outbox keyed its entries by document id until the change
+   *   that came with these handlers, which meant the edit was reported as a
+   *   duplicate and silently dropped.
+   *
+   *   the edit must carry ONLY what changed. The endpoint builds its update from
+   *   "field !== undefined", so a handler that helpfully sent the whole document
+   *   would write back values nobody touched, reverting whatever another machine
+   *   had changed in between.
+   */
+  const examSession = { userId: "admin-1", schoolId: SCHOOL, permissions: [] };
+  const examCtx     = { docs, meta, queue, session: examSession };
+
+  const created = api.handle({
+    method: "POST", path: "/api/exams", query: {},
+    body: {
+      schoolId: SCHOOL, name: "  Second Term Maths  ", academicYear: YEAR,
+      term: "term_2", type: "mid_term", classId: "cls-1", totalMarks: 80,
+    },
+  }, examCtx);
+
+  check("the exam is accepted locally", created?.status, 201);
+  check("and queued", created?.queued, true);
+
+  const examId = created.data.serverId;
+  check("with the id the client chose", created.data.exam._id, examId);
+  check("the name is trimmed the way the endpoint trims it",
+    created.data.exam.name, "Second Term Maths");
+  check("the class name is resolved from the mirror, not left blank",
+    created.data.exam.className, "Form 1");
+  check("a new exam carries no subjects", created.data.exam.subjects, []);
+  check("the row is in the mirror, not yet sent",
+    docs.get("exam", examId)?._pending, true);
+
+  // The screen that just created it reads it back.
+  const readBack = api.handle({
+    method: "GET", path: `/api/exams/${examId}`, query: { schoolId: SCHOOL },
+  }, examCtx);
+  check("and reading it back locally works", readBack?.status, 200);
+  check("with its subjects, empty for now", readBack.data.exam.subjects, []);
+
+  // ── An edit, behind the create ─────────────────────────────────────────
+  const edited = api.handle({
+    method: "PUT", path: `/api/exams/${examId}`, query: {},
+    body: { schoolId: SCHOOL, name: "Second Term Mathematics", passMark: 40 },
+  }, examCtx);
+
+  check("the edit is accepted locally", edited?.status, 200);
+  // THE ASSERTION FOR THE DROPPED-WRITE BUG. Not duplicate, and its own entry.
+  check("and is NOT treated as a duplicate of the create", edited?.duplicate, false);
+  check("so two requests are waiting", queue.summary().pending, 2);
+
+  check("the mirror shows the new name", docs.get("exam", examId)?.name,
+    "Second Term Mathematics");
+  check("and keeps the fields the edit did not mention",
+    docs.get("exam", examId)?.totalMarks, 80);
+
+  // ── The connection comes back ──────────────────────────────────────────
+  const examEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["exam"],
+  });
+
+  await examEngine.cycle();
+
+  check("both requests drained", queue.all().length, 0);
+  check("and the row settled", docs.get("exam", examId)?._pending, false);
+
+  const onServer = await Exam.findById(examId).lean();
+  check("the server has the exam under the client's id", Boolean(onServer), true);
+  check("there is exactly one of it",
+    await Exam.countDocuments({ schoolId: SCHOOL, name: "Second Term Mathematics" }), 1);
+  check("the edit was applied", onServer?.name, "Second Term Mathematics");
+  check("and so was the second changed field", onServer?.passMark, 40);
+
+  // What the create set and the edit never mentioned. If the edit had sent the
+  // whole document this would still be 80 by luck; the assertion that matters is
+  // the pair — a field the create set, and a field the create defaulted.
+  check("a field only the create set survived the edit", onServer?.totalMarks, 80);
+  check("a field neither of them mentioned kept the endpoint's default",
+    onServer?.type, "mid_term");
+  check("the class the create named is still there", onServer?.className, "Form 1");
+
+  /**
+   * ── Where the mirror's copy comes from ───────────────────────────────────
+   *
+   * NOT from the response. POST /api/exams answers with { exam: { …, subjects } },
+   * and storing that would put a subjects array into the mirror — a field the
+   * sync feed never sends, so the row would differ from every other machine's
+   * copy of the same exam and GET /api/exams would answer with an extra key.
+   *
+   * The pull in the same cycle delivers the server's document instead, which is
+   * why push happens before pull. Asserted rather than assumed, because the
+   * engine does take the response's copy for a payment — where the receipt
+   * number makes it necessary — and the difference is easy to lose.
+   */
+  const mirrored = docs.get("exam", examId);
+  check("the mirror has no field the feed would not send",
+    Object.prototype.hasOwnProperty.call(mirrored, "subjects"), false);
+  check("and agrees with the server about the name", mirrored.name, onServer.name);
+  check("including who created it, which the server attributes",
+    mirrored.createdBy, onServer.createdBy);
+
+  // The read endpoint now answers identically on both sides.
+  await parity("one exam, after a round trip", `/api/exams/${examId}?schoolId=${SCHOOL}`);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- an edit from a stale mirror does not revert somebody else ---");
+
+  /**
+   * ── The assertion that gives "only what changed" its teeth ───────────────
+   *
+   * A handler that sends the whole document looks correct in every test where
+   * one machine is the only thing writing: the values it sends back are the
+   * values that were already there.
+   *
+   * It is wrong the moment a second machine exists, which is the ordinary case
+   * in a school office. The secretary edits the exam on the desktop while it is
+   * offline; somebody in the next room has already changed a different field
+   * from the web. If the queued request carries the desktop's whole idea of the
+   * document, the field it never touched is written back from a copy made before
+   * that change — and the other person's work is gone, with nothing to show it
+   * ever happened.
+   *
+   * So: change a field on the server the way another machine would, edit a
+   * DIFFERENT field offline from a mirror that has not seen it, and require both
+   * changes to survive.
+   */
+  await Exam.collection.updateOne(
+    { _id: examId },
+    { $set: { instructions: "Bring a calculator", updatedAt: new Date() } }
+  );
+  check("the other machine's change is on the server",
+    (await Exam.findById(examId).lean())?.instructions, "Bring a calculator");
+  check("and this mirror has not seen it",
+    docs.get("exam", examId)?.instructions, null);
+
+  const staleEdit = api.handle({
+    method: "PUT", path: `/api/exams/${examId}`, query: {},
+    body: { schoolId: SCHOOL, passMark: 45 },
+  }, examCtx);
+  check("the offline edit is accepted", staleEdit?.status, 200);
+
+  await examEngine.cycle();
+
+  const afterBoth = await Exam.findById(examId).lean();
+  check("this machine's change was applied", afterBoth?.passMark, 45);
+  // THE ONE THIS SECTION EXISTS FOR.
+  check("and the other machine's change was NOT reverted",
+    afterBoth?.instructions, "Bring a calculator");
+  check("the mirror catches up with both",
+    docs.get("exam", examId)?.instructions, "Bring a calculator");
+  check("including its own", docs.get("exam", examId)?.passMark, 45);
+
+  // ── Re-staging it ──────────────────────────────────────────────────────
+  const staged = api.handle({
+    method: "PATCH", path: `/api/exams/${examId}/status`, query: {},
+    body: { schoolId: SCHOOL, status: "scheduled" },
+  }, examCtx);
+  check("a status change is accepted locally", staged?.status, 200);
+  check("and shows at once", docs.get("exam", examId)?.status, "scheduled");
+
+  await examEngine.cycle();
+  check("the server agrees after syncing",
+    (await Exam.findById(examId).lean())?.status, "scheduled");
+
+  // Two statuses are the server's business, for reasons in writes/exams.js.
+  check("an invalid status is left to the server to refuse",
+    api.handle({
+      method: "PATCH", path: `/api/exams/${examId}/status`, query: {},
+      body: { schoolId: SCHOOL, status: "halfway" },
+    }, examCtx),
+    null);
+  check("and so is publishing, which changes every result summary",
+    api.handle({
+      method: "PATCH", path: `/api/exams/${examId}/status`, query: {},
+      body: { schoolId: SCHOOL, status: "published" },
+    }, examCtx),
+    null);
+
+  // An exam created WITH its subjects is one request and several documents, with
+  // ids the endpoint generates — so it goes out rather than being queued.
+  check("a create carrying subjects goes to the server",
+    api.handle({
+      method: "POST", path: "/api/exams", query: {},
+      body: {
+        schoolId: SCHOOL, name: "With Subjects", academicYear: YEAR, term: "term_2",
+        subjects: [{ subjectId: "sub-1" }],
+      },
+    }, examCtx),
+    null);
+
+  // ── Archiving it ───────────────────────────────────────────────────────
+  const archived = api.handle({
+    method: "DELETE", path: `/api/exams/${examId}`, query: { schoolId: SCHOOL },
+  }, examCtx);
+  check("the archive is accepted locally", archived?.status, 200);
+  check("with the endpoint's message, not the exam",
+    archived.data.message, "Exam archived");
+
+  /**
+   * ── A second click, and where it is stopped ─────────────────────────────
+   *
+   * Not by the queue. The local row is archived in the same transaction that
+   * queued the request, so the handler declines every later attempt and the
+   * request goes to the network — where the endpoint answers its own 404.
+   *
+   * This started out as a dedupe key on the queued request, on the reasoning
+   * that a repeat would take that 404 and stop the queue on work that had
+   * succeeded. The key could never fire, and the assertion that was meant to
+   * prove it works is what showed that: it read undefined, because nothing had
+   * been queued at all.
+   */
+  const archivedAgain = api.handle({
+    method: "DELETE", path: `/api/exams/${examId}`, query: { schoolId: SCHOOL },
+  }, examCtx);
+  check("archiving twice does not queue twice", archivedAgain, null);
+  check("so one request is waiting, not two", queue.summary().pending, 1);
+
+  await examEngine.cycle();
+  examEngine.stop();
+
+  const gone = await Exam.findById(examId).lean();
+  check("the server archived it", Boolean(gone?.deletedAt), true);
+  check("and set the status the endpoint sets", gone?.status, "archived");
+  check("the queue is empty", queue.all().length, 0);
 
   server.close();
   db.close();

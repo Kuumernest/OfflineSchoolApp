@@ -30,11 +30,44 @@
  * fails there. Declining rather than reproducing that: an error is the server's
  * to raise, and inventing a local one would mean two implementations of the same
  * failure.
+ *
+ * ── One exam carries its subjects ─────────────────────────────────────────
+ *
+ * GET /api/exams/:id answers with the exam and the ExamSubject rows belonging to
+ * it, so the two collections have to be mirrored together. Both are in the feed
+ * under exams.view, which is what makes this answerable at all — a handler
+ * cannot answer from data the feed does not send.
  */
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 module.exports = [
+  {
+    route: "GET /api/exams/:id",
+
+    /**
+     * One exam, with its subjects.
+     *
+     * A missing exam returns nothing rather than a local 404. The endpoint's 404
+     * carries { message: "Exam not found" } and no success flag, and a screen
+     * distinguishing "not here" from "not synced yet" would need to know which it
+     * was — so the request goes out and the server answers it.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const exam = docs.get("exam", String(params.id));
+      if (!exam) return null;
+      if (String(exam.schoolId) !== String(schoolId)) return null;
+      if (exam.deletedAt) return null;
+
+      const subjects = docs.find("examSubject", { examId: exam._id, deletedAt: null });
+
+      return ok({ exam: { ...exam, subjects } });
+    },
+  },
+
   {
     route: "GET /api/exams",
     handler: ({ query }, { docs }) => {
