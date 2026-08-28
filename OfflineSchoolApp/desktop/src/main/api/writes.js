@@ -41,26 +41,14 @@
  */
 
 const { randomUUID } = require("crypto");
-const { formatDeviceReceipt } = require("../../../../shared/receipts");
 const {
   resolveThresholds,
   requiresApprovalWith,
 } = require("../../../../shared/approvalThresholds");
 
-/**
- * The next receipt number for this school and year, on this installation.
- *
- * Counted per academic year, in the meta table, so it survives a restart. It is
- * never reconciled with the server's counter and does not need to be: the two
- * number spaces are distinguishable by shape and neither has to know about the
- * other.
- */
-const nextReceipt = (meta, { schoolId, academicYear }) => {
-  const key  = `receiptSeq:${schoolId}:${academicYear}`;
-  const seq  = Number(meta.get(key) ?? 0) + 1;
-  meta.set(key, seq);
-  return formatDeviceReceipt(academicYear, meta.deviceCode(), seq);
-};
+// Its own module because the reversal in writes/feePayments.js needs it too, and
+// requiring this file from there made a load-order cycle. See receiptCounter.js.
+const { nextReceipt } = require("./receiptCounter");
 
 module.exports = [
   {
@@ -286,5 +274,4 @@ module.exports.push({
 module.exports.push(...require("./writes/exams"));
 module.exports.push(...require("./writes/examSubjects"));
 module.exports.push(...require("./writes/fees"));
-
-module.exports.nextReceipt = nextReceipt;
+module.exports.push(...require("./writes/feePayments"));

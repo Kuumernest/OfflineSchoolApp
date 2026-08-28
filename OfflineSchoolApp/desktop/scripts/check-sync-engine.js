@@ -17,6 +17,8 @@
  *     back after a write        the record
  *   send a STABLE idem key   or a replayed write creates a second record, and a
  *                            fresh key per attempt defeats the mechanism
+ *   settle EVERY row a       or a row nothing settles stays pending for ever,
+ *     request wrote            and a pending row is never overwritten by a pull
  *   an in-flight 409 waits   or the queue blocks on a request that was about to
  *                            succeed on its own
  *
@@ -407,6 +409,82 @@ const main = async () => {
     st.keys.filter((k) => k.path === "/api/exams").map((k) => k.key),
     ["exam-1-create", "exam-1-create"]);
   check("and it drained", queue.summary().pending, 0);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- one request, two rows, settled together ---");
+
+  /**
+   * ── The failure this prevents is permanent ───────────────────────────────
+   *
+   * Most writes change one document. Reversing a payment changes two: it appends
+   * a row with the opposite sign AND stamps the original with reversedById,
+   * because that stamp is what stops the same payment being reversed again.
+   *
+   * If the second row is written but not recorded on the queue entry, nothing
+   * ever settles it. And a pending row is deliberately never overwritten by a
+   * pull — that rule is what stops a sync erasing what somebody typed — so the
+   * row does not heal on the next cycle, or the one after. It disagrees with the
+   * school's own record until a person goes looking, and the only sign is a
+   * document listed as held back on the sync screen.
+   */
+  docs.tx(() => {
+    docs.put("feePayment", { _id: "pay-9", schoolId: "sch-1", amount: 8000 }, { pending: true });
+    docs.put("feePayment", {
+      _id: "pay-9r", schoolId: "sch-1", amount: -8000, reversesId: "pay-9",
+    }, { pending: true });
+    queue.add({
+      method: "post", path: "/api/fees/payments/pay-9/reverse",
+      body: { reason: "wrong student" },
+      collection: "feePayment", docId: "pay-9r",
+      extraDocs: [{ collection: "feePayment", docId: "pay-9" }],
+      idemKey: "reverse-pay-9",
+    });
+  });
+
+  check("both rows start provisional", [
+    docs.get("feePayment", "pay-9")._pending,
+    docs.get("feePayment", "pay-9r")._pending,
+  ], [true, true]);
+
+  await eng.cycle();
+
+  check("the request drained", queue.all().length, 0);
+  check("the row the request created is settled",
+    docs.get("feePayment", "pay-9r")._pending, false);
+  // THE ASSERTION THIS SECTION EXISTS FOR.
+  check("and so is the OTHER row it changed",
+    docs.get("feePayment", "pay-9")._pending, false);
+
+  // Until it lands, both stay provisional — a half-applied reversal is worse
+  // than one that has visibly not been sent.
+  st.refuse["/api/fees/payments/pay-8/reverse"] = { status: 500, body: { message: "down" } };
+  docs.tx(() => {
+    docs.put("feePayment", { _id: "pay-8", schoolId: "sch-1", amount: 3000 }, { pending: true });
+    docs.put("feePayment", {
+      _id: "pay-8r", schoolId: "sch-1", amount: -3000, reversesId: "pay-8",
+    }, { pending: true });
+    queue.add({
+      method: "post", path: "/api/fees/payments/pay-8/reverse",
+      body: { reason: "typo" },
+      collection: "feePayment", docId: "pay-8r",
+      extraDocs: [{ collection: "feePayment", docId: "pay-8" }],
+      idemKey: "reverse-pay-8",
+    });
+  });
+
+  await eng.cycle();
+  check("a failure leaves both provisional", [
+    docs.get("feePayment", "pay-8")._pending,
+    docs.get("feePayment", "pay-8r")._pending,
+  ], [true, true]);
+
+  delete st.refuse["/api/fees/payments/pay-8/reverse"];
+  db.prepare("UPDATE outbox SET next_try_at = ?").run("2000-01-01T00:00:00.000Z");
+  await eng.cycle();
+  check("and the retry settles both", [
+    docs.get("feePayment", "pay-8")._pending,
+    docs.get("feePayment", "pay-8r")._pending,
+  ], [false, false]);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- a request already in flight is not a refusal ---");

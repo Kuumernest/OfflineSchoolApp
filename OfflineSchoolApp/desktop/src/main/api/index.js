@@ -124,22 +124,50 @@ const handle = (req, ctx) => {
 
       if (entry.kind === "read") return result;
 
-      // ── A write: the row and the queued request commit together ──────────
+      // ── A write: every row and the queued request commit together ────────
       //
-      // Not two operations. A document stored with nothing queued is a change
-      // that will never reach the school; a request queued with no document is a
-      // screen that does not show what the user just did. Either alone is worse
-      // than neither.
-      const { collection, doc, request, response } = result;
+      // Not separate operations. A document stored with nothing queued is a
+      // change that will never reach the school; a request queued with no
+      // document is a screen that does not show what the user just did. Either
+      // alone is worse than neither.
+      //
+      // `also` is for the requests that change more than one document. Reversing
+      // a payment appends the opposite-signed row AND stamps the original, and
+      // the stamp is what stops the same payment being reversed twice — so the
+      // two have to land together or the screen offers an action the server will
+      // refuse. The ids go into the queue entry as well, because a row nothing
+      // settles stays pending for ever.
+      const { collection, doc, also = [], request, response } = result;
 
       const queued = ctx.docs.tx(() => {
         const id = ctx.docs.put(collection, doc, { pending: true });
-        return ctx.queue.add({ ...request, collection, docId: id });
+
+        const extraDocs = also.map((row) => ({
+          collection: row.collection,
+          docId:      ctx.docs.put(row.collection, row.doc, { pending: true }),
+        }));
+
+        return ctx.queue.add({ ...request, collection, docId: id, extraDocs });
       });
+
+      /**
+       * ── A response that depends on what was just written ─────────────────
+       *
+       * Most writes can describe their own answer before anything is stored.
+       * Some cannot: reversing a payment answers with the family's balance, and
+       * a balance computed before the reversal row exists still includes the
+       * money that was just taken back off the account.
+       *
+       * So a handler may return `response` as a function instead of an object,
+       * and it is called HERE — after the transaction, with the same context the
+       * handler had. Which keeps the awkwardness in the one place that needs it
+       * rather than making every handler carry a two-phase shape.
+       */
+      const answer = typeof response === "function" ? response(ctx) : response;
 
       // `queued` sits on the envelope, not in the response body: the body is a
       // contract the screens read and must match the server's exactly.
-      return { ...response, queued: true, seq: queued.seq, duplicate: queued.duplicate };
+      return { ...answer, queued: true, seq: queued.seq, duplicate: queued.duplicate };
     } catch (err) {
       // A handler throwing is a bug in this file, not a server error. Reported
       // as one rather than dressed up as a 500, so it is visible in development

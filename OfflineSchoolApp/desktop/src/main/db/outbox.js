@@ -94,6 +94,11 @@ const outbox = (db) => {
      * @param dedupeKey  Identifies an INTENT — pass it where submitting the same
      *                   thing twice should be ignored, such as a create behind a
      *                   button somebody may double-click. Omit it for edits.
+     * @param extraDocs  Rows this request wrote BESIDES the primary one, as
+     *                   [{ collection, docId }]. They are settled with it. A row
+     *                   written and not listed here stays pending for ever, and
+     *                   a pending row is never overwritten by the server — so it
+     *                   would disagree with the school's record permanently.
      *
      * ── These were one value, and that lost data ─────────────────────────────
      *
@@ -104,7 +109,7 @@ const outbox = (db) => {
      */
     add({
       method, path, body = null, collection = null, docId = null,
-      idemKey = null, dedupeKey = null,
+      idemKey = null, dedupeKey = null, extraDocs = null,
     }) {
       // Never derived from the document: two operations on one document are two
       // operations, and the server must be able to tell them apart.
@@ -127,12 +132,15 @@ const outbox = (db) => {
 
       const res = db.prepare(`
         INSERT INTO outbox
-          (idem_key, dedupe_key, method, path, body, collection, doc_id, created_at, next_try_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (idem_key, dedupe_key, method, path, body, collection, doc_id,
+           extra_docs, created_at, next_try_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         key, dedupeKey, method.toUpperCase(), path,
         body === null ? null : JSON.stringify(body),
-        collection, docId, nowIso(), nowIso()
+        collection, docId,
+        extraDocs?.length ? JSON.stringify(extraDocs) : null,
+        nowIso(), nowIso()
       );
 
       return { seq: Number(res.lastInsertRowid), duplicate: false };
@@ -154,7 +162,14 @@ const outbox = (db) => {
       for (const row of rows) {
         if (row.status === "blocked") break;
         if (row.next_try_at && row.next_try_at > nowIso()) break;
-        due.push({ ...row, seq: Number(row.seq), body: row.body ? JSON.parse(row.body) : null });
+        due.push({
+          ...row,
+          seq:  Number(row.seq),
+          body: row.body ? JSON.parse(row.body) : null,
+          // Parsed here rather than in the engine: the engine's job is to decide
+          // what to do with them, not to know how they are stored.
+          extraDocs: row.extra_docs ? JSON.parse(row.extra_docs) : [],
+        });
       }
       return due;
     },

@@ -271,6 +271,41 @@ const main = () => {
   check("pointing at the entry already waiting", removedTwice.seq, removed.seq);
 
   // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a request may name other rows it changed ---");
+
+  // Which rows a request touched has to survive a restart like everything else:
+  // the machine may be switched off between the write and the connection coming
+  // back, and a row nothing settles afterwards stays pending for ever.
+  const twoRows = q.add({
+    method: "post", path: "/api/fees/payments/pay-1/reverse",
+    body: { reason: "wrong student" },
+    collection: "feePayment", docId: "pay-1r",
+    extraDocs: [{ collection: "feePayment", docId: "pay-1" }],
+  });
+  check("it is queued", twoRows.duplicate, false);
+
+  const withExtras = q.all().find((r) => r.seq === twoRows.seq);
+  check("and the other row is stored with it",
+    JSON.parse(withExtras.extra_docs),
+    [{ collection: "feePayment", docId: "pay-1" }]);
+
+  // The head of the queue is waiting out a backoff by this point in the file, so
+  // nextBatch() would hand back nothing at all — the clock is moved on first, as
+  // in the backoff section above.
+  db.prepare("UPDATE outbox SET next_try_at = ?").run("2000-01-01T00:00:00.000Z");
+  const due = q.nextBatch();
+
+  const dueRow = due.find((r) => r.seq === twoRows.seq);
+  check("handed to the engine already parsed",
+    dueRow?.extraDocs, [{ collection: "feePayment", docId: "pay-1" }]);
+
+  // A write with nothing extra gets an empty list, not undefined — so the engine
+  // can loop over it without asking whether it is there.
+  const oneRow = due.find((r) => r.seq !== twoRows.seq);
+  check("there is an ordinary write to compare against", Boolean(oneRow), true);
+  check("and it reports no extra rows", oneRow?.extraDocs, []);
+
+  // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the queue survives the machine being switched off ---");
 
   // The reason any of this exists. A bursar takes a payment, the power goes,

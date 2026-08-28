@@ -2434,6 +2434,217 @@ const main = async () => {
 
   await parity("the plans once one is cancelled", "/api/fees/plans?schoolId=" + SCHOOL);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a payment reversed with no connection ---");
+
+  /**
+   * ── The first write here that changes two documents ──────────────────────
+   *
+   * A reversal appends a row with the opposite sign and STAMPS the original with
+   * reversedById. The stamp is not bookkeeping: it is what stops the same
+   * payment being reversed twice. Without it the screen goes on offering
+   * Reverse, somebody presses it, the endpoint answers 409 ALREADY_REVERSED —
+   * and a 409 stops the outbox and waits for a person, with every payment behind
+   * it held up.
+   *
+   * So both rows commit with the request or neither does, and the queue records
+   * the second one so the engine settles it too. A row nothing settles stays
+   * pending for ever, and a pending row is deliberately never overwritten by a
+   * pull, so it would disagree with the school's record permanently.
+   */
+  const { DEVICE_RECEIPT } = require("../../shared/receipts");
+
+  const reverseSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["fees.manage", "fees.view"],
+  };
+  const reverseCtx = { docs, meta, queue, session: reverseSession };
+
+  // y1 is a synced payment of 30000 from the fixtures — the ordinary case, a
+  // row that came from the server rather than one written on this machine.
+  const beforeReversal = api.handle({
+    method: "GET", path: "/api/fees/students/p1",
+    query: { schoolId: SCHOOL, academicYear: YEAR },
+  }, reverseCtx).data.data.totals.paid;
+
+  const reversed = api.handle({
+    method: "POST", path: "/api/fees/payments/y1/reverse", query: {},
+    body: { schoolId: SCHOOL, reason: "  Wrong student  " },
+  }, reverseCtx);
+
+  check("the reversal is accepted locally", reversed?.status, 201);
+  check("and queued", reversed?.queued, true);
+
+  const reversalRow = reversed.data.data;
+  check("it is the opposite sign, not a flag", reversalRow.amount, -30000);
+  check("pointing at the original", reversalRow.reversesId, "y1");
+  check("with the reason trimmed", reversalRow.reversalReason, "Wrong student");
+  check("and a receipt number in this installation's own space",
+    DEVICE_RECEIPT.test(reversalRow.receiptNo), true);
+  check("marked as having been made on a desktop", reversalRow.source, "desktop");
+
+  // BOTH rows, in one transaction.
+  check("the reversal row is in the mirror",
+    docs.get("feePayment", reversalRow._id)?.amount, -30000);
+  check("and the ORIGINAL is stamped", docs.get("feePayment", "y1")?.reversedById,
+    reversalRow._id);
+  check("both provisional until it lands", [
+    docs.get("feePayment", "y1")._pending,
+    docs.get("feePayment", reversalRow._id)._pending,
+  ], [true, true]);
+
+  // The balance the bursar is shown has to be the one AFTER the reversal — the
+  // figure they were trying to correct is exactly the wrong answer here.
+  check("the totals in the reply already exclude the money",
+    reversed.data.totals.paid, beforeReversal - 30000);
+  check("and the ledger agrees",
+    api.handle({
+      method: "GET", path: "/api/fees/students/p1",
+      query: { schoolId: SCHOOL, academicYear: YEAR },
+    }, reverseCtx).data.data.totals.paid,
+    beforeReversal - 30000);
+
+  // ── What must NOT be queued ────────────────────────────────────────────
+  //
+  // The stamp is what makes the first of these possible to detect at all.
+  check("reversing it again is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/payments/y1/reverse", query: {},
+      body: { schoolId: SCHOOL, reason: "again" },
+    }, reverseCtx),
+    null);
+
+  // y2r is itself a reversal, from the fixtures. Reversing a reversal is a 409.
+  check("reversing a reversal is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/payments/y2r/reverse", query: {},
+      body: { schoolId: SCHOOL, reason: "no" },
+    }, reverseCtx),
+    null);
+
+  check("nor is one with no reason",
+    api.handle({
+      method: "POST", path: "/api/fees/payments/y3/reverse", query: {},
+      body: { schoolId: SCHOOL, reason: "   " },
+    }, reverseCtx),
+    null);
+
+  check("nor one from somebody without fees.manage",
+    api.handle({
+      method: "POST", path: "/api/fees/payments/y3/reverse", query: {},
+      body: { schoolId: SCHOOL, reason: "typo" },
+    }, { docs, meta, queue, session: { ...reverseSession, permissions: ["fees.view"] } }),
+    null);
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  const reverseEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["feePayment"],
+  });
+  await reverseEngine.cycle();
+
+  check("the request drained", queue.all().length, 0);
+  check("the reversal row settled", docs.get("feePayment", reversalRow._id)?._pending, false);
+  // The row the engine only knows about because the queue entry named it.
+  check("and so did the original it stamped",
+    docs.get("feePayment", "y1")?._pending, false);
+
+  const storedReversal = await FeePayment.findById(reversalRow._id).lean();
+  check("the server has the reversal under the client's id",
+    Boolean(storedReversal), true);
+  check("with the amount unchanged", storedReversal?.amount, -30000);
+  check("and the receipt number that was printed",
+    storedReversal?.receiptNo, reversalRow.receiptNo);
+  check("attributed by the server, not the client", storedReversal?.receivedBy, "admin-1");
+
+  const storedOriginal = await FeePayment.findById("y1").lean();
+  check("the server stamped the original too",
+    storedOriginal?.reversedById, reversalRow._id);
+  check("with the same reason", storedOriginal?.reversalReason, "Wrong student");
+
+  /**
+   * ── THE ASSERTION THE ORDERING FIX EXISTS FOR ────────────────────────────
+   *
+   * The same request again, at the real endpoint, with the same _id — a queued
+   * write sent twice because the connection dropped after it arrived.
+   *
+   * A successful reversal sets original.reversedById, which is exactly what the
+   * ALREADY_REVERSED check refuses. So the endpoint has to look for the reversal
+   * BY ITS OWN ID first, or a replay of a request that worked is answered 409
+   * and stops the queue on work that was already done. The two cases are
+   * otherwise identical from the server's side: "reversed by the request I am
+   * replaying" and "reversed by somebody else".
+   */
+  const replayed = await fetch(
+    "http://127.0.0.1:" + port + "/api/fees/payments/y1/reverse",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify({
+        _id: reversalRow._id, schoolId: SCHOOL,
+        reason: "Wrong student", receiptNo: reversalRow.receiptNo,
+      }),
+    }
+  );
+  const replayedBody = await replayed.json();
+  check("replaying the reversal is a success, not a conflict", replayed.status, 200);
+  check("and says so, so the queue can mark it done", replayedBody.replay, true);
+  check("returning the row already stored", replayedBody.data._id, reversalRow._id);
+  check("without a second reversal appearing",
+    await FeePayment.countDocuments({ reversesId: "y1", deletedAt: null }), 1);
+
+  // A DIFFERENT id against an already-reversed payment is the real conflict, and
+  // must still stop the queue.
+  const genuineClash = await fetch(
+    "http://127.0.0.1:" + port + "/api/fees/payments/y1/reverse",
+    {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify({ _id: "some-other-reversal", schoolId: SCHOOL, reason: "again" }),
+    }
+  );
+  const clashBody = await genuineClash.json();
+  check("but somebody else's reversal of the same payment is refused",
+    genuineClash.status, 409);
+  check("naming what happened", clashBody.code, "ALREADY_REVERSED");
+
+  // And the pair nets to zero on both sides, which is the arithmetic a family's
+  // balance depends on.
+  /**
+   * ── The pull is made to run, because these fixtures stop it ──────────────
+   *
+   * The sync cursor is a high-water mark over (updatedAt, _id). These fixtures
+   * are dated across a school year — 2026-09, 2027-01 — which is AHEAD of the
+   * real clock this suite runs on, so after one pull the cursor sits in the
+   * future. Every row created during the run carries a real timestamp that sorts
+   * before it and is skipped for ever: the reversal the server stored, the
+   * server's stamp on the original, and "impersonator" from the receipt section
+   * above all stayed invisible to this mirror.
+   *
+   * That is an artefact of dated fixtures. It is also a real property of the
+   * design worth knowing about, and it is written down in src/config/syncFeed.js
+   * beside the cursor rather than only here.
+   *
+   * Cleared so the comparison below is against a mirror that has actually pulled
+   * — which is the state a school's machine is in, and which is what makes the
+   * assertions about the server's own values mean anything.
+   */
+  db.prepare("DELETE FROM sync_state WHERE collection = ?").run("feePayment");
+  await reverseEngine.cycle();
+
+  check("the pull delivered the row the endpoint created directly",
+    docs.get("feePayment", "impersonator")?.amount, 500);
+  check("and the server's version of the reversal replaced the local copy",
+    Object.prototype.hasOwnProperty.call(docs.get("feePayment", reversalRow._id), "isReversal"),
+    false);
+  check("the mirror agrees with the server about the stamped original",
+    docs.get("feePayment", "y1")?.source, storedOriginal?.source);
+
+  await parity("the ledger once a payment is reversed",
+    "/api/fees/students/p1?schoolId=" + SCHOOL + "&academicYear=" + YEAR);
+
+  reverseEngine.stop();
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);

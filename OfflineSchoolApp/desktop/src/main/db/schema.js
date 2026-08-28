@@ -188,6 +188,36 @@ MIGRATIONS.push({
   `,
 });
 
+MIGRATIONS.push({
+  version: 3,
+  name:    "one request may have changed more than one row",
+  /**
+   * ── Why the queue has to know ────────────────────────────────────────────
+   *
+   * Most writes change one document, and the outbox recorded exactly that: a
+   * collection and a doc_id, which the engine settles when the server accepts
+   * the request.
+   *
+   * Reversing a payment changes two. It appends a row with the opposite sign AND
+   * stamps the original with reversedById, because that stamp is what stops the
+   * same payment being reversed a second time — the endpoint answers 409
+   * ALREADY_REVERSED, and a 409 stops this queue and waits for a person.
+   *
+   * Writing the second row without recording it here would leave it pending for
+   * ever. Nothing would settle it, and a pending row is deliberately never
+   * overwritten by the server — that rule is what stops a sync erasing what
+   * somebody typed. So the original payment would sit in the mirror, marked
+   * unsent, disagreeing with the server forever, and the disagreement would be
+   * reported on the sync screen as a document held back.
+   *
+   * Hence this column: the rows BESIDES the primary that this request wrote, so
+   * every one of them is settled together when it lands.
+   */
+  up: `
+    ALTER TABLE outbox ADD COLUMN extra_docs TEXT;
+  `,
+});
+
 const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 module.exports = { PRAGMAS, MIGRATIONS, SCHEMA_VERSION };

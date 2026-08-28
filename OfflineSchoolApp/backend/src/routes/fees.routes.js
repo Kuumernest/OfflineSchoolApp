@@ -389,6 +389,45 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
   if (!original) {
     return res.status(404).json({ success: false, message: "Payment not found" });
   }
+
+  /**
+   * ── A replay, and why this check comes FIRST ─────────────────────────────
+   *
+   * The desktop writes both rows into its own mirror and queues this request, so
+   * the reversal needs an id the client chose — otherwise the reply describes a
+   * row this machine has never heard of.
+   *
+   * The order matters more here than anywhere else so far. A reversal that
+   * SUCCEEDED sets original.reversedById, which is exactly the condition the
+   * ALREADY_REVERSED check below refuses. So a replay of a request that worked
+   * would be answered 409, and a 409 stops the offline queue and waits for a
+   * person — on work that had already been done, with every payment behind it
+   * held up in the meantime.
+   *
+   * Looking for the reversal by its own id distinguishes the two cases that are
+   * otherwise identical from here: "this payment was reversed by the request I
+   * am now replaying" and "this payment was already reversed by somebody else".
+   * The first is a success; the second is a genuine conflict.
+   */
+  const reversalId    = req.body._id || uuidv4();
+  const priorReversal = await FeePayment.findById(reversalId).lean();
+  if (priorReversal) {
+    if (String(priorReversal.schoolId) !== String(schoolId)) {
+      return res.status(409).json({
+        success: false, code: "REVERSAL_ID_TAKEN",
+        message: "That reversal id already belongs to another school",
+      });
+    }
+    const already = await balanceFor({
+      schoolId,
+      studentId:    priorReversal.studentId,
+      academicYear: priorReversal.academicYear,
+    });
+    return res.status(200).json({
+      success: true, replay: true, data: priorReversal, totals: already,
+    });
+  }
+
   if (original.reversedById) {
     return res.status(409).json({
       success: false, code: "ALREADY_REVERSED",
@@ -402,10 +441,20 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
     });
   }
 
+  /**
+   * The number on the credit note, which may already be printed.
+   *
+   * As POST /api/fees/payments: a device-format number issued offline is KEPT,
+   * because the bursar has handed the paper over and the counter this endpoint
+   * normally draws from is precisely what a machine with no connection cannot
+   * reach. See shared/receipts.js for why the two number spaces cannot collide.
+   */
+  const claimedReceipt = parseDeviceReceipt(req.body.receiptNo, original.academicYear);
+
   // The correction is a new row with the opposite sign — the original stays
   // exactly as it was written.
   const reversal = await FeePayment.create({
-    _id:          uuidv4(),
+    _id:          reversalId,
     schoolId,
     studentId:    original.studentId,
     academicYear: original.academicYear,
@@ -414,7 +463,9 @@ router.post("/payments/:id/reverse", canWrite, asyncHandler(async (req, res) => 
     amount:       -original.amount,
     method:       original.method,
     reference:    original.reference,
-    receiptNo:    await nextReceiptNo(schoolId, original.academicYear),
+    receiptNo:    claimedReceipt
+      ? String(req.body.receiptNo).trim()
+      : await nextReceiptNo(schoolId, original.academicYear),
     receivedAt:   new Date(),
     receivedBy:   req.user?._id ? String(req.user._id) : null,
     reversesId:   String(original._id),

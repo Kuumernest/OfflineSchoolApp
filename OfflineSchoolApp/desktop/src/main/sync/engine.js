@@ -87,15 +87,48 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       try {
         const answer = await client.replay(item);
 
-        // The server has it. The local row is no longer provisional.
+        // The server has it. The local rows are no longer provisional.
         queue.markSent(item.seq);
+
+        // Rows this request changed besides the primary — see the note on
+        // extra_docs in schema.js. Settled FIRST so that an exception thrown
+        // while taking the response's copy below cannot leave them pending: a
+        // pending row is never overwritten by a pull, so it would disagree with
+        // the server permanently rather than until the next cycle.
+        for (const extra of item.extraDocs ?? []) {
+          if (extra?.collection && extra?.docId) docs.settle(extra.collection, extra.docId);
+        }
+
         if (item.collection && item.doc_id) {
           docs.settle(item.collection, item.doc_id);
 
-          // If the response carried the stored document, take it — the server
-          // fills in things the client could not know, and a receipt number is
-          // exactly that. Without this the mirror keeps the local guess and the
-          // bursar prints a receipt whose number does not match the record.
+          /**
+           * ── Correcting the local guess from the server's answer ────────────
+           *
+           * The server fills in things the client could not know, and a receipt
+           * number is exactly that: without this the mirror keeps the number it
+           * invented and the bursar's printed paper does not match the record.
+           *
+           * ── This copy is transient, and that matters ───────────────────────
+           *
+           * A write response is not shaped like a feed document. The feed sends
+           * lean Mongo rows; an endpoint returns a mongoose document, and
+           * FeePayment sets toJSON: { virtuals: true } with isReversal and
+           * isReversed declared on it — so the response carries three keys
+           * (those two and the id virtual) that no feed document has.
+           *
+           * They land in the mirror and are replaced by the pull in this same
+           * cycle, which is what push-before-pull is for. So the mirror's shape
+           * between the two halves is not something to depend on, and nothing
+           * does: the reads answer from whatever the row holds.
+           *
+           * Filtering them out here was tried and reverted. The only rule that
+           * needs no list of virtuals is "keep the keys the local guess already
+           * had" — and that drops the receipt number in the case where the
+           * server issues one the client never had, which is the very reason
+           * this copy is taken. A narrower fix belongs on the server, where the
+           * write response and the feed could be made to agree.
+           */
           const stored = answer?.data ?? answer?.admin ?? answer?.teacher ?? null;
           if (stored && (stored._id ?? stored.id)) docs.put(item.collection, stored);
         }

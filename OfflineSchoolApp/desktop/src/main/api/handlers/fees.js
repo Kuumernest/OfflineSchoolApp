@@ -286,3 +286,10 @@ module.exports = [
     },
   },
 ];
+
+/**
+ * Exposed for writes/feePayments.js, which needs the same totals in the answer
+ * it gives a reversal — the endpoint returns them, and a second implementation
+ * of "what does this family owe" is the last thing this codebase needs.
+ */
+module.exports.totalsFor = totalsFor;
