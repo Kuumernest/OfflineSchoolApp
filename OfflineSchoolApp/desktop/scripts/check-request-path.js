@@ -23,6 +23,8 @@
  *   node scripts/check-request-path.js
  */
 
+const fs = require("fs");
+
 const { requestPath } = require("../../shared/requestPath");
 const { compile, handle } = require("../src/main/api");
 
@@ -218,6 +220,77 @@ console.log("--- every shared module this package imports actually resolves ---"
   // Guards against the check passing by finding nothing to check.
   check("some shared imports were found", checked > 0, true);
   check("and every one resolves", broken, []);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the paths still resolve once this is an installed application ---");
+
+// The whole packaging arrangement rests on one correspondence, and nothing in the
+// code declares it:
+//
+//   in the repo      OfflineSchoolApp/desktop/  sits beside  shared/  and  web/
+//   when installed   resources/app/             sits beside  resources/shared/
+//                                                       and  resources/web/
+//
+// Because desktop/ and app/ are each one path segment, every relative path
+// already written resolves correctly in both — so no code has to know whether it
+// is packaged, and there is no build-time copy of shared/ to drift.
+//
+// It is arithmetic, so it is checked as arithmetic. Getting it wrong produces an
+// installer that builds cleanly and then cannot find its own interface, which is
+// discovered by a school rather than by a test.
+{
+  const pathMod = require("path");
+
+  // Exactly the strings the code uses today.
+  const WEB_FROM_MAIN       = "../../../web/dist/index.html";
+  const SHARED_FROM_HANDLER = "../../../../../shared/students.js";
+
+  const cases = [
+    {
+      name:     "running from the repo",
+      main:     "/repo/OfflineSchoolApp/desktop/src/main",
+      handlers: "/repo/OfflineSchoolApp/desktop/src/main/api/handlers",
+      web:      "/repo/OfflineSchoolApp/web/dist/index.html",
+      shared:   "/repo/OfflineSchoolApp/shared/students.js",
+    },
+    {
+      // Files unpacked on disk.
+      name:     "installed, app unpacked",
+      main:     "/prog/resources/app/src/main",
+      handlers: "/prog/resources/app/src/main/api/handlers",
+      web:      "/prog/resources/web/dist/index.html",
+      shared:   "/prog/resources/shared/students.js",
+    },
+    {
+      // Files inside an asar archive. This one is the reason the check exists:
+      // app.asar is ONE path segment just like app, so the resolved path leaves
+      // the archive and lands on the real resources/shared — which require()
+      // loads normally. Believing otherwise would have meant disabling asar for
+      // no reason.
+      name:     "installed, app in an asar archive",
+      main:     "/prog/resources/app.asar/src/main",
+      handlers: "/prog/resources/app.asar/src/main/api/handlers",
+      web:      "/prog/resources/web/dist/index.html",
+      shared:   "/prog/resources/shared/students.js",
+    },
+  ];
+
+  for (const c of cases) {
+    check(`${c.name}: web/dist`,
+      pathMod.posix.resolve(c.main, WEB_FROM_MAIN), c.web);
+    check(`${c.name}: shared/`,
+      pathMod.posix.resolve(c.handlers, SHARED_FROM_HANDLER), c.shared);
+  }
+
+  // And the packaging config must actually put them where that expects.
+  const builder = fs.readFileSync(
+    pathMod.join(__dirname, "..", "electron-builder.yml"), "utf8"
+  );
+  check("the config ships shared/ into resources/shared",
+    /to:\s*shared\b/.test(builder), true);
+  check("and web/dist into resources/web/dist",
+    /to:\s*web\/dist\b/.test(builder), true);
 }
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

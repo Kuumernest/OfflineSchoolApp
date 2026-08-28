@@ -343,20 +343,45 @@ app.whenReady().then(() => {
 
   // A smoke mode, so a build can be checked without a person watching. Opens
   // everything the real launch opens, then leaves.
+  //
+  // The result goes to a WRITABLE directory, chosen at runtime. It used to be
+  // written beside the source, which is fine from a checkout and impossible in
+  // an installed build: there the app lives inside resources/app.asar, a
+  // read-only archive, so the smoke that exists to verify a package was the one
+  // thing a package could not run.
   if (process.env.SCHOOL_DESKTOP_SMOKE) {
-    const out = path.join(__dirname, "..", "..", "smoke-result.txt");
+    const out = app.isPackaged
+      ? path.join(app.getPath("temp"), "school-desktop-smoke.txt")
+      : path.join(__dirname, "..", "..", "smoke-result.txt");
+
     setTimeout(() => {
       const win = BrowserWindow.getAllWindows()[0];
+
+      // How many routes the local API registered. This is the line that proves
+      // the shared modules resolved: every handler requires at least one of
+      // them at load, so a broken path in a packaged build shows up here as a
+      // smaller number or a crash rather than as a screen quietly going to the
+      // network for everything.
+      let routes = "FAILED";
+      try { routes = String(localApi.routes().length); } catch (err) { routes = `FAILED — ${err.message}`; }
+
       fs.writeFileSync(out, [
+        `packaged       ${app.isPackaged}`,
         `electron       ${process.versions.electron}`,
         `node           ${process.versions.node}`,
         `database       ${fs.existsSync(DB_FILE()) ? "opened" : "MISSING"}`,
         `device         ${metaBag.deviceCode()}`,
         `window         ${win ? "created" : "MISSING"}`,
         `title          ${win ? JSON.stringify(win.getTitle()) : "-"}`,
-        `url            ${win ? win.webContents.getURL().slice(0, 120) : "-"}`,
+        `url            ${win ? win.webContents.getURL().slice(0, 160) : "-"}`,
+        `local routes   ${routes}`,
         `schema         ${store.SCHEMA_VERSION}`,
+        `result file    ${out}`,
       ].join("\n") + "\n");
+
+      // Printed as well: in a packaged run the file is in the temp directory and
+      // nothing else says where.
+      console.log(`[smoke] wrote ${out}`);
       app.quit();
     }, Number(process.env.SCHOOL_DESKTOP_SMOKE) || 4000);
   }

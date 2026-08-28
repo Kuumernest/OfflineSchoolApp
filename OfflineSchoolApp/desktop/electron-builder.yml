@@ -1,0 +1,108 @@
+# OfflineSchoolApp/desktop/electron-builder.yml
+#
+# How the desktop application becomes something a school can install.
+#
+# ── The layout, which is the only clever part ──────────────────────────────
+#
+# The application code lives in desktop/, and requires two things beside it:
+# web/dist (the built interface) and shared/ (modules the server uses too, so
+# there is one definition rather than a copy that drifts).
+#
+# Both are shipped as extraResources, which puts them under resources/ next to
+# the packaged app. That is not arbitrary: it makes the installed layout mirror
+# the repository one, because desktop/ and app/ are each a single path segment.
+#
+#   repo         OfflineSchoolApp/desktop/src/main  →  ../../../web/dist
+#   installed    resources/app/src/main             →  ../../../web/dist
+#                                                       = resources/web/dist
+#
+# So every relative path already written works in both, unchanged, and no code
+# has to ask whether it is packaged. The arithmetic is asserted in
+# scripts/check-request-path.js rather than trusted, because getting it wrong
+# produces an installer that builds cleanly and then cannot find its own
+# interface — which a school discovers, not a test.
+#
+# asar stays ENABLED. Five levels up from a handler leaves the archive and lands
+# on the real resources/shared, which require() loads like any other directory.
+# I had assumed it would need disabling and the arithmetic said otherwise.
+
+appId: com.myschoolonthemove.desktop
+productName: My School On The Move
+
+directories:
+  output: dist
+  buildResources: build
+
+# ── What goes inside the app ───────────────────────────────────────────────
+files:
+  - src/**/*
+  - package.json
+  # Deliberately NOT scripts/: those are the assertion suites and the launcher,
+  # which belong to development. An installed copy has no use for them and
+  # shipping them means shipping the fixtures too.
+
+# ── What goes beside it ────────────────────────────────────────────────────
+extraResources:
+  - from: ../shared
+    to: shared
+    filter:
+      - "**/*.js"
+  - from: ../web/dist
+    to: web/dist
+
+# ── Windows ────────────────────────────────────────────────────────────────
+#
+# The schools this is for run Windows, and the machine is usually a single office
+# computer that somebody sets up once.
+win:
+  target:
+    # An installer for the office machine...
+    - target: nsis
+      arch: [x64]
+    # ...and a single self-contained executable, because a memory stick handed
+    # between two schools is a real distribution method here and it needs no
+    # installation at all.
+    - target: portable
+      arch: [x64]
+
+nsis:
+  # Per-user, so no administrator password is needed. A school where the person
+  # setting this up does not have the admin account is not an edge case.
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  # The database lives in %APPDATA%, not in the installation directory, so
+  # uninstalling does not take the school's records with it. The uninstaller
+  # leaves that alone deliberately.
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+
+# ── One database per machine, whichever build is running ───────────────────
+#
+# The installed build, the portable one and a checkout run from source all read
+# the same database, because Electron derives userData from the application name
+# and all three share it. That was worth checking rather than assuming, and it is
+# the behaviour to want: one office computer holds one school's records, and two
+# builds keeping two mirrors would mean two outboxes, two sync cursors, and a
+# payment recorded in whichever one happened to be open.
+#
+# The consequence to know about: a portable copy carried to a DIFFERENT machine
+# starts empty and syncs from the server, which is correct — the mirror belongs to
+# the machine, not to the executable.
+
+# ── Not configured, and each for a reason ──────────────────────────────────
+#
+# CODE SIGNING. There is no certificate, so Windows SmartScreen will warn on
+# first run ("unknown publisher") until somebody clicks through. That is a real
+# cost — it teaches users to dismiss security warnings — and the fix is buying an
+# OV or EV certificate, which is a purchase and a decision rather than a config
+# line. Nothing here pretends to be signed.
+#
+# AUTO-UPDATE. electron-updater needs somewhere to publish to and a signed build
+# to verify. Without both, an updater is a way to install an unverified binary
+# over a working one. Until then, updating is installing the new version.
+#
+# AN ICON. build/ has none, so the default Electron icon is used and the app
+# looks like a template. Fixing it needs a 256×256 .ico, which is an asset
+# somebody has to draw rather than something to generate badly.

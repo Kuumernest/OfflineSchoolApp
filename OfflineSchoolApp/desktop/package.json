@@ -13,9 +13,14 @@
     "check:outbox": "node scripts/check-outbox.js",
     "check:sync": "node scripts/check-sync-engine.js",
     "check:path": "node scripts/check-request-path.js",
-    "check:seam": "node scripts/seam-launch.js"
+    "check:seam": "node scripts/seam-launch.js",
+    "build:web": "npm --prefix ../web run build",
+    "package": "npm run build:web && electron-builder --config electron-builder.yml",
+    "package:dir": "npm run build:web && electron-builder --config electron-builder.yml --dir"
   },
   "devDependencies": {
-    "electron": "^44.0.0"
-  }
+    "electron": "^44.0.0",
+    "electron-builder": "^26.15.3"
+  },
+  "author": "My School On The Move"
 }
