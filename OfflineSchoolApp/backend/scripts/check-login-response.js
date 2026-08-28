@@ -43,7 +43,13 @@ const check = (label, actual, expected) => {
 
 const main = async () => {
   const { MongoMemoryServer } = require("mongodb-memory-server");
-  const mongo = await MongoMemoryServer.create();
+  const mongo = await MongoMemoryServer.create({
+    // The default launch timeout is ten seconds, which is not enough on a
+    // developer machine with a browser and an editor open — the suite failed
+    // intermittently with "Instance failed to start within 10000ms" and the
+    // failure looked like a broken test rather than a busy host.
+    instance: { launchTimeout: 180_000 },
+  });
   await mongoose.connect(mongo.getUri(), { dbName: "login-response" });
 
   // Read when a token is signed, so setting it here is early enough. Left

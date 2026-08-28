@@ -411,6 +411,39 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
 
   const from = new Date(effectiveFrom);
 
+  /**
+   * ── A replay, checked BEFORE anything is closed ──────────────────────────
+   *
+   * This endpoint accepts a client _id, which is what lets an offline machine
+   * queue a raise. What it did not do was look for that id first, and the order
+   * mattered more here than anywhere else in this file.
+   *
+   * On a second arrival of the same request, the row the FIRST attempt created
+   * still has effectiveTo: null, so it matches the updateMany below and is
+   * closed at effectiveFrom minus one millisecond — a salary structure that
+   * exists and is never in force at any instant. The create that follows then
+   * hits the unique index, throws 11000, and answers 500. A 500 is retryable, so
+   * the offline queue tries again for ever, and every attempt leaves the row
+   * closed.
+   *
+   * A payslip computed in that window reads no structure at all. So: find the id
+   * first and answer with what is stored, exactly as POST /api/fees/payments and
+   * POST /api/exams do.
+   */
+  const claimedId = req.body._id || null;
+  if (claimedId) {
+    const already = await SalaryStructure.findById(claimedId).lean();
+    if (already) {
+      if (String(already.schoolId) !== String(schoolId)) {
+        return res.status(409).json({
+          success: false, code: "STRUCTURE_ID_TAKEN",
+          message: "That salary structure id already belongs to another school",
+        });
+      }
+      return res.status(200).json({ success: true, replay: true, data: already });
+    }
+  }
+
   // A raise closes the previous row rather than overwriting it, so an old
   // payslip still reproduces the figures that were in force when it was issued.
   await SalaryStructure.updateMany(
@@ -419,7 +452,7 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
   );
 
   const row = await SalaryStructure.create({
-    _id: req.body._id || uuidv4(),
+    _id: claimedId || uuidv4(),
     schoolId, userId,
     baseAmount,
     allowances:    allow.rows,

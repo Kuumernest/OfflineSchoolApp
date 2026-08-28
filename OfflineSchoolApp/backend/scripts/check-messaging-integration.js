@@ -36,7 +36,13 @@ const check = (label, actual, expected) => {
   const mongoose = require("mongoose");
 
   console.log("Starting a throwaway MongoDB…");
-  const mongod = await MongoMemoryServer.create();
+  const mongod = await MongoMemoryServer.create({
+    // The default launch timeout is ten seconds, which is not enough on a
+    // developer machine with a browser and an editor open — the suite failed
+    // intermittently with "Instance failed to start within 10000ms" and the
+    // failure looked like a broken test rather than a busy host.
+    instance: { launchTimeout: 180_000 },
+  });
   await mongoose.connect(mongod.getUri(), { dbName: "commstest" });
   console.log("Connected.\n");
 

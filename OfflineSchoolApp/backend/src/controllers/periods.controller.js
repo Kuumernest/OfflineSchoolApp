@@ -19,14 +19,57 @@ const isValidTime = (t) => {
   return /^\d{2}:\d{2}$/.test(t);
 };
 
-// Resolve schoolId from query → body → JWT (in that order)
+/**
+ * Which school this request is about.
+ *
+ * ── The token first, not the query string ─────────────────────────────────
+ *
+ * This read query → body → token, so ANY caller could name a school and be
+ * believed. Only a super_admin may do that; for everybody else a schoolId in the
+ * request is ignored rather than validated, because there is no reading of it
+ * that should change what they get.
+ *
+ * That is the rule the rest of the codebase already applies — getTenantQuery()
+ * in admin.routes.js, and tenantFilter() in the sync feed, whose comment says
+ * "Taken from the TOKEN, never from the query string". This file was the
+ * exception.
+ */
 const resolveSchoolId = (req) => {
-  return (
-    req.query.schoolId ||
-    req.body.schoolId  ||
-    req.user?.schoolId ||
-    null
-  );
+  if (req.user?.role === "super_admin") {
+    return req.query.schoolId || req.body.schoolId || req.user?.schoolId || null;
+  }
+  return req.user?.schoolId || null;
+};
+
+/**
+ * One period by id, IN THIS CALLER'S SCHOOL.
+ *
+ * ── The check none of the write paths had ─────────────────────────────────
+ *
+ * update, toggleActive, reorder and remove each began with Period.findById(id)
+ * and then worked from `period.schoolId` — the row's own school, never the
+ * caller's. Their 404 meant "no such period", not "not yours", so anybody
+ * holding periods.manage could rewrite, disable, reorder or delete another
+ * school's timetable given only an id.
+ *
+ * Note this deliberately does NOT use resolveSchoolId: that function honours a
+ * query parameter for a super_admin, and a tenancy check that read the request
+ * would let a caller authorise themselves by naming the school they wanted.
+ *
+ * Returns null on a mismatch, so the callers' existing 404 stands — somebody
+ * outside a school should not learn that one of its periods exists.
+ */
+const findPeriodForCaller = async (req, id) => {
+  const period = await Period.findById(id);
+  if (!period) return null;
+
+  if (req.user?.role === "super_admin") return period;
+
+  const callerSchool = req.user?.schoolId;
+  if (!callerSchool) return null;
+  if (String(period.schoolId ?? "") !== String(callerSchool)) return null;
+
+  return period;
 };
 
 // Check for time overlaps excluding a specific period (for updates)
@@ -99,7 +142,7 @@ exports.getAll = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 exports.getById = async (req, res) => {
   try {
-    const period = await Period.findById(req.params.id);
+    const period = await findPeriodForCaller(req, req.params.id);
 
     if (!period || period.deletedAt) {
       return res.status(404).json({
@@ -206,7 +249,7 @@ exports.update = async (req, res) => {
     const { id } = req.params;
     const { name, startTime, endTime, isBreak } = req.body;
 
-    const existing = await Period.findById(id);
+    const existing = await findPeriodForCaller(req, id);
 
     if (!existing || existing.deletedAt) {
       return res.status(404).json({
@@ -273,7 +316,7 @@ exports.update = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 exports.toggleActive = async (req, res) => {
   try {
-    const period = await Period.findById(req.params.id);
+    const period = await findPeriodForCaller(req, req.params.id);
 
     if (!period || period.deletedAt) {
       return res.status(404).json({
@@ -314,7 +357,7 @@ exports.reorder = async (req, res) => {
       });
     }
 
-    const period = await Period.findById(id);
+    const period = await findPeriodForCaller(req, id);
 
     if (!period) {
       return res.status(404).json({
@@ -363,7 +406,7 @@ exports.reorder = async (req, res) => {
 // ─────────────────────────────────────────────────────────────
 exports.remove = async (req, res) => {
   try {
-    const period = await Period.findById(req.params.id);
+    const period = await findPeriodForCaller(req, req.params.id);
 
     if (!period) {
       return res.status(404).json({

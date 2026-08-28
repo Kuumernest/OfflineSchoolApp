@@ -108,7 +108,13 @@ const diff = (a, b, at = "") => {
 
 const main = async () => {
   const { MongoMemoryServer } = require("mongodb-memory-server");
-  const mongo = await MongoMemoryServer.create();
+  const mongo = await MongoMemoryServer.create({
+    // The default launch timeout is ten seconds, which is not enough on a
+    // developer machine with a browser and an editor open — the suite failed
+    // intermittently with "Instance failed to start within 10000ms" and the
+    // failure looked like a broken test rather than a busy host.
+    instance: { launchTimeout: 180_000 },
+  });
   await mongoose.connect(mongo.getUri(), { dbName: "parity" });
   process.env.JWT_SECRET = process.env.JWT_SECRET || "test-only-secret";
 
@@ -264,6 +270,10 @@ const main = async () => {
   const { authenticate } = require("../middleware/auth");
   const app = express();
   app.use(express.json());
+  // Above /api/admin deliberately: the period endpoints are in their own
+  // router, and admin.routes.js ends in a catch-all 404, so a mount after it is
+  // never reached.
+  app.use("/api/admin/periods", authenticate, require("../src/routes/periods.routes"));
   app.use("/api/admin", authenticate, require("../src/routes/admin.routes"));
   app.use("/api/fees",  authenticate, require("../src/routes/fees.routes"));
   app.use("/api/finance", authenticate, require("../src/routes/finance.routes"));
@@ -3268,6 +3278,3341 @@ const main = async () => {
 
     docs.putMany("user", staffRows);
   }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- approval thresholds and withdrawals, with no connection ---");
+
+  /**
+   * ── Deciding is not here, and that is asserted ───────────────────────────
+   *
+   * approve and reject are online-only. Approving does not record a decision, it
+   * APPLIES one — the per-kind applier creates the refund payment, lets the
+   * pending expense count, puts the waiver on the charge. "Approved" on a head
+   * teacher's screen while the money has not moved is the one thing this layer
+   * must never say.
+   *
+   * What is here is withdrawing your own request, which decides nothing, and the
+   * thresholds, which are configuration rather than an act.
+   */
+  const ApprovalRequestModel = require("../src/db/models/ApprovalRequest");
+
+  check("approving is not answered locally",
+    api.handle({
+      method: "POST", path: "/api/approvals/ap-1/approve", query: {},
+      body: { schoolId: SCHOOL },
+    }, { docs, meta, queue, session: asHead.session }),
+    null);
+  check("nor is rejecting",
+    api.handle({
+      method: "POST", path: "/api/approvals/ap-1/reject", query: {},
+      body: { schoolId: SCHOOL, note: "no" },
+    }, { docs, meta, queue, session: asHead.session }),
+    null);
+
+  // ── The thresholds ─────────────────────────────────────────────────────
+  const headCtx = { docs, meta, queue, session: asHead.session };
+
+  // The school starts on 50,000 for expenses (see the School fixture), so an
+  // expense of 60,000 needs somebody to agree. That is the state before.
+  const before60k = api.handle({
+    method: "POST", path: "/api/finance/expenses", query: {},
+    body: { schoolId: SCHOOL, categoryId: "ec-1", amount: 60000, description: "Before" },
+  }, headCtx);
+  check("at a threshold of 50,000 an expense of 60,000 is not written outright",
+    before60k, null);
+
+  const setThresholds = api.handle({
+    method: "PUT", path: "/api/approvals/thresholds", query: {},
+    body: {
+      schoolId: SCHOOL,
+      expenseThreshold: 75000,
+      refundThreshold:  null,
+      // Zero is a real setting and not the same as empty: every waiver
+      // countersigned. A handler treating an empty field as zero would turn a
+      // school's whole ledger into a queue of approvals.
+      waiverThreshold:  0,
+      payrollRequired:  true,
+    },
+  }, headCtx);
+
+  check("the change is accepted locally", setThresholds?.status, 200);
+  check("and queued", setThresholds?.queued, true);
+  check("the reply carries the resolved thresholds, as the endpoint's does",
+    setThresholds.data.data,
+    { expenseThreshold: 75000, refundThreshold: null, waiverThreshold: 0, payrollRequired: true });
+  check("null is kept as never, not turned into zero",
+    setThresholds.data.data.refundThreshold, null);
+  check("and zero is kept as always",
+    setThresholds.data.data.waiverThreshold, 0);
+  check("the mirror holds them where the expense write reads them",
+    docs.get("school", SCHOOL)?.settings?.approvals?.expenseThreshold, 75000);
+
+  /**
+   * ── THE ASSERTION THAT SHOWS WHY THIS IS SAFE TO QUEUE ───────────────────
+   *
+   * The same expense, judged again. It was above the old threshold and is below
+   * the new one, so it is now written outright — and the queued threshold change
+   * sits AHEAD of it in the outbox, because the queue is strictly FIFO. The
+   * server therefore applies the new figure first and judges this expense by it,
+   * exactly as this machine did.
+   *
+   * Without that ordering guarantee the two sides would disagree about the same
+   * expense, and the disagreement would be invisible.
+   */
+  const after60k = api.handle({
+    method: "POST", path: "/api/finance/expenses", query: {},
+    body: { schoolId: SCHOOL, categoryId: "ec-1", amount: 60000, description: "After" },
+  }, headCtx);
+  check("under a threshold of 75,000 the same expense is written outright",
+    after60k?.status, 201);
+  check("and it is queued behind the threshold change, not in front of it",
+    queue.all().map((r) => r.path),
+    ["/api/approvals/thresholds", "/api/finance/expenses"]);
+
+  // ── What must not be queued ────────────────────────────────────────────
+  const badThresholds = [
+    ["a negative threshold",   { expenseThreshold: -1 }],
+    ["a fractional threshold", { refundThreshold: 1500.5 }],
+    ["a threshold that is not a number", { waiverThreshold: "soon" }],
+  ];
+
+  for (const [what, patch] of badThresholds) {
+    check("not queued: " + what,
+      api.handle({
+        method: "PUT", path: "/api/approvals/thresholds", query: {},
+        body: { schoolId: SCHOOL, ...patch },
+      }, headCtx),
+      null);
+
+    const refused = await fetch("http://127.0.0.1:" + port + "/api/approvals/thresholds", {
+      method: "PUT",
+      headers: { "content-type": "application/json", authorization: "Bearer " + asHead.token },
+      body: JSON.stringify({ schoolId: SCHOOL, ...patch }),
+    });
+    check("and the server refuses it: " + what, refused.status, 400);
+    check("with its code: " + what, (await refused.json()).code, "INVALID_AMOUNT");
+  }
+
+  check("somebody without approvals.configure is not queued",
+    api.handle({
+      method: "PUT", path: "/api/approvals/thresholds", query: {},
+      body: { schoolId: SCHOOL, expenseThreshold: 10 },
+    }, { docs, meta, queue, session: asBursar.session }),
+    null);
+
+  // ── Withdrawing a request ──────────────────────────────────────────────
+  //
+  // ap-1 is the bursar's own pending EXPENSE request, so cancelling it must also
+  // mark the expense rejected — one request, two rows. The expense it points at
+  // is only referenced by the fixtures, so it is created here.
+  /**
+   * ── The actor has to be the one whose token the queue replays with ───────
+   *
+   * ap-1 belongs to the bursar, and the first version of this section withdrew
+   * it through the bursar's SESSION. It passed locally and then blocked the
+   * outbox: the sync client holds one token — the machine's signed-in user — so
+   * the replay arrived as the head, the endpoint's "only the person who raised a
+   * request may withdraw it" refused it 403, and the payment-plan work queued
+   * behind it never left.
+   *
+   * That is an artefact of a harness able to switch sessions freely. On a real
+   * machine the session and the token are the same person by construction. But
+   * it is worth having discovered, because it is the shape of a genuine mistake:
+   * a handler that authorises against something the replay does not carry.
+   *
+   * So a pending expense request of the HEAD's own, with the expense it points
+   * at, and it is withdrawn as the head.
+   */
+  await ApprovalRequestModel.collection.insertOne({
+    _id: "ap-mine", schoolId: SCHOOL, kind: "expense", targetId: "ex-mine",
+    amount: 80000, threshold: 50000, summary: "Generator repair",
+    status: "pending", requestedBy: "admin-1",
+    requestedAt: new Date("2026-09-10T08:00:00Z"),
+    deletedAt: null, updatedAt: new Date(),
+  });
+  await Expense.collection.insertOne({
+    _id: "ex-mine", schoolId: SCHOOL, categoryId: "ec-1", amount: 80000,
+    description: "Generator repair", status: "pending",
+    incurredAt: new Date("2026-09-10T00:00:00.000Z"),
+    deletedAt: null, voidedAt: null, updatedAt: new Date(),
+  });
+  docs.putMany("approvalRequest",
+    JSON.parse(JSON.stringify(await ApprovalRequestModel.find({ _id: "ap-mine" }).lean())));
+  docs.putMany("expense",
+    JSON.parse(JSON.stringify(await Expense.find({ _id: "ex-mine" }).lean())));
+
+  const bursarCtx = { docs, meta, queue, session: asBursar.session };
+
+  check("cancelling somebody else's request is not queued",
+    api.handle({
+      method: "POST", path: "/api/approvals/ap-mine/cancel", query: {},
+      body: { schoolId: SCHOOL },
+    }, bursarCtx),
+    null);
+  check("nor one already decided",
+    api.handle({
+      method: "POST", path: "/api/approvals/ap-3/cancel", query: {},
+      body: { schoolId: SCHOOL },
+    }, bursarCtx),
+    null);
+  check("nor one that was removed",
+    api.handle({
+      method: "POST", path: "/api/approvals/ap-gone/cancel", query: {},
+      body: { schoolId: SCHOOL },
+    }, bursarCtx),
+    null);
+
+  const withdrawn = api.handle({
+    method: "POST", path: "/api/approvals/ap-mine/cancel", query: {},
+    body: { schoolId: SCHOOL },
+  }, headCtx);
+
+  check("withdrawing your own pending request is accepted", withdrawn?.status, 200);
+  check("the request is cancelled", withdrawn.data.data.status, "cancelled");
+  check("recorded against the person who withdrew it",
+    withdrawn.data.data.decidedBy, "admin-1");
+  // THE SECOND DOCUMENT. A withdrawn expense must not keep sitting outside the
+  // accounts with nothing waiting to resolve it.
+  check("and the expense it pointed at is rejected",
+    docs.get("expense", "ex-mine")?.status, "rejected");
+  check("both rows provisional until it lands", [
+    docs.get("approvalRequest", "ap-mine")._pending,
+    docs.get("expense", "ex-mine")._pending,
+  ], [true, true]);
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  {
+    const approvalsEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["school", "approvalRequest", "expense"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?, ?)")
+      .run("school", "approvalRequest", "expense");
+    await approvalsEngine.cycle();
+    approvalsEngine.stop();
+  }
+
+  check("everything drained", queue.all().length, 0);
+  check("both rows settled", [
+    docs.get("approvalRequest", "ap-mine")._pending,
+    docs.get("expense", "ex-mine")._pending,
+  ], [false, false]);
+
+  const storedSchool = await School.findById(SCHOOL).lean();
+  check("the server took the new thresholds",
+    storedSchool?.settings?.approvals,
+    { expenseThreshold: 75000, refundThreshold: null, waiverThreshold: 0, payrollRequired: true });
+
+  check("the server cancelled the request",
+    (await ApprovalRequestModel.findById("ap-mine").lean())?.status, "cancelled");
+  check("and rejected the expense behind it",
+    (await Expense.findById("ex-mine").lean())?.status, "rejected");
+
+  await parity("the approval queue after a withdrawal",
+    "/api/approvals?schoolId=" + SCHOOL + "&status=pending", asHead);
+  await parity("and its summary", "/api/approvals/summary?schoolId=" + SCHOOL, asHead);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- report-card templates ---");
+
+  /**
+   * ── Where this has to land ───────────────────────────────────────────────
+   *
+   * After the declarations of `meta`, `queue` and `apiClient` (around line 1390
+   * and 1423), because the round trips at the end use all three. Everything else
+   * it touches is either module scope (`store`, `engine`, `diff`, `check`,
+   * `parity`, `api`, `SCHOOL`) or set up before the first parity call (`app`,
+   * `token`, `port`, `docs`, `db`).
+   *
+   * It mounts /api/templates itself — template.routes.js is not among the routers
+   * mounted in the setup block. If you would rather mount it up there with the
+   * others, delete the app.use() line below; a second mount is harmless but
+   * pointless.
+   *
+   * The whole section is wrapped in a block so none of its locals leak.
+   */
+  {
+    const ReportTemplate = require("../src/db/models/ReportTemplate");
+    await ReportTemplate.init();
+
+    const { authenticate: tplAuth } = require("../middleware/auth");
+    app.use("/api/templates", tplAuth, require("../src/routes/template.routes"));
+
+    const { ROLES: TPL_ROLES }      = require("../src/config/roles");
+    const { defaultsFor: tplDefaults } = require("../src/services/permissions.service");
+    const TplUser = require("../src/db/models/User");
+
+    /** Whole-object compare that ignores __v and the mirror's _pending flag. */
+    const same = (label, local, server) => check(label, diff(local, server), []);
+
+    /** The same request at the REAL endpoint, so a refusal is never assumed. */
+    const askTpl = async (method, p, body = null, as = null) => {
+      const res = await fetch(`http://127.0.0.1:${port}${p}`, {
+        method,
+        headers: {
+          "content-type":  "application/json",
+          authorization:   `Bearer ${as?.token ?? token}`,
+        },
+        ...(body === null ? {} : { body: JSON.stringify(body) }),
+      });
+      return { status: res.status, body: await res.json() };
+    };
+
+    // ── Fixtures ─────────────────────────────────────────────────────────
+    //
+    // Five rows covering everything the endpoints branch on: the default, a row
+    // named exactly what POST /seed-default looks for, a plain one, a
+    // soft-deleted one that must never appear, and another school's.
+    //
+    // updatedAt values are deliberately out of _id order and out of createdAt
+    // order, so a handler that sorted by either would be caught.
+    const TPL_HTML = "<h1>{{student_name}}</h1><p>{{average}}</p>";
+    const TPL_CSS  = "h1{color:#123456}";
+
+    await ReportTemplate.collection.insertMany([
+      { _id: "tpl-1", schoolId: SCHOOL, name: "Term Report",
+        html: TPL_HTML, css: TPL_CSS, isDefault: true, version: 3,
+        variables: ["{{student_name}}", "{{average}}"],
+        createdBy: "admin-1", updatedBy: "admin-1", deletedAt: null,
+        createdAt: new Date("2026-01-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-03-01T00:00:00.000Z") },
+
+      // The name POST /seed-default recognises. Not the default — seeding only
+      // claims the slot when the school has not already chosen one.
+      { _id: "tpl-2", schoolId: SCHOOL, name: "Default Report Card",
+        html: "<p>{{class}}</p>", css: "", isDefault: false, version: 1,
+        variables: ["{{class}}"],
+        createdBy: "admin-1", updatedBy: "admin-1", deletedAt: null,
+        createdAt: new Date("2026-02-05T00:00:00.000Z"),
+        updatedAt: new Date("2026-05-01T00:00:00.000Z") },
+
+      { _id: "tpl-3", schoolId: SCHOOL, name: "Old Layout",
+        html: "<p>{{term}}</p>", css: "p{margin:0}", isDefault: false, version: 2,
+        variables: ["{{term}}"],
+        createdBy: "admin-1", updatedBy: "admin-1", deletedAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-01-01T00:00:00.000Z") },
+
+      { _id: "tpl-4", schoolId: SCHOOL, name: "Binned",
+        html: "<p>gone</p>", css: "", isDefault: false, version: 1, variables: [],
+        createdBy: "admin-1", updatedBy: "admin-1",
+        deletedAt: new Date("2026-06-01T00:00:00.000Z"),
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-06-01T00:00:00.000Z") },
+
+      { _id: "tpl-5", schoolId: "other-school", name: "Not Yours",
+        html: "<p>theirs</p>", css: "", isDefault: true, version: 1, variables: [],
+        createdBy: "admin-9", updatedBy: "admin-9", deletedAt: null,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-07-01T00:00:00.000Z") },
+    ]);
+
+    const mirrorTemplates = async () => {
+      const rows = JSON.parse(JSON.stringify(await ReportTemplate.find({}).lean()));
+      docs.putMany("reportTemplate", rows);
+    };
+    await mirrorTemplates();
+
+    // ── Who is asking ────────────────────────────────────────────────────
+    //
+    // The whole router is requirePermission("reports.manage"), so the session
+    // must carry it or every handler declines and this section would report
+    // "answered by the network" for all of it.
+    const tplAs = {
+      token,
+      session: { userId: "admin-1", role: TPL_ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+                 permissions: tplDefaults(TPL_ROLES.SCHOOL_ADMIN) },
+    };
+    const tplCtx = { docs, meta, queue, session: tplAs.session };
+
+    // A bursar, who holds nothing in this module. reports.manage is not
+    // delegable, so this is not a school setting somebody could have changed.
+    const tplBursarToken = require("jsonwebtoken").sign(
+      { id: "tpl-bursar", role: TPL_ROLES.BURSAR, schoolId: SCHOOL },
+      process.env.JWT_SECRET, { expiresIn: "1h" }
+    );
+    await TplUser.collection.insertOne({
+      _id: "tpl-bursar", name: "Bursar", email: "bursar-tpl@x.com",
+      role: TPL_ROLES.BURSAR, schoolId: SCHOOL, isActive: true, password: "x",
+      updatedAt: new Date(),
+    });
+    const tplAsBursar = {
+      token:   tplBursarToken,
+      session: { userId: "tpl-bursar", role: TPL_ROLES.BURSAR, schoolId: SCHOOL,
+                 permissions: tplDefaults(TPL_ROLES.BURSAR) },
+    };
+    const tplBursarCtx = { docs, meta, queue, session: tplAsBursar.session };
+
+    // ── The list ─────────────────────────────────────────────────────────
+    //
+    // isDefault desc then updatedAt desc: tpl-1 (default), tpl-2 (May),
+    // tpl-3 (January). tpl-4 is soft-deleted and tpl-5 is another school's.
+    await parity("the template list", `/api/templates?schoolId=${SCHOOL}`, tplAs);
+    await parity("one template",      `/api/templates/tpl-1?schoolId=${SCHOOL}`, tplAs);
+    await parity("the seeded one",    `/api/templates/tpl-2?schoolId=${SCHOOL}`, tplAs);
+
+    // Position is asserted here rather than only through parity(), because
+    // parity() would pass on two lists that happened to agree while both were
+    // in the storage engine's order.
+    check("default first, then most recently touched",
+      api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx)
+        .data.templates.map((t) => t._id),
+      ["tpl-1", "tpl-2", "tpl-3"]);
+
+    // The whole document, not a projection — the endpoint has no .select(), so
+    // every list load carries the full html and css of every template.
+    check("the list carries the html the builder edits",
+      api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx)
+        .data.templates[0].html,
+      TPL_HTML);
+
+    // ── What the list must not show ──────────────────────────────────────
+    check("a soft-deleted template is not readable",
+      api.handle({ method: "GET", path: "/api/templates/tpl-4", query: { schoolId: SCHOOL } }, tplCtx),
+      null);
+    const binned = await askTpl("GET", `/api/templates/tpl-4?schoolId=${SCHOOL}`, null, tplAs);
+    check("and the server calls it not found", binned.status, 404);
+
+    check("another school's template is not readable",
+      api.handle({ method: "GET", path: "/api/templates/tpl-5", query: { schoolId: SCHOOL } }, tplCtx),
+      null);
+    const theirs = await askTpl("GET", `/api/templates/tpl-5?schoolId=${SCHOOL}`, null, tplAs);
+    check("nor by the server", theirs.status, 404);
+
+    // resolveSchoolId ignores the request's schoolId for anybody who is not a
+    // super_admin, so asking for another school reads your OWN. A handler that
+    // trusted query.schoolId would answer with tpl-5 here.
+    check("asking for another school still answers with this one",
+      api.handle({ method: "GET", path: "/api/templates", query: { schoolId: "other-school" } }, tplCtx)
+        .data.templates.map((t) => t._id),
+      ["tpl-1", "tpl-2", "tpl-3"]);
+    await parity("and the server agrees", `/api/templates?schoolId=other-school`, tplAs);
+
+    // ── The guard over the whole router ──────────────────────────────────
+    check("a bursar is not answered locally",
+      api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplBursarCtx),
+      null);
+    const bursarRead = await askTpl("GET", `/api/templates?schoolId=${SCHOOL}`, null, tplAsBursar);
+    check("because the server refuses them", bursarRead.status, 403);
+    check("naming the permission", bursarRead.body.permission, "reports.manage");
+
+    // ── The raw preview, which is a read wearing a POST ──────────────────
+    {
+      const localPrev = api.handle({
+        method: "POST", path: "/api/templates/tpl-1/preview",
+        query: {}, body: { schoolId: SCHOOL },
+      }, tplCtx);
+      const serverPrev = await askTpl("POST", "/api/templates/tpl-1/preview",
+        { schoolId: SCHOOL }, tplAs);
+
+      check("the raw preview status", localPrev?.status, serverPrev.status);
+      same("the raw preview, key for key", localPrev?.data, serverPrev.body);
+      check("nothing was queued for a preview", localPrev?.queued, undefined);
+
+      // With a pupil and an exam the endpoint runs the placeholder engine, which
+      // this machine does not have. Declined — and NOT because the server would
+      // refuse it: it answers 200 with rendered html. A second copy of a
+      // 600-line renderer is the thing being avoided.
+      check("a filled preview is left to the server",
+        api.handle({
+          method: "POST", path: "/api/templates/tpl-1/preview",
+          query: {}, body: { schoolId: SCHOOL, examId: "exam-1", studentId: "p1" },
+        }, tplCtx),
+        null);
+    }
+
+    // ── Seeding, whose idempotent half is answerable ─────────────────────
+    {
+      const localSeed = api.handle({
+        method: "POST", path: "/api/templates/seed-default",
+        query: {}, body: { schoolId: SCHOOL },
+      }, tplCtx);
+      const serverSeed = await askTpl("POST", "/api/templates/seed-default",
+        { schoolId: SCHOOL }, tplAs);
+
+      check("seeding a school that already has the row: status", localSeed?.status, serverSeed.status);
+      check("and it says nothing was created", localSeed?.data.created, false);
+      same("and hands back the same row", localSeed?.data, serverSeed.body);
+      check("without queueing anything", localSeed?.queued, undefined);
+      check("and the server wrote nothing",
+        await ReportTemplate.countDocuments({ schoolId: SCHOOL, deletedAt: null }), 3);
+
+      // Two rows with that name are possible — there is no unique index — and
+      // findOne with no sort does not define which one comes back.
+      docs.put("reportTemplate", {
+        ...docs.get("reportTemplate", "tpl-3"), name: "Default Report Card",
+      });
+      check("two rows with the seed name declines rather than guessing",
+        api.handle({
+          method: "POST", path: "/api/templates/seed-default",
+          query: {}, body: { schoolId: SCHOOL },
+        }, tplCtx),
+        null);
+      await mirrorTemplates();
+    }
+
+    // ═════════════════════════════════════════════════════════════════════
+    // WRITES
+    // ═════════════════════════════════════════════════════════════════════
+
+    const tplEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["reportTemplate"],
+    });
+    apiClient.setServerUrl(`http://127.0.0.1:${port}`);
+    apiClient.setToken(token);
+
+    /**
+     * The cursor is cleared before every cycle.
+     *
+     * Not laziness: this file's fixtures are dated across a school year, so a
+     * cursor recorded from them can sit ahead of the wall clock and nothing
+     * written during the run would ever be pulled back. Clearing it makes each
+     * cycle a full re-read of one small collection.
+     */
+    const tplCycle = async () => {
+      db.prepare("DELETE FROM sync_state WHERE collection = ?").run("reportTemplate");
+      await tplEngine.cycle();
+    };
+
+    // ── Deleting the default is refused, and that is checked locally ─────
+    //
+    // A queued 400 does not merely fail — it blocks the outbox and holds up
+    // everything behind it, including work from other parts of the school.
+    check("the default template is not queued for deletion",
+      api.handle({
+        method: "DELETE", path: "/api/templates/tpl-1",
+        query: { schoolId: SCHOOL }, body: {},
+      }, tplCtx),
+      null);
+    const refusedDelete = await askTpl("DELETE", `/api/templates/tpl-1?schoolId=${SCHOOL}`, null, tplAs);
+    check("and the server really would have refused it", refusedDelete.status, 400);
+    check("saying what to do instead",
+      /Set another template as default/.test(String(refusedDelete.body.error)), true);
+
+    check("nor is a bursar's deletion queued",
+      api.handle({
+        method: "DELETE", path: "/api/templates/tpl-3",
+        query: { schoolId: SCHOOL }, body: {},
+      }, tplBursarCtx),
+      null);
+    const bursarDelete = await askTpl("DELETE", `/api/templates/tpl-3?schoolId=${SCHOOL}`,
+      null, tplAsBursar);
+    check("because that is a 403", bursarDelete.status, 403);
+
+    // ── Deleting a spare layout, all the way to the server ──────────────
+    {
+      const deleted = api.handle({
+        method: "DELETE", path: "/api/templates/tpl-3",
+        query: { schoolId: SCHOOL }, body: {},
+      }, tplCtx);
+
+      check("a non-default template is accepted locally", deleted?.status, 200);
+      check("and queued", deleted?.queued, true);
+      same("with the endpoint's own reply", deleted?.data,
+        { success: true, message: "Template deleted" });
+      check("the mirror shows it gone at once",
+        !!docs.get("reportTemplate", "tpl-3")?.deletedAt, true);
+      check("marked as not yet sent", docs.get("reportTemplate", "tpl-3")?._pending, true);
+      check("version is not touched by a delete",
+        docs.get("reportTemplate", "tpl-3")?.version, 2);
+      check("and the list no longer offers it",
+        api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx)
+          .data.templates.map((t) => t._id),
+        ["tpl-1", "tpl-2"]);
+
+      // A second press cannot reach the queue: the local row is already gone.
+      check("a repeat is not queued a second time",
+        api.handle({
+          method: "DELETE", path: "/api/templates/tpl-3",
+          query: { schoolId: SCHOOL }, body: {},
+        }, tplCtx),
+        null);
+
+      await tplCycle();
+      check("the queue drained", queue.all().length, 0);
+      check("the row is settled", docs.get("reportTemplate", "tpl-3")?._pending, false);
+      check("and the server soft-deleted it",
+        !!(await ReportTemplate.findById("tpl-3").lean())?.deletedAt, true);
+      await parity("the list after a delete", `/api/templates?schoolId=${SCHOOL}`, tplAs);
+    }
+
+    // ── Choosing the default: one request, two rows ──────────────────────
+    {
+      const before = docs.get("reportTemplate", "tpl-1")?.updatedAt;
+
+      const madeDefault = api.handle({
+        method: "PATCH", path: "/api/templates/tpl-2/default",
+        query: {}, body: { schoolId: SCHOOL },
+      }, tplCtx);
+
+      check("setting a default is accepted locally", madeDefault?.status, 200);
+      check("and queued", madeDefault?.queued, true);
+      same("with the endpoint's own reply — a message, not the row", madeDefault?.data,
+        { success: true, message: "Default template updated" });
+
+      check("the chosen row is default in the mirror",
+        docs.get("reportTemplate", "tpl-2")?.isDefault, true);
+      check("and pending", docs.get("reportTemplate", "tpl-2")?._pending, true);
+      check("its version is NOT bumped — only PUT does that",
+        docs.get("reportTemplate", "tpl-2")?.version, 1);
+
+      /**
+       * ── The other half of the write, which is the part that goes wrong ────
+       *
+       * The old default has to be cleared in the same commit, and the cleared
+       * row has to be recorded on the queue entry. A row written and not listed
+       * there stays pending for ever — and a pending row is deliberately never
+       * overwritten by a pull, so the mirror would say tpl-1 is still the
+       * default until somebody reinstalled the application.
+       */
+      check("the old default is cleared too",
+        docs.get("reportTemplate", "tpl-1")?.isDefault, false);
+      check("its timestamp is left for the server to set",
+        docs.get("reportTemplate", "tpl-1")?.updatedAt, before);
+      check("one queue entry, not two", queue.all().length, 1);
+      check("and it carries the cleared row so the engine settles it",
+        JSON.parse(queue.all()[0].extra_docs ?? "null"),
+        [{ collection: "reportTemplate", docId: "tpl-1" }]);
+
+      // Two defaults are never shown, which is the thing the screen would get
+      // wrong if `also` had been omitted.
+      check("exactly one template reads as default",
+        api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx)
+          .data.templates.filter((t) => t.isDefault).map((t) => t._id),
+        ["tpl-2"]);
+
+      // Setting the default on the row that already has it is declined. See the
+      // note in writes/templates.js and the demonstration at the end of this
+      // section: the endpoint clears every flag and then writes nothing.
+      check("re-defaulting the row that is already default is not queued",
+        api.handle({
+          method: "PATCH", path: "/api/templates/tpl-2/default",
+          query: {}, body: { schoolId: SCHOOL },
+        }, tplCtx),
+        null);
+
+      await tplCycle();
+      check("the queue drained", queue.all().length, 0);
+      check("the chosen row settled", docs.get("reportTemplate", "tpl-2")?._pending, false);
+      check("and so did the cleared one — it was on the queue entry",
+        docs.get("reportTemplate", "tpl-1")?._pending, false);
+      check("the server agrees which one is default",
+        (await ReportTemplate.findOne({ schoolId: SCHOOL, isDefault: true }).lean())?._id,
+        "tpl-2");
+      check("and that the old one is not",
+        (await ReportTemplate.findById("tpl-1").lean())?.isDefault, false);
+
+      /**
+       * ── Compared by key, not by position ─────────────────────────────────
+       *
+       * The endpoint clears the flag with an updateMany, and mongoose adds
+       * `$set: { updatedAt: now }` to update queries — so ONE timestamp is
+       * stamped onto every remaining template of the school at once. Their
+       * updatedAt values then tie exactly, `{ updatedAt: -1 }` has nothing left
+       * to order them by, and the server's own list can come back differently
+       * for two identical requests.
+       *
+       * So the contents are compared, and the order is not. The desktop's own
+       * order is stable (an _id tie-break), which is a promise the server does
+       * not make.
+       */
+      const localList  = api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx);
+      const serverList = await askTpl("GET", `/api/templates?schoolId=${SCHOOL}`, null, tplAs);
+      check("the same templates, whatever the order",
+        localList.data.templates.map((t) => t._id).sort(),
+        serverList.body.templates.map((t) => t._id).sort());
+      check("and the same count", localList.data.count, serverList.body.count);
+    }
+
+    // ── Duplicating a layout ─────────────────────────────────────────────
+    //
+    // ⚠ THE LAST CHECK IN THIS BLOCK FAILS UNTIL THE BACKEND IS CHANGED.
+    //
+    // POST /api/templates/:id/duplicate hard-codes _id: uuidv4() at
+    // src/routes/template.routes.js:493. Until it honours req.body._id the
+    // server creates the copy under a different id, the outbox drains happily,
+    // and the local row is orphaned in the mirror for ever — no pull removes it,
+    // and the first "set as default" pressed on that phantom queues a PATCH the
+    // server answers 404 to, which stops the whole outbox.
+    {
+      const copied = api.handle({
+        method: "POST", path: "/api/templates/tpl-1/duplicate",
+        query: {}, body: { schoolId: SCHOOL },
+      }, tplCtx);
+
+      check("a copy is accepted locally", copied?.status, 201);
+      check("and queued", copied?.queued, true);
+
+      const copyId = copied.data.template._id;
+      check("named after the original", copied.data.template.name, "Term Report (Copy)");
+      check("never the default", copied.data.template.isDefault, false);
+      check("version reset to 1", copied.data.template.version, 1);
+      check("carrying the original's html", copied.data.template.html, TPL_HTML);
+      check("and its placeholder list, un-rescanned",
+        copied.data.template.variables, ["{{student_name}}", "{{average}}"]);
+      // toObject() with toObject: { virtuals: true }, so mongoose's default `id`
+      // virtual rides along on the RESPONSE. The stored row keeps the feed's
+      // lean shape and has no `id`.
+      check("the response carries the id virtual", copied.data.template.id, copyId);
+      check("the mirrored row does not", docs.get("reportTemplate", copyId)?.id, undefined);
+      check("the id is in the body that will be replayed",
+        queue.all().find((q) => q.path.endsWith("/duplicate")) &&
+        JSON.parse(queue.all().find((q) => q.path.endsWith("/duplicate")).body)._id,
+        copyId);
+      check("and the copy is in the list at once",
+        api.handle({ method: "GET", path: "/api/templates", query: { schoolId: SCHOOL } }, tplCtx)
+          .data.templates.some((t) => t._id === copyId),
+        true);
+
+      await tplCycle();
+      check("the queue drained", queue.all().length, 0);
+      check("⚠ the server has the copy under the CLIENT'S id (needs template.routes.js:493)",
+        (await ReportTemplate.findById(copyId).lean())?.name, "Term Report (Copy)");
+      check("⚠ and did not make a second one",
+        await ReportTemplate.countDocuments({ schoolId: SCHOOL, name: "Term Report (Copy)" }), 1);
+      check("the copy is stamped with who made it",
+        (await ReportTemplate.findById(copyId).lean())?.createdBy,
+        docs.get("reportTemplate", copyId)?.createdBy);
+    }
+
+    /**
+     * ── Re-confirming the current default: found broken, now fixed ─────────
+     *
+     * This section was written to DEMONSTRATE a bug, and the assertions below
+     * are what it looked like. PATCH /:id/default cleared isDefault on every
+     * non-deleted template of the school — the target INCLUDED — and then
+     * assigned `template.isDefault = true` to a document loaded before that
+     * clear, which already held true. Mongoose sends only modified paths, and
+     * assigning true to true modifies nothing: modifiedPaths() was [], save()
+     * issued no write, and the clear stood.
+     *
+     * The school was left with NO default. GET /templates/default answered 404
+     * and a report card rendered without an explicit templateId had nothing to
+     * render from — from the most innocuous action available, pressing "set as
+     * default" on the row already marked default.
+     *
+     * The console hid the button on that row, so nothing reached it. It was one
+     * line from being reachable, and template.routes.js now excludes the target
+     * from the clear — which removes the dependency on dirty tracking entirely,
+     * rather than relying on save() to put back what was just taken away.
+     *
+     * So these assert the fix. If somebody reinstates the old updateMany they
+     * fail, which is the point of keeping them.
+     */
+    {
+      const before = await ReportTemplate.findOne({ schoolId: SCHOOL, isDefault: true }).lean();
+      check("the school has a default to begin with", before?._id, "tpl-2");
+
+      const reDefault = await askTpl("PATCH", "/api/templates/tpl-2/default",
+        { schoolId: SCHOOL }, tplAs);
+      check("the server reports success", reDefault.status, 200);
+      check("with the same cheerful message", reDefault.body.message, "Default template updated");
+      // THE ASSERTIONS THE FIX EXISTS FOR. Both read the other way round before it.
+      check("the school still has exactly one default",
+        await ReportTemplate.countDocuments({ schoolId: SCHOOL, isDefault: true, deletedAt: null }),
+        1);
+      check("and it is still the one that was re-confirmed",
+        (await ReportTemplate.findOne({ schoolId: SCHOOL, isDefault: true, deletedAt: null }).lean())?._id,
+        "tpl-2");
+      check("so the default lookup still answers",
+        (await askTpl("GET", `/api/templates/default?schoolId=${SCHOOL}`, null, tplAs)).status,
+        200);
+
+      // Put it back, so anything spliced after this section sees a school with a
+      // default. updateOne bumps updatedAt, which is what the next pull follows.
+      await ReportTemplate.updateOne({ _id: "tpl-2" }, { $set: { isDefault: true } });
+      await mirrorTemplates();
+      check("restored", docs.get("reportTemplate", "tpl-2")?.isDefault, true);
+    }
+
+    tplEngine.stop();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the settings screens: office accounts, grading, the ID card ---");
+
+  /**
+   * ── SPLICE THIS AT THE END OF main(), AFTER THE APPROVALS SECTION ────────
+   *
+   * Two reasons, both real rather than cautious:
+   *
+   *   · It adds settings.academicYear to the school fixture, which the id-card
+   *     dates are computed from. The approvals section reads
+   *     settings.approvals.expenseThreshold off the same document, and this
+   *     section then asserts that a settings write does NOT disturb it — so the
+   *     threshold assertions want to have run already.
+   *   · It adds office accounts to the `user` collection. Nothing earlier joins
+   *     on the whole staff list, but a section that did would see rows it did
+   *     not seed.
+   *
+   * ── The queue may not be mine alone ─────────────────────────────────────
+   *
+   * A blocked entry left by an earlier section would stop the outbox before my
+   * pushes, so the depth is recorded before the writes and compared against
+   * afterwards rather than against zero. If that check fails with a bigger
+   * number, the cause is upstream and the label says so.
+   */
+
+  const stgSession = {
+    userId: "admin-1", schoolId: SCHOOL, role: "school_admin",
+    permissions: ["settings.view", "settings.manage", "users.manage", "results.view"],
+  };
+  const stgCtx = { docs, meta, queue, session: stgSession };
+
+  /** The same body, straight at the endpoint, so a refusal is never assumed. */
+  const stgAsk = async (path, body, method = "PUT") => {
+    const res = await fetch("http://127.0.0.1:" + port + path, {
+      method,
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  const stgGet = async (pathAndQuery) => {
+    const res = await fetch("http://127.0.0.1:" + port + pathAndQuery, {
+      headers: { authorization: "Bearer " + token },
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // FIXTURES
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const SettingsUser       = require("../src/db/models/User");
+  const GradingConfigModel  = require("../src/db/models/GradingConfig");
+
+  /**
+   * The office accounts, each one a condition in the list endpoint's filter:
+   *
+   *   stg-burs    a bursar, ACTIVE — and carrying a tempPassword, which is the
+   *               one this fixture exists for. tempPassword is NOT select:false
+   *               on the model, so it really does travel out of a .find(); the
+   *               endpoint drops it with .select("-password -tempPassword") and
+   *               the handler has to drop it too. Without this row a handler
+   *               that forgot would pass.
+   *   stg-gone    a REMOVED admin — isActive false, which is what DELETE does.
+   *               Absent by default, present under ?status=inactive.
+   *   stg-noflag  NO isActive FIELD AT ALL. statusFilter writes { isActive: true }
+   *               rather than { $ne: false }, so this row is absent by default —
+   *               and a mirror that translated it as "not false" would show an
+   *               account the server does not.
+   *   stg-del     soft-deleted and STILL LISTED, because this endpoint applies
+   *               no deletedAt filter. It looks like an oversight; the mirror
+   *               must not be cleverer than the server about who can reach the
+   *               school's records.
+   *   stg-other   another school's bursar, for tenancy.
+   *
+   * t1 and t2 are already in the fixtures as teachers, which covers the role
+   * filter: neither may appear.
+   */
+  await SettingsUser.collection.insertMany([
+    { _id: "stg-burs", schoolId: SCHOOL, name: "Mme Bursar", email: "bursar@x.com",
+      role: "bursar", isActive: true, password: "x", tempPassword: "SwiftRiver1234",
+      deletedAt: null, updatedAt: new Date("2026-09-20T00:00:00Z") },
+    { _id: "stg-gone", schoolId: SCHOOL, name: "Former Head", email: "former@x.com",
+      role: "school_admin", isActive: false, password: "x",
+      deletedAt: null, updatedAt: new Date("2026-09-20T00:00:00Z") },
+    { _id: "stg-noflag", schoolId: SCHOOL, name: "No Flag", email: "noflag@x.com",
+      role: "bursar", password: "x",
+      deletedAt: null, updatedAt: new Date("2026-09-20T00:00:00Z") },
+    { _id: "stg-del", schoolId: SCHOOL, name: "Deleted Bursar", email: "delbursar@x.com",
+      role: "bursar", isActive: true, password: "x",
+      deletedAt: new Date("2026-05-01T00:00:00Z"), updatedAt: new Date("2026-09-20T00:00:00Z") },
+    { _id: "stg-other", schoolId: "other-school", name: "Elsewhere", email: "elsewhere@x.com",
+      role: "bursar", isActive: true, password: "x",
+      deletedAt: null, updatedAt: new Date("2026-09-20T00:00:00Z") },
+  ]);
+
+  /**
+   * The school's academic year, which the ID-card dates are read from.
+   *
+   * $set on the dotted path rather than a whole settings object, for the same
+   * reason the endpoint does it: settings.approvals is already on this document
+   * and the approvals section depends on it.
+   *
+   * An ObjectId in the filter, not the string. School is the only model here
+   * whose _id is an ObjectId, and a string filter matches nothing — silently,
+   * so the academicYear would simply never arrive and the id-card dates would
+   * both fall back to the calendar and agree by accident.
+   *
+   * 2030-2031 rather than YEAR, deliberately. The date assertions below turn on
+   * the school's stated year being DIFFERENT from the one today's calendar
+   * implies, and with 2026-2027 the two coincide for eleven months of every
+   * twelve — so the run would pass or fail depending on which side of 1
+   * September it happened on. Nothing else in this file reads
+   * settings.academicYear; the fee and exam fixtures carry their own
+   * academicYear fields and those are unrelated.
+   */
+  await School.collection.updateOne(
+    { _id: new mongoose.Types.ObjectId(SCHOOL) },
+    { $set: { "settings.academicYear": "2030-2031", updatedAt: new Date() } }
+  );
+
+  docs.putMany("user", JSON.parse(JSON.stringify(await SettingsUser.find({}).lean())));
+  docs.putMany("school", JSON.parse(JSON.stringify(await School.find({}).lean())));
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE OFFICE ACCOUNTS — compared BY KEY, because neither side promises order
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * GET /admin/settings/admins has NO .sort().
+   *
+   * Mongo answers in storage order and SQLite answers in rowid order, and
+   * neither is a promise. The handler sorts by _id so the settings list does not
+   * reshuffle between two reads on the same machine, and this compares the two
+   * sides as SETS keyed on _id — asserting position would be asserting something
+   * the server never offered.
+   *
+   * Key order is normalised too: the endpoint's projection and the feed's are
+   * different queries over the same documents, so the fields can arrive in a
+   * different order while being the same fields.
+   */
+  const stgCanon = (rows) => [...rows]
+    .map((row) => Object.fromEntries(
+      Object.entries(row)
+        .filter(([k]) => k !== "__v" && k !== "_pending")
+        .sort(([a], [b]) => a.localeCompare(b))
+    ))
+    .sort((a, b) => String(a._id).localeCompare(String(b._id)));
+
+  const stgAdminsParity = async (label, qs) => {
+    const fromServer = await stgGet("/api/admin/settings/admins" + qs);
+    const local = api.handle(
+      { method: "GET", path: "/api/admin/settings/admins",
+        query: Object.fromEntries(new URLSearchParams(qs.replace(/^\?/, ""))) },
+      stgCtx
+    );
+    if (!local) {
+      console.log("  ---- " + label + ": answered by the network, not locally");
+      return;
+    }
+    check(label + ": HTTP status", local.status, fromServer.status);
+    check(label + ": the same accounts, by key",
+      stgCanon(local.data.admins), stgCanon(fromServer.body.admins));
+  };
+
+  await stgAdminsParity("the office accounts", "?schoolId=" + SCHOOL);
+  await stgAdminsParity("removed accounts only", "?schoolId=" + SCHOOL + "&status=inactive");
+  await stgAdminsParity("every account", "?schoolId=" + SCHOOL + "&status=all");
+  // Not an enum the endpoint knows: statusFilter falls through to active-only
+  // rather than refusing, so "?status=banana" is the default list.
+  await stgAdminsParity("an unrecognised status is the default",
+    "?schoolId=" + SCHOOL + "&status=banana");
+
+  /**
+   * resolveSchoolId IGNORES ?schoolId for anybody who is not a super_admin.
+   *
+   * So a school_admin naming another school gets their OWN accounts, not an
+   * empty list — and a handler that took the query parameter (as the sibling
+   * handlers in that directory do) would answer with nothing while the server
+   * answered with five rows.
+   */
+  await stgAdminsParity("a foreign schoolId is ignored, not honoured",
+    "?schoolId=other-school");
+
+  const stgAdmins = api.handle(
+    { method: "GET", path: "/api/admin/settings/admins", query: { schoolId: SCHOOL } },
+    stgCtx
+  ).data.admins;
+
+  // Stated outright, so a failure names the decision rather than showing a diff.
+  check("the bursar is an office account and is listed",
+    stgAdmins.some((a) => a._id === "stg-burs"), true);
+  check("a teacher is not",
+    stgAdmins.some((a) => a._id === "t1" || a._id === "t2"), false);
+  check("a row with no isActive field is absent — { isActive: true }, not { $ne: false }",
+    stgAdmins.some((a) => a._id === "stg-noflag"), false);
+  check("a soft-deleted office account IS listed, because the endpoint filters none",
+    stgAdmins.some((a) => a._id === "stg-del"), true);
+  check("another school's bursar is not",
+    stgAdmins.some((a) => a._id === "stg-other"), false);
+  // The projection, asserted rather than assumed. tempPassword is not
+  // select:false on the model, so this is a credential that genuinely travels
+  // unless something drops it.
+  check("no password reaches the screen",
+    stgAdmins.some((a) => "password" in a), false);
+  check("and no temporary password either",
+    stgAdmins.some((a) => "tempPassword" in a), false);
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE GRADING SCALE
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * First, with NO saved config — which is the state most schools are in.
+   *
+   * This is the assertion that earns the DEFAULT_GRADES copy in
+   * handlers/settings.js. That table is duplicated from admin.routes.js and it
+   * is not inert data: results.controller.js turns a percentage into a letter
+   * and a remark with it, so a drifted copy would print a different grade on a
+   * desktop report card than the school's own server would. This comparison is
+   * the only thing holding the two together until the table moves to shared/.
+   */
+  // The precondition, stated rather than assumed. If some other section came to
+  // seed a grading config, the comparison below would be measuring a different
+  // thing and would fail for a reason nobody could read off the diff.
+  check("no grading config exists on the server yet, which the next comparison " +
+        "depends on", await GradingConfigModel.countDocuments({ schoolId: SCHOOL }), 0);
+  check("nor in the mirror", docs.count("gradingConfig", { schoolId: SCHOOL }), 0);
+
+  await parity("the grading scale a school has never configured",
+    "/api/admin/settings/grading?schoolId=" + SCHOOL, { session: stgSession });
+
+  /**
+   * ── The first save cannot be queued, and the server would NOT have refused ──
+   *
+   * Read this one carefully, because it breaks the usual pattern. Every other
+   * decline in this file is a prediction that the server would answer 4xx, and
+   * is paired with the server actually doing so. This decline is NOT that: the
+   * endpoint is an upsert and it accepts the request happily.
+   *
+   * It declines because GradingConfig's _id is a MONGO OBJECTID and the handler
+   * never reads req.body._id. Queueing the first save would mean inventing an
+   * id here, the server's upsert generating a different one, the push settling
+   * the local row under the invented id, and the next pull delivering the
+   * server's row under its own — two grading configs for one school in the
+   * mirror, findOne returning whichever SQLite reached first, and the wrong one
+   * possibly being the orphan for ever. A school's marking scheme, permanently
+   * ambiguous.
+   *
+   * So the assertion below is the opposite of the usual one: the server accepts
+   * it, and the decline is deliberate conservatism rather than a mispredicted
+   * refusal. Making the first save queueable is a backend change (accept
+   * req.body._id through $setOnInsert, or derive the id from schoolId, which
+   * already carries a unique index) and it is reported, not made.
+   */
+  const stgFirstSave = {
+    schoolId: SCHOOL,
+    grades: [
+      { grade: "A", minMark: 80, maxMark: 100, gpaPoints: 4, remark: "Very Good" },
+      { grade: "B", minMark: 60, maxMark: 79,  gpaPoints: 3, remark: "Good"      },
+      { grade: "F", minMark: 0,  maxMark: 59,  gpaPoints: 0, remark: "Fail"      },
+    ],
+    passMark: 60, useGpa: true, gpaScale: 4, gradingType: "gpa",
+  };
+
+  check("the first grading save for a school is not queued",
+    api.handle({ method: "PUT", path: "/api/admin/settings/grading", query: {}, body: stgFirstSave }, stgCtx),
+    null);
+  const stgFirstOnServer = await stgAsk("/api/admin/settings/grading", stgFirstSave);
+  // NOT a refusal. Asserted so that nobody reads the decline above as one.
+  check("and the server would have ACCEPTED it — the decline is about the id, not a 4xx",
+    stgFirstOnServer.status, 200);
+
+  docs.putMany("gradingConfig",
+    JSON.parse(JSON.stringify(await GradingConfigModel.find({}).lean())));
+
+  const stgConfigId = String(
+    (await GradingConfigModel.findOne({ schoolId: SCHOOL }).lean())._id
+  );
+  // Worth naming: the id really is an ObjectId, which is what the note above is
+  // about. Every other collection in this mirror is keyed on a string uuid.
+  check("the grading config is keyed on an ObjectId, not a uuid",
+    /^[0-9a-f]{24}$/.test(stgConfigId), true);
+
+  await parity("the grading scale, now that one is saved",
+    "/api/admin/settings/grading?schoolId=" + SCHOOL, { session: stgSession });
+
+  /**
+   * ── An invalid marking scheme, and the status code that mattered ─────────
+   *
+   * These were written expecting a refusal, because GradingConfig declares
+   * exactly what they violate — gradingType's enum, and grade/minMark/maxMark
+   * required on every band — and the endpoint passes runValidators: true.
+   *
+   * The refusal was there. It arrived as a 500. The ValidationError was never
+   * caught, so a school typing a grade band with no name got "Internal Server
+   * Error" and no clue which field was wrong.
+   *
+   * The status code is not cosmetic here. This layer treats 5xx as "the server is
+   * unwell, try again" and 4xx as "it refused, ask a person" — so an invalid
+   * marking scheme became a queue entry that retried FOR EVER rather than
+   * stopping once. admin.routes.js now maps ValidationError and CastError to 400
+   * with a code; nothing about what the endpoint accepts has changed.
+   *
+   * The local handler declines these before they are queued, which is what makes
+   * it worth checking them locally at all.
+   */
+  const stgGradingRejections = [
+    ["a gradingType outside the enum",
+      { ...stgFirstSave, gradingType: "letters" }],
+    ["a band whose minMark will not cast",
+      { ...stgFirstSave, grades: [{ grade: "A", minMark: "x", maxMark: 100 }] }],
+    ["a band with an empty grade name",
+      { ...stgFirstSave, grades: [{ grade: "", minMark: 80, maxMark: 100 }] }],
+  ];
+
+  for (const [what, body] of stgGradingRejections) {
+    check("not queued: " + what,
+      api.handle({ method: "PUT", path: "/api/admin/settings/grading", query: {}, body }, stgCtx),
+      null);
+    const refused = await stgAsk("/api/admin/settings/grading", body);
+    // Recorded, not asserted as a refusal — see the note above. If somebody
+    // makes the endpoint validate its bands, these flip and the note is stale.
+    // A 400, not a 500 — and the difference is the point. The desktop treats 5xx
+    // as "try again later", so an invalid marking scheme used to become a queue
+    // entry that retried for ever instead of stopping once with a reason.
+    check("and the server refuses it with a 4xx: " + what, refused.status, 400);
+    check("naming the field: " + what, refused.body.code, "INVALID_GRADING");
+  }
+
+  /**
+   * settings.manage, checked locally because a queued 403 stops the outbox as
+   * surely as a 400 does.
+   *
+   * A bursar reaches this router — the router-level guard is STAFF_ROLES — and
+   * is then refused by requirePermission("settings.manage"), which is
+   * ADMIN_ROLES. Its own token, minted here rather than borrowed from another
+   * section, so this assertion does not depend on where it is spliced.
+   */
+  const stgBursarToken = require("jsonwebtoken").sign(
+    { id: "stg-burs", role: "bursar", schoolId: SCHOOL },
+    process.env.JWT_SECRET, { expiresIn: "1h" }
+  );
+  check("somebody without settings.manage is not queued",
+    api.handle(
+      { method: "PUT", path: "/api/admin/settings/grading", query: {}, body: stgFirstSave },
+      { docs, meta, queue, session: { ...stgSession, permissions: ["settings.view"] } }
+    ),
+    null);
+  const stgBursarRefused = await fetch(
+    "http://127.0.0.1:" + port + "/api/admin/settings/grading",
+    { method: "PUT",
+      headers: { "content-type": "application/json", authorization: "Bearer " + stgBursarToken },
+      body: JSON.stringify(stgFirstSave) }
+  );
+  check("and the server refuses a bursar with a 403", stgBursarRefused.status, 403);
+
+  /**
+   * A body with no `grades` at all is the second conservative decline.
+   *
+   * The endpoint substitutes its own DEFAULT_GRADES table for a missing value,
+   * so it is accepted — but reproducing that would put a second dependency on a
+   * constant that lives inside a route file, and getting it wrong would replace
+   * a school's marking scheme with the shipped one. The console never omits
+   * grades; it sends the whole config back.
+   *
+   * Left to last of the grading writes because it CHANGES the server's config,
+   * which is then re-mirrored below.
+   */
+  check("a grading save with no grades array is not queued",
+    api.handle({ method: "PUT", path: "/api/admin/settings/grading", query: {},
+                 body: { schoolId: SCHOOL, passMark: 55 } }, stgCtx),
+    null);
+  const stgNoGrades = await stgAsk("/api/admin/settings/grading", { schoolId: SCHOOL, passMark: 55 });
+  check("and the server ACCEPTS it, substituting its own default table — so this " +
+        "decline is conservatism, not a predicted 4xx",
+    stgNoGrades.status, 200);
+  check("which is exactly the damage being avoided: the school's bands are gone",
+    stgNoGrades.body.grading.grades.length, 8);
+
+  // Back in step with the server before the write that is meant to succeed.
+  docs.putMany("gradingConfig",
+    JSON.parse(JSON.stringify(await GradingConfigModel.find({}).lean())));
+
+  // ── The write that is accepted ──────────────────────────────────────────
+
+  const stgQueueBefore = queue.all().length;
+
+  const stgEdit = {
+    schoolId: SCHOOL,
+    grades: [
+      { grade: "Distinction", minMark: 70, maxMark: 100, gpaPoints: 4, remark: "Excellent" },
+      // Deliberately awkward: numeric strings, which mongoose casts and the
+      // handler has to cast the same way or the local row differs arithmetically
+      // from the server's.
+      { grade: "Credit",      minMark: "50", maxMark: "69" },
+      { grade: "Fail",        minMark: 0,  maxMark: 49, gpaPoints: 0, remark: "Fail" },
+    ],
+    // ZERO, not absent. The endpoint uses `passMark ?? 50`, so 0 must survive —
+    // a handler treating an empty field as missing would silently make every
+    // pupil pass.
+    passMark: 0,
+    useGpa: false, gpaScale: 5, gradingType: "points",
+  };
+
+  const stgSaved = api.handle(
+    { method: "PUT", path: "/api/admin/settings/grading", query: {}, body: stgEdit },
+    stgCtx
+  );
+
+  check("a grading edit against a saved config is accepted locally", stgSaved?.status, 200);
+  check("and queued", stgSaved?.queued, true);
+  check("a pass mark of zero survives", stgSaved.data.grading.passMark, 0);
+  check("the bands keep the order they arrived in — results.controller takes the " +
+        "FIRST band a percentage falls in, so the order IS the marking scheme",
+    stgSaved.data.grading.grades.map((g) => g.grade),
+    ["Distinction", "Credit", "Fail"]);
+  check("numeric strings are cast, as mongoose casts them",
+    stgSaved.data.grading.grades[1],
+    { grade: "Credit", minMark: 50, maxMark: 69, gpaPoints: 0, remark: "" });
+  check("the local row keeps the server's ObjectId rather than inventing one",
+    stgSaved.data.grading._id, stgConfigId);
+  /**
+   * The `id` virtual, which the GET does not send.
+   *
+   * GradingConfig sets toJSON: { virtuals: true } and the PUT answers with a
+   * mongoose document while the GET answers with a .lean() one — so res.json()
+   * adds mongoose's default `id` virtual to one reply and not the other. Two
+   * shapes for one object from a single screen's point of view. Reported;
+   * asserted here because the response body is a contract the screen reads.
+   */
+  check("and carries the id virtual the PUT response has and the GET has not",
+    stgSaved.data.grading.id, stgConfigId);
+  check("the mirror holds the edit", docs.get("gradingConfig", stgConfigId)?.gradingType, "points");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE ID CARD AND THE GATE
+  // ─────────────────────────────────────────────────────────────────────────
+
+  await parity("the ID card and gate settings",
+    "/api/admin/settings/id-card?schoolId=" + SCHOOL, { session: stgSession });
+
+  /**
+   * ── A server bug, asserted as a bug on BOTH sides ─────────────────────────
+   *
+   * The school's academic year is 2030-2031 and it has set no custom expiry, so
+   * "what an empty field means" and "what would actually be printed" ought to be
+   * the same date. They are not.
+   *
+   * defaultValidUntil reads `school.academicYear ?? settings.academicYear`.
+   * effectiveValidUntil goes through expiryFor(), which reads `school.academicYear`
+   * ONLY — and School has no top-level academicYear path at all; the schema puts
+   * it inside settings. So effectiveValidUntil ignores the school's stated year
+   * and falls back to the calendar.
+   *
+   * Reproduced rather than fixed: documents.routes.js hands expiryFor a FLATTENED
+   * school whose academicYear IS at the top level, so the printed card does not
+   * have the bug and the settings screen does. A mirror that quietly agreed with
+   * the printer would hide the inconsistency instead of showing it.
+   *
+   * When the server is fixed THIS assertion fails, which is the point — it is
+   * the reminder to drop the same fallback into handlers/settings.js.
+   */
+  const stgIdCard = api.handle(
+    { method: "GET", path: "/api/admin/settings/id-card", query: { schoolId: SCHOOL } },
+    stgCtx
+  ).data;
+  const stgIdCardServer = (await stgGet("/api/admin/settings/id-card?schoolId=" + SCHOOL)).body;
+  check("the default expiry reads the school's academic year",
+    stgIdCard.idCard.defaultValidUntil, "2031-08-31");
+  check("the EFFECTIVE expiry does not, on either side — expiryFor reads a field " +
+        "School does not have (server bug, reproduced deliberately)",
+    stgIdCard.idCard.effectiveValidUntil, stgIdCardServer.idCard.effectiveValidUntil);
+  check("and the two dates disagree, which is the bug",
+    stgIdCard.idCard.defaultValidUntil !== stgIdCard.idCard.effectiveValidUntil, true);
+
+  // ── The declines, each against the real refusal ─────────────────────────
+
+  const stgIdCardRejections = [
+    // Caught by parseDay rather than left to the schema's regex, which would
+    // accept it and store a day that does not exist.
+    ["a validUntil of 2026-02-30",      { schoolId: SCHOOL, validUntil: "2026-02-30" }],
+    ["a validUntil that is prose",      { schoolId: SCHOOL, validUntil: "next friday" }],
+    ["a gate time of 25:00",            { schoolId: SCHOOL, gateLateAfter: "25:00" }],
+    ["an early-departure time of 7pm",  { schoolId: SCHOOL, gateEarlyBefore: "19:00:00" }],
+    ["a gateNotify outside the enum",   { schoolId: SCHOOL, gateNotify: "loud" }],
+    // "Nothing to update". A screen sending an empty save is a 400, not a no-op.
+    ["a body with nothing in it",       { schoolId: SCHOOL }],
+  ];
+
+  for (const [what, body] of stgIdCardRejections) {
+    check("not queued: " + what,
+      api.handle({ method: "PUT", path: "/api/admin/settings/id-card", query: {}, body }, stgCtx),
+      null);
+    const refused = await stgAsk("/api/admin/settings/id-card", body);
+    check("and the server refuses it: " + what,
+      refused.status >= 400 && refused.status < 500, true);
+  }
+
+  check("somebody without settings.manage is not queued for the ID card either",
+    api.handle(
+      { method: "PUT", path: "/api/admin/settings/id-card", query: {},
+        body: { schoolId: SCHOOL, gateNotify: "all" } },
+      { docs, meta, queue, session: { ...stgSession, permissions: ["settings.view"] } }
+    ),
+    null);
+
+  // ── The write that is accepted ──────────────────────────────────────────
+
+  /**
+   * One field, and the assertion that matters is about the OTHERS.
+   *
+   * The endpoint writes dotted paths — "settings.gateNotify" — precisely so a
+   * screen editing one setting cannot blank the rest. The local merge has to do
+   * the same to the same document, and the document in question also holds
+   * settings.approvals, which the expense write reads to decide whether money
+   * needs a second signature. A merge that replaced `settings` wholesale would
+   * quietly let unapproved expenses through on this machine.
+   */
+  /**
+   * ── Read the threshold, do not assume it ─────────────────────────────────
+   *
+   * This asserted 50000, the School fixture's value, and failed once the
+   * approvals section was spliced ahead of it: that section legitimately sets
+   * the expense threshold to 75000, so the number here was a hostage to
+   * whatever ran before.
+   *
+   * The claim being made is that a settings write leaves settings.approvals
+   * ALONE — the expense write reads it to decide whether money needs a second
+   * signature — so the honest form is to capture it first and require it
+   * unchanged, whatever it happens to be.
+   */
+  const stgThresholdBefore =
+    docs.get("school", SCHOOL)?.settings?.approvals?.expenseThreshold ?? null;
+
+  const stgCardSaved = api.handle(
+    { method: "PUT", path: "/api/admin/settings/id-card", query: {},
+      body: { schoolId: SCHOOL, validUntil: "2027-07-15", gateNotify: "all" } },
+    stgCtx
+  );
+
+  check("an ID card and gate change is accepted locally", stgCardSaved?.status, 200);
+  check("and queued", stgCardSaved?.queued, true);
+  check("the card's own date is what was typed", stgCardSaved.data.idCard.validUntil, "2027-07-15");
+  check("and it is now the effective one, ahead of any default",
+    stgCardSaved.data.idCard.effectiveValidUntil, "2027-07-15");
+  check("the gate answer moves with it", stgCardSaved.data.gate.notify, "all");
+  check("the two gate times are untouched and keep their defaults",
+    [stgCardSaved.data.gate.lateAfter, stgCardSaved.data.gate.earlyBefore],
+    ["07:45", "14:00"]);
+  // reprintRequired is true because validUntil was PRESENT, not because it
+  // changed. That is what the endpoint says, and it is saying the useful thing:
+  // this changes cards printed from now on and nothing already laminated.
+  check("and the office is told a reprint is needed", stgCardSaved.data.reprintRequired, true);
+
+  const stgSchoolRow = docs.get("school", SCHOOL);
+  check("the approval thresholds on the same document survived the merge",
+    stgSchoolRow?.settings?.approvals?.expenseThreshold, stgThresholdBefore);
+  check("so did the academic year",
+    stgSchoolRow?.settings?.academicYear, "2030-2031");
+  check("and the school's name, which this screen never mentions",
+    stgSchoolRow?.name, "Parity College");
+
+  // A change that touches only the gate must NOT claim a reprint.
+  const stgGateOnly = api.handle(
+    { method: "PUT", path: "/api/admin/settings/id-card", query: {},
+      body: { schoolId: SCHOOL, gateEarlyBefore: "13:30" } },
+    stgCtx
+  );
+  check("a gate-only change does not ask for a reprint",
+    stgGateOnly?.data?.reprintRequired, false);
+  check("and leaves the card's date alone",
+    stgGateOnly?.data?.idCard?.validUntil, "2027-07-15");
+  // An empty string is MEANINGFUL and accepted: it means "go back to the
+  // academic-year default". A handler testing truthiness would drop it.
+  const stgClearDate = api.handle(
+    { method: "PUT", path: "/api/admin/settings/id-card", query: {},
+      body: { schoolId: SCHOOL, validUntil: "" } },
+    stgCtx
+  );
+  check("clearing the date is accepted, not treated as a missing field",
+    stgClearDate?.status, 200);
+  check("and hands back the default again",
+    stgClearDate?.data?.idCard?.validUntil, "");
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // RECONNECTING
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * The cursors are deleted first.
+   *
+   * The fixtures in this file are dated across a school year, so a cursor set
+   * from them sits in the FUTURE and nothing written during the run would ever
+   * be pulled back. Without this the post-round-trip comparison would be reading
+   * the local guess rather than the server's answer, and would pass whatever the
+   * server had actually stored.
+   */
+  db.prepare("DELETE FROM sync_state WHERE collection = ?").run("gradingConfig");
+  db.prepare("DELETE FROM sync_state WHERE collection = ?").run("school");
+
+  const stgEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["gradingConfig", "school"],
+  });
+  await stgEngine.cycle();
+
+  // Against the depth recorded before these writes, not against zero — see the
+  // note at the top. A bigger number here means something upstream is blocked.
+  check("the settings writes left the queue", queue.all().length, stgQueueBefore);
+
+  const stgServerGrading = await GradingConfigModel.findOne({ schoolId: SCHOOL }).lean();
+  check("the server holds the edit under the same ObjectId",
+    String(stgServerGrading._id), stgConfigId);
+  check("with the bands in the order they were saved",
+    stgServerGrading.grades.map((g) => g.grade), ["Distinction", "Credit", "Fail"]);
+  check("and the pass mark of zero, not the default 50", stgServerGrading.passMark, 0);
+  check("and the numeric strings stored as numbers", stgServerGrading.grades[1].minMark, 50);
+
+  const stgServerSchool = await School.findById(SCHOOL).lean();
+  check("the server has the gate settings", stgServerSchool.settings.gateNotify, "all");
+  check("and the early-departure time from the second write",
+    stgServerSchool.settings.gateEarlyBefore, "13:30");
+  check("and the cleared card date from the third",
+    stgServerSchool.settings.idCardValidUntil, "");
+  // The whole point of the dotted paths, verified on the server side too.
+  check("the approval thresholds survived three settings writes on the server",
+    stgServerSchool.settings.approvals?.expenseThreshold, stgThresholdBefore);
+  check("and the academic year", stgServerSchool.settings.academicYear, "2030-2031");
+
+  await parity("the grading scale, after a round trip",
+    "/api/admin/settings/grading?schoolId=" + SCHOOL, { session: stgSession });
+  await parity("the ID card and gate, after a round trip",
+    "/api/admin/settings/id-card?schoolId=" + SCHOOL, { session: stgSession });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // THE FIVE THAT ARE ONLINE-ONLY — asserted as declines, not as omissions
+  // ─────────────────────────────────────────────────────────────────────────
+
+  /**
+   * Each of these must fall through to the network. A handler accidentally
+   * matching one of these paths would be far worse than not having it: creating
+   * an admin and resetting a password both answer with a TEMPORARY PASSWORD the
+   * server invented, and a locally invented one is a credential written on a
+   * piece of paper that will not work.
+   *
+   * Asserted rather than assumed, because "we never wrote that handler" is not
+   * something a reader of coverage.js can verify.
+   */
+  const stgOnlineOnly = [
+    ["POST",   "/api/admin/settings/admins",
+      { schoolId: SCHOOL, name: "New Bursar", email: "newbursar@x.com", role: "bursar" }],
+    ["POST",   "/api/admin/settings/admins/stg-burs/reset-password", {}],
+    ["DELETE", "/api/admin/settings/admins/stg-burs", {}],
+    ["GET",    "/api/admin/settings/analytics", {}],
+    ["PUT",    "/api/admin/settings/profile", { name: "Head", email: "head@x.com" }],
+  ];
+
+  for (const [method, path, body] of stgOnlineOnly) {
+    check("online-only, goes to the network: " + method + " " + path,
+      api.handle({ method, path, query: { schoolId: SCHOOL }, body }, stgCtx),
+      null);
+  }
+
+  /**
+   * And the reason GET /admin/settings/analytics is online-only, recorded as an
+   * assertion so that fixing the server makes it fail.
+   *
+   * Both $unwind stages in that handler pass `preserveNullAndEmpty`, which is not
+   * an option $unwind accepts — the real name is preserveNullAndEmptyArrays,
+   * which appears NOWHERE in this backend. Mongo raises "unrecognized option to
+   * $unwind", each aggregation is wrapped in a bare `catch { }`, and both arrays
+   * come back empty on every request. Not sometimes: always.
+   *
+   * Mirroring that would mean either hard-coding two empty arrays to agree with
+   * a swallowed server error — and silently diverging the day it is fixed — or
+   * computing the real answer and disagreeing with the server today. Neither is
+   * a mirror. Once the typo is fixed this is worth revisiting.
+   */
+  const stgAnalytics = await stgGet("/api/admin/settings/analytics?schoolId=" + SCHOOL);
+  check("analytics answers 200", stgAnalytics.status, 200);
+  check("but teachersBySubject is empty despite an assignment existing — the " +
+        "$unwind option is misspelled and a bare catch swallows the error",
+    stgAnalytics.body.analytics.teachersBySubject, []);
+  check("and so is classLoad, despite approved pupils in cls-1",
+    stgAnalytics.body.analytics.classLoad, []);
+  // The summary counts DO work, which is what makes the emptiness look like real
+  // data rather than a failure.
+  check("while the summary counts are real, so the screen looks fine",
+    stgAnalytics.body.analytics.summary.totalTeachers >= 2, true);
+
+  /**
+   * PUT /admin/settings/profile: the 409 nothing local can predict.
+   *
+   * The uniqueness check is User.findOne({ email, _id: { $ne: userId } }) with
+   * NO role filter and NO tenancy — every User in the deployment, students
+   * included, and students share addresses deliberately for siblings. The mirror
+   * holds at most this school's staff, so the refusal is unknowable here, and a
+   * queued one would stop the outbox with an unrelated payment behind it.
+   */
+  const stgProfileClash = await stgAsk("/api/admin/settings/profile",
+    { name: "Head", email: "bursar@x.com" });
+  check("a profile email held by a colleague is a 409 the mirror could not have " +
+        "predicted", stgProfileClash.status, 409);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the structure of the school: counts, the school day, assignments ---");
+
+  /**
+   * ── WHERE THIS GOES ─────────────────────────────────────────────────────
+   *
+   * After the class and subject sections, and after `meta` and `queue` are
+   * declared. It reuses Class, Subject, TeacherAssignment and UserModel from the
+   * subject fixtures rather than inserting a second set, and it adds rows to
+   * those collections — so spliced ABOVE them it would both fail to resolve the
+   * models and change the answers those sections assert.
+   *
+   * It ends by mutating the server on purpose (the create and delete probes) and
+   * puts the mirror back in step after each one, so a later section reading
+   * classes or subjects still sees two stores that agree.
+   *
+   * ── ONE MOUNT IS NEEDED BEFORE THIS SECTION CAN RUN ──────────────────────
+   *
+   * The period endpoints are NOT in admin.routes.js. They live in
+   * src/routes/periods.routes.js and src/server.js mounts them at
+   * /api/admin/periods, ABOVE the /api/admin mount — deliberately, with a
+   * comment saying why. This harness mounts only /api/admin, so every period
+   * request here currently reaches the admin router's catch-all and comes back
+   * as `Admin route not found`.
+   *
+   * It cannot be fixed by adding a mount after the fact: that catch-all answers
+   * before a later mount is reached. So the line has to go ABOVE the existing
+   * one, next to where the other routers are mounted:
+   *
+   *     app.use("/api/admin/periods", authenticate, require("../src/routes/periods.routes"));
+   *     app.use("/api/admin", authenticate, require("../src/routes/admin.routes"));
+   *
+   * Until it is there, the probe below says so and the period assertions are
+   * skipped rather than failing for a reason that has nothing to do with the
+   * handlers.
+   */
+
+  const Period = require("../src/db/models/Period");
+  await Period.init();
+
+  /**
+   * The school day, and the fixtures exist to hit each decision the controller
+   * makes rather than to look like a timetable:
+   *
+   *   per-1  an ordinary period, first in the order
+   *   per-2  a BREAK, and the one the toggle and the swap both touch
+   *   per-3  an ordinary period, the one that gets reordered
+   *   per-4  INACTIVE — still holds a place in the order, and is invisible to
+   *          everybody's overlap check
+   *   per-5  soft-deleted — out of the list, out of the ordering, and a 410 on
+   *          a second delete
+   *   per-9  another school's, which must never appear
+   *
+   * Every one carries `version`, because the update, toggle and delete paths all
+   * compute `existing.version + 1` and the desktop declines a row whose version
+   * is not a number rather than betting on when mongoose fills the default in.
+   */
+  await Period.collection.insertMany([
+    { _id: "per-1", schoolId: SCHOOL, name: "First",   startTime: "08:00", endTime: "08:55",
+      sortOrder: 1, isBreak: false, isActive: true,  version: 1, deletedAt: null, updatedAt: new Date() },
+    { _id: "per-2", schoolId: SCHOOL, name: "Break",   startTime: "08:55", endTime: "09:10",
+      sortOrder: 2, isBreak: true,  isActive: true,  version: 1, deletedAt: null, updatedAt: new Date() },
+    { _id: "per-3", schoolId: SCHOOL, name: "Second",  startTime: "09:10", endTime: "10:05",
+      sortOrder: 3, isBreak: false, isActive: true,  version: 1, deletedAt: null, updatedAt: new Date() },
+    { _id: "per-4", schoolId: SCHOOL, name: "Retired", startTime: "10:05", endTime: "11:00",
+      sortOrder: 4, isBreak: false, isActive: false, version: 1, deletedAt: null, updatedAt: new Date() },
+    { _id: "per-5", schoolId: SCHOOL, name: "Gone",    startTime: "11:00", endTime: "12:00",
+      sortOrder: 5, isBreak: false, isActive: true,  version: 1,
+      deletedAt: new Date("2026-05-01"), updatedAt: new Date() },
+    { _id: "per-9", schoolId: "other-school", name: "Elsewhere", startTime: "08:00", endTime: "09:00",
+      sortOrder: 1, isBreak: false, isActive: true,  version: 1, deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  /**
+   * Two more rows for the structure section, and a scratch class for the probes
+   * that have to actually delete something.
+   *
+   *   sub-orphan   a subject filed against a class id that does not exist. This
+   *                is all it takes for GET /admin/classes/stats to report a
+   *                class "with subjects" that the school does not have.
+   *   as-class     the ONLY assignment in these fixtures filed under `class`
+   *                rather than `classId`. Every other one uses classId, and the
+   *                assignment list filters on `class` — so without this row the
+   *                classId filter could not be shown to work at all.
+   *   cls-scratch  a class with no pupils, so the delete probes below have
+   *                something to destroy without disturbing cls-1..cls-9.
+   *   sub-free     a subject with no teacher assignment: deletable.
+   *   sub-held     a subject WITH one: a 409.
+   *   as-held      the assignment that holds sub-held, and that the class
+   *                delete cascades away.
+   *   as-extra     a second assignment, for the assignment-delete probe.
+   */
+  await Class.collection.insertOne(
+    { _id: "cls-scratch", schoolId: SCHOOL, name: "Scratch", isActive: true,
+      deletedAt: null, updatedAt: new Date() }
+  );
+  await Subject.collection.insertMany([
+    { _id: "sub-orphan", schoolId: SCHOOL, name: "Orphaned", classId: "cls-vanished",
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-free", schoolId: SCHOOL, name: "Unheld", classId: "cls-scratch",
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "sub-held", schoolId: SCHOOL, name: "Held", classId: "cls-scratch",
+      deletedAt: null, updatedAt: new Date() },
+  ]);
+  await TeacherAssignment.collection.insertMany([
+    { _id: "as-class", schoolId: SCHOOL, subject: "sub-2", teacher: "t1", class: "cls-3",
+      createdAt: new Date("2026-08-01"), deletedAt: null, updatedAt: new Date() },
+    { _id: "as-held", schoolId: SCHOOL, subject: "sub-held", teacher: "t1", class: "cls-scratch",
+      createdAt: new Date("2026-08-02"), deletedAt: null, updatedAt: new Date() },
+    { _id: "as-extra", schoolId: SCHOOL, subject: "sub-held", teacher: "t2", class: "cls-scratch",
+      createdAt: new Date("2026-08-03"), deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  for (const [name, Model] of Object.entries({
+    period: Period, class: Class, subject: Subject, teacherAssignment: TeacherAssignment,
+    // Users too, and not as a formality: an earlier section removes t2 from the
+    // mirror to simulate a bursar's gap and restores it, and the assignment list
+    // joins on both teachers. A mirror missing one would report an id where the
+    // server reports a name, and the diff would blame this handler.
+    user: UserModel,
+  })) {
+    docs.putMany(name, JSON.parse(JSON.stringify(await Model.find({}).lean())));
+  }
+
+  /** The same request, straight at the endpoint, so a refusal is never assumed. */
+  const askStructure = async (method, path, body) => {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: { "content-type": "application/json", authorization: `Bearer ${token}` },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    let payload = null;
+    try { payload = await res.json(); } catch { /* not every response is json */ }
+    return { status: res.status, body: payload };
+  };
+
+  const periodsMounted =
+    (await askStructure("GET", `/api/admin/periods?schoolId=${SCHOOL}`)).status === 200;
+  if (!periodsMounted) {
+    console.log("  ---- the periods router is not mounted here; see the note above. " +
+                "Every period assertion in this section is SKIPPED.");
+  }
+
+  // ── The counts on the dashboard ────────────────────────────────────────
+
+  await parity("class counts",   `/api/admin/classes/stats?schoolId=${SCHOOL}`);
+  await parity("subject counts", `/api/admin/subjects/stats?schoolId=${SCHOOL}`);
+
+  const classStats = api.handle({
+    method: "GET", path: "/api/admin/classes/stats", query: { schoolId: SCHOOL },
+  }, { docs }).data;
+
+  /**
+   * THE FINDING, stated as an assertion rather than left in a comment.
+   *
+   * `total` is active, undeleted classes: cls-1..cls-5 and cls-scratch, six.
+   * `withSubjects` is the number of DISTINCT CLASS IDS MENTIONED BY SUBJECTS,
+   * with no check that the class exists, is active or is undeleted: cls-1,
+   * cls-2, cls-scratch and cls-vanished, four — and cls-vanished is not a class
+   * at all. So the dashboard says "6 classes, 4 with subjects" while only three
+   * of the school's classes have any.
+   */
+  check("class total counts the active, undeleted classes", classStats.total, 6);
+  check("withSubjects counts class ids mentioned by subjects, existing or not",
+    classStats.withSubjects, 4);
+  check("and one of the four is not a class this school has",
+    docs.get("class", "cls-vanished"), null);
+
+  // ── Who takes what ────────────────────────────────────────────────────
+
+  await parity("teacher assignments",       `/api/admin/assignments?schoolId=${SCHOOL}`);
+  await parity("one teacher's assignments", `/api/admin/assignments?schoolId=${SCHOOL}&teacherId=t1`);
+  await parity("by subject",                `/api/admin/assignments?schoolId=${SCHOOL}&subjectId=sub-3`);
+  await parity("by class",                  `/api/admin/assignments?schoolId=${SCHOOL}&classId=cls-1`);
+  await parity("by class, the spelling the filter reads",
+    `/api/admin/assignments?schoolId=${SCHOOL}&classId=cls-3`);
+  await parity("a teacher with nothing",    `/api/admin/assignments?schoolId=${SCHOOL}&teacherId=nobody`);
+
+  const assignmentsFor = (query) => api.handle({
+    method: "GET", path: "/api/admin/assignments", query,
+  }, { docs }).data;
+
+  /**
+   * THE SECOND FINDING. The query parameter is classId and it is matched against
+   * the assignment's `class` field, never against `classId` — unlike
+   * GET /admin/subjects, which accepts both spellings for the same reason both
+   * spellings exist in the data. as-1..as-6 are all filed under classId, so
+   * filtering the assignment list by their class finds nothing at all, while
+   * as-class (filed under `class`) is found.
+   */
+  check("filtering by a class whose assignments use classId finds none of them",
+    assignmentsFor({ schoolId: SCHOOL, classId: "cls-1" }).count, 0);
+  /**
+   * And it is worse than a filter that misses them. The response's OWN classId is
+   * derived from the row's `class` field too, so an assignment filed under
+   * classId comes back with class: null and classId: null — a blank class column
+   * on the screen, for a row that names its class perfectly well in the database.
+   *
+   * That is why the filter finds nothing: there is nothing to find. Both facts
+   * are the same bug seen from two ends, and the fix is one line in
+   * handleGetAssignments.
+   */
+  check("they are in the unfiltered list, with no class on them at all",
+    assignmentsFor({ schoolId: SCHOOL }).assignments
+      .filter((a) => ["as-1", "as-2", "as-3", "as-4", "as-5"].includes(a._id))
+      // Sorted by id. All five rows have no createdAt, so they tie under the
+      // endpoint's only sort key and their order is the storage engine's — which
+      // is what the note on byCreatedAtDesc says. Pinning that order here would
+      // assert a coincidence; the contents are the finding.
+      .map((a) => [a._id, a.class, a.classId]).sort(),
+    [["as-1", null, null], ["as-2", null, null], ["as-3", null, null],
+     ["as-4", null, null], ["as-5", null, null]]);
+  check("while the row in the database says which class it is",
+    docs.get("teacherAssignment", "as-1").classId, "cls-1");
+  check("and the filter does work for a row filed under `class`",
+    assignmentsFor({ schoolId: SCHOOL, classId: "cls-3" }).assignments.map((a) => a._id),
+    ["as-class"]);
+
+  /**
+   * THE THIRD FINDING. The subject is projected with .select("name code class
+   * classId") — no coefficient — and then run through normaliseSubject(), which
+   * defaults a missing coefficient to 1. So every subject on this screen reads
+   * as coefficient 1 whatever the school set, and a school using coefficients
+   * cannot see them here.
+   *
+   * Set on the real subject first, so the assertion is about the projection and
+   * not about the fixture never having had a value.
+   */
+  await Subject.collection.updateOne({ _id: "sub-1" }, { $set: { coefficient: 4 } });
+  docs.put("subject", JSON.parse(JSON.stringify(await Subject.findById("sub-1").lean())));
+
+  await parity("assignments, with a coefficient the projection drops",
+    `/api/admin/assignments?schoolId=${SCHOOL}&subjectId=sub-1`);
+  check("a coefficient of 4 is reported as 1 by the assignment list",
+    assignmentsFor({ schoolId: SCHOOL, subjectId: "sub-1" }).assignments[0].subject.coefficient, 1);
+  check("while the subject list reports the real one",
+    api.handle({ method: "GET", path: "/api/admin/subjects", query: { schoolId: SCHOOL } }, { docs })
+      .data.subjects.find((s) => s._id === "sub-1").coefficient, 4);
+
+  /**
+   * An unresolvable reference keeps its id here and becomes null in the subject
+   * list — two endpoints, two answers, because one spreads an empty map and the
+   * other goes through populate(). Worth pinning: a screen that reads
+   * assignment.teacher.name would print undefined rather than falling into its
+   * "unassigned" branch.
+   */
+  check("a teacher this machine does not hold is an id and nothing else",
+    assignmentsFor({ schoolId: SCHOOL }).assignments.find((a) => a._id === "as-6").teacher,
+    { _id: "ghost" });
+
+  // ── The school day ────────────────────────────────────────────────────
+
+  if (periodsMounted) {
+    await parity("the school day", `/api/admin/periods?schoolId=${SCHOOL}`);
+    await parity("including the retired ones",
+      `/api/admin/periods?schoolId=${SCHOOL}&includeInactive=true`);
+
+    const day = api.handle({
+      method: "GET", path: "/api/admin/periods", query: { schoolId: SCHOOL },
+    }, { docs }).data;
+
+    check("in sortOrder, and keyed `data` rather than `periods`",
+      day.data.map((p) => p._id), ["per-1", "per-2", "per-3"]);
+    check("with a count beside it", day.count, 3);
+    // includeInactive here drops ONLY the isActive filter — unlike
+    // GET /admin/classes, where the same parameter drops the deleted filter too.
+    // One parameter name, two meanings, and this is the assertion that says so.
+    check("includeInactive brings back the retired period and NOT the deleted one",
+      api.handle({
+        method: "GET", path: "/api/admin/periods",
+        query: { schoolId: SCHOOL, includeInactive: "true" },
+      }, { docs }).data.data.map((p) => p._id),
+      ["per-1", "per-2", "per-3", "per-4"]);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- a class, a subject and the school day changed with no connection ---");
+
+  const structureSession = {
+    userId: "admin-1", role: ROLES.SCHOOL_ADMIN, schoolId: SCHOOL,
+    permissions: ["classes.manage", "subjects.manage", "periods.manage", "teachers.manage"],
+  };
+  const structureCtx = { docs, meta, queue, session: structureSession };
+
+  // ── Renaming a class ──────────────────────────────────────────────────
+
+  const renamed = api.handle({
+    method: "PUT", path: "/api/admin/classes/cls-4", query: {},
+    body: { name: "  Zebra House  ", section: "  B  " },
+  }, structureCtx);
+
+  check("a class rename is accepted locally", renamed?.status, 200);
+  check("and queued", renamed?.queued, true);
+  check("the name is trimmed the way the endpoint trims it",
+    renamed.data.class.name, "Zebra House");
+  // The endpoint does NOT trim section — the SCHEMA does, and the stored value is
+  // therefore trimmed. A mirror keeping the untrimmed string would disagree with
+  // the server about a field nobody had changed.
+  check("and so is a field only the schema trims", renamed.data.class.section, "B");
+  check("with the `id` alias toObject() adds on this model", renamed.data.class.id, "cls-4");
+  check("the row is in the mirror, not yet sent", docs.get("class", "cls-4")?._pending, true);
+  check("and keeps a field the edit never mentioned",
+    docs.get("class", "cls-4")?.isActive, true);
+
+  // Each decline, against the real refusal.
+  const classRejections = [
+    // `name.trim()` on a number is a TypeError before mongoose sees it.
+    ["a name that is not a string", { name: 7 }],
+    // maxlength 100, under runValidators.
+    ["a name over 100 characters",  { name: "x".repeat(101) }],
+    // Not in mongoose's boolean conversion sets, so a CastError.
+    ["isActive as arbitrary prose", { isActive: "maybe" }],
+  ];
+  for (const [what, body] of classRejections) {
+    check(`not queued: ${what}`,
+      api.handle({ method: "PUT", path: "/api/admin/classes/cls-5", query: {}, body },
+        structureCtx),
+      null);
+    const refused = await askStructure("PUT", "/api/admin/classes/cls-5", body);
+    check(`and the server really does refuse it: ${what}`, refused.status >= 400, true);
+  }
+
+  /**
+   * ── The one that answers 500, which is worse than a 400 ──────────────────
+   *
+   * A name of "   " trims to "" and the endpoint sets it. Mongoose's update
+   * validators DO run `required` on a path that is in the update, so this is a
+   * ValidationError — and nothing maps it, so it surfaces as a 500.
+   *
+   * That matters more than the wrong number. The outbox treats 5xx as
+   * RETRYABLE, on the reasonable theory that a server error is transient. This
+   * one never will be: the same body fails the same way for ever, so a queued
+   * write like it would retry on every cycle until somebody looked. A 409 stops
+   * the queue and asks for a person; a 500 does not even do that.
+   *
+   * The handler declines it, so it is never queued from here. Reported for the
+   * same ValidationError → 400 mapping that PUT /admin/settings/grading just
+   * got. Asserted as "refused" rather than as 500 so the assertion survives the
+   * fix, with the current status printed beside it.
+   */
+  {
+    const blank = await askStructure("PUT", "/api/admin/classes/cls-scratch", { name: "   " });
+    check("not queued: a name that is only spaces",
+      api.handle({ method: "PUT", path: "/api/admin/classes/cls-scratch", query: {},
+        body: { name: "   " } }, structureCtx),
+      null);
+    check("and the server refuses it: a name that is only spaces",
+      blank.status >= 400, true);
+    console.log(`  ---- and it refuses it with ${blank.status}` +
+      (blank.status === 500 ? " — a ValidationError surfacing uncaught, and retryable" : ""));
+    // Put the mirror back in step whatever happened, so nothing downstream sees
+    // a class that differs between the two stores.
+    docs.put("class", JSON.parse(JSON.stringify(await Class.findById("cls-scratch").lean())));
+  }
+
+  /**
+   * Deliberately stricter than the server, and said out loud.
+   *
+   * Mongoose coerces "yes", "no", "1" and "0" to booleans. This layer does not
+   * reproduce that table — a wrong entry in it would queue a CastError — so any
+   * non-boolean is declined. cls-6 is already inactive, so the probe changes
+   * nothing.
+   */
+  check("a coercible non-boolean is declined too",
+    api.handle({ method: "PUT", path: "/api/admin/classes/cls-6", query: {},
+      body: { isActive: "no" } }, structureCtx),
+    null);
+  {
+    const coerced = await askStructure("PUT", "/api/admin/classes/cls-6", { isActive: "no" });
+    check("even though the server would have taken it", coerced.status, 200);
+    docs.put("class", JSON.parse(JSON.stringify(await Class.findById("cls-6").lean())));
+  }
+
+  /**
+   * THE FOURTH FINDING, and the one with teeth: this path has no uniqueness
+   * check and there is no unique index behind it either. POST /admin/classes
+   * refuses a duplicate name with a 409; PUT happily makes one.
+   *
+   * Reproduced rather than guarded, because a local check the server does not
+   * make would decline a write the server accepts and the rename would need a
+   * connection. Asserted so that if the endpoint ever grows the check, the
+   * mirror is known to need it too — this assertion is what will fail.
+   */
+  {
+    const duplicate = await askStructure("PUT", "/api/admin/classes/cls-3", { name: "Form 1" });
+    check("renaming one class onto another's name is accepted by the server",
+      duplicate.status, 200);
+    check("and the school now has two classes called Form 1",
+      await Class.countDocuments({ schoolId: SCHOOL, name: "Form 1", isActive: true }), 2);
+    check("which the local handler also allows, because the server does",
+      api.handle({ method: "PUT", path: "/api/admin/classes/cls-3", query: {},
+        body: { name: "Form 1" } }, structureCtx)?.status,
+      200);
+    // Undo it on both sides: a duplicate name would make every later comparison
+    // of the class list about this probe rather than about the handler.
+    await Class.collection.updateOne({ _id: "cls-3" },
+      { $set: { name: "Form 2", updatedAt: new Date() } });
+    docs.put("class", JSON.parse(JSON.stringify(await Class.findById("cls-3").lean())));
+    // The queued rename of cls-3 goes with it. Left in the outbox it would
+    // re-apply the duplicate on the next cycle.
+    for (const item of queue.all()) {
+      if (item.path === "/api/admin/classes/cls-3") queue.discard(item.seq);
+    }
+  }
+
+  // ── Editing a subject ─────────────────────────────────────────────────
+
+  const editedSubject = api.handle({
+    method: "PUT", path: "/api/admin/subjects/sub-1", query: {},
+    body: { name: "Further Mathematics", code: " MTH ", coefficient: "2.567" },
+  }, structureCtx);
+
+  check("a subject edit is accepted locally", editedSubject?.status, 200);
+  check("and is its own queue entry, not a duplicate of the class rename",
+    editedSubject?.duplicate, false);
+  check("the code is trimmed", editedSubject.data.subject.code, "MTH");
+  // parseCoefficient rounds to two places. A coefficient is a MULTIPLIER here —
+  // 2 means "counts double" — while ExamSubject.weight is percentage-style, and
+  // nothing converts between them on this path.
+  check("the coefficient is rounded to two places",
+    editedSubject.data.subject.coefficient, 2.57);
+  check("the teacher is joined onto the response",
+    editedSubject.data.subject.teacher._id, "t1");
+  // .lean() on this endpoint, so no `id` alias — unlike the class response above.
+  // Same router, two conventions, and a screen reading `.id` gets undefined.
+  check("and there is no `id` alias on this one",
+    Object.prototype.hasOwnProperty.call(editedSubject.data.subject, "id"), false);
+
+  const subjectRejections = [
+    ["a coefficient of zero",        { coefficient: 0 }],
+    ["a coefficient above twenty",   { coefficient: 21 }],
+    ["a coefficient that is prose",  { coefficient: "heavy" }],
+    ["a class that does not exist",  { classId: "cls-vanished" }],
+    ["a name that is only spaces",   { name: "   " }],
+    ["a code that is not a string",  { code: 12 }],
+  ];
+  for (const [what, body] of subjectRejections) {
+    check(`not queued: ${what}`,
+      api.handle({ method: "PUT", path: "/api/admin/subjects/sub-2", query: {}, body },
+        structureCtx),
+      null);
+    const refused = await askStructure("PUT", "/api/admin/subjects/sub-2", body);
+    check(`and the server really does refuse it: ${what}`, refused.status >= 400, true);
+  }
+
+  // 403 and not 404, and not the 422 with a CLASS_NOT_SYNCED code that
+  // POST /admin/subjects answers for the identical condition. A screen handling
+  // one of those does not handle the other.
+  check("an unknown class on an edit is a 403",
+    (await askStructure("PUT", "/api/admin/subjects/sub-2", { classId: "cls-vanished" })).status,
+    403);
+
+  check("somebody without subjects.manage is not queued",
+    api.handle({ method: "PUT", path: "/api/admin/subjects/sub-2", query: {},
+      body: { name: "Nope" } },
+      { docs, meta, queue, session: { ...structureSession, permissions: ["subjects.view"] } }),
+    null);
+
+  // ── The connection comes back ─────────────────────────────────────────
+
+  const structureClient = client({ meta });
+  structureClient.setServerUrl(`http://127.0.0.1:${port}`);
+  structureClient.setToken(token);
+
+  // The cursor in this file is set from fixtures dated across a school year, so
+  // it sits in the future and nothing written during the run would be pulled.
+  for (const collection of ["class", "subject", "period"]) {
+    db.prepare("DELETE FROM sync_state WHERE collection = ?").run(collection);
+  }
+
+  const structureEngine = engine({
+    docs, queue, state: store.state(db), client: structureClient,
+    feedCollections: ["class", "subject", "period"],
+  });
+
+  await structureEngine.cycle();
+
+  check("both requests drained", queue.all().length, 0);
+  check("and the class settled", docs.get("class", "cls-4")?._pending, false);
+
+  const onServerClass = await Class.findById("cls-4").lean();
+  check("the server has the new name", onServerClass?.name, "Zebra House");
+  check("and the section, trimmed", onServerClass?.section, "B");
+  check("a field the edit never mentioned is untouched", onServerClass?.isActive, true);
+
+  const onServerSubject = await Subject.findById("sub-1").lean();
+  check("the subject was renamed", onServerSubject?.name, "Further Mathematics");
+  // 2.567 rounded to two places by parseCoefficient, on both sides.
+  check("with its coefficient", onServerSubject?.coefficient, 2.57);
+  check("and the class it was already in", onServerSubject?.classId, "cls-1");
+
+  await parity("the class list, after a round trip", `/api/admin/classes?schoolId=${SCHOOL}`);
+  await parity("subjects, after a round trip",       `/api/admin/subjects?schoolId=${SCHOOL}`);
+  await parity("class counts, after a round trip",   `/api/admin/classes/stats?schoolId=${SCHOOL}`);
+
+  /**
+   * ── An edit from a stale mirror must not revert somebody else ─────────────
+   *
+   * The same property the exam section pins, asserted again here because these
+   * endpoints build their updates the same way and a handler that sent the whole
+   * document would look correct in every test where one machine is the only
+   * writer.
+   */
+  await Subject.collection.updateOne({ _id: "sub-1" },
+    { $set: { description: "Set from the web", updatedAt: new Date() } });
+  check("another machine's change is on the server",
+    (await Subject.findById("sub-1").lean())?.description, "Set from the web");
+  check("and this mirror has not seen it",
+    docs.get("subject", "sub-1")?.description, undefined);
+
+  api.handle({ method: "PUT", path: "/api/admin/subjects/sub-1", query: {},
+    body: { code: "FMTH" } }, structureCtx);
+  await structureEngine.cycle();
+
+  {
+    const both = await Subject.findById("sub-1").lean();
+    check("the offline edit landed", both?.code, "FMTH");
+    check("and the other machine's field survived it", both?.description, "Set from the web");
+  }
+
+  // ── The school day, changed offline ───────────────────────────────────
+
+  if (periodsMounted) {
+    const retimed = api.handle({
+      method: "PUT", path: "/api/admin/periods/per-1", query: {},
+      body: { endTime: "08:50" },
+    }, structureCtx);
+    check("a retime is accepted locally", retimed?.status, 200);
+    check("keyed `data`, with the id alias the Period schema adds",
+      retimed.data.data.id, "per-1");
+    check("and the version is bumped", retimed.data.data.version, 2);
+
+    // 409. An overlap with an ACTIVE period, which is the one that would stop
+    // the outbox.
+    check("an overlap is not queued",
+      api.handle({ method: "PUT", path: "/api/admin/periods/per-1", query: {},
+        body: { endTime: "09:00" } }, structureCtx),
+      null);
+    check("and the server really answers 409",
+      (await askStructure("PUT", "/api/admin/periods/per-1", { endTime: "09:00" })).status, 409);
+
+    // But an INACTIVE period holds no ground: checkOverlap filters isActive, so
+    // per-4's hour is free for anybody. Reproduced because it is the endpoint's
+    // rule, not because it is a good one.
+    check("overlapping an inactive period is fine",
+      api.handle({ method: "PUT", path: "/api/admin/periods/per-3", query: {},
+        body: { endTime: "10:30" } }, structureCtx)?.status,
+      200);
+
+    const periodRejections = [
+      ["a one-digit hour",          { startTime: "8:00" }],
+      ["an end before the start",   { endTime: "07:00" }],
+    ];
+    for (const [what, body] of periodRejections) {
+      check(`not queued: ${what}`,
+        api.handle({ method: "PUT", path: "/api/admin/periods/per-2", query: {}, body },
+          structureCtx),
+        null);
+      check(`and the server refuses it: ${what}`,
+        (await askStructure("PUT", "/api/admin/periods/per-2", body)).status, 400);
+    }
+
+    /**
+     * "25:99" IS a valid time to this endpoint — isValidTime is two digits, a
+     * colon, two digits, and says nothing about hours below 24. Queued, because
+     * a mirror that refused it would refuse a write the server takes and the
+     * form would work online and not offline. Asserted so the behaviour is on
+     * the record as the server's rather than as a bug in the handler.
+     */
+    check("a nonsense time the regex accepts is queued too",
+      api.handle({ method: "PUT", path: "/api/admin/periods/per-4", query: {},
+        body: { startTime: "25:00", endTime: "25:99" } }, structureCtx)?.status,
+      200);
+
+    check("a deleted period is a 404 and is not queued",
+      api.handle({ method: "PUT", path: "/api/admin/periods/per-5", query: {},
+        body: { endTime: "12:30" } }, structureCtx),
+      null);
+    check("and the server agrees",
+      (await askStructure("PUT", "/api/admin/periods/per-5", { endTime: "12:30" })).status, 404);
+
+    check("another school's period is not ours to edit",
+      api.handle({ method: "PUT", path: "/api/admin/periods/per-9", query: {},
+        body: { endTime: "09:30" } }, structureCtx),
+      null);
+    /**
+     * THE FIFTH FINDING, now fixed on the server — so this asserts the fix.
+     *
+     * update, toggleActive, reorder and remove each began with
+     * Period.findById(id) and then worked from `period.schoolId` — the ROW's
+     * school, never the caller's. Their 404 meant "no such period", not "not
+     * yours", so anybody holding periods.manage could rewrite, disable, reorder
+     * or delete another school's timetable given only an id.
+     *
+     * findPeriodForCaller() closes it, and deliberately does not consult
+     * resolveSchoolId: that one honours ?schoolId for a super_admin, and a
+     * tenancy check that read the request would let a caller authorise
+     * themselves by naming the school they wanted.
+     *
+     * 404 rather than 403 is the right refusal: somebody outside a school should
+     * not learn that one of its periods exists.
+     *
+     * The desktop declined this before the fix and declines it now, for a
+     * different reason — it holds one school's periods and has never heard of
+     * that row. Both sides refusing for different reasons is fine; both sides
+     * ACCEPTING was the bug.
+     */
+    check("and the SERVER refuses it too, now that the write paths are scoped",
+      (await askStructure("PUT", "/api/admin/periods/per-9", { endTime: "09:30" })).status, 404);
+    check("without saying whether such a period exists",
+      (await askStructure("PUT", "/api/admin/periods/per-9", { endTime: "09:30" })).body?.message,
+      "Period not found");
+    check("and the other school's period is untouched",
+      (await Period.findById("per-9").lean())?.endTime, "09:00");
+
+    // ── The toggle, the swap and the retirement ─────────────────────────
+
+    const toggled = api.handle({
+      method: "PATCH", path: "/api/admin/periods/per-2/toggle", query: {}, body: {},
+    }, structureCtx);
+    check("the toggle is accepted", toggled?.status, 200);
+    check("and flips isActive", toggled.data.data.isActive, false);
+    check("bumping the version", toggled.data.data.version, 2);
+
+    /**
+     * ── The multi-document write ─────────────────────────────────────────
+     *
+     * A reorder is a neighbour SWAP: two rows change, and the second goes in
+     * `also` so that the queue entry names it. A row nothing settles stays
+     * pending for ever, and a pending row is never overwritten by a pull — so
+     * without this the neighbour would hold this machine's guess at its position
+     * permanently and the two halves of one swap would disagree.
+     *
+     * Bounded, which is why it can be queued at all: two documents, named
+     * individually. No bulkWrite, no updateMany, no unbounded set.
+     */
+    const moved = api.handle({
+      method: "POST", path: "/api/admin/periods/per-3/reorder", query: {},
+      body: { direction: "up" },
+    }, structureCtx);
+
+    check("the swap is accepted", moved?.status, 200);
+    check("the response is a two-element array, moved first",
+      moved.data.data.map((p) => p._id), ["per-3", "per-2"]);
+    check("the moved period takes its neighbour's place", moved.data.data[0].sortOrder, 2);
+    check("and the neighbour takes its",                 moved.data.data[1].sortOrder, 3);
+    // A reorder is the one period write that does NOT touch version. Both rows
+    // are already at 2 — per-3 from the retime above, per-2 from the toggle — and
+    // what this asserts is that the swap left them there.
+    check("no version bump on either row",
+      [moved.data.data[0].version, moved.data.data[1].version], [2, 2]);
+    check("BOTH rows are in the mirror and both are pending",
+      [docs.get("period", "per-3")?._pending, docs.get("period", "per-2")?._pending],
+      [true, true]);
+
+    check("moving the first period up is a 400 and is not queued",
+      api.handle({ method: "POST", path: "/api/admin/periods/per-1/reorder", query: {},
+        body: { direction: "up" } }, structureCtx),
+      null);
+    check("and the server really answers 400",
+      (await askStructure("POST", "/api/admin/periods/per-1/reorder", { direction: "up" })).status,
+      400);
+    check("a direction that is neither up nor down is not queued",
+      api.handle({ method: "POST", path: "/api/admin/periods/per-1/reorder", query: {},
+        body: { direction: "sideways" } }, structureCtx),
+      null);
+    check("also a 400 on the server",
+      (await askStructure("POST", "/api/admin/periods/per-1/reorder", { direction: "sideways" })).status,
+      400);
+
+    const retired = api.handle({
+      method: "DELETE", path: "/api/admin/periods/per-4", query: {}, body: {},
+    }, structureCtx);
+    check("retiring a period is accepted", retired?.status, 200);
+    check("with a message, not the period", retired.data,
+      { success: true, message: "Period deleted" });
+    check("it is SOFT, which is why this delete can be mirrored at all",
+      Boolean(docs.get("period", "per-4")?.deletedAt), true);
+
+    // 410 Gone, not 404, and it would stop the outbox exactly the same.
+    check("a second delete is not queued",
+      api.handle({ method: "DELETE", path: "/api/admin/periods/per-4", query: {}, body: {} },
+        structureCtx),
+      null);
+    check("and the already-deleted per-5 is a 410 on the server",
+      (await askStructure("DELETE", "/api/admin/periods/per-5")).status, 410);
+
+    /**
+     * Two periods sharing a sortOrder make the neighbour ambiguous: the
+     * endpoint's .sort() picks between equals and nothing says which. The two
+     * sides could swap DIFFERENT pairs, and the queue entry would then name a
+     * row the server never touched — so the handler declines and lets the server
+     * make the only choice that is made.
+     *
+     * Worth knowing how easily this happens: sortOrder defaults to 0, so a
+     * school whose periods were inserted without one cannot reorder at all.
+     */
+    await Period.collection.insertOne(
+      // sortOrder 2, which is where per-3 landed after the swap — so per-2, now
+      // at 3, has TWO periods one place below it and no way to say which.
+      { _id: "per-tie", schoolId: SCHOOL, name: "Tie", startTime: "13:00", endTime: "13:55",
+        sortOrder: 2, isBreak: false, isActive: true, version: 1,
+        deletedAt: null, updatedAt: new Date() }
+    );
+    docs.put("period", JSON.parse(JSON.stringify(await Period.findById("per-tie").lean())));
+    check("an ambiguous neighbour goes to the network rather than being guessed at",
+      api.handle({ method: "POST", path: "/api/admin/periods/per-2/reorder", query: {},
+        body: { direction: "up" } }, structureCtx),
+      null);
+
+    check("somebody without periods.manage is not queued",
+      api.handle({ method: "PATCH", path: "/api/admin/periods/per-1/toggle", query: {}, body: {} },
+        { docs, meta, queue, session: { ...structureSession, permissions: ["periods.view"] } }),
+      null);
+
+    // ── Reconnecting ───────────────────────────────────────────────────
+
+    await structureEngine.cycle();
+    check("every period request drained", queue.all().length, 0);
+    check("and the swapped neighbour settled — the row `also` exists for",
+      docs.get("period", "per-2")?._pending, false);
+
+    // Not named `server`: that is the harness's listening HTTP server two
+    // hundred lines up, and shadowing it inside this block is how a later edit
+    // here comes to fetch from a Map.
+    const strDayOnServer = new Map(
+      (await Period.find({ schoolId: SCHOOL }).lean()).map((p) => [p._id, p])
+    );
+    check("the retime reached the server", strDayOnServer.get("per-1").endTime, "08:50");
+    check("the toggle did",               strDayOnServer.get("per-2").isActive, false);
+    check("and the retirement did",
+      Boolean(strDayOnServer.get("per-4").deletedAt), true);
+
+    /**
+     * ── The swap, and why it did not move the row the mirror predicted ───────
+     *
+     * The queued reorder was computed against a mirror in which per-2 was the
+     * only period one place below per-3. By the time it was REPLAYED, per-tie
+     * had been inserted at the same sortOrder — so the endpoint's
+     * findOne(...).sort({ sortOrder: -1 }) had two equal candidates and picked
+     * between them, and it did not pick the one this machine had guessed.
+     *
+     * This is the ambiguity the handler declines on, arriving by the back door:
+     * declining at write time cannot help when the tie appears between the write
+     * and its replay. What saves the mirror is push-then-pull — the pull in the
+     * same cycle replaces both rows with the server's, so the wrong guess lives
+     * for one cycle and not longer. That is the property worth pinning, and it
+     * is the last assertion below.
+     *
+     * So: per-3 definitely gives up its place, and exactly one of the two rows
+     * sharing the position below it definitely takes per-3's. WHICH one is the
+     * storage engine's choice — reverse index order here, which happens to be
+     * the newer row — and is not something either side promises.
+     */
+    check("the reordered period took the position below it",
+      strDayOnServer.get("per-3").sortOrder, 2);
+    {
+      const shared = ["per-2", "per-tie"];
+      check("and exactly one of the two rows sharing that position took its place",
+        [shared.filter((id) => strDayOnServer.get(id).sortOrder === 3).length,
+         shared.filter((id) => strDayOnServer.get(id).sortOrder === 2).length],
+        [1, 1]);
+      // THE ASSERTION THAT MATTERS. The mirror guessed per-2 and the server chose
+      // per-tie; both rows are named on the queue entry, so both settled, and the
+      // pull then corrected them. A row that had settled and NOT been corrected
+      // would disagree with the school for ever.
+      check("and the mirror agrees with the server about which one it was",
+        ["per-1", "per-2", "per-3", "per-tie"].map((id) => docs.get("period", id).sortOrder),
+        ["per-1", "per-2", "per-3", "per-tie"].map((id) => strDayOnServer.get(id).sortOrder));
+    }
+
+    await parity("the school day, after a round trip", `/api/admin/periods?schoolId=${SCHOOL}`);
+    await parity("including the retired ones, after a round trip",
+      `/api/admin/periods?schoolId=${SCHOOL}&includeInactive=true`);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the seven writes in this domain that are NOT queued ---");
+
+  /**
+   * Each of these must be unanswered locally, and each for a stated reason. The
+   * api.handle() calls below pass trivially — there is no route registered — so
+   * what they actually assert is "this request goes over the network", which is
+   * the property that matters. The server side of each pair is what makes the
+   * reason checkable.
+   *
+   * The probes from here on MUTATE the server, so each one puts the mirror back
+   * in step afterwards. Two of them do it with docs.forget(), which is the whole
+   * problem: the write layer has no way to say "this row is gone", so the
+   * harness has to do by hand what a handler cannot describe.
+   */
+
+  // ── 1. PATCH /admin/classes/:id/toggle-active — the route does not exist ──
+  check("the class toggle is not queued",
+    api.handle({ method: "PATCH", path: "/api/admin/classes/cls-5/toggle-active",
+      query: {}, body: {} }, structureCtx),
+    null);
+  {
+    const missing = await askStructure("PATCH", "/api/admin/classes/cls-5/toggle-active");
+    check("because the endpoint does not exist — the console calls a 404",
+      missing.status, 404);
+    check("and it is the admin router's catch-all saying so",
+      String(missing.body?.message || "").startsWith("Admin route not found"), true);
+  }
+
+  // ── 2, 3, 4. The creates: the server picks the id ────────────────────────
+  for (const [what, path, body] of [
+    ["a class",   "/api/admin/classes",  { id: "client-cls", name: "Form 3", schoolId: SCHOOL }],
+    ["a subject", "/api/admin/subjects", { id: "client-sub", name: "Geography",
+                                          classId: "cls-1", schoolId: SCHOOL }],
+  ]) {
+    check(`creating ${what} is not queued`,
+      api.handle({ method: "POST", path, query: {}, body }, structureCtx), null);
+
+    const created = await askStructure("POST", path, body);
+    check(`the server accepts ${what}`, created.status, 201);
+    // THE REASON. The endpoint reads body.id, echoes it back as clientId, and
+    // then lets the model's default generate _id anyway — so the reply describes
+    // a row this machine has never heard of while the row it wrote sits
+    // orphaned. It is a mapping hint for a client that can remap ids; this one
+    // stores documents under the id it chose and cannot.
+    check(`and gives ${what} an id of its own`, created.body.serverId === body.id, false);
+    check(`while echoing the client's id back as a hint`, created.body.clientId, body.id);
+  }
+  // Both new rows into the mirror, so no later comparison is about this probe.
+  for (const [name, Model] of Object.entries({ class: Class, subject: Subject })) {
+    docs.putMany(name, JSON.parse(JSON.stringify(await Model.find({}).lean())));
+  }
+
+  /**
+   * Deliberately NOT against cls-scratch or its subjects.
+   *
+   * It was, and it made the subject-delete probe below answer 409 instead of 200:
+   * this create gives the subject a teacher assignment, and
+   * DELETE /admin/subjects/:id refuses a subject that has one. The probe was
+   * quietly testing its own side effect.
+   *
+   * cls-2 and sub-5 instead. t2 has no assignment there — as-6 files sub-5 under
+   * a teacher who does not exist — so the unique index is satisfied and nothing
+   * the delete probes touch is affected.
+   */
+  const strNewAssignment =
+    { teacherId: "t2", classId: "cls-2", subjectId: "sub-5", schoolId: SCHOOL };
+
+  check("creating an assignment is not queued",
+    api.handle({ method: "POST", path: "/api/admin/assignments", query: {},
+      body: strNewAssignment }, structureCtx),
+    null);
+  {
+    // This one does not even read an id from the body: TeacherAssignment.create
+    // hard-codes uuidv4().
+    const created = await askStructure("POST", "/api/admin/assignments", strNewAssignment);
+    check("the server accepts it", created.status, 201);
+    check("under an id it generated, with nothing echoed back",
+      created.body.assignment.id.length, 36);
+    docs.putMany("teacherAssignment",
+      JSON.parse(JSON.stringify(await TeacherAssignment.find({}).lean())));
+  }
+
+  // ── 5, 6, 7. The deletes: a mirror cannot remove a row ──────────────────
+
+  /**
+   * THE SIXTH FINDING, and the one that decides three of these seven.
+   *
+   * A write handler describes rows to WRITE — `doc` and `also` both go through
+   * docs.put — so there is no way to say "and this row is gone". Nor can the
+   * sync feed ever say it: the feed sends documents that EXIST, so a row the
+   * server hard-deleted is never mentioned again and a local copy of it sits on
+   * the machine for ever.
+   *
+   * Marking it deleted locally does not help either, because GET /admin/subjects
+   * applies no deleted filter at all — the subject would keep appearing on the
+   * screen that had just deleted it. Every assertion below is the harness doing
+   * with docs.forget() what a handler has no way to ask for.
+   */
+  for (const [what, path] of [
+    ["a subject",    "/api/admin/subjects/sub-free"],
+    ["an assignment", "/api/admin/assignments/as-extra"],
+    ["a class",      "/api/admin/classes/cls-scratch"],
+  ]) {
+    check(`deleting ${what} is not queued`,
+      api.handle({ method: "DELETE", path, query: {}, body: {} }, structureCtx), null);
+  }
+
+  // The 409s first, because they are the interesting refusals and neither
+  // mutates anything.
+  check("a subject with a teacher assignment cannot be deleted",
+    (await askStructure("DELETE", "/api/admin/subjects/sub-held")).status, 409);
+  check("nor a class with pupils in it",
+    (await askStructure("DELETE", "/api/admin/classes/cls-1")).status, 409);
+  /**
+   * Which pupils hold it open, rather than how many.
+   *
+   * A count here was wrong twice over: cls-1 also holds rows the admissions
+   * section inserts, so the number is not this section's to know, and a count
+   * assertion would have stayed green if addNotDeleted were dropped and some
+   * other fixture added. What the 409 turns on is that the SOFT-DELETED pupil is
+   * not one of the ones holding the class.
+   */
+  {
+    const inClassOne = await Student
+      .find({ schoolId: SCHOOL, classId: "cls-1" }).select("_id deletedAt").lean();
+    check("the soft-deleted pupil is in the class",
+      inClassOne.some((s) => s._id === "p4"), true);
+    check("but is not among the ones holding it open",
+      inClassOne.filter((s) => !s.deletedAt).some((s) => s._id === "p4"), false);
+    check("while the live ones are",
+      inClassOne.filter((s) => !s.deletedAt).map((s) => s._id).includes("p1"), true);
+  }
+
+  // Then the ones that succeed, each followed by the hand-cleanup.
+  {
+    const gone = await askStructure("DELETE", "/api/admin/assignments/as-extra");
+    check("an assignment delete is a HARD delete", gone.status, 200);
+    check("the row is off the server entirely",
+      await TeacherAssignment.countDocuments({ _id: "as-extra" }), 0);
+    // Nothing in the sync feed will ever mention it again, so the mirror can only
+    // be corrected by hand. This line is the missing primitive, written out.
+    docs.forget("teacherAssignment", "as-extra");
+  }
+
+  {
+    const gone = await askStructure("DELETE", "/api/admin/subjects/sub-free");
+    check("a subject delete is a HARD delete", gone.status, 200);
+    check("the row is off the server entirely",
+      await Subject.countDocuments({ _id: "sub-free" }), 0);
+    docs.forget("subject", "sub-free");
+  }
+
+  {
+    const gone = await askStructure("DELETE", "/api/admin/classes/cls-scratch");
+    check("a class with no pupils is deleted", gone.status, 200);
+    // The class itself is SOFT-deleted…
+    check("the class row survives, soft-deleted",
+      Boolean((await Class.findById("cls-scratch").lean())?.deletedAt), true);
+    // …and its subjects and assignments are removed outright. THIS is the
+    // cascade that cannot be mirrored: one request, hard deletes across two
+    // other collections.
+    check("but its subject is gone outright",
+      await Subject.countDocuments({ _id: "sub-held" }), 0);
+    check("and so is the teacher assignment that held it",
+      await TeacherAssignment.countDocuments({ _id: "as-held" }), 0);
+    check("with a count of the subjects it removed", gone.body.deletedSubjects, 1);
+    // THE SEVENTH FINDING: class.service.ts reads data.deletedAssignments and
+    // the endpoint never sends it, so the office is always told nothing was
+    // unassigned however many teachers just lost the class.
+    check("and no count of the assignments, which the console does read",
+      Object.prototype.hasOwnProperty.call(gone.body, "deletedAssignments"), false);
+
+    docs.put("class", JSON.parse(JSON.stringify(await Class.findById("cls-scratch").lean())));
+
+    /**
+     * ── The cleanup a handler would have had to do, and cannot ───────────────
+     *
+     * Naming the rows was not enough. deleteMany takes EVERY subject and EVERY
+     * assignment for the class, whatever else happened to point at it since —
+     * and the set is not knowable from the request. Two forget() calls left the
+     * mirror holding a row the cascade had removed, and the assignment list then
+     * differed by 143 keys.
+     *
+     * So this asks the server what survived and drops the rest, which is exactly
+     * the one thing a machine with no connection cannot do. It is the clearest
+     * statement of why these three deletes are online-only: not "the cascade is
+     * large", but "only the server knows what it removed".
+     */
+    for (const [collection, Model] of [
+      ["subject", Subject], ["teacherAssignment", TeacherAssignment],
+    ]) {
+      const alive = new Set(
+        (await Model.find({}).select("_id").lean()).map((r) => String(r._id))
+      );
+      for (const row of docs.find(collection, {})) {
+        if (!alive.has(String(row._id))) docs.forget(collection, row._id);
+      }
+    }
+  }
+
+  check("the outbox is still empty — nothing in this section queued a refusal",
+    queue.all().length, 0);
+
+  await parity("the class list, after all of that",
+    `/api/admin/classes?schoolId=${SCHOOL}`);
+  await parity("subjects, after all of that",
+    `/api/admin/subjects?schoolId=${SCHOOL}`);
+  await parity("assignments, after all of that",
+    `/api/admin/assignments?schoolId=${SCHOOL}`);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- finance: staff, salaries, and the income statement ---");
+
+  /**
+   * ── SPLICE THIS AT THE END of main(), just before server.close() ─────────
+   *
+   * Not a preference. This section inserts USERS, and several sections above it
+   * assert exact teacher and staff lists by id — /admin/teachers among them — so
+   * placed earlier it would "fail" assertions that are correct. Everything it
+   * adds is prefixed `fin-` for the same reason.
+   *
+   * It also re-mirrors the user collection at the end of the fixtures, because
+   * the payroll join and the staff list both read it.
+   *
+   * ── Two things to know about what is compared ───────────────────────────
+   *
+   * SORT TIES ARE NOT A PROMISE. /finance/salary-structures sorts on
+   * effectiveFrom alone and the report's byCategory sorts on total alone;
+   * neither endpoint has a tiebreak, so two rows with the same value come back
+   * in whatever order the storage engine used. The fixtures below deliberately
+   * avoid ties so that parity()'s positional diff is meaningful. If a tie is
+   * ever added, that array has to be compared by key rather than by position.
+   *
+   * THE DECLINES HERE ARE NOT ALL REFUSALS. Most declines in this harness are
+   * asserted by showing the server refusing the same request. Two of these are a
+   * different thing: /finance/staff and /finance/salary-structures decline for a
+   * bursar because the FEED will not mirror the collections they read, while the
+   * server answers them perfectly well. So those are asserted against the feed
+   * table itself rather than against a status code — that is where the authority
+   * is, and a guess about it would be exactly the sort of quiet death the
+   * offline path dies of.
+   */
+
+  const FinUser            = require("../src/db/models/User");
+  const FinExpense         = require("../src/db/models/Expense");
+  const FinExpenseCategory = require("../src/db/models/ExpenseCategory");
+  const FinSalaryStructure = require("../src/db/models/SalaryStructure");
+  const FinSalaryPayment   = require("../src/db/models/SalaryPayment");
+  const FinPayrollRun      = require("../src/db/models/PayrollRun");
+  const FinSchool          = require("../src/db/models/School");
+  const finFeed            = require("../src/config/syncFeed");
+  const finDefaults        = require("../src/services/permissions.service").defaultsFor;
+  const finJwt             = require("jsonwebtoken");
+
+  await Promise.all([
+    FinUser.init(), FinExpense.init(), FinExpenseCategory.init(),
+    FinSalaryStructure.init(), FinSalaryPayment.init(), FinPayrollRun.init(),
+  ]);
+
+  const finHead = {
+    token,
+    session: {
+      userId: "admin-1", role: "school_admin", schoolId: SCHOOL,
+      permissions: finDefaults("school_admin"),
+    },
+  };
+
+  // A bursar: holds payroll.view, payroll.process, expenses.manage and
+  // finance.reports, and holds neither payroll.setSalary nor users.manage. That
+  // pair of absences is what the two declines below are about.
+  const finBursar = {
+    token: finJwt.sign(
+      { id: "fin-bursar", role: "bursar", schoolId: SCHOOL },
+      process.env.JWT_SECRET, { expiresIn: "1h" }
+    ),
+    session: {
+      userId: "fin-bursar", role: "bursar", schoolId: SCHOOL,
+      permissions: finDefaults("bursar"),
+    },
+  };
+
+  // A teacher: holds none of this router's three capabilities, so the guard at
+  // the top of it refuses them outright. Used only to show what a 403 looks
+  // like, which is the answer that stops an outbox.
+  const finTeacher = {
+    token: finJwt.sign(
+      { id: "t1", role: "teacher", schoolId: SCHOOL },
+      process.env.JWT_SECRET, { expiresIn: "1h" }
+    ),
+    session: {
+      userId: "t1", role: "teacher", schoolId: SCHOOL,
+      permissions: finDefaults("teacher"),
+    },
+  };
+
+  const finLocal = (method, path, { body = {}, query = {}, as = finHead } = {}) =>
+    api.handle({ method, path, query, body }, { docs, meta, queue, session: as.session });
+
+  const finSend = async (method, path, body, as = finHead) => {
+    const res = await fetch(`http://127.0.0.1:${port}${path}`, {
+      method,
+      headers: { "content-type": "application/json", authorization: `Bearer ${as.token}` },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  // ── Fixtures ────────────────────────────────────────────────────────────
+
+  await FinUser.collection.insertMany([
+    { _id: "fin-bursar", schoolId: SCHOOL, name: "Grace Ayuk", email: "grace.ayuk@x.com",
+      role: "bursar", isActive: true, password: "x", updatedAt: new Date() },
+    // Deactivated: the filter is isActive: true, so this is off the payroll list.
+    { _id: "fin-inactive", schoolId: SCHOOL, name: "Zoe Retired", email: "zoe@x.com",
+      role: "teacher", isActive: false, password: "x", updatedAt: new Date() },
+    // NO isActive FIELD AT ALL — the case that separates `isActive: true` from
+    // `isActive: { $ne: false }`. This account fails the first and passes the
+    // second, and the endpoint uses the first.
+    { _id: "fin-nofield", schoolId: SCHOOL, name: "Aaron Legacy", email: "aaron@x.com",
+      role: "teacher", password: "x", updatedAt: new Date() },
+    { _id: "fin-other", schoolId: "other-school", name: "Far Away", email: "far@x.com",
+      role: "teacher", isActive: true, password: "x", updatedAt: new Date() },
+  ]);
+
+  await FinSalaryStructure.collection.insertMany([
+    // t1's trail: one closed row and one in force. A raise closes rather than
+    // overwrites, which is what makes an old payslip reproducible.
+    { _id: "fin-ss-t1-old", schoolId: SCHOOL, userId: "t1", baseAmount: 150000,
+      allowances: [], deductions: [],
+      effectiveFrom: new Date("2026-01-01T00:00:00.000Z"),
+      effectiveTo:   new Date("2026-06-30T23:59:59.999Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "fin-ss-t1", schoolId: SCHOOL, userId: "t1", baseAmount: 180000,
+      allowances: [{ code: "HOU", label: "Housing", labelFr: null, amount: 30000 },
+                   { code: "TRA", label: "Transport", labelFr: null, amount: 10000 }],
+      deductions: [{ code: "TAX", label: "Tax", labelFr: null, amount: 12000 }],
+      effectiveFrom: new Date("2026-07-01T00:00:00.000Z"), effectiveTo: null,
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "fin-ss-t2", schoolId: SCHOOL, userId: "t2", baseAmount: 200000,
+      allowances: [], deductions: [],
+      effectiveFrom: new Date("2026-02-01T00:00:00.000Z"), effectiveTo: null,
+      deletedAt: null, updatedAt: new Date() },
+    // Deleted, and open-ended: excluded by deletedAt, and outside the unique
+    // index for the same reason, which is why two open rows for t1 can coexist.
+    { _id: "fin-ss-gone", schoolId: SCHOOL, userId: "t1", baseAmount: 999999,
+      allowances: [], deductions: [],
+      effectiveFrom: new Date("2026-08-01T00:00:00.000Z"), effectiveTo: null,
+      deletedAt: new Date("2026-08-02T00:00:00.000Z"), updatedAt: new Date() },
+    // A structure in THIS school naming somebody in another one. The endpoint's
+    // staff join is scoped to the school, so it resolves to null — and the local
+    // handler has to answer null too rather than joining the user it holds.
+    { _id: "fin-ss-foreign", schoolId: SCHOOL, userId: "fin-other", baseAmount: 1,
+      allowances: [], deductions: [],
+      effectiveFrom: new Date("2026-03-01T00:00:00.000Z"), effectiveTo: null,
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "fin-ss-elsewhere", schoolId: "other-school", userId: "t1", baseAmount: 5,
+      allowances: [], deductions: [],
+      effectiveFrom: new Date("2026-04-01T00:00:00.000Z"), effectiveTo: null,
+      deletedAt: null, updatedAt: new Date() },
+  ]);
+
+  // An expense whose category document does not exist — a category deleted
+  // outright at some point in the past, which the report's $lookup finds nothing
+  // for and labels "—". Inserted with the first batch so that it is counted
+  // before the before/after assertions below start.
+  await FinExpense.collection.insertOne({
+    _id: "fin-ex-nocat", schoolId: SCHOOL, categoryId: "fin-ec-missing", amount: 700,
+    status: "approved", incurredAt: new Date("2026-10-15T00:00:00.000Z"),
+    deletedAt: null, voidedAt: null, updatedAt: new Date(),
+  });
+
+  /**
+   * Both stores, holding the same rows.
+   *
+   * The report sums FOUR collections, two of which earlier sections write to, so
+   * this re-mirrors fee payments and charges as well — otherwise a difference
+   * left over from another section would be reported as a difference in this
+   * one, which is the least useful kind of failure.
+   */
+  const FinFeePayment = require("../src/db/models/FeePayment");
+  const FinFeeCharge  = require("../src/db/models/FeeCharge");
+
+  const finMirror = async () => {
+    for (const [name, Model] of Object.entries({
+      user:            FinUser,
+      salaryStructure: FinSalaryStructure,
+      salaryPayment:   FinSalaryPayment,
+      expense:         FinExpense,
+      expenseCategory: FinExpenseCategory,
+      feePayment:      FinFeePayment,
+      feeCharge:       FinFeeCharge,
+    })) {
+      docs.putMany(name, JSON.parse(JSON.stringify(await Model.find({}).lean())));
+    }
+  };
+  await finMirror();
+
+  // ── Who can be put on payroll ───────────────────────────────────────────
+
+  await parity("who can be put on payroll", `/api/finance/staff?schoolId=${SCHOOL}`, finHead);
+
+  const finStaff = finLocal("GET", "/api/finance/staff", { query: { schoolId: SCHOOL } }).data;
+  const finStaffIds = finStaff.data.map((s) => s._id);
+
+  check("the head and the teachers are on it",
+    ["admin-1", "t1", "t2"].every((id) => finStaffIds.includes(id)), true);
+  check("a deactivated account is not",
+    finStaffIds.includes("fin-inactive"), false);
+  // The one that separates the two readings of the field.
+  check("nor is an account that never had isActive at all",
+    finStaffIds.includes("fin-nofield"), false);
+  check("nor anybody from another school",
+    finStaffIds.includes("fin-other"), false);
+  /**
+   * THE BURSAR IS NOT ON THE PAYROLL LIST.
+   *
+   * The endpoint's own comment says it exists because /admin/teachers "would
+   * leave the head and the bursar off the payroll entirely" — and then filters
+   * role $in ["school_admin", "teacher"], which leaves the bursar off. So a
+   * school cannot give its own bursar a salary structure through this screen.
+   * Reproduced exactly and reported as a defect; a mirror that helpfully added
+   * them would offer a structure the server then refuses to find.
+   */
+  check("and the bursar is left off, exactly as the endpoint leaves them off",
+    finStaffIds.includes("fin-bursar"), false);
+
+  check("projected to name, email and role and nothing else",
+    Object.keys(finStaff.data[0]).sort(), ["_id", "email", "name", "role"]);
+  check("sorted by Mongo's byte order, not localeCompare",
+    finStaff.data.map((s) => s.name),
+    [...finStaff.data.map((s) => s.name)].sort((a, b) => (a === b ? 0 : a < b ? -1 : 1)));
+
+  // ── The two declines that are not refusals ──────────────────────────────
+  console.log("--- and it declines where a bursar's mirror is empty ---");
+
+  check("a bursar is not answered locally for the staff list",
+    finLocal("GET", "/api/finance/staff", { query: { schoolId: SCHOOL }, as: finBursar }),
+    null);
+  // Because the feed will not send them the collection, while the server will
+  // answer the request. An empty list would say "this school has no staff".
+  check("because users.manage is what mirrors the user collection",
+    finFeed.satisfies(finFeed.byCollection.get("user"), new Set(finDefaults("bursar"))),
+    false);
+  const finStaffFromServer = await fetch(
+    `http://127.0.0.1:${port}/api/finance/staff?schoolId=${SCHOOL}`,
+    { headers: { authorization: `Bearer ${finBursar.token}` } }
+  );
+  check("and the server answers the same bursar without complaint",
+    finStaffFromServer.status, 200);
+  check("which is the whole point: the decline is about the mirror, not the rule",
+    (await finStaffFromServer.json()).data.length > 0, true);
+
+  // ── Salary structures ───────────────────────────────────────────────────
+
+  await parity("salary structures in force",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}`, finHead);
+  await parity("the whole trail",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&history=1`, finHead);
+  await parity("one person's",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&userId=t1`, finHead);
+  await parity("one person's whole trail",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&userId=t1&history=1`, finHead);
+  await parity("somebody with none",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&userId=fin-nofield`, finHead);
+  // history=0 is NOT "no history" — the test is `!== "1"`, so anything other
+  // than the string 1 means only what is in force. Surprising, and reproduced.
+  await parity("history=0 still means only what is in force",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&history=0`, finHead);
+
+  const finForce = finLocal("GET", "/api/finance/salary-structures",
+    { query: { schoolId: SCHOOL } }).data;
+  const finTrail = finLocal("GET", "/api/finance/salary-structures",
+    { query: { schoolId: SCHOOL, history: "1" } }).data;
+
+  check("only the open rows by default",
+    finForce.data.map((r) => r._id).sort(), ["fin-ss-foreign", "fin-ss-t1", "fin-ss-t2"]);
+  check("the closed row appears only with history=1",
+    finTrail.data.map((r) => r._id).includes("fin-ss-t1-old"), true);
+  check("a deleted structure appears in neither",
+    finTrail.data.map((r) => r._id).includes("fin-ss-gone"), false);
+  check("nor another school's",
+    finTrail.data.map((r) => r._id).includes("fin-ss-elsewhere"), false);
+  check("newest effective date first",
+    finTrail.data.map((r) => r.effectiveFrom),
+    [...finTrail.data.map((r) => r.effectiveFrom)]
+      .sort((a, b) => (a === b ? 0 : a < b ? 1 : -1)));
+
+  // gross is base PLUS allowances, with deductions NOT taken off — and it is
+  // computed by the route rather than read from the model's virtual, which
+  // .lean() drops. Reading the virtual instead would also add a `net` key the
+  // server never sends.
+  const finT1 = finForce.data.find((r) => r._id === "fin-ss-t1");
+  check("gross is base plus allowances", finT1.gross, 180000 + 30000 + 10000);
+  check("and there is no net key, because the endpoint does not send one",
+    Object.prototype.hasOwnProperty.call(finT1, "net"), false);
+
+  check("a structure naming another school's staff joins to null, as the server's does",
+    finForce.data.find((r) => r._id === "fin-ss-foreign").staff, null);
+
+  // The same gap as the staff list, one collection along.
+  check("a bursar is not answered locally for the salary structures either",
+    finLocal("GET", "/api/finance/salary-structures",
+      { query: { schoolId: SCHOOL }, as: finBursar }),
+    null);
+  check("because the feed gates salaryStructure on payroll.setSalary",
+    finFeed.byCollection.get("salaryStructure").permission, "payroll.setSalary");
+  check("which a bursar does not hold, though the endpoint only wants payroll.view",
+    [finDefaults("bursar").includes("payroll.setSalary"),
+     finDefaults("bursar").includes("payroll.view")],
+    [false, true]);
+
+  // And the join declines rather than blanking a name, as the payslip view does.
+  docs.forget("user", "t2");
+  check("a structure whose staff is not mirrored makes it decline",
+    finLocal("GET", "/api/finance/salary-structures", { query: { schoolId: SCHOOL } }),
+    null);
+  docs.putMany("user", JSON.parse(JSON.stringify(await FinUser.find({}).lean())));
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the income statement, where four filters are load-bearing ---");
+
+  await parity("the report, all time", `/api/finance/reports/summary?schoolId=${SCHOOL}`, finHead);
+  await parity("the report over one month",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}&from=2026-09-01&to=2026-09-30T23:59:59.999Z`,
+    finHead);
+  await parity("with an academic year, which narrows the arrears and not the flow",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}&academicYear=${YEAR}`, finHead);
+  await parity("a period with nothing in it",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}&from=2030-01-01&to=2030-01-31`, finHead);
+  await parity("from with no to", `/api/finance/reports/summary?schoolId=${SCHOOL}&from=2026-09-15`,
+    finHead);
+
+  /**
+   * ── Each filter, asserted by moving one row and watching the total ───────
+   *
+   * Written as a before/after rather than as an absolute figure on purpose:
+   * this section runs after several others that write expenses of their own, so
+   * an absolute total here would be an assertion about them. What matters is the
+   * RULE — that this row does or does not move the number.
+   */
+  /**
+   * The FLOW half of the answer, which is not the whole answer.
+   *
+   * The endpoint replies { data: { summary, arrears } } and keeps the two in
+   * separate objects on purpose: the summary is a flow over an interval and
+   * arrears are a position at a moment, so a caller cannot add them together by
+   * accident. This helper read `.data.data` as if it WERE the summary, which
+   * threw on the first assertion below — the nesting is the point of the
+   * response shape and reaching past it is exactly the mistake it guards.
+   */
+  const finReport  = () => finLocal("GET", "/api/finance/reports/summary",
+    { query: { schoolId: SCHOOL } }).data.data.summary;
+
+  /** And the POSITION half, over the same request. */
+  const finArrears = (qs = "") => finLocal("GET", "/api/finance/reports/summary", {
+    query: Object.fromEntries(new URLSearchParams(`schoolId=${SCHOOL}&${qs}`)),
+  }).data.data.arrears;
+
+  const finBefore = finReport();
+
+  await FinExpense.collection.insertMany([
+    // Waiting for a second signature. Counting it would tell a head the money
+    // is gone before anybody agreed it should be.
+    { _id: "fin-ex-pending", schoolId: SCHOOL, categoryId: "ec-2", amount: 777000,
+      status: "pending", incurredAt: new Date("2026-10-10T00:00:00.000Z"),
+      deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    // Somebody said no. Kept for the record, never counted.
+    { _id: "fin-ex-rejected", schoolId: SCHOOL, categoryId: "ec-2", amount: 555000,
+      status: "rejected", incurredAt: new Date("2026-10-11T00:00:00.000Z"),
+      deletedAt: null, voidedAt: null, updatedAt: new Date() },
+    // Cancelled: in the ledger listing, out of every total.
+    { _id: "fin-ex-voided", schoolId: SCHOOL, categoryId: "ec-2", amount: 333000,
+      status: "approved", incurredAt: new Date("2026-10-12T00:00:00.000Z"),
+      deletedAt: null, voidedAt: new Date("2026-10-13T00:00:00.000Z"), updatedAt: new Date() },
+  ]);
+  await finMirror();
+
+  check("a pending, a rejected and a voided expense move nothing",
+    finReport().expenditure.expenses, finBefore.expenditure.expenses);
+  await parity("and the server agrees about all three",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}`, finHead);
+
+  const finAfterExpenses = finReport();
+
+  // A draft pays nobody, so it is not expenditure.
+  await FinSalaryPayment.collection.insertOne({
+    _id: "fin-slip-draft", schoolId: SCHOOL, userId: "t2", runId: "fin-run",
+    periodMonth: "2026-10", gross: 500000, totalDeductions: 0, net: 500000,
+    status: "draft", paidAt: null, deletedAt: null, updatedAt: new Date(),
+  });
+  await finMirror();
+
+  check("a draft payslip is not expenditure",
+    finReport().expenditure.payroll, finAfterExpenses.expenditure.payroll);
+
+  /**
+   * THE PAIR THAT CATCHES `status: "paid"`.
+   *
+   * Reversing a run flips each original to "reversed" and appends a negative
+   * mirror that is itself "paid". Summing only paid rows keeps the mirror and
+   * drops the original, so a reversed month reports as a large NEGATIVE
+   * expenditure — 100,000 of imaginary income in this fixture. Excluding drafts
+   * instead keeps both halves, and they cancel, which is what this pins.
+   */
+  await FinSalaryPayment.collection.insertMany([
+    { _id: "fin-slip-rev-orig", schoolId: SCHOOL, userId: "t1", runId: "fin-run-2",
+      periodMonth: "2026-11", gross: 120000, totalDeductions: 20000, net: 100000,
+      status: "reversed", paidAt: new Date("2026-11-05T00:00:00.000Z"),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "fin-slip-rev", schoolId: SCHOOL, userId: "t1", runId: null,
+      periodMonth: "2026-11", gross: -120000, totalDeductions: -20000, net: -100000,
+      status: "paid", reversesId: "fin-slip-rev-orig",
+      paidAt: new Date("2026-11-05T00:00:00.000Z"), deletedAt: null, updatedAt: new Date() },
+  ]);
+  await finMirror();
+
+  check("and a reversed run nets to zero rather than to minus its own value",
+    finReport().expenditure.payroll, finAfterExpenses.expenditure.payroll);
+  await parity("and the server agrees about the payroll filter",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}`, finHead);
+
+  // The reversal pair IS in the monthly series, on both sides, at zero. A
+  // handler that dropped either half would report a month that never happened.
+  const finNov = finReport().months.find((m) => m.month === "2026-11");
+  check("november exists in the series and cancels", finNov && finNov.expenditure, 0);
+
+  // The endpoint's $ifNull, which is not the same as leaving the label out.
+  check("an expense whose category has no document is labelled with a dash",
+    finReport().byCategory.find((c) => c.categoryId === "fin-ec-missing")?.label, "—");
+  check("and the categories are ordered largest first",
+    finReport().byCategory.map((c) => c.total),
+    [...finReport().byCategory.map((c) => c.total)].sort((a, b) => b - a));
+
+  /**
+   * ── Arrears are a position, and the period must not touch them ───────────
+   *
+   * A debt raised in October is still owed in March. The service takes from/to
+   * for the summary and ignores them entirely for the arrears, so clipping the
+   * position to the period would report old debt as settled — the one figure on
+   * this screen a school chases people about.
+   */
+  check("a date range moves the flow",
+    finReport().expenditure.expenses ===
+      finLocal("GET", "/api/finance/reports/summary", {
+        query: { schoolId: SCHOOL, from: "2026-09-01", to: "2026-09-30" },
+      }).data.data.summary.expenditure.expenses,
+    false);
+  check("and leaves the position exactly where it was",
+    finArrears("from=2026-09-01&to=2026-09-30"), finArrears());
+  check("the academic year DOES narrow it",
+    finArrears(`academicYear=${YEAR}`).charged < finArrears().charged, true);
+  check("outstanding is billed less paid, with waivers already off the bill",
+    (() => {
+      const a = finArrears();
+      return [a.billed, a.outstanding];
+    })(),
+    (() => {
+      const a = finArrears();
+      return [a.charged - a.waived, a.charged - a.waived - a.paid];
+    })());
+
+  // ── The report's own refusals, and its permission floor ─────────────────
+  for (const [what, qs] of [
+    ["an unreadable from", `from=soon`],
+    ["an unreadable to",   `to=whenever`],
+    ["a reversed range",   `from=2026-10-01&to=2026-09-01`],
+  ]) {
+    check(`not answered locally: ${what}`,
+      finLocal("GET", "/api/finance/reports/summary",
+        { query: Object.fromEntries(new URLSearchParams(`schoolId=${SCHOOL}&${qs}`)) }),
+      null);
+
+    const refused = await fetch(
+      `http://127.0.0.1:${port}/api/finance/reports/summary?schoolId=${SCHOOL}&${qs}`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    check(`and the server refuses it: ${what}`, refused.status, 400);
+  }
+
+  /**
+   * finance.reports alone is not enough to answer this offline.
+   *
+   * The endpoint is gated on that one capability and then sums four collections
+   * the feed gates on three others. finance.reports is delegable, so a school
+   * can hand it to somebody who mirrors none of the inputs — and that machine
+   * would answer a report of zeros, which reads as a bad month rather than as an
+   * empty mirror.
+   */
+  check("somebody with finance.reports and none of the inputs is not answered locally",
+    finLocal("GET", "/api/finance/reports/summary", {
+      query: { schoolId: SCHOOL },
+      as: { session: { ...finHead.session, permissions: ["finance.reports"] } },
+    }),
+    null);
+  check("and the server answers them, which is why declining is the safe half",
+    (await fetch(`http://127.0.0.1:${port}/api/finance/reports/summary?schoolId=${SCHOOL}`,
+      { headers: { authorization: `Bearer ${finBursar.token}` } })).status,
+    200);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- writes: a category, a void, and a raise ---");
+
+  // ── A new expense category ─────────────────────────────────────────────
+  const finCat = finLocal("POST", "/api/finance/expense-categories", {
+    body: { schoolId: SCHOOL, code: " TRP ", label: " Transport ", labelFr: "Transport" },
+  });
+
+  check("a new category is accepted", finCat?.status, 201);
+  check("and queued", finCat?.queued, true);
+  check("trimmed as the endpoint trims it",
+    [finCat.data.data.code, finCat.data.data.label], ["TRP", "Transport"]);
+  check("with the defaults the model would have given it",
+    [finCat.data.data.isActive, finCat.data.data.parentId, finCat.data.data.deletedAt],
+    [true, null, null]);
+  const finCatId = finCat.data.data._id;
+
+  // The endpoint reads req.body._id, so a replay of this request lands on the
+  // row it already made rather than making a second one.
+  const finQueuedCat = queue.all().find((r) => r.path === "/api/finance/expense-categories");
+  check("the id is chosen here and travels in the body",
+    JSON.parse(finQueuedCat.body)._id, finCatId);
+
+  // ── What must not be queued ────────────────────────────────────────────
+  const finBadCategories = [
+    ["no code",  { label: "No code" },                    400],
+    ["no label", { code: "NOLABEL" },                     400],
+    // The 409 that would stop the outbox and everything queued behind it.
+    ["a code already in use", { code: "UTL", label: "Utilities again" }, 409],
+  ];
+
+  for (const [what, patch, status] of finBadCategories) {
+    check(`not queued: ${what}`,
+      finLocal("POST", "/api/finance/expense-categories", { body: { schoolId: SCHOOL, ...patch } }),
+      null);
+    const refused = await finSend("POST", "/api/finance/expense-categories",
+      { schoolId: SCHOOL, ...patch });
+    check(`and the server refuses it: ${what}`, refused.status, status);
+  }
+
+  // A retired category's code is free again — the unique index is partial on
+  // deletedAt: null — so this must NOT be declined.
+  check("a deleted category's code can be reused",
+    finLocal("POST", "/api/finance/expense-categories",
+      { body: { schoolId: SCHOOL, code: "OLD", label: "Reused" } })?.status,
+    201);
+
+  check("not queued: without expenses.manage",
+    finLocal("POST", "/api/finance/expense-categories", {
+      body: { schoolId: SCHOOL, code: "ZZZ", label: "Z" },
+      as: { session: { ...finHead.session, permissions: ["expenses.view"] } },
+    }),
+    null);
+
+  // ── Voiding an expense ─────────────────────────────────────────────────
+  await FinExpense.collection.insertOne({
+    _id: "fin-ex-void-me", schoolId: SCHOOL, categoryId: "ec-2", amount: 45000,
+    description: "Wrong vendor", status: "approved",
+    incurredAt: new Date("2026-10-14T00:00:00.000Z"),
+    deletedAt: null, voidedAt: null, updatedAt: new Date(),
+  });
+  await finMirror();
+
+  const finVoidedBefore = finReport().expenditure.expenses;
+  const finExpenseRows  = docs.count("expense", { schoolId: SCHOOL });
+
+  const finVoid = finLocal("POST", "/api/finance/expenses/fin-ex-void-me/void",
+    { body: { schoolId: SCHOOL, reason: "  paid the wrong vendor  " } });
+
+  check("a void is accepted", finVoid?.status, 200);
+  check("200 and not 201, because nothing was created",
+    [finVoid.status, finVoid.data.success], [200, true]);
+  check("the row is stamped rather than removed",
+    [Boolean(finVoid.data.data.voidedAt), finVoid.data.data.amount], [true, 45000]);
+  check("the reason is trimmed as the endpoint trims it",
+    finVoid.data.data.voidReason, "paid the wrong vendor");
+  check("and recorded against the person who did it",
+    finVoid.data.data.voidedBy, "admin-1");
+  /**
+   * A voided expense is STILL IN THE LIST, marked — a bursar looking for the
+   * payment they cancelled has to be able to find it. Only the totals drop it.
+   *
+   * Asked for over October rather than unfiltered, and that is not incidental:
+   * the endpoint returns the newest 500 rows and the section above this one
+   * inserts 520 expenses dated 2027-01, so an unfiltered list is entirely those
+   * and contains nothing from 2026 at all. The first version of this assertion
+   * failed for exactly that reason and read as the void having removed the row.
+   * The cap is the endpoint's own behaviour, faithfully mirrored; a query narrow
+   * enough to be about this expense is the honest way to ask.
+   */
+  check("the expense is still in the ledger listing",
+    finLocal("GET", "/api/finance/expenses", {
+      query: { schoolId: SCHOOL, from: "2026-10-01", to: "2026-10-31T23:59:59.999Z" },
+    }).data.data.some((r) => r._id === "fin-ex-void-me"),
+    true);
+  check("marked as void where the screen can show it",
+    finLocal("GET", "/api/finance/expenses", {
+      query: { schoolId: SCHOOL, from: "2026-10-01", to: "2026-10-31T23:59:59.999Z" },
+    }).data.data.find((r) => r._id === "fin-ex-void-me").voidReason,
+    "paid the wrong vendor");
+  check("and out of the report's expenditure",
+    finReport().expenditure.expenses, finVoidedBefore - 45000);
+  // A void is a STAMP. A fee payment reversal is an appended negative row, and
+  // confusing the two would either count the void twice or subtract the
+  // reversal twice, one screen apart.
+  check("no second row was appended — unlike a payment reversal",
+    docs.count("expense", { schoolId: SCHOOL }), finExpenseRows);
+
+  const finBadVoids = [
+    ["no reason",         "fin-ex-void-me", { reason: "" },     400],
+    ["a reason of spaces", "fin-ex-void-me", { reason: "   " }, 400],
+    ["an expense nobody has", "fin-ex-nope", { reason: "why" }, 404],
+  ];
+
+  for (const [what, id, patch, status] of finBadVoids) {
+    check(`not queued: ${what}`,
+      finLocal("POST", `/api/finance/expenses/${id}/void`,
+        { body: { schoolId: SCHOOL, ...patch } }),
+      null);
+    const refused = await finSend("POST", `/api/finance/expenses/${id}/void`,
+      { schoolId: SCHOOL, ...patch });
+    check(`and the server refuses it: ${what}`, refused.status, status);
+  }
+
+  // Already void. The endpoint answers 200 replay rather than 409 — so queueing
+  // it again would be harmless and would also store nothing, which is why it is
+  // declined rather than reported as done.
+  check("not queued: an expense that is already void",
+    finLocal("POST", "/api/finance/expenses/fin-ex-voided/void",
+      { body: { schoolId: SCHOOL, reason: "again" } }),
+    null);
+  const finReplayVoid = await finSend("POST", "/api/finance/expenses/fin-ex-voided/void",
+    { schoolId: SCHOOL, reason: "again" });
+  check("and the server answers it 200 with replay, not 409",
+    [finReplayVoid.status, finReplayVoid.body.replay], [200, true]);
+
+  // On a DIFFERENT expense, one that is not already void, so that the decline
+  // can only be about the permission.
+  check("not queued: without expenses.manage",
+    finLocal("POST", "/api/finance/expenses/fin-ex-pending/void", {
+      body: { schoolId: SCHOOL, reason: "no rights" },
+      as: { session: { ...finHead.session, permissions: ["expenses.view"] } },
+    }),
+    null);
+  // Proved with a teacher, who holds none of this router's capabilities, rather
+  // than by voiding something with a bursar's token to see it work — that would
+  // void a row these assertions are still counting.
+  const finVoidNoRights = await finSend("POST", "/api/finance/expenses/fin-ex-pending/void",
+    { schoolId: SCHOOL, reason: "no rights" }, finTeacher);
+  check("and the server answers 403, which is a full stop for the whole outbox",
+    finVoidNoRights.status, 403);
+
+  // ── A raise ────────────────────────────────────────────────────────────
+  const finRaise = finLocal("POST", "/api/finance/salary-structures", {
+    body: {
+      schoolId: SCHOOL, userId: "t1", baseAmount: 210000,
+      allowances: [{ code: "HOU", label: " Housing ", amount: 35000 }],
+      deductions: [{ code: "TAX", label: "Tax", amount: 14000 }],
+      effectiveFrom: "2026-10-01",
+    },
+  });
+
+  check("a raise is accepted", finRaise?.status, 201);
+  check("the new row is open-ended", finRaise.data.data.effectiveTo, null);
+  check("its components are cleaned the way the endpoint cleans them",
+    finRaise.data.data.allowances,
+    [{ code: "HOU", label: "Housing", labelFr: null, amount: 35000 }]);
+
+  // THE SECOND ROW. One open structure per person is a unique index, so a new
+  // row written without closing the previous one leaves the mirror showing two
+  // concurrent salaries — and the screen offering a figure the server does not
+  // hold.
+  check("the previous structure is closed in the same commit",
+    docs.get("salaryStructure", "fin-ss-t1").effectiveTo,
+    new Date(Date.parse("2026-10-01T00:00:00.000Z") - 1).toISOString());
+  check("both rows provisional until it lands",
+    [docs.get("salaryStructure", finRaise.data.data._id)._pending,
+     docs.get("salaryStructure", "fin-ss-t1")._pending],
+    [true, true]);
+  check("and only one row is in force for that person",
+    docs.find("salaryStructure",
+      { schoolId: SCHOOL, userId: "t1", effectiveTo: null, deletedAt: null }).length,
+    1);
+
+  const finBadRaises = [
+    ["no userId",           { baseAmount: 1, effectiveFrom: "2026-10-01" }, 400],
+    ["no effectiveFrom",    { userId: "t1", baseAmount: 1 }, 400],
+    ["a fractional salary", { userId: "t1", baseAmount: 1500.5, effectiveFrom: "2026-10-01" }, 400],
+    ["a negative salary",   { userId: "t1", baseAmount: -1, effectiveFrom: "2026-10-01" }, 400],
+    ["an allowance with no label",
+      { userId: "t1", baseAmount: 1, effectiveFrom: "2026-10-01",
+        allowances: [{ code: "X", amount: 1 }] }, 400],
+    ["a negative deduction",
+      { userId: "t1", baseAmount: 1, effectiveFrom: "2026-10-01",
+        deductions: [{ code: "X", label: "X", amount: -1 }] }, 400],
+    ["a fractional allowance",
+      { userId: "t1", baseAmount: 1, effectiveFrom: "2026-10-01",
+        allowances: [{ code: "X", label: "X", amount: 0.5 }] }, 400],
+    ["somebody who does not work here", { userId: "fin-nobody", baseAmount: 1,
+      effectiveFrom: "2026-10-01" }, 404],
+    ["somebody at another school", { userId: "fin-other", baseAmount: 1,
+      effectiveFrom: "2026-10-01" }, 404],
+  ];
+
+  for (const [what, patch, status] of finBadRaises) {
+    check(`not queued: ${what}`,
+      finLocal("POST", "/api/finance/salary-structures", { body: { schoolId: SCHOOL, ...patch } }),
+      null);
+    const refused = await finSend("POST", "/api/finance/salary-structures",
+      { schoolId: SCHOOL, ...patch });
+    check(`and the server refuses it: ${what}`, refused.status, status);
+  }
+
+  /**
+   * An unreadable date is not a 400 — it is a 500, and a 500 is RETRYABLE.
+   *
+   * effectiveFrom goes straight into new Date() and then into a required Date
+   * field, so "soon" is a cast error. That would not block the outbox; it would
+   * retry it for ever behind a row that never settles, which is worse than a
+   * block because nothing asks anybody to look at it.
+   */
+  check("not queued: an unreadable effectiveFrom",
+    finLocal("POST", "/api/finance/salary-structures",
+      { body: { schoolId: SCHOOL, userId: "t1", baseAmount: 1, effectiveFrom: "soon" } }),
+    null);
+  const finBadDate = await finSend("POST", "/api/finance/salary-structures",
+    { schoolId: SCHOOL, userId: "t1", baseAmount: 1, effectiveFrom: "soon" });
+  check("and the server answers it 500, which the queue would retry rather than block on",
+    finBadDate.status >= 500, true);
+
+  check("not queued: without payroll.setSalary",
+    finLocal("POST", "/api/finance/salary-structures", {
+      body: { schoolId: SCHOOL, userId: "t1", baseAmount: 1, effectiveFrom: "2026-10-01" },
+      as: finBursar,
+    }),
+    null);
+  const finBursarRaise = await finSend("POST", "/api/finance/salary-structures",
+    { schoolId: SCHOOL, userId: "t1", baseAmount: 1, effectiveFrom: "2026-10-01" }, finBursar);
+  check("and the server refuses the bursar with 403, which would stop the whole outbox",
+    finBursarRaise.status, 403);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- reconnecting ---");
+
+  /**
+   * A push is not scoped to a collection: it drains the whole outbox, oldest
+   * first, and stops dead at the first entry the server refuses. So if a section
+   * spliced before this one leaves a BLOCKED entry behind, the three writes above
+   * never leave the machine and the assertions below fail for that reason rather
+   * than for anything wrong here. Worth knowing before debugging the wrong file.
+   */
+  {
+    const finEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["expense", "expenseCategory", "salaryStructure"],
+    });
+    // The fixtures in this file are dated across a school year, so a cursor set
+    // from them sits in the future and nothing written during the run would be
+    // pulled back.
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?, ?)")
+      .run("expense", "expenseCategory", "salaryStructure");
+    await finEngine.cycle();
+    finEngine.stop();
+  }
+
+  check("everything of this domain's drained",
+    queue.all().filter((r) => String(r.path).startsWith("/api/finance/")).length, 0);
+  check("and none of it blocked",
+    queue.all().filter((r) => r.status === "blocked").length, 0);
+
+  check("the server has the category, under the id this machine chose",
+    (await FinExpenseCategory.findById(finCatId).lean())?.code, "TRP");
+  check("the server voided the expense",
+    Boolean((await FinExpense.findById("fin-ex-void-me").lean())?.voidedAt), true);
+  check("with the reason it was given",
+    (await FinExpense.findById("fin-ex-void-me").lean())?.voidReason, "paid the wrong vendor");
+  check("the server has the new structure",
+    (await FinSalaryStructure.findById(finRaise.data.data._id).lean())?.baseAmount, 210000);
+  check("and closed the previous one at the same instant this machine did",
+    (await FinSalaryStructure.findById("fin-ss-t1").lean())?.effectiveTo?.toISOString(),
+    new Date(Date.parse("2026-10-01T00:00:00.000Z") - 1).toISOString());
+  check("every local row settled",
+    [docs.get("expenseCategory", finCatId)._pending,
+     docs.get("expense", "fin-ex-void-me")._pending,
+     docs.get("salaryStructure", finRaise.data.data._id)._pending,
+     docs.get("salaryStructure", "fin-ss-t1")._pending],
+    [false, false, false, false]);
+
+  await parity("the categories after the round trip",
+    `/api/finance/expense-categories?schoolId=${SCHOOL}`, finHead);
+  await parity("the structures after the round trip",
+    `/api/finance/salary-structures?schoolId=${SCHOOL}&history=1`, finHead);
+  await parity("and the report after it",
+    `/api/finance/reports/summary?schoolId=${SCHOOL}`, finHead);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- and the payroll run, which stays on the server ---");
+
+  /**
+   * ── Why these three are online-only, asserted rather than asserted-ish ───
+   *
+   * Not because they are big. Because each of them mints values only the server
+   * can mint, for an unbounded number of rows: generate creates a PayrollRun
+   * with no client id AND payslip rows with no _id at all, and confirm and
+   * reverse mint gapless payslip numbers from an atomic Counter the feed
+   * deliberately never mirrors.
+   *
+   * The probes below show that from the server rather than from reasoning: an
+   * _id sent in the body is ignored, so a local generate would write a run and N
+   * payslips the school's record has never heard of while the server writes its
+   * own — a month with two runs and every payslip twice.
+   */
+  for (const [what, path, body] of [
+    ["generate", "/api/finance/payroll/generate", { schoolId: SCHOOL, periodMonth: "2026-12" }],
+    ["confirm",  "/api/finance/payroll/run-2026-09/confirm", { schoolId: SCHOOL, method: "bank" }],
+    ["reverse",  "/api/finance/payroll/run-2026-09/reverse", { schoolId: SCHOOL, reason: "wrong" }],
+  ]) {
+    check(`${what} is not answered locally`, finLocal("POST", path, { body }), null);
+  }
+
+  const finGenerated = await finSend("POST", "/api/finance/payroll/generate", {
+    schoolId: SCHOOL, periodMonth: "2026-12",
+    // A client id, offered and ignored.
+    _id: "fin-run-mine",
+  });
+  check("generate succeeds on the server", finGenerated.status, 201);
+  check("and IGNORES the id the client chose — the reason it cannot be queued",
+    finGenerated.body.run._id === "fin-run-mine", false);
+  check("its payslips carry ids the client never sent either",
+    finGenerated.body.payslips.every((p) => typeof p._id === "string" && p._id.length > 0), true);
+  check("one payslip per structure in force, which is unbounded by anything local",
+    finGenerated.body.payslips.length,
+    (await FinSalaryStructure.countDocuments({
+      schoolId: SCHOOL, deletedAt: null,
+      effectiveFrom: { $lte: new Date(Date.UTC(2026, 12, 0, 23, 59, 59, 999)) },
+      $or: [{ effectiveTo: null }, { effectiveTo: { $gte: new Date(Date.UTC(2026, 12, 0, 23, 59, 59, 999)) } }],
+    })));
+  check("and a draft has no payslip number, because a draft is not a payslip",
+    finGenerated.body.payslips.every((p) => !p.payslipNo), true);
+
+  // A second generate for the same month is the 409 a stale mirror would walk
+  // into — and RUN_EXISTS depends on the school's whole collection, not on this
+  // machine's copy of it.
+  const finAgain = await finSend("POST", "/api/finance/payroll/generate",
+    { schoolId: SCHOOL, periodMonth: "2026-12" });
+  check("a second run for the same month is refused", finAgain.status, 409);
+  check("with the code that would stop the outbox", finAgain.body.code, "RUN_EXISTS");
+
+  // Confirming is where the money moves. Whether it is even allowed depends on
+  // the school's payroll setting, which is why the probe reads it rather than
+  // assuming — and either answer makes the same point.
+  const finPayrollApproval = Boolean(
+    (await FinSchool.findById(SCHOOL).lean())?.settings?.approvals?.payrollRequired
+  );
+  const finConfirm = await finSend("POST",
+    `/api/finance/payroll/${finGenerated.body.run._id}/confirm`,
+    { schoolId: SCHOOL, method: "bank" });
+
+  if (finPayrollApproval) {
+    check("with payroll approval on, a draft cannot be confirmed at all",
+      [finConfirm.status, finConfirm.body.code], [409, "APPROVAL_REQUIRED"]);
+    // Which is itself a second reason this cannot be queued: whether a run has
+    // been signed off, and by whom, is state only the server holds.
+  } else {
+    check("confirming mints a payslip number per row", finConfirm.status, 200);
+    const finPaid = await FinSalaryPayment.find({
+      schoolId: SCHOOL, runId: finGenerated.body.run._id,
+    }).lean();
+    check("gapless, from a Counter the feed deliberately never mirrors",
+      finPaid.every((p) => /^PSL-2026-12-\d{4}$/.test(String(p.payslipNo))), true);
+  }
+
+  // Reversing depends on state only the server holds — "is this run confirmed"
+  // is a fact this machine may be a sync behind on, and the answer decides
+  // between a 409 and money moving.
+  const finReverse = await finSend("POST",
+    `/api/finance/payroll/${finGenerated.body.run._id}/reverse`,
+    { schoolId: SCHOOL, reason: "wrong month" });
+
+  if (finPayrollApproval) {
+    // The run is still a draft, because confirm refused it above.
+    check("an unconfirmed run cannot be reversed",
+      [finReverse.status, finReverse.body.code], [409, "NOT_CONFIRMED"]);
+  } else {
+    check("reversing a confirmed run appends one negative payslip per paid row",
+      [finReverse.status, finReverse.body.reversed],
+      [200, finGenerated.body.payslips.length]);
+    const finMirrored = await FinSalaryPayment.find({
+      schoolId: SCHOOL, reversesId: { $ne: null }, periodMonth: "2026-12",
+    }).lean();
+    check("each with a payslip number of its own, minted server-side",
+      finMirrored.length > 0 && finMirrored.every((p) => /^PSL-2026-12-\d{4}$/.test(String(p.payslipNo))),
+      true);
+    check("and Counter is excluded from the feed, so no offline machine can mint one",
+      Boolean(finFeed.EXCLUDED.Counter), true);
+  }
+
+  // A reason is required, exactly as voiding an expense requires one.
+  const finReverseNoReason = await finSend("POST",
+    `/api/finance/payroll/${finGenerated.body.run._id}/reverse`, { schoolId: SCHOOL });
+  check("and reversing without a reason is refused",
+    [finReverseNoReason.status, finReverseNoReason.body.code], [400, "REASON_REQUIRED"]);
 
   server.close();
   db.close();

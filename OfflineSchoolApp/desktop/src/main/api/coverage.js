@@ -177,6 +177,31 @@ const ONLINE_ONLY = [
       "the file format offline is a second implementation of an export, and the " +
       "screens that offer it can say it needs a connection.",
   },
+  // ── Deciding an approval ────────────────────────────────────────────────
+  //
+  // The one place in this application where "queued" would be an outright lie
+  // about what has happened.
+  {
+    endpoint: "POST /approvals/:id/approve",
+    because:
+      "Approving does not record a decision, it APPLIES one: a per-kind applier " +
+      "in services/approvals.service creates the refund payment, lets the pending " +
+      "expense count, puts the waiver on the charge. Queueing it would show " +
+      "'approved' to a head teacher while the money had not moved and the person " +
+      "waiting had not been answered. It also has a state no local copy can " +
+      "reproduce — the decision is saved BEFORE the effect is attempted, so a " +
+      "failed apply leaves a request genuinely approved and genuinely not applied, " +
+      "and collapsing those two facts into one hides whichever is dropped.",
+  },
+  {
+    endpoint: "POST /approvals/:id/reject",
+    because:
+      "As approve. A refusal is an answer somebody is waiting for, and one that " +
+      "leaves this machine in four hours has not been given. The four-eyes rule " +
+      "the endpoint enforces — you may not decide what you raised — is the point " +
+      "of the whole feature, and its authority is the server's.",
+  },
+
   // ── Reminders and late fees ─────────────────────────────────────────────
   //
   // Four endpoints, and the reason is the same one twice over: two of them are

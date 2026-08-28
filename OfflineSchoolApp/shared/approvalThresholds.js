@@ -23,10 +23,61 @@
  * them, so there is still one answer.
  */
 
-/** An integer, or null. Not a rounding helper — a rejection. */
+/**
+ * An integer, or null. Not a rounding helper — a rejection.
+ *
+ * ── null and "" are rejected explicitly, and they have to be ──────────────
+ *
+ * Number(null) is 0 and Number("") is 0. Leaning on Number() alone therefore
+ * turned an explicitly CLEARED threshold into zero, and zero is not the absence
+ * of a threshold — it is the strictest possible one. The two readings are
+ * opposites:
+ *
+ *     null   never require approval for this   (the shipped default)
+ *     0      always require approval           (every refund countersigned)
+ *
+ * A school that had never opened the settings screen read correctly, because an
+ * absent field is undefined and Number(undefined) is NaN. A school that opened
+ * the screen, left the refund box empty and saved — the ordinary way to say "we
+ * do not need approvals for refunds" — got the exact opposite, and every refund
+ * of any size began requiring a second signature.
+ */
 const whole = (v) => {
+  if (v === null || v === undefined || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) && Number.isInteger(n) ? n : null;
+};
+
+/**
+ * One threshold from a request body: a whole number of XAF, or null for never.
+ *
+ * ── Why this is here and not in the route ─────────────────────────────────
+ *
+ * PUT /api/approvals/thresholds had its own copy, and the desktop needed the
+ * same rule — a threshold change can be made with no connection, and a value
+ * this side accepted while the server refused it would be a 400 sitting at the
+ * head of the outbox, stopping every write behind it.
+ *
+ * Note that this REJECTS a negative where resolveThresholds() below quietly
+ * maps one to null. That is not an inconsistency to tidy: this guards what gets
+ * written, so it should complain; that reads what is already stored, where a bad
+ * value means "unset" and there is nobody left to complain to.
+ *
+ * @returns {{ value: number|null, error: string|null, code: string|null }}
+ */
+const parseThreshold = (value, name) => {
+  if (value === null || value === undefined || value === "") {
+    return { value: null, error: null, code: null };
+  }
+  const n = Number(value);
+  if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+    return {
+      value: null,
+      error: `${name} must be a whole number of XAF, or empty for never`,
+      code:  "INVALID_AMOUNT",
+    };
+  }
+  return { value: n, error: null, code: null };
 };
 
 /**
@@ -102,4 +153,5 @@ module.exports = {
   resolveThresholds,
   THRESHOLD_KEY,
   requiresApprovalWith,
+  parseThreshold,
 };

@@ -44,6 +44,9 @@ const reads = [
   ...require("./handlers/attendance"),
   ...require("./handlers/exams"),
   ...require("./handlers/results"),
+  ...require("./handlers/announcements"),
+  ...require("./handlers/templates"),
+  ...require("./handlers/settings"),
 ];
 
 /**

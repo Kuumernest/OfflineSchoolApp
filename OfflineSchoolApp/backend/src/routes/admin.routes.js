@@ -28,6 +28,34 @@ const sendSuccess = (res, data, status = 200) =>
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
 
+/**
+ * A rejected document is a 400, not a 500.
+ *
+ * ── Why the status code is load-bearing here ──────────────────────────────
+ *
+ * Mongoose raises ValidationError and CastError for input a person typed: a
+ * class name that is blank, a mark that will not cast, a field over its
+ * maxlength. Left uncaught they reach the error handler as 500s, and the caller
+ * is told "Internal Server Error" with no idea which field was wrong.
+ *
+ * That was merely unhelpful until the desktop application existed. It queues
+ * writes made with no connection and replays them, and desktop/src/main/db/
+ * outbox.js treats 5xx as "the server is unwell, try again" and 4xx as "it
+ * refused, stop and ask a person". A DETERMINISTIC 500 is the worst of both: the
+ * request can never succeed, and the queue retries it on every cycle for ever
+ * with nobody told.
+ *
+ * So this maps the two mongoose errors that mean "your input" onto a refusal.
+ * Nothing about what is ACCEPTED changes.
+ *
+ * @returns {boolean} whether the error was handled
+ */
+const sentAsBadRequest = (res, err, code) => {
+  if (err?.name !== "ValidationError" && err?.name !== "CastError") return false;
+  sendError(res, 400, err.message, { code });
+  return true;
+};
+
 const resolveSchoolId = (req, providedSchoolId) => {
   const provided = providedSchoolId || req.body?.schoolId || req.query?.schoolId;
   if (req.user?.role === "super_admin" && provided) {
@@ -1169,16 +1197,31 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
 
 router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
   const { name, level, section, isActive } = req.body;
-  const cls = await Class.findOneAndUpdate(
-    getTenantQuery(req, req.params.id),
-    {
-      ...(name                   && { name: name.trim() }),
-      ...(level   !== undefined  && { level }),
-      ...(section !== undefined  && { section }),
-      ...(isActive !== undefined && { isActive }),
-    },
-    { new: true, runValidators: true }
-  );
+
+  // A non-string name reached .trim() and threw a TypeError, which is a 500 the
+  // offline queue would retry for ever. Refused as the input error it is.
+  if (name !== undefined && typeof name !== "string") {
+    return sendError(res, 400, "name must be a string", { code: "INVALID_NAME" });
+  }
+
+  let cls;
+  try {
+    cls = await Class.findOneAndUpdate(
+      getTenantQuery(req, req.params.id),
+      {
+        ...(name                   && { name: name.trim() }),
+        ...(level   !== undefined  && { level }),
+        ...(section !== undefined  && { section }),
+        ...(isActive !== undefined && { isActive }),
+      },
+      { new: true, runValidators: true }
+    );
+  } catch (err) {
+    // A blank name trims to "" and fails required; an over-long one fails
+    // maxlength. Both are the caller's to fix, not the server's to retry.
+    if (sentAsBadRequest(res, err, "INVALID_CLASS")) return;
+    throw err;
+  }
   if (!cls) return sendError(res, 404, "Class not found");
 
   console.log(`✅ Class updated: ${cls.name}`);
@@ -2633,19 +2676,43 @@ router.put("/settings/grading", requirePermission("settings.manage"), asyncHandl
     });
   }
 
-  const config = await GradingConfig.findOneAndUpdate(
-    { schoolId },
-    {
-      schoolId,
-      grades:      grades      || DEFAULT_GRADES,
-      passMark:    passMark    ?? 50,
-      useGpa:      useGpa      ?? false,
-      gpaScale:    gpaScale    ?? 4.0,
-      gradingType: gradingType || "percentage",
-      updatedBy:   req.user?._id,
-    },
-    { upsert: true, new: true, runValidators: true }
-  );
+  /**
+   * ── A rejected marking scheme is a 400, not a 500 ────────────────────────
+   *
+   * runValidators does its job here: gradingType's enum and each band's required
+   * grade, minMark and maxMark are all enforced. What was missing was catching
+   * the result, so a school typing a grade band with no name got "Internal
+   * Server Error" and no idea which field was wrong.
+   *
+   * The status code matters more than the wording. The desktop application
+   * queues writes made with no connection and replays them, and it treats 5xx as
+   * "the server is unwell, try again" — so an invalid marking scheme became a
+   * queue entry that retried for ever instead of stopping once with a reason.
+   * A 4xx stops it and asks a person, which is what this is.
+   *
+   * Nothing about what the endpoint ACCEPTS changes here.
+   */
+  let config;
+  try {
+    config = await GradingConfig.findOneAndUpdate(
+      { schoolId },
+      {
+        schoolId,
+        grades:      grades      || DEFAULT_GRADES,
+        passMark:    passMark    ?? 50,
+        useGpa:      useGpa      ?? false,
+        gpaScale:    gpaScale    ?? 4.0,
+        gradingType: gradingType || "percentage",
+        updatedBy:   req.user?._id,
+      },
+      { upsert: true, new: true, runValidators: true }
+    );
+  } catch (err) {
+    if (err?.name === "ValidationError" || err?.name === "CastError") {
+      return sendError(res, 400, err.message, { code: "INVALID_GRADING" });
+    }
+    throw err;
+  }
 
   return sendSuccess(res, { grading: config });
 }));

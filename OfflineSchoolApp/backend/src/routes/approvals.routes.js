@@ -9,6 +9,10 @@ const approvals   = require("../services/approvals.service");
 const permissions = require("../services/permissions.service");
 const School      = require("../db/models/School");
 
+// The one definition of what a threshold value may be, shared with the desktop
+// so a change made offline cannot be one this endpoint refuses.
+const { parseThreshold } = require("../../../shared/approvalThresholds");
+
 /**
  * What is waiting for a second signature.
  *
@@ -187,28 +191,25 @@ router.put("/thresholds", canConfigure, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
 
-  const asThreshold = (value, name) => {
-    if (value === null || value === undefined || value === "") return null;
-    const n = Number(value);
-    if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
-      const err = new Error(`${name} must be a whole number of XAF, or empty for never`);
-      err.code = "INVALID_AMOUNT";
-      throw err;
-    }
-    return n;
+  // parseThreshold lives in shared/approvalThresholds.js, so the desktop cannot
+  // accept a value this endpoint would refuse — a 400 at the head of the offline
+  // queue stops every write behind it.
+  const parsed = {
+    expenseThreshold: parseThreshold(req.body.expenseThreshold, "expenseThreshold"),
+    refundThreshold:  parseThreshold(req.body.refundThreshold,  "refundThreshold"),
+    waiverThreshold:  parseThreshold(req.body.waiverThreshold,  "waiverThreshold"),
   };
 
-  let next;
-  try {
-    next = {
-      expenseThreshold: asThreshold(req.body.expenseThreshold, "expenseThreshold"),
-      refundThreshold:  asThreshold(req.body.refundThreshold,  "refundThreshold"),
-      waiverThreshold:  asThreshold(req.body.waiverThreshold,  "waiverThreshold"),
-      payrollRequired:  req.body.payrollRequired === true,
-    };
-  } catch (err) {
-    return bad(res, err.message, err.code);
+  for (const one of Object.values(parsed)) {
+    if (one.error) return bad(res, one.error, one.code);
   }
+
+  const next = {
+    expenseThreshold: parsed.expenseThreshold.value,
+    refundThreshold:  parsed.refundThreshold.value,
+    waiverThreshold:  parsed.waiverThreshold.value,
+    payrollRequired:  req.body.payrollRequired === true,
+  };
 
   await School.updateOne(
     { _id: schoolId },

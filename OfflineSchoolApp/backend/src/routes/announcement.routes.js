@@ -78,7 +78,42 @@ const extractUserId = (req) =>
  * Fix: try ObjectId first; if it's not a valid ObjectId format, fall back
  * to a plain { _id: id } string query which works for any _id type.
  */
-const findAnnouncementById = (id) => Announcement.findByAnyId(id);
+/**
+ * One announcement by id, IN THIS CALLER'S SCHOOL.
+ *
+ * ── The tenancy filter this used to be missing ────────────────────────────
+ *
+ * Announcement.findByAnyId() looks up by _id and nothing else. It exists because
+ * ids here may be stored as ObjectIds or as strings, and findById() raises a
+ * CastError on a non-hex string — the "✅ FIX" comments through this file are
+ * that repair.
+ *
+ * The repair replaced queries of the form findOne({ _id, schoolId }), and the
+ * schoolId went with them. Every route below then decided authorisation from
+ * `isAuthor || isAdmin`, where isAdmin is a ROLE check — so a school_admin of
+ * one school could edit or delete an announcement belonging to another, and any
+ * authenticated user could mark one read or acknowledged, given only its id.
+ * Nothing in the path compared the announcement's school with the caller's.
+ *
+ * Fixed here rather than at each of the eight call sites, so a ninth cannot be
+ * added without it. A mismatch returns null and the caller answers 404, which is
+ * the right answer: somebody outside a school should not learn that one of its
+ * announcements exists.
+ *
+ * A super_admin still crosses schools, which is what that role is for.
+ */
+const findAnnouncementById = async (id, req) => {
+  const doc = await Announcement.findByAnyId(id);
+  if (!doc) return null;
+
+  if (req?.user?.role === "super_admin") return doc;
+
+  const callerSchool = req?.user?.schoolId;
+  if (!callerSchool) return null;
+  if (String(doc.schoolId ?? "") !== String(callerSchool)) return null;
+
+  return doc;
+};
 
 const resolveStudentClassId = async (userId, schoolId) => {
   try {
@@ -446,7 +481,7 @@ router.post("/read-all", authenticated, async (req, res) => {
 router.post("/students/:id/read", authenticated, async (req, res) => {
   try {
     // ✅ FIX: use findAnnouncementById so nanoid / UUID _ids don't CastError
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -474,7 +509,7 @@ router.post("/students/:id/read", authenticated, async (req, res) => {
 // POST /api/announcements/students/:id/acknowledge
 router.post("/students/:id/acknowledge", authenticated, async (req, res) => {
   try {
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -767,7 +802,7 @@ router.get("/:id", authenticated, async (req, res) => {
     }
 
     // ✅ FIX: use findAnnouncementById to handle both ObjectId and string ids
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
 
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
@@ -838,7 +873,7 @@ router.get("/:id", authenticated, async (req, res) => {
 router.put("/:id", adminOrTeacher, async (req, res) => {
   try {
     // ✅ FIX: use findAnnouncementById
-    const existing = await findAnnouncementById(req.params.id);
+    const existing = await findAnnouncementById(req.params.id, req);
     if (!existing) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -909,7 +944,7 @@ router.put("/:id", adminOrTeacher, async (req, res) => {
 router.delete("/:id", adminOrTeacher, async (req, res) => {
   try {
     // ✅ FIX: use findAnnouncementById
-    const existing = await findAnnouncementById(req.params.id);
+    const existing = await findAnnouncementById(req.params.id, req);
     if (!existing) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -946,7 +981,7 @@ router.post("/:id/read", authenticated, async (req, res) => {
     //    Mongoose.findById() calls new ObjectId(id) which throws CastError
     //    for non-hex strings. findAnnouncementById falls back to findOne({ _id })
     //    which works for any _id type stored in MongoDB.
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -988,7 +1023,7 @@ router.post("/:id/read", authenticated, async (req, res) => {
 router.post("/:id/acknowledge", authenticated, async (req, res) => {
   try {
     // ✅ FIX: use findAnnouncementById
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }
@@ -1033,7 +1068,7 @@ router.post("/:id/acknowledge", authenticated, async (req, res) => {
 router.post("/:id/pin", adminOnly, async (req, res) => {
   try {
     // ✅ FIX: use findAnnouncementById
-    const announcement = await findAnnouncementById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) {
       return res.status(404).json({ message: "Announcement not found" });
     }

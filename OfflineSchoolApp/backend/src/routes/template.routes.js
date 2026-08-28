@@ -479,6 +479,31 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
 router.post("/:id/duplicate", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
 
+  /**
+   * ── The copy's id, and why it is looked up first ─────────────────────────
+   *
+   * A supplied _id is kept, so a machine that duplicated a template with no
+   * connection can replay the request without producing a second copy — the
+   * reply would otherwise describe a row it has never heard of while the one it
+   * wrote sat orphaned.
+   *
+   * The lookup comes BEFORE the original's 404 deliberately. If the original
+   * were deleted after the copy was made, a replay would take that 404 and stop
+   * the offline queue on work that had already succeeded.
+   */
+  const copyId = req.body._id || uuidv4();
+
+  const priorCopy = await ReportTemplate.findById(copyId).lean();
+  if (priorCopy) {
+    if (String(priorCopy.schoolId) !== String(schoolId)) {
+      return res.status(409).json({
+        success: false, code: "TEMPLATE_ID_TAKEN",
+        error: "That template id already belongs to another school",
+      });
+    }
+    return res.status(200).json({ success: true, replay: true, template: priorCopy });
+  }
+
   const original = await ReportTemplate.findOne({
     _id:      req.params.id,
     schoolId,
@@ -490,7 +515,7 @@ router.post("/:id/duplicate", asyncHandler(async (req, res) => {
   }
 
   const copy = await ReportTemplate.create({
-    _id:       uuidv4(),
+    _id:       copyId,
     schoolId,
     name:      `${original.name} (Copy)`,
     html:      original.html,
@@ -524,8 +549,26 @@ router.patch("/:id/default", asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Template not found" });
   }
 
+  /**
+   * ── Every OTHER template, not every template ─────────────────────────────
+   *
+   * This cleared the flag on all of them, this one included, and then relied on
+   * save() to put it back. That works when a DIFFERENT template is being
+   * promoted, and silently fails when the current default is re-confirmed:
+   * mongoose sends only modified paths, and assigning true to a field that is
+   * already true modifies nothing. modifiedPaths() is [] and save() issues no
+   * $set, so the clear stands.
+   *
+   * The result was a school with NO default template — from the most innocuous
+   * action available, pressing "set as default" on the row already marked
+   * default. GET /api/templates/default then answers 404 and report cards lose
+   * their template until somebody notices and sets one again.
+   *
+   * Excluding the target removes the dependency on dirty tracking altogether:
+   * the row keeps isDefault true whether save() writes anything or not.
+   */
   await ReportTemplate.updateMany(
-    { schoolId, deletedAt: null },
+    { schoolId, deletedAt: null, _id: { $ne: template._id } },
     { $set: { isDefault: false } }
   );
 
