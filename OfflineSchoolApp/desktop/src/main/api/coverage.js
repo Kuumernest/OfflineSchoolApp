@@ -148,6 +148,25 @@ const ONLINE_ONLY = [
     because: "As revoke: the effect is at the point of verification, not here.",
   },
   {
+    endpoint: "GET /documents/guardian-access",
+    because:
+      "The list of who may see which pupil. GuardianAccess is excluded from the " +
+      "feed in terms that settle this endpoint too: a stale mirrored copy of an " +
+      "access grant is the one kind of staleness that must not happen. A handler " +
+      "cannot answer from a collection this machine does not hold, and answering " +
+      "with an empty list would read as 'nobody has access', which is a sentence " +
+      "somebody would act on.",
+  },
+  {
+    endpoint: "POST /documents/guardian-access",
+    because:
+      "Issuing access to a child's records. Queued, it would tell the office a " +
+      "guardian can see their child while the server has never heard of the " +
+      "grant — and the guardian, being told, would try. The same reasoning " +
+      "already declines revoking a document's validity and withdrawing access: " +
+      "the effect is at the point where it is checked, which is the server.",
+  },
+  {
     endpoint: "PUT /documents/guardian-access/:id",
     because:
       "GuardianAccess is excluded from the feed for exactly this reason: a stale " +
@@ -200,6 +219,26 @@ const ONLINE_ONLY = [
       "leaves this machine in four hours has not been given. The four-eyes rule " +
       "the endpoint enforces — you may not decide what you raised — is the point " +
       "of the whole feature, and its authority is the server's.",
+  },
+
+  {
+    endpoint: "POST /fees/structures/:id/apply",
+    because:
+      "Raising the term's charges: one row per pupil per item on the price list, " +
+      "so a school of five hundred on a five-item structure is two and a half " +
+      "thousand documents from one request, every one of them provisional until " +
+      "the request lands. " +
+      "That size alone would not settle it. FeeCharge has a unique index on " +
+      "(studentId, structureId, code, term), which is a genuine natural key — " +
+      "so the derived-id treatment in shared/attendance.js would apply here and " +
+      "would make a replay safe by construction. What does settle it is the " +
+      "ANSWER: the endpoint reports how many charges it raised and how many it " +
+      "skipped, and skipped means 'already on the server'. A machine that has " +
+      "not synced cannot know that number, and a bursar reading '0 skipped' " +
+      "where the server would have said '500 skipped' has been told the term was " +
+      "billed when it was billed twice over. " +
+      "Worth revisiting if the endpoint is ever given a client-supplied id " +
+      "scheme AND an answer that does not depend on the server's prior state.",
   },
 
   // ── Reminders and late fees ─────────────────────────────────────────────

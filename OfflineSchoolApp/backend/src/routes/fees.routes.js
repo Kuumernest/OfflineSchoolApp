@@ -547,6 +547,32 @@ router.post("/plans", canPlan, asyncHandler(async (req, res) => {
     );
   }
 
+  /**
+   * ── A replay, ahead of every check that a success would fail ─────────────
+   *
+   * A plan agreed on a machine with no connection carries the id it wrote into
+   * its own mirror, so the reply describes a row that machine already holds.
+   *
+   * The lookup has to come BEFORE the balance comparison below, and that is the
+   * subtle part. A plan does not change the ledger, but the unique index means a
+   * second attempt would answer 409 PLAN_EXISTS — and a replay of a request that
+   * SUCCEEDED would take that 409, which stops the offline queue and asks a
+   * person to resolve work that was already done.
+   */
+  const planId = req.body._id ? String(req.body._id).trim() : null;
+  if (planId) {
+    const already = await PaymentPlan.findById(planId).lean();
+    if (already) {
+      if (String(already.schoolId) !== String(schoolId)) {
+        return res.status(409).json({
+          success: false, code: "PLAN_ID_TAKEN",
+          message: "That plan id already belongs to another school",
+        });
+      }
+      return res.status(200).json({ success: true, replay: true, data: already });
+    }
+  }
+
   const student = await Student.findOne({ _id: studentId, schoolId, deletedAt: null })
     .select("_id").lean();
   if (!student) {
@@ -604,6 +630,10 @@ router.post("/plans", canPlan, asyncHandler(async (req, res) => {
 
   try {
     const plan = await PaymentPlan.create({
+      // A supplied _id is kept, so a plan agreed with no connection can be
+      // replayed without becoming a second plan. The replay guard is above,
+      // ahead of the balance check — see the note there.
+      _id: planId || undefined,
       schoolId, studentId, academicYear, term,
       instalments, reason,
       agreedBy: req.user?._id ? String(req.user._id) : null,

@@ -6614,12 +6614,334 @@ const main = async () => {
   check("and reversing without a reason is refused",
     [finReverseNoReason.status, finReverseNoReason.body.code], [400, "REASON_REQUIRED"]);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the pupil-record reads ---");
+
+  /**
+   * ── Verified after the fact, which is why this section exists ─────────────
+   *
+   * These four handlers were written and left LIVE without a parity section: the
+   * file they were added to is already registered, so they began answering the
+   * moment they were written. Unverified handlers that answer wrongly are worse
+   * than absent ones, so they are either checked or removed. This checks them.
+   *
+   * What they claim, and what is worth pinning:
+   *
+   *   status: { in: ["approved", "active"] } and NOTHING else. Mongo's $in does
+   *   not admit a record whose status is missing or null, so a legacy pupil with
+   *   no status is on the register according to one endpoint and off it according
+   *   to another. Reproduced rather than reconciled.
+   *
+   *   isActive read BOTH ways again, in one file. The admin stats count records
+   *   whose isActive is exactly true; the summary counts applications with
+   *   isActive not false. A pupil record written before the field existed has no
+   *   isActive at all, so the two readings differ for most older rows and
+   *   writing either as the other silently changes a number on a dashboard.
+   *
+   *   GET /admin/students/:id has NO deletedAt filter, unlike every list. A
+   *   withdrawn pupil is still fetchable by id. That looks like an oversight and
+   *   is not this layer's to correct.
+   */
+
+  // students.routes.js is not mounted by the harness's app — it carries its own
+  // authenticate on each route, so it goes on as it is.
+  app.use("/api/students", require("../src/routes/students.routes"));
+
+  const pupilSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["students.view", "students.manage", "students.admit"],
+  };
+  const pupilCtx = { docs, meta, queue, session: pupilSession };
+  const asPupilOffice = { token, session: pupilSession };
+
+  // ── The approved register ──────────────────────────────────────────────
+  await parity("the approved register", `/api/admin/students/approved?schoolId=${SCHOOL}`,
+    asPupilOffice);
+  await parity("narrowed to one class",
+    `/api/admin/students/approved?schoolId=${SCHOOL}&classId=cls-1`, asPupilOffice);
+  await parity("and to a class nobody is in",
+    `/api/admin/students/approved?schoolId=${SCHOOL}&classId=cls-4`, asPupilOffice);
+
+  /**
+   * A pupil with NO status at all. Mongo's $in does not match a missing field,
+   * so this record is invisible to the approved register — and the fixture is
+   * added here precisely because no other section has one, which means nothing
+   * was proving the endpoint's behaviour either way.
+   */
+  await Student.collection.insertOne({
+    _id: "p-nostatus", schoolId: SCHOOL, classId: "cls-1",
+    studentName: "Statusless Pupil", enrollmentNo: "SMK-900",
+    isActive: true, deletedAt: null, updatedAt: new Date(),
+  });
+  docs.putMany("student",
+    JSON.parse(JSON.stringify(await Student.find({ _id: "p-nostatus" }).lean())));
+
+  check("a pupil with no status is off the approved register",
+    api.handle({
+      method: "GET", path: "/api/admin/students/approved",
+      query: { schoolId: SCHOOL },
+    }, pupilCtx).data.students.some((s) => s._id === "p-nostatus"),
+    false);
+  await parity("and both sides agree about that",
+    `/api/admin/students/approved?schoolId=${SCHOOL}`, asPupilOffice);
+
+  // ── The two stats endpoints, and the two readings of isActive ───────────
+  await parity("the admin pupil stats", `/api/admin/students/stats?schoolId=${SCHOOL}`,
+    asPupilOffice);
+  await parity("the summary", `/api/students/stats/summary?schoolId=${SCHOOL}`, asPupilOffice);
+
+  /**
+   * THE ASSERTION FOR THE TWO READINGS. A record with isActive ABSENT, which is
+   * what most older rows look like. The admin stats want exactly true and must
+   * not count it; the summary wants "not false" and must.
+   */
+  await Student.collection.insertOne({
+    _id: "p-noflag", schoolId: SCHOOL, classId: "cls-1",
+    studentName: "Unflagged Pupil", enrollmentNo: "SMK-901",
+    status: "approved", deletedAt: null, updatedAt: new Date(),
+  });
+  docs.putMany("student",
+    JSON.parse(JSON.stringify(await Student.find({ _id: "p-noflag" }).lean())));
+
+  await parity("the admin stats, with an unflagged pupil in the school",
+    `/api/admin/students/stats?schoolId=${SCHOOL}`, asPupilOffice);
+  await parity("and the summary, which counts it differently",
+    `/api/students/stats/summary?schoolId=${SCHOOL}`, asPupilOffice);
+
+  {
+    const adminStats = api.handle({
+      method: "GET", path: "/api/admin/students/stats", query: { schoolId: SCHOOL },
+    }, pupilCtx).data;
+    const approved = api.handle({
+      method: "GET", path: "/api/admin/students/approved", query: { schoolId: SCHOOL },
+    }, pupilCtx).data.students;
+
+    // Stated outright: the pupil is ON the register and NOT in the active count,
+    // which is the whole difference between the two readings.
+    check("the unflagged pupil is on the approved register",
+      approved.some((s) => s._id === "p-noflag"), true);
+    check("but is not counted as active, because that wants exactly true",
+      adminStats.active < approved.length, true);
+  }
+
+  // ── One pupil by id ────────────────────────────────────────────────────
+  await parity("one pupil by id", `/api/admin/students/p1?schoolId=${SCHOOL}`, asPupilOffice);
+  await parity("a pupil with alias-spelled names",
+    `/api/admin/students/p2?schoolId=${SCHOOL}`, asPupilOffice);
+
+  // p4 is soft-deleted in the fixtures. Every LIST filters it out; this endpoint
+  // does not, and both sides have to agree about that.
+  await parity("a withdrawn pupil is still fetchable by id",
+    `/api/admin/students/p4?schoolId=${SCHOOL}`, asPupilOffice);
+  check("which no list agrees with",
+    api.handle({
+      method: "GET", path: "/api/admin/students/approved",
+      query: { schoolId: SCHOOL },
+    }, pupilCtx).data.students.some((s) => s._id === "p4"),
+    false);
+
+  // Another school's pupil, and one that does not exist.
+  check("a pupil from another school is not answered locally",
+    api.handle({
+      method: "GET", path: "/api/admin/students/p5", query: { schoolId: SCHOOL },
+    }, pupilCtx),
+    null);
+  check("nor one that does not exist",
+    api.handle({
+      method: "GET", path: "/api/admin/students/nobody", query: { schoolId: SCHOOL },
+    }, pupilCtx),
+    null);
+
+  // The rows added here are left in place: sections after this one read the
+  // register, and removing a pupil mid-file is how a later count stops matching.
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- an instalment plan agreed with no connection ---");
+
+  /**
+   * ── A plan changes WHEN, never HOW MUCH ──────────────────────────────────
+   *
+   * Nothing about a plan touches the ledger, and balanceFor() does not know the
+   * collection exists. What it changes is the date reminders and late fees are
+   * measured against.
+   *
+   * Which is why the endpoint refuses a schedule that does not add up to what is
+   * outstanding: a plan for less quietly forgives the difference — that is a
+   * waiver, and waivers go through approval — and a plan for more has the family
+   * chased for money the ledger says they do not owe. So the local handler
+   * compares against the same totals the ledger read uses rather than carrying a
+   * second idea of what a family owes.
+   *
+   * The outstanding figure is READ here rather than written down: sections above
+   * this one take payments, reverse one and change thresholds, so any constant
+   * would be a hostage to whatever ran first.
+   */
+  const planSession = {
+    userId: "admin-1", schoolId: SCHOOL,
+    permissions: ["fees.plan", "fees.view", "fees.manage"],
+  };
+  const planCtx = { docs, meta, queue, session: planSession };
+
+  const planAsk = async (body) => {
+    const res = await fetch("http://127.0.0.1:" + port + "/api/fees/plans", {
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: "Bearer " + token },
+      body: JSON.stringify(body),
+    });
+    return { status: res.status, body: await res.json() };
+  };
+
+  // p1 already has an active plan from the section above? No — pl-offline was
+  // cancelled there, so the index is free for the year. Confirmed rather than
+  // assumed, because the unique index is one active plan per student and term.
+  check("no active plan stands in the way",
+    docs.find("paymentPlan", { schoolId: SCHOOL, studentId: "p1", deletedAt: null })
+      .filter((p) => p.status === "active").length,
+    0);
+
+  const planOutstanding = api.handle({
+    method: "GET", path: "/api/fees/students/p1",
+    query: { schoolId: SCHOOL, academicYear: YEAR },
+  }, planCtx).data.data.totals.balance;
+
+  check("this family owes something to plan for", planOutstanding > 0, true);
+
+  // Two instalments that add up exactly. An odd balance splits with the
+  // remainder on the first, because XAF has no minor unit to carry.
+  const planFirst  = Math.ceil(planOutstanding / 2);
+  const planSecond = planOutstanding - planFirst;
+
+  const planBody = {
+    schoolId: SCHOOL, studentId: "p1", academicYear: YEAR, term: null,
+    reason: "  Family paying in two parts  ",
+    instalments: [
+      { amount: planFirst,  dueDate: "2026-11-01" },
+      { amount: planSecond, dueDate: "2026-12-01" },
+    ],
+  };
+
+  const planned = api.handle({
+    method: "POST", path: "/api/fees/plans", query: {}, body: planBody,
+  }, planCtx);
+
+  check("the plan is accepted locally", planned?.status, 201);
+  check("and queued", planned?.queued, true);
+  const planId = planned.data.data._id;
+  check("the reason is trimmed, since an auditor reads it",
+    planned.data.data.reason, "Family paying in two parts");
+  check("it is active", planned.data.data.status, "active");
+  check("the instalments are numbered from one",
+    planned.data.data.instalments.map((i) => i.seq), [1, 2]);
+  check("and they add up to what is outstanding",
+    planned.data.data.instalments.reduce((s, i) => s + i.amount, 0), planOutstanding);
+  check("the row is in the mirror", docs.get("paymentPlan", planId)?._pending, true);
+
+  // ── Every refusal, checked against the real endpoint ────────────────────
+  const planRejections = [
+    ["no reason",              { ...planBody, reason: "   " }],
+    ["a single instalment",    { ...planBody, instalments: [{ amount: planOutstanding, dueDate: "2026-11-01" }] }],
+    ["a fractional amount",    { ...planBody,
+                                 instalments: [{ amount: planOutstanding - 0.5, dueDate: "2026-11-01" },
+                                               { amount: 0.5, dueDate: "2026-12-01" }] }],
+    ["an instalment with no date", { ...planBody,
+                                 instalments: [{ amount: planFirst }, { amount: planSecond, dueDate: "2026-12-01" }] }],
+    ["a date that is prose",   { ...planBody,
+                                 instalments: [{ amount: planFirst, dueDate: "next friday" },
+                                               { amount: planSecond, dueDate: "2026-12-01" }] }],
+    // The rule the endpoint exists to enforce.
+    ["a total under what is owed", { ...planBody,
+                                 instalments: [{ amount: 1, dueDate: "2026-11-01" },
+                                               { amount: 1, dueDate: "2026-12-01" }] }],
+    ["a pupil in another school", { ...planBody, studentId: "p5" }],
+  ];
+
+  for (const [what, body] of planRejections) {
+    check("not queued: " + what,
+      api.handle({ method: "POST", path: "/api/fees/plans", query: {}, body }, planCtx),
+      null);
+    const refused = await planAsk(body);
+    check("and the server refuses it: " + what,
+      refused.status >= 400 && refused.status < 500, true);
+  }
+
+  check("somebody without fees.plan is not queued",
+    api.handle({ method: "POST", path: "/api/fees/plans", query: {}, body: planBody },
+      { docs, meta, queue, session: { ...planSession, permissions: ["fees.view"] } }),
+    null);
+
+  // A SECOND active plan for the same pupil, year and term is the unique index's
+  // 409 — and the local row written a moment ago is what makes it detectable.
+  check("a second active plan for the same term is not queued",
+    api.handle({
+      method: "POST", path: "/api/fees/plans", query: {},
+      body: { ...planBody, reason: "again" },
+    }, planCtx),
+    null);
+
+  // ── Reconnecting ───────────────────────────────────────────────────────
+  {
+    const planEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["paymentPlan"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection = ?").run("paymentPlan");
+    await planEngine.cycle();
+    planEngine.stop();
+  }
+
+  check("the plan reached the server", queue.all().length, 0);
+  check("and settled", docs.get("paymentPlan", planId)?._pending, false);
+
+  const planStored = await PaymentPlanModel.findById(planId).lean();
+  check("the server has it under the client's id", Boolean(planStored), true);
+  check("with the schedule intact",
+    planStored?.instalments?.map((i) => i.amount), [planFirst, planSecond]);
+  check("attributed to whoever agreed it", planStored?.agreedBy, "admin-1");
+
+  /**
+   * The replay, which the endpoint could not survive before this batch: the
+   * unique index means a second attempt is a 409 PLAN_EXISTS, and a replay of a
+   * request that SUCCEEDED would take that 409 and stop the queue on work that
+   * was already done. So the id is looked up first.
+   */
+  const planReplay = await planAsk({ ...planBody, _id: planId });
+  check("replaying it is a success, not a conflict", planReplay.status, 200);
+  check("and says so, so the queue can mark it done", planReplay.body.replay, true);
+  check("returning the plan already stored", planReplay.body.data._id, planId);
+  check("without a second plan appearing",
+    await PaymentPlanModel.countDocuments({
+      schoolId: SCHOOL, studentId: "p1", academicYear: YEAR, status: "active",
+    }),
+    1);
+
+  // A DIFFERENT id for the same pupil and term is the real conflict, and must
+  // still refuse — that is the index doing its job.
+  const planClash = await planAsk({ ...planBody, _id: "some-other-plan" });
+  check("but a different plan for the same term is refused", planClash.status, 409);
+
+  await parity("the plans once one is agreed", "/api/fees/plans?schoolId=" + SCHOOL);
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+
+  /**
+   * Teardown must not turn a passing run into a failure.
+   *
+   * On a loaded machine mongod sometimes will not exit within the library's
+   * window, and the throw landed AFTER every assertion had been counted and
+   * printed — so the suite said "0 failed" and then exited 1, which is the
+   * worst of both for anything reading the exit code.
+   *
+   * A lingering temporary process is worth knowing about and is not a result.
+   */
+  try {
+    await mongo.stop();
+  } catch (err) {
+    console.log(`  (the temporary mongod did not exit cleanly: ${err.message})`);
+  }
 };
 
 main()

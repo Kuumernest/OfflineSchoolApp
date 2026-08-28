@@ -81,13 +81,39 @@ const getStudentApp        = lazyModel("../db/models/StudentApplication", "Stude
 
 // ─── Shared query clauses ─────────────────────────────────────────────────────
 
+/**
+ * Rows that have not been withdrawn.
+ *
+ * ── Two of the five clauses made every query using this THROW ─────────────
+ *
+ * Student.deletedAt is a Date. Mongoose casts query values against the schema,
+ * and `false` cannot become a Date — so this filter raised
+ *
+ *     CastError: Cast to date failed for value "false" (type boolean)
+ *         at path "deletedAt" for model "Student"
+ *
+ * on every single call, before touching the database. Four endpoints used it:
+ * GET /api/students/stats/summary, GET /api/students, GET /api/students/pending
+ * and GET /api/students/application-status/:id. All four answered 500, always,
+ * and the console calls the first of them.
+ *
+ * It was found by a parity comparison whose fetch got an HTML stack trace where
+ * JSON belonged — the harness has no error middleware, so Express's default
+ * handler had been swallowing the reason.
+ *
+ * `0` went with `false`: it casts to the epoch, so it matched rows "deleted at
+ * midnight on 1 January 1970" — harmless and meaningless. What remains is
+ * exactly what admin.routes.js uses for the same job, and those endpoints have
+ * always worked.
+ *
+ * Nothing depended on the removed clauses: a query that always threw never
+ * returned a row, so no caller can have relied on one.
+ */
 const NOT_DELETED = {
   $or: [
     { deletedAt: { $exists: false } },
     { deletedAt: null               },
     { deletedAt: ""                 },
-    { deletedAt: 0                  },
-    { deletedAt: false              },
   ],
 };
 
