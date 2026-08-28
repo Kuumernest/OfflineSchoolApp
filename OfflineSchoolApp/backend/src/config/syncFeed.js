@@ -34,7 +34,7 @@
 const fs   = require("fs");
 const path = require("path");
 
-const { ROLES, STAFF_ROLES } = require("./roles");
+const { ROLES, STAFF_ROLES, ADMIN_ROLES } = require("./roles");
 const { isPermission }       = require("./permissions");
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,6 +79,37 @@ const taughtStudentsOnly = async (req, models) => {
   // otherwise be read as "no filter" by anything that builds on this.
   return { classId: { $in: classIds } };
 };
+
+/**
+ * Only results that have been published, unless the caller is an admin.
+ *
+ * ── Why this exists ───────────────────────────────────────────────────────
+ *
+ * GET /api/results/:examId is gated on results.view, which a bursar and a
+ * teacher both hold — and then, INSIDE the handler, it forces
+ * isPublished: true for anybody who is not an admin. So the server has never
+ * shown an unpublished result to a teacher.
+ *
+ * The feed had no such rule, so it mirrored the whole collection: unpublished
+ * marks, on a teacher's or a bursar's machine, in a file they can read. That is
+ * exactly the gap this file's own header warns about — a difference between what
+ * a caller may PULL and what they may READ is a difference that persists to
+ * disk, and a local handler filtering it afterwards is a screen being polite
+ * about data that should not have been sent.
+ *
+ * Unpublished marks are a real confidence: a provisional grade seen early is a
+ * grade argued about before the school has decided it.
+ *
+ * ── Why the admin list rather than results.publish ────────────────────────
+ *
+ * Because the controller uses the roles, not a capability — isAdmin(role) over
+ * ["super_admin", "school_admin", "admin"]. Reproducing the rule as written
+ * keeps the two the same; pairing it with results.publish instead would be a
+ * different rule that happens to agree today. ("admin" in that list is the dead
+ * legacy string, aliased to school_admin at the door, so ADMIN_ROLES covers it.)
+ */
+const publishedUnlessAdmin = (req) =>
+  ADMIN_ROLES.includes(req.user?.role) ? {} : { isPublished: true };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE FEED
@@ -193,7 +224,15 @@ const FEED = [
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
   { collection: "examScore",    model: "ExamScore",    permission: "results.view" },
-  { collection: "examResult",   model: "ExamResult",   permission: "results.view" },
+  {
+    collection: "examResult", model: "ExamResult",
+    permission: "results.view",
+    scope: publishedUnlessAdmin,
+    why: "Scoped, not merely gated. The endpoint forces isPublished for anybody " +
+         "who is not an admin, so mirroring the whole collection would put " +
+         "unpublished marks on a teacher's machine — which the server would " +
+         "never show them.",
+  },
   { collection: "studentScore", model: "StudentScore", permission: "results.view" },
   { collection: "resultSummary", model: "ResultSummary", permission: "results.view" },
   { collection: "grade",        model: "Grade",        permission: "results.view" },
@@ -423,5 +462,5 @@ module.exports = {
   byCollection,
   modelNames,
   assertEveryModelIsClassified,
-  scopes: { wholeSchool, taughtStudentsOnly },
+  scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin },
 };

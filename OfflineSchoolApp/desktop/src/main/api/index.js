@@ -43,6 +43,7 @@ const reads = [
   ...require("./handlers/approvals"),
   ...require("./handlers/attendance"),
   ...require("./handlers/exams"),
+  ...require("./handlers/results"),
 ];
 
 /**

@@ -60,7 +60,7 @@ const check = (label, actual, expected) => {
     pass++;
   } else {
     fail++;
-    console.log(`  FAIL ${label}:\n       local  ${JSON.stringify(actual)}\n       server ${JSON.stringify(expected)}`);
+    console.log(`  FAIL ${label}:\n       got      ${JSON.stringify(actual)}\n       expected ${JSON.stringify(expected)}`);
   }
 };
 
@@ -270,6 +270,7 @@ const main = async () => {
   app.use("/api/approvals", authenticate, require("../src/routes/approvals.routes"));
   app.use("/api/attendance", authenticate, require("../src/routes/attendance.routes"));
   app.use("/api/exams", authenticate, require("../src/routes/exam.routes"));
+  app.use("/api/results", authenticate, require("../src/routes/results.routes"));
   const server = app.listen(0);
   const port   = server.address().port;
 
@@ -1059,6 +1060,158 @@ const main = async () => {
     api.handle({
       method: "GET", path: "/api/exams", query: { schoolId: SCHOOL, limit: "0" },
     }, { docs }),
+    null);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- exam results, published and otherwise ---");
+
+  const ExamResult = require("../src/db/models/ExamResult");
+  await ExamResult.init();
+
+  // Positions 1..10 so the numeric sort is testable: as text, "10" sorts before
+  // "9", and a ranked list in the wrong order is worse than an unordered one.
+  // One row with no position at all, because Mongo puts missing values first on
+  // an ascending sort.
+  const resultRows = [
+    ...Array.from({ length: 10 }, (_, i) => ({
+      _id: `res-${i + 1}`, examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
+      // A DISTINCT pupil per row: there is a unique index on
+      // { examId, studentId }, so one exam has one result per pupil. The first
+      // version of this fixture cycled through three pupils and could not exist.
+      // The index is not partial either, so a soft-deleted row still occupies
+      // its pupil's place — which is why res-gone below has its own.
+      studentId: `stu-${i + 1}`, total: 100 - i, classPosition: i + 1,
+      isPublished: true, deletedAt: null, updatedAt: new Date(),
+    })),
+    { _id: "res-unranked", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
+      studentId: "stu-unranked", total: 40, isPublished: true, deletedAt: null, updatedAt: new Date() },
+    // Unpublished: an admin may ask for these, a teacher and a bursar may not
+    // see them at all.
+    { _id: "res-draft-1", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
+      studentId: "stu-draft-1", total: 88, classPosition: 2, isPublished: false,
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "res-draft-2", examId: "exam-0", schoolId: SCHOOL, classId: "cls-2",
+      studentId: "stu-draft-2", total: 77, classPosition: 1, isPublished: false,
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "res-gone", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
+      studentId: "stu-gone", total: 1, classPosition: 99, isPublished: true,
+      deletedAt: new Date(), updatedAt: new Date() },
+    { _id: "res-other", examId: "exam-0", schoolId: "other-school", classId: "cls-9",
+      studentId: "px", total: 50, classPosition: 1, isPublished: true,
+      deletedAt: null, updatedAt: new Date() },
+  ];
+  await ExamResult.collection.insertMany(resultRows);
+
+  // Mirrored WITHOUT the feed's scope, deliberately: this is the state a machine
+  // is in if it pulled as an admin. The handler must still hide unpublished rows
+  // from a non-admin reading that same machine.
+  docs.putMany("examResult", JSON.parse(JSON.stringify(await ExamResult.find({}).lean())));
+
+  await parity("as an admin, published only by default",
+    `/api/results/exam-0?schoolId=${SCHOOL}`, asHead);
+  await parity("as an admin, asking for unpublished",
+    `/api/results/exam-0?schoolId=${SCHOOL}&isPublished=false`, asHead);
+  await parity("as an admin, asking for published",
+    `/api/results/exam-0?schoolId=${SCHOOL}&isPublished=true`, asHead);
+  await parity("as a bursar, who may not see drafts",
+    `/api/results/exam-0?schoolId=${SCHOOL}`, asBursar);
+  await parity("as a bursar, asking for unpublished anyway",
+    `/api/results/exam-0?schoolId=${SCHOOL}&isPublished=false`, asBursar);
+  await parity("one class",
+    `/api/results/exam-0?schoolId=${SCHOOL}&classId=cls-1`, asHead);
+  // Paging compared over PUBLISHED results only, where classPosition is unique
+  // and the order is therefore total. Compared over everything, the drafts share
+  // positions with published rows and the endpoint has no secondary sort key —
+  // so which of two tied documents lands on which page is undefined, and a
+  // parity check over it would be asserting something the server does not
+  // promise. That is exactly how this first failed.
+  await parity("paged, where positions are unique",
+    `/api/results/exam-0?schoolId=${SCHOOL}&isPublished=true&limit=4&page=2`, asHead);
+
+  // What IS guaranteed with ties present: the same documents, however ordered.
+  {
+    const all = new Set(
+      api.handle({
+        method: "GET", path: "/api/results/exam-0",
+        query: { schoolId: SCHOOL, limit: "100" },
+      }, { docs, session: asHead.session }).data.data.map((r) => r._id)
+    );
+    const res = await fetch(
+      `http://127.0.0.1:${port}/api/results/exam-0?schoolId=${SCHOOL}&limit=100`,
+      { headers: { authorization: `Bearer ${token}` } }
+    );
+    const fromServer = new Set((await res.json()).data.map((r) => r._id));
+    check("with ties present, both sides return the same set of results",
+      [...all].sort(), [...fromServer].sort());
+  }
+  await parity("an exam with no results",
+    `/api/results/exam-nothing?schoolId=${SCHOOL}`, asHead);
+
+  // Stated outright.
+  const asAdminRows = api.handle({
+    method: "GET", path: "/api/results/exam-0", query: { schoolId: SCHOOL },
+  }, { docs, session: asHead.session }).data;
+  const asBursarRows = api.handle({
+    method: "GET", path: "/api/results/exam-0", query: { schoolId: SCHOOL },
+  }, { docs, session: asBursar.session }).data;
+
+  // THE ASSERTION THIS SECTION EXISTS FOR. The mirror holds the drafts; the
+  // handler must not show them to somebody the server would hide them from.
+  check("the mirror does hold the unpublished rows",
+    docs.count("examResult", { isPublished: false }) > 0, true);
+  check("and a bursar is shown none of them",
+    asBursarRows.data.some((r) => r.isPublished === false), false);
+  check("an admin asking explicitly does see them",
+    api.handle({
+      method: "GET", path: "/api/results/exam-0",
+      query: { schoolId: SCHOOL, isPublished: "false" },
+    }, { docs, session: asHead.session }).data.data.map((r) => r._id).sort(),
+    ["res-draft-1", "res-draft-2"]);
+  // isPublished is compared to the string "true", so anything else is FALSE —
+  // including "1", which reads as true to a human.
+  check("isPublished=1 means false, as the string comparison dictates",
+    api.handle({
+      method: "GET", path: "/api/results/exam-0",
+      query: { schoolId: SCHOOL, isPublished: "1" },
+    }, { docs, session: asHead.session }).data.data.every((r) => r.isPublished === false),
+    true);
+  check("a bursar passing isPublished=false is still shown published rows only",
+    asBursarRows.data.length,
+    api.handle({
+      method: "GET", path: "/api/results/exam-0",
+      query: { schoolId: SCHOOL, isPublished: "false" },
+    }, { docs, session: asBursar.session }).data.data.length);
+
+  // Over published results only, where positions are unique — as text, "10"
+  // sorts before "9", and a ranked list in the wrong order is worse than an
+  // unordered one.
+  const publishedOnly = api.handle({
+    method: "GET", path: "/api/results/exam-0",
+    query: { schoolId: SCHOOL, isPublished: "true", limit: "100" },
+  }, { docs, session: asHead.session }).data;
+
+  check("positions sort numerically, not as text",
+    publishedOnly.data.map((r) => r.classPosition).filter((p) => p !== undefined).slice(0, 4),
+    [1, 2, 3, 4]);
+  check("a row with no position comes first, as Mongo sorts missing values",
+    publishedOnly.data[0]._id, "res-unranked");
+  check("and an admin's default includes the drafts, so positions repeat",
+    asAdminRows.data.map((r) => r.classPosition).filter((p) => p !== undefined).slice(0, 4),
+    [1, 1, 2, 2]);
+  check("a deleted result is excluded",
+    asAdminRows.data.some((r) => r._id === "res-gone"), false);
+  check("and another school's is not here",
+    asAdminRows.data.some((r) => r._id === "res-other"), false);
+
+  // This envelope is FLAT and names the page count "pages", where the exam list
+  // nests it and names it "totalPages". A mirror does not get to tidy that up.
+  check("the envelope is flat, with pages not totalPages",
+    Object.keys(asAdminRows).sort(), ["count", "data", "page", "pages", "success", "total"]);
+
+  check("with no role it declines rather than guessing which way to fail",
+    api.handle({
+      method: "GET", path: "/api/results/exam-0", query: { schoolId: SCHOOL },
+    }, { docs, session: null }),
     null);
 
   // ═══════════════════════════════════════════════════════════════════════
