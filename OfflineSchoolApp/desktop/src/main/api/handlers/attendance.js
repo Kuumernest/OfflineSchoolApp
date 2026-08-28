@@ -43,7 +43,7 @@ const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
  * a queued register against one day and apply it against another — and the two
  * would disagree about who was in the room with nothing to show why.
  */
-const { dateStr } = require("../../../../../shared/attendance");
+const { dateStr, lastSevenDays } = require("../../../../../shared/attendance");
 
 /**
  * A calendar-day filter, as both teacher and pupil queries build it.
@@ -71,7 +71,244 @@ const withinDates = (rows, query) => {
   });
 };
 
+/**
+ * How many of a school's pupils and staff there are to mark.
+ *
+ * ── Two different readings of isActive, and both are the endpoint's ───────
+ *
+ * Pupils: isActive is not false, so a record that never had the field counts —
+ * and most do not have it. Staff: isActive is exactly true. Reading the pupil
+ * side as true-only would make every attendance RATE in the school read as zero
+ * per cent, because the denominator would be nothing.
+ *
+ * Neither query filters deletedAt, so a withdrawn pupil is still counted. That
+ * looks like an oversight and is not this layer's to correct: a rate that
+ * disagreed with the server's would be a worse problem, and a silent one.
+ */
+const population = (docs, schoolId) => ({
+  students: docs.find("student", { schoolId }).filter((s) => s.isActive !== false).length,
+  teachers: docs.count("user", { schoolId, role: "teacher", isActive: true }),
+});
+
+/** Marks of one status, counted. */
+const countOf = (rows, status) => rows.filter((r) => r.status === status).length;
+
+/**
+ * present as a percentage of the POPULATION, not of the marks taken.
+ *
+ * So a class of thirty with two pupils marked present reads 7%, not 100%. That is
+ * the number a head is looking for — it answers "how much of the school was
+ * here", and a rate over marks taken would answer "of the ones somebody
+ * remembered to mark", which flatters an unmarked register.
+ */
+const rateOf = (rows, total) =>
+  total > 0 ? Math.round((countOf(rows, "present") / total) * 100) : 0;
+
 module.exports = [
+  {
+    route: "GET /api/attendance/report/overview",
+
+    /**
+     * One day, pupils and staff side by side.
+     *
+     * Declines when the staff directory is not mirrored — it needs users.manage,
+     * and a teacher's own machine does not hold it. A summary reporting nought
+     * out of nought teachers is not a smaller answer than the server's, it is a
+     * different one.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      if (docs.count("user", { schoolId, role: "teacher" }) === 0) return null;
+
+      const date  = dateStr(query.date);
+      const total = population(docs, schoolId);
+
+      const studentRows = docs.find("studentAttendance", { schoolId, date });
+      const teacherRows = docs.find("teacherAttendance", { schoolId, date });
+
+      return ok({
+        date,
+        students: {
+          total:    total.students,
+          marked:   studentRows.length,
+          present:  countOf(studentRows, "present"),
+          absent:   countOf(studentRows, "absent"),
+          late:     countOf(studentRows, "late"),
+          excused:  countOf(studentRows, "excused"),
+          // May go negative where marks exist for pupils no longer counted as
+          // active. The endpoint subtracts without a floor, so this does too.
+          unmarked: total.students - studentRows.length,
+          rate:     rateOf(studentRows, total.students),
+        },
+        teachers: {
+          total:    total.teachers,
+          marked:   teacherRows.length,
+          present:  countOf(teacherRows, "present"),
+          absent:   countOf(teacherRows, "absent"),
+          late:     countOf(teacherRows, "late"),
+          on_leave: countOf(teacherRows, "on_leave"),
+          unmarked: total.teachers - teacherRows.length,
+          rate:     rateOf(teacherRows, total.teachers),
+        },
+      });
+    },
+  },
+
+  {
+    route: "GET /api/attendance/report/weekly",
+
+    /**
+     * The last seven days, as a trend.
+     *
+     * The window comes from shared/attendance.js because the arithmetic mixes a
+     * local calendar day with a UTC reading of it — see the note there. Two
+     * implementations would agree for most of the day and differ for the rest,
+     * which is the worst way for anything to be wrong.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      if (docs.count("user", { schoolId, role: "teacher" }) === 0) return null;
+
+      const days  = lastSevenDays();
+      const from  = days[0];
+      const to    = days[days.length - 1];
+      const total = population(docs, schoolId);
+
+      const inWindow = (collection) =>
+        docs.find(collection, { schoolId }).filter((r) => {
+          const d = String(r.date ?? "");
+          return d >= from && d <= to;
+        });
+
+      const studentRows = inWindow("studentAttendance");
+      const teacherRows = inWindow("teacherAttendance");
+
+      const trend = days.map((day) => {
+        const s = studentRows.filter((r) => r.date === day);
+        const t = teacherRows.filter((r) => r.date === day);
+
+        return {
+          date: day,
+          students: {
+            present: countOf(s, "present"),
+            absent:  countOf(s, "absent"),
+            late:    countOf(s, "late"),
+            excused: countOf(s, "excused"),
+            total:   total.students,
+            rate:    rateOf(s, total.students),
+          },
+          teachers: {
+            present:  countOf(t, "present"),
+            absent:   countOf(t, "absent"),
+            late:     countOf(t, "late"),
+            on_leave: countOf(t, "on_leave"),
+            total:    total.teachers,
+            rate:     rateOf(t, total.teachers),
+          },
+        };
+      });
+
+      return ok({ trend, days });
+    },
+  },
+
+  {
+    route: "GET /api/attendance/report/class/:classId",
+
+    /**
+     * One class over a range of days, pupil by pupil.
+     *
+     * ── The default range is today, not everything ──────────────────────────
+     *
+     * Both ends go through dateStr, which falls back to TODAY on anything
+     * missing or unparseable — so a request with no dates asks about today
+     * alone. A mirror that read "no dates" as "all time" would answer a
+     * different question from the server's, and a screen showing a term's
+     * figures where the server shows one day is a difference nobody would read
+     * as a bug.
+     *
+     * ── And the rate here means something else ──────────────────────────────
+     *
+     * Per pupil it is present as a share of THAT PUPIL'S marks, not of the days
+     * in the range: a child marked once and present reads 100%. The overview's
+     * rate is over the population instead. Two rates with one name, and copying
+     * either into the other's place would be undetectable on a screen.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const classId   = String(params.classId);
+      const startDate = dateStr(query.startDate);
+      const endDate   = dateStr(query.endDate || new Date());
+
+      const records = docs
+        .find("studentAttendance", { schoolId, classId })
+        .filter((r) => {
+          const d = String(r.date ?? "");
+          return d >= startDate && d <= endDate;
+        });
+
+      // ── The endpoint imposes no order on this list ──────────────────────
+      //
+      // Student.find() with no .sort(), so the server returns whatever order the
+      // storage engine gives and any order is as faithful as another. Sorted by
+      // name here so the desktop shows a stable one — a class list that
+      // reshuffles between reads is its own kind of wrong — with the id as a
+      // tie-break so two pupils of the same name do not swap places either.
+      //
+      // It also means the parity harness compares these rows BY PUPIL rather
+      // than by position: a list comparison would be asserting Mongo's storage
+      // order, which the endpoint does not promise.
+      const roster = docs
+        .find("student", { schoolId, classId })
+        .filter((s) => s.isActive !== false)
+        .map((s) => ({ _id: s._id, studentName: s.studentName, email: s.email }))
+        .sort((a, b) => {
+          const an = String(a.studentName ?? "");
+          const bn = String(b.studentName ?? "");
+          if (an === bn) return String(a._id).localeCompare(String(b._id));
+          return an < bn ? -1 : 1;
+        });
+
+      const students = roster.map((student) => {
+        const mine  = records.filter((r) => r.studentId === String(student._id));
+        const total = mine.length;
+        const present = countOf(mine, "present");
+
+        return {
+          student,
+          present,
+          absent:  countOf(mine, "absent"),
+          late:    countOf(mine, "late"),
+          excused: countOf(mine, "excused"),
+          total,
+          // Of this pupil's own marks — see the docstring.
+          rate: total > 0 ? Math.round((present / total) * 100) : 0,
+        };
+      });
+
+      return ok({
+        classId,
+        startDate,
+        endDate,
+        students,
+        overall: {
+          totalStudents: roster.length,
+          totalRecords:  records.length,
+          present: countOf(records, "present"),
+          absent:  countOf(records, "absent"),
+          late:    countOf(records, "late"),
+          excused: countOf(records, "excused"),
+        },
+      });
+    },
+  },
+
   {
     route: "GET /api/attendance/teachers/roster",
 

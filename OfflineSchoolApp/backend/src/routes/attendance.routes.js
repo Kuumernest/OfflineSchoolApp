@@ -32,6 +32,7 @@ const {
   TEACHER_STATUSES,
   todayStr,
   dateStr,
+  lastSevenDays,
   attendanceId,
   teacherAttendanceId,
 } = require("../../../shared/attendance");
@@ -1000,12 +1001,9 @@ router.get("/report/weekly", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
 
-    const days = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      days.push(d.toISOString().slice(0, 10));
-    }
+    // Shared with the desktop — see the note in shared/attendance.js on why the
+    // local/UTC mix in this arithmetic is not worth writing twice.
+    const days = lastSevenDays();
 
     const startDate = days[0];
     const endDate   = days[days.length - 1];

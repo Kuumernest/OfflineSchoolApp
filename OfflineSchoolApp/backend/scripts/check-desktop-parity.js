@@ -3035,6 +3035,240 @@ const main = async () => {
     "/api/attendance/teachers?schoolId=" + SCHOOL +
     "&startDate=2026-10-01&endDate=2026-10-31");
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the attendance reports ---");
+
+  /**
+   * ── Counting, but with three numbers that are easy to swap ───────────────
+   *
+   * These are the last of the attendance endpoints and the only ones that are
+   * arithmetic rather than shape. Three things in them are worth pinning:
+   *
+   *   isActive is read TWO ways. Pupils count when it is not false — and most
+   *   records do not have the field at all — while staff count only when it is
+   *   exactly true. Reading the pupil side as true-only makes every rate in the
+   *   school read nought per cent, because the denominator vanishes.
+   *
+   *   THE RATE MEANS TWO THINGS. In the overview it is present over the whole
+   *   population, so a class of thirty with two marked present reads 7%. In the
+   *   class report it is per pupil, over that pupil's own marks, so a child
+   *   marked once and present reads 100%. Copying either into the other's place
+   *   is invisible on a screen.
+   *
+   *   THE CLASS REPORT DEFAULTS TO TODAY, not to everything. Both ends go
+   *   through dateStr, which falls back to today on anything absent.
+   */
+  const { lastSevenDays } = require("../../shared/attendance");
+
+  // The weekly window is the last seven REAL days, and every fixture in this
+  // file is dated months later — so without marks inside it the report would
+  // compare two empty trends and prove nothing about the counting.
+  const week = lastSevenDays();
+  await StudentAttendanceModel.collection.insertMany([
+    { _id: "wk-1", schoolId: SCHOOL, classId: "cls-1", subjectId: null, studentId: "p1",
+      date: week[6], status: "present", markedBy: "admin-1", markedAt: new Date(),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "wk-2", schoolId: SCHOOL, classId: "cls-1", subjectId: null, studentId: "p2",
+      date: week[6], status: "absent", markedBy: "admin-1", markedAt: new Date(),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "wk-3", schoolId: SCHOOL, classId: "cls-1", subjectId: null, studentId: "p1",
+      date: week[4], status: "late", markedBy: "admin-1", markedAt: new Date(),
+      deletedAt: null, updatedAt: new Date() },
+    { _id: "wk-4", schoolId: SCHOOL, classId: "cls-2", subjectId: null, studentId: "p3",
+      date: week[4], status: "excused", markedBy: "admin-1", markedAt: new Date(),
+      deletedAt: null, updatedAt: new Date() },
+  ]);
+  await TeacherAttendanceModel.collection.insertMany([
+    { _id: "wkt-1", schoolId: SCHOOL, teacherId: "t1", date: week[6], status: "present",
+      markedBy: "admin-1", markedAt: new Date(), updatedAt: new Date() },
+    { _id: "wkt-2", schoolId: SCHOOL, teacherId: "t2", date: week[4], status: "on_leave",
+      markedBy: "admin-1", markedAt: new Date(), updatedAt: new Date() },
+  ]);
+
+  {
+    const reportEngine = engine({
+      docs, queue, state: store.state(db), client: apiClient,
+      feedCollections: ["studentAttendance", "teacherAttendance"],
+    });
+    db.prepare("DELETE FROM sync_state WHERE collection IN (?, ?)")
+      .run("studentAttendance", "teacherAttendance");
+    await reportEngine.cycle();
+    reportEngine.stop();
+  }
+  check("the week's marks are in the mirror",
+    docs.count("studentAttendance", { date: week[6] }), 2);
+
+  // ── One day, pupils and staff side by side ─────────────────────────────
+  await parity("the overview for a day with pupil marks",
+    "/api/attendance/report/overview?schoolId=" + SCHOOL + "&date=" + REGISTER_DAY);
+  await parity("and for one with staff marks",
+    "/api/attendance/report/overview?schoolId=" + SCHOOL + "&date=" + STAFF_DAY);
+  await parity("and for a day nobody marked",
+    "/api/attendance/report/overview?schoolId=" + SCHOOL + "&date=2026-12-25");
+  // No date at all means today, which is inside the week just inserted.
+  await parity("and with no date, meaning today",
+    "/api/attendance/report/overview?schoolId=" + SCHOOL);
+
+  // The numbers behind one of those, stated outright — a parity pass proves the
+  // two agree, not that either is right.
+  {
+    const overview = api.handle({
+      method: "GET", path: "/api/attendance/report/overview",
+      query: { schoolId: SCHOOL, date: week[6] },
+    }, teachCtx).data;
+
+    // The RULE rather than a number, because other sections of this file add
+    // pupils and a hard-coded total would be a hostage to them.
+    const activePupils = await Student.countDocuments({
+      schoolId: SCHOOL, isActive: { $ne: false },
+    });
+    const undeletedPupils = await Student.countDocuments({
+      schoolId: SCHOOL, isActive: { $ne: false }, deletedAt: null,
+    });
+
+    check("the pupil denominator is the endpoint's population",
+      overview.students.total, activePupils);
+    // The rule worth naming: this query has no deletedAt filter, so a withdrawn
+    // pupil is still counted. Asserted as a difference rather than described, so
+    // it fails if either side starts filtering.
+    check("which includes withdrawn pupils, because the endpoint does not filter them",
+      activePupils > undeletedPupils, true);
+
+    check("one pupil present that day", overview.students.present, 1);
+    // THE FIRST MEANING OF RATE: over the population, not the marks. One present
+    // of a whole school is a low percentage, not a hundred.
+    check("so the rate is over the population, not over the marks",
+      overview.students.rate, Math.round((1 / activePupils) * 100));
+    check("and the rest went unmarked",
+      overview.students.unmarked, activePupils - 2);
+  }
+
+  // ── The week ───────────────────────────────────────────────────────────
+  await parity("the weekly trend", "/api/attendance/report/weekly?schoolId=" + SCHOOL);
+
+  {
+    const weekly = api.handle({
+      method: "GET", path: "/api/attendance/report/weekly",
+      query: { schoolId: SCHOOL },
+    }, teachCtx).data;
+    check("seven days, oldest first", weekly.days.length, 7);
+    check("ending today", weekly.days[6], week[6]);
+    check("with a row per day", weekly.trend.length, 7);
+    check("today's present count", weekly.trend[6].students.present, 1);
+    check("and a day in the middle", weekly.trend[4].students.late, 1);
+    check("a day with nothing shows zeroes, not gaps",
+      weekly.trend[0].students.present, 0);
+  }
+
+  // ── One class, pupil by pupil ──────────────────────────────────────────
+  /**
+   * ── Compared BY PUPIL, not by position ──────────────────────────────────
+   *
+   * The endpoint's roster query has no .sort(), so the order of this list is
+   * whatever the storage engine gives. A list comparison would be asserting
+   * Mongo's storage order — which the endpoint does not promise, and which the
+   * first run of this section duly failed on: the two sides held identical
+   * figures for every pupil in a different order.
+   *
+   * So the rows are matched by student id and diffed, and everything the
+   * endpoint DOES define — the dates, the overall totals — is compared as it
+   * stands.
+   */
+  const classReportParity = async (label, path) => {
+    const [pathname, qs = ""] = path.split("?");
+    const res = await fetch("http://127.0.0.1:" + port + path,
+      { headers: { authorization: "Bearer " + token } });
+    const fromServer = await res.json();
+
+    const local = api.handle(
+      { method: "GET", path: pathname, query: Object.fromEntries(new URLSearchParams(qs)) },
+      { docs, meta, queue, session: teachSession }
+    );
+    if (!local) { console.log("  ---- " + label + ": answered by the network"); return; }
+
+    check(label + ": status", local.status, res.status);
+    check(label + ": the dates it covers",
+      [local.data.startDate, local.data.endDate, local.data.classId],
+      [fromServer.startDate, fromServer.endDate, fromServer.classId]);
+    check(label + ": the overall totals", local.data.overall, fromServer.overall);
+    check(label + ": the same pupils",
+      local.data.students.map((r) => r.student._id).sort().join(),
+      fromServer.students.map((r) => r.student._id).sort().join());
+
+    const byId = new Map(fromServer.students.map((r) => [String(r.student._id), r]));
+    const wrong = local.data.students.filter((mine) => {
+      const theirs = byId.get(String(mine.student._id));
+      return !theirs || JSON.stringify(mine) !== JSON.stringify(theirs);
+    });
+    check(label + ": and the same figures for each of them",
+      wrong.map((r) => r.student._id), []);
+  };
+
+  await classReportParity("a class over a range of days",
+    "/api/attendance/report/class/cls-1?schoolId=" + SCHOOL +
+    "&startDate=" + week[0] + "&endDate=" + week[6]);
+  await classReportParity("a class over the register day",
+    "/api/attendance/report/class/cls-1?schoolId=" + SCHOOL +
+    "&startDate=" + REGISTER_DAY + "&endDate=" + REGISTER_DAY);
+  // No dates: today alone, which is the endpoint's default and not "everything".
+  await classReportParity("a class with no dates, meaning today",
+    "/api/attendance/report/class/cls-1?schoolId=" + SCHOOL);
+
+  {
+    const classReport = api.handle({
+      method: "GET", path: "/api/attendance/report/class/cls-1",
+      query: { schoolId: SCHOOL, startDate: week[0], endDate: week[6] },
+    }, teachCtx).data;
+
+    const ada = classReport.students.find((s) => s.student._id === "p1");
+    check("a pupil's row carries the three fields the endpoint selects",
+      Object.keys(ada.student).sort().join(), ["_id", "email", "studentName"].join());
+    check("two marks for that pupil in the week", ada.total, 2);
+    check("one of them present", ada.present, 1);
+    // THE SECOND MEANING OF RATE: over this pupil's own marks, not the days.
+    check("and the rate is over their marks, not the days in the range",
+      ada.rate, 50);
+
+    check("the range defaults to today when nothing is asked for",
+      api.handle({
+        method: "GET", path: "/api/attendance/report/class/cls-1",
+        query: { schoolId: SCHOOL },
+      }, teachCtx).data.startDate,
+      week[6]);
+  }
+
+  // ── Where the staff directory is missing ───────────────────────────────
+  //
+  // The overview and the weekly trend both count teachers, which needs
+  // users.manage to mirror. A summary reporting nought out of nought staff is
+  // not a smaller answer than the server's — it is a different one.
+  {
+    const staffRows = JSON.parse(JSON.stringify(await UserModel.find({}).lean()));
+    for (const row of staffRows) docs.forget("user", row._id);
+
+    check("the overview declines without the staff directory",
+      api.handle({
+        method: "GET", path: "/api/attendance/report/overview",
+        query: { schoolId: SCHOOL },
+      }, teachCtx),
+      null);
+    check("and so does the weekly trend",
+      api.handle({
+        method: "GET", path: "/api/attendance/report/weekly",
+        query: { schoolId: SCHOOL },
+      }, teachCtx),
+      null);
+    // The class report counts no staff, so it still answers.
+    check("but a class report needs no staff and still answers",
+      api.handle({
+        method: "GET", path: "/api/attendance/report/class/cls-1",
+        query: { schoolId: SCHOOL },
+      }, teachCtx)?.status,
+      200);
+
+    docs.putMany("user", staffRows);
+  }
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);
