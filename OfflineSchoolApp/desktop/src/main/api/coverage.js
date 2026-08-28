@@ -219,6 +219,17 @@ const PARTIAL = [
       "at a time and is queueable, so nothing is out of reach.",
   },
   {
+    endpoint: "POST /exams/:id/subjects",
+    except:   "one naming a subject or teacher whose row this machine does not hold",
+    because:
+      "The row stores the subject's name and the teacher's, read from two other " +
+      "collections, and they are what a screen prints. The staff directory needs " +
+      "users.manage to mirror, so a teacher's own machine does not hold it — and " +
+      "an absent row is indistinguishable from no such person. Declining sends " +
+      "the request out and lets the server resolve the name, rather than writing " +
+      "a blank one that a later pull corrects.",
+  },
+  {
     endpoint: "PATCH /exams/:id/status",
     except:   'setting the status to "published"',
     because:

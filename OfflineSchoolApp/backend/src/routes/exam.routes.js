@@ -768,6 +768,34 @@ router.post("/:examId/subjects", asyncHandler(async (req, res) => {
   const teacherDoc      = teacherId ? await User.findById(teacherId).lean() : null;
   const resolvedClassId = classId || exam.classId;
 
+  /**
+   * ── The id, and the two ways a repeat arrives ────────────────────────────
+   *
+   * A supplied _id is kept, as POST /api/exams and POST /api/fees/payments do,
+   * so a request queued by an offline machine can be replayed without creating
+   * a second row. See the note on POST /api/exams for why a server-invented id
+   * makes a write unqueueable rather than merely awkward.
+   *
+   * The uniqueness rule below then does double duty. A replay of the SAME row
+   * finds itself by id and is answered with what is stored; a genuinely
+   * different attempt to add the same subject twice is still the 409 it was.
+   * Ordered id-first because the two are otherwise indistinguishable — the
+   * replay would take the 409, and a 409 stops the offline queue and waits for
+   * a person, on work that had in fact succeeded.
+   */
+  const examSubjectId = req.body._id || uuidv4();
+
+  const priorById = await ExamSubject.findById(examSubjectId).lean();
+  if (priorById) {
+    if (String(priorById.schoolId) !== String(schoolId)) {
+      return res.status(409).json({
+        success: false, code: "EXAM_SUBJECT_ID_TAKEN",
+        message: "That exam subject id already belongs to another school",
+      });
+    }
+    return res.status(200).json({ success: true, replay: true, subject: priorById });
+  }
+
   const existing = await ExamSubject.findOne({
     examId,
     subjectId,
@@ -792,7 +820,7 @@ router.post("/:examId/subjects", asyncHandler(async (req, res) => {
   const resolvedWeight = weight ?? Math.round(subjectCoefficient * 100);
 
   const es = await ExamSubject.create({
-    _id:         uuidv4(),
+    _id:         examSubjectId,
     examId,
     subjectId,
     classId:     resolvedClassId,

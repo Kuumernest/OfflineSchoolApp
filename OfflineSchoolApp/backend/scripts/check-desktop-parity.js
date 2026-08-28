@@ -1879,6 +1879,336 @@ const main = async () => {
   check("and set the status the endpoint sets", gone?.status, "archived");
   check("the queue is empty", queue.all().length, 0);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the marks workflow, with no connection ---");
+
+  /**
+   * ── Why this one is worth a long section ─────────────────────────────────
+   *
+   * It is the part of the term a school cannot pause. Teachers enter marks and
+   * submit them; the head approves or sends them back; reports go out. That
+   * happens in a few days, and those are exactly the days when waiting for the
+   * connection is not an option.
+   *
+   * The rule under test throughout: a handler must never queue something the
+   * server will refuse. A refused write STOPS the outbox and waits for a person,
+   * so a request the server would 400 or 409 does not merely fail — it holds up
+   * everything behind it, including work with nothing to do with exams.
+   */
+  const StudentScore = require("../src/db/models/StudentScore");
+  const ExamSubject  = require("../src/db/models/ExamSubject");
+
+  // One subject with a coefficient of 2, so the scaling below is exercised
+  // rather than assumed. Subject.coefficient is a plain multiplier; the exam
+  // subject's weight is percentage-style, 100 meaning ×1.
+  await Subject.collection.updateOne(
+    { _id: "sub-3" }, { $set: { coefficient: 2, updatedAt: new Date() } }
+  );
+  const mirrorSubjects = async () =>
+    docs.putMany("subject", JSON.parse(JSON.stringify(await Subject.find({}).lean())));
+  await mirrorSubjects();
+
+  const marksSession = {
+    userId: "admin-1", schoolId: SCHOOL, permissions: ["exams.manage", "results.view"],
+  };
+  const marksCtx = { docs, meta, queue, session: marksSession };
+
+  // A live exam for them to hang on. Created through the layer under test and
+  // synced, so what follows is built on the same path a school would take.
+  const forMarks = api.handle({
+    method: "POST", path: "/api/exams", query: {},
+    body: {
+      schoolId: SCHOOL, name: "End of Term", academicYear: YEAR,
+      term: "term_3", classId: "cls-1",
+    },
+  }, marksCtx);
+  const marksExamId = forMarks.data.serverId;
+
+  const marksEngine = engine({
+    docs, queue, state: store.state(db), client: apiClient,
+    feedCollections: ["exam", "examSubject", "studentScore"],
+  });
+  await marksEngine.cycle();
+  check("the exam for the marks workflow is on the server",
+    Boolean(await Exam.findById(marksExamId).lean()), true);
+
+  // ── Adding subjects ────────────────────────────────────────────────────
+  const added = api.handle({
+    method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+    body: { schoolId: SCHOOL, subjectId: "sub-1", teacherId: "t1", classId: "cls-1" },
+  }, marksCtx);
+
+  check("a subject is added locally", added?.status, 201);
+  check("and queued", added?.queued, true);
+  check("with the subject's name read from the mirror",
+    added.data.subject.subjectName, "Mathematics");
+  check("and the teacher's, which the screen prints",
+    Boolean(added.data.subject.teacherName), true);
+  check("a subject with no coefficient set weighs 100 — coefficient 1",
+    added.data.subject.weight, 100);
+  check("and starts pending, not submitted",
+    added.data.subject.submissionStatus, "pending");
+
+  // THE SCALING ASSERTION. Getting this wrong by a factor of a hundred rescales
+  // every average in the class.
+  const weighted = api.handle({
+    method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+    body: { schoolId: SCHOOL, subjectId: "sub-3", classId: "cls-1" },
+  }, marksCtx);
+  check("a coefficient of 2 becomes a weight of 200", weighted.data.subject.weight, 200);
+
+  // An explicit weight is the per-exam override and wins over the coefficient.
+  const override = api.handle({
+    method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+    body: { schoolId: SCHOOL, subjectId: "sub-4", classId: "cls-1", weight: 150 },
+  }, marksCtx);
+  check("an explicit weight overrides the subject's coefficient",
+    override.data.subject.weight, 150);
+
+  // ── What must NOT be queued ────────────────────────────────────────────
+  //
+  // Each of these would come back a 4xx and stop the outbox on a request that
+  // can never succeed.
+  check("the same subject twice for one class is not queued",
+    api.handle({
+      method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+      body: { schoolId: SCHOOL, subjectId: "sub-1", classId: "cls-1" },
+    }, marksCtx),
+    null);
+
+  check("nor is a subject with no subjectId",
+    api.handle({
+      method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+      body: { schoolId: SCHOOL, classId: "cls-1" },
+    }, marksCtx),
+    null);
+
+  check("nor one for an exam this machine does not hold",
+    api.handle({
+      method: "POST", path: "/api/exams/no-such-exam/subjects", query: {},
+      body: { schoolId: SCHOOL, subjectId: "sub-5" },
+    }, marksCtx),
+    null);
+
+  // A teacher's own machine does not mirror the staff directory — users.manage
+  // gates it — so the name it would store is a blank on the screen. Simulated by
+  // removing the row, which is the state that machine is really in.
+  docs.forget("user", "t2");
+  check("nor one naming a teacher whose row is not mirrored",
+    api.handle({
+      method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+      body: { schoolId: SCHOOL, subjectId: "sub-5", classId: "cls-2", teacherId: "t2" },
+    }, marksCtx),
+    null);
+  docs.putMany("user", JSON.parse(JSON.stringify(await UserModel.find({}).lean())));
+
+  check("but it is queued once that row is there",
+    api.handle({
+      method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+      body: { schoolId: SCHOOL, subjectId: "sub-5", classId: "cls-2", teacherId: "t2" },
+    }, marksCtx)?.status,
+    201);
+
+  const queuedBefore = queue.summary().pending;
+  await marksEngine.cycle();
+  check("all of them reached the server", queue.all().length, 0);
+  check("there were four to send, not five", queuedBefore, 4);
+
+  const onServerSubjects = await ExamSubject.find({ examId: marksExamId }).lean();
+  check("the server holds four exam subjects", onServerSubjects.length, 4);
+  check("under the ids this machine chose",
+    onServerSubjects.map((s) => s._id).sort().join(),
+    docs.find("examSubject", { examId: marksExamId }).map((s) => s._id).sort().join());
+  check("and agrees about the scaled weight",
+    onServerSubjects.find((s) => s.subjectId === "sub-3")?.weight, 200);
+  check("and about the override",
+    onServerSubjects.find((s) => s.subjectId === "sub-4")?.weight, 150);
+
+  await parity("the subjects on an exam, after a round trip",
+    "/api/exams/" + marksExamId + "/submissions?schoolId=" + SCHOOL);
+
+  // ── Setting a coefficient ──────────────────────────────────────────────
+  const mathsSubject = docs
+    .find("examSubject", { examId: marksExamId })
+    .find((s) => s.subjectId === "sub-1");
+
+  const settings = api.handle({
+    method: "PUT",
+    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+    query: {},
+    body: { schoolId: SCHOOL, weight: 300 },
+  }, marksCtx);
+  check("the coefficient change is accepted", settings?.status, 200);
+  check("and shows at once", docs.get("examSubject", mathsSubject._id)?.weight, 300);
+  // Nothing has been marked yet, so nothing has gone stale.
+  check("with nothing to reprocess yet", settings.data.reprocessRequired, false);
+
+  // It rescales every average in the class, so it is a head's decision. A
+  // queued request coming back 403 would stop the outbox.
+  check("somebody without exams.manage is not queued",
+    api.handle({
+      method: "PUT",
+      path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+      query: {},
+      body: { schoolId: SCHOOL, weight: 250 },
+    }, { docs, meta, queue, session: { ...marksSession, permissions: ["exams.view"] } }),
+    null);
+
+  check("a weight of zero is not queued either",
+    api.handle({
+      method: "PUT",
+      path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+      query: {}, body: { schoolId: SCHOOL, weight: 0 },
+    }, marksCtx),
+    null);
+
+  check("nor a request that changes nothing",
+    api.handle({
+      method: "PUT",
+      path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+      query: {}, body: { schoolId: SCHOOL },
+    }, marksCtx),
+    null);
+
+  await marksEngine.cycle();
+  check("the server took the new coefficient",
+    (await ExamSubject.findById(mathsSubject._id).lean())?.weight, 300);
+
+  // ── Once marks exist, a coefficient change makes them stale ────────────
+  //
+  // The endpoint refuses to recompute silently — that would rewrite results an
+  // admin may already have published — and tells the caller instead. A local
+  // answer that always said false would leave a screen presenting stale
+  // averages as current.
+  await StudentScore.collection.insertMany([
+    { _id: "sc-1", schoolId: SCHOOL, examId: marksExamId, subjectId: "sub-1",
+      classId: "cls-1", studentId: "p1", score: 14, deletedAt: null, updatedAt: new Date() },
+    { _id: "sc-2", schoolId: SCHOOL, examId: marksExamId, subjectId: "sub-1",
+      classId: "cls-1", studentId: "p2", score: null, deletedAt: null, updatedAt: new Date() },
+  ]);
+  await marksEngine.cycle();
+  check("the marks reached the mirror", docs.count("studentScore", { examId: marksExamId }), 2);
+
+  const restaled = api.handle({
+    method: "PUT",
+    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+    query: {}, body: { schoolId: SCHOOL, maxScore: 20 },
+  }, marksCtx);
+  check("now the caller is told the averages need reprocessing",
+    restaled.data.reprocessRequired, true);
+
+  // A field that does NOT invalidate an average must not claim it does, or the
+  // screen asks for a reprocess after every edit and the warning stops meaning
+  // anything.
+  const harmless = api.handle({
+    method: "PUT",
+    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id,
+    query: {}, body: { schoolId: SCHOOL, isOral: true },
+  }, marksCtx);
+  check("but a change that does not affect averages does not",
+    harmless.data.reprocessRequired, false);
+
+  await marksEngine.cycle();
+
+  // The submissions screen counts ENTERED marks per subject and class — the
+  // blank row is what it is asking about.
+  const progress = api.handle({
+    method: "GET", path: "/api/exams/" + marksExamId + "/submissions",
+    query: { schoolId: SCHOOL },
+  }, marksCtx);
+  check("one of the two marks is entered",
+    progress.data.submissions.find((s) => s.subjectId === "sub-1")?.totalScoresEntered, 1);
+  check("and a subject nobody has marked shows none",
+    progress.data.submissions.find((s) => s.subjectId === "sub-3")?.totalScoresEntered, 0);
+
+
+  /**
+   * ── One subject, two classes ─────────────────────────────────────────────
+   *
+   * The assertions above pass whether the count is per subject-and-class or per
+   * subject alone, because every subject in the fixtures sits in exactly one
+   * class. That is the shape of gap worth minding: the comment in the handler
+   * says the count must be per class, and nothing was checking it.
+   *
+   * An exam covering several classes has a row per class, and each row is one
+   * teacher's work. Counting by subject alone makes every row report the whole
+   * exam's progress — so a class nobody has touched shows as finished the moment
+   * another class is marked, and a head chasing outstanding marks chases nobody.
+   */
+  const alsoInCls2 = api.handle({
+    method: "POST", path: "/api/exams/" + marksExamId + "/subjects", query: {},
+    body: { schoolId: SCHOOL, subjectId: "sub-1", classId: "cls-2" },
+  }, marksCtx);
+  check("the same subject is allowed in another class", alsoInCls2?.status, 201);
+
+  await StudentScore.collection.insertMany([
+    { _id: "sc-3", schoolId: SCHOOL, examId: marksExamId, subjectId: "sub-1",
+      classId: "cls-2", studentId: "p9", score: 11, deletedAt: null, updatedAt: new Date() },
+    { _id: "sc-4", schoolId: SCHOOL, examId: marksExamId, subjectId: "sub-1",
+      classId: "cls-2", studentId: "p10", score: 17, deletedAt: null, updatedAt: new Date() },
+  ]);
+  await marksEngine.cycle();
+
+  const perClass = api.handle({
+    method: "GET", path: "/api/exams/" + marksExamId + "/submissions",
+    query: { schoolId: SCHOOL },
+  }, marksCtx).data.submissions.filter((s) => s.subjectId === "sub-1");
+
+  check("there is a row for each class", perClass.length, 2);
+  check("the first class counts only its own mark",
+    perClass.find((s) => s.classId === "cls-1")?.totalScoresEntered, 1);
+  check("and the second counts only its two",
+    perClass.find((s) => s.classId === "cls-2")?.totalScoresEntered, 2);
+
+  await parity("progress across two classes",
+    "/api/exams/" + marksExamId + "/submissions?schoolId=" + SCHOOL);
+
+  await parity("marks entered for an exam",
+    "/api/exams/" + marksExamId + "/scores?schoolId=" + SCHOOL);
+  await parity("progress per subject",
+    "/api/exams/" + marksExamId + "/submissions?schoolId=" + SCHOOL);
+
+  // ── Sending marks back, then accepting them ────────────────────────────
+  check("a rejection with no reason is not queued",
+    api.handle({
+      method: "PATCH",
+      path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/reject",
+      query: {}, body: { schoolId: SCHOOL, reason: "   " },
+    }, marksCtx),
+    null);
+
+  const rejected = api.handle({
+    method: "PATCH",
+    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/reject",
+    query: {}, body: { schoolId: SCHOOL, reason: "  Two students are missing  " },
+  }, marksCtx);
+  check("a rejection with one is", rejected?.status, 200);
+  check("the reason is trimmed, since the teacher reads it",
+    rejected.data.subject.rejectReason, "Two students are missing");
+  check("and the status says so", rejected.data.subject.submissionStatus, "rejected");
+
+  const approved = api.handle({
+    method: "PATCH",
+    path: "/api/exams/" + marksExamId + "/subjects/" + mathsSubject._id + "/approve",
+    query: {}, body: { schoolId: SCHOOL },
+  }, marksCtx);
+  check("approving after a rejection works", approved?.status, 200);
+  // A subject approved after being sent back must not still read as rejected,
+  // which is what a screen showing both stamps would say.
+  check("and clears the rejection", approved.data.subject.rejectReason, null);
+  check("along with who rejected it", approved.data.subject.rejectedBy, null);
+  check("leaving only the approval", approved.data.subject.submissionStatus, "approved");
+
+  await marksEngine.cycle();
+  marksEngine.stop();
+
+  const finalSubject = await ExamSubject.findById(mathsSubject._id).lean();
+  check("the server ends up approved", finalSubject?.submissionStatus, "approved");
+  check("with the rejection cleared there too", finalSubject?.rejectReason, null);
+  check("and the mirror agrees",
+    docs.get("examSubject", mathsSubject._id)?.submissionStatus, "approved");
+  check("the queue is empty", queue.all().length, 0);
+
   server.close();
   db.close();
   console.log(`\n  ${pass} passed, ${fail} failed`);

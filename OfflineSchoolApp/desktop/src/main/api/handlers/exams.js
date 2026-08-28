@@ -43,6 +43,62 @@ const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 module.exports = [
   {
+    route: "GET /api/exams/:examId/scores",
+
+    /** The marks entered for an exam, optionally narrowed to a class or subject. */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const filter = { examId: String(params.examId), schoolId, deletedAt: null };
+      if (query.classId)   filter.classId   = String(query.classId);
+      if (query.subjectId) filter.subjectId = String(query.subjectId);
+
+      return ok({ scores: docs.find("studentScore", filter) });
+    },
+  },
+
+  {
+    route: "GET /api/exams/:examId/submissions",
+
+    /**
+     * Which subjects have had their marks entered, and how far.
+     *
+     * ── The count is per subject AND per class ──────────────────────────────
+     *
+     * Each row's count is of scores matching the exam, the SUBJECT and the
+     * CLASS of that row — not of every score for the subject. An exam may cover
+     * several classes, so counting by subject alone makes each row report the
+     * whole exam's progress and every class look finished as soon as one is.
+     *
+     * And score: { $ne: null } counts entered marks, not rows. A row is created
+     * for each student when marking starts; the blank ones are precisely what
+     * this screen is asking about, so counting them would show every subject
+     * complete before anybody had typed a number.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const examId = String(params.examId);
+      const filter = { examId, schoolId, deletedAt: null };
+      if (query.teacherId) filter.teacherId = String(query.teacherId);
+
+      const submissions = docs.find("examSubject", filter).map((es) => ({
+        ...es,
+        totalScoresEntered: docs
+          .find("studentScore", {
+            examId, subjectId: es.subjectId, classId: es.classId, schoolId, deletedAt: null,
+          })
+          .filter((s) => s.score !== null && s.score !== undefined)
+          .length,
+      }));
+
+      return ok({ submissions });
+    },
+  },
+
+  {
     route: "GET /api/exams/:id",
 
     /**

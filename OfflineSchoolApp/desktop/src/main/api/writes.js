@@ -284,5 +284,6 @@ module.exports.push({
  * mirror and one file of them would be unreadable long before the end.
  */
 module.exports.push(...require("./writes/exams"));
+module.exports.push(...require("./writes/examSubjects"));
 
 module.exports.nextReceipt = nextReceipt;
