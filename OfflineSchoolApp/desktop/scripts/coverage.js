@@ -82,6 +82,30 @@ const consoleCalls = () => {
         bases[m[1]] = m[2];
       }
 
+      /**
+       * Calls where the path is a BARE constant — api.get(BASE) — rather than a
+       * quoted string or a template literal.
+       *
+       * Nine of them, across five services, and every one was invisible: the
+       * pattern below requires a quote or a backtick immediately after the
+       * paren. GET /admin/periods and POST /admin/periods are both called by the
+       * console and neither appeared in this census, so the denominator was
+       * short — and a handler answering one of them credited nothing, which is
+       * the same way the attendance family was undercounted.
+       *
+       * Resolved against the same per-file constants the template-literal branch
+       * uses, so the two agree about what BASE means.
+       */
+      for (const m of src.matchAll(/\bapi\.(get|post|put|patch|delete)\(\s*([A-Z_][A-Za-z0-9_]*)\s*[,)]/g)) {
+        const value = bases[m[2]];
+        if (!value || !value.startsWith("/")) continue;
+        for (const concrete of expand(value)) {
+          const key = `${m[1].toUpperCase()} ${concrete}`;
+          if (!found.has(key)) found.set(key, new Set());
+          found.get(key).add(path.relative(WEB, p));
+        }
+      }
+
       for (const m of src.matchAll(/\bapi\.(get|post|put|patch|delete)\(\s*(["'`])([^"'`]*)\2/g)) {
         let route = m[3];
         for (const [name, value] of Object.entries(bases)) {
