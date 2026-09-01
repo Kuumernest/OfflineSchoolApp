@@ -14,7 +14,7 @@
  *
  *   • a bill is NOT overdue on its own due date, and IS the day after
  *   • a family who has paid drops off the list entirely
- *   • an undated charge is invisible to both jobs
+ *   • an undated charge is overdue at once, but only within the year in scope
  *   • the grace period holds the penalty back, and then releases it
  *   • applying penalties twice raises one charge, not two
  *   • a percentage penalty is a share of what is still owed, not of the bill
@@ -120,8 +120,9 @@ const main = async () => {
 
   await charge(owing._id);
   await charge(paid._id);
-  // Same bill, no deadline — the shape of every charge raised before this
-  // feature existed.
+  // Same bill, no deadline. Undated now means overdue at once — but only inside
+  // the academic year in scope. Cara's is this year, so she is chased; the
+  // earlier-year case is asserted separately below.
   await FeeCharge.create({
     schoolId, studentId: String(undated._id), academicYear: YEAR, term: "1",
     structureId: null, code: "TUIT", label: "Tuition", amount: 60_000,
@@ -139,27 +140,59 @@ const main = async () => {
   const onDueDate = await reminders.candidates({
     schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-09-15"),
   });
-  check("nothing overdue on the 15th", onDueDate.length, 0);
+  check("the dated bill is not overdue on its own due date",
+    onDueDate.some((r) => r.name === "Ama Owing"), false);
+  check("and on that day only the undated one is late",
+    onDueDate.map((r) => r.name), ["Cara Undated"]);
 
   const dayAfter = await reminders.candidates({
     schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-09-16"),
   });
-  check("overdue on the 16th", dayAfter.map((r) => r.name), ["Ama Owing"]);
-  check("and by one day", dayAfter[0].daysOverdue, 1);
+  check("overdue on the 16th",
+    dayAfter.map((r) => r.name).sort(), ["Ama Owing", "Cara Undated"]);
+  // Found by name rather than taken from [0]: the undated row shares this list
+  // now, and an assertion that depends on ordering passes or fails by luck.
+  check("and by one day",
+    dayAfter.find((r) => r.name === "Ama Owing").daysOverdue, 1);
 
   const threeWeeks = await reminders.candidates({
     schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-06"),
   });
-  check("21 days later", threeWeeks[0].daysOverdue, 21);
+  const ama3w = threeWeeks.find((r) => r.name === "Ama Owing");
+  check("21 days later", ama3w.daysOverdue, 21);
 
   console.log("--- who is on the list, and who is not ---");
   check("a family who paid is not chased",
     threeWeeks.some((r) => r.name === "Ben Paid"), false);
-  check("an undated charge is invisible",
-    threeWeeks.some((r) => r.name === "Cara Undated"), false);
-  check("the balance is what is owed", threeWeeks[0].balance, 60_000);
+  check("an undated charge in the year in scope is chased",
+    threeWeeks.some((r) => r.name === "Cara Undated"), true);
+  check("the balance is what is owed", ama3w.balance, 60_000);
   check("reachable, because a guardian email is on file",
-    threeWeeks[0].reachable, true);
+    ama3w.reachable, true);
+
+  console.log("--- but an undated charge from an earlier year stays silent ---");
+  // The bound that makes the rule above safe to ship. Every charge raised
+  // before due dates existed is undated, so unbounded this would hand a school
+  // its whole history the first time a bursar opened the preview. With no
+  // academicYear argument the school's own current year is what binds.
+  await School.updateOne(
+    { _id: schoolId },
+    { $set: { "settings.academicYear": YEAR } }
+  );
+  const legacy = await makeStudent(schoolId, "Eve Legacy");
+  await FeeCharge.create({
+    schoolId, studentId: String(legacy._id), academicYear: "2019/2020", term: "1",
+    structureId: null, code: "TUIT", label: "Tuition", amount: 60_000,
+    dueDate: null,
+  });
+
+  const noYearNamed = await reminders.candidates({
+    schoolId, mode: "overdue", asOf: day("2025-10-06"),
+  });
+  check("this year's undated charge is still chased when the caller names no year",
+    noYearNamed.some((r) => r.name === "Cara Undated"), true);
+  check("and 2019/2020's is not",
+    noYearNamed.some((r) => r.name === "Eve Legacy"), false);
 
   console.log("--- due soon looks forward, not back ---");
   const soon = await reminders.candidates({
@@ -180,13 +213,17 @@ const main = async () => {
     schoolId, academicYear: YEAR, mode: "overdue",
     requestedBy: "bursar-1", asOf: day("2025-10-06"),
   });
-  check("one queued", sent.queued, 1);
+  // Two: the dated bill and the undated one, which are both overdue by now.
+  check("one per family queued", sent.queued, 2);
 
   const queued = await Notification.find({ schoolId, kind: "fee.reminder" }).lean();
-  check("the notification exists", queued.length, 1);
-  check("addressed to the guardian", queued[0].to, "g1@example.com");
-  check("carrying the due date", Boolean(queued[0].data?.dueDate), true);
-  check("and the overdue flag", queued[0].data?.isOverdue, true);
+  check("both notifications exist", queued.length, 2);
+  // Ama's specifically — g1 is the first student makeStudent numbered — because
+  // queued[0] is now whichever of the two the driver happened to write first.
+  const amaNote = queued.find((n) => n.to === "g1@example.com");
+  check("addressed to the guardian", Boolean(amaNote), true);
+  check("carrying the due date", Boolean(amaNote.data?.dueDate), true);
+  check("and the overdue flag", amaNote.data?.isOverdue, true);
 
   await backdateReminders(day("2025-10-06"));
 
@@ -194,15 +231,15 @@ const main = async () => {
   const again = await reminders.sendReminders({
     schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-07"),
   });
-  check("skipped as recently reminded", again.skippedRecent, 1);
+  check("skipped as recently reminded", again.skippedRecent, 2);
   check("nothing queued", again.queued, 0);
-  check("still one notification",
-    await Notification.countDocuments({ schoolId, kind: "fee.reminder" }), 1);
+  check("still just the two notifications",
+    await Notification.countDocuments({ schoolId, kind: "fee.reminder" }), 2);
 
   const forced = await reminders.sendReminders({
     schoolId, academicYear: YEAR, mode: "overdue", force: true, asOf: day("2025-10-07"),
   });
-  check("force overrides the cooldown", forced.queued, 1);
+  check("force overrides the cooldown", forced.queued, 2);
 
   console.log("--- after the cooldown it sends again on its own ---");
   // The forced send above left a fresh row; align it with the simulated clock.
@@ -210,7 +247,7 @@ const main = async () => {
   const later = await reminders.sendReminders({
     schoolId, academicYear: YEAR, mode: "overdue", asOf: day("2025-10-20"),
   });
-  check("two weeks later, queued", later.queued, 1);
+  check("two weeks later, queued", later.queued, 2);
 
   console.log("--- a family with no contact details is reported, not sent to ---");
   const unreachable = await makeStudent(schoolId, "Dele NoPhone");

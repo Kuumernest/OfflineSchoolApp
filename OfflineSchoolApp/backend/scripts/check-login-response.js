@@ -1,6 +1,10 @@
 // backend/scripts/check-login-response.js
 "use strict";
 
+// This suite signs in well over ten times from one address, which the login
+// limiter reads as brute force. Set before auth.routes is required.
+process.env.DISABLE_LOGIN_RATE_LIMIT = "1";
+
 /**
  * Assert that a real sign-in returns what the client needs to draw a console.
  *

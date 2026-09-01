@@ -21,10 +21,16 @@
  *   A charge keeps the deadline it was raised under. Publishing a corrected
  *   structure next term does not move the date on bills already sent.
  *
- *   A charge with no due date is invisible to both jobs. That is the correct
- *   reading of a bill with no deadline — there is nothing to be late for — and
- *   it is what every charge raised before this feature existed looks like. No
- *   school gets a surprise batch of reminders for last year on upgrade day.
+ *   A charge with no due date counts as overdue at once — a bill with no
+ *   deadline is not a bill with an infinite one — but only within a single
+ *   academic year: the caller's if it named one, otherwise the school's
+ *   current year.
+ *
+ *   That bound is the whole safety of it. Every charge raised before due dates
+ *   existed is undated, so unbounded this would hand a school its entire
+ *   history the first time a bursar opened the preview after upgrading. Older
+ *   years stay silent permanently; an undated bill raised this year is a real
+ *   current debt and is chased.
  *
  * ── Neither job is automatic ──────────────────────────────────────────────
  *
@@ -215,6 +221,15 @@ async function candidates({
   if (academicYear) chargeFilter.academicYear = academicYear;
   if (classId)      chargeFilter.classId      = classId;
 
+  // Read once, used twice below: for the year that bounds undated charges, and
+  // for the channel "reachable" is judged against.
+  const school = await School.findById(schoolId).lean().catch(() => null);
+
+  // The year undated charges are confined to — see the header. With no year
+  // resolvable from either the caller or the school, they stay out entirely
+  // rather than being chased across every year on record.
+  const undatedYear = academicYear || school?.settings?.academicYear || null;
+
   // Two groups: charges with a due date (which have a deadline) and charges
   // without one (which have no grace period — they are overdue immediately).
   const [dated, undated] = await Promise.all([
@@ -231,15 +246,17 @@ async function candidates({
       },
     ]),
     // Undated charges: count per student, no deadline to compute.
-    FeeCharge.aggregate([
-      { $match: { ...chargeFilter, dueDate: null } },
-      {
-        $group: {
-          _id:           "$studentId",
-          undatedCharges: { $sum: 1 },
-        },
-      },
-    ]),
+    undatedYear
+      ? FeeCharge.aggregate([
+          { $match: { ...chargeFilter, dueDate: null, academicYear: undatedYear } },
+          {
+            $group: {
+              _id:           "$studentId",
+              undatedCharges: { $sum: 1 },
+            },
+          },
+        ])
+      : [],
   ]);
 
   // Merge the two groups into one map keyed by studentId.
@@ -281,7 +298,8 @@ async function candidates({
     activePlans({ schoolId, studentIds, academicYear }),
     // How this school sends, so "reachable" below answers the same question
     // the notification pipeline will ask rather than a more generous one.
-    School.findById(schoolId).lean().then(notify.resolveChannel).catch(() => "email"),
+    // Reuses the document already read above.
+    Promise.resolve().then(() => notify.resolveChannel(school)).catch(() => "email"),
   ]);
 
   const byId = new Map(students.map((s) => [String(s._id), s]));
