@@ -413,31 +413,21 @@ const ONLINE_ONLY = [
       "would silently succeed and then be undone by the next pull.",
   },
 
-  // ── Assignments and periods: backend generates ids ────────────────────────
+  // ── Periods: backend generates ids ────────────────────────────────────────
   //
-  // Both endpoints always call uuidv4() for the new document's _id and do not
-  // accept req.body._id. A local write would invent an id the server does not
-  // agree with, creating an orphan that the next pull duplicates. The fix is a
-  // backend change (accept client-supplied _id), not a local workaround.
-  {
-    endpoint: "POST /admin/assignments",
-    because:
-      "The backend always generates _id via uuidv4() and does not accept " +
-      "req.body._id. A locally-invented id would not survive the server's " +
-      "own insert, and the outbox would settle the document under a wrong id.",
-  },
-  {
-    endpoint: "DELETE /admin/assignments/:id",
-    because:
-      "Deleting by server-assigned id. The delete itself is a plain " +
-      "findByIdAndDelete, but it depends on the id the server gave the " +
-      "document, which a local write cannot know.",
-  },
+  // POST /admin/classes, /admin/subjects and /admin/assignments used to be here
+  // for this reason too. The note asked for a backend change rather than a
+  // local workaround, and it was made: all three now take the client's id as
+  // _id and answer a replay with the existing row, on the same terms POST
+  // /exams already offered. POST /admin/periods is the one that still does not.
   {
     endpoint: "POST /admin/periods",
     because:
-      "As assignments: backend always generates _id via uuidv4() and does " +
-      "not accept req.body._id.",
+      "The backend always generates _id via uuidv4() and does not accept " +
+      "req.body._id. A locally-invented id would not survive the server's " +
+      "own insert, and the outbox would settle the document under a wrong id. " +
+      "The fix is the same backend change made for classes, subjects and " +
+      "assignments, not a local workaround.",
   },
 
   // ── Announcements create: teacher-class authorization ─────────────────────

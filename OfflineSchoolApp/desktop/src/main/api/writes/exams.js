@@ -224,11 +224,20 @@ module.exports = [
     /**
      * Moving an exam through its stages — draft to scheduled to ongoing.
      *
-     * "published" is now handled locally: it marks every ResultSummary for the
+     * "published" is handled locally too: it marks every ResultSummary for the
      * exam as published, which is one request against an unbounded number of
      * documents. The local handler enumerates all ResultSummaries in the mirror
      * and marks them via `also`, so the screen shows published results
-     * immediately.
+     * immediately. The mirror holds all of them — resultSummary is in the sync
+     * feed unscoped, on results.view — so the enumeration is complete rather
+     * than a partial guess.
+     *
+     * Publishing is the one status with effects outside this exam, and those
+     * effects are what a parent then reads. The server gates the whole route on
+     * exams.manage; a session that cannot prove that capability would have this
+     * accepted locally, show published results on the strength of it, and then
+     * be refused by the server — which stops the outbox for the entire school.
+     * So publishing specifically is checked here.
      */
     handler: ({ params, body }, { docs, session }) => {
       const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
@@ -236,6 +245,9 @@ module.exports = [
 
       const status = body.status;
       if (!STATUSES.includes(status)) return null;   // the server's 400
+
+      if (status === "published"
+          && !session?.permissions?.includes("exams.manage")) return null;
 
       const row = target(docs, { params, schoolId });
       if (!row) return null;

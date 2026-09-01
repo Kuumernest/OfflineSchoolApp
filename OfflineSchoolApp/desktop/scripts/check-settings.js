@@ -114,14 +114,17 @@ const a = call("GET", "/api/admin/settings/analytics", {}, { schoolId: "S1" });
 check("analytics is answered locally", a !== null, true);
 
 const sum = a.data.analytics;
-check("summary is the server's four keys, not totalStudents",
+check("summary is the server's five keys",
   Object.keys(sum.summary).sort(),
-  ["totalAssignments", "totalClasses", "totalSubjects", "totalTeachers"]);
+  ["totalAssignments", "totalClasses", "totalStudents", "totalSubjects", "totalTeachers"]);
 check("summary counts (teachers active, classes live, all subjects, all assignments)",
   [sum.summary.totalTeachers, sum.summary.totalClasses, sum.summary.totalSubjects, sum.summary.totalAssignments],
   [1, 1, 2, 3]);
-check("summary.totalStudents is undefined, as on the server",
-  sum.summary.totalStudents, undefined);
+// st1, st3, st6, st2 — every approved S1 pupil. st3 is soft-deleted and still
+// counts, because the server's countDocuments filters on status alone; st4 is
+// pending and st5 belongs to another school.
+check("totalStudents counts approved pupils with no deletedAt filter, as on the server",
+  sum.summary.totalStudents, 4);
 
 const trendCount = sum.enrollmentTrend.reduce((s, e) => s + e.count, 0);
 check("trend counts only approved students inside the six-month window (soft-deleted included)",

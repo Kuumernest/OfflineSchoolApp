@@ -117,7 +117,8 @@ const chain = (...comparators) => (a, b) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * `.select("name level nextClassId isFinalYear")` — four fields plus `_id`.
+ * `.select("name level nextClassId isFinalYear promotionAverage")` — five
+ * fields plus `_id`.
  *
  * Copied by PRESENCE, not by name. A projection asks Mongo for four paths and
  * gets back however many of them the stored document actually has; the row is
@@ -131,7 +132,13 @@ const chain = (...comparators) => (a, b) => {
  * the server's too, which matters only to a whole-object JSON compare but costs
  * nothing.
  */
-const PROGRESSION_FIELDS = new Set(["name", "level", "nextClassId", "isFinalYear"]);
+// promotionAverage joined the server's projection with the per-class promotion
+// bar. It was absent here, and because this Set filters, the field was dropped
+// even from rows that carried it — so every class the server reported with a
+// bar of null came back from the mirror with the key missing entirely.
+const PROGRESSION_FIELDS = new Set([
+  "name", "level", "nextClassId", "isFinalYear", "promotionAverage",
+]);
 
 const projectClass = (row) => {
   const out = { _id: row._id };

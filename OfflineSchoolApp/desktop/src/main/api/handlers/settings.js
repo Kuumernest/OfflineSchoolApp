@@ -481,11 +481,15 @@ module.exports = [
           (b.count - a.count) ||
           String(a.className).localeCompare(String(b.className)));
 
-      // The four summary counts. Three carry no deletedAt filter on the server
+      // The five summary counts. Four carry no deletedAt filter on the server
       // and must not pick one up here; the class count is the one that does,
       // with the null-or-"" legacy escape reproduced as `!deletedAt`.
       const totalTeachers = docs
         .find("user", { schoolId, role: "teacher", isActive: true }).length;
+      // totalStudents joined the server's summary with the dashboard rework and
+      // was missing here, so the offline card read one field short.
+      const totalStudents = docs
+        .find("student", { schoolId, status: "approved" }).length;
       const totalClasses = docs
         .find("class", { schoolId, isActive: true })
         .filter((c) => !c.deletedAt).length;
@@ -494,7 +498,9 @@ module.exports = [
 
       return ok({
         analytics: {
-          summary: { totalTeachers, totalClasses, totalSubjects, totalAssignments },
+          summary: {
+            totalTeachers, totalStudents, totalClasses, totalSubjects, totalAssignments,
+          },
           enrollmentTrend,
           teachersBySubject,
           classLoad,

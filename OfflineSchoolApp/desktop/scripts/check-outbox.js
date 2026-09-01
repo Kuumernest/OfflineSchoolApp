@@ -192,8 +192,12 @@ const main = () => {
   // The local mirror still holds the row this request would have created. The
   // caller has to remove it, or the desktop shows a payment the server has
   // never heard of — for ever.
+  // extraDocs joined the descriptor when a queued request became able to write
+  // more than one row — publishing an exam marks every result summary with it.
+  // Empty here, because this request wrote one row, but present: the caller
+  // iterates it, and a missing key and an empty array are different to read.
   check("it says which document to forget",
-    discarded, { collection: "feePayment", docId: "pay-1" });
+    discarded, { collection: "feePayment", docId: "pay-1", extraDocs: [] });
   check("and the queue drains past it", q.nextBatch().map((r) => r.path),
     ["/api/fees/penalties"]);
 

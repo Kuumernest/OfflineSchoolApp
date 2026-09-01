@@ -1180,6 +1180,26 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
   const { id, name, level, section, schoolId } = req.body;
   if (!name?.trim()) return sendError(res, 400, "name is required");
 
+  // Class._id is a String UUID, so a client that created this class offline can
+  // supply the id it already stored locally — the same contract POST /exams
+  // offers. Until this existed the desktop mirror could not answer the create
+  // at all: it would have stored a row under an id the server then replaced,
+  // leaving the reply describing a class that machine had never heard of.
+  //
+  // Re-POSTing an id that already exists returns it rather than failing, which
+  // is what makes the offline outbox safe to retry.
+  if (id) {
+    const already = await Class.findById(String(id).trim()).lean();
+    if (already) {
+      return sendSuccess(res, {
+        class:        already,
+        serverId:     String(already._id),
+        clientId:     String(id).trim(),
+        deduplicated: true,
+      });
+    }
+  }
+
   const resolvedSchoolId = resolveSchoolId(req, schoolId);
 
   const existing = await Class.findOne(
@@ -1199,6 +1219,7 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
   }
 
   const cls = await Class.create({
+    ...(id ? { _id: String(id).trim() } : {}),
     name:      name.trim(),
     level:     level || null,
     section:   section?.trim() || "",
@@ -1408,8 +1429,30 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
   if (!name?.trim()) return sendError(res, 400, "name is required");
   if (!classId)      return sendError(res, 400, "classId is required");
 
+  // A non-string code used to reach code?.trim() below and throw
+  // "code?.trim is not a function" — a 500 for a body a client could plausibly
+  // send, and a 500 stalls the offline outbox exactly as a 409 does.
+  if (code !== undefined && code !== null && typeof code !== "string") {
+    return sendError(res, 400, "code must be a string");
+  }
+
   const coeff = parseCoefficient(coefficient);
   if (!coeff.ok) return sendError(res, 400, coeff.error);
+
+  // Subject._id is a String UUID, so a client that created this subject offline
+  // can supply the id it already stored — see POST /classes above for why the
+  // mirror needs this, and POST /exams for the original of the pattern.
+  if (id) {
+    const already = await Subject.findById(String(id).trim()).lean();
+    if (already) {
+      return sendSuccess(res, {
+        subject:      normaliseSubject(already),
+        serverId:     String(already._id),
+        clientId:     String(id).trim(),
+        deduplicated: true,
+      });
+    }
+  }
 
   const resolvedSchoolId = resolveSchoolId(req, schoolId);
   const classIdStr       = String(classId).trim();
@@ -1439,6 +1482,7 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
   }
 
   const subject = await Subject.create({
+    ...(id ? { _id: String(id).trim() } : {}),
     name:     name.trim(),
     code:     code?.trim() || "",
     class:    classIdStr,
@@ -1468,6 +1512,19 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
 
 router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(async (req, res) => {
   const { name, code, classId, coefficient } = req.body;
+
+  // Two bodies a client can plausibly send used to arrive as unhandled 500s
+  // rather than 400s: a non-string code reached code?.trim(), and a name of
+  // only spaces trimmed to "" and failed the schema's `required`. Both matter
+  // beyond tidiness — the offline outbox stops on any non-2xx, and a 500 stops
+  // it exactly as a 409 does, taking the rest of the school's queued work with
+  // it. Refusing them here keeps the failure local to the one request.
+  if (code !== undefined && code !== null && typeof code !== "string") {
+    return sendError(res, 400, "code must be a string");
+  }
+  if (name !== undefined && (typeof name !== "string" || !name.trim())) {
+    return sendError(res, 400, "name cannot be empty");
+  }
 
   const coeff = parseCoefficient(coefficient);
   if (!coeff.ok) return sendError(res, 400, coeff.error);
@@ -2531,9 +2588,24 @@ const handleGetAssignments = asyncHandler(async (req, res) => {
 });
 
 const handleCreateAssignment = asyncHandler(async (req, res) => {
-  const { teacherId, classId, subjectId, schoolId: bodySchool } = req.body;
+  const { id, teacherId, classId, subjectId, schoolId: bodySchool } = req.body;
   if (!teacherId || !classId || !subjectId) {
     return sendError(res, 400, "teacherId, classId, and subjectId are required");
+  }
+
+  // As with POST /classes and POST /subjects: a client that made this
+  // assignment offline supplies the id it already stored, and replaying it
+  // returns the existing row instead of a second one.
+  if (id) {
+    const already = await TeacherAssignment.findById(String(id).trim()).lean();
+    if (already) {
+      return sendSuccess(res, {
+        assignment:   already,
+        serverId:     String(already._id),
+        clientId:     String(id).trim(),
+        deduplicated: true,
+      });
+    }
   }
 
   const schoolId = resolveSchoolId(req, bodySchool);
@@ -2581,7 +2653,7 @@ const handleCreateAssignment = asyncHandler(async (req, res) => {
   }
 
   const assignment = await TeacherAssignment.create({
-    _id:        uuidv4(),
+    _id:        id ? String(id).trim() : uuidv4(),
     schoolId,
     teacher:    String(teacherId).trim(),
     class:      String(classId).trim(),
@@ -3138,7 +3210,7 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
           as:           "subject",
         },
       },
-      { $unwind: { path: "$subject", preserveNullAndEmpty: true } },
+      { $unwind: { path: "$subject", preserveNullAndEmptyArrays: true } },
       {
         $project: {
           _id:         0,
@@ -3146,7 +3218,10 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
           count:       1,
         },
       },
-      { $sort: { count: -1 } },
+      // Ties broken by name so the order is defined. Without it two
+      // identical requests could return these rows in different orders, and
+      // the $limit below could keep different ones each time.
+      { $sort: { count: -1, subjectName: 1 } },
       { $limit: 10 },
     ]);
   } catch { /* ignore */ }
@@ -3165,7 +3240,7 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
             as:           "class",
           },
         },
-        { $unwind: { path: "$class", preserveNullAndEmpty: true } },
+        { $unwind: { path: "$class", preserveNullAndEmptyArrays: true } },
         {
           $project: {
             _id:       0,
@@ -3173,7 +3248,8 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
             count:     1,
           },
         },
-        { $sort: { count: -1 } },
+        // Ties broken by name, as above.
+        { $sort: { count: -1, className: 1 } },
       ]);
     }
   } catch { /* ignore */ }

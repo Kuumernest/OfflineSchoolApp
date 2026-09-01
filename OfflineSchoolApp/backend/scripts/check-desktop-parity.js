@@ -1367,20 +1367,35 @@ const main = async () => {
     api.handle({ method: "POST", path: "/api/admin/students", query: { schoolId: SCHOOL } }, { docs }),
     null);
 
-  // A pupil on an instalment plan: planStatus is cumulative arithmetic in a
+  // A pupil on an instalment plan. planStatus is cumulative arithmetic in a
   // backend service, and a wrong answer says a family is behind on a plan they
-  // are keeping to. Declining is the correct behaviour, not a gap.
+  // are keeping to — which is exactly what the mirror's "simplified" copy did:
+  // it counted instalments not yet due, so a family one payment into a
+  // two-payment plan was reported as behind by the second payment. The copy is
+  // now line-for-line, so the two answers are compared rather than the local
+  // one declined.
   docs.put("paymentPlan", {
     _id: "pl1", schoolId: SCHOOL, studentId: "p1", academicYear: YEAR,
     status: "active", deletedAt: null,
     instalments: [{ seq: 1, amount: 40000, dueDate: "2026-10-01" }],
   });
-  check("a pupil on a payment plan is left to the server",
-    api.handle({
+  {
+    const withPlan = api.handle({
       method: "GET", path: "/api/fees/students/p1",
       query: { schoolId: SCHOOL, academicYear: YEAR },
-    }, { docs }),
-    null);
+    }, { docs });
+    check("a pupil on a payment plan is answered, not declined", withPlan?.status, 200);
+
+    // Compared against the server's own planStatus() with the same inputs
+    // rather than against written-out numbers: the instalment dates here are
+    // fixed but "now" is not, so a literal expectation would start failing on
+    // a date rather than on a change to the code.
+    const { planStatus } = require("../src/services/feeReminders.service");
+    const seeded   = docs.get("paymentPlan", "pl1");
+    const expected = planStatus(seeded, withPlan.data.data.totals.paid, new Date());
+    check("and its planStatus is the server's arithmetic, not a simplification",
+      JSON.stringify(withPlan.data.data.planStatus), JSON.stringify(expected));
+  }
 
   // Removed again, or every ledger read below this point would decline for the
   // same correct reason and the failures would look like the write path was
@@ -1837,7 +1852,12 @@ const main = async () => {
       body: { schoolId: SCHOOL, status: "halfway" },
     }, examCtx),
     null);
-  check("and so is publishing, which changes every result summary",
+  // Publishing IS answered locally now — it marks every ResultSummary for the
+  // exam, which the mirror holds in full — but only for a session that carries
+  // exams.manage, which is what the server gates the route on. This session has
+  // no permissions, so it is declined here and refused there, in that order.
+  // The positive path is covered in the desktop's own suite.
+  check("and publishing without exams.manage is left to the server",
     api.handle({
       method: "PATCH", path: `/api/exams/${examId}/status`, query: {},
       body: { schoolId: SCHOOL, status: "published" },
@@ -4409,8 +4429,14 @@ const main = async () => {
   check("and the server ACCEPTS it, substituting its own default table — so this " +
         "decline is conservatism, not a predicted 4xx",
     stgNoGrades.status, 200);
+  // Against the shared table's own length rather than a literal: the number
+  // changed once already when the default moved from a /100 scale to /20, and a
+  // magic number here fails for a reason that reads like a broken endpoint.
+  // What matters is that the school's own bands were replaced by the shipped
+  // ones, and the school's table is a different length from this.
   check("which is exactly the damage being avoided: the school's bands are gone",
-    stgNoGrades.body.grading.grades.length, 8);
+    stgNoGrades.body.grading.grades.length,
+    require("../../shared/gradeScale").DEFAULT_GRADES.length);
 
   // Back in step with the server before the write that is meant to succeed.
   docs.putMany("gradingConfig",
@@ -4686,7 +4712,10 @@ const main = async () => {
       { schoolId: SCHOOL, name: "New Bursar", email: "newbursar@x.com", role: "bursar" }],
     ["POST",   "/api/admin/settings/admins/stg-burs/reset-password", {}],
     ["DELETE", "/api/admin/settings/admins/stg-burs", {}],
-    ["GET",    "/api/admin/settings/analytics", {}],
+    // GET /admin/settings/analytics is NOT in this list any more: it is
+    // deterministic counting and grouping over rows a settings screen already
+    // mirrors, so it is answered offline and compared against the server below
+    // rather than declined.
     ["PUT",    "/api/admin/settings/profile", { name: "Head", email: "head@x.com" }],
   ];
 
@@ -4697,31 +4726,35 @@ const main = async () => {
   }
 
   /**
-   * And the reason GET /admin/settings/analytics is online-only, recorded as an
-   * assertion so that fixing the server makes it fail.
+   * GET /admin/settings/analytics — and the server bug that used to make it
+   * unmirrorable, now fixed.
    *
-   * Both $unwind stages in that handler pass `preserveNullAndEmpty`, which is not
-   * an option $unwind accepts — the real name is preserveNullAndEmptyArrays,
-   * which appears NOWHERE in this backend. Mongo raises "unrecognized option to
-   * $unwind", each aggregation is wrapped in a bare `catch { }`, and both arrays
-   * come back empty on every request. Not sometimes: always.
+   * Both $unwind stages passed `preserveNullAndEmpty`, which is not an option
+   * $unwind accepts — the real name is preserveNullAndEmptyArrays, and it
+   * appeared NOWHERE in this backend. Mongo raised "unrecognized option to
+   * $unwind", each aggregation sat inside a bare `catch { }`, and both arrays
+   * came back empty on every request. Not sometimes: always. The summary counts
+   * kept working, which is what made two empty charts look like a school with
+   * no data rather than a broken endpoint.
    *
-   * Mirroring that would mean either hard-coding two empty arrays to agree with
-   * a swallowed server error — and silently diverging the day it is fixed — or
-   * computing the real answer and disagreeing with the server today. Neither is
-   * a mirror. Once the typo is fixed this is worth revisiting.
+   * Mirroring THAT would have meant either hard-coding two empty arrays to
+   * agree with a swallowed error, or computing the real answer and disagreeing
+   * with the server. With the option spelled correctly both sides do the same
+   * arithmetic, so the endpoint is compared like any other.
    */
   const stgAnalytics = await stgGet("/api/admin/settings/analytics?schoolId=" + SCHOOL);
   check("analytics answers 200", stgAnalytics.status, 200);
-  check("but teachersBySubject is empty despite an assignment existing — the " +
-        "$unwind option is misspelled and a bare catch swallows the error",
-    stgAnalytics.body.analytics.teachersBySubject, []);
-  check("and so is classLoad, despite approved pupils in cls-1",
-    stgAnalytics.body.analytics.classLoad, []);
-  // The summary counts DO work, which is what makes the emptiness look like real
-  // data rather than a failure.
-  check("while the summary counts are real, so the screen looks fine",
-    stgAnalytics.body.analytics.summary.totalTeachers >= 2, true);
+  check("teachersBySubject is populated now the $unwind option is spelled right",
+    stgAnalytics.body.analytics.teachersBySubject.length > 0, true);
+  check("and so is classLoad, from the approved pupils in cls-1",
+    stgAnalytics.body.analytics.classLoad.length > 0, true);
+  check("the summary counts still work", stgAnalytics.body.analytics.summary.totalTeachers >= 2, true);
+  check("including the pupil count the summary gained",
+    typeof stgAnalytics.body.analytics.summary.totalStudents, "number");
+
+  // And the whole thing against the mirror, which is the claim that matters.
+  await parity("analytics, offline and on",
+    "/api/admin/settings/analytics?schoolId=" + SCHOOL, asHead);
 
   /**
    * PUT /admin/settings/profile: the 409 nothing local can predict.
@@ -5553,13 +5586,24 @@ const main = async () => {
 
     const created = await askStructure("POST", path, body);
     check(`the server accepts ${what}`, created.status, 201);
-    // THE REASON. The endpoint reads body.id, echoes it back as clientId, and
-    // then lets the model's default generate _id anyway — so the reply describes
-    // a row this machine has never heard of while the row it wrote sits
-    // orphaned. It is a mapping hint for a client that can remap ids; this one
-    // stores documents under the id it chose and cannot.
-    check(`and gives ${what} an id of its own`, created.body.serverId === body.id, false);
-    check(`while echoing the client's id back as a hint`, created.body.clientId, body.id);
+    // THE REASON THIS USED TO BE A DECLINE, and what changed.
+    //
+    // The endpoint read body.id, echoed it back as clientId, and then let the
+    // model's default generate _id anyway — so the reply described a row this
+    // machine had never heard of while the row it wrote sat orphaned. Both
+    // writes/structure.js and the coverage census recorded that and asked for
+    // the backend to accept the id rather than for a local workaround.
+    //
+    // It now does, on the same terms POST /exams already offered: the client's
+    // id becomes _id, and replaying it returns the existing row instead of
+    // creating a second one. So the two sides agree about identity.
+    check(`and stores ${what} under the id the client chose`,
+      created.body.serverId, body.id);
+    check(`while still echoing it back as clientId`, created.body.clientId, body.id);
+    // The replay an outbox performs after a connection drops mid-request.
+    const replayed = await askStructure("POST", path, body);
+    check(`replaying ${what} is not a second row`, replayed.body.deduplicated, true);
+    check(`and answers with the same id`, replayed.body.serverId, body.id);
   }
   // Both new rows into the mirror, so no later comparison is about this probe.
   for (const [name, Model] of Object.entries({ class: Class, subject: Subject })) {
@@ -5581,17 +5625,47 @@ const main = async () => {
   const strNewAssignment =
     { teacherId: "t2", classId: "cls-2", subjectId: "sub-5", schoolId: SCHOOL };
 
-  check("creating an assignment is not queued",
+  // Without an id the mirror still declines: it would have to invent one, and
+  // that is the orphan this whole section is about.
+  check("creating an assignment with no id is not queued",
     api.handle({ method: "POST", path: "/api/admin/assignments", query: {},
       body: strNewAssignment }, structureCtx),
     null);
+
+  // t2 left the mirror when the settings section re-seeded `user` from its own
+  // fixtures. Put the teacher back first, or the create below is declined
+  // because the mirror cannot resolve a teacher — which is correct behaviour,
+  // and would hide whether the id is accepted.
+  docs.put("user", JSON.parse(JSON.stringify(await UserModel.findById("t2").lean())));
+
+  /**
+   * With an id it is STILL not queued, and for a reason worth writing down.
+   *
+   * writes/assignments.js returns a response body — { success, assignment,
+   * serverId } — where this layer expects a write descriptor, { collection,
+   * doc, request, response }. So `collection` and `doc` are undefined,
+   * ctx.docs.put throws, api.handle catches it, and the request goes to the
+   * network having logged "failed locally". The same is true of writes for
+   * classes, subjects, staff and permissions: five modules, and none of them
+   * has ever written a row.
+   *
+   * It reads as a decline from out here, which is why nothing caught it. That
+   * is also why this assertion is written against the observable behaviour
+   * rather than deleted: when the shape is fixed it will fail, and the reason
+   * will be in this comment.
+   */
+  for (const p of ["/api/admin/assignments", "/api/admin/teacher-assignments"]) {
+    check(`creating an assignment is not queued either way: ${p}`,
+      api.handle({ method: "POST", path: p, query: {},
+        body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx),
+      null);
+  }
+
   {
-    // This one does not even read an id from the body: TeacherAssignment.create
-    // hard-codes uuidv4().
-    const created = await askStructure("POST", "/api/admin/assignments", strNewAssignment);
+    const created = await askStructure("POST", "/api/admin/assignments",
+      { ...strNewAssignment, id: "client-as" });
     check("the server accepts it", created.status, 201);
-    check("under an id it generated, with nothing echoed back",
-      created.body.assignment.id.length, 36);
+    check("under the id the client chose", String(created.body.assignment.id), "client-as");
     docs.putMany("teacherAssignment",
       JSON.parse(JSON.stringify(await TeacherAssignment.find({}).lean())));
   }
@@ -6983,7 +7057,11 @@ const main = async () => {
     // .select() does not invent a field the document lacks, so a class with no
     // level or nextClassId comes back with only the keys it has. The claim worth
     // asserting is the other direction: nothing OUTSIDE the projection leaks.
-    const allowed = new Set(["_id", "name", "level", "nextClassId", "isFinalYear"]);
+    // promotionAverage joined the server's .select() with the per-class
+    // promotion bar, so it is inside the projection now, not outside it.
+    const allowed = new Set([
+      "_id", "name", "level", "nextClassId", "isFinalYear", "promotionAverage",
+    ]);
     check("nothing outside the projection is returned",
       rule.data.flatMap((c) => Object.keys(c)).filter((k) => !allowed.has(k)), []);
     check("and the classes carry no schoolId, which the endpoint withholds",

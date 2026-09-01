@@ -44,7 +44,11 @@ const ctx = {
   queue: { add: (r) => ({ seq: 1, duplicate: false }) },
 };
 
-ctx.docs.putMany("examResult", [
+// ResultSummary is the collection the server reads for results, rankings and
+// stats. These rows were seeded as "examResult" — the model deleted when the
+// two collections were merged — so every stats and rankings case below was
+// querying an empty table.
+ctx.docs.putMany("resultSummary", [
   { _id: "r1", examId: "e1", studentId: "s1", classId: "c1", schoolId: "S1",
     studentName: "Ada", admissionNo: "A1", className: "P4",
     classPosition: 1, gradePosition: 1, schoolPosition: 2,
@@ -76,10 +80,6 @@ ctx.docs.putMany("examResult", [
     isPassing: true, average: 19, percentage: 95, gpa: 4.0,
     maxTotalScore: 20, overallGrade: "A+",
     subjectScores: [{ subjectId: "x9", isAbsent: false, score: 20 }] },
-]);
-ctx.docs.putMany("resultSummary", [
-  { _id: "rs1", examId: "e1", studentId: "s1", classId: "c1", schoolId: "S1",
-    studentName: "Ada", isPassing: true, average: 16.5, overallGrade: "A" },
 ]);
 ctx.docs.putMany("studentScore", [
   { _id: "sc1", examId: "e1", studentId: "s1", subjectId: "x1", classId: "c1", schoolId: "S1", score: 18, maxScore: 100 },
@@ -134,8 +134,16 @@ check("student result envelope",
   [single.status, single.data.success, single.data.data.summary.studentName],
   [200, true, "Ada"]);
 check("student result carries scores", single.data.data.scores.map((sc) => sc.score), [18, 15]);
+// s3 used to be the "neither summary nor scores" case, because its row lived in
+// examResult while this read looked at resultSummary. Those are one collection
+// now, so s3 HAS a summary — it is a pupil who sat nothing, not a pupil the
+// mirror has never heard of. Both cases are worth keeping apart.
+check("a pupil who was absent throughout still has a summary to show",
+  [call("GET", "/api/results/e1/student/s3").status,
+   call("GET", "/api/results/e1/student/s3").data.data.summary.isPassing],
+  [200, false]);
 check("student result with neither summary nor scores declines (not-found goes to server)",
-  call("GET", "/api/results/e1/student/s3"), null);
+  call("GET", "/api/results/e1/student/s404"), null);
 check("student result for another school's child declines",
   call("GET", "/api/results/e1/student/s99"), null);
 

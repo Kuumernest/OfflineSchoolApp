@@ -166,7 +166,16 @@ module.exports = [
       const filter = { schoolId, deletedAt: null };
       if (query.status)       filter.status       = String(query.status).trim();
       if (query.academicYear) filter.academicYear = String(query.academicYear).trim();
-      if (query.term)         filter.term         = String(query.term).trim();
+      // Exam.term is a Number since the sequence model landed, and the server
+      // hands mongoose a query string that it casts before the query runs. The
+      // raw string would match nothing here: the stored rows hold 1, not "1".
+      // A term that is not a number is left to the server, which answers it
+      // with a cast error this layer should not imitate.
+      if (query.term !== undefined && String(query.term).trim() !== "") {
+        const term = Number(String(query.term).trim());
+        if (!Number.isFinite(term)) return null;
+        filter.term = term;
+      }
 
       let rows = docs.find("exam", filter);
 

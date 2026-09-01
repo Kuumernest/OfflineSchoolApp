@@ -275,17 +275,21 @@ module.exports = [
       });
       const plan = plans[0] ?? null;
 
-      // planStatus is cumulative instalment arithmetic living in
-      // backend/src/services/feeReminders.service.js — real logic, not a shape.
-      // Declining rather than reimplementing it: a wrong answer here says a
-      // family is behind on a plan they are keeping to, and there is no version
-      // of that which is better than falling back to the network.
+      // planStatus is cumulative instalment arithmetic from
+      // backend/src/services/feeReminders.service.js. This used to answer with
+      // planStatus: null while a comment above it said it was declining — the
+      // worst of the two, because the screen read null as "no plan trouble"
+      // rather than as "unknown".
       //
-      // Return the charges and payments regardless — the screen needs them to
-      // render the ledger. Only planStatus is unavailable locally.
-      if (plan) return ok({ data: { charges, payments, totals, plan, planStatus: null } });
+      // planStatusLocal is now a line-for-line mirror of the server's
+      // planStatus rather than a simplification of it, and the arrears list and
+      // the reminders preview in this same file already depend on it. Computing
+      // it here too is what makes those three agree.
+      const planStatus = plan
+        ? planStatusLocal(plan, totals.paid, Date.now())
+        : null;
 
-      return ok({ data: { charges, payments, totals, plan: null, planStatus: null } });
+      return ok({ data: { charges, payments, totals, plan, planStatus } });
     },
   },
 ];
@@ -360,40 +364,60 @@ const DAY_MS = 86_400_000;
 /**
  * Walk an active payment plan's instalments to determine status.
  *
- * Simplified from backend/src/services/feeReminders.service.js planStatus():
- * we check cumulative instalment amounts against what has been paid.
+ * A line-for-line mirror of planStatus() in
+ * backend/src/services/feeReminders.service.js. It was a "simplified" version,
+ * and the simplifications were wrong in a direction that matters:
+ *
+ *   dueByNow accumulated EVERY dated instalment rather than only those whose
+ *   day had ended, so behindBy included money not yet due. A family paying
+ *   perfectly to a two-instalment plan — first one paid, second still months
+ *   away — was reported as behindBy the whole second instalment.
+ *
+ *   the schedule was sorted on `inst.sequence`, which no instalment has; the
+ *   field is `seq`, so every comparison was 0 - 0 and the order was whatever
+ *   the array happened to hold.
+ *
+ *   nextAmount and settled were missing from the result entirely.
+ *
+ * Dates are returned exactly as the instalment holds them, as the server does —
+ * not re-serialised — so a JSON comparison of the two answers matches.
  */
 const planStatusLocal = (plan, paid, asOf) => {
-  if (!plan || !Array.isArray(plan.instalments) || plan.instalments.length === 0) {
-    return { isBehind: false, behindBy: 0, nextDue: null, dueByNow: 0, missedSince: null };
-  }
+  const schedule = [...(plan?.instalments ?? [])].sort((a, b) => a.seq - b.seq);
 
-  const sorted = [...plan.instalments].sort((a, b) => (a.sequence ?? 0) - (b.sequence ?? 0));
-  let cumulativeDue = 0;
-  let nextDue = null;
+  let dueByNow    = 0;
+  let nextDue     = null;
+  let nextAmount  = 0;
   let missedSince = null;
+  let running     = 0;
 
-  for (const inst of sorted) {
-    const dueDate = inst.dueDate ? new Date(inst.dueDate) : null;
-    if (!dueDate) continue;
+  for (const inst of schedule) {
+    running += inst.amount;
 
-    cumulativeDue += inst.amount ?? 0;
-
-    if (endOfDay(dueDate) < asOf) {
-      // This instalment's day has ended
-      if (paid < cumulativeDue && !missedSince) {
-        missedSince = dueDate.toISOString();
-      }
-    } else {
-      // Future instalment
-      if (!nextDue) nextDue = dueDate.toISOString();
+    // Due once its day has ended: an instalment due on the 15th is not late
+    // on the 15th.
+    if (endOfDay(inst.dueDate) < asOf) {
+      dueByNow = running;
+      // The FIRST shortfall wins — that is the date a reminder should quote.
+      if (missedSince === null && paid < running) missedSince = inst.dueDate;
+    } else if (nextDue === null) {
+      nextDue    = inst.dueDate;
+      nextAmount = inst.amount;
     }
   }
 
-  const behindBy = Math.max(0, cumulativeDue - paid);
-  const isBehind = missedSince !== null;
+  const behindBy = Math.max(0, dueByNow - paid);
 
-  return { isBehind, behindBy, nextDue, dueByNow: cumulativeDue, missedSince };
+  return {
+    dueByNow,
+    behindBy,
+    isBehind: behindBy > 0,
+    nextDue,
+    nextAmount,
+    missedSince,
+    /** Every instalment covered, whether or not the dates have passed. */
+    settled: paid >= running,
+  };
 };
 
 /**
