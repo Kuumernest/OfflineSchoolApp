@@ -8,21 +8,55 @@ export type ExamStatus =
 | "published"
 | "archived";
 
+/** Simplified exam type — only 3 values */
 export type ExamType =
-| "first_test"
-| "second_test"
-| "mid_term"
+| "test"
 | "practical"
-| "final_exam"
-| "mock_exam"
-| "promotion_exam"
-| "continuous_assessment";
+| "promotion_exam";
+
+export type SequenceNumber = 1 | 2 | 3 | 4 | 5 | 6;
+export type TermNumber = 1 | 2 | 3;
 
 export type SubmissionStatus =
 | "pending"
 | "submitted"
 | "approved"
 | "rejected";
+
+// ─── Academic Structure ────────────────────────────────────
+
+export interface AssessmentConfig {
+  type: "test" | "practical" | "promotion_exam";
+  label?: string;
+}
+
+export interface SequenceConfig {
+  number: SequenceNumber;
+  name: string;
+  weight: number; // % within the term (equal = 50)
+  assessment: AssessmentConfig;
+}
+
+export interface TermConfig {
+  number: TermNumber;
+  name: string;
+  weight: number; // % in annual average
+  sequences: SequenceConfig[];
+}
+
+export interface AcademicStructure {
+  _id: string;
+  schoolId: string;
+  academicYear: string;
+  terms: TermConfig[];
+  annualAverageMethod: "terms" | "sequences";
+  promotionExams: SequenceNumber[];
+  promotionThreshold: number;
+  passMark: number;
+  maxAbsences: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 // ─── Core Models ──────────────────────────────────────────
 
@@ -31,8 +65,9 @@ _id: string;
 schoolId: string;
 name: string;
 type: ExamType;
+sequenceNumber: SequenceNumber | null;
 academicYear: string;
-term: string;
+term: TermNumber;
 status: ExamStatus;
 classId: string | null;
 className: string | null;
@@ -42,10 +77,11 @@ startDate: string | null;
 endDate: string | null;
 totalMarks: number;
 passMark: number;
+weight: number;
 description: string | null;
 instructions: string | null;
 resultsPublished: boolean;
-resultsPublishedAt:string | null;
+resultsPublishedAt: string | null;
 publishedBy: string | null;
 createdBy: string | null;
 createdAt: string;
@@ -142,6 +178,72 @@ isPassing: boolean;
 isAbsent: boolean;
 }
 
+// ─── Term / Annual Results ─────────────────────────────────
+
+export interface SequenceAverage {
+sequence: SequenceNumber;
+examId: string | null;
+average: number;
+overallGrade: string | null;
+isComplete: boolean;
+}
+
+export interface TermResult {
+_id: string;
+schoolId: string;
+academicYear: string;
+term: TermNumber;
+classId: string;
+studentId: string;
+studentName: string | null;
+admissionNo: string | null;
+className: string | null;
+sequenceAverages: SequenceAverage[];
+termAverage: number;
+overallGrade: string | null;
+overallRemark: string | null;
+classPosition: number | null;
+schoolPosition: number | null;
+totalInClass: number | null;
+totalInSchool: number | null;
+isPassing: boolean;
+isPublished: boolean;
+createdAt: string;
+updatedAt: string;
+}
+
+export interface TermAverage {
+term: TermNumber;
+average: number;
+overallGrade: string | null;
+isComplete: boolean;
+}
+
+export interface AnnualResult {
+_id: string;
+schoolId: string;
+academicYear: string;
+classId: string;
+studentId: string;
+studentName: string | null;
+admissionNo: string | null;
+className: string | null;
+termAverages: TermAverage[];
+annualAverage: number;
+overallGrade: string | null;
+overallRemark: string | null;
+promotionStatus: "promoted" | "repeated" | "conditional" | "graduated" | "pending";
+promotionThreshold: number | null;
+classPosition: number | null;
+schoolPosition: number | null;
+totalInClass: number | null;
+totalInSchool: number | null;
+isPassing: boolean;
+isPublished: boolean;
+createdAt: string;
+updatedAt: string;
+}
+
 // ─── API Response Shapes ──────────────────────────────────
 
 export interface ExamsListResponse {
@@ -161,20 +263,20 @@ export interface DashboardResponse {
 success: boolean;
 dashboard: {
 exams: {
-total: number;
-draft: number;
-scheduled: number;
-ongoing: number;
-completed: number;
-published: number;
-archived: number;
+  total: number;
+  draft: number;
+  scheduled: number;
+  ongoing: number;
+  completed: number;
+  published: number;
+  archived: number;
 };
 results: {
-published: number;
-pending: number;
-missingGrades: number;
-averagePerformance: number;
-passRate: number;
+  published: number;
+  pending: number;
+  missingGrades: number;
+  averagePerformance: number;
+  passRate: number;
 };
 };
 }
@@ -187,6 +289,22 @@ submissions: ExamSubject[];
 export interface ResultsResponse {
 success: boolean;
 results: ResultSummary[];
+}
+
+export interface TermResultsResponse {
+success: boolean;
+results: TermResult[];
+total: number;
+page: number;
+totalPages: number;
+}
+
+export interface AnnualResultsResponse {
+success: boolean;
+results: AnnualResult[];
+total: number;
+page: number;
+totalPages: number;
 }
 
 export interface StatsResponse {
@@ -220,8 +338,9 @@ total: number;
 export interface CreateExamForm {
 name: string;
 type: ExamType;
+sequenceNumber: SequenceNumber | null;
 academicYear: string;
-term: string;
+term: TermNumber;
 status: ExamStatus;
 startDate: string;
 endDate: string;

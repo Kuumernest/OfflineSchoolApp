@@ -211,30 +211,66 @@ async function candidates({
     schoolId,
     deletedAt: null,
     voidedAt:  null,
-    // Only dated charges. See the header: an undated bill has no deadline to be
-    // late for, and every pre-feature charge is undated.
-    dueDate:   { $ne: null },
   };
   if (academicYear) chargeFilter.academicYear = academicYear;
   if (classId)      chargeFilter.classId      = classId;
 
-  // The earliest deadline per student, and the latest, so a preview can say
-  // "3 charges, earliest due 15 September".
-  const dated = await FeeCharge.aggregate([
-    { $match: chargeFilter },
-    {
-      $group: {
-        _id:         "$studentId",
-        earliestDue: { $min: "$dueDate" },
-        latestDue:   { $max: "$dueDate" },
-        datedCharges: { $sum: 1 },
+  // Two groups: charges with a due date (which have a deadline) and charges
+  // without one (which have no grace period — they are overdue immediately).
+  const [dated, undated] = await Promise.all([
+    // Dated charges: earliest/latest due date per student.
+    FeeCharge.aggregate([
+      { $match: { ...chargeFilter, dueDate: { $ne: null } } },
+      {
+        $group: {
+          _id:         "$studentId",
+          earliestDue: { $min: "$dueDate" },
+          latestDue:   { $max: "$dueDate" },
+          datedCharges: { $sum: 1 },
+        },
       },
-    },
+    ]),
+    // Undated charges: count per student, no deadline to compute.
+    FeeCharge.aggregate([
+      { $match: { ...chargeFilter, dueDate: null } },
+      {
+        $group: {
+          _id:           "$studentId",
+          undatedCharges: { $sum: 1 },
+        },
+      },
+    ]),
   ]);
 
-  if (!dated.length) return [];
+  // Merge the two groups into one map keyed by studentId.
+  const merged = new Map();
+  for (const d of dated) {
+    merged.set(String(d._id), {
+      studentId:    String(d._id),
+      earliestDue:  d.earliestDue,
+      latestDue:    d.latestDue,
+      datedCharges: d.datedCharges,
+      undatedCharges: 0,
+    });
+  }
+  for (const u of undated) {
+    const id = String(u._id);
+    if (merged.has(id)) {
+      merged.get(id).undatedCharges = u.undatedCharges;
+    } else {
+      merged.set(id, {
+        studentId:    id,
+        earliestDue:  null,
+        latestDue:    null,
+        datedCharges: 0,
+        undatedCharges: u.undatedCharges,
+      });
+    }
+  }
 
-  const studentIds = dated.map((d) => String(d._id));
+  if (!merged.size) return [];
+
+  const studentIds = [...merged.keys()];
 
   const [students, balances, plans, channel] = await Promise.all([
     Student.find({ _id: { $in: studentIds }, schoolId, deletedAt: null })
@@ -254,49 +290,42 @@ async function candidates({
 
   const rows = [];
 
-  for (const d of dated) {
-    const id      = String(d._id);
+  for (const [id, group] of merged) {
     const student = byId.get(id);
-    // A charge whose student has been deleted. Skipped rather than reported: a
-    // reminder needs somebody to send it to.
     if (!student) continue;
 
     const totals  = balances.get(id);
     const balance = totals?.balance ?? 0;
-    if (balance <= 0) continue;   // settled, or in credit
+    if (balance <= 0) continue;
 
-    // ── An agreed plan replaces the structure's deadline ─────────────────
-    //
-    // This is the point of plans. A family who cannot pay the term in one go
-    // and has agreed four dates with the school must be measured against those
-    // dates — chasing them on the original deadline while they keep to an
-    // arrangement the school itself proposed is worse than having no plans.
-    //
-    // "Behind" is cumulative; see planStatus.
     const plan   = plans.get(id);
     const status = plan ? planStatus(plan, totals?.paid ?? 0, asOf) : null;
 
-    let due, isOverdue, isDueSoon;
+    let due, isOverdue, isDueSoon, hasUndated = group.undatedCharges > 0;
 
     if (status) {
-      // Behind on the plan: the deadline to quote is the first date by which
-      // they had fallen short, not the last one to pass.
       isOverdue = status.isBehind;
       due       = status.isBehind ? status.missedSince : status.nextDue;
-
-      // A family on track with nothing left to pay is not a candidate at all —
-      // and one with no next date has finished the schedule.
-      if (!due) continue;
-
-      isDueSoon = !isOverdue && due <= soonCutoff;
-    } else {
-      due       = d.earliestDue;
+      if (!due && !hasUndated) continue;
+      isDueSoon = !isOverdue && due && due <= soonCutoff;
+    } else if (group.earliestDue) {
+      due       = group.earliestDue;
       isOverdue = endOfDay(due) < asOf;
       isDueSoon = !isOverdue && due <= soonCutoff;
+    } else if (hasUndated) {
+      // No due date on any charge — treat as overdue immediately (no grace
+      // period). This covers pre-feature charges and manually created bills.
+      due       = null;
+      isOverdue = true;
+      isDueSoon = false;
+    } else {
+      continue;
     }
 
     if (mode === "overdue" && !isOverdue) continue;
     if (mode === "dueSoon" && !isDueSoon) continue;
+
+    const totalCharges = group.datedCharges + group.undatedCharges;
 
     rows.push({
       studentId:    id,
@@ -308,10 +337,12 @@ async function candidates({
       charged: totals?.charged ?? 0,
       paid:    totals?.paid    ?? 0,
       earliestDue: due,
-      latestDue:   d.latestDue,
-      datedCharges: d.datedCharges,
+      latestDue:   group.latestDue,
+      datedCharges: group.datedCharges,
+      undatedCharges: group.undatedCharges,
+      totalCharges,
       isOverdue,
-      daysOverdue: isOverdue ? daysBetween(asOf, due) : 0,
+      daysOverdue: isOverdue && due ? daysBetween(asOf, due) : (isOverdue && !due ? 1 : 0),
 
       // The plan, when there is one. Reported rather than folded into
       // `balance`: what a family owes and what they were meant to have paid by

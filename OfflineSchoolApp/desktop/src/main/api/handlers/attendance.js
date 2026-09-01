@@ -460,6 +460,7 @@ module.exports = [
       if (query.classId)   filter.classId   = String(query.classId).trim();
       if (query.studentId) filter.studentId = String(query.studentId).trim();
       if (query.status)    filter.status    = String(query.status).trim();
+      if (query.periodId)  filter.periodId  = String(query.periodId).trim();
 
       // An exact day wins over any range, as it does on the server, and a range
       // is inclusive at both ends. Applied after the query because the store's

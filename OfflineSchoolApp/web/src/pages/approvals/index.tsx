@@ -38,7 +38,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }   from "@/i18n/format";
 import { cn }          from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import {
   fetchApprovals, approveRequest, rejectRequest, cancelRequest,
   type ApprovalKind, type ApprovalRequest, type ApprovalStatus,

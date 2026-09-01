@@ -108,7 +108,7 @@ exports.upsert = async (req, res, next) => {
       homework = await Homework.findOneAndUpdate(
         { _id: id, schoolId: data.schoolId },
         { $set: { ...data, deletedAt: null }, $inc: { version: 1 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true }
+        { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
       ).lean();
     } else {
       homework = await Homework.create({ ...data, version: 1 });
@@ -131,7 +131,7 @@ exports.remove = async (req, res, next) => {
     const homework = await Homework.findOneAndUpdate(
       { _id: req.params.id, schoolId: schoolIdFor(req, req.query.schoolId || req.body.schoolId) },
       { $set: { deletedAt: new Date() }, $inc: { version: 1 } },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
     if (!homework) return res.status(404).json({ message: "Homework not found" });
     return res.json({ success: true, homework });
@@ -147,7 +147,7 @@ exports.submit = async (req, res, next) => {
     const homework = await Homework.findOneAndUpdate(
       { _id: req.params.id, schoolId: schoolIdFor(req, req.body.schoolId), deletedAt: null },
       { $pull: { submissions: { studentId } } },
-      { new: true }
+      { returnDocument: 'after' }
     );
     if (!homework) return res.status(404).json({ message: "Homework not found" });
     homework.submissions.push({ studentId, text: input.data.text ?? null, attachmentUrl: input.data.attachmentUrl ?? null });

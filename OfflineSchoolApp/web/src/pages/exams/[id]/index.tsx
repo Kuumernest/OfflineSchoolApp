@@ -10,15 +10,23 @@ import { useExamDetail, useSubmissions,
 import { useExamResults, useExamStats,
          useProcessResults,
          usePublishResults }                 from "@/hooks/useExamResults";
-import { useUpdateExamStatus }               from "@/hooks/useExams";
+import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
-              ExamSubject }                  from "@/types/exam.types";
+              ExamSubject,
+              ExamType,
+              SequenceNumber,
+              TermNumber }                  from "@/types/exam.types";
 import * as ExamService                      from "@/services/exam.service";
 import api                                   from "@/services/api";
-import { getErrorMessage }                   from "@/lib/api";
+import { getErrorMessage }                   from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import {
   EXAM_STATUS_META,
+  EXAM_TYPE_KEYS,
+  SEQUENCE_MAP,
+  getSequencesForTerm,
+  TERM_OPTIONS,
+  ACADEMIC_YEAR_OPTIONS,
   examTypeLabel,
 }                                            from "@/constants/exam.constants";
 
@@ -141,14 +149,70 @@ const DetailsTab = ({
   submissions,
   onStatusChange,
   changingStatus,
+  onUpdateExam,
+  updatingExam,
 }: {
   exam:           NonNullable<ReturnType<typeof useExamDetail>["data"]>["exam"];
   submissions:    ExamSubjectWithTotals[];
   onStatusChange: (s: ExamStatus) => void;
   changingStatus: boolean;
+  onUpdateExam:   (data: Record<string, unknown>) => void;
+  updatingExam:   boolean;
 }) => {
   const { t } = useTranslation();
   const nextStatuses = NEXT_STATUSES[exam.status] ?? [];
+  const [editOpen, setEditOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    name:          exam.name          ?? "",
+    type:          exam.type          ?? "test",
+    sequenceNumber: String(exam.sequenceNumber ?? ""),
+    academicYear:  exam.academicYear  ?? "",
+    term:          String(exam.term    ?? ""),
+    startDate:     exam.startDate     ?? "",
+    endDate:       exam.endDate       ?? "",
+    totalMarks:    String(exam.totalMarks ?? 100),
+    passMark:      String(exam.passMark   ?? 50),
+    description:   exam.description   ?? "",
+    instructions:  exam.instructions  ?? "",
+  });
+  const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+
+  const handleEditChange = (field: string, value: string) => {
+    setEditForm((prev) => ({ ...prev, [field]: value }));
+    if (editErrors[field]) setEditErrors((prev) => ({ ...prev, [field]: "" }));
+  };
+
+  const handleEditSave = () => {
+    const errors: Record<string, string> = {};
+    if (!editForm.name.trim()) errors.name = t("examCreate.nameRequired") as string;
+    if (!editForm.academicYear) errors.academicYear = t("examCreate.yearRequired") as string;
+    if (!editForm.term) errors.term = t("examCreate.termRequired") as string;
+    const tm = Number(editForm.totalMarks);
+    const pm = Number(editForm.passMark);
+    if (!tm || tm <= 0) errors.totalMarks = t("examCreate.totalMarksRequired") as string;
+    if (!pm || pm <= 0) errors.passMark = t("examCreate.passMarkRequired") as string;
+    if (pm > tm) errors.passMark = t("examCreate.passMarkExceeds") as string;
+
+    if (Object.keys(errors).length) {
+      setEditErrors(errors);
+      return;
+    }
+
+    onUpdateExam({
+      name:          editForm.name.trim(),
+      type:          editForm.type,
+      sequenceNumber: editForm.sequenceNumber ? Number(editForm.sequenceNumber) : null,
+      academicYear:  editForm.academicYear,
+      term:          Number(editForm.term),
+      startDate:     editForm.startDate || null,
+      endDate:       editForm.endDate   || null,
+      totalMarks:    tm,
+      passMark:      pm,
+      description:   editForm.description   || null,
+      instructions:  editForm.instructions  || null,
+    });
+    setEditOpen(false);
+  };
 
   const subjectProgress = submissions.map((sub) => {
     const entered = sub.totalScoresEntered ?? 0;
@@ -201,7 +265,18 @@ const DetailsTab = ({
 
       {/* Exam info */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
-        <h3 className="font-semibold text-gray-900 mb-4">{t("exams.information")}</h3>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-gray-900">{t("exams.information")}</h3>
+          <button
+            onClick={() => setEditOpen(true)}
+            className="px-3 py-1.5 text-sm font-semibold rounded-xl
+                       border-2 border-gray-200 text-gray-700
+                       hover:border-primary-400 hover:text-primary-700
+                       hover:bg-primary-50 transition-colors"
+          >
+            {t("common.edit")}
+          </button>
+        </div>
         <dl className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           {[
             { labelKey: "common.type",           value: examTypeLabel(t, exam.type) },
@@ -235,6 +310,221 @@ const DetailsTab = ({
           </div>
         )}
       </div>
+
+      {/* Edit Exam Modal */}
+      {editOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto p-6">
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">
+              {t("exams.editExam")}
+            </h3>
+            <div className="space-y-4">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  {t("examCreate.name")} <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={editForm.name}
+                  onChange={(e) => handleEditChange("name", e.target.value)}
+                  className={`w-full px-3 py-2 rounded-xl border text-sm
+                    focus:outline-none focus:ring-2 focus:ring-primary-500
+                    ${editErrors.name ? "border-red-400" : "border-gray-200"}`}
+                />
+                {editErrors.name && <p className="text-xs text-red-500 mt-1">{editErrors.name}</p>}
+              </div>
+
+              {/* Type */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  {t("common.type")}
+                </label>
+                <select
+                  value={editForm.type}
+                  onChange={(e) => handleEditChange("type", e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  {Object.keys(EXAM_TYPE_KEYS).map((key) => (
+                    <option key={key} value={key}>{examTypeLabel(t, key as ExamType)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Academic Year & Term */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("academic.schoolYear")} <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editForm.academicYear}
+                    onChange={(e) => handleEditChange("academicYear", e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm
+                      focus:outline-none focus:ring-2 focus:ring-primary-500
+                      ${editErrors.academicYear ? "border-red-400" : "border-gray-200"}`}
+                  >
+                    <option value="">{t("examCreate.selectYear")}</option>
+                    {ACADEMIC_YEAR_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
+                  {editErrors.academicYear && <p className="text-xs text-red-500 mt-1">{editErrors.academicYear}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("academic.term")} <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    value={editForm.term}
+                    onChange={(e) => handleEditChange("term", e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm
+                      focus:outline-none focus:ring-2 focus:ring-primary-500
+                      ${editErrors.term ? "border-red-400" : "border-gray-200"}`}
+                  >
+                    <option value="">{t("examCreate.selectTerm")}</option>
+                    {TERM_OPTIONS.map((opt) => (
+                      <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                    ))}
+                  </select>
+                  {editErrors.term && <p className="text-xs text-red-500 mt-1">{editErrors.term}</p>}
+                </div>
+              </div>
+
+              {/* Sequence */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  {t("examCreate.sequence")}
+                </label>
+                <select
+                  value={editForm.sequenceNumber}
+                  onChange={(e) => handleEditChange("sequenceNumber", e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">{t("examCreate.selectSequence")}</option>
+                  {getSequencesForTerm(Number(editForm.term) as TermNumber).map((seq) => {
+                    const meta = SEQUENCE_MAP[seq];
+                    return (
+                      <option key={seq} value={seq}>{t(meta.labelKey)}</option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("common.startDate")}
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.startDate}
+                    onChange={(e) => handleEditChange("startDate", e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("common.endDate")}
+                  </label>
+                  <input
+                    type="date"
+                    value={editForm.endDate}
+                    onChange={(e) => handleEditChange("endDate", e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                               focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                </div>
+              </div>
+
+              {/* Total Marks & Pass Mark */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("examCreate.totalMarks")} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    value={editForm.totalMarks}
+                    onChange={(e) => handleEditChange("totalMarks", e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm
+                      focus:outline-none focus:ring-2 focus:ring-primary-500
+                      ${editErrors.totalMarks ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  {editErrors.totalMarks && <p className="text-xs text-red-500 mt-1">{editErrors.totalMarks}</p>}
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1">
+                    {t("academic.passMark")} <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editForm.passMark}
+                    onChange={(e) => handleEditChange("passMark", e.target.value)}
+                    className={`w-full px-3 py-2 rounded-xl border text-sm
+                      focus:outline-none focus:ring-2 focus:ring-primary-500
+                      ${editErrors.passMark ? "border-red-400" : "border-gray-200"}`}
+                  />
+                  {editErrors.passMark && <p className="text-xs text-red-500 mt-1">{editErrors.passMark}</p>}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  {t("common.description")}
+                </label>
+                <textarea
+                  rows={3}
+                  value={editForm.description}
+                  onChange={(e) => handleEditChange("description", e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+
+              {/* Instructions */}
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">
+                  {t("examCreate.instructions")}
+                </label>
+                <textarea
+                  rows={2}
+                  value={editForm.instructions}
+                  onChange={(e) => handleEditChange("instructions", e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl border border-gray-200 text-sm
+                             focus:outline-none focus:ring-2 focus:ring-primary-500"
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 mt-6">
+              <button
+                onClick={() => setEditOpen(false)}
+                className="px-4 py-2 text-sm font-semibold rounded-xl border-2
+                           border-gray-200 text-gray-700 hover:bg-gray-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={handleEditSave}
+                disabled={updatingExam}
+                className="px-4 py-2 text-sm font-semibold rounded-xl
+                           bg-primary-600 text-white hover:bg-primary-700
+                           disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {updatingExam ? t("common.saving") : t("common.save")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Per-subject progress */}
       <div className="bg-white rounded-xl border border-gray-100 p-5">
@@ -316,6 +606,11 @@ const ScoreEntryPanel = ({
   const [saving,   setSaving]   = useState(false);
   const [saved,    setSaved]    = useState(false);
   const [search,   setSearch]   = useState("");
+  // Rows that failed validation (out-of-range or missing score). Flagging them
+  // inline shows the teacher exactly which cells to fix (e.g. a 23/20 typo or
+  // a blank) instead of a blind alert naming nobody.
+  const [invalidIds, setInvalidIds] = useState<Set<string>>(new Set());
+  const [formError,  setFormError]  = useState("");
 
   // Stable primitive IDs — prevents double useEffect firing
   const subId     = sub._id;
@@ -332,6 +627,8 @@ const ScoreEntryPanel = ({
       setStudents([]);
       setScores({});
       setSaved(false);
+      setInvalidIds(new Set());
+      setFormError("");
 
       try {
         const [stuRes, scoresRes] = await Promise.all([
@@ -387,6 +684,13 @@ const ScoreEntryPanel = ({
       [studentId]: { ...(prev[studentId] ?? EMPTY_SCORE), [field]: value },
     }));
     setSaved(false);
+    setFormError("");
+    setInvalidIds((prev) => {
+      if (!prev.has(studentId)) return prev;
+      const next = new Set(prev);
+      next.delete(studentId);
+      return next;
+    });
   }, []);
 
   const handleSave = async () => {
@@ -404,6 +708,30 @@ const ScoreEntryPanel = ({
           teacherRemark: entry.teacherRemark || null,
         };
       });
+
+      // A mark of 23/20 must never leave the browser. Number("abc") is NaN,
+      // which fails both comparisons, so unparseable cells are caught too.
+      const invalid = records.filter(
+        (r) =>
+          !r.isAbsent && r.score !== null &&
+          (!Number.isFinite(r.score) || r.score < 0 || r.score > maxScore)
+      );
+      if (invalid.length > 0) {
+        setInvalidIds(new Set(invalid.map((r) => r.studentId)));
+        setFormError(t("exams.invalidScores", { count: invalid.length, max: maxScore }));
+        return;
+      }
+
+      // A present student must have a score — a blank cell means the sheet is
+      // unfinished, so the save is blocked until every row is filled or absent.
+      const unentered = records.filter((r) => !r.isAbsent && r.score === null);
+      if (unentered.length > 0) {
+        setInvalidIds(new Set(unentered.map((r) => r.studentId)));
+        setFormError(t("exams.missingScores", { count: unentered.length }));
+        return;
+      }
+      setInvalidIds(new Set());
+      setFormError("");
 
       await ExamService.saveBulkScores({
         examId,
@@ -492,6 +820,14 @@ const ScoreEntryPanel = ({
           style={{ width: `${progressPct}%` }}
         />
       </div>
+
+      {/* Validation banner (out-of-range or missing scores) */}
+      {formError && (
+        <div className="px-4 py-2 bg-red-50 border-b border-red-100
+                        text-xs font-semibold text-red-700">
+          {formError}
+        </div>
+      )}
 
       {/* Search */}
       <div className="px-4 py-2 bg-white border-b border-gray-100">
@@ -607,9 +943,11 @@ const ScoreEntryPanel = ({
                         className={`w-16 text-center px-2 py-1 border
                           rounded-lg text-sm font-bold focus:outline-none
                           focus:ring-2 focus:ring-primary-400 ${scoreColor}
-                          ${num != null
-                            ? "border-current"
-                            : "border-gray-200"
+                          ${invalidIds.has(sid)
+                            ? "border-red-500 ring-2 ring-red-300"
+                            : num != null
+                              ? "border-current"
+                              : "border-gray-200"
                           }`}
                       />
                       {pct != null && (
@@ -1232,6 +1570,7 @@ export default function ExamDetailPage() {
   const { data, isLoading, error } = useExamDetail(id ?? "");
   const { data: subData }          = useSubmissions(id ?? "");
   const updateStatus               = useUpdateExamStatus();
+  const updateExam                 = useUpdateExam();
 
   const exam        = data?.exam;
   const submissions = (subData?.submissions ?? []) as ExamSubjectWithTotals[];
@@ -1248,6 +1587,11 @@ export default function ExamDetailPage() {
       status: t(EXAM_STATUS_META[status].labelKey),
     }))) return;
     updateStatus.mutate({ examId: id, status });
+  };
+
+  const handleUpdateExam = (data: Record<string, unknown>) => {
+    if (!id) return;
+    updateExam.mutate({ examId: id, data });
   };
 
   const awaitingApproval = submissions.filter(
@@ -1333,6 +1677,8 @@ export default function ExamDetailPage() {
             submissions={submissions}
             onStatusChange={handleStatusChange}
             changingStatus={updateStatus.isPending}
+            onUpdateExam={handleUpdateExam}
+            updatingExam={updateExam.isPending}
           />
         )}
 

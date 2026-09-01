@@ -1094,7 +1094,9 @@ const main = async () => {
     title: `Assessment ${i}`,
     status: i % 2 === 0 ? "published" : "draft",
     academicYear: YEAR,
-    term: "Term 1",
+    // Exam.term is a number (1-3) since the sequence model landed; the string
+    // form still belongs to FeeStructure and FeeCharge, which are untouched.
+    term: 1,
     classId: i < 4 ? "cls-1" : null,
     // Several classes on one exam: the endpoint matches classId OR a member of
     // classIds, and Mongo does the array case implicitly where SQLite does not.
@@ -1105,13 +1107,13 @@ const main = async () => {
   }));
   examRows.push({
     _id: "exam-gone", schoolId: SCHOOL, title: "Removed", status: "draft",
-    academicYear: YEAR, term: "Term 1", classId: "cls-1",
+    academicYear: YEAR, term: 1, classId: "cls-1",
     createdAt: new Date(Date.UTC(2026, 8, 20)),
     deletedAt: new Date(), updatedAt: new Date(),
   });
   examRows.push({
     _id: "exam-other", schoolId: "other-school", title: "Elsewhere", status: "published",
-    academicYear: YEAR, term: "Term 1", classId: "cls-9",
+    academicYear: YEAR, term: 1, classId: "cls-9",
     createdAt: new Date(Date.UTC(2026, 8, 21)), deletedAt: null, updatedAt: new Date(),
   });
 
@@ -1124,7 +1126,7 @@ const main = async () => {
   await parity("the uneven last page", `/api/exams?schoolId=${SCHOOL}&limit=3&page=3`, asHead);
   await parity("a page past the end", `/api/exams?schoolId=${SCHOOL}&limit=3&page=9`, asHead);
   await parity("by status",          `/api/exams?schoolId=${SCHOOL}&status=published`, asHead);
-  await parity("by year and term",   `/api/exams?schoolId=${SCHOOL}&academicYear=${YEAR}&term=Term 1`, asHead);
+  await parity("by year and term",   `/api/exams?schoolId=${SCHOOL}&academicYear=${YEAR}&term=1`, asHead);
   await parity("by class, matching classId",  `/api/exams?schoolId=${SCHOOL}&classId=cls-1`, asHead);
   await parity("by class, matching classIds", `/api/exams?schoolId=${SCHOOL}&classId=cls-2`, asHead);
   await parity("a class with no exams",      `/api/exams?schoolId=${SCHOOL}&classId=cls-none`, asHead);
@@ -1175,8 +1177,8 @@ const main = async () => {
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- exam results, published and otherwise ---");
 
-  const ExamResult = require("../src/db/models/ExamResult");
-  await ExamResult.init();
+  const ResultSummary = require("../src/db/models/ResultSummary");
+  await ResultSummary.init();
 
   // Positions 1..10 so the numeric sort is testable: as text, "10" sorts before
   // "9", and a ranked list in the wrong order is worse than an unordered one.
@@ -1190,32 +1192,32 @@ const main = async () => {
       // version of this fixture cycled through three pupils and could not exist.
       // The index is not partial either, so a soft-deleted row still occupies
       // its pupil's place — which is why res-gone below has its own.
-      studentId: `stu-${i + 1}`, total: 100 - i, classPosition: i + 1,
+      studentId: `stu-${i + 1}`, totalScore: 100 - i, classPosition: i + 1,
       isPublished: true, deletedAt: null, updatedAt: new Date(),
     })),
     { _id: "res-unranked", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
-      studentId: "stu-unranked", total: 40, isPublished: true, deletedAt: null, updatedAt: new Date() },
+      studentId: "stu-unranked", totalScore: 40, isPublished: true, deletedAt: null, updatedAt: new Date() },
     // Unpublished: an admin may ask for these, a teacher and a bursar may not
     // see them at all.
     { _id: "res-draft-1", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
-      studentId: "stu-draft-1", total: 88, classPosition: 2, isPublished: false,
+      studentId: "stu-draft-1", totalScore: 88, classPosition: 2, isPublished: false,
       deletedAt: null, updatedAt: new Date() },
     { _id: "res-draft-2", examId: "exam-0", schoolId: SCHOOL, classId: "cls-2",
-      studentId: "stu-draft-2", total: 77, classPosition: 1, isPublished: false,
+      studentId: "stu-draft-2", totalScore: 77, classPosition: 1, isPublished: false,
       deletedAt: null, updatedAt: new Date() },
     { _id: "res-gone", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
-      studentId: "stu-gone", total: 1, classPosition: 99, isPublished: true,
+      studentId: "stu-gone", totalScore: 1, classPosition: 99, isPublished: true,
       deletedAt: new Date(), updatedAt: new Date() },
     { _id: "res-other", examId: "exam-0", schoolId: "other-school", classId: "cls-9",
-      studentId: "px", total: 50, classPosition: 1, isPublished: true,
+      studentId: "px", totalScore: 50, classPosition: 1, isPublished: true,
       deletedAt: null, updatedAt: new Date() },
   ];
-  await ExamResult.collection.insertMany(resultRows);
+  await ResultSummary.collection.insertMany(resultRows);
 
   // Mirrored WITHOUT the feed's scope, deliberately: this is the state a machine
   // is in if it pulled as an admin. The handler must still hide unpublished rows
   // from a non-admin reading that same machine.
-  docs.putMany("examResult", JSON.parse(JSON.stringify(await ExamResult.find({}).lean())));
+  docs.putMany("resultSummary", JSON.parse(JSON.stringify(await ResultSummary.find({}).lean())));
 
   await parity("as an admin, published only by default",
     `/api/results/exam-0?schoolId=${SCHOOL}`, asHead);
@@ -1268,7 +1270,7 @@ const main = async () => {
   // THE ASSERTION THIS SECTION EXISTS FOR. The mirror holds the drafts; the
   // handler must not show them to somebody the server would hide them from.
   check("the mirror does hold the unpublished rows",
-    docs.count("examResult", { isPublished: false }) > 0, true);
+    docs.count("resultSummary", { isPublished: false }) > 0, true);
   check("and a bursar is shown none of them",
     asBursarRows.data.some((r) => r.isPublished === false), false);
   check("an admin asking explicitly does see them",
@@ -1679,7 +1681,7 @@ const main = async () => {
     method: "POST", path: "/api/exams", query: {},
     body: {
       schoolId: SCHOOL, name: "  Second Term Maths  ", academicYear: YEAR,
-      term: "term_2", type: "mid_term", classId: "cls-1", totalMarks: 80,
+      term: 2, type: "practical", classId: "cls-1", totalMarks: 80,
     },
   }, examCtx);
 
@@ -1741,8 +1743,8 @@ const main = async () => {
   // whole document this would still be 80 by luck; the assertion that matters is
   // the pair — a field the create set, and a field the create defaulted.
   check("a field only the create set survived the edit", onServer?.totalMarks, 80);
-  check("a field neither of them mentioned kept the endpoint's default",
-    onServer?.type, "mid_term");
+  check("a field the create set and the edit never mentioned survived",
+    onServer?.type, "practical");
   check("the class the create named is still there", onServer?.className, "Form 1");
 
   /**
@@ -1848,7 +1850,7 @@ const main = async () => {
     api.handle({
       method: "POST", path: "/api/exams", query: {},
       body: {
-        schoolId: SCHOOL, name: "With Subjects", academicYear: YEAR, term: "term_2",
+        schoolId: SCHOOL, name: "With Subjects", academicYear: YEAR, term: 2,
         subjects: [{ subjectId: "sub-1" }],
       },
     }, examCtx),
@@ -1930,7 +1932,7 @@ const main = async () => {
     method: "POST", path: "/api/exams", query: {},
     body: {
       schoolId: SCHOOL, name: "End of Term", academicYear: YEAR,
-      term: "term_3", classId: "cls-1",
+      term: 3, classId: "cls-1",
     },
   }, marksCtx);
   const marksExamId = forMarks.data.serverId;

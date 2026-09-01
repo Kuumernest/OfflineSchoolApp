@@ -231,6 +231,44 @@ const TEMPLATES = {
     };
   },
 
+  "attendance.absent.period": (d, lang) => {
+    const en = lang !== "fr";
+    const subject = en
+      ? `Absent — ${d.subjectName ?? "class"}`
+      : `Absent — ${d.subjectName ?? "cours"}`;
+    const lines = en
+      ? [
+          `<b>${esc(d.studentName)}</b> was marked absent for <b>${esc(d.subjectName ?? "class")}</b> during <b>${esc(d.periodName ?? "period")}</b> on <b>${esc(d.date ?? "")}</b>.`,
+        ]
+      : [
+          `<b>${esc(d.studentName)}</b> a été marqué(e) absent(e) pour <b>${esc(d.subjectName ?? "cours")}</b> pendant <b>${esc(d.periodName ?? "période")}</b> le <b>${esc(d.date ?? "")}</b>.`,
+        ];
+    return {
+      subject,
+      text: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n"),
+      html: shell(d.schoolName, lines.map((l) => `<p style="margin:0 0 8px">${l}</p>`).join(""), FOOTER[en ? "en" : "fr"]),
+    };
+  },
+
+  "attendance.late.period": (d, lang) => {
+    const en = lang !== "fr";
+    const subject = en
+      ? `Late — ${d.subjectName ?? "class"}`
+      : `Retard — ${d.subjectName ?? "cours"}`;
+    const lines = en
+      ? [
+          `<b>${esc(d.studentName)}</b> was marked late for <b>${esc(d.subjectName ?? "class")}</b> during <b>${esc(d.periodName ?? "period")}</b> on <b>${esc(d.date ?? "")}</b>.`,
+        ]
+      : [
+          `<b>${esc(d.studentName)}</b> a été marqué(e) en retard pour <b>${esc(d.subjectName ?? "cours")}</b> pendant <b>${esc(d.periodName ?? "période")}</b> le <b>${esc(d.date ?? "")}</b>.`,
+        ];
+    return {
+      subject,
+      text: lines.map((l) => l.replace(/<[^>]+>/g, "")).join("\n"),
+      html: shell(d.schoolName, lines.map((l) => `<p style="margin:0 0 8px">${l}</p>`).join(""), FOOTER[en ? "en" : "fr"]),
+    };
+  },
+
   announcement: (d, lang) => {
     const en = lang !== "fr";
     return {

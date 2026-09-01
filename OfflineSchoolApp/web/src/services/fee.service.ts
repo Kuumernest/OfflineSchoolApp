@@ -64,6 +64,14 @@ export async function deactivateStructure(
   return unwrap<FeeStructure>(data);
 }
 
+export async function activateStructure(
+  id: string,
+  schoolId: string
+): Promise<FeeStructure> {
+  const { data } = await api.patch(`${BASE}/structures/${id}/activate`, { schoolId });
+  return unwrap<FeeStructure>(data);
+}
+
 /**
  * Raise the charges for a class.
  *
@@ -181,17 +189,20 @@ export async function cancelPlan(
 export type ReminderMode = "overdue" | "dueSoon" | "all";
 
 export interface ReminderCandidate {
-  studentId:    string;
-  name:         string | null;
-  enrollmentNo: string | null;
-  classId:      string | null;
-  guardianName: string | null;
-  balance:      number;
-  earliestDue:  string;
-  isOverdue:    boolean;
-  daysOverdue:  number;
+  studentId:      string;
+  name:           string | null;
+  enrollmentNo:   string | null;
+  classId:        string | null;
+  guardianName:   string | null;
+  balance:        number;
+  earliestDue:    string | null;
+  datedCharges:   number;
+  undatedCharges: number;
+  totalCharges:   number;
+  isOverdue:      boolean;
+  daysOverdue:    number;
   /** Whether a message can actually reach this family. */
-  reachable:    boolean;
+  reachable:      boolean;
   /** Already reminded inside the cooldown, so sending would skip them. */
   recentlyReminded: boolean;
 }
@@ -274,4 +285,24 @@ export async function fetchOutstanding(
     totalOutstanding: body.totalOutstanding ?? 0,
     rows:             body.data ?? [],
   };
+}
+
+// ─── Receipt printing ─────────────────────────────────────────────────────────
+
+/**
+ * Fetch a printable receipt as HTML from the server.
+ *
+ * The server builds the same receipt the guardian portal produces, but
+ * authenticated as staff.  The caller passes it to `printHtml()`.
+ */
+export async function fetchReceiptHtml(
+  paymentId: string,
+  schoolId:  string,
+  lang:      string = "en",
+): Promise<string> {
+  const { data } = await api.get(`${BASE}/receipt/${paymentId}`, {
+    params: { schoolId, lang },
+    responseType: "text",
+  });
+  return data as string;
 }

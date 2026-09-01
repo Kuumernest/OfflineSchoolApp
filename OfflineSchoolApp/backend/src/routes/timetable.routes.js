@@ -287,6 +287,7 @@ router.post(
   adminOnly,
   asyncHandler(async (req, res) => {
     const {
+      _id,
       schoolId, classId, subjectId,
       teacherId, dayOfWeek, periodId, room,
     } = req.body;
@@ -305,6 +306,30 @@ router.post(
         error:   "Validation Error",
         details: [`Missing required fields: ${missing.join(", ")}`],
       });
+    }
+
+    // ── Client-supplied _id for offline-first ────────────────────────────
+    //
+    // POST /api/exams and POST /api/fees/payments already accept a client id
+    // so a queued request from an offline machine can be replayed without
+    // creating a duplicate. The desktop writes layer needs the same for
+    // timetable slots: without it a create would orphan a row the mirror
+    // wrote under an id the server never saw.
+    //
+    // Idempotent: if the id already exists in this school, return the
+    // existing slot — the request already succeeded.
+    if (_id) {
+      const existing = await TimetableSlot.findOne({
+        _id: String(_id).trim(),
+        schoolId,
+      }).lean();
+      if (existing) {
+        return res.status(200).json({
+          success: true,
+          replay:  true,
+          slot:    normalizeSlot(existing),
+        });
+      }
     }
 
     // ✅ strict=true — rejects anything not in the Mongoose enum
@@ -336,12 +361,15 @@ router.post(
       });
     }
 
-    const created = await TimetableSlot.create({
+    const slotData = {
       schoolId, classId, subjectId, teacherId,
       dayOfWeek: day,
       periodId,
       room: room?.trim() || null,
-    });
+    };
+    if (_id) slotData._id = String(_id).trim();
+
+    const created = await TimetableSlot.create(slotData);
 
     res.status(201).json({
       success: true,

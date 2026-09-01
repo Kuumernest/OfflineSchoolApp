@@ -20,6 +20,14 @@ import { getCurrentAuth }    from "../utils/authHelpers";
 import NetInfo               from "@react-native-community/netinfo";
 import { appError }          from "../utils/appError";
 
+// gradingType's enum, from backend GradingConfig.js. The grading screen never
+// edits this field — it is carried along with the config from the server's GET
+// (or from the local SQLite copy of it). A stale value written under an earlier
+// schema must not be sent back: the server's validator would refuse the whole
+// save, and the screen has no way to change the field. Same gate the desktop
+// write handler applies.
+const GRADING_TYPES = ["percentage", "gpa", "points"];
+
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — SCHEMA
 // ═════════════════════════════════════════════════════════════════════════════
@@ -241,7 +249,15 @@ export const saveGradingConfig = async (config) => {
     throw appError("svcErr.onlineGradingConfig", "Saving grading config requires an internet connection");
   }
 
-  const res     = await api.put("/admin/settings/grading", config);
+  // The screen never edits gradingType, so a stale value carried in the config
+  // (from an older server document or an old SQLite copy) is coerced to the
+  // schema default before it can make the save fail validation.
+  let body = config;
+  if (config?.gradingType && !GRADING_TYPES.includes(config.gradingType)) {
+    body = { ...config, gradingType: "percentage" };
+  }
+
+  const res     = await api.put("/admin/settings/grading", body);
   const grading = res.data?.grading;
 
   if (grading) {

@@ -2,8 +2,6 @@
 "use strict";
 
 const { v4: uuidv4 }  = require("uuid");
-const ExamResult      = require("../db/models/ExamResult");
-const ExamScore       = require("../db/models/ExamScore");
 const StudentScore    = require("../db/models/StudentScore");
 const ResultSummary   = require("../db/models/ResultSummary");
 const Exam            = require("../db/models/Exam");
@@ -18,16 +16,15 @@ const {
   logResultChange,
   diffField,
 } = require("../services/resultAudit.service");
+const Student = require("../db/models/Student");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const docVerify = require("../services/documentVerify.service");
-
-const {
-  computeResults:  computeResultsService,
-  publishResults:  publishResultsService,
-  getRankings,
-  getExamStats:    getExamStatsService,
-} = require("../services/examResult.service");
+const termGrading  = require("../services/termGrading.service");
+const annualGrading = require("../services/annualGrading.service");
+const resultsService = require("../services/results.service");
+const { getRankings } = resultsService;
+const { lookupGrade } = require("../services/grading.service");
 
 // ─────────────────────────────────────────────────────────
 // UTILITIES
@@ -72,12 +69,48 @@ const getExamResults = asyncHandler(async (req, res) => {
   }
 
   const skip    = (Number(page) - 1) * Number(limit);
-  const total   = await ExamResult.countDocuments(filter);
-  const results = await ExamResult.find(filter)
+  const total   = await ResultSummary.countDocuments(filter);
+  const results = await ResultSummary.find(filter)
     .sort({ classPosition: 1 })
     .skip(skip)
     .limit(Number(limit))
     .lean();
+
+  // Backfill studentName / admissionNo / className for old results that were
+  // processed before the fields were denormalised. enrollmentNo is the single
+  // source of truth; admissionNo only survives as a legacy fallback.
+  const missing = results.filter((r) => (!r.studentName || !r.className) && r.studentId);
+  if (missing.length > 0 && schoolId) {
+    const Student = require("../db/models/Student");
+    const ids = [...new Set(missing.map((r) => r.studentId))];
+    const [students, classes] = await Promise.all([
+      Student.find({ _id: { $in: ids }, schoolId })
+        .select("_id studentName firstName lastName enrollmentNo admissionNo classId")
+        .lean(),
+      require("../db/models/Class").find({ schoolId }).select("_id name").lean(),
+    ]);
+    const sMap = new Map(students.map((s) => [String(s._id), s]));
+    const cMap = new Map(classes.map((c) => [String(c._id), c.name]));
+    const bulkOps = [];
+    for (const r of missing) {
+      const s = sMap.get(String(r.studentId));
+      if (!s) continue;
+      const name    = s.studentName || [s.firstName, s.lastName].filter(Boolean).join(" ") || null;
+      const admNo   = s.enrollmentNo || s.admissionNo || null;
+      const clsName = cMap.get(String(s.classId)) || null;
+      if (!r.studentName) r.studentName = name;
+      if (!r.admissionNo) r.admissionNo = admNo;
+      if (!r.className)   r.className   = clsName;
+      const $set = {};
+      if (name)    $set.studentName = name;
+      if (admNo)   $set.admissionNo = admNo;
+      if (clsName) $set.className   = clsName;
+      bulkOps.push({ updateOne: { filter: { _id: r._id }, update: { $set } } });
+    }
+    if (bulkOps.length > 0) {
+      await ResultSummary.bulkWrite(bulkOps).catch(() => {});
+    }
+  }
 
   return res.json({
     success: true,
@@ -95,11 +128,108 @@ const getExamResults = asyncHandler(async (req, res) => {
 
 const getExamStats = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
-  const { classId } = req.query;
+  const { classId, schoolId: qSchoolId } = req.query;
 
-  const stats = await getExamStatsService(examId, classId || null);
+  const schoolId = resolveSchoolId(req, qSchoolId);
 
-  return res.json({ success: true, data: stats });
+  const filter = { examId, deletedAt: null };
+  if (schoolId) filter.schoolId = schoolId;
+  if (classId)  filter.classId  = classId;
+
+  const results = await ResultSummary.find(filter).lean();
+
+  const totalStudents = results.length;
+  const passed = results.filter((r) => r.isPassing).length;
+  const failed = totalStudents - passed;
+
+  // Average / highest / lowest use each student's overall percentage (0-100),
+  // not the /20 average stored on the summary. r.average mixes scales when
+  // subjects have different maxScore, so a 12/20 average must not render as 12%.
+  const percentages = results
+    .map((r) => r.percentage)
+    .filter((p) => p != null && Number.isFinite(Number(p)))
+    .map(Number);
+  const average = percentages.length
+    ? Math.round((percentages.reduce((s, v) => s + v, 0) / percentages.length) * 100) / 100
+    : 0;
+  const highest = percentages.length ? Math.max(...percentages) : 0;
+  const lowest  = percentages.length ? Math.min(...percentages) : 0;
+  const passRate = totalStudents > 0
+    ? Math.round((passed / totalStudents) * 10000) / 100
+    : 0;
+
+  const gpas = results
+    .map((r) => r.gpa)
+    .filter((g) => g != null && Number.isFinite(Number(g)))
+    .map(Number);
+  const averageGpa = gpas.length
+    ? Math.round((gpas.reduce((s, v) => s + v, 0) / gpas.length) * 100) / 100
+    : 0;
+
+  const gradeDistribution = {};
+  for (const r of results) {
+    const g = r.overallGrade || "N/A";
+    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
+  }
+
+  // Subject analysis — aggregate per-subject numbers from every student's
+  // subjectBreakdown. Averages / highs / lows are percentages so the UI can
+  // render them alongside the pass rate without mixing scales.
+  const subjectAgg = new Map();
+  for (const r of results) {
+    for (const s of r.subjectBreakdown || []) {
+      if (s.isAbsent || s.isExempt || s.score == null) continue;
+      const key = String(s.subjectId || s.subjectName || "");
+      if (!key) continue;
+      if (!subjectAgg.has(key)) {
+        subjectAgg.set(key, {
+          subjectId:   s.subjectId || key,
+          subjectName: s.subjectName || key,
+          total:       0,
+          sum:         0,
+          highest:     -Infinity,
+          lowest:      Infinity,
+          passed:      0,
+        });
+      }
+      const agg = subjectAgg.get(key);
+      agg.total += 1;
+      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
+        ? Number(s.percentage)
+        : s.maxScore > 0
+          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
+          : 0;
+      agg.sum += pct;
+      if (pct > agg.highest) agg.highest = pct;
+      if (pct < agg.lowest)  agg.lowest  = pct;
+      if (s.isPassing) agg.passed += 1;
+    }
+  }
+  const subjectStats = [...subjectAgg.values()].map((a) => ({
+    subjectId:   a.subjectId,
+    subjectName: a.subjectName,
+    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
+    highest:     a.total > 0 ? a.highest : 0,
+    lowest:      a.total > 0 ? a.lowest  : 0,
+    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
+    total:       a.total,
+  }));
+
+  return res.json({
+    success: true,
+    data: {
+      totalStudents,
+      passed,
+      failed,
+      average,
+      highest,
+      lowest,
+      passRate,
+      averageGpa,
+      gradeDistribution,
+      subjectStats,
+    },
+  });
 });
 
 // ─────────────────────────────────────────────────────────
@@ -152,6 +282,23 @@ const getStudentResult = asyncHandler(async (req, res) => {
     });
   }
 
+  // Backfill studentName if missing
+  if (summary && !summary.studentName && summary.studentId) {
+    const Student = require("../db/models/Student");
+    const stu = await Student.findOne({ _id: summary.studentId, schoolId: summary.schoolId })
+      .select("_id studentName firstName lastName admissionNo")
+      .lean();
+    if (stu) {
+      const name = stu.studentName || [stu.firstName, stu.lastName].filter(Boolean).join(" ") || null;
+      summary.studentName = name;
+      summary.admissionNo = stu.admissionNo || null;
+      await ResultSummary.updateOne(
+        { _id: summary._id },
+        { $set: { studentName: name, admissionNo: stu.admissionNo || null } }
+      ).catch(() => {});
+    }
+  }
+
   return res.json({
     success: true,
     data:    { summary: summary ?? null, scores },
@@ -178,6 +325,80 @@ const buildStudentReportCardData = async (examId, studentId) => {
   ]);
 
   if (!summary && !scores.length) return { ok: false };
+
+  // ── Student info + school grading settings (requirements §1, §3) ──────────
+  const [student, gradingConfig, allExamScores] = await Promise.all([
+    // gender / dateOfBirth live on the Student document, not the summary
+    Student.findOne({ _id: studentId })
+      .select("gender dateOfBirth studentName enrollmentNo admissionNo")
+      .lean()
+      .catch(() => null),
+    // showGrades + the school's configurable grade bands (§3). Falls back to
+    // the model's DEFAULT_GRADE_SCALE when the school has no config.
+    exam?.schoolId
+      ? GradingConfig.findOne({ schoolId: String(exam.schoolId) }).lean()
+          .catch(() => null)
+      : Promise.resolve(null),
+    // Every score for this exam — needed to rank the student per subject (§5)
+    StudentScore.find({ examId, deletedAt: null })
+      .select("studentId examSubjectId subjectId score maxScore isAbsent isExempt")
+      .lean(),
+  ]);
+
+  const showGrades = gradingConfig?.showGrades ?? true;
+
+  // ── Per-subject positions (§5) ─────────────────────────────────────────────
+  // Students who did not sit a subject are excluded from that subject's
+  // ranking entirely; the denominator is the number of valid results.
+  // Equal marks share the same rank (competition ranking: 1, 1, 3, …).
+  const scoresBySubject = new Map();
+  for (const sc of allExamScores) {
+    if (sc.isAbsent || sc.isExempt || sc.score == null) continue;
+    const key = String(sc.examSubjectId || sc.subjectId);
+    if (!scoresBySubject.has(key)) scoresBySubject.set(key, []);
+    scoresBySubject.get(key).push(sc);
+  }
+  for (const list of scoresBySubject.values()) {
+    list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+  }
+  const computeSubjectPosition = (score) => {
+    if (score == null || score.isAbsent || score.isExempt || score.score == null)
+      return { position: null, total: null };
+    const list = scoresBySubject.get(
+      String(score.examSubjectId || score.subjectId)
+    );
+    if (!list || list.length === 0) return { position: null, total: null };
+    const total = list.length;
+    let position = 1;
+    for (const other of list) {
+      if ((other.score ?? 0) > (score.score ?? 0)) position += 1;
+    }
+    return { position, total };
+  };
+
+  // ── Grade + remark per the school's configured bands (§3, §4) ──────────────
+  // The school's GradingConfig.grades bands are on the /20 Cameroon scale
+  // (see DEFAULT_GRADE_SCALE in the model). When the school has no config or
+  // no band matches, fall back to the built-in Cameroon scale so a real mark
+  // never renders without its grade/remark.
+  const bands = Array.isArray(gradingConfig?.grades)
+    ? gradingConfig.grades.filter((b) => b && b.grade != null)
+    : [];
+  const gradeInfo = (normalizedMark) => {
+    if (normalizedMark == null) return { grade: null, remark: null };
+    if (bands.length > 0) {
+      const m = Number(normalizedMark);
+      const band = bands.find(
+        (b) =>
+          m >= Number(b.minMark) &&
+          (m < Number(b.maxMark) ||
+            (Number(b.maxMark) >= 20 && m <= 20))
+      );
+      if (band) return { grade: band.grade, remark: band.remark || null };
+    }
+    const fb = lookupGrade(normalizedMark);
+    return { grade: fb.grade, remark: fb.remark };
+  };
 
   // Lookup by both ref styles: StudentScore.examSubjectId → ExamSubject._id,
   // while rows entered before subjects were set up may only carry subjectId.
@@ -213,6 +434,9 @@ const buildStudentReportCardData = async (examId, studentId) => {
         ? Math.round(normalizedMark * coeff * 100) / 100
         : null;
 
+    const posInfo = computeSubjectPosition(score);
+    const gi      = gradeInfo(normalizedMark);
+
     return {
       scoreId:       String(score._id),
       subjectId:     String(score.subjectId),
@@ -224,13 +448,19 @@ const buildStudentReportCardData = async (examId, studentId) => {
       isAbsent:      score.isAbsent      ?? false,
       isExempt:      score.isExempt      ?? false,
       teacherRemark: score.teacherRemark || null,
+      // Remark shown on the card: the teacher's own remark wins, then the
+      // school's configured band remark (§4).
+      remark:        score.teacherRemark || gi.remark || null,
       coefficient:   coeff,
       percentage:    score.percentage    ?? null,
-      grade:         score.grade         ?? null,
+      grade:         score.grade         ?? gi.grade,
       gradePoint:    score.gpaPoints     ?? null,
       isPassing:     score.isPassing     ?? null,
       normalizedMark,
       weightedScore,
+      // Per-subject rank over the students who actually sat this subject (§5)
+      subjectPosition: posInfo.position,
+      subjectTotal:    posInfo.total,
     };
   });
 
@@ -245,6 +475,14 @@ const buildStudentReportCardData = async (examId, studentId) => {
     ? Math.round((totalWeighted / totalCoeff) * 100) / 100
     : 0;
 
+  // ── Report type (§7) ────────────────────────────────────────────────────────
+  // sequence → a bound sequence (1–6); annual → the promotion exam, the only
+  // card allowed to carry a promotion decision (§8); everything else → term.
+  const reportType =
+    exam?.type === "promotion_exam" ? "annual"
+    : exam?.sequenceNumber != null  ? "sequence"
+    : "term";
+
   const data = {
       examId,
       studentId,
@@ -256,6 +494,11 @@ const buildStudentReportCardData = async (examId, studentId) => {
       term:         exam?.term           || null,
       totalMarks:   exam?.totalMarks     || null,
       passMark:     exam?.passMark       || null,
+      // §1 student identity + §3 grade toggle, consumed by the renderer
+      gender:       student?.gender      || null,
+      dateOfBirth:  student?.dateOfBirth || null,
+      showGrades,
+      reportType,
       subjects:     subjectRows,
       summary: summary
         ? {
@@ -278,7 +521,11 @@ const buildStudentReportCardData = async (examId, studentId) => {
             totalInSchool:   summary.totalInSchool,
             subjectsPassed:  summary.subjectsPassed,
             subjectsFailed:  summary.subjectsFailed,
-            promotionStatus: summary.promotionStatus,
+            // §8: promotion only exists on the final annual report card —
+            // sequence and intermediate term cards never carry it.
+            promotionStatus: reportType === "annual"
+              ? summary.promotionStatus
+              : null,
             subjectScores:   summary.subjectBreakdown,
           }
         : null,
@@ -421,11 +668,14 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   }
 
   let schoolName = req.user?.schoolName || null;
-  if (!schoolName && req.user?.schoolId) {
-    const school = await School.findOne({ _id: req.user.schoolId })
-      .select("name")
-      .lean();
-    schoolName = school?.name || null;
+  let schoolDoc = null;
+  if (req.user?.schoolId) {
+    // Logo + motto come from the school's settings (§2) — never hard-coded.
+    schoolDoc = await School.findOne({ _id: req.user.schoolId })
+      .select("name logo motto")
+      .lean()
+      .catch(() => null);
+    schoolName = schoolName || schoolDoc?.name || null;
   }
 
   /**
@@ -490,6 +740,12 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
+    // §2: logo + motto from the school's settings document
+    school: {
+      name:  schoolName || "",
+      logo:  schoolDoc?.logo  || null,
+      motto: schoolDoc?.motto || null,
+    },
     verify,
     template,
   });
@@ -698,9 +954,19 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
 
     const pct        = Math.round((numScore / numMax) * 100);
     const grades     = gradingConfig?.grades || [];
-    const gradeMatch = grades.find(
-      (g) => pct >= g.minMark && pct <= g.maxMark
+    // Grade bands are stored on the /20 scale (same as GradingConfig defaults
+    // and grading.service's GRADE_SCALE), so look the mark up out of 20 — not
+    // the 0-100 percentage. Falling back to the built-in scale keeps a student
+    // from dropping to a wrong letter when a school has no custom config.
+    let gradeMatch = grades.find(
+      (g) => normalizedMark >= g.minMark && normalizedMark <= g.maxMark
     );
+    if (!gradeMatch) {
+      const fb = lookupGrade(normalizedMark);
+      gradeMatch = fb
+        ? { grade: fb.grade, gpaPoints: fb.points, remark: fb.remark }
+        : null;
+    }
     const isPassing  = normalizedMark >= pass;
 
     if (isPassing) subjectsPassed++;
@@ -729,9 +995,17 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     : 0;
   const avgPercentage = Math.round((average / out) * 100);
   const grades        = gradingConfig?.grades || [];
-  const overallMatch  = grades.find(
-    (g) => avgPercentage >= g.minMark && avgPercentage <= g.maxMark
+  // Same scale fix as per-subject: `average` is already out of `out` (default
+  // 20), so it is matched against the /20 bands directly.
+  let overallMatch = grades.find(
+    (g) => average >= g.minMark && average <= g.maxMark
   );
+  if (!overallMatch) {
+    const fb = lookupGrade(average);
+    overallMatch = fb
+      ? { grade: fb.grade, remark: fb.remark, gpaPoints: fb.points }
+      : null;
+  }
   const isPassing     = average >= pass;
 
   // ✅ Phase 0 repoint: persist to ResultSummary (the live pipeline model)
@@ -762,7 +1036,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     summary = await ResultSummary.findByIdAndUpdate(
       existing._id,
       { $set: computedFields },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
   } else {
     // No processed summary yet — create a minimal one. classId and schoolId
@@ -848,15 +1122,17 @@ const computeResults = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: "schoolId is required" });
   }
 
-  const result = await computeResultsService({ examId, classId, schoolId });
+  // Use the new results.service.js pipeline (Phase 0)
+  const resultsService = require("../services/results.service");
+  const result = await resultsService.processResults({ examId, classId, schoolId });
 
   return res.json({
     success:   true,
-    message:   `Results computed for ${result.computed} student(s)`,
-    computed:  result.computed,
-    warnings:  result.warnings,
-    isPartial: result.isPartial,
-    stats:     result.stats,
+    message:   `Results computed for ${result.computed || 0} student(s)`,
+    computed:  result.computed || 0,
+    warnings:  result.warnings || [],
+    isPartial: result.isPartial || false,
+    stats:     result.stats || null,
   });
 });
 
@@ -868,16 +1144,31 @@ const publishResults = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
   const { classId } = req.body;
 
-  const result = await publishResultsService({
-    examId,
-    classId,
-    publishedBy: req.user?._id || null,
+  // Publish all ResultSummary records for this exam
+  const filter = { examId, deletedAt: null };
+  if (classId) filter.classId = classId;
+
+  const result = await ResultSummary.updateMany(filter, {
+    $set: {
+      isPublished: true,
+      publishedAt: new Date(),
+    },
+  });
+
+  // Also update the Exam status
+  await Exam.findByIdAndUpdate(examId, {
+    $set: {
+      status: "published",
+      resultsPublished: true,
+      resultsPublishedAt: new Date(),
+      publishedBy: req.user?._id || null,
+    },
   });
 
   return res.json({
     success:   true,
     message:   "Results published successfully",
-    published: result.published,
+    published: result.modifiedCount,
   });
 });
 
@@ -889,7 +1180,7 @@ const publishResult = asyncHandler(async (req, res) => {
   const { summaryId }      = req.params;
   const { publish = true } = req.body;
 
-  const summary = await ExamResult.findById(summaryId);
+  const summary = await ResultSummary.findById(summaryId);
 
   if (!summary) {
     return res.status(404).json({
@@ -970,7 +1261,7 @@ const upsertScore = asyncHandler(async (req, res) => {
   });
   if (!audit) return;
 
-  const existing = await ExamScore.findOne({ examId, studentId, subjectId });
+  const existing = await StudentScore.findOne({ examId, studentId, subjectId });
 
   if (existing) {
     // Snapshot before Object.assign mutates the document in place.
@@ -1023,7 +1314,7 @@ const upsertScore = asyncHandler(async (req, res) => {
     return res.json({ success: true, action: "updated", data: existing });
   }
 
-  const newScore = await ExamScore.create({
+  const newScore = await StudentScore.create({
     examId, examSubjectId, studentId,
     subjectId, classId, schoolId,
     score,
@@ -1057,7 +1348,7 @@ const upsertScore = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 const deleteScore = asyncHandler(async (req, res) => {
-  const score = await ExamScore.findById(req.params.scoreId);
+  const score = await StudentScore.findById(req.params.scoreId);
 
   if (!score) {
     return res.status(404).json({

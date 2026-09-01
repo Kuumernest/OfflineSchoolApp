@@ -1341,7 +1341,7 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
       const doc = await Att.findOneAndUpdate(
         { teacherId: String(teacherId), classId: classIdStr, studentId: String(r.studentId), date: dateStr },
         { teacherId: String(teacherId), classId: classIdStr, studentId: String(r.studentId), date: dateStr, status: r.status || "present", schoolId },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       saved.push(doc._id);
     } catch (e) {
@@ -1480,7 +1480,7 @@ router.post("/exams/:examId/marks", asyncHandler(async (req, res) => {
           status:        "submitted",
           submittedAt:   new Date(),
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       saved.push(doc._id);
     } catch (e) {
@@ -1800,7 +1800,7 @@ router.patch("/content/:id/status", asyncHandler(async (req, res) => {
   if (String(content.teacherId) !== String(teacherId))
     return res.status(403).json({ success: false, message: "You can only update your own content" });
 
-  const updated = await C.findByIdAndUpdate(req.params.id, { status }, { new: true }).lean();
+  const updated = await C.findByIdAndUpdate(req.params.id, { status }, { returnDocument: 'after' }).lean();
   return res.json({ success: true, data: normaliseContentItem(updated) });
 }));
 
@@ -1885,7 +1885,7 @@ router.put("/profile", asyncHandler(async (req, res) => {
   }
 
   const teacher = await User.findByIdAndUpdate(teacherId, updates, {
-    new: true, runValidators: true, select: "-password -tempPassword",
+    returnDocument: 'after', runValidators: true, select: "-password -tempPassword",
   });
 
   if (!teacher) return res.status(404).json({ message: "Teacher not found" });

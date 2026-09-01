@@ -318,7 +318,7 @@ router.put("/questions/:id", authoring, asyncHandler(async (req, res) => {
   const q = await Question.findOneAndUpdate(
     { _id: req.params.id, ...ownScope(req) },
     pick(req.body, QUESTION_FIELDS),
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!q) {
     return res.status(404).json({
@@ -414,7 +414,7 @@ router.put("/quizzes/:id", authoring, asyncHandler(async (req, res) => {
   const quiz = await Quiz.findOneAndUpdate(
     { _id: req.params.id, ...ownScope(req) },
     pick(req.body, QUIZ_FIELDS),
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!quiz) {
     return res.status(404).json({

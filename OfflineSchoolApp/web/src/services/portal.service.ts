@@ -67,12 +67,80 @@ export interface PortalAttendance {
   tally: Record<string, number>;
   total: number;
   rate: number | null;
-  recent: { date: string; status: string; subjectId: string | null }[];
+  lateCount?: number;
+  excusedCount?: number;
+  recent: {
+    date: string;
+    status: string;
+    periodId: string | null;
+    periodName: string | null;
+    periodTime: string | null;
+    subjectId: string | null;
+    subjectName: string | null;
+    note: string | null;
+  }[];
+  dailySummaries?: {
+    date: string;
+    status: string;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+    periods: {
+      date: string;
+      status: string;
+      periodId: string | null;
+      periodName: string | null;
+      periodTime: string | null;
+      subjectId: string | null;
+      subjectName: string | null;
+      note: string | null;
+    }[];
+  }[];
+  subjectSummary?: {
+    subjectId: string | null;
+    subjectName: string | null;
+    present: number;
+    absent: number;
+    late: number;
+    excused: number;
+    total: number;
+  }[];
 }
 
 export interface PortalAnnouncement {
   _id: string; title: string | null; body: string | null;
   createdAt: string; priority: string | null;
+}
+
+export interface PortalFeeReminder {
+  chargeId:     string;
+  code:         string;
+  label:        string;
+  amount:       number;
+  waivedAmount: number;
+  netAmount:    number;
+  dueDate:      string;
+  isOverdue:    boolean;
+  isDueSoon:    boolean;
+  daysOverdue:  number;
+  academicYear: string;
+  term:         string | null;
+}
+
+export interface PortalFeeReminders {
+  balance:       number;
+  totalCharged:  number;
+  totalWaived:   number;
+  totalPaid:     number;
+  reminders:     PortalFeeReminder[];
+  hasPlan:       boolean;
+  plan: {
+    _id:         string;
+    reason:      string;
+    instalments: Array<{ seq: number; amount: number; dueDate: string }>;
+  } | null;
 }
 
 /** One code covers a whole family, so login returns every child it opens. */
@@ -110,6 +178,23 @@ export const fetchAttendance = async (studentId?: string | null): Promise<Portal
 
 export const fetchAnnouncements = async (studentId?: string | null): Promise<PortalAnnouncement[]> =>
   unwrap(await client.get("/announcements", childParams(studentId)).then((r) => r.data));
+
+export const fetchFeeReminders = async (studentId?: string | null): Promise<PortalFeeReminders> =>
+  unwrap(await client.get("/fees/reminders", childParams(studentId)).then((r) => r.data));
+
+export interface PortalNotification {
+  _id:       string;
+  kind:      string;
+  subject:   string | null;
+  body:      string | null;
+  data:      Record<string, unknown>;
+  status:    string;
+  sentAt:    string | null;
+  createdAt: string;
+}
+
+export const fetchNotifications = async (studentId?: string | null): Promise<PortalNotification[]> =>
+  unwrap(await client.get("/notifications", childParams(studentId)).then((r) => r.data));
 
 /** Fetches the printable receipt as HTML, using the portal token. */
 // ─── Messaging ────────────────────────────────────────────────────────────────

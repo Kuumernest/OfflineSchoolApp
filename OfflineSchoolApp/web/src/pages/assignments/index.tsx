@@ -29,7 +29,7 @@ import {
   fetchAssignments,
   summariseByTeacher,
 } from "@/services/assignment.service";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 

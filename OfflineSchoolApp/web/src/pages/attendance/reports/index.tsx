@@ -32,7 +32,7 @@ import {
 } from "@/services/attendance.service";
 import type { AttendanceSummary } from "@/types/attendance.types";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 

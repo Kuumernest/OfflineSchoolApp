@@ -94,6 +94,29 @@ export const useUpdateExamStatus = () => {
   });
 };
 
+// ─── UPDATE EXAM ─────────────────────────────────────────────────────────────
+
+export const useUpdateExam = () => {
+  const { t }    = useTranslation();
+  const qc       = useQueryClient();
+  const { toast } = useToast();
+  const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
+
+  return useMutation({
+    mutationFn: ({ examId, data }: { examId: string; data: Partial<CreateExamForm> }) =>
+      ExamService.updateExam(examId, { ...data, schoolId }),
+
+    onSuccess: (_result, { examId }) => {
+      qc.invalidateQueries({ queryKey: examQueryKeys.lists()             });
+      qc.invalidateQueries({ queryKey: examQueryKeys.detail(examId)      });
+      qc.invalidateQueries({ queryKey: examQueryKeys.dashboard(schoolId) });
+      toast({ title: t("exams.examUpdated"), kind: "success" });
+    },
+    onError: (e: Error) =>
+      toast({ title: e.message || "Failed to update exam", kind: "error" }),
+  });
+};
+
 // ─── DELETE ───────────────────────────────────────────────────────────────────
 
 export const useDeleteExam = () => {

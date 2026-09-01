@@ -118,7 +118,7 @@ const main = async () => {
         "content-type": "application/json",
         ...(key ? { "Idempotency-Key": key } : {}),
       },
-      body: JSON.stringify({ name, academicYear: "2026-2027", term: "term_1" }),
+      body: JSON.stringify({ name, academicYear: "2026-2027", term: 1 }),
     });
     return { status: res.status, body: await res.json() };
   };
@@ -209,7 +209,7 @@ const main = async () => {
   const inFlight = await fetch(`http://127.0.0.1:${port}/api/exams`, {
     method:  "POST",
     headers: { "content-type": "application/json", "Idempotency-Key": "op-slow" },
-    body:    JSON.stringify({ name: "Slow", academicYear: "2026-2027", term: "term_1" }),
+    body:    JSON.stringify({ name: "Slow", academicYear: "2026-2027", term: 1 }),
   });
   const inFlightBody = await inFlight.json();
 
@@ -289,7 +289,7 @@ const main = async () => {
     const res = await fetch(`http://127.0.0.1:${port}/api/exams`, {
       method:  "POST",
       headers: { "content-type": "application/json" },
-      body:    JSON.stringify({ _id: id, name, academicYear: "2026-2027", term: "term_1" }),
+      body:    JSON.stringify({ _id: id, name, academicYear: "2026-2027", term: 1 }),
     });
     return { status: res.status, body: await res.json() };
   };

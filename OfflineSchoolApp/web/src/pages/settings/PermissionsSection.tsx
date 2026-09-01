@@ -39,7 +39,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageSpinner } from "@/components/ui/Spinner";
 import { useToast } from "@/components/ui/Toast";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -22,24 +22,15 @@ import { errorText } from "../../../src/utils/appError";
 // ─────────────────────────────────────────────────────────
 
 const examTypeOptions = (t) => [
-  { value: "first_test",            label: t("examNew.typeFirstTest")            },
-  { value: "second_test",           label: t("examNew.typeSecondTest")           },
-  { value: "mid_term",              label: t("examNew.typeMidTerm")              },
-  { value: "practical",             label: t("examNew.typePractical")            },
-  { value: "final_exam",            label: t("examNew.typeFinalExam")            },
-  { value: "mock_exam",             label: t("examNew.typeMockExam")             },
-  { value: "promotion_exam",        label: t("examNew.typePromotionExam")        },
-  { value: "continuous_assessment", label: t("examNew.typeContinuousAssessment") },
+  { value: "test",            label: t("examNew.typeTest")            },
+  { value: "practical",       label: t("examNew.typePractical")       },
+  { value: "promotion_exam",  label: t("examNew.typePromotionExam")   },
 ];
 
 const termOptions = (t) => [
-  { value: "Term 1",     label: t("examNew.term1")      },
-  { value: "Term 2",     label: t("examNew.term2")      },
-  { value: "Term 3",     label: t("examNew.term3")      },
-  { value: "Semester 1", label: t("examNew.semester1")  },
-  { value: "Semester 2", label: t("examNew.semester2")  },
-  { value: "First Half", label: t("examNew.firstHalf")  },
-  { value: "Second Half", label: t("examNew.secondHalf") },
+  { value: "1", label: t("examNew.term1") },
+  { value: "2", label: t("examNew.term2") },
+  { value: "3", label: t("examNew.term3") },
 ];
 
 const statusOptions = (t) => [
@@ -1098,7 +1089,7 @@ export default function CreateExamScreen() {
 
   const [form, setForm] = useState({
     name:         "",
-    type:         "first_test",
+    type:         "test",
     academicYear: ACADEMIC_YEARS[1],
     term:         "Term 1",
     status:       "draft",

@@ -40,7 +40,7 @@ import {
   padTime,
 } from "@/services/period.service";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import type { Period } from "@/types/timetable.types";
 import { useTranslation } from "react-i18next";

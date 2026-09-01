@@ -119,7 +119,7 @@ const generateEnrollmentNo = async (schoolId, prefix) => {
     const counter = await Counter.findOneAndUpdate(
       { _id: `enrollmentNo:${schoolId}:${prefix}` },
       { $inc: { seq: 1 } },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
     return `${prefix}-${String(counter.seq).padStart(4, "0")}`;
   }
@@ -357,7 +357,7 @@ exports.pushPeriodChanges = async (req, res) => {
           const updated = await Period.findOneAndUpdate(
             { _id, schoolId, ...NOT_DELETED },
             { ...safeData, $inc: { version: 1 } },
-            { new: true, timestamps: true }
+            { returnDocument: 'after', timestamps: true }
           );
 
           if (updated) results.updated.push(_id);

@@ -224,7 +224,7 @@ async function nextSeq(conversationId) {
   const row = await Counter.findByIdAndUpdate(
     `conversation:${conversationId}`,
     { $inc: { seq: 1 } },
-    { upsert: true, new: true, setDefaultsOnInsert: true }
+    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
   ).lean();
   return row.seq;
 }

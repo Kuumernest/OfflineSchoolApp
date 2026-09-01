@@ -601,23 +601,21 @@ function ScoreEntry({
     };
 
     if (unentered.length) {
+      const names = unentered
+        .map((r) => safeStudents.find((s) => s._id === r.studentId)?.studentName)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ");
       Alert.alert(
         t("teacherExamSubjects.unenteredTitle"),
-        t("teacherExamSubjects.unenteredBody", { count: unentered.length }),
-        [
-          {
-            text:  t("teacherExamSubjects.cancel"),
-            style: "cancel",
-          },
-          {
-            text:    t("teacherExamSubjects.saveAnyway"),
-            onPress: doSave,
-          },
-        ]
+        t("teacherExamSubjects.unenteredBody", { count: unentered.length }) +
+          (names ? `\n\n${names}${unentered.length > 3 ? " …" : ""}` : ""),
+        [{ text: t("teacherExamSubjects.done") }]
       );
-    } else {
-      await doSave();
+      return;
     }
+
+    await doSave();
   }, [
     safeStudents, scores, maxScore,
     examId, classId, subjectId, examSubjectId,

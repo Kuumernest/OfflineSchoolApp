@@ -44,15 +44,26 @@ const LABELS = {
     absent:       "ABS",
     exempt:       "EXEMPT",
     studentName:  "Student Name",
-    admissionNo:  "Admission No",
+    admissionNo:  "Admission No (Matricule)",
     classLabel:   "Class",
+    gender:       "Gender",
+    dob:          "Date of Birth",
+    academicYear: "Academic Year",
+    examLabel:    "Examination",
     average:      "Average",
     percentage:   "Percentage",
     overallGrade: "Overall Grade",
     classPos:     "Class Position",
+    remarkCol:    "Remark",
+    positionCol:  "Position",
     passed:       "PASSED",
     failed:       "FAILED",
     remark:       "Teacher's Remark",
+    // Promotion decision — the final annual report card only.
+    decision:     "Council Decision",
+    promotedTo:   "PROMOTED",
+    repeated:     "REPEATED",
+    graduated:    "GRADUATED",
     generatedOn:  "Generated on",
     official:     "Official Academic Report",
     noScores:     "No scores recorded for this student.",
@@ -75,13 +86,24 @@ const LABELS = {
     studentName:  "Nom de l'élève",
     admissionNo:  "Matricule",
     classLabel:   "Classe",
+    gender:       "Sexe",
+    dob:          "Date de naissance",
+    academicYear: "Année académique",
+    examLabel:    "Examen",
     average:      "Moyenne",
     percentage:   "Pourcentage",
     overallGrade: "Mention générale",
     classPos:     "Rang",
+    remarkCol:    "Observation",
+    positionCol:  "Rang",
     passed:       "ADMIS(E)",
     failed:       "AJOURNÉ(E)",
     remark:       "Observation du professeur",
+    // Décision du conseil — bulletin annuel uniquement.
+    decision:     "Décision du Conseil",
+    promotedTo:   "ADMIS(E) EN",
+    repeated:     "REDOUBLANT",
+    graduated:    "DIPLOMÉ(E)",
     generatedOn:  "Généré le",
     official:     "Bulletin officiel",
     noScores:     "Aucune note enregistrée pour cet élève.",
@@ -139,6 +161,23 @@ function renderReportCardHtml(payload, opts = {}) {
   const summary  = payload.summary || null;
   const computed = payload.computed || {};
 
+  // ── Feature switches ─────────────────────────────────────────────────────
+  // showGrades comes from the school's grading settings (GradingConfig) and
+  // rides on the payload; when OFF the Grade column disappears entirely.
+  const showGrades = opts.showGrades ?? payload.showGrades ?? true;
+  const school     = opts.school || {};
+
+  // 2nd / 35 — language-aware ordinal for subject and class positions.
+  const ordinal = (n) => {
+    if (n == null) return "—";
+    if (lang === "fr") return `${n}ᵉ`;
+    const j = n % 10, k = n % 100;
+    if (j === 1 && k !== 11) return `${n}st`;
+    if (j === 2 && k !== 12) return `${n}nd`;
+    if (j === 3 && k !== 13) return `${n}rd`;
+    return `${n}th`;
+  };
+
   // ── Subject rows ──────────────────────────────────────────────────────────
   const rows = subjects.map((s) => {
     const absent = s.isAbsent || s.isExempt;
@@ -153,6 +192,14 @@ function renderReportCardHtml(payload, opts = {}) {
       ? flag
       : `${s.score ?? "—"} / ${s.maxScore ?? 100}`;
 
+    // "2nd / 35" — the student's rank in this subject, over the number of
+    // students who actually sat the subject (computed in the controller).
+    const posCell = (s) => {
+      if (s.subjectPosition == null) return "—";
+      const total = s.subjectTotal != null ? ` / ${s.subjectTotal}` : "";
+      return `${ordinal(s.subjectPosition)}${total}`;
+    };
+
     return `
       <tr>
         <td>${esc(s.subjectName || "—")}
@@ -161,9 +208,15 @@ function renderReportCardHtml(payload, opts = {}) {
         <td style="text-align:center;color:${color}">${esc(scoreCell)}</td>
         <td style="text-align:center;color:${color}">${norm}</td>
         <td style="text-align:center">${s.coefficient ?? 1}</td>
-        <td style="text-align:center;font-weight:bold;color:${color}">
-          ${absent ? flag : esc(s.grade || "—")}
+        ${showGrades
+          ? `<td style="text-align:center;font-weight:bold;color:${color}">
+               ${absent ? flag : esc(s.grade || "—")}
+             </td>`
+          : ""}
+        <td style="text-align:center;color:${absent ? "#9CA3AF" : "#374151"}">
+          ${absent ? flag : esc(s.remark || "—")}
         </td>
+        <td style="text-align:center">${absent ? "—" : posCell(s)}</td>
         <td style="text-align:center;color:${color}">
           ${absent ? "—" : s.isPassing ? t.pass : t.fail}
         </td>
@@ -192,6 +245,27 @@ function renderReportCardHtml(payload, opts = {}) {
     boxes.push(`<div class="box"><div class="box-val">${summary.classPosition}${total}</div><div class="box-lbl">${t.classPos}</div></div>`);
   }
 
+  // The promotion decision appears ONLY on the final annual report card —
+  // never on sequence or intermediate term reports (see requirements §8).
+  const isAnnual   = payload.reportType === "annual";
+  const promoStatus = isAnnual ? summary?.promotionStatus || null : null;
+
+  // School branding pulled from the school's settings, never hard-coded.
+  const schoolLogo = school.logo || null;
+  const schoolMotto = school.motto || null;
+
+  // Student info — payload first (controller enriches it), opts.student as
+  // the caller-supplied fallback.
+  const stu        = opts.student || {};
+  const genderVal  = payload.gender      || stu.gender      || "";
+  const dobVal     = payload.dateOfBirth || stu.dateOfBirth || null;
+  // ISO (YYYY-MM-DD) — unambiguous on a printable document, regardless of locale.
+  const dobDisplay = dobVal
+    ? (typeof dobVal === "string" && /^\d{4}-\d{2}-\d{2}/.test(dobVal)
+        ? dobVal.slice(0, 10)
+        : new Date(dobVal).toISOString().slice(0, 10))
+    : "—";
+
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -201,7 +275,13 @@ function renderReportCardHtml(payload, opts = {}) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 12px;
            color: #111827; padding: 24px; max-width: 800px; margin: 0 auto; }
+    .school-head { display: flex; align-items: center; gap: 14px;
+                   justify-content: center; margin-bottom: 4px; }
+    .school-head img { max-height: 70px; max-width: 70px; object-fit: contain; }
+    .school-head-text { text-align: center; }
     h1 { font-size: 20px; color: #1e40af; text-align: center; }
+    .motto { text-align: center; font-style: italic; color: #6b7280;
+             font-size: 11px; }
     .subtitle { text-align: center; color: #6b7280; margin-bottom: 18px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 20px;
                  background: #f0f4ff; padding: 12px; border-radius: 8px; margin-bottom: 14px; }
@@ -239,7 +319,13 @@ function renderReportCardHtml(payload, opts = {}) {
   </style>
 </head>
 <body>
-  <h1>${esc(schoolName)}</h1>
+  <div class="school-head">
+    ${schoolLogo ? `<img src="${esc(schoolLogo)}" alt="">` : ""}
+    <div class="school-head-text">
+      <h1>${esc(schoolName)}</h1>
+      ${schoolMotto ? `<div class="motto">${esc(schoolMotto)}</div>` : ""}
+    </div>
+  </div>
   <p class="subtitle">
     ${t.title}${payload.examName ? ` · ${esc(payload.examName)}` : ""}
     ${payload.term || payload.academicYear
@@ -250,7 +336,10 @@ function renderReportCardHtml(payload, opts = {}) {
   <div class="info-grid">
     <div><div class="lbl">${t.studentName}</div><div class="val">${esc(payload.studentName || "—")}</div></div>
     <div><div class="lbl">${t.admissionNo}</div><div class="val">${payload.admissionNo ? "#" + esc(payload.admissionNo) : "—"}</div></div>
+    <div><div class="lbl">${t.gender}</div><div class="val">${genderVal ? esc(genderVal) : "—"}</div></div>
+    <div><div class="lbl">${t.dob}</div><div class="val">${dobDisplay}</div></div>
     <div><div class="lbl">${t.classLabel}</div><div class="val">${esc(payload.className || "—")}</div></div>
+    <div><div class="lbl">${t.academicYear}</div><div class="val">${esc(payload.academicYear || "—")}</div></div>
   </div>
 
   <table>
@@ -260,12 +349,14 @@ function renderReportCardHtml(payload, opts = {}) {
         <th style="text-align:center">${t.score}</th>
         <th style="text-align:center">${t.outOf20}</th>
         <th style="text-align:center">${t.coeff}</th>
-        <th style="text-align:center">${t.grade}</th>
+        ${showGrades ? `<th style="text-align:center">${t.grade}</th>` : ""}
+        <th style="text-align:center">${t.remarkCol}</th>
+        <th style="text-align:center">${t.positionCol}</th>
         <th style="text-align:center">${t.result}</th>
       </tr>
     </thead>
     <tbody>${rows ||
-      `<tr><td colspan="6" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
+      `<tr><td colspan="${showGrades ? 8 : 7}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
   </table>
 
   ${(avg20 != null || pct != null || summary?.overallGrade || summary?.classPosition != null)
@@ -276,6 +367,16 @@ function renderReportCardHtml(payload, opts = {}) {
       ? `<div class="banner ${isPassing ? "pass-banner" : "fail-banner"}">
            ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}
            ${summary?.overallGrade ? ` · ${t.overallGrade}: ${esc(summary.overallGrade)}` : ""}
+         </div>`
+      : ""
+  }
+
+  ${
+    // §8: the promotion decision is rendered ONLY here, and only when the
+    // controller has marked this as the final annual report.
+    promoStatus
+      ? `<div class="banner ${summary.isPassing === false ? "fail-banner" : "pass-banner"}">
+           ${esc(promoStatus)}
          </div>`
       : ""
   }
@@ -348,7 +449,9 @@ function toTemplateData(payload, opts = {}) {
       address:       school.address       || "",
       phone:         school.phone         || "",
       principalName: school.principalName || "",
-      logoBase64:    school.logoBase64    || null,
+      // The School model stores the branding at `logo`; logoBase64 is the
+      // legacy caller-supplied shape. Either satisfies {{school.logoBase64}}.
+      logoBase64:    school.logoBase64    || school.logo || null,
     },
 
     className:    payload.className    || "",
@@ -371,7 +474,11 @@ function toTemplateData(payload, opts = {}) {
       totalStudents:     summary?.totalInClass    ?? null,
       grade:             summary?.overallGrade    || "",
       remark:            summary?.overallRemark   || "",
-      promotionStatus:   summary?.promotionStatus || "",
+      // §8: promotion only exists on the final annual report — never leaked
+      // onto sequence or term templates regardless of what the payload holds.
+      promotionStatus:   payload.reportType === "annual"
+        ? (summary?.promotionStatus || "")
+        : "",
       subjectsPassed:    summary?.subjectsPassed  ?? 0,
       subjectsFailed:    summary?.subjectsFailed  ?? 0,
       totalCoefficients: computed.totalCoefficients ?? null,
@@ -390,8 +497,13 @@ function toTemplateData(payload, opts = {}) {
       weightedScore:  r.weightedScore  ?? null,
       coefficient:    r.coefficient    ?? 1,
       grade:          r.grade          || "",
-      remark:         r.teacherRemark  || "",
-      position:       r.position       ?? null,
+      // The controller now emits the remark at `remark` (school-configured
+      // remark system); teacherRemark remains the legacy fallback.
+      remark:         r.remark         || r.teacherRemark || "",
+      // Per-subject rank over students who actually sat the subject
+      // (§5). `position` keeps the legacy token name working.
+      position:       r.subjectPosition ?? r.position ?? null,
+      subjectTotal:   r.subjectTotal   ?? null,
       isPassing:      r.isPassing      ?? false,
       isAbsent:       r.isAbsent       ?? false,
       isExempt:       r.isExempt       ?? false,

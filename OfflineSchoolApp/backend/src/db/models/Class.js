@@ -128,6 +128,23 @@ const classSchema = new mongoose.Schema(
       default: false,
     },
 
+    /**
+     * The promotion average this class demands, as a percentage 0–100.
+     *
+     * Set per class, by the school admin, on the promotion page. A student
+     * whose published yearly average is below this number proposes as
+     * "repeated" regardless of how their per-term pass/fail counts look;
+     * null falls back to the majority-of-terms rule. Per class rather than
+     * per school because a Form 6 science stream and a Form 1 intake are
+     * rarely held to the same bar.
+     */
+    promotionAverage: {
+      type:    Number,
+      default: null,
+      min:     [0, "promotionAverage cannot be below 0"],
+      max:     [100, "promotionAverage cannot be above 100"],
+    },
+
     description: {
       type:    String,
       default: null,
@@ -253,7 +270,7 @@ classSchema.statics.softDelete = async function (classId, deletedByUserId = null
       deletedBy: deletedByUserId || null,
       isActive:  false,
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 };
 
@@ -271,7 +288,7 @@ classSchema.statics.restore = async function (classId) {
       deletedBy: null,
       isActive:  true,
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 };
 

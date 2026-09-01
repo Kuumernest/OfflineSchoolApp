@@ -71,6 +71,12 @@ const resultsByStudent = async (schoolId, academicYear) => {
 /**
  * Decide one student's proposed outcome. Pure — no database, no clock.
  *
+ * When the student's class carries a `promotionAverage` (set per class by the
+ * school admin on the promotion page), the student's published yearly average
+ * must meet it to move up — the majority-of-terms rule no longer decides on
+ * its own. A class without a threshold keeps the old behaviour, so nothing
+ * changes for schools that have not set one.
+ *
  * @returns {{outcome: string, basis: string, toClassId: string|null}}
  */
 const proposeFor = ({ currentClass, result }) => {
@@ -82,9 +88,27 @@ const proposeFor = ({ currentClass, result }) => {
     return { outcome: "graduated", basis: "final_year", toClassId: null };
   }
 
-  // Failing the year repeats it — the student stays exactly where they are,
-  // which is a real destination, not an absent one.
-  if (result && !result.passing) {
+  // The class's own bar, when the admin has set one. Checked before the
+  // pass-count rule: a student can have scraped through two of three terms
+  // and still sit under the average the class demands.
+  if (
+    currentClass.promotionAverage !== null &&
+    currentClass.promotionAverage !== undefined &&
+    result &&
+    result.average !== null &&
+    result.average !== undefined
+  ) {
+    if (result.average < currentClass.promotionAverage) {
+      // The student stays exactly where they are — a real destination.
+      return {
+        outcome:   "repeated",
+        basis:     "average_fail",
+        toClassId: currentClass._id,
+      };
+    }
+  } else if (result && !result.passing) {
+    // Failing the year repeats it — the student stays exactly where they are,
+    // which is a real destination, not an absent one.
     return { outcome: "repeated", basis: "results_fail", toClassId: currentClass._id };
   }
 
@@ -139,7 +163,7 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
   }
 
   const classes = await Class.find({ schoolId, deletedAt: null })
-    .select("name nextClassId isFinalYear").lean();
+    .select("name nextClassId isFinalYear promotionAverage").lean();
   const classById = new Map(classes.map((c) => [String(c._id), c]));
 
   const results = await resultsByStudent(schoolId, fromYear);

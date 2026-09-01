@@ -1,5 +1,5 @@
 // web/src/services/exam.service.ts
-import api from "@/lib/api";
+import api from "@/lib/axios";
 import type {
 ExamsListResponse,
 ExamDetailResponse,
@@ -7,8 +7,13 @@ DashboardResponse,
 SubmissionsResponse,
 ResultsResponse,
 StatsResponse,
+TermResultsResponse,
+AnnualResultsResponse,
+AcademicStructure,
 CreateExamForm,
 ExamSubject,
+TermResult,
+AnnualResult,
 } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────
@@ -261,15 +266,15 @@ return data;
 };
 
 export const processResults = async (
-examId: string,
-schoolId: string,
-classId?: string
+  examId: string,
+  schoolId: string,
+  classId?: string
 ) => {
-const { data } = await api.post(`/exams/${examId}/process`, {
-schoolId,
-classId,
-});
-return data;
+  const { data } = await api.post(`/exams/${examId}/process`, {
+    schoolId,
+    classId,
+  }, { timeout: 120_000 });
+  return data;
 };
 
 export const publishResults = async (
@@ -330,17 +335,107 @@ page?: number;
 limit?: number;
 }) => {
 const { data } = await api.get(`/results/${params.examId}`, {
-params: {
-schoolId: params.schoolId,
-classId: params.classId,
-page: params.page ?? 1,
-limit: params.limit ?? 50,
-},
+  params: {
+    schoolId: params.schoolId,
+    classId: params.classId,
+    page: params.page ?? 1,
+    limit: params.limit ?? 50,
+  },
 });
 return {
-results: data?.data || [],
-total: data?.total || 0,
-page: data?.page || 1,
-pages: data?.pages || 1,
+  results: data?.data || [],
+  total: data?.total || 0,
+  page: data?.page || 1,
+  pages: data?.pages || 1,
 };
+};
+
+// ─────────────────────────────────────────────────────────
+// ACADEMIC STRUCTURE
+// ─────────────────────────────────────────────────────────
+
+export const getAcademicStructure = async (
+schoolId: string,
+academicYear: string
+): Promise<{ success: boolean; structure: AcademicStructure }> => {
+const { data } = await api.get(`/academic-structure/${schoolId}/${encodeURIComponent(academicYear)}`);
+return data;
+};
+
+export const updateAcademicStructure = async (
+schoolId: string,
+academicYear: string,
+payload: Partial<AcademicStructure>
+): Promise<{ success: boolean; structure: AcademicStructure }> => {
+const { data } = await api.put(`/academic-structure/${schoolId}/${encodeURIComponent(academicYear)}`, payload);
+return data;
+};
+
+// ─────────────────────────────────────────────────────────
+// TERM RESULTS
+// ─────────────────────────────────────────────────────────
+
+export const getTermResults = async (params: {
+schoolId: string;
+academicYear: string;
+term: number;
+classId?: string;
+page?: number;
+limit?: number;
+}): Promise<TermResultsResponse> => {
+const { data } = await api.get("/term-results", { params });
+return data;
+};
+
+export const computeTermResults = async (payload: {
+schoolId: string;
+academicYear: string;
+term: number;
+classId?: string;
+}) => {
+const { data } = await api.post("/term-results/compute", payload);
+return data;
+};
+
+export const publishTermResults = async (payload: {
+schoolId: string;
+academicYear: string;
+term: number;
+classId?: string;
+}) => {
+const { data } = await api.post("/term-results/publish", payload);
+return data;
+};
+
+// ─────────────────────────────────────────────────────────
+// ANNUAL RESULTS
+// ─────────────────────────────────────────────────────────
+
+export const getAnnualResults = async (params: {
+schoolId: string;
+academicYear: string;
+classId?: string;
+page?: number;
+limit?: number;
+}): Promise<AnnualResultsResponse> => {
+const { data } = await api.get("/annual-results", { params });
+return data;
+};
+
+export const computeAnnualResults = async (payload: {
+schoolId: string;
+academicYear: string;
+classId?: string;
+}) => {
+const { data } = await api.post("/annual-results/compute", payload);
+return data;
+};
+
+export const publishAnnualResults = async (payload: {
+schoolId: string;
+academicYear: string;
+classId?: string;
+}) => {
+const { data } = await api.post("/annual-results/publish", payload);
+return data;
 };

@@ -31,7 +31,7 @@ const nextReceiptNo = async (schoolId, academicYear) => {
   const counter = await Counter.findOneAndUpdate(
     { _id: key },
     { $inc: { seq: 1 }, $setOnInsert: { schoolId } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return `RCT-${academicYear}-${String(counter.seq).padStart(4, "0")}`;
 };
@@ -197,10 +197,77 @@ const applyStructure = async ({ structure, students, raisedBy }) => {
     throw err;
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// BILLING A NEWCOMER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Bill one student from every active structure that covers their class.
+ *
+ * A structure is applied from a button, to the approved students who exist at
+ * that moment. Anyone admitted — or moved into a class — afterwards missed it,
+ * and their account stayed at zero until a bursar noticed and re-applied the
+ * structure by hand. This closes that gap: every entry point that puts a
+ * student into a class calls this.
+ *
+ * Self-limiting, not new arithmetic: it reuses applyStructure(), whose unique
+ * (studentId, structureId, code, term) index means a student already billed by
+ * a structure is not billed again by it. A structure that covers several
+ * classes bills the student's own class items exactly as the button would.
+ *
+ * Never throws: a billing failure must not fail an admission. Whatever goes
+ * wrong is logged and reported in the returned counts instead.
+ *
+ * @returns {Promise<{structures:number, raised:number, skipped:number}>}
+ */
+const applyActiveStructuresForStudent = async ({ schoolId, student, raisedBy }) => {
+  const classId   = student?.classId ?? null;
+  const studentId = student?._id     ? String(student._id) : null;
+  if (!schoolId || !studentId || !classId) {
+    return { structures: 0, raised: 0, skipped: 0 };
+  }
+
+  try {
+    const structures = await FeeStructure.find({
+      schoolId,
+      isActive:  true,
+      deletedAt: null,
+      $or: [
+        { classIds: classId },        // a structure naming this class
+        { classIds: { $size: 0 } },   // an empty list means school-wide
+      ],
+    }).lean();
+
+    let raised  = 0;
+    let skipped = 0;
+    for (const structure of structures) {
+      const result = await applyStructure({
+        structure,
+        students: [{ _id: studentId, classId }],
+        raisedBy,
+      });
+      raised  += result.raised;
+      skipped += result.skipped;
+    }
+
+    if (raised > 0) {
+      console.log(
+        `[fees] ${raised} charge(s) raised for student ${studentId} ` +
+        `from ${structures.length} active structure(s)`
+      );
+    }
+    return { structures: structures.length, raised, skipped };
+  } catch (err) {
+    console.warn(`[fees] Auto-billing student ${studentId} failed:`, err.message);
+    return { structures: 0, raised: 0, skipped: 0, error: err.message };
+  }
+};
 
 module.exports = {
   nextReceiptNo,
   balanceFor,
   balancesFor,
   applyStructure,
+  applyActiveStructuresForStudent,
 };
+

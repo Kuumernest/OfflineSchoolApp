@@ -27,7 +27,12 @@ export async function fetchProgression(schoolId: string): Promise<ProgressionRes
 
 export async function saveProgression(
   schoolId: string,
-  entries: { classId: string; nextClassId: string | null; isFinalYear: boolean }[]
+  entries: {
+    classId: string;
+    nextClassId: string | null;
+    isFinalYear: boolean;
+    promotionAverage: number | null;
+  }[]
 ): Promise<ProgressionClass[]> {
   const { data } = await api.put(`${BASE}/progression`, { schoolId, entries });
   return (data as { data: ProgressionClass[] }).data ?? [];

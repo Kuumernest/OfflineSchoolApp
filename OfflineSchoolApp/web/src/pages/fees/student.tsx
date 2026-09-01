@@ -10,7 +10,7 @@ import { useState, useMemo }              from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                 from "react-i18next";
-import { ArrowLeft, Receipt, Undo2 }      from "lucide-react";
+import { ArrowLeft, Receipt, Undo2, Printer } from "lucide-react";
 
 import { useUser }        from "@/store/auth.store";
 import { PageHeader }     from "@/components/ui/PageHeader";
@@ -25,12 +25,14 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { useFormat }      from "@/i18n/format";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import {
   fetchStudentAccount,
   recordPayment,
   reversePayment,
+  fetchReceiptHtml,
 } from "@/services/fee.service";
+import { printHtml } from "@/print/document";
 import type { PaymentMethod } from "@/types/fees.types";
 import PaymentPlanPanel from "@/pages/fees/PaymentPlanPanel";
 
@@ -39,7 +41,7 @@ const METHODS: PaymentMethod[] = [
 ];
 
 export default function StudentFeeAccountPage() {
-  const { t }        = useTranslation();
+  const { t, i18n } = useTranslation();
   const fmt          = useFormat();
   const navigate     = useNavigate();
   const qc           = useQueryClient();
@@ -50,6 +52,7 @@ export default function StudentFeeAccountPage() {
   const year         = params.get("year") ?? "";
 
   const [payOpen, setPayOpen] = useState(false);
+  const [printing, setPrinting] = useState<string | null>(null);
   const [form, setForm] = useState({
     amount:    "",
     method:    "cash" as PaymentMethod,
@@ -102,6 +105,19 @@ export default function StudentFeeAccountPage() {
     onError: (err) =>
       toast({ kind: "error", title: t("fees.reverseFailed"), message: getErrorMessage(err) }),
   });
+
+  const printReceipt = async (paymentId: string) => {
+    setPrinting(paymentId);
+    try {
+      const lang = i18n?.language?.startsWith("fr") ? "fr" : "en";
+      const html = await fetchReceiptHtml(paymentId, schoolId, lang);
+      printHtml(html);
+    } catch (err) {
+      toast({ kind: "error", title: t("fees.receipt"), message: getErrorMessage(err) });
+    } finally {
+      setPrinting(null);
+    }
+  };
 
   // Whole francs only. The server rejects anything else, but catching it here
   // means the bursar is told before the request rather than after.
@@ -285,20 +301,33 @@ export default function StudentFeeAccountPage() {
                       {fmt.money(p.amount)}
                     </Td>
                     <Td numeric>
-                      {isReversal ? (
-                        <Badge variant="danger">{t("fees.reversalOf")}</Badge>
-                      ) : isReversed ? (
-                        <Badge variant="default">{t("fees.reversed")}</Badge>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => askReverse(p._id, p.amount)}
-                          className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
-                        >
-                          <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
-                          {t("fees.reverse")}
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-1">
+                        {!isReversal && !isReversed && p.receiptNo && (
+                          <button
+                            type="button"
+                            disabled={printing === p._id}
+                            onClick={() => printReceipt(p._id)}
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-indigo-700 disabled:opacity-50"
+                          >
+                            <Printer className="h-3.5 w-3.5" aria-hidden="true" />
+                            {printing === p._id ? "…" : t("common.print")}
+                          </button>
+                        )}
+                        {isReversal ? (
+                          <Badge variant="danger">{t("fees.reversalOf")}</Badge>
+                        ) : isReversed ? (
+                          <Badge variant="default">{t("fees.reversed")}</Badge>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => askReverse(p._id, p.amount)}
+                            className="inline-flex items-center gap-1 rounded-control px-2 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-canvas hover:text-danger"
+                          >
+                            <Undo2 className="h-3.5 w-3.5" aria-hidden="true" />
+                            {t("fees.reverse")}
+                          </button>
+                        )}
+                      </div>
                     </Td>
                   </Tr>
                 );

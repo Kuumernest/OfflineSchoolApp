@@ -39,6 +39,7 @@ import { useToast } from "@/components/ui/Toast";
 
 import {
   fetchRegister,
+  fetchPeriods,
   saveRegister,
   todayKey,
   shiftDateKey,
@@ -54,19 +55,21 @@ import type {
   AttendanceStatus,
   AttendanceSubject,
   BulkAttendanceRow,
+  Period,
   RosterEntry,
 } from "@/types/attendance.types";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
 const QK = {
-  register: (subject: string, schoolId: string, classId: string, date: string) =>
-    ["attendance", subject, schoolId, classId, date] as const,
+  register: (subject: string, schoolId: string, classId: string, periodId: string, date: string) =>
+    ["attendance", subject, schoolId, classId, periodId, date] as const,
   classes: (schoolId: string) => ["classes", schoolId] as const,
+  periods: (schoolId: string) => ["periods", schoolId] as const,
 };
 
 const STATUS_STYLE: Record<AttendanceStatus, { on: string; off: string; icon: typeof Check }> = {
@@ -90,6 +93,7 @@ export default function AttendancePage() {
 
   const [subject, setSubject] = useState<AttendanceSubject>("students");
   const [classId, setClassId] = useState("");
+  const [periodId, setPeriodId] = useState("");
   const [date,    setDate]    = useState(todayKey());
   const [search,  setSearch]  = useState("");
 
@@ -100,7 +104,7 @@ export default function AttendancePage() {
   // (`useEffect(() => setDraft({}), [...])`) works but renders once with the
   // stale draft still showing before the reset lands. Tagging the draft and
   // deriving it during render has no such window and no extra render.
-  const registerKey = `${subject}|${classId}|${date}`;
+  const registerKey = `${subject}|${classId}|${periodId}|${date}`;
 
   const [draftState, setDraftState] = useState<{
     key:   string;
@@ -129,13 +133,25 @@ export default function AttendancePage() {
     enabled:  !!schoolId && subject === "students",
   });
 
+  const periodsQ = useQuery({
+    queryKey: QK.periods(schoolId),
+    queryFn:  () => fetchPeriods(schoolId),
+    enabled:  !!schoolId,
+  });
+
   // Teacher registers are school-wide; student registers need a class.
   const ready = !!schoolId && (subject === "teachers" || !!classId);
 
   const registerQ = useQuery({
-    queryKey: QK.register(subject, schoolId, classId, date),
-    queryFn:  () => fetchRegister({ subject, schoolId, classId: classId || null, date }),
-    enabled:  ready,
+    queryKey: QK.register(subject, schoolId, classId, periodId, date),
+    queryFn:  () => fetchRegister({
+      subject,
+      schoolId,
+      classId:  classId || null,
+      periodId: periodId || null,
+      date,
+    }),
+    enabled: ready,
   });
 
   // Memoised: the filter/tally useMemos below key off this array's identity.
@@ -184,6 +200,7 @@ export default function AttendancePage() {
         schoolId,
         date,
         ...(subject === "students" ? { classId } : {}),
+        ...(periodId ? { periodId } : {}),
         records,
       });
     },
@@ -310,6 +327,27 @@ export default function AttendancePage() {
                 options={classOptions}
                 value={classId}
                 onChange={(e) => setClassId(e.target.value)}
+                className="min-w-44"
+              />
+            </label>
+          )}
+
+          {/* Period selector — lets the teacher pick which class period
+              they are marking. The register is keyed on this, so switching
+              periods clears the unsaved draft. */}
+          {subject === "students" && (
+            <label className="block">
+              <span className="block text-xs font-medium text-gray-500 mb-1.5">{t("attendance.period", "Period")}</span>
+              <Select
+                options={[
+                  { value: "", label: t("attendance.allDay", "All day") },
+                  ...(periodsQ.data ?? []).map((p: Period) => ({
+                    value: p._id,
+                    label: `${p.name} (${p.startTime}–${p.endTime})`,
+                  })),
+                ]}
+                value={periodId}
+                onChange={(e) => setPeriodId(e.target.value)}
                 className="min-w-44"
               />
             </label>

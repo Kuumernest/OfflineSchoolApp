@@ -105,14 +105,9 @@ const SUBMISSION_META = {
 };
 
 const EXAM_TYPE_KEYS = {
-  first_test:            "examDetail.typeFirstTest",
-  second_test:           "examDetail.typeSecondTest",
-  mid_term:              "examDetail.typeMidTerm",
-  practical:             "examDetail.typePractical",
-  final_exam:            "examDetail.typeFinalExam",
-  mock_exam:             "examDetail.typeMockExam",
-  promotion_exam:        "examDetail.typePromotionExam",
-  continuous_assessment: "examDetail.typeCA",
+  test:               "examDetail.typeTest",
+  practical:          "examDetail.typePractical",
+  promotion_exam:     "examDetail.typePromotionExam",
 };
 
 /** Translated exam-type label, falling back to the raw stored value. */

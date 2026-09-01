@@ -341,12 +341,12 @@ export const pushUnsyncedAttendance = async () => {
 
 export const AttendanceService = {
 
-  async getStudentAttendanceToday(classId, schoolId) {
+  async getStudentAttendanceToday(classId, schoolId, periodId = null) {
     if (_isConnected) {
       try {
-        const response = await api.get("/attendance/students/today", {
-          params: { classId, schoolId },
-        });
+        const params = { classId, schoolId };
+        if (periodId) params.periodId = periodId;
+        const response = await api.get("/attendance/students/today", { params });
 
         const records =
           response.data?.records ||
@@ -360,7 +360,7 @@ export const AttendanceService = {
       }
     }
 
-    return this._getStudentAttendanceLocal({ classId, schoolId, date: todayStr() });
+    return this._getStudentAttendanceLocal({ classId, schoolId, date: todayStr(), periodId });
   },
 
   async getStudentAttendance(params = {}) {
@@ -384,7 +384,7 @@ export const AttendanceService = {
   },
 
   async _getStudentAttendanceLocal({
-    classId, schoolId, studentId, date, startDate, endDate,
+    classId, schoolId, studentId, date, startDate, endDate, periodId,
   } = {}) {
     const db = await getDatabase();
     await ensureSchema(db);
@@ -400,6 +400,7 @@ export const AttendanceService = {
     if (date)      { where += " AND date = ?";     params.push(date);      }
     if (startDate) { where += " AND date >= ?";    params.push(startDate); }
     if (endDate)   { where += " AND date <= ?";    params.push(endDate);   }
+    if (periodId)  { where += " AND periodId = ?"; params.push(periodId);  }
 
     const records = await db.getAllAsync(
       `SELECT * FROM attendance ${where} ORDER BY date DESC, created_at DESC`,

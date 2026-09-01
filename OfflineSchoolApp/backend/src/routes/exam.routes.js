@@ -13,6 +13,7 @@ const GradingConfig = require("../db/models/GradingConfig");
 const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
+const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
 const {
@@ -95,18 +96,79 @@ const computeGrade = (score, maxScore, gradingConfig) => {
     };
   }
   const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
-  const grades     = gradingConfig?.grades || [];
-  const passMark   = gradingConfig?.passMark ?? 50;
-  const match      = grades.find(
-    (g) => percentage >= g.minMark && percentage <= g.maxMark
+  // Normalize to /20 Cameroon scale for grade band lookup
+  const markOutOf20 = normalizeTo20(score, maxScore);
+  const grades   = gradingConfig?.grades || [];
+  const passMark = gradingConfig?.passMark ?? 10;
+  // Bands are stored on the /20 scale. If the school has no config — or stored
+  // bands on some other scale — fall back to the built-in Cameroon scale so a
+  // genuine 12/20 never degrades to a wrong letter like F for everyone.
+  let match = grades.find(
+    (g) => markOutOf20 >= g.minMark && markOutOf20 <= g.maxMark
   );
+  if (!match) {
+    const fb = lookupGrade(markOutOf20);
+    match = fb
+      ? { grade: fb.grade, remark: fb.remark, gpaPoints: fb.points }
+      : null;
+  }
   return {
     percentage,
     grade:     match?.grade     || null,
     remark:    match?.remark    || null,
     gpaPoints: match?.gpaPoints ?? null,
-    isPassing: percentage >= passMark,
+    isPassing: markOutOf20 >= passMark,
   };
+};
+
+/**
+ * Backfill studentName, admissionNo, and className for old ResultSummary rows
+ * that were processed before these fields were denormalized.
+ * Patches in-memory AND persists so future reads skip the join.
+ */
+const backfillResultNames = async (results, schoolId) => {
+  const incomplete = results.filter((r) =>
+    r.studentId && (!r.studentName || !r.admissionNo || !r.className)
+  );
+  if (incomplete.length === 0) return;
+
+  const Student = require("../db/models/Student");
+  const Class   = require("../db/models/Class");
+
+  const sIds = [...new Set(incomplete.map((r) => r.studentId))];
+  const [students, allClasses] = await Promise.all([
+    Student.find({ _id: { $in: sIds }, schoolId })
+      .select("_id studentName firstName lastName enrollmentNo admissionNo classId className")
+      .lean(),
+    Class.find({ schoolId }).select("_id name").lean(),
+  ]);
+
+  const sMap = new Map(students.map((s) => [String(s._id), s]));
+  const cMap = new Map(allClasses.map((c) => [String(c._id), c.name]));
+  const bulkOps = [];
+
+  for (const r of incomplete) {
+    const s = sMap.get(String(r.studentId));
+    if (!s) continue;
+    const name    = s.studentName || [s.firstName, s.lastName].filter(Boolean).join(" ") || null;
+    const admNo   = s.enrollmentNo || s.admissionNo || null;
+    const clsName = s.className || cMap.get(String(s.classId)) || null;
+    // In-memory patch
+    if (!r.studentName) r.studentName = name;
+    if (!r.admissionNo) r.admissionNo = admNo;
+    if (!r.className)   r.className   = clsName;
+    // Persist only what changed
+    const $set = {};
+    if (name)    $set.studentName = name;
+    if (admNo)   $set.admissionNo = admNo;
+    if (clsName) $set.className   = clsName;
+    if (Object.keys($set).length > 0) {
+      bulkOps.push({ updateOne: { filter: { _id: r._id }, update: { $set } } });
+    }
+  }
+  if (bulkOps.length > 0) {
+    await ResultSummary.bulkWrite(bulkOps).catch(() => {});
+  }
 };
 
 // ═════════════════════════════════════════════════════════
@@ -117,7 +179,7 @@ const computeGrade = (score, maxScore, gradingConfig) => {
 // GET /api/exams
 // ─────────────────────────────────────────────────────────
 
-router.get("/", asyncHandler(async (req, res) => {
+router.get("/", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const {
     status, classId, academicYear, term,
@@ -159,7 +221,7 @@ router.get("/", asyncHandler(async (req, res) => {
 // GET /api/exams/dashboard
 // ─────────────────────────────────────────────────────────
 
-router.get("/dashboard", asyncHandler(async (req, res) => {
+router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const [
@@ -228,7 +290,7 @@ router.get("/dashboard", asyncHandler(async (req, res) => {
 // GET /api/exams/stats
 // ─────────────────────────────────────────────────────────
 
-router.get("/stats", asyncHandler(async (req, res) => {
+router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) {
     return res.status(400).json({ success: false, message: "schoolId is required" });
@@ -350,7 +412,7 @@ router.get("/stats", asyncHandler(async (req, res) => {
 // GET /api/exams/reports
 // ─────────────────────────────────────────────────────────
 
-router.get("/reports", asyncHandler(async (req, res) => {
+router.get("/reports", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { academicYear, term, classId, page = 1, limit = 20 } = req.query;
 
@@ -382,11 +444,11 @@ router.get("/reports", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/reports/results", asyncHandler(async (req, res) => {
+router.get("/reports/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId, page = 1, limit = 50 } = req.query;
 
-  const query = { schoolId };
+  const query = { schoolId, deletedAt: null };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
@@ -398,6 +460,10 @@ router.get("/reports/results", asyncHandler(async (req, res) => {
     .limit(Number(limit))
     .lean();
 
+  // Backfill studentName / admissionNo / className for rows processed before
+  // the fields were denormalised (patches in-memory AND persists).
+  await backfillResultNames(results, schoolId);
+
   return res.json({
     success: true,
     results,
@@ -407,7 +473,7 @@ router.get("/reports/results", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/reports/submissions", asyncHandler(async (req, res) => {
+router.get("/reports/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
 
@@ -445,17 +511,22 @@ router.get("/submissions", asyncHandler(async (req, res) => {
   });
 }));
 
-router.get("/submissions/results", asyncHandler(async (req, res) => {
+router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { classId, examId } = req.query;
 
-  const query = { schoolId };
+  const query = { schoolId, deletedAt: null };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })
     .lean();
+
+  // Backfill studentName / admissionNo / className for rows processed before
+  // the fields were denormalised (patches in-memory AND persists).
+  await backfillResultNames(results, schoolId);
+
   return res.json({ success: true, results, total: results.length });
 }));
 
@@ -496,7 +567,7 @@ router.get("/submissions/submissions", asyncHandler(async (req, res) => {
 // GET /api/exams/:id
 // ─────────────────────────────────────────────────────────
 
-router.get("/:id", asyncHandler(async (req, res) => {
+router.get("/:id", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const exam = await Exam.findOne({
@@ -519,7 +590,7 @@ router.get("/:id", asyncHandler(async (req, res) => {
 // POST /api/exams
 // ─────────────────────────────────────────────────────────
 
-router.post("/", asyncHandler(async (req, res) => {
+router.post("/", adminOnly, asyncHandler(async (req, res) => {
   const {
     name, type, academicYear, term,
     startDate, endDate, description, instructions,
@@ -581,7 +652,7 @@ router.post("/", asyncHandler(async (req, res) => {
     classIds:     classData.classIds,
     classNames:   classData.classNames,
     name:         name.trim(),
-    type:         type         || "first_test",
+    type:         type         || "test",
     academicYear,
     term,
     startDate:    startDate    || null,
@@ -634,7 +705,7 @@ router.post("/", asyncHandler(async (req, res) => {
 // PUT /api/exams/:id
 // ─────────────────────────────────────────────────────────
 
-router.put("/:id", asyncHandler(async (req, res) => {
+router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const {
     name, type, academicYear, term,
@@ -671,7 +742,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
   const exam = await Exam.findOneAndUpdate(
     { _id: req.params.id, schoolId, deletedAt: null },
     updates,
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).lean();
 
   if (!exam) return res.status(404).json({ message: "Exam not found" });
@@ -683,7 +754,7 @@ router.put("/:id", asyncHandler(async (req, res) => {
 // PATCH /api/exams/:id/status
 // ─────────────────────────────────────────────────────────
 
-router.patch("/:id/status", asyncHandler(async (req, res) => {
+router.patch("/:id/status", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const { status } = req.body;
 
@@ -709,7 +780,7 @@ router.patch("/:id/status", asyncHandler(async (req, res) => {
   const exam = await Exam.findOneAndUpdate(
     { _id: req.params.id, schoolId, deletedAt: null },
     updates,
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!exam) return res.status(404).json({ message: "Exam not found" });
@@ -721,13 +792,13 @@ router.patch("/:id/status", asyncHandler(async (req, res) => {
 // DELETE /api/exams/:id
 // ─────────────────────────────────────────────────────────
 
-router.delete("/:id", asyncHandler(async (req, res) => {
+router.delete("/:id", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
   const exam = await Exam.findOneAndUpdate(
     { _id: req.params.id, schoolId, deletedAt: null },
     { deletedAt: new Date(), status: "archived" },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!exam) return res.status(404).json({ message: "Exam not found" });
@@ -739,7 +810,7 @@ router.delete("/:id", asyncHandler(async (req, res) => {
 // EXAM SUBJECTS
 // ─────────────────────────────────────────────────────────
 
-router.get("/:examId/subjects", asyncHandler(async (req, res) => {
+router.get("/:examId/subjects", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const subjects = await ExamSubject.find({
     examId:    req.params.examId,
@@ -749,7 +820,7 @@ router.get("/:examId/subjects", asyncHandler(async (req, res) => {
   return res.json({ success: true, subjects });
 }));
 
-router.post("/:examId/subjects", asyncHandler(async (req, res) => {
+router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
 
@@ -881,7 +952,7 @@ router.put(
     const es = await ExamSubject.findOneAndUpdate(
       { _id: req.params.id, examId: req.params.examId, schoolId, deletedAt: null },
       updates,
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     ).lean();
     if (!es) return res.status(404).json({ message: "Exam subject not found" });
 
@@ -911,7 +982,7 @@ router.delete(
         schoolId,
       },
       { deletedAt: new Date() },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
     if (!es) return res.status(404).json({ message: "Exam subject not found" });
     return res.json({ success: true, message: "Subject removed from exam" });
@@ -961,6 +1032,24 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
     : await ExamSubject.findOne({
         examId, subjectId, classId, deletedAt: null,
       }).lean();
+
+  // A mark of 23/20 (or a blank cell on a present student) silently corrupts
+  // every average and grade computed from it, so the sheet is validated before
+  // anything is written. Absent and exempt rows carry no score; every other
+  // student must have a real number between 0 and the subject's ceiling.
+  const invalidScores = scores.filter((s) => {
+    if (!s || s.isAbsent || s.isExempt)                           return false;
+    if (s.score === null || s.score === undefined || s.score === "") return true;
+    const n = Number(s.score);
+    return !Number.isFinite(n) || n < 0 || n > (s.maxScore ?? examSubject?.maxScore ?? 100);
+  });
+  if (invalidScores.length > 0) {
+    return res.status(400).json({
+      success: false,
+      message: `${invalidScores.length} invalid score(s): every present student needs a mark between 0 and ${examSubject?.maxScore ?? 100}`,
+      invalid: invalidScores.map((s) => s.studentId),
+    });
+  }
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
   const saved         = [];
@@ -1024,7 +1113,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
             _id: uuidv4(), examId, studentId, subjectId, schoolId,
           },
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       ).lean();
 
       saved.push(doc);
@@ -1091,7 +1180,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
 // POST /api/exams/:examId/process
 // ─────────────────────────────────────────────────────────
 
-router.post("/:examId/process", asyncHandler(async (req, res) => {
+router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
   const { classId } = req.body;
@@ -1117,6 +1206,22 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
     if (!byStudent[score.studentId]) byStudent[score.studentId] = [];
     byStudent[score.studentId].push(score);
   }
+
+  // Fetch student names for all students in this result set
+  const studentIds = Object.keys(byStudent);
+  const Student = require("../db/models/Student");
+  const Class   = require("../db/models/Class");
+  const students = await Student.find({ _id: { $in: studentIds }, schoolId })
+    .select("_id studentName firstName lastName enrollmentNo classId className")
+    .lean();
+  const studentMap = new Map(students.map((s) => [String(s._id), s]));
+
+  // Fetch class names for all classes represented
+  const classIds = [...new Set(students.map((s) => s.classId).filter(Boolean))];
+  const classes = classIds.length > 0
+    ? await Class.find({ _id: { $in: classIds }, schoolId }).select("_id name").lean()
+    : [];
+  const classNamesById = new Map(classes.map((c) => [String(c._id), c.name]));
 
   const summaries = [];
 
@@ -1174,6 +1279,10 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
     const computed   = computeGrade(totalScore, maxTotalScore, gradingConfig);
 
     const existing = await ResultSummary.findOne({ examId, studentId, schoolId });
+    const stu = studentMap.get(studentId);
+    const studentName = stu?.studentName || [stu?.firstName, stu?.lastName].filter(Boolean).join(" ") || null;
+    const admissionNo = stu?.enrollmentNo || null;
+    const className   = stu?.className || classNamesById.get(String(stu?.classId)) || null;
 
     let summary;
     if (existing) {
@@ -1182,6 +1291,9 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
         {
           $set: {
             classId:        classId || exam.classId,
+            className,
+            studentName,
+            admissionNo,
             totalScore,
             maxTotalScore,
             percentage,
@@ -1192,13 +1304,13 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
             subjectsPassed: passed,
             subjectsFailed: failedCount,
             subjectsTotal:  scores.length,
-            isPassing:      percentage >= (gradingConfig?.passMark ?? 50),
+            isPassing:      computed.isPassing,
             subjectBreakdown,
             syncStatus:     "synced",
             lastSyncedAt:   new Date(),
           },
         },
-        { new: true }
+        { returnDocument: 'after' }
       ).lean();
     } else {
       summary = await ResultSummary.create({
@@ -1207,6 +1319,9 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
         studentId,
         schoolId,
         classId:        classId || exam.classId,
+        className,
+        studentName,
+        admissionNo,
         totalScore,
         maxTotalScore,
         percentage,
@@ -1217,7 +1332,7 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
         subjectsPassed: passed,
         subjectsFailed: failedCount,
         subjectsTotal:  scores.length,
-        isPassing:      percentage >= (gradingConfig?.passMark ?? 50),
+        isPassing:      computed.isPassing,
         subjectBreakdown,
         syncStatus:     "synced",
         lastSyncedAt:   new Date(),
@@ -1267,14 +1382,17 @@ router.post("/:examId/process", asyncHandler(async (req, res) => {
 // GET /api/exams/:examId/results
 // ─────────────────────────────────────────────────────────
 
-router.get("/:examId/results", asyncHandler(async (req, res) => {
+router.get("/:examId/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
-  const query = { examId: req.params.examId, schoolId };
+  const query = { examId: req.params.examId, schoolId, deletedAt: null };
   if (classId) query.classId = classId;
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })
     .lean();
+
+  await backfillResultNames(results, schoolId);
+
   return res.json({ success: true, results });
 }));
 
@@ -1282,7 +1400,7 @@ router.get("/:examId/results", asyncHandler(async (req, res) => {
 // GET /api/exams/:examId/submissions
 // ─────────────────────────────────────────────────────────
 
-router.get("/:examId/submissions", asyncHandler(async (req, res) => {
+router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.query.schoolId);
   const { teacherId } = req.query;
 
@@ -1318,6 +1436,7 @@ router.get("/:examId/submissions", asyncHandler(async (req, res) => {
 
 router.patch(
   "/:examId/subjects/:examSubjectId/submit",
+  staffOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     const now      = new Date();
@@ -1336,7 +1455,7 @@ router.patch(
         rejectedAt:       null,
         rejectReason:     null,
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
 
     if (!es) return res.status(404).json({ message: "Exam subject not found" });
@@ -1351,6 +1470,7 @@ router.patch(
 
 router.patch(
   "/:examId/subjects/:examSubjectId/approve",
+  adminOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.body.schoolId);
     const now      = new Date();
@@ -1369,7 +1489,7 @@ router.patch(
         rejectedAt:       null,
         rejectReason:     null,
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
 
     if (!es) return res.status(404).json({ message: "Exam subject not found" });
@@ -1384,6 +1504,7 @@ router.patch(
 
 router.patch(
   "/:examId/subjects/:examSubjectId/reject",
+  adminOnly,
   asyncHandler(async (req, res) => {
     const schoolId   = resolveSchoolId(req, req.body.schoolId);
     const { reason } = req.body;
@@ -1407,7 +1528,7 @@ router.patch(
         approvedBy:       null,
         approvedAt:       null,
       },
-      { new: true }
+      { returnDocument: 'after' }
     ).lean();
 
     if (!es) return res.status(404).json({ message: "Exam subject not found" });

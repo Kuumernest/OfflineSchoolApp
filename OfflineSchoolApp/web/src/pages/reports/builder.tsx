@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api              from "@/services/api";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import {
   ArrowLeft, Save, Loader2, Code2,
   Palette, List, Star, Eye,
@@ -48,6 +48,35 @@ const VARIABLE_GROUPS = [
       { key: "{{position}}",         labelKey: "builder.vars.position"        },
       { key: "{{total_students}}",   labelKey: "builder.vars.totalStudents"   },
       { key: "{{promotion_status}}", labelKey: "builder.vars.promotionStatus" },
+    ],
+  },
+  {
+    labelKey: "builder.varGroups.termResults",
+    vars: [
+      { key: "{{term_average}}",          labelKey: "builder.vars.termAverage"          },
+      { key: "{{term_grade}}",            labelKey: "builder.vars.termGrade"            },
+      { key: "{{term_remark}}",           labelKey: "builder.vars.termRemark"           },
+      { key: "{{term_class_position}}",   labelKey: "builder.vars.termClassPosition"    },
+      { key: "{{term_total_in_class}}",   labelKey: "builder.vars.termTotalInClass"     },
+      { key: "{{sequence_1_average}}",    labelKey: "builder.vars.sequence1Average"     },
+      { key: "{{sequence_2_average}}",    labelKey: "builder.vars.sequence2Average"     },
+      { key: "{{sequence_3_average}}",    labelKey: "builder.vars.sequence3Average"     },
+      { key: "{{sequence_4_average}}",    labelKey: "builder.vars.sequence4Average"     },
+      { key: "{{sequence_5_average}}",    labelKey: "builder.vars.sequence5Average"     },
+      { key: "{{sequence_6_average}}",    labelKey: "builder.vars.sequence6Average"     },
+    ],
+  },
+  {
+    labelKey: "builder.varGroups.annualResults",
+    vars: [
+      { key: "{{annual_average}}",        labelKey: "builder.vars.annualAverage"        },
+      { key: "{{annual_grade}}",          labelKey: "builder.vars.annualGrade"          },
+      { key: "{{annual_remark}}",         labelKey: "builder.vars.annualRemark"         },
+      { key: "{{annual_class_position}}", labelKey: "builder.vars.annualClassPosition"  },
+      { key: "{{annual_total_in_class}}", labelKey: "builder.vars.annualTotalInClass"   },
+      { key: "{{term_1_average}}",        labelKey: "builder.vars.term1Average"         },
+      { key: "{{term_2_average}}",        labelKey: "builder.vars.term2Average"         },
+      { key: "{{term_3_average}}",        labelKey: "builder.vars.term3Average"         },
     ],
   },
   {

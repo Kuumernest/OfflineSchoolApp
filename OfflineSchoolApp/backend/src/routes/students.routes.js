@@ -28,6 +28,9 @@ const SyncOverwrite = require("../db/models/SyncOverwrite");
 const photoStorage  = require("../utils/photoStorage");
 
 const { sendEmail } = require("../services/email.service");
+const {
+  applyActiveStructuresForStudent: billStudentForClass,
+} = require("../services/fees.service");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — UTILITIES
@@ -705,7 +708,10 @@ router.post("/apply", asyncHandler(async (req, res) => {
 }));
 
 router.get("/application-status/:id", asyncHandler(async (req, res) => {
-  const student = await Student.findById(req.params.id)
+  const schoolId = req.query.schoolId ? String(req.query.schoolId).trim() : null;
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
+
+  const student = await Student.findOne({ _id: req.params.id, schoolId })
     .select("status name firstName lastName studentName rejectionReason classId approvedAt enrollmentNo admissionNo")
     .lean();
 
@@ -1628,9 +1634,26 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
 
   console.log(`✅ Direct enroll: "${displayName}" → ${className} | ${enrollmentNo}`);
 
+  // ── Bill the newcomer ─────────────────────────────────────────────────────
+  // Direct enrollment skips the application pipeline, but the fees behave the
+  // same: every active structure covering this class applies immediately, and
+  // the unique charge index skips anything that already exists (safe on the
+  // outbox replays the dedup guard above answers). Never throws.
+  const billing = await billStudentForClass({
+    schoolId,
+    student:  { _id: student._id, classId: String(targetClass._id) },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+  if (billing.raised > 0) {
+    console.log(
+      `[enroll] Billed ${billing.raised} fee charge(s) from ${billing.structures} structure(s)`
+    );
+  }
+
   return sendSuccess(res, {
     emailSent: emailResult.success,
     warning:   notice,
+    feesRaised: billing.raised,
     message:   notice
       ? `${displayName} enrolled in ${className}. ${notice}`
       : emailResult.success
@@ -2124,8 +2147,24 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   const className = [targetClass.name, targetClass.section].filter(Boolean).join(" ");
   console.log(`[move] "${resolveDisplayName(student)}" ${prev} → ${student.classId}`);
 
+  // ── Bill the new class ─────────────────────────────────────────────────────
+  // The destination class's active structures apply to this student now;
+  // charges that already exist (e.g. a structure covering both classes) are
+  // skipped by the unique index. Never throws.
+  const billing = await billStudentForClass({
+    schoolId,
+    student:  { _id: student._id, classId: student.classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+  if (billing.raised > 0) {
+    console.log(
+      `[move] Billed ${billing.raised} fee charge(s) from ${billing.structures} structure(s)`
+    );
+  }
+
   return sendSuccess(res, {
     message: `"${resolveDisplayName(student)}" moved to ${className}`,
+    feesRaised: billing.raised,
     data:    { ...normaliseStudent(student.toObject()), className },
     overwrote,
   });

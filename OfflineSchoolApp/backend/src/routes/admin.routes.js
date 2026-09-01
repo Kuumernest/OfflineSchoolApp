@@ -14,6 +14,9 @@ const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
 const { sendEmail } = require("../services/email.service");
+const {
+  applyActiveStructuresForStudent: billStudentForClass,
+} = require("../services/fees.service");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — SHARED UTILITIES
@@ -108,6 +111,12 @@ const addNotDeleted = (query) => {
 
   return { ...query, ...ndClause };
 };
+
+// Escapes user text before it goes into a $regex. Without it, a search for
+// "a.b" or "50%" matches far more than it should — and a stray "(" throws,
+// which turns a search box into a 500.
+const escapeRegex = (str) =>
+  String(str ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ─── Lazy model loaders ──────────────────────────────────────────────────────
 
@@ -613,15 +622,20 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
       try {
         const Announcement = require("../db/models/Announcement");
         const now = new Date();
-        return Announcement.countDocuments({
-          ...baseQuery,
-          isActive: true,
-          $or: [
-            { expiresAt: { $exists: false } },
-            { expiresAt: null               },
-            { expiresAt: { $gt: now }       },
-          ],
-        });
+        // addNotDeleted mirrors the mobile local count, which applies
+        // notDeletedClause — otherwise a deleted notice kept being tallied
+        // here and the two dashboards disagreed.
+        return Announcement.countDocuments(
+          addNotDeleted({
+            ...baseQuery,
+            isActive: true,
+            $or: [
+              { expiresAt: { $exists: false } },
+              { expiresAt: null               },
+              { expiresAt: { $gt: now }       },
+            ],
+          })
+        );
       } catch { return 0; }
     })(),
 
@@ -629,7 +643,13 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
     (async () => {
       try {
         const Period = require("../db/models/Period");
-        return Period.countDocuments({ ...baseQuery, isActive: true });
+        // addNotDeleted matters here: a period delete is SOFT — it only stamps
+        // deletedAt and leaves isActive untouched — so without the clause every
+        // retired period stayed in this count. The mobile local calculation
+        // already excludes deleted rows, which made the two dashboards disagree.
+        return Period.countDocuments(
+          addNotDeleted({ ...baseQuery, isActive: true })
+        );
       } catch { return 0; }
     })(),
   ]);
@@ -871,11 +891,11 @@ router.get("/exams/stats", requirePermission("dashboard.view"), asyncHandler(asy
   }
 
   const [total, ongoing, completed, draft, scheduled] = await Promise.all([
-    Exam.countDocuments({ schoolId }),
-    Exam.countDocuments({ schoolId, status: "ongoing"   }),
-    Exam.countDocuments({ schoolId, status: "completed" }),
-    Exam.countDocuments({ schoolId, status: "draft"     }),
-    Exam.countDocuments({ schoolId, status: "scheduled" }),
+    Exam.countDocuments({ schoolId, deletedAt: null }),
+    Exam.countDocuments({ schoolId, status: "ongoing",   deletedAt: null }),
+    Exam.countDocuments({ schoolId, status: "completed", deletedAt: null }),
+    Exam.countDocuments({ schoolId, status: "draft",     deletedAt: null }),
+    Exam.countDocuments({ schoolId, status: "scheduled", deletedAt: null }),
   ]);
 
   return sendSuccess(res, { total, ongoing, completed, draft, scheduled });
@@ -1083,7 +1103,7 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
   const teacher = await User.findOneAndUpdate(
     { ...getTenantQuery(req, req.params.id), role: "teacher" },
     updateFields,
-    { new: true, runValidators: true, select: "-password -tempPassword" }
+    { returnDocument: 'after', runValidators: true, select: "-password -tempPassword" }
   );
   if (!teacher) return sendError(res, 404, "Teacher not found");
 
@@ -1095,7 +1115,7 @@ router.delete("/teachers/:id", requirePermission("teachers.manage"), asyncHandle
   const teacher = await User.findOneAndUpdate(
     { ...getTenantQuery(req, req.params.id), role: "teacher" },
     { isActive: false },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!teacher) return sendError(res, 404, "Teacher not found");
 
@@ -1214,7 +1234,7 @@ router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(asy
         ...(section !== undefined  && { section }),
         ...(isActive !== undefined && { isActive }),
       },
-      { new: true, runValidators: true }
+      { returnDocument: 'after', runValidators: true }
     );
   } catch (err) {
     // A blank name trims to "" and fails required; an over-long one fails
@@ -1253,6 +1273,7 @@ router.delete("/classes/:id", requirePermission("classes.manage"), asyncHandler(
   }
 
   const subjectResult = await Subject.deleteMany({
+    schoolId,
     $or: [{ class: classId }, { classId }],
   }).catch(() => ({ deletedCount: 0 }));
 
@@ -1261,13 +1282,14 @@ router.delete("/classes/:id", requirePermission("classes.manage"), asyncHandler(
   );
 
   await TeacherAssignment.deleteMany({
+    schoolId,
     $or: [{ class: classId }, { classId }],
   }).catch(() => {});
 
   const deleted = await Class.findOneAndUpdate(
     getTenantQuery(req, classId),
     { isActive: false, deletedAt: new Date() },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!deleted) return sendError(res, 404, "Class not found");
 
@@ -1469,7 +1491,7 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
       ...(classIdStr         && { class: classIdStr, classId: classIdStr }),
       ...(coeff.value !== undefined && { coefficient: coeff.value }),
     },
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).lean();
 
   if (!subject) return sendError(res, 404, "Subject not found");
@@ -1634,6 +1656,32 @@ router.get("/students", requirePermission("students.view"), asyncHandler(async (
 
   if (req.query.classId) query.classId = String(req.query.classId).trim();
 
+  // ── Search ─────────────────────────────────────────────────────────────────
+  // The web students page and the mobile roster both send ?search=… and both
+  // used to get the same unfiltered list back — this handler read only
+  // schoolId/status/classId, so the search box did nothing. The field set
+  // mirrors buildStudentFilter() in students.routes.js (the /api/students
+  // list), which has always matched on these names, plus admissionNumber
+  // which the approve flow writes alongside admissionNo.
+  //
+  // addNotDeleted() folds this $or into $and alongside its own not-deleted
+  // $or, so the two clauses don't clobber each other.
+  const searchParam = String(req.query.search ?? "").trim();
+  if (searchParam) {
+    const rx = new RegExp(escapeRegex(searchParam), "i");
+    query.$or = [
+      { name:            rx },
+      { studentName:     rx },
+      { firstName:       rx },
+      { lastName:        rx },
+      { email:           rx },
+      { admissionNo:     rx },
+      { admissionNumber: rx },
+      { enrollmentNo:    rx },
+      { guardianName:    rx },
+    ];
+  }
+
   query = addNotDeleted(query);
 
   const students   = await fetchAllStudents(query);
@@ -1646,10 +1694,26 @@ router.get("/students", requirePermission("students.view"), asyncHandler(async (
   });
   const normalised = sorted.map(normaliseStudentDoc).filter(Boolean);
 
+  // ── Pagination ─────────────────────────────────────────────────────────────
+  // Only paginates when the caller asks for it (the web sends page/limit; the
+  // mobile roster pages through with the same contract). Callers that send
+  // neither — the parity script, older clients — still get the full list.
+  const page   = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const rawLim = parseInt(req.query.limit, 10) || 0;
+  const limit  = Math.min(Math.max(rawLim, 0), 200);   // cap: no unbounded pages
+  const total  = normalised.length;
+  const pages  = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
+  const slice  = limit > 0
+    ? normalised.slice((page - 1) * limit, (page - 1) * limit + limit)
+    : normalised;
+
   return sendSuccess(res, {
-    count:    normalised.length,
-    students: normalised,
-    data:     normalised,
+    count:    slice.length,
+    total,
+    page,
+    pages,
+    students: slice,
+    data:     slice,
   });
 }));
 
@@ -2010,6 +2074,22 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
     console.log(`[approve] ✅ Updated Student in place: ${studentId}`);
   }
 
+  // ── Bill the newcomer ─────────────────────────────────────────────────────
+  // The student has just joined a class. Every active structure covering that
+  // class applies to them now — not the next time a bursar remembers to press
+  // "Apply" again. Idempotent: charges that already exist are skipped, so
+  // re-approvals and replays raise nothing twice. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: resolvedSchoolId,
+    student:  { _id: canonicalStudentId, classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+  if (billing.raised > 0) {
+    console.log(
+      `[approve] Billed ${billing.raised} fee charge(s) from ${billing.structures} structure(s)`
+    );
+  }
+
   // ── Send approval email to parent/guardian ────────────────────────────────
   const schoolName = await getSchoolName(resolvedSchoolId);
 
@@ -2139,7 +2219,7 @@ router.patch("/students/:id/suspend", requirePermission("students.manage"), asyn
   const student = await S.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
     { status: "suspended", isActive: false },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!student) return sendError(res, 404, "Student not found");
 
@@ -2156,7 +2236,7 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
   const student = await S.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
     { status: "approved", isActive: true },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!student) return sendError(res, 404, "Student not found");
 
@@ -2176,14 +2256,14 @@ router.delete("/students/:id", requirePermission("students.delete"), asyncHandle
   if (S) {
     const result = await S.findOneAndUpdate(
       getTenantQuery(req, id),
-      { deletedAt: new Date(), isActive: false }, { new: true }
+      { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
     ).catch(() => null);
     if (result) deleted = true;
   }
 
   if (!deleted && App) {
     const result = await App.findByIdAndUpdate(
-      id, { deletedAt: new Date(), isActive: false }, { new: true }
+      id, { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
     ).catch(() => null);
     if (result) deleted = true;
   }
@@ -2209,12 +2289,29 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   const student = await S.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
     { classId, class_id: classId },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!student) return sendError(res, 404, "Student not found");
 
+  // ── Bill the new class ─────────────────────────────────────────────────────
+  // Joining a class mid-year is joining its fees. Active structures covering
+  // the destination class apply now; anything the student was already billed
+  // for (including by a structure that covers both old and new class) is
+  // skipped by the unique index. Never throws.
+  const billing = await billStudentForClass({
+    schoolId: String(student.schoolId || resolveSchoolId(req) || ""),
+    student:  { _id: student._id, classId },
+    raisedBy: req.user?._id ? String(req.user._id) : null,
+  });
+  if (billing.raised > 0) {
+    console.log(
+      `[move] Billed ${billing.raised} fee charge(s) from ${billing.structures} structure(s)`
+    );
+  }
+
   return sendSuccess(res, {
     message: "Student moved to new class",
+    feesRaised: billing.raised,
     data:    normaliseStudentDoc(student.toObject()),
   });
 }));
@@ -2639,25 +2736,11 @@ router.delete("/assignments/:id", requirePermission("teachers.manage"), handleDe
 // SECTION 10 — SETTINGS: GRADING
 // ═════════════════════════════════════════════════════════════════════════════
 
-const DEFAULT_GRADES = [
-  { grade: "A+", minMark:  90, maxMark: 100, gpaPoints: 4.0, remark: "Excellent"     },
-  { grade: "A",  minMark:  80, maxMark:  89, gpaPoints: 4.0, remark: "Very Good"     },
-  { grade: "B+", minMark:  75, maxMark:  79, gpaPoints: 3.5, remark: "Good"          },
-  { grade: "B",  minMark:  70, maxMark:  74, gpaPoints: 3.0, remark: "Above Average" },
-  { grade: "C+", minMark:  65, maxMark:  69, gpaPoints: 2.5, remark: "Average"       },
-  { grade: "C",  minMark:  60, maxMark:  64, gpaPoints: 2.0, remark: "Satisfactory"  },
-  { grade: "D",  minMark:  50, maxMark:  59, gpaPoints: 1.0, remark: "Pass"          },
-  { grade: "F",  minMark:   0, maxMark:  49, gpaPoints: 0.0, remark: "Fail"          },
-];
+// The scale itself lives in shared/ so the desktop mirror cannot drift from
+// it — the two copies already had, on /20 versus /100.
+const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("../../../shared/gradeScale");
 
-const getDefaultGradingConfig = (schoolId) => ({
-  schoolId,
-  grades:      DEFAULT_GRADES,
-  passMark:    50,
-  useGpa:      false,
-  gpaScale:    4.0,
-  gradingType: "percentage",
-});
+const { defaultGradingConfig: getDefaultGradingConfig } = require("../../../shared/gradeScale");
 
 router.get("/settings/grading", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.query.schoolId);
@@ -2668,13 +2751,40 @@ router.get("/settings/grading", requirePermission("settings.view"), asyncHandler
   const config =
     (await GradingConfig.findOne({ schoolId }).lean()) ||
     getDefaultGradingConfig(schoolId);
+
+  /**
+   * ── A stored gradingType the schema no longer accepts never reaches a save ─
+   *
+   * Every settings screen loads this document and puts the whole thing straight
+   * back on save — gradingType included. So one stale value sitting in the
+   * database (written under an earlier schema, when the enum accepted more
+   * values) would make every save a 400 forever: the client cannot change a
+   * field the screen does not even render.
+   *
+   * Healing the read — falling back to the schema's default for anything outside
+   * the enum — means the bad value is never offered again, and the next save
+   * persists the repair. The write endpoint stays strict (runValidators still
+   * refuses genuinely invalid submissions); this only keeps the GET from
+   * producing a document the schema itself would reject on resave.
+   */
+  if (!GradingConfig.GRADING_TYPES.includes(config.gradingType)) {
+    config.gradingType = "percentage";
+  }
+
   return sendSuccess(res, { grading: config });
 }));
 
 router.put("/settings/grading", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.body.schoolId);
   const GradingConfig = getGradingConfig();
-  const { grades, passMark, useGpa, gpaScale, gradingType } = req.body;
+  const { grades, passMark, useGpa, gpaScale, gradingType, showGrades } = req.body;
+
+  // Coerce stale gradingType values written under an earlier schema so the
+  // admin is not stuck behind a validator they cannot otherwise clear.
+  const GradingConfigTypes = GradingConfig?.GRADING_TYPES || ["percentage", "gpa", "points"];
+  if (gradingType && !GradingConfigTypes.includes(gradingType)) {
+    req.body.gradingType = "percentage";
+  }
 
   if (!GradingConfig) {
     return sendSuccess(res, {
@@ -2706,13 +2816,14 @@ router.put("/settings/grading", requirePermission("settings.manage"), asyncHandl
       {
         schoolId,
         grades:      grades      || DEFAULT_GRADES,
-        passMark:    passMark    ?? 50,
+        passMark:    passMark    ?? 10,
+        showGrades:  showGrades  ?? true,
         useGpa:      useGpa      ?? false,
         gpaScale:    gpaScale    ?? 4.0,
         gradingType: gradingType || "percentage",
         updatedBy:   req.user?._id,
       },
-      { upsert: true, new: true, runValidators: true }
+      { upsert: true, returnDocument: 'after', runValidators: true }
     );
   } catch (err) {
     if (err?.name === "ValidationError" || err?.name === "CastError") {
@@ -2906,7 +3017,7 @@ router.delete("/settings/admins/:id", requirePermission("users.manage"), asyncHa
   const admin = await User.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
     { isActive: false },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!admin) return sendError(res, 404, "Admin not found");
 
@@ -2942,7 +3053,7 @@ router.put("/settings/profile", requirePermission("settings.manage"), asyncHandl
   }
 
   const user = await User.findByIdAndUpdate(userId, updates, {
-    new: true, runValidators: true, select: "-password",
+    returnDocument: 'after', runValidators: true, select: "-password",
   });
   if (!user) return sendError(res, 404, "User not found");
   return sendSuccess(res, { profile: user.toObject() });
@@ -3067,9 +3178,11 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
     }
   } catch { /* ignore */ }
 
-  const [totalTeachers, totalClasses, totalSubjects, totalAssignments] =
+  const S = getStudent();
+  const [totalTeachers, totalStudents, totalClasses, totalSubjects, totalAssignments] =
     await Promise.all([
       User.countDocuments({ ...baseQuery, role: "teacher", isActive: true }),
+      S ? S.countDocuments({ ...baseQuery, status: "approved" }) : 0,
       Class.countDocuments(addNotDeleted({ ...baseQuery, isActive: true })),
       Subject.countDocuments(baseQuery),
       TeacherAssignment.countDocuments(baseQuery),
@@ -3077,7 +3190,7 @@ router.get("/settings/analytics", requirePermission("settings.view"), asyncHandl
 
   return sendSuccess(res, {
     analytics: {
-      summary: { totalTeachers, totalClasses, totalSubjects, totalAssignments },
+      summary: { totalTeachers, totalStudents, totalClasses, totalSubjects, totalAssignments },
       enrollmentTrend,
       teachersBySubject,
       classLoad,
@@ -3172,7 +3285,10 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
 
   const LIGHT_FIELDS =
     "name code address city state country phone email " +
-    "motto website applicationsOpen isActive updatedAt";
+    "motto website applicationsOpen isActive updatedAt " +
+    "postalCode schoolType termSystem registrationNumber foundedYear " +
+    "principalName description academicYearStart academicYearEnd " +
+    "schoolDays schoolStartTime schoolEndTime";
 
   if (includeLogo) {
     const school = await School.findById(schoolId)
@@ -3226,19 +3342,41 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
   const {
     name, code, address, city, state, country,
     phone, email, website, applicationsOpen, logoBase64,
+    motto, postalCode, schoolType, termSystem, schoolCode,
+    registrationNumber, foundedYear, principalName, description,
+    academicYearStart, academicYearEnd, schoolDays,
+    schoolStartTime, schoolEndTime, removeLogo,
   } = req.body;
 
+  // The screens send `schoolCode` (what the form field is called) but the
+  // schema stores `code`. Accept either — `code` stays for clients (the
+  // desktop) that already send the stored name.
+  const codeValue = code !== undefined ? code : schoolCode;
+
   const updateFields = {
-    ...(name             !== undefined && { name: name.trim()                   }),
-    ...(code             !== undefined && { code: code?.trim() || null          }),
-    ...(address          !== undefined && { address                             }),
-    ...(city             !== undefined && { city                                }),
-    ...(state            !== undefined && { state                               }),
-    ...(country          !== undefined && { country                             }),
-    ...(phone            !== undefined && { phone                               }),
-    ...(email            !== undefined && { email: email?.toLowerCase().trim()  }),
-    ...(website          !== undefined && { website                             }),
-    ...(applicationsOpen !== undefined && { applicationsOpen                    }),
+    ...(name             !== undefined && { name: name.trim()                     }),
+    ...(codeValue        !== undefined && { code: String(codeValue ?? "").trim() || null }),
+    ...(address          !== undefined && { address                               }),
+    ...(city             !== undefined && { city                                  }),
+    ...(state            !== undefined && { state                                 }),
+    ...(country          !== undefined && { country                               }),
+    ...(postalCode       !== undefined && { postalCode: postalCode?.trim()        }),
+    ...(phone            !== undefined && { phone                                 }),
+    ...(email            !== undefined && { email: email?.toLowerCase().trim()    }),
+    ...(website          !== undefined && { website                               }),
+    ...(motto            !== undefined && { motto: motto?.trim()                  }),
+    ...(schoolType       !== undefined && { schoolType                            }),
+    ...(termSystem       !== undefined && { termSystem                            }),
+    ...(registrationNumber !== undefined && { registrationNumber: registrationNumber?.trim() }),
+    ...(foundedYear      !== undefined && { foundedYear                           }),
+    ...(principalName    !== undefined && { principalName: principalName?.trim()  }),
+    ...(description      !== undefined && { description: description?.trim()      }),
+    ...(academicYearStart !== undefined && { academicYearStart                    }),
+    ...(academicYearEnd  !== undefined && { academicYearEnd                       }),
+    ...(schoolDays       !== undefined && { schoolDays                            }),
+    ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
+    ...(schoolEndTime    !== undefined && { schoolEndTime                         }),
+    ...(applicationsOpen !== undefined && { applicationsOpen                      }),
   };
 
   // The logo arrives as base64 (the mobile picker posts JSON), but it is
@@ -3258,10 +3396,19 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     } catch (err) {
       return sendError(res, 400, `Logo rejected: ${err.message}`);
     }
+  } else if (removeLogo === true) {
+    // A plain removal was requested and no replacement was uploaded. Drop the
+    // file first, then the reference — the cleanup block below cannot run
+    // because previousLogo is null.
+    const current = await School.findById(schoolId).select("logo").lean();
+    if (current?.logo && logoStorage.isLogoReference(current.logo)) {
+      logoStorage.deleteLogoFile(current.logo);
+    }
+    updateFields.logo = null;
   }
 
   const school = await School.findByIdAndUpdate(
-    schoolId, updateFields, { new: true, runValidators: true }
+    schoolId, updateFields, { returnDocument: 'after', runValidators: true }
   );
   if (!school) return sendError(res, 404, "School not found");
 
@@ -3370,7 +3517,7 @@ router.put("/settings/id-card", requirePermission("settings.manage"), asyncHandl
   // wholesale would drop currency, timezone and the academic year along with
   // everything else this screen does not know about.
   const school = await School.findByIdAndUpdate(
-    schoolId, { $set: update }, { new: true, runValidators: true }
+    schoolId, { $set: update }, { returnDocument: 'after', runValidators: true }
   ).select("academicYear settings").lean();
   if (!school) return sendError(res, 404, "School not found");
 

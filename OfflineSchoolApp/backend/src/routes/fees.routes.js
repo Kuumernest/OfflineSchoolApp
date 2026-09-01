@@ -15,6 +15,8 @@ const PaymentPlan  = require("../db/models/PaymentPlan");
 const FeeCharge    = require("../db/models/FeeCharge");
 const FeePayment   = require("../db/models/FeePayment");
 const Student      = require("../db/models/Student");
+const School       = require("../db/models/School");
+const Class        = require("../db/models/Class");
 
 const {
   nextReceiptNo,
@@ -25,6 +27,8 @@ const {
 const { displayName } = require("../utils/studentName");
 const approvals = require("../services/approvals.service");
 const reminders = require("../services/feeReminders.service");
+const { buildReceiptHtml } = require("../print/receipt");
+const { labelsFor, formatPrintDate } = require("../print/labels");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -178,9 +182,71 @@ router.patch("/structures/:id/deactivate", canWrite, asyncHandler(async (req, re
   const updated = await FeeStructure.findOneAndUpdate(
     { _id: req.params.id, schoolId },
     { isActive: false },
-    { new: true }
+    { returnDocument: 'after' }
   );
   if (!updated) return res.status(404).json({ success: false, message: "Structure not found" });
+  return res.json({ success: true, data: updated });
+}));
+
+// PATCH /api/fees/structures/:id/activate
+//
+// Reactivate a previously deactivated structure. Before flipping the flag,
+// check that no other active structure already covers the same classes for the
+// same year and term — the partial unique index would reject the write, but a
+// clear error message is kinder than a MongoDB duplicate key error.
+router.patch("/structures/:id/activate", canWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+
+  const structure = await FeeStructure.findOne({
+    _id: req.params.id, schoolId, deletedAt: null,
+  });
+  if (!structure) {
+    return res.status(404).json({ success: false, message: "Structure not found" });
+  }
+  if (structure.isActive) {
+    return res.json({ success: true, data: structure });
+  }
+
+  // Check for conflicts: another active structure covering the same classes.
+  const conflictFilter = {
+    schoolId,
+    academicYear: structure.academicYear,
+    term:         structure.term ?? null,
+    isActive:     true,
+    deletedAt:    null,
+    _id:          { $ne: structure._id },
+  };
+
+  // An empty classIds means school-wide — any other active structure conflicts.
+  // A non-empty classIds conflicts if any class overlaps.
+  if (!structure.classIds?.length) {
+    // This structure is school-wide. Any other active structure for the same
+    // year/term would conflict.
+    conflictFilter.classIds = { $exists: true };
+  } else {
+    conflictFilter.$or = [
+      { classIds: { $size: 0 } },
+      { classIds: { $in: structure.classIds } },
+    ];
+  }
+
+  const conflict = await FeeStructure.findOne(conflictFilter).lean();
+  if (conflict) {
+    const conflictingClasses = !conflict.classIds?.length
+      ? "all classes (school-wide)"
+      : (conflict.classIds || []).join(", ");
+    return res.status(409).json({
+      success: false,
+      code:    "STRUCTURE_CONFLICT",
+      message: `Cannot reactivate: an active structure already covers ${conflictingClasses} for ${conflict.academicYear}${conflict.term ? ` (${conflict.term})` : ""}. Deactivate it first.`,
+    });
+  }
+
+  const updated = await FeeStructure.findOneAndUpdate(
+    { _id: req.params.id, schoolId },
+    { isActive: true },
+    { returnDocument: 'after' }
+  );
   return res.json({ success: true, data: updated });
 }));
 
@@ -1063,6 +1129,93 @@ router.get("/outstanding", asyncHandler(async (req, res) => {
     totalOutstanding,
     data:    rows,
   });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RECEIPT — printable HTML for one payment
+// ─────────────────────────────────────────────────────────────────────────────
+
+const originOf = (req) => {
+  const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
+  const host  = req.headers["x-forwarded-host"]  || req.get("host");
+  return host ? `${proto}://${host}` : null;
+};
+
+const schoolHeading = async (schoolId) => {
+  const school = await School.findOne({ _id: schoolId }).lean();
+  return {
+    name:    school?.name ?? null,
+    logo:    school?.logo ?? null,
+    address: school?.address ?? null,
+    phone:   school?.phone ?? null,
+    email:   school?.email ?? null,
+    motto:   school?.motto ?? null,
+    academicYear: school?.settings?.academicYear ?? null,
+    currentTerm:  school?.settings?.currentTerm ?? null,
+  };
+};
+
+/**
+ * GET /api/fees/receipt/:paymentId
+ *
+ * Staff-only printable receipt. The bursar prints this from the student's
+ * fee account page. Same HTML the guardian portal produces, but with staff
+ * authentication (no portal token required).
+ */
+router.get("/receipt/:paymentId", requirePermission("fees.view"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+
+  const payment = await FeePayment.findOne({
+    _id: req.params.paymentId, schoolId, deletedAt: null,
+  }).lean();
+
+  if (!payment) {
+    return res.status(404).json({ success: false, message: "Receipt not found" });
+  }
+
+  const student = await Student.findOne({
+    _id: payment.studentId, schoolId, deletedAt: null,
+  }).lean();
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: "Student not found" });
+  }
+
+  const [charges, payments, klass] = await Promise.all([
+    FeeCharge.find({ schoolId, studentId: payment.studentId, deletedAt: null, voidedAt: null }).lean(),
+    FeePayment.find({ schoolId, studentId: payment.studentId, deletedAt: null }).lean(),
+    student.classId
+      ? Class.findOne({ _id: student.classId, schoolId }).select("name").lean()
+      : null,
+  ]);
+
+  const charged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);
+  const waived  = charges.reduce((s, c) => s + (c.waivedAmount ?? 0), 0);
+  const paid    = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
+
+  const lang = req.query.lang || "en";
+
+  const data = {
+    school: await schoolHeading(schoolId),
+    student: {
+      name:         displayName(student) || null,
+      enrollmentNo: student.enrollmentNo ?? null,
+      className:    klass?.name ?? null,
+    },
+    payment,
+    totals: { charged, waived, paid, balance: charged - waived - paid },
+  };
+
+  const html = buildReceiptHtml({
+    data,
+    labels:    labelsFor(lang),
+    lang,
+    printedOn: formatPrintDate(new Date(payment.receivedAt ?? Date.now()), lang),
+    origin:    originOf(req),
+  });
+
+  res.type("html");
+  return res.send(html);
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

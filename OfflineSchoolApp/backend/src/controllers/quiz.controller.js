@@ -51,7 +51,7 @@ const updateQuestionAnalytics = async (questionId, {
     const doc = await QuestionAnalytics.findOneAndUpdate(
       { question_id: questionId },
       { $inc: inc },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     // Recalculate difficulty score and avg time
@@ -90,7 +90,7 @@ const updateQuizAnalytics = async (quizId, {
           total_passes:      is_passed ? 1 : 0,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     const updates = {
@@ -303,7 +303,7 @@ exports.updateQuestion = async (req, res) => {
   const question = await Question.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: updates },
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).lean();
 
   if (!question) {
@@ -317,7 +317,7 @@ exports.deleteQuestion = async (req, res) => {
   const question = await Question.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: { deleted_at: new Date(), is_active: false } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!question) {
@@ -504,7 +504,7 @@ exports.updateQuiz = async (req, res) => {
   const quiz = await Quiz.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: updates },
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).lean();
 
   if (!quiz) {
@@ -518,7 +518,7 @@ exports.publishQuiz = async (req, res) => {
   const quiz = await Quiz.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: { is_published: true } },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!quiz) {
@@ -532,7 +532,7 @@ exports.unpublishQuiz = async (req, res) => {
   const quiz = await Quiz.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: { is_published: false } },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!quiz) {
@@ -546,7 +546,7 @@ exports.deleteQuiz = async (req, res) => {
   const quiz = await Quiz.findOneAndUpdate(
     { _id: req.params.id, deleted_at: null },
     { $set: { deleted_at: new Date(), is_published: false } },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!quiz) {

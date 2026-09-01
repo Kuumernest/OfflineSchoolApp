@@ -38,12 +38,13 @@ import type { Student }         from "@/types";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 import { Button }               from "@/components/ui/Button";
-import { getErrorMessage }      from "@/lib/api";
+import { getErrorMessage }      from "@/lib/axios";
 import {
   uploadStudentPhoto, deleteStudentPhoto,
   fetchVerifications, revokeVerification, restoreVerification,
   type DocumentVerificationRow,
 } from "@/services/document.service";
+import { fetchSchoolInfo, type SchoolInfo } from "@/services/dashboard.service";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -65,6 +66,25 @@ const QK = {
   student:  (id: string)       => ["student",  id]       as const,
   classes:  (schoolId: string) => ["classes",  schoolId] as const,
   students: (schoolId: string) => ["students", schoolId] as const,
+};
+
+// `value` is what the API stores; the label travels as a key because module
+// scope cannot call a hook. Kept in sync with the school settings screen so a
+// student record and the settings form name a school's type the same way.
+const SCHOOL_TYPE_LABELS: Record<string, string> = {
+  primary:    "settings.typePrimary",
+  jhs:        "settings.typeJhs",
+  shs:        "settings.typeShs",
+  combined:   "settings.typeCombined",
+  vocational: "settings.typeVocational",
+  university: "settings.typeUniversity",
+  other:      "settings.typeOther",
+};
+
+const TERM_SYSTEM_LABELS: Record<string, string> = {
+  trimester: "settings.termTrimester",
+  semester:  "settings.termSemester",
+  quarter:   "settings.termQuarter",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -781,8 +801,16 @@ export default function StudentDetailPage() {
     staleTime: 60_000,
   });
 
+  const schoolQuery = useQuery<SchoolInfo | null, Error>({
+    queryKey:  ["school-info", schoolId],
+    queryFn:   () => fetchSchoolInfo(schoolId),
+    enabled:   !!schoolId,
+    staleTime: 60_000,
+  });
+
   const student = studentQuery.data;
   const classes = classesQuery.data ?? [];
+  const school  = schoolQuery.data ?? null;
 
   // ── Cache invalidation helper ─────────────────────────────────────────────
 
@@ -913,6 +941,26 @@ export default function StudentDetailPage() {
   // Support both shapes so this works with legacy and current API responses.
   const classNameDisplay = student?.className || student?.class?.name;
   const classIdForMove   = student?.classId || student?.class?._id || student?.class?.id;
+
+  // ── School profile (for the School information section) ───────────────
+  const schoolAddress = [school?.address, school?.postalCode, school?.city, school?.state, school?.country]
+    .filter(Boolean)
+    .join(", ") || null;
+  const academicYear = school?.academicYearStart || school?.academicYearEnd
+    ? [school?.academicYearStart, school?.academicYearEnd].filter(Boolean).join(" → ")
+    : null;
+  const schoolDays = school?.schoolDays?.length
+    ? school.schoolDays.join(", ")
+    : null;
+  const schoolHours = school?.schoolStartTime || school?.schoolEndTime
+    ? [school?.schoolStartTime, school?.schoolEndTime].filter(Boolean).join(" – ")
+    : null;
+  const schoolTypeLabel = school?.schoolType
+    ? t(SCHOOL_TYPE_LABELS[school.schoolType] ?? school.schoolType)
+    : null;
+  const termSystemLabel = school?.termSystem
+    ? t(TERM_SYSTEM_LABELS[school.termSystem] ?? school.termSystem)
+    : null;
 
   // ── Loading state ─────────────────────────────────────────────────────────
 
@@ -1109,6 +1157,90 @@ export default function StudentDetailPage() {
 
         {/* ── School info ── */}
         <Section title={t("studentDetail.school")}>
+          <InfoRow
+            icon={School}
+            label={t("studentDetail.schoolName")}
+            value={school?.name ?? null}
+            iconColor="text-indigo-600"
+          />
+          <InfoRow
+            icon={School}
+            label={t("settings.motto")}
+            value={school?.motto ?? null}
+            iconColor="text-indigo-400"
+          />
+          <InfoRow
+            icon={School}
+            label={t("settings.schoolType")}
+            value={schoolTypeLabel}
+            iconColor="text-indigo-500"
+          />
+          <InfoRow
+            icon={School}
+            label={t("settings.termSystem")}
+            value={termSystemLabel}
+            iconColor="text-indigo-500"
+          />
+          <InfoRow
+            icon={Calendar}
+            label={t("studentDetail.academicYear")}
+            value={academicYear}
+            iconColor="text-indigo-400"
+          />
+          <InfoRow
+            icon={School}
+            label={t("studentDetail.schoolAddress")}
+            value={schoolAddress}
+            iconColor="text-indigo-400"
+          />
+          <InfoRow
+            icon={Phone}
+            label={t("studentDetail.schoolPhone")}
+            value={school?.phone ?? null}
+            iconColor="text-emerald-500"
+          />
+          <InfoRow
+            icon={Mail}
+            label={t("studentDetail.schoolEmail")}
+            value={school?.email ?? null}
+            iconColor="text-emerald-500"
+          />
+          <InfoRow
+            icon={School}
+            label={t("settings.schoolCode")}
+            value={school?.code ?? null}
+            iconColor="text-gray-500"
+          />
+          <InfoRow
+            icon={School}
+            label={t("settings.regNumber")}
+            value={school?.registrationNumber ?? null}
+            iconColor="text-gray-500"
+          />
+          <InfoRow
+            icon={Calendar}
+            label={t("settings.yearFounded")}
+            value={school?.foundedYear ? String(school.foundedYear) : null}
+            iconColor="text-gray-500"
+          />
+          <InfoRow
+            icon={User}
+            label={t("settings.principal")}
+            value={school?.principalName ?? null}
+            iconColor="text-amber-500"
+          />
+          <InfoRow
+            icon={Calendar}
+            label={t("settings.schoolDays")}
+            value={schoolDays}
+            iconColor="text-indigo-400"
+          />
+          <InfoRow
+            icon={Calendar}
+            label={t("settings.startTime")}
+            value={schoolHours}
+            iconColor="text-indigo-400"
+          />
           <InfoRow
             icon={School}
             label={t("academic.class")}

@@ -19,7 +19,7 @@ import {
 import { useAuthStore }       from "@/store/auth.store";
 import { EXAM_STATUS_META, examTypeLabel }   from "@/constants/exam.constants";
 import type { Exam, ExamStatus } from "@/types/exam.types";
-import api                    from "@/lib/api";
+import api                    from "@/lib/axios";
 import { useToast }           from "@/components/ui/Toast";
 import { useTranslation } from "react-i18next";
 import { currentLocale }      from "@/i18n";
@@ -36,6 +36,7 @@ interface AlertItem {
   message: string;
   action:  string;
   examId?: string;
+  onAction?: () => void;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -238,7 +239,10 @@ const AlertsPanel = ({
                   <div className="flex-1">
                     <p className="text-gray-800 leading-snug">{a.message}</p>
                     {a.action && (
-                      <button className="text-blue-600 font-semibold mt-1 hover:underline">
+                      <button
+                        onClick={() => { a.onAction?.(); onClose(); }}
+                        className="text-blue-600 font-semibold mt-1 hover:underline
+                                   cursor-pointer">
                         {a.action} →
                       </button>
                     )}
@@ -455,6 +459,11 @@ const ExamRow = ({
 
                   {nextStatuses.length > 0 && <hr className="my-1 border-gray-100" />}
 
+                  <Link to={`/exams/${exam._id}?tab=details`}
+                    className="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    onClick={() => setMenuOpen(false)}>
+                    ✏️ {t("common.edit")}
+                  </Link>
                   <Link to={`/exams/${exam._id}?tab=marks`}
                     className="block px-4 py-2 text-sm text-indigo-600 hover:bg-indigo-50"
                     onClick={() => setMenuOpen(false)}>
@@ -899,6 +908,7 @@ const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
 export default function ExamsPage() {
   const { t } = useTranslation();
   const { toast } = useToast();
+  const navigate  = useNavigate();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId ?? "";
   const canManage = ADMIN_ROLES.has(user?.role ?? "");
@@ -972,6 +982,7 @@ export default function ExamsPage() {
         type:    "reminder",
         message: t("exams.alertDraft", { count: d.draft }),
         action:  t("exams.actionViewDrafts"),
+        onAction: () => setStatusFilter("draft"),
       });
     }
     if (d.ongoing > 0) {
@@ -979,27 +990,30 @@ export default function ExamsPage() {
         type:    "warning",
         message: t("exams.alertOngoing", { count: d.ongoing }),
         action:  t("exams.actionViewOngoing"),
+        onAction: () => setStatusFilter("ongoing"),
       });
     }
-    if (dashData?.dashboard?.results?.missingGrades ?? 0 > 0) {
+    if ((dashData?.dashboard?.results?.missingGrades ?? 0) > 0) {
       const missing = dashData!.dashboard.results.missingGrades;
       derived.push({
         type:    "warning",
         message: t("exams.alertMissingGrades", { count: missing }),
         action:  t("exams.actionEnterResults"),
+        onAction: () => navigate("/exams/results"),
       });
     }
-    if (dashData?.dashboard?.results?.pending ?? 0 > 0) {
+    if ((dashData?.dashboard?.results?.pending ?? 0) > 0) {
       const pending = dashData!.dashboard.results.pending;
       derived.push({
         type:    "atRisk",
         message: t("exams.alertPending", { count: pending }),
         action:  t("exams.actionPublishResults"),
+        onAction: () => navigate("/exams/results"),
       });
     }
 
     setAlerts(derived);
-  }, [d, dashData, t]);
+  }, [d, dashData, t, navigate, setStatusFilter]);
 
   // ── Close quick menu on outside click ────────────────────────────────────
   useEffect(() => {
@@ -1021,7 +1035,8 @@ export default function ExamsPage() {
       const q = search.toLowerCase();
       list = list.filter((e) =>
         e.name?.toLowerCase().includes(q)       ||
-        e.term?.toLowerCase().includes(q)       ||
+        e.term?.toString().includes(q)       ||
+
         e.academicYear?.toLowerCase().includes(q) ||
         e.className?.toLowerCase().includes(q)  ||
         e.classNames?.toLowerCase().includes(q)
@@ -1244,32 +1259,38 @@ export default function ExamsPage() {
             highlight={statusFilter === "published"}
             onClick={() => setStatusFilter("published")}
           />
-          <StatCard
+                    <StatCard
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
             icon={BookOpen}   color="bg-teal-50 text-teal-600"
             sub={t("exams.schoolAvg")}
+            onClick={() => navigate("/exams/results")}
           />
         </div>
       )}
 
-      {/* Results overview strip */}
+            {/* Results overview strip — every item links to the results page */}
       {dashData?.dashboard?.results && (
         <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
             <div className="flex flex-wrap gap-6">
               {[
-                { id: "published", label: t("results.published"),     value: dashData.dashboard.results.published,               color: "text-purple-600" },
-                { id: "pending",   label: t("results.pending"),       value: dashData.dashboard.results.pending,                 color: "text-amber-600"  },
-                { id: "missing",   label: t("exams.missingGrades"),   value: dashData.dashboard.results.missingGrades,           color: "text-red-600"    },
-                { id: "avg",       label: t("exams.avgScore"),        value: `${dashData.dashboard.results.averagePerformance}%`, color: "text-green-600" },
-                { id: "passRate",  label: t("exams.passRate"),        value: `${dashData.dashboard.results.passRate}%`,          color: "text-primary-600"},
+                { id:    "published", label: t("results.published"),     value: (dashData.dashboard.results.published            ?? 0),               color: "text-purple-600" },
+                { id:    "pending",   label: t("results.pending"),       value: (dashData.dashboard.results.pending              ?? 0),               color: "text-amber-600"  },
+                { id:    "missing",   label: t("exams.missingGrades"),   value: (dashData.dashboard.results.missingGrades          ?? 0),               color: "text-red-600"    },
+                { id:    "avg",       label: t("exams.avgScore"),        value: `${dashData.dashboard.results.averagePerformance ?? 0}%`, color: "text-green-600" },
+                { id:    "passRate",  label: t("exams.passRate"),        value: `${dashData.dashboard.results.passRate             ?? 0}%`, color: "text-primary-600"},
               ].map((item) => (
-                <div key={item.id} className="text-center">
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => navigate("/exams/results")}
+                  className="text-center hover:opacity-80 transition-opacity cursor-pointer"
+                >
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
                   <p className="text-xs text-gray-400 font-medium">{item.label}</p>
-                </div>
+                </button>
               ))}
             </div>
           </div>

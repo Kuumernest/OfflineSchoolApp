@@ -22,7 +22,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
-import { getErrorMessage }  from "@/lib/api";
+import { getErrorMessage }  from "@/lib/axios";
 import {
   fetchCategories, createCategory,
   fetchExpenses, recordExpense, voidExpense,

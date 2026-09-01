@@ -40,7 +40,9 @@ const promotionDecisionSchema = new mongoose.Schema(
 
     basis: {
       type:    String,
-      enum:    ["results_pass", "results_fail", "no_results", "final_year", "manual"],
+      // "average_fail" — the class's own promotionAverage bar (set per class
+      // by the school admin) was not met, even if term passes said otherwise.
+      enum:    ["results_pass", "results_fail", "average_fail", "no_results", "final_year", "manual"],
       default: "no_results",
     },
 

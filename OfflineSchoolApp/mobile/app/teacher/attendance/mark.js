@@ -22,6 +22,7 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { PeriodsService }    from "../../../src/services/periods.service";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -189,6 +190,21 @@ export default function TeacherMarkAttendanceScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [search,     setSearch]     = useState("");
   const [error,      setError]      = useState(null);
+  const [periods,    setPeriods]    = useState([]);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await PeriodsService.getAll();
+        if (!cancelled) setPeriods(data || []);
+      } catch (err) {
+        console.warn("Failed to load periods:", err.message);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const loadRoster = useCallback(async (isRefresh = false) => {
     if (!classId || !schoolId) {
@@ -203,7 +219,8 @@ export default function TeacherMarkAttendanceScreen() {
 
       const data = await AttendanceService.getStudentAttendanceToday(
         classId,
-        schoolId
+        schoolId,
+        selectedPeriod
       );
 
       const rosterData = data?.roster || [];
@@ -228,7 +245,7 @@ export default function TeacherMarkAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [classId, schoolId]);
+  }, [classId, schoolId, selectedPeriod]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -272,6 +289,7 @@ export default function TeacherMarkAttendanceScreen() {
         await AttendanceService.markClassAttendanceBulk({
           schoolId,
           classId,
+          periodId: selectedPeriod || undefined,
           date:    today,
           records,
         });
@@ -303,7 +321,7 @@ export default function TeacherMarkAttendanceScreen() {
     } else {
       doSave();
     }
-  }, [attendance, roster, schoolId, classId, today, router]);
+  }, [attendance, roster, schoolId, classId, selectedPeriod, today, router]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -377,6 +395,40 @@ export default function TeacherMarkAttendanceScreen() {
           <TouchableOpacity onPress={() => loadRoster()}>
             <Text style={styles.errorRetry}>{t("common.retry")}</Text>
           </TouchableOpacity>
+        </View>
+      )}
+
+      {/* Period selector */}
+      {periods.length > 0 && (
+        <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+            <TouchableOpacity
+              style={[styles.periodChip, !selectedPeriod && styles.periodChipActive]}
+              onPress={() => setSelectedPeriod(null)}
+              activeOpacity={0.7}
+            >
+              <Text style={[styles.periodChipText, !selectedPeriod && styles.periodChipTextActive]}>
+                {t("attAdmin.allPeriods", "All")}
+              </Text>
+            </TouchableOpacity>
+            {periods.filter(p => p.isActive !== false).map((p) => (
+              <TouchableOpacity
+                key={p.id}
+                style={[styles.periodChip, selectedPeriod === p.id && styles.periodChipActive]}
+                onPress={() => setSelectedPeriod(p.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.periodChipText, selectedPeriod === p.id && styles.periodChipTextActive]}>
+                  {p.name}
+                </Text>
+                {!!p.startTime && (
+                  <Text style={[styles.periodChipTime, selectedPeriod === p.id && styles.periodChipTimeActive]}>
+                    {p.startTime}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -616,6 +668,25 @@ const styles = StyleSheet.create({
   empty: { alignItems: "center", paddingVertical: 60, gap: 10 },
   emptyTitle: { fontSize: 15, fontWeight: "600", color: "#374151", textAlign: "center" },
   emptySub:   { fontSize: 13, color: "#9CA3AF", textAlign: "center" },
+  periodChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  periodChipActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#4F46E5",
+  },
+  periodChipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  periodChipTextActive: { color: "#4F46E5" },
+  periodChipTime: { fontSize: 11, color: "#9CA3AF" },
+  periodChipTimeActive: { color: "#818CF8" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";

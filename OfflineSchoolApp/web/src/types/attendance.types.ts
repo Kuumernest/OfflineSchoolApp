@@ -53,6 +53,18 @@ export interface AttendanceRecord {
   updatedAt?: string;
 }
 
+/** A period (time slot) in the school day. */
+export interface Period {
+  _id:       string;
+  schoolId:  string;
+  name:      string;
+  startTime: string;
+  endTime:   string;
+  sortOrder: number;
+  isBreak:   boolean;
+  isActive:  boolean;
+}
+
 /** A person on the register, whether or not they have been marked yet. */
 export interface RosterEntry {
   id:          string;

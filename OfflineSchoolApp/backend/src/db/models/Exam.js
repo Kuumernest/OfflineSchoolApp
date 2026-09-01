@@ -10,11 +10,9 @@ const examSchema = new mongoose.Schema(
 
     schoolId:  { type: String, required: true, index: true },
 
-    // ── Single class (primary / backwards compat) ─────────
+    // ── Class references ──────────────────────────────────
     classId:   { type: String, ref: "Class", index: true, default: null },
     className: { type: String, default: null },
-
-    // ── Multiple classes support ──────────────────────────
     classIds:   { type: [String], default: [] },
     classNames: { type: String,   default: null },
 
@@ -24,17 +22,24 @@ const examSchema = new mongoose.Schema(
       trim:     true,
     },
 
+    // ── Simplified type — only 3 values ───────────────────
     type: {
       type:    String,
-      enum:    [
-        "first_test", "second_test", "mid_term", "practical",
-        "final_exam", "mock_exam", "promotion_exam", "continuous_assessment",
-      ],
-      default: "first_test",
+      enum:    ["test", "practical", "promotion_exam"],
+      default: "test",
     },
 
+    // ── Sequence binding (1–6) ────────────────────────────
+    sequenceNumber: {
+      type:    Number,
+      min:     1,
+      max:     6,
+      default: null,
+    },
+
+    // ── Academic period ───────────────────────────────────
     academicYear: { type: String, required: true },
-    term:         { type: String, required: true },
+    term:         { type: Number, required: true, min: 1, max: 3 },
 
     startDate: { type: String, default: null },
     endDate:   { type: String, default: null },
@@ -52,6 +57,10 @@ const examSchema = new mongoose.Schema(
     totalMarks: { type: Number, default: 100 },
     passMark:   { type: Number, default: 50  },
 
+    // ── Weighting ─────────────────────────────────────────
+    weight: { type: Number, default: 100 }, // percentage weight within its sequence
+
+    // ── Publishing ────────────────────────────────────────
     resultsPublished:   { type: Boolean, default: false },
     resultsLockedAt:    { type: Date,    default: null  },
     resultsPublishedAt: { type: Date,    default: null  },
@@ -74,6 +83,7 @@ const examSchema = new mongoose.Schema(
 
 examSchema.index({ schoolId: 1, status: 1 });
 examSchema.index({ schoolId: 1, academicYear: 1, term: 1 });
+examSchema.index({ schoolId: 1, academicYear: 1, term: 1, sequenceNumber: 1 });
 examSchema.index({ schoolId: 1, classId: 1, status: 1 });
 examSchema.index({ schoolId: 1, classIds: 1 });
 

@@ -379,9 +379,16 @@ const documents = (db) => {
       // Ordering by a JSON field is legitimate and common (by receivedAt, by
       // name), so it goes through the same column-or-JSON resolution as filters
       // rather than being restricted to the real columns.
-      const orderSql = order
+      //
+      // The order parameter is sanitized to prevent SQL injection: only
+      // alphanumeric characters, underscores and dots are allowed.
+      const safeOrder = order
+        ? String(order).replace(/[^a-zA-Z0-9_.]/g, "")
+        : null;
+
+      const orderSql = safeOrder
         ? ` ORDER BY ${
-            order === "updatedAt" ? "updated_at" : `json_extract(json, '$.${order}')`
+            safeOrder === "updatedAt" ? "updated_at" : `json_extract(json, '$.${safeOrder}')`
           } ${dir === "DESC" ? "DESC" : "ASC"}`
         : "";
 

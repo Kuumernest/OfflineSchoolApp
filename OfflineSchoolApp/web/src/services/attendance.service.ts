@@ -11,6 +11,7 @@ import type {
   AttendanceSummary,
   BulkAttendancePayload,
   BulkAttendanceResult,
+  Period,
   RosterEntry,
   TodayAttendance,
   WeeklyAttendancePoint,
@@ -112,6 +113,29 @@ interface RosterArgs {
 }
 
 /**
+ * Fetch available periods for a school.
+ */
+export async function fetchPeriods(schoolId: string): Promise<Period[]> {
+  const { data } = await api.get("/admin/periods", {
+    params: { schoolId },
+  });
+  const body = (data ?? {}) as Record<string, unknown>;
+  const list = (body.periods ?? body.data ?? body) as Record<string, unknown>[];
+  return Array.isArray(list)
+    ? list.map((p) => ({
+        _id:       String(p._id ?? ""),
+        schoolId:  String(p.schoolId ?? ""),
+        name:      String(p.name ?? ""),
+        startTime: String(p.startTime ?? ""),
+        endTime:   String(p.endTime ?? ""),
+        sortOrder: Number(p.sortOrder ?? 0),
+        isBreak:   Boolean(p.isBreak),
+        isActive:  Boolean(p.isActive ?? true),
+      }))
+    : [];
+}
+
+/**
  * Everyone who should be on the register, before any marks are applied.
  *
  * Used for dates other than today: /students/today only builds a roster for
@@ -142,6 +166,7 @@ async function fetchRecords(args: {
   subject:  AttendanceSubject;
   schoolId: string;
   classId?: string | null;
+  periodId?: string | null;
   date:     string;
 }): Promise<AttendanceRecord[]> {
   const { data } = await api.get(`${BASE}/${args.subject}`, {
@@ -149,7 +174,8 @@ async function fetchRecords(args: {
       schoolId:  args.schoolId,
       startDate: args.date,
       endDate:   args.date,
-      ...(args.classId ? { classId: args.classId } : {}),
+      ...(args.classId  ? { classId:  args.classId }  : {}),
+      ...(args.periodId ? { periodId: args.periodId } : {}),
     },
   });
   return unwrapList<Record<string, unknown>>(data, "records").map(normaliseRecord);
@@ -162,11 +188,14 @@ async function fetchRecords(args: {
  * Joining roster and records on the client rather than relying on
  * /students/today is what makes a past date work — and it keeps the two
  * subjects (students, teachers) on one code path.
+ *
+ * When periodId is provided, records are filtered to that period only.
  */
 export async function fetchRegister(args: {
   subject:  AttendanceSubject;
   schoolId: string;
   classId?: string | null;
+  periodId?: string | null;
   date:     string;
 }): Promise<TodayAttendance> {
   const [roster, records] = await Promise.all([

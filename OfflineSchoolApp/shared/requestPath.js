@@ -81,4 +81,4 @@ const requestPath = (config = {}) => {
   return { path: normalised, query };
 };
 
-module.exports = { requestPath };
+export { requestPath };

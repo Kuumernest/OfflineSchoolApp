@@ -217,9 +217,21 @@ module.exports = [
 
       const normalised = sorted.map(normaliseStudentDoc).filter(Boolean);
 
+      // Pagination, mirrored from the server exactly: it only slices when the
+      // caller asks, so a request with neither page nor limit still answers
+      // with the whole roster — and page/pages are reported either way.
+      const page   = Math.max(1, parseInt(query.page, 10) || 1);
+      const rawLim = parseInt(query.limit, 10) || 0;
+      const limit  = Math.min(Math.max(rawLim, 0), 200);
+      const total  = normalised.length;
+      const pages  = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
+      const slice  = limit > 0
+        ? normalised.slice((page - 1) * limit, (page - 1) * limit + limit)
+        : normalised;
+
       // count, students AND data: three keys carrying the same array, because
       // different screens read different ones and the server sends all three.
-      return ok({ count: normalised.length, students: normalised, data: normalised });
+      return ok({ count: slice.length, total, page, pages, students: slice, data: slice });
     },
   },
 

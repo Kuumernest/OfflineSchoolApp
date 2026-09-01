@@ -36,7 +36,7 @@ import { useToast } from "@/components/ui/Toast";
 import { enrollStudent } from "@/services/student.service";
 import { fetchClasses } from "@/services/class.service";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 

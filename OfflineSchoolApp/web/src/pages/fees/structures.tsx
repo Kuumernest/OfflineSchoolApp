@@ -24,11 +24,12 @@ import { useToast }         from "@/components/ui/Toast";
 import { EmptyTable }       from "@/components/ui/DataTable";
 import { useFormat }        from "@/i18n/format";
 import { cn }               from "@/utils/cn";
-import { getErrorMessage }  from "@/lib/api";
+import { getErrorMessage }  from "@/lib/axios";
 import {
   fetchStructures,
   createStructure,
   deactivateStructure,
+  activateStructure,
   applyStructure,
 } from "@/services/fee.service";
 import { fetchClasses }     from "@/services/class.service";
@@ -127,6 +128,12 @@ export default function FeeStructuresPage() {
     mutationFn: (id: string) => deactivateStructure(id, schoolId),
     onSuccess:  invalidate,
     onError: (err) => toast({ kind: "error", title: t("fees.deactivate"), message: getErrorMessage(err) }),
+  });
+
+  const activateMutation = useMutation({
+    mutationFn: (id: string) => activateStructure(id, schoolId),
+    onSuccess:  invalidate,
+    onError: (err) => toast({ kind: "error", title: t("fees.activate"), message: getErrorMessage(err) }),
   });
 
   const applyMutation = useMutation({
@@ -243,7 +250,7 @@ export default function FeeStructuresPage() {
                 </span>
               </div>
 
-              {s.isActive && (
+              {s.isActive ? (
                 <div className="mt-4 flex gap-2">
                   <Button
                     size="sm"
@@ -260,6 +267,18 @@ export default function FeeStructuresPage() {
                     onClick={() => deactivateMutation.mutate(s._id)}
                   >
                     {t("fees.deactivate")}
+                  </Button>
+                </div>
+              ) : (
+                <div className="mt-4">
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    icon={<Play className="h-4 w-4" />}
+                    loading={activateMutation.isPending}
+                    onClick={() => activateMutation.mutate(s._id)}
+                  >
+                    {t("fees.reactivate")}
                   </Button>
                 </div>
               )}

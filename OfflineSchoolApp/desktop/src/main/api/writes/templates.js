@@ -5,25 +5,6 @@
  * Duplicating, defaulting and deleting a report-card template, with no
  * connection.
  *
- * ── READ THIS BEFORE REGISTERING THE DUPLICATE ────────────────────────────
- *
- * POST /api/templates/:id/duplicate hard-codes `_id: uuidv4()` —
- * backend/src/routes/template.routes.js:493. Until that endpoint honours
- * `req.body._id`, the handler below is NOT safe to register: the queued request
- * would create a row on the server under a different id from the one this machine
- * wrote, the outbox would drain with a cheerful 201, and the local copy would sit
- * in the mirror for ever. No pull removes it — the feed only adds and updates —
- * so the phantom stays in the template list, and the first person who presses
- * "set as default" on it queues a PATCH the server answers 404 to, which stops
- * the whole outbox. That is how a create with no client id turns into a stuck
- * queue two steps later.
- *
- * The change also needs an ordering rule: look the row up BY ID before anything
- * else, and answer with the stored row, so that a replayed request which already
- * succeeded gets 201-and-the-row rather than a duplicate-key error. A duplicate
- * key surfaces as a 500, and a 500 is retryable — so the queue would not block on
- * it, it would retry it for ever.
- *
  * ── Three writes, and two things left alone ───────────────────────────────
  *
  * POST /api/templates and PUT /api/templates/:id are online-only, and the reason
@@ -96,6 +77,110 @@ const withSchool = (path, provided) =>
 
 module.exports = [
   {
+    route: "POST /api/templates",
+
+    handler: ({ body }, { docs, session }) => {
+      if (!mayManage(session)) return null;
+
+      const schoolId = resolveSchoolId(session, body.schoolId);
+      if (!schoolId) return null;
+
+      const { unknownTokens } = require("../../../../../shared/reportTokens");
+      const bad = unknownTokens(body.html || "");
+      if (bad.length) {
+        return {
+          status: 400,
+          data: { success: false, unknownTokens: bad },
+        };
+      }
+
+      const id  = body._id ? String(body._id) : randomUUID();
+      const now = new Date().toISOString();
+
+      const doc = {
+        _id:       id,
+        schoolId,
+        name:      String(body.name || "Untitled Template").trim(),
+        html:      body.html  || "",
+        css:       body.css   || "",
+        isDefault: false,
+        version:   1,
+        variables: body.variables || [],
+        createdBy: session?.userId ?? null,
+        updatedBy: session?.userId ?? null,
+        deletedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      return {
+        collection: "reportTemplate",
+        doc,
+        request: {
+          method: "POST",
+          path:   "/api/templates",
+          body:   { ...body, _id: id },
+        },
+        response: {
+          status: 201,
+          data:   { success: true, template: { ...doc, id } },
+        },
+      };
+    },
+  },
+
+  {
+    route: "PUT /api/templates/:id",
+
+    handler: ({ params, body }, { docs, session }) => {
+      if (!mayManage(session)) return null;
+
+      const schoolId = resolveSchoolId(session, body.schoolId);
+      if (!schoolId) return null;
+
+      const row = target(docs, params.id, schoolId);
+      if (!row) return null;
+
+      const { unknownTokens } = require("../../../../../shared/reportTokens");
+      const bad = unknownTokens(body.html || "");
+      if (bad.length) {
+        return {
+          status: 400,
+          data: { success: false, unknownTokens: bad },
+        };
+      }
+
+      const now = new Date().toISOString();
+
+      const doc = {
+        ...row,
+        name:      body.name      !== undefined ? String(body.name).trim()      : row.name,
+        html:      body.html      !== undefined ? body.html                     : row.html,
+        css:       body.css       !== undefined ? body.css                      : row.css,
+        variables: body.variables !== undefined ? body.variables                : row.variables,
+        version:   (row.version ?? 0) + 1,
+        updatedBy: session?.userId ?? null,
+        updatedAt: now,
+      };
+
+      return {
+        collection: "reportTemplate",
+        doc,
+        also: [],
+        request: {
+          method: "PUT",
+          path:   `/api/templates/${params.id}`,
+          body,
+        },
+        response: {
+          status: 200,
+          data:   { success: true, template: doc },
+        },
+      };
+    },
+  },
+
+  {
     route: "POST /api/templates/:id/duplicate",
 
     /**
@@ -110,8 +195,8 @@ module.exports = [
      * disagree about how many placeholders a template has, which is a number the
      * template card prints.
      *
-     * See the file header before registering this. It depends on the endpoint
-     * accepting a client-supplied _id.
+     * The server endpoint honours a client-supplied _id and answers with the
+     * existing row on replay, making this safe to queue.
      */
     handler: ({ params, body }, { docs, session }) => {
       if (!mayManage(session)) return null;

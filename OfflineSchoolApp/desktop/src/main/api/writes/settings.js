@@ -44,6 +44,7 @@ const {
   parseDay,
   resolveSchoolId,
   withoutPending,
+  GRADING_TYPES,
 } = require("../handlers/settings");
 
 /**
@@ -59,10 +60,9 @@ const {
  * path would quietly send every settings write to the network and look fine.
  */
 
-/** gradingType's enum, from GradingConfig.js. Anything else is a ValidationError. */
-const GRADING_TYPES = ["percentage", "gpa", "points"];
-
-/** gateNotify's enum, from the settings sub-schema in School.js. */
+/**
+ * gateNotify's enum, from the settings sub-schema in School.js.
+ */
 const GATE_NOTIFY = ["off", "exceptions", "all"];
 
 /** As the endpoint's own HHMM constant. Empty is allowed; the schema permits ^$. */
@@ -127,6 +127,85 @@ const cleanBand = (band) => {
 };
 
 module.exports = [
+  {
+    route: "PUT /api/admin/school-info",
+
+    /**
+     * Updating the school's profile text fields offline.
+     *
+     * ── Logo is deliberately excluded ──────────────────────────────────────
+     *
+     * The logo is written to the server's filesystem via fs.writeFileSync.
+     * An offline client cannot replicate that, so logoBase64 is stripped from
+     * the queued request. The text fields (name, address, etc.) are a plain
+     * findByIdAndUpdate and can be queued safely.
+     *
+     * ── Only what changed goes out ─────────────────────────────────────────
+     *
+     * Same rule as PUT /exams: sending the whole document would revert
+     * changes made on another machine. The body is sent as-is; the local
+     * row is merged.
+     */
+    handler: ({ body }, { docs, session }) => {
+      const schoolId = resolveSchoolId(body.schoolId, session);
+      if (!schoolId) return null;
+
+      if (!session?.permissions?.includes("settings.manage")) return null;
+
+      const school = docs.get("school", schoolId);
+      if (!school) return null;
+
+      const FIELDS = [
+        "name", "code", "address", "city", "state", "country",
+        "phone", "email", "website", "motto",
+        "postalCode", "schoolType", "termSystem", "registrationNumber",
+        "foundedYear", "principalName", "description",
+        "academicYearStart", "academicYearEnd", "schoolDays",
+        "schoolStartTime", "schoolEndTime",
+        "applicationsOpen", "isActive",
+      ];
+
+      const updates = {};
+      for (const field of FIELDS) {
+        if (body[field] === undefined) continue;
+        updates[field] = body[field];
+      }
+      // The settings screens call the form field `schoolCode`; the server
+      // stores `code`. Carry the alias through so an offline edit reaches the
+      // server under the name it understands.
+      if (body.schoolCode !== undefined && body.code === undefined) {
+        updates.code = body.schoolCode;
+      }
+
+      if (Object.keys(updates).length === 0) return null;
+
+      const existing = withoutPending(school);
+      const doc = {
+        ...existing,
+        ...updates,
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Strip logoBase64 from the queued request — the server writes it to
+      // the filesystem, which is not queueable.
+      const { logoBase64, ...bodyForServer } = body;
+
+      return {
+        collection: "school",
+        doc,
+        request: {
+          method: "PUT",
+          path:   "/api/admin/school-info",
+          body:   bodyForServer,
+        },
+        response: {
+          status: 200,
+          data: { success: true, school: doc },
+        },
+      };
+    },
+  },
+
   {
     route: "PUT /api/admin/settings/grading",
 

@@ -67,7 +67,7 @@ import {
 } from "@/types/timetable.types";
 import type { DayCode, TimetableSlot } from "@/types/timetable.types";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
 

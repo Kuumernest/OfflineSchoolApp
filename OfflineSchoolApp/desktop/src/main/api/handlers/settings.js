@@ -21,8 +21,11 @@
  *     the screen while the account still signs in is the one thing that button
  *     must never mean.
  *
- * GET /admin/settings/analytics is online-only too, and PUT
- * /admin/settings/profile — again with the reasoning in coverage.js.
+ * PUT /admin/settings/profile is online-only too — writes/settings.js has the
+ * note in coverage.js. GET /admin/settings/analytics, by contrast, IS answered
+ * here: it is deterministic arithmetic (counts and group-bys) over the same
+ * rows the server aggregates — class, subject, teacherAssignment, student and
+ * user all mirror under the capabilities a settings screen requires.
  *
  * ── The one filter reproduced exactly rather than sensibly ────────────────
  *
@@ -47,24 +50,22 @@ const OFFICE_ROLES = ["super_admin", "school_admin", "bursar"];
 /**
  * The shipped grading scale, returned when a school has never saved one.
  *
- * A copy of DEFAULT_GRADES in backend/src/routes/admin.routes.js. This one is
- * NOT harmless duplication: these bands are what results.controller.js turns a
- * percentage into a letter and a remark with, so a drifted copy would print a
- * different grade on a desktop report card than the school's own server would.
- * It belongs in shared/ and is proposed there; until then the parity check
- * compares this table against the server's for a school with no config, which
- * is what would catch the drift.
+ * From shared/, which is where the comment this replaces asked for it. It was
+ * a second copy of the backend table and the two had drifted: this one still
+ * held a /100 scale after the backend moved to Cameroon /20, so the same mark
+ * printed as a different letter offline than the school's own server printed.
  */
-const DEFAULT_GRADES = [
-  { grade: "A+", minMark:  90, maxMark: 100, gpaPoints: 4.0, remark: "Excellent"     },
-  { grade: "A",  minMark:  80, maxMark:  89, gpaPoints: 4.0, remark: "Very Good"     },
-  { grade: "B+", minMark:  75, maxMark:  79, gpaPoints: 3.5, remark: "Good"          },
-  { grade: "B",  minMark:  70, maxMark:  74, gpaPoints: 3.0, remark: "Above Average" },
-  { grade: "C+", minMark:  65, maxMark:  69, gpaPoints: 2.5, remark: "Average"       },
-  { grade: "C",  minMark:  60, maxMark:  64, gpaPoints: 2.0, remark: "Satisfactory"  },
-  { grade: "D",  minMark:  50, maxMark:  59, gpaPoints: 1.0, remark: "Pass"          },
-  { grade: "F",  minMark:   0, maxMark:  49, gpaPoints: 0.0, remark: "Fail"          },
-];
+const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("../../../../../shared/gradeScale");
+
+/**
+ * gradingType's enum, from GradingConfig.js.
+ *
+ * The write side (writes/settings.js) refuses anything outside it because the
+ * server would, and the read side here uses it to heal a stale value the mirror
+ * picked up from a server document written under an earlier schema — otherwise
+ * the screen would echo it back on every save and be refused for ever.
+ */
+const GRADING_TYPES = ["percentage", "gpa", "points"];
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
@@ -172,6 +173,58 @@ const idCardView = (school) => {
 
 module.exports = [
   {
+    route: "GET /api/admin/school-info",
+
+    /**
+     * The school's profile: name, code, address, contact details.
+     *
+     * Served from the mirrored School document. The logo is intentionally
+     * withheld (the server returns only a length fingerprint by default) —
+     * the full logo is a file, not a document, and belongs in a file cache.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = resolveSchoolId(query.schoolId, session);
+      if (!schoolId) return null;
+
+      const school = docs.get("school", schoolId);
+      if (!school) return null;
+
+      const info = {
+        name:               school.name               || null,
+        code:               school.code               || null,
+        address:            school.address             || null,
+        city:               school.city                || null,
+        state:              school.state               || null,
+        country:            school.country             || null,
+        postalCode:         school.postalCode          || null,
+        phone:              school.phone               || null,
+        email:              school.email               || null,
+        website:            school.website             || null,
+        motto:              school.motto               || null,
+        schoolType:         school.schoolType          || "primary",
+        termSystem:         school.termSystem          || "trimester",
+        registrationNumber: school.registrationNumber  || null,
+        foundedYear:        school.foundedYear         ?? null,
+        principalName:      school.principalName       || null,
+        description:        school.description         || null,
+        academicYearStart:  school.academicYearStart   || null,
+        academicYearEnd:    school.academicYearEnd     || null,
+        schoolDays:         Array.isArray(school.schoolDays) && school.schoolDays.length
+          ? school.schoolDays
+          : ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"],
+        schoolStartTime:    school.schoolStartTime     || "07:30",
+        schoolEndTime:      school.schoolEndTime       || "15:30",
+        applicationsOpen:   school.applicationsOpen    ?? true,
+        isActive:           school.isActive            ?? true,
+        updatedAt:          school.updatedAt            || null,
+        logoLen:            school.logoBase64?.length   ?? school.logoLen ?? 0,
+      };
+
+      return ok({ school: info });
+    },
+  },
+
+  {
     route: "GET /api/admin/settings/admins",
 
     /**
@@ -268,11 +321,19 @@ module.exports = [
       const grading = stored ? withoutPending(stored) : {
         schoolId,
         grades:      DEFAULT_GRADES,
-        passMark:    50,
+        passMark:    DEFAULT_PASS_MARK,
         useGpa:      false,
         gpaScale:    4.0,
         gradingType: "percentage",
       };
+
+      // A mirror row synced from a server document that once held an out-of-enum
+      // gradingType would otherwise round-trip through the screen and be refused
+      // at the next save. Same repair as the server's GET: fall back to the
+      // schema default.
+      if (!GRADING_TYPES.includes(grading.gradingType)) {
+        grading.gradingType = "percentage";
+      }
 
       return ok({ grading });
     },
@@ -322,6 +383,125 @@ module.exports = [
       return ok(idCardView(withoutPending(school)));
     },
   },
+
+  {
+    route: "GET /api/admin/settings/analytics",
+
+    /**
+     * The school-health summary: four counts and three group-bys.
+     *
+     * ── Why this one is answered and early-warning is not ──────────────────
+     *
+     * Every number here is deterministic arithmetic over rows the mirror
+     * already holds — totals, counts, and names pulled from sibling rows. A
+     * wrong answer is a stale count, the same stale count every mirrored read
+     * can show on a machine that has not synced. It cannot misname anybody:
+     * the screen draws four tiles and three small bars, not a list of children.
+     *
+     * ── Reproduced exactly, including what looks like a bug ────────────────
+     *
+     *   · The server's summary is { totalTeachers, totalClasses, totalSubjects,
+     *     totalAssignments }. The web screen reads summary.totalStudents, which
+     *     the server never sends — the students tile renders "—" online, and it
+     *     renders "—" here. A mirror does not get to tidy up an envelope.
+     *   · enrollmentTrend and classLoad count SOFT-DELETED students too: the
+     *     $match carries no deletedAt clause. Replicated by NOT filtering
+     *     deletedAt, not by adding a filter that happens to look right.
+     *   · Class is the one count that excludes deleted rows, and the server
+     *     matches `deletedAt` null OR "" — legacy rows. `!deletedAt` is that
+     *     $or, and nothing else is close.
+     *
+     * ── The tie-break, the same one as the results list ────────────────────
+     *
+     * The group-bys sort by count descending with no secondary key, and both
+     * engines leave ties in an unspecified order. The mirror sorts ties by name
+     * so the screen does not reshuffle between renders.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = resolveSchoolId(query.schoolId, session);
+      if (!schoolId) return null;
+
+      const sixMonthsAgo = new Date();
+      sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+      const toDate = (value) => {
+        if (value == null) return null;
+        const d = new Date(value);
+        return Number.isNaN(d.getTime()) ? null : d;
+      };
+
+      // enrollmentTrend: approved students whose createdAt is within the last
+      // six months, grouped by (year, month) and sorted ascending. $year and
+      // $month are UTC in a Mongo aggregation, so UTC here too.
+      const trend = new Map();
+      for (const s of docs.find("student", { schoolId, status: "approved" })) {
+        const d = toDate(s.createdAt);
+        if (d === null || d < sixMonthsAgo) continue;
+        const key = `${d.getUTCFullYear()}:${d.getUTCMonth() + 1}`;
+        const entry = trend.get(key) ||
+          { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1, count: 0 };
+        entry.count += 1;
+        trend.set(key, entry);
+      }
+      const enrollmentTrend = [...trend.values()]
+        .sort((a, b) => (a.year - b.year) || (a.month - b.month));
+
+      // teachersBySubject: assignments grouped by subject id, the subject's
+      // name looked up. A subject the mirror does not hold is "Unknown", the
+      // $ifNull the server answers with.
+      const bySubject = new Map();
+      for (const a of docs.find("teacherAssignment", { schoolId })) {
+        const id = String(a.subject ?? "");
+        bySubject.set(id, (bySubject.get(id) || 0) + 1);
+      }
+      const teachersBySubject = [...bySubject.entries()]
+        .map(([subjectId, count]) => ({
+          subjectName: docs.get("subject", subjectId)?.name ?? "Unknown",
+          count,
+        }))
+        .sort((a, b) =>
+          (b.count - a.count) ||
+          String(a.subjectName).localeCompare(String(b.subjectName)))
+        .slice(0, 10);
+
+      // classLoad: approved students by class id, the class's name looked up.
+      // The $match filters on status only — not deletedAt, so a class holding
+      // only soft-deleted pupils still counts them.
+      const byClass = new Map();
+      for (const s of docs.find("student", { schoolId, status: "approved" })) {
+        const id = String(s.classId ?? "");
+        byClass.set(id, (byClass.get(id) || 0) + 1);
+      }
+      const classLoad = [...byClass.entries()]
+        .map(([classId, count]) => ({
+          className: docs.get("class", classId)?.name ?? "Unknown",
+          count,
+        }))
+        .sort((a, b) =>
+          (b.count - a.count) ||
+          String(a.className).localeCompare(String(b.className)));
+
+      // The four summary counts. Three carry no deletedAt filter on the server
+      // and must not pick one up here; the class count is the one that does,
+      // with the null-or-"" legacy escape reproduced as `!deletedAt`.
+      const totalTeachers = docs
+        .find("user", { schoolId, role: "teacher", isActive: true }).length;
+      const totalClasses = docs
+        .find("class", { schoolId, isActive: true })
+        .filter((c) => !c.deletedAt).length;
+      const totalSubjects = docs.find("subject", { schoolId }).length;
+      const totalAssignments = docs.find("teacherAssignment", { schoolId }).length;
+
+      return ok({
+        analytics: {
+          summary: { totalTeachers, totalClasses, totalSubjects, totalAssignments },
+          enrollmentTrend,
+          teachersBySubject,
+          classLoad,
+        },
+      });
+    },
+  },
 ];
 
 // Shared with writes/settings.js, which answers PUT /admin/settings/id-card with
@@ -333,3 +513,4 @@ module.exports.parseDay         = parseDay;
 module.exports.toDayString      = toDayString;
 module.exports.resolveSchoolId  = resolveSchoolId;
 module.exports.withoutPending   = withoutPending;
+module.exports.GRADING_TYPES    = GRADING_TYPES;

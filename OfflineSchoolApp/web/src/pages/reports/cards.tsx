@@ -7,7 +7,7 @@ import { EXAM_STATUS_META,
          examTypeLabel }    from "@/constants/exam.constants";
 import type { Exam }           from "@/types/exam.types";
 
-import api                     from "@/lib/api";
+import api                     from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 
 // ─────────────────────────────────────────────────────────

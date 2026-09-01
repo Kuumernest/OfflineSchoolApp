@@ -391,6 +391,20 @@ export const NAV_ITEMS: NavItem[] = [
         icon:  BarChart3,
         roles: ["super_admin", "school_admin", "teacher"],
       },
+      {
+        label: "Term Results",
+        labelKey: "nav.termResults",
+        path:  "/exams/term-results",
+        icon:  BarChart3,
+        roles: ["super_admin", "school_admin"],
+      },
+      {
+        label: "Annual Results",
+        labelKey: "nav.annualResults",
+        path:  "/exams/annual-results",
+        icon:  BarChart3,
+        roles: ["super_admin", "school_admin"],
+      },
       // Report cards are deliberately NOT listed here. They used to appear
       // both under Exams and under Reports, which read as two features and
       // sent people to whichever they found first. They now live once, under

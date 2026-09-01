@@ -4,11 +4,12 @@ import {
   Building2, User, GraduationCap, Shield, BarChart3,
   Save, Upload, Trash2, Plus, Eye, EyeOff, Loader2,
   ChevronRight, AlertCircle, X, CreditCard, ShieldCheck, ShieldAlert,
-  KeyRound,
+  KeyRound, Calendar,
 } from "lucide-react";
 
 import PermissionsSection from "@/pages/settings/PermissionsSection";
 import ApprovalsSection   from "@/pages/settings/ApprovalsSection";
+import AcademicStructureSection from "@/pages/settings/AcademicStructureSection";
 
 import { useUser, useAuthStore } from "@/store/auth.store";
 import { cn }                    from "@/utils/cn";
@@ -49,9 +50,11 @@ interface SchoolSettings {
 }
 
 interface GradingConfig {
-  passMark: number;
-  useGpa:   boolean;
-  grades?:  { label: string; min: number; max: number; gpa?: number }[];
+  passMark:    number;
+  useGpa:      boolean;
+  gpaScale:    number;
+  gradingType: string;
+  grades?:     { grade: string; minMark: number; maxMark: number; gpaPoints?: number; remark?: string }[];
 }
 
 interface AdminUser {
@@ -82,10 +85,19 @@ interface Analytics {
 // carries a translation key and the component resolves it at render. The
 // `value` / `id` fields stay English — they are compared, stored and sent to
 // the API.
+
+// gradingType's enum, from backend GradingConfig.js. The grading screen never
+// edits this field, so a stale value carried in the loaded config (a document
+// written under an earlier schema) is coerced to the default before a save —
+// otherwise the validator on the PUT refuses the whole save and the admin is
+// stuck. Same gate the desktop write handler applies.
+const GRADING_TYPES = ["percentage", "gpa", "points"];
+
 const SECTIONS = [
   { id: "school",      labelKey: "settings.secSchool",      icon: Building2     },
   { id: "profile",     labelKey: "settings.secProfile",     icon: User          },
   { id: "grading",     labelKey: "settings.secGrading",     icon: GraduationCap },
+  { id: "academicStructure", labelKey: "settings.secAcademicStructure", icon: Calendar },
   { id: "admins",      labelKey: "settings.secAdmins",      icon: Shield        },
   // Sits next to Office accounts on purpose: appointing somebody and deciding
   // what they may do are two halves of one job, and a head who has just created
@@ -349,7 +361,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             postalCode:         s.postalCode         ?? "",
             schoolType:         s.schoolType         ?? "primary",
             termSystem:         s.termSystem         ?? "trimester",
-            schoolCode:         s.schoolCode         ?? "",
+            schoolCode:         s.code ?? s.schoolCode ?? "",
             registrationNumber: s.registrationNumber ?? "",
             foundedYear:        s.foundedYear        ? String(s.foundedYear) : "",
             principalName:      s.principalName      ?? "",
@@ -924,7 +936,14 @@ function GradingSection({ schoolId }: { schoolId: string }) {
     if (!config) return;
     setSaving(true);
     try {
-      await api.put("/admin/settings/grading", { ...config, schoolId });
+      const payload = { ...config, schoolId };
+      // The screen cannot change gradingType, so a stored value the schema no
+      // longer accepts would fail the save with no way past it. Fall back to
+      // the default, as the server's own GET now does.
+      if (!GRADING_TYPES.includes(payload.gradingType)) {
+        payload.gradingType = "percentage";
+      }
+      await api.put("/admin/settings/grading", payload);
       toast({ kind: "success", title: t("settings.gradingSaved") });
     } catch (err) {
       toast({ kind: "error", title: t("settings.saveFailed"), message: extractMessage(err, t) });
@@ -952,46 +971,34 @@ function GradingSection({ schoolId }: { schoolId: string }) {
     <div className="space-y-5">
       <Card>
         <CardTitle>{t("settings.gradingSettings")}</CardTitle>
+
+        {/* Explanation */}
+        <p className="text-xs text-gray-500 mb-4">
+          Cameroon Anglophone system — all marks are on a /20 scale.
+          The pass mark and grade bands below are used when grading exam results.
+        </p>
+
         <div className="space-y-5">
 
-          <div className="flex items-center justify-between rounded-xl border border-gray-100 bg-gray-50 p-4">
-            <div>
-              <p className="text-sm font-semibold text-gray-900">{t("settings.gpaSystem")}</p>
-              <p className="text-xs text-gray-500">{t("settings.gpaEnable")}</p>
-            </div>
-            <label className="relative inline-flex cursor-pointer items-center">
-              <input
-                type="checkbox"
-                className="sr-only peer"
-                checked={config.useGpa}
-                onChange={(e) => setConfig({ ...config, useGpa: e.target.checked })}
-              />
-              <div className="
-                h-6 w-11 rounded-full bg-gray-200 transition
-                peer-checked:bg-indigo-600
-                after:absolute after:left-0.5 after:top-0.5
-                after:h-5 after:w-5 after:rounded-full after:bg-white
-                after:transition peer-checked:after:translate-x-5
-              " />
-            </label>
-          </div>
-
-          <div>
+          {/* Pass mark */}
+          <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">
             <FieldLabel>{t("settings.passMarkPct")}</FieldLabel>
             <input
               type="number"
               min={0}
-              max={100}
+              max={20}
+              step="0.5"
               value={config.passMark}
               onChange={(e) =>
                 setConfig({ ...config, passMark: Number(e.target.value) })
               }
               className="
-                w-28 rounded-xl border border-gray-200 bg-gray-50 px-4 py-2.5
+                w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
                 text-sm outline-none focus:border-indigo-400 focus:ring-2
                 focus:ring-indigo-100
               "
             />
+            <span className="text-sm text-gray-500">/ 20</span>
           </div>
 
           {/* Grade bands */}
@@ -1003,24 +1010,27 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                   <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-400">
                     <tr>
                       <th className="px-4 py-2.5 text-left">{t("academic.grade")}</th>
-                      <th className="px-4 py-2.5 text-left">{t("settings.minPct")}</th>
-                      <th className="px-4 py-2.5 text-left">{t("settings.maxPct")}</th>
-                      {config.useGpa && <th className="px-4 py-2.5 text-left">GPA</th>}
+                      <th className="px-4 py-2.5 text-left">Min (/20)</th>
+                      <th className="px-4 py-2.5 text-left">Max (/20)</th>
+                      <th className="px-4 py-2.5 text-left">Remark</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
                     {config.grades.map((g, i) => (
                       <tr key={i} className="bg-white">
                         <td className="px-4 py-2.5 font-semibold text-indigo-700">
-                          {g.label}
+                          {g.grade}
                         </td>
                         <td className="px-4 py-2.5">
                           <input
                             type="number"
-                            value={g.min}
+                            step="0.5"
+                            min={0}
+                            max={20}
+                            value={g.minMark}
                             onChange={(e) => {
                               const grades = [...config.grades!];
-                              grades[i] = { ...grades[i], min: Number(e.target.value) };
+                              grades[i] = { ...grades[i], minMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
                             className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
@@ -1029,30 +1039,21 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                         <td className="px-4 py-2.5">
                           <input
                             type="number"
-                            value={g.max}
+                            step="0.5"
+                            min={0}
+                            max={20}
+                            value={g.maxMark}
                             onChange={(e) => {
                               const grades = [...config.grades!];
-                              grades[i] = { ...grades[i], max: Number(e.target.value) };
+                              grades[i] = { ...grades[i], maxMark: Number(e.target.value) };
                               setConfig({ ...config, grades });
                             }}
                             className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
                           />
                         </td>
-                        {config.useGpa && (
-                          <td className="px-4 py-2.5">
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={g.gpa ?? ""}
-                              onChange={(e) => {
-                                const grades = [...config.grades!];
-                                grades[i] = { ...grades[i], gpa: Number(e.target.value) };
-                                setConfig({ ...config, grades });
-                              }}
-                              className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
-                            />
-                          </td>
-                        )}
+                        <td className="px-4 py-2.5 text-gray-600">
+                          {g.remark}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -1926,6 +1927,7 @@ export default function SettingsPage() {
             {activeSection === "school"    && <SchoolSection    schoolId={schoolId} />}
             {activeSection === "profile"   && <ProfileSection />}
             {activeSection === "grading"   && <GradingSection   schoolId={schoolId} />}
+            {activeSection === "academicStructure" && <AcademicStructureSection schoolId={schoolId} />}
             {activeSection === "admins"    && <AdminsSection    schoolId={schoolId} currentUserId={currentUserId} />}
             {activeSection === "permissions" && <PermissionsSection schoolId={schoolId} />}
             {activeSection === "approvals"   && <ApprovalsSection   schoolId={schoolId} />}

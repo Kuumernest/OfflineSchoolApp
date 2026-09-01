@@ -330,7 +330,10 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
       status.phase === "offline" ? OFFLINE_INTERVAL_MS :
       IDLE_INTERVAL_MS;
 
-    timer = setTimeout(async () => { await cycle(); scheduleNext(); }, wait);
+    timer = setTimeout(async () => {
+      try { await cycle(); } catch { /* cycle() has its own error handling */ }
+      scheduleNext();
+    }, wait);
     // Never a reason to keep the process alive on its own.
     timer.unref?.();
   };

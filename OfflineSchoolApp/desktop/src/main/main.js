@@ -277,9 +277,12 @@ const registerHandlers = () => {
   ipcMain.handle("outbox:unblock", (_e, seq) => { queue.unblock(seq); return queue.summary(); });
   ipcMain.handle("outbox:discard", (_e, seq) => {
     const undo = queue.discard(seq);
-    // The local row this request would have created has to go with it, or the
-    // desktop keeps showing something the server has never heard of.
+    // The local rows this request wrote have to go with it, or the desktop
+    // keeps showing something the server has never heard of.
     if (undo?.collection && undo?.docId) docs.forget(undo.collection, undo.docId);
+    for (const extra of undo?.extraDocs ?? []) {
+      if (extra?.collection && extra?.docId) docs.forget(extra.collection, extra.docId);
+    }
     return queue.summary();
   });
 
@@ -398,8 +401,12 @@ app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
   try { sync?.stop(); } catch { /* nothing useful to do while exiting */ }
-  // Closed explicitly so WAL is checkpointed into the database file rather
-  // than left beside it. It would recover either way, but a school that copies
-  // school.db onto a memory stick as its backup should get a complete one.
-  try { db?.close(); } catch { /* nothing useful to do while exiting */ }
+  // Give an in-progress sync cycle a moment to finish before closing the
+  // database. Without this, SQL operations on the closed handle throw into
+  // the engine's catch block. 2 seconds is enough for any in-flight HTTP
+  // request to complete or time out on a local network.
+  const closeDb = () => {
+    try { db?.close(); } catch { /* nothing useful to do while exiting */ }
+  };
+  setTimeout(closeDb, 2000);
 });

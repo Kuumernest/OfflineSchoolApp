@@ -77,7 +77,7 @@ const ensure = async ({ schoolId, kind, studentId, examId, snapshot }) => {
       $set: { snapshot, refreshedAt: new Date() },
       $inc: { printCount: 1 },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
   if (existing) return existing;
 
@@ -185,7 +185,7 @@ const setRevoked = async ({ schoolId, id, revoked, reason, by }) => {
           }
         : { revokedAt: null, revokeReason: null, revokedBy: null },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!row) {

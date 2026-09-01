@@ -392,9 +392,68 @@ async function getRankings(examId, scope = "class", classId = null) {
     scope === "grade"  ? "gradePosition"  :
                          "classPosition";
 
-  return ResultSummary.find(filter)
+  const results = await ResultSummary.find(filter)
     .sort({ [sortField]: 1 })
     .lean();
+
+  // Backfill studentName, admissionNo and className for rows that predate
+  // denormalisation. Without this, old ranking rows render with no class,
+  // no number, and a bare student id instead of a name.
+  await backfillRankingNames(results);
+
+  return results;
+}
+
+/**
+ * Patch studentName / admissionNo / className onto ResultSummary rows that were
+ * processed before the fields were denormalised — in-memory for the caller AND
+ * persisted so the next read skips the extra joins. `enrollmentNo` is the single
+ * source of truth for the number; `admissionNo` is only read as a legacy fallback.
+ */
+async function backfillRankingNames(results) {
+  const incomplete = results.filter(
+    (r) => r.studentId && (!r.studentName || !r.admissionNo || !r.className)
+  );
+  if (incomplete.length === 0) return;
+
+  const Student = require("../db/models/Student");
+  const Class   = require("../db/models/Class");
+
+  const sIds = [...new Set(incomplete.map((r) => r.studentId))];
+  const schoolIds = [...new Set(incomplete.map((r) => r.schoolId).filter(Boolean))];
+
+  const [students, classes] = await Promise.all([
+    Student.find({ _id: { $in: sIds } })
+      .select("_id studentName firstName lastName enrollmentNo admissionNo classId")
+      .lean(),
+    Class.find({ schoolId: { $in: schoolIds } }).select("_id name").lean(),
+  ]);
+
+  const sMap = new Map(students.map((s) => [String(s._id), s]));
+  const cMap = new Map(classes.map((c) => [String(c._id), c.name]));
+  const bulkOps = [];
+
+  for (const r of incomplete) {
+    const s = sMap.get(String(r.studentId));
+    if (!s) continue;
+
+    const name    = s.studentName || [s.firstName, s.lastName].filter(Boolean).join(" ") || null;
+    const admNo   = s.enrollmentNo || s.admissionNo || null;
+    const clsName = cMap.get(String(s.classId)) || null;
+
+    const $set = {};
+    if (name    && !r.studentName) { r.studentName = name;    $set.studentName = name;    }
+    if (admNo   && !r.admissionNo) { r.admissionNo = admNo;   $set.admissionNo = admNo;   }
+    if (clsName && !r.className)   { r.className   = clsName; $set.className   = clsName; }
+
+    if (Object.keys($set).length > 0) {
+      bulkOps.push({ updateOne: { filter: { _id: r._id }, update: { $set } } });
+    }
+  }
+
+  if (bulkOps.length > 0) {
+    await ResultSummary.bulkWrite(bulkOps).catch(() => {});
+  }
 }
 
 // ─── Get Single Student Result ────────────────────────────────────────────
@@ -461,6 +520,42 @@ function generateStats(results) {
     gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
   }
 
+  // Subject analysis — per-subject aggregates from each student's breakdown,
+  // using percentages so the UI can render them alongside the pass rate.
+  const subjectAgg = new Map();
+  for (const r of results) {
+    for (const s of r.subjectBreakdown || []) {
+      if (s.isAbsent || s.isExempt || s.score == null) continue;
+      const key = String(s.subjectId || s.subjectName || "");
+      if (!key) continue;
+      if (!subjectAgg.has(key)) {
+        subjectAgg.set(key, {
+          subjectId: s.subjectId || key,
+          subjectName: s.subjectName || key,
+          total: 0, sum: 0, highest: -Infinity, lowest: Infinity, passed: 0,
+        });
+      }
+      const agg = subjectAgg.get(key);
+      agg.total += 1;
+      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
+        ? Number(s.percentage)
+        : s.maxScore > 0 ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100 : 0;
+      agg.sum += pct;
+      if (pct > agg.highest) agg.highest = pct;
+      if (pct < agg.lowest)  agg.lowest  = pct;
+      if (s.isPassing) agg.passed += 1;
+    }
+  }
+  const subjectStats = [...subjectAgg.values()].map((a) => ({
+    subjectId:   a.subjectId,
+    subjectName: a.subjectName,
+    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
+    highest:     a.total > 0 ? a.highest : 0,
+    lowest:      a.total > 0 ? a.lowest  : 0,
+    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
+    total:       a.total,
+  }));
+
   return {
     totalStudents: results.length,
     present:       present.length,
@@ -474,7 +569,7 @@ function generateStats(results) {
     highest,
     lowest,
     gradeDistribution,
-    subjectStats: [],
+    subjectStats,
   };
 }
 

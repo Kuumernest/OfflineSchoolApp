@@ -80,15 +80,34 @@ export interface SystemHealthStats {
 
 export interface SchoolInfo {
   name:     string;
-  city?:    string;
-  state?:   string;
-  country?: string;
   motto?:   string;
   /** Stored path ("/uploads/…"), absolute URL, or raw base64. */
   logo?:    string;
   logoUrl?: string;
   /** Byte length of an inline logo the server chose not to send. */
   logoLen?: number | null;
+
+  // ── Extended school profile (school settings screen) ──────────────────
+  code?:                string;
+  address?:             string;
+  postalCode?:          string;
+  city?:                string;
+  state?:               string;
+  country?:             string;
+  phone?:               string;
+  email?:               string;
+  website?:             string;
+  schoolType?:          string;
+  termSystem?:          string;
+  registrationNumber?:  string;
+  foundedYear?:         number | null;
+  principalName?:       string;
+  description?:         string;
+  academicYearStart?:   string;
+  academicYearEnd?:     string;
+  schoolDays?:          string[];
+  schoolStartTime?:     string;
+  schoolEndTime?:       string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -483,15 +502,35 @@ export async function fetchSchoolInfo(
 
     return {
       name:    String(s.name),
-      city:    s.city    ? String(s.city)    : undefined,
-      state:   s.state   ? String(s.state)   : undefined,
-      country: s.country ? String(s.country) : undefined,
       motto:   s.motto   ? String(s.motto)   : undefined,
       // Accept both "logo" (raw base64) and "logoUrl" (full URL / data URI)
       // Passed through verbatim; utils/logoSrc decides how to render it,
       // since the value may be a stored path, a URL, or raw base64.
       logo:    s.logo    ? String(s.logo)
              : s.logoUrl ? String(s.logoUrl) : undefined,
+      // Extended school profile — carried through so any consumer (dashboard,
+      // student detail, etc.) can render the full picture without a second
+      // request or a local copy that has fewer fields than the server.
+      code:               s.code               ? String(s.code)               : undefined,
+      address:            s.address            ? String(s.address)            : undefined,
+      postalCode:         s.postalCode         ? String(s.postalCode)         : undefined,
+      city:               s.city               ? String(s.city)               : undefined,
+      state:              s.state              ? String(s.state)              : undefined,
+      country:            s.country            ? String(s.country)            : undefined,
+      phone:              s.phone              ? String(s.phone)              : undefined,
+      email:              s.email              ? String(s.email)              : undefined,
+      website:            s.website            ? String(s.website)            : undefined,
+      schoolType:         s.schoolType         ? String(s.schoolType)         : undefined,
+      termSystem:         s.termSystem         ? String(s.termSystem)         : undefined,
+      registrationNumber: s.registrationNumber ? String(s.registrationNumber) : undefined,
+      foundedYear:        typeof s.foundedYear === "number" ? s.foundedYear : undefined,
+      principalName:      s.principalName      ? String(s.principalName)      : undefined,
+      description:        s.description        ? String(s.description)        : undefined,
+      academicYearStart:  s.academicYearStart  ? String(s.academicYearStart)  : undefined,
+      academicYearEnd:    s.academicYearEnd    ? String(s.academicYearEnd)    : undefined,
+      schoolDays:         Array.isArray(s.schoolDays) ? s.schoolDays.map(String) : undefined,
+      schoolStartTime:    s.schoolStartTime    ? String(s.schoolStartTime)    : undefined,
+      schoolEndTime:      s.schoolEndTime      ? String(s.schoolEndTime)      : undefined,
     };
   } catch (err) {
     console.warn("[dashboard] fetchSchoolInfo failed:", err);

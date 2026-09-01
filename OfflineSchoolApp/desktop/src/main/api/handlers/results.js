@@ -45,6 +45,157 @@ const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
 
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
+/**
+ * True when the student sat none of the subjects — used to keep a fully-absent
+ * child out of the averages, exactly as the server's service helper decides.
+ * A child who never sat the exam is not a child who scored zero.
+ */
+const isFullyAbsent = (result) => {
+  if (!result.subjectScores || result.subjectScores.length === 0) return false;
+  return result.subjectScores.every((s) => s.isAbsent);
+};
+
+/**
+ * Aggregate stats over mirrored result rows — a faithful copy of the server's
+ * getExamStats controller, which is pure arithmetic over rows the mirror
+ * already holds. Nothing here can disagree with the server except about how
+ * much has synced.
+ *
+ * ── Scales ────────────────────────────────────────────────────────────────
+ * average / highest / lowest are PERCENTAGES (0-100), taken from each row's
+ * `percentage` field — not the /20 `average` the row also carries. The server
+ * was fixed for exactly this: a 12/20 average must not render as 12%. Rows
+ * mirrored before the server denormalized `percentage` get it derived from
+ * average and maxTotalScore, and rows with neither are skipped, as the
+ * server's filter does.
+ *
+ * subjectStats aggregates each student's subjectBreakdown the way the
+ * controller does, so a subject analysis rendered offline reads the same
+ * shape (and the same percentage scale) as one rendered online.
+ */
+const generateStats = (results) => {
+  if (!results.length) {
+    return {
+      totalStudents:     0,
+      present:           0,
+      absent:            0,
+      passed:            0,
+      failed:            0,
+      passRate:          0,
+      average:           0,
+      classAverage:      0,
+      highest:           0,
+      lowest:            0,
+      averageGpa:        0,
+      gradeDistribution: {},
+      subjectStats:      [],
+    };
+  }
+
+  const present = results.filter((r) => !isFullyAbsent(r));
+  const absent  = results.filter((r) =>  isFullyAbsent(r));
+  const passed  = present.filter((r) => r.isPassing);
+  const failed  = present.filter((r) => !r.isPassing);
+
+  // Percentage per row: the denormalized field when the mirror has it, else
+  // derived from the /20-style average against the row's max total, else the
+  // row does not count — matching the server's `p != null` filter.
+  const pctOf = (r) => {
+    if (r.percentage != null && Number.isFinite(Number(r.percentage)))
+      return Number(r.percentage);
+    const avg = Number(r.average);
+    const max = Number(r.maxTotalScore);
+    if (Number.isFinite(avg) && Number.isFinite(max) && max > 0)
+      return Math.round((avg / max) * 10000) / 100;
+    return null;
+  };
+
+  const percentages = present.map(pctOf).filter((p) => p != null);
+  const average = percentages.length
+    ? Math.round((percentages.reduce((s, v) => s + v, 0) / percentages.length) * 100) / 100
+    : 0;
+  const highest = percentages.length ? Math.max(...percentages) : 0;
+  const lowest  = percentages.length ? Math.min(...percentages) : 0;
+
+  const gpas = results
+    .map((r) => r.gpa)
+    .filter((g) => g != null && Number.isFinite(Number(g)))
+    .map(Number);
+  const averageGpa = gpas.length
+    ? Math.round((gpas.reduce((s, v) => s + v, 0) / gpas.length) * 100) / 100
+    : 0;
+
+  const gradeDistribution = {};
+  for (const r of present) {
+    const g = r.overallGrade || "N/A";
+    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
+  }
+
+  // Per-subject aggregation over subjectBreakdown — percentages throughout,
+  // absent/exempt/scoreless entries skipped, exactly as the controller does.
+  const subjectAgg = new Map();
+  for (const r of results) {
+    for (const s of r.subjectBreakdown || []) {
+      if (s.isAbsent || s.isExempt || s.score == null) continue;
+      const key = String(s.subjectId || s.subjectName || "");
+      if (!key) continue;
+      if (!subjectAgg.has(key)) {
+        subjectAgg.set(key, {
+          subjectId:   s.subjectId || key,
+          subjectName: s.subjectName || key,
+          total:       0,
+          sum:         0,
+          highest:     -Infinity,
+          lowest:      Infinity,
+          passed:      0,
+        });
+      }
+      const agg = subjectAgg.get(key);
+      agg.total += 1;
+      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
+        ? Number(s.percentage)
+        : Number(s.maxScore) > 0
+          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
+          : 0;
+      agg.sum += pct;
+      if (pct > agg.highest) agg.highest = pct;
+      if (pct < agg.lowest)  agg.lowest  = pct;
+      if (s.isPassing) agg.passed += 1;
+    }
+  }
+  const subjectStats = [...subjectAgg.values()].map((a) => ({
+    subjectId:   a.subjectId,
+    subjectName: a.subjectName,
+    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
+    highest:     a.total > 0 ? a.highest : 0,
+    lowest:      a.total > 0 ? a.lowest  : 0,
+    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
+    total:       a.total,
+  }));
+
+  const passRate = present.length
+    ? Math.round((passed.length / present.length) * 10000) / 100
+    : 0;
+
+  // `classAverage` is kept as an alias of `average` for any screen still
+  // reading the old key; the server's controller speaks `average`.
+  return {
+    totalStudents: results.length,
+    present:       present.length,
+    absent:        absent.length,
+    passed:        passed.length,
+    failed:        failed.length,
+    passRate,
+    average,
+    classAverage:  average,
+    highest,
+    lowest,
+    averageGpa,
+    gradeDistribution,
+    subjectStats,
+  };
+};
+
 module.exports = [
   {
     route: "GET /api/results/:examId",
@@ -83,7 +234,7 @@ module.exports = [
         filter.isPublished = query.isPublished === "true";
       }
 
-      const rows = docs.find("examResult", filter);
+      const rows = docs.find("resultSummary", filter);
       const total = rows.length;
 
       // classPosition ascending: first in the class first. Numeric, so compared
@@ -115,6 +266,113 @@ module.exports = [
         pages: Math.ceil(total / limit),
         data:  results,
       });
+    },
+  },
+
+  {
+    route: "GET /api/results/:examId/stats",
+
+    /**
+     * Aggregate statistics for an exam, computed over ResultSummary rows — the
+     * same rows and the same arithmetic the server's generateStats runs. There
+     * is no aggregation the mirror cannot reproduce: it is count, mean, min
+     * and max over a filtered set, not a query the server resolves specially.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId
+        ? String(query.schoolId).trim()
+        : (session?.schoolId ?? null);
+      if (!schoolId) return null;
+
+      const filter = { examId: String(params.examId), schoolId, deletedAt: null };
+      if (query.classId) filter.classId = String(query.classId).trim();
+
+      return ok({ data: generateStats(docs.find("resultSummary", filter)) });
+    },
+  },
+
+  {
+    route: "GET /api/results/:examId/rankings",
+
+    /**
+     * Dense rankings by class, grade or school.
+     *
+     * The server sorts by the scope's position field ascending with NO
+     * secondary key, and ties sit in storage order there — an order Mongo does
+     * not define. The mirror adds _id as a tie-break for the same reason the
+     * list endpoint does, so the desktop does not reshuffle between renders;
+     * where the two orders differ they differ only within a tie.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId
+        ? String(query.schoolId).trim()
+        : (session?.schoolId ?? null);
+      if (!schoolId) return null;
+
+      const examId = String(params.examId);
+      const scope  = ["class", "grade", "school"].includes(String(query.rankBy))
+        ? String(query.rankBy) : "class";
+      const sortField =
+        scope === "school" ? "schoolPosition" :
+        scope === "grade"  ? "gradePosition"  :
+                             "classPosition";
+
+      const filter = {
+        examId,
+        schoolId,
+        deletedAt: null,
+        // Position absent means the student was fully absent — the server's
+        // $ne: null, spelled for the mirror's filter language.
+        [sortField]: { not: null },
+      };
+      if (query.classId) filter.classId = String(query.classId).trim();
+
+      const ordered = docs
+        .find("resultSummary", filter, { order: sortField, dir: "ASC" })
+        .slice()
+        .sort((a, b) => {
+          const ap = Number(a[sortField]);
+          const bp = Number(b[sortField]);
+          if (ap !== bp) return ap - bp;
+          return String(a._id).localeCompare(String(b._id));
+        });
+
+      // Sliced in JS, not LIMIT in SQL: the server fetches then slices, and a
+      // NaN or negative limit has to behave the same way here as there.
+      const data = ordered.slice(0, Number(query.limit ?? 100));
+
+      return ok({ rankBy: scope, count: data.length, data });
+    },
+  },
+
+  {
+    route: "GET /api/results/:examId/student/:studentId",
+
+    /**
+     * One student's marks for one exam: the summary row plus its scores.
+     *
+     * The server answers 404 when it has neither. The mirror cannot tell "not
+     * yet processed" from "not yet synced" — so when both are absent locally
+     * the request goes out and the server gives the authoritative answer,
+     * exactly as GET /api/exams/:id returns nothing for an exam the mirror has
+     * never seen rather than inventing a local 404.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId
+        ? String(query.schoolId).trim()
+        : (session?.schoolId ?? null);
+      if (!schoolId) return null;
+
+      const examId    = String(params.examId);
+      const studentId = String(params.studentId);
+      const filter    = { examId, studentId, schoolId, deletedAt: null };
+
+      const summary = docs.find("resultSummary", filter)[0] ?? null;
+      const scores  = docs.find("studentScore", filter);
+
+      if (!summary && scores.length === 0) return null;
+
+      return ok({ data: { summary: summary ?? null, scores } });
     },
   },
 ];

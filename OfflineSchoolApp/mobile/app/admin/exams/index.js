@@ -31,14 +31,9 @@ const STATUS_META = {
 };
 
 const EXAM_TYPE_KEYS = {
-  first_test:            "examType.first_test",
-  second_test:           "examType.second_test",
-  mid_term:              "examType.mid_term",
-  practical:             "examType.practical",
-  final_exam:            "examType.final_exam",
-  mock_exam:             "examType.mock_exam",
-  promotion_exam:        "examType.promotion_exam",
-  continuous_assessment: "examType.continuous_assessment",
+  test:               "examType.test",
+  practical:          "examType.practical",
+  promotion_exam:     "examType.promotion_exam",
 };
 
 /** Localised exam-type label, falling back to the raw stored value. */

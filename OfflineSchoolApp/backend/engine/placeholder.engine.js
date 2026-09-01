@@ -313,6 +313,55 @@ function buildReplacementMap(data) {
     remark:             performance.remark           || "",
     promotion_status:   performance.promotionStatus  || "",
 
+    // Term results
+    term_average:           performance.termAverage != null
+                              ? Number(performance.termAverage).toFixed(1)
+                              : "",
+    term_grade:             performance.termGrade            || "",
+    term_remark:            performance.termRemark           || "",
+    term_class_position:    performance.termClassPosition != null
+                              ? formatPosition(performance.termClassPosition)
+                              : "",
+    term_total_in_class:    String(performance.termTotalInClass ?? ""),
+    sequence_1_average:     performance.sequence1Average != null
+                              ? Number(performance.sequence1Average).toFixed(1)
+                              : "",
+    sequence_2_average:     performance.sequence2Average != null
+                              ? Number(performance.sequence2Average).toFixed(1)
+                              : "",
+    sequence_3_average:     performance.sequence3Average != null
+                              ? Number(performance.sequence3Average).toFixed(1)
+                              : "",
+    sequence_4_average:     performance.sequence4Average != null
+                              ? Number(performance.sequence4Average).toFixed(1)
+                              : "",
+    sequence_5_average:     performance.sequence5Average != null
+                              ? Number(performance.sequence5Average).toFixed(1)
+                              : "",
+    sequence_6_average:     performance.sequence6Average != null
+                              ? Number(performance.sequence6Average).toFixed(1)
+                              : "",
+
+    // Annual results
+    annual_average:         performance.annualAverage != null
+                              ? Number(performance.annualAverage).toFixed(1)
+                              : "",
+    annual_grade:           performance.annualGrade            || "",
+    annual_remark:          performance.annualRemark           || "",
+    annual_class_position:  performance.annualClassPosition != null
+                              ? formatPosition(performance.annualClassPosition)
+                              : "",
+    annual_total_in_class:  String(performance.annualTotalInClass ?? ""),
+    term_1_average:         performance.term1Average != null
+                              ? Number(performance.term1Average).toFixed(1)
+                              : "",
+    term_2_average:         performance.term2Average != null
+                              ? Number(performance.term2Average).toFixed(1)
+                              : "",
+    term_3_average:         performance.term3Average != null
+                              ? Number(performance.term3Average).toFixed(1)
+                              : "",
+
     // School
     school_name:        school.name           || "",
     school_motto:       school.motto          || "",
@@ -346,8 +395,7 @@ function buildReplacementMap(data) {
     subjects_passed:    String(performance.subjectsPassed ?? 0),
     subjects_failed:    String(performance.subjectsFailed ?? 0),
 
-    // Coefficient-aware figures. weighted_average is the same /20 number as
-    // {{average}}; both are exposed so a template can name it either way.
+    // Coefficient-aware figures
     total_coefficients: performance.totalCoefficients != null
                           ? String(performance.totalCoefficients)
                           : "",
@@ -551,63 +599,28 @@ function scanVariables(html) {
 /**
  * Every token this engine knows how to resolve.
  *
- * Derived from buildReplacementMap so it cannot drift from what actually
- * renders: adding a token to the map automatically lists it here. The
- * composite and control-flow names are appended because they are handled
- * outside the map.
- *
- * The builder validates a template against this, so a school is told about
- * {{avg}} before the typo reaches a parent's report card.
+ * Imports from shared/reportTokens.js so both backend and desktop share
+ * one canonical vocabulary.
  *
  * @returns {string[]} bare token names, e.g. ["student_name", "average", …]
  */
 function knownTokens() {
-  // Called with empty data purely to enumerate the keys.
-  const mapKeys = Object.keys(buildReplacementMap({}));
-
-  const composites = [
-    "subjects_table",
-    "attendance_table",
-    "student_photo",
-    "school_logo",
-    "qr_code",
-  ];
-
-  // Control flow is matched by the tokenizer, not the replacement map.
-  const control = ["if", "else", "endif", "each"];
-
-  return [...new Set([...mapKeys, ...composites, ...control])].sort();
+  const { knownTokens: sharedKnownTokens } = require("../../shared/reportTokens");
+  return sharedKnownTokens();
 }
 
 /**
  * Tokens in `html` that this engine does not know.
  *
- * Ignores the block forms — {{if x}}, {{each xs}}, {{/each}}, {{#raw}} — and
+ * Ignores block forms — {{if x}}, {{each xs}}, {{/each}}, {{#raw}} — and
  * reports only plain {{name}} tokens that would render as literal braces.
  *
  * @param {string} html
  * @returns {string[]} unknown bare names
  */
 function unknownTokens(html) {
-  const known = new Set(knownTokens());
-  const found = new Set();
-  const re    = /\{\{\s*([^{}]+?)\s*\}\}/g;
-  let   m;
-
-  while ((m = re.exec(String(html || ""))) !== null) {
-    const raw = m[1].trim();
-
-    // Block openers/closers and raw output are not map lookups.
-    if (/^[/#]/.test(raw)) continue;
-    if (/^(if|each)\s+/.test(raw)) continue;
-    if (raw === "else" || raw === "endif") continue;
-
-    // {{a.b}} resolves by path at render time; only the root must be known.
-    const root = raw.split(".")[0];
-    if (!known.has(root)) found.add(raw);
-  }
-
-  return [...found];
+  const { unknownTokens: sharedUnknownTokens } = require("../../shared/reportTokens");
+  return sharedUnknownTokens(html);
 }
 
 module.exports = {

@@ -31,14 +31,14 @@
  *                          second implementation of one validation, so the
  *                          request goes out and the server refuses it.
  *
- *   publishing results     status "published" also marks every ResultSummary
- *                          for the exam published — one request changing an
- *                          unbounded number of documents, which this layer's
- *                          write contract (one row, one request) cannot express
- *                          honestly. Recorded in coverage.js as a partial.
+ *   create with subjects   POST /api/exams with a subjects array creates
+ *                          ExamSubject entries inline with server-generated ids.
+ *                          The local handler cannot queue those, so the UI should
+ *                          create the exam first and add subjects one at a time.
  */
 
 const { randomUUID } = require("crypto");
+const { computeGrade } = require("../gradeUtils");
 
 /** The statuses PATCH /:id/status accepts. Anything else is the server's to refuse. */
 const STATUSES = ["draft", "scheduled", "ongoing", "completed", "published", "archived"];
@@ -125,7 +125,7 @@ module.exports = [
         classIds:           cls.classIds,
         classNames:         cls.classNames,
         name:               String(body.name).trim(),
-        type:               body.type         || "first_test",
+        type:               body.type         || "test",
         academicYear:       body.academicYear,
         term:               body.term,
         startDate:          body.startDate    || null,
@@ -224,9 +224,11 @@ module.exports = [
     /**
      * Moving an exam through its stages — draft to scheduled to ongoing.
      *
-     * "published" is declined: see the file note. It also marks every
-     * ResultSummary for the exam published, which is one request against an
-     * unbounded number of documents.
+     * "published" is now handled locally: it marks every ResultSummary for the
+     * exam as published, which is one request against an unbounded number of
+     * documents. The local handler enumerates all ResultSummaries in the mirror
+     * and marks them via `also`, so the screen shows published results
+     * immediately.
      */
     handler: ({ params, body }, { docs, session }) => {
       const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
@@ -234,21 +236,45 @@ module.exports = [
 
       const status = body.status;
       if (!STATUSES.includes(status)) return null;   // the server's 400
-      if (status === "published")     return null;   // see the docstring
 
       const row = target(docs, { params, schoolId });
       if (!row) return null;
+
+      const now = new Date().toISOString();
 
       const doc = {
         ...row,
         status,
         updatedBy: session?.userId ?? null,
-        updatedAt: new Date().toISOString(),
+        updatedAt: now,
       };
+
+      // "published" also marks every ResultSummary for the exam as published.
+      // Enumerate them all from the mirror — the collection is bounded by the
+      // exam's students, and the mirror holds all of them for this school.
+      const also = [];
+      if (status === "published") {
+        doc.resultsPublished   = true;
+        doc.resultsPublishedAt = now;
+        doc.publishedBy        = session?.userId ?? null;
+
+        const summaries = docs.find("resultSummary", { examId: row._id, schoolId });
+        for (const s of summaries) {
+          also.push({
+            collection: "resultSummary",
+            doc: {
+              ...s,
+              isPublished: true,
+              publishedAt: now,
+            },
+          });
+        }
+      }
 
       return {
         collection: "exam",
         doc,
+        also,
         request: { method: "PATCH", path: `/api/exams/${row._id}/status`, body },
         response: { status: 200, data: { success: true, exam: doc } },
       };
@@ -306,7 +332,201 @@ module.exports = [
           body: null,
         },
         // The endpoint returns a message, not the exam.
-        response: { status: 200, data: { success: true, message: "Exam archived" } },
+                response: { status: 200, data: { success: true, message: "Exam archived" } },
+      };
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // POST /api/exams/:examId/scores/bulk
+  // ─────────────────────────────────────────────────────────
+  //
+  // Writing a whole sheet of marks at once. Grade fields (percentage, grade,
+  // remark, isPassing) are computed here, mirroring the server's computeGrade
+  // so the marksheet screen shows the same per-subject grade before sync.
+  //
+  // Process is NOT run locally: it needs every subject in the exam, not just
+  // the one being scored. The request is queued and the server recomputes
+  // from the complete sheet — strict queue ordering guarantees it.
+  //
+  {
+    route: "POST /api/exams/:examId/scores/bulk",
+
+    handler: ({ params, body }, { docs, session }) => {
+      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const examId = String(params.examId);
+      const exam   = docs.get("exam", examId);
+      if (!exam) return null;
+      if (String(exam.schoolId) !== String(schoolId)) return null;
+      if (exam.deletedAt) return null;
+
+      const { classId, subjectId, scores } = body;
+      if (!Array.isArray(scores) || scores.length === 0) return null;
+
+      const gradingConfig = docs.get("gradingConfig", schoolId);
+
+      const now = new Date().toISOString();
+      const saved = [];
+      const failed = [];
+
+      for (const row of scores) {
+        const studentId = row?.studentId ? String(row.studentId).trim() : null;
+        if (!studentId) {
+          failed.push({ ...row, reason: "Missing studentId" });
+          continue;
+        }
+
+        const maxScore = Number(row.maxScore ?? exam.passMark ?? 100);
+        const computed = computeGrade(row.score, maxScore, gradingConfig);
+
+        const doc = {
+          _id:           row._id ? String(row._id) : randomUUID(),
+          examId,
+          examSubjectId: row.examSubjectId ?? null,
+          studentId,
+          subjectId:     row.subjectId ?? subjectId ?? null,
+          classId:       row.classId ?? classId ?? exam.classId ?? null,
+          schoolId,
+          score:         row.score         ?? null,
+          maxScore:      maxScore,
+          percentage:    computed.percentage,
+          grade:         computed.grade,
+          remark:        computed.remark,
+          gpaPoints:     computed.gpaPoints,
+          isPassing:     computed.isPassing,
+          teacherRemark: row.teacherRemark ?? null,
+          isAbsent:      row.isAbsent      ?? false,
+          isExempt:      row.isExempt      ?? false,
+          enteredBy:     session?.userId ?? null,
+          enteredAt:     row.enteredAt ?? now,
+          updatedBy:     session?.userId ?? null,
+          syncStatus:    "synced",
+          lastSyncedAt:  now,
+        };
+
+        docs.put("studentScore", doc);
+        saved.push(doc);
+      }
+
+      return {
+        collection: "studentScore",
+        doc: saved[0],
+        also: saved.slice(1).map((r) => ({ collection: "studentScore", doc: r })),
+        request: { method: "POST", path: `/api/exams/${examId}/scores/bulk`, body },
+        response: {
+          status: 201,
+          data: {
+            success: true,
+            saved:   saved.length,
+            failed:  failed.length,
+            failedRecords: failed,
+          },
+        },
+      };
+    },
+  },
+
+  // ─────────────────────────────────────────────────────────
+  // POST /api/exams/:examId/process
+  // ─────────────────────────────────────────────────────────
+  //
+  // Computing result summaries for every student in an exam. The server does
+  // this in one request: it groups scores by student, computes totals,
+  // percentages, grades, and class positions, then upserts ResultSummary rows.
+  //
+  // The local handler replicates the full computation using gradeUtils.js so
+  // the results tab shows data immediately — no spinner waiting for a server
+  // that may not be reachable. The real request is still queued so the server
+  // can confirm the computation (or correct it if the mirror is stale).
+  //
+  {
+    route: "POST /api/exams/:examId/process",
+
+    handler: ({ params, body }, { docs, session }) => {
+      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const examId = String(params.examId);
+      const exam   = docs.get("exam", examId);
+      if (!exam) return null;
+      if (String(exam.schoolId) !== String(schoolId)) return null;
+      if (exam.deletedAt) return null;
+
+      const classId = body.classId || exam.classId || null;
+
+      // ── Load the mirror's copies of every collection process touches ────
+      const gradingConfig = docs.get("gradingConfig", schoolId);
+
+      const scoreQuery = { examId, schoolId, deletedAt: null };
+      if (classId) scoreQuery.classId = classId;
+      const allScores = docs.find("studentScore", scoreQuery);
+
+      const examSubjectQuery = { examId, schoolId, deletedAt: null };
+      if (classId) examSubjectQuery.classId = classId;
+      const examSubjects = docs.find("examSubject", examSubjectQuery);
+
+      const subjectMap = new Map(examSubjects.map((es) => [es.subjectId, es]));
+
+      // ── Group scores by student ─────────────────────────────────────────
+      const byStudent = {};
+      for (const score of allScores) {
+        if (!byStudent[score.studentId]) byStudent[score.studentId] = [];
+        byStudent[score.studentId].push(score);
+      }
+
+      const { computeResultSummary, assignClassPositions } = require("../gradeUtils");
+
+      const summaries = [];
+
+      for (const [studentId, scores] of Object.entries(byStudent)) {
+        const summary = computeResultSummary(
+          studentId, scores, subjectMap, gradingConfig,
+          examId, schoolId, classId
+        );
+        summary._id = randomUUID();
+        summaries.push(summary);
+      }
+
+      // ── Class positions ─────────────────────────────────────────────────
+      assignClassPositions(summaries);
+
+      // ── Build the response ──────────────────────────────────────────────
+      //
+      // The primary document is the exam (status -> completed). Every
+      // ResultSummary goes into `also` so they all commit in one transaction.
+      const now = new Date().toISOString();
+
+      const examDoc = {
+        ...exam,
+        status:    "completed",
+        updatedBy: session?.userId ?? null,
+        updatedAt: now,
+      };
+
+      const also = summaries.map((s) => ({
+        collection: "resultSummary",
+        doc: s,
+      }));
+
+      return {
+        collection: "exam",
+        doc: examDoc,
+        also,
+        request: {
+          method: "POST",
+          path:   `/api/exams/${examId}/process`,
+          body:   { schoolId, classId },
+        },
+        response: {
+          status: 200,
+          data: {
+            success:   true,
+            processed: summaries.length,
+            message:   `Results processed for ${summaries.length} student(s)`,
+          },
+        },
       };
     },
   },

@@ -3,7 +3,7 @@ import { useState, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import api from "@/services/api";
-import { getErrorMessage, isConflict } from "@/lib/api";
+import { getErrorMessage, isConflict } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft, UserPlus, Mail, User,

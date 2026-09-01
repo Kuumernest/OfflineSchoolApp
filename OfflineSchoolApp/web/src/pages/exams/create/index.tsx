@@ -3,29 +3,19 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/auth.store";
 import { useCreateExam } from "@/hooks/useExams";
-import type { ExamType, ExamStatus } from "@/types/exam.types";
+import type { ExamType, ExamStatus, SequenceNumber, TermNumber } from "@/types/exam.types";
 // "../../lib/api" resolves to src/pages/lib/api, which does not exist.
-import api, { getErrorMessage } from "@/lib/api";
+import api, { getErrorMessage } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 
-const EXAM_TYPE_OPTIONS = [
-{ value: "written", label: "Written" },
-{ value: "practical", label: "Practical" },
-{ value: "oral", label: "Oral" },
-{ value: "project", label: "Project" },
-] as const;
-
-const TERM_OPTIONS = [
-{ value: "term-1", labelKey: "exams.term1" },
-{ value: "term-2", labelKey: "exams.term2" },
-{ value: "term-3", labelKey: "exams.term3" },
-] as const;
-
-const ACADEMIC_YEAR_OPTIONS = [
-{ value: "2024/2025", label: "2024/2025" },
-{ value: "2025/2026", label: "2025/2026" },
-{ value: "2026/2027", label: "2026/2027" },
-] as const;
+import {
+  EXAM_TYPE_KEYS,
+  SEQUENCE_MAP,
+  getSequencesForTerm,
+  TERM_OPTIONS,
+  ACADEMIC_YEAR_OPTIONS,
+  examTypeLabel,
+} from "@/constants/exam.constants";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -41,8 +31,6 @@ subjectName: string;
 teacherId: string | null;
 maxScore: number;
 passMark: number;
-/** Report-card coefficient. Stored server-side as weight = coefficient × 100. */
-coefficient: number;
 }
 
 interface ClassAssignment {
@@ -67,7 +55,8 @@ const StepIndicator = ({ current }: { current: Step }) => (
 
 interface DetailsForm {
 name: string;
-type: string;
+type: ExamType;
+sequenceNumber: string;
 academicYear: string;
 term: string;
 status: string;
@@ -96,8 +85,6 @@ const passRate = tm > 0 ? ((pm / tm) * 100).toFixed(1) : null;
 return (
 <div className="space-y-6">
 
-text
-
   {/* Name */}
   <div>
     <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -123,23 +110,56 @@ text
       {t("examCreate.type")} <span className="text-red-500">*</span>
     </label>
     <div className="flex flex-wrap gap-2">
-      {EXAM_TYPE_OPTIONS.map((opt) => (
+      {(Object.entries(EXAM_TYPE_KEYS) as [ExamType, string][]).map(([value, labelKey]) => (
         <button
-          key={opt.value}
+          key={value}
           type="button"
-          onClick={() => onChange("type", opt.value)}
+          onClick={() => onChange("type", value)}
           className={`px-3 py-1.5 rounded-lg text-xs font-semibold
             border transition-colors
-            ${form.type === opt.value
+            ${form.type === value
               ? "bg-primary-600 border-primary-600 text-white"
               : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
             }`}
         >
-          {opt.label}
+          {t(labelKey)}
         </button>
       ))}
     </div>
   </div>
+
+  {/* Sequence (only for test / promotion_exam) */}
+  {form.type !== "practical" && (
+    <div>
+      <label className="block text-sm font-semibold text-gray-700 mb-2">
+        Sequence <span className="text-red-500">*</span>
+      </label>
+      <div className="flex flex-wrap gap-2">
+        {getSequencesForTerm(Number(form.term) as TermNumber).map((seq) => {
+          const meta = SEQUENCE_MAP[seq];
+          const isPromo = seq === 5 || seq === 6;
+          return (
+            <button
+              key={seq}
+              type="button"
+              onClick={() => onChange("sequenceNumber", String(seq))}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold
+                border transition-colors
+                ${form.sequenceNumber === String(seq)
+                  ? "bg-primary-600 border-primary-600 text-white"
+                  : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
+                }`}
+            >
+              {t(meta.labelKey)}{isPromo ? " *" : ""}
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-xs text-gray-400 mt-1">
+        * Sequence 5 &amp; 6 can be configured as promotion exams
+      </p>
+    </div>
+  )}
 
   {/* Academic year + term */}
   <div className="grid grid-cols-2 gap-4">
@@ -350,6 +370,7 @@ passMark: number;
 const [classes, setClasses] = useState<ClassOption[]>([]);
 const [subjects, setSubjects] = useState<SubjectOption[]>([]);
 const [teachers, setTeachers] = useState<TeacherOption[]>([]);
+const [classTeacherMap, setClassTeacherMap] = useState<Record<string, string>>({});
 const [loading, setLoading] = useState(true);
 const [activeClass, setActiveClass] = useState<string | null>(null);
 const [subjectSearch, setSubjectSearch] = useState("");
@@ -380,17 +401,29 @@ load();
 
 // Load subjects when class selected
 useEffect(() => {
-if (!activeClass) { setSubjects([]); return; }
+if (!activeClass) { setSubjects([]); setClassTeacherMap({}); return; }
 api.get("/admin/subjects", {
 params: { schoolId, classId: activeClass },
 }).then((res) => {
-// /admin/subjects answers either a bare array or { subjects: [...] }
-// depending on the code path, so both are unwrapped here.
 const body = res.data as { subjects?: SubjectOption[] } | SubjectOption[] | undefined;
 setSubjects(
 Array.isArray(body) ? body : body?.subjects ?? []
 );
 }).catch(() => setSubjects([]));
+
+// Load teacher assignments for this class to auto-fill teachers
+api.get("/admin/teacher-assignments", {
+params: { schoolId, classId: activeClass },
+}).then((res) => {
+const assignments = res.data?.assignments || (Array.isArray(res.data) ? res.data : []);
+const map: Record<string, string> = {};
+for (const a of assignments) {
+  if (a.subjectId && a.teacherId) {
+    map[a.subjectId] = a.teacherId;
+  }
+}
+setClassTeacherMap(map);
+}).catch(() => setClassTeacherMap({}));
 }, [activeClass, schoolId]);
 
 const toggleClass = (cls: ClassOption) => {
@@ -426,12 +459,11 @@ return {
 subjects: {
 ...cls.subjects,
 [sid]: {
-subjectId: sid,
-subjectName: sub.name,
-teacherId: null,
-maxScore: totalMarks,
-passMark,
-coefficient: 1,
+  subjectId: sid,
+  subjectName: sub.name,
+  teacherId: classTeacherMap[sid] || null,
+  maxScore: totalMarks,
+  passMark,
 },
 },
 },
@@ -475,8 +507,6 @@ return (
 
 return (
 <div className="space-y-4">
-
-text
 
   {/* Summary */}
   <div className="flex items-center gap-4 bg-primary-50 rounded-xl
@@ -573,6 +603,48 @@ text
                              tracking-wide flex-1">
               {classes.find((c) => c._id === activeClass)?.name} — Subjects
             </span>
+            <button
+              type="button"
+              onClick={() => {
+                if (!activeClass) return;
+                const allSelected = filteredSubjects.every(
+                  (s) => assignments[activeClass]?.subjects[s._id]
+                );
+                setAssignments((prev) => {
+                  const cls = prev[activeClass];
+                  if (!cls) return prev;
+                  if (allSelected) {
+                    // Deselect all filtered subjects
+                    const subjects = { ...cls.subjects };
+                    for (const s of filteredSubjects) delete subjects[s._id];
+                    return { ...prev, [activeClass]: { ...cls, subjects } };
+                  }
+                  // Select all filtered subjects
+                  const subjects = { ...cls.subjects };
+                  for (const s of filteredSubjects) {
+                    if (!subjects[s._id]) {
+                      subjects[s._id] = {
+                        subjectId: s._id,
+                        subjectName: s.name,
+                        teacherId: classTeacherMap[s._id] || null,
+                        maxScore: totalMarks,
+                        passMark,
+                      };
+                    }
+                  }
+                  return { ...prev, [activeClass]: { ...cls, subjects } };
+                });
+              }}
+              className="text-xs px-2 py-1 rounded-lg font-medium
+                         transition-colors
+                         bg-primary-100 text-primary-700 hover:bg-primary-200"
+            >
+              {filteredSubjects.every(
+                (s) => assignments[activeClass]?.subjects[s._id]
+              )
+                ? t("examCreate.deselectAll")
+                : t("examCreate.selectAll")}
+            </button>
             <input
               type="text"
               placeholder={t("common.searchShort")}
@@ -702,29 +774,6 @@ text
                               focus:outline-none"
                           />
                         </div>
-                        {/* Coefficient — how much this subject counts in
-                            the average and on the report card. */}
-                        <div>
-                          <label className="text-xs text-gray-500
-                                           font-semibold">
-                            {t("examCreate.coefficient")}
-                          </label>
-                          <input
-                            type="number"
-                            min={0.5}
-                            step={0.5}
-                            value={entry.coefficient}
-                            onChange={(e) =>
-                              updateSubject(
-                                activeClass, sub._id,
-                                "coefficient", Number(e.target.value)
-                              )
-                            }
-                            className="w-full mt-1 px-2 py-1.5 text-xs
-                              border border-gray-200 rounded-lg
-                              focus:outline-none"
-                          />
-                        </div>
                       </div>
                     )}
                   </div>
@@ -758,18 +807,16 @@ const totalSubjects = Object.values(assignments).reduce(
 return (
 <div className="space-y-6">
 
-text
-
   {/* Exam summary */}
   <div className="bg-gray-50 rounded-xl p-5">
     <h3 className="font-semibold text-gray-900 mb-4">{t("examCreate.details")}</h3>
     <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
       {[
-        { label: "Name",          value: form.name },
-        { label: "Type",          value: EXAM_TYPE_OPTIONS.find((t) => t.value === form.type)?.label },
+        { label: t("common.name"),          value: form.name },
+        { label: t("common.type"),          value: examTypeLabel(t, form.type) },
         { label: t("academic.schoolYear"), value: form.academicYear },
         { label: t("academic.term"),          value: form.term },
-        { label: "Status",        value: form.status },
+        { label: t("common.status"),        value: form.status },
         { label: t("common.startDate"),    value: form.startDate || "—" },
         { label: t("common.endDate"),      value: form.endDate   || "—" },
         { label: t("examCreate.totalMarks"),   value: form.totalMarks },
@@ -853,9 +900,10 @@ const [step, setStep] = useState<Step>(0);
 
 const [form, setForm] = useState<DetailsForm>({
 name: "",
-type: "first_test",
+type: "test",
+sequenceNumber: "",
 academicYear: `${currentYear}/${currentYear + 1}`,
-term: "Term 1",
+term: "1",
 status: "draft",
 startDate: "",
 endDate: "",
@@ -914,8 +962,9 @@ try {
 const result = await createExam.mutateAsync({
 name: form.name.trim(),
 type: form.type as ExamType,
+sequenceNumber: form.sequenceNumber ? (Number(form.sequenceNumber) as SequenceNumber) : null,
 academicYear: form.academicYear,
-term: form.term,
+term: Number(form.term) as TermNumber,
 status: form.status as ExamStatus,
 startDate: form.startDate || "",
 endDate: form.endDate || "",
@@ -945,8 +994,6 @@ schoolId, // ✅ add this
           teacherId: sub.teacherId || null,
           maxScore:  sub.maxScore,
           passMark:  sub.passMark,
-          // The API stores percentage-style weight: coefficient 2 → 200.
-          weight:    Math.round((sub.coefficient > 0 ? sub.coefficient : 1) * 100),
           schoolId,
         });
       } catch {
@@ -963,8 +1010,6 @@ schoolId, // ✅ add this
 
 return (
 <div className="max-w-3xl mx-auto">
-
-text
 
   {/* Header */}
   <div className="mb-6">

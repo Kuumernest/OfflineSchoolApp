@@ -49,14 +49,9 @@ const STATUS_META = {
 };
 
 const EXAM_TYPE_KEYS = {
-  first_test:            "examType.first_test",
-  second_test:           "examType.second_test",
-  mid_term:              "examType.mid_term",
-  practical:             "examType.practical",
-  final_exam:            "examType.final_exam",
-  mock_exam:             "examType.mock_exam",
-  promotion_exam:        "examType.promotion_exam",
-  continuous_assessment: "examType.continuous_assessment",
+  test:               "examType.test",
+  practical:          "examType.practical",
+  promotion_exam:     "examType.promotion_exam",
 };
 
 const ADMIN_ROLES = ["super_admin", "school_admin", "admin"];
@@ -1026,17 +1021,21 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
     };
 
     if (unentered.length > 0) {
+      const names = unentered
+        .map((r) => students.find((s) => s._id === r.studentId)?.studentName)
+        .filter(Boolean)
+        .slice(0, 3)
+        .join(", ");
       Alert.alert(
         t("marksEntry.unenteredTitle"),
-        `${unentered.length} student(s) have no score entered. They will be saved as blank. Continue?`,
-        [
-          { text: t("common.cancel"),      style: "cancel" },
-          { text: t("marksEntry.saveAnyway"), onPress: doSave },
-        ]
+        t("marksEntry.unenteredBody", { count: unentered.length }) +
+          (names ? `\n\n${names}${unentered.length > 3 ? " …" : ""}` : ""),
+        [{ text: t("common.done") }]
       );
-    } else {
-      await doSave();
+      return;
     }
+
+    await doSave();
   }, [saving, students, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
 
   useEffect(() => {

@@ -66,6 +66,8 @@ const ExamsPage        = lazy(() => import("@/pages/exams/index"));
 const CreateExamPage   = lazy(() => import("@/pages/exams/create/index"));
 const ExamDetailPage   = lazy(() => import("@/pages/exams/[id]/index"));
 const ExamResultsPage  = lazy(() => import("@/pages/exams/results/index"));
+const TermResultsPage  = lazy(() => import("@/pages/exams/term-results/index"));
+const AnnualResultsPage = lazy(() => import("@/pages/exams/annual-results/index"));
 
 const AnnouncementsPage = lazy(() => import("@/pages/announcements/index"));
 const MessagesPage      = lazy(() => import("@/pages/messages/index"));
@@ -286,6 +288,8 @@ export default function App() {
             <Route path="/exams"         element={page(<ExamsPage />)} />
             <Route path="/exams/new"     element={page(<CreateExamPage />)} />
             <Route path="/exams/results" element={page(<ExamResultsPage />)} />
+            <Route path="/exams/term-results" element={page(<TermResultsPage />)} />
+            <Route path="/exams/annual-results" element={page(<AnnualResultsPage />)} />
             {/* Report cards used to live here. They are one section under
                 /reports now; this keeps old links and bookmarks working. */}
             <Route path="/exams/reports" element={<Navigate to="/reports/cards" replace />} />
@@ -332,10 +336,12 @@ export default function App() {
 
             <Route path="/settings" element={page(<SettingsPage />)} />
           </Route>
-
-          <Route path="*" element={page(<NotFoundPage />)} />
         </Route>
       </Route>
+
+      {/* Catch-all outside ProtectedRoute so unauthenticated unknown URLs
+          show a 404 instead of a blank page. */}
+      <Route path="*" element={page(<NotFoundPage />)} />
     </Routes>
   );
 }

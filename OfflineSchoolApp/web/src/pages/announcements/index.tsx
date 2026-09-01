@@ -60,7 +60,7 @@ import type {
   Priority,
 } from "@/types/announcement.types";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { formatDate } from "@/utils/formatDate";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";

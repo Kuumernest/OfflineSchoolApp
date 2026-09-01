@@ -243,18 +243,10 @@ const ONLINE_ONLY = [
 
   // ── Reminders and late fees ─────────────────────────────────────────────
   //
-  // Four endpoints, and the reason is the same one twice over: two of them are
-  // real computations rather than shapes, and two of them act on the result.
-  {
-    endpoint: "GET /fees/reminders",
-    because:
-      "The candidate list, computed by services/feeReminders across charges, " +
-      "students, balances, active plans and a notification channel, then filtered " +
-      "by a cooldown window so a family is not chased twice in a week. Real " +
-      "logic, not a query — and it decides who gets told they owe money. A " +
-      "second implementation that disagreed would chase a family who had just " +
-      "paid, or leave one nobody had spoken to off the list.",
-  },
+  // GET /fees/penalties and GET /fees/reminders are now handled locally:
+  // grace-period arithmetic and candidate lists are computed from the mirror.
+  // POST /fees/reminders and POST /fees/penalties remain online-only because
+  // they act on the result (sending messages, raising charges).
   {
     endpoint: "POST /fees/reminders",
     because:
@@ -262,14 +254,6 @@ const ONLINE_ONLY = [
       "presses send, sees the list go out, and the messages actually leave four " +
       "hours later — by which time some of those families have paid at the " +
       "counter. A reminder that visibly did not send beats one that sends late.",
-  },
-  {
-    endpoint: "GET /fees/penalties",
-    because:
-      "The late-fee preview, which is grace-period arithmetic over each " +
-      "structure's own penalty rule — two classes on different price lists have " +
-      "different late fees and different grace days. Getting the boundary wrong " +
-      "by a day adds money to a bill that had not yet earned it.",
   },
   {
     endpoint: "POST /fees/penalties",
@@ -286,7 +270,289 @@ const ONLINE_ONLY = [
       "attendance, marks and fees. Real logic rather than a shape — and a wrong " +
       "answer here names a child as at risk who is not, or misses one who is.",
   },
+
+  // ── Pupil records: the writes that carry a credential or a minted number ──
+  //
+  // The record writes themselves — suspend, restore, move, approve, reject,
+  // withdraw — ARE answered offline, in writes/students.js. What remains here
+  // is the part of the lifecycle that only the server can do honestly.
+  {
+    endpoint: "POST /students",
+    because:
+      "Enrolling a pupil mints two things the desk cannot mint: the enrollment " +
+      "number, derived atomically across BOTH student collections so two " +
+      "approvals never collide — writes/students.js already declines to queue " +
+      "the renumber route for exactly this reason — and the temporary password " +
+      "the response carries, which the office hands to the parent as the child's " +
+      "login. A local answer would show a credential the server will replace.",
+  },
+  {
+    endpoint: "POST /students/:id/reset-password",
+    because:
+      "As change-password: the credential lives on the server and only the " +
+      "server can issue its replacement. The screen shows the new password so " +
+      "somebody can pass it on — an offline answer would show one that does " +
+      "not work.",
+  },
+  {
+    endpoint: "POST /admin/students",
+    because:
+      "DEAD CALL, recorded so it does not read as backlog: no POST /students " +
+      "route exists under /api/admin — the admin router has approve, reject, " +
+      "suspend, restore, move, delete and renumber only. The console's create " +
+      "answers 404 today. The real enrollment endpoint is POST /students, " +
+      "listed above. If the endpoint is ever written, its home decision is the " +
+      "same one — the credential travels in the response.",
+  },
+  {
+    endpoint: "PUT /admin/students/:id",
+    because:
+      "DEAD CALL, recorded so it does not read as backlog: the admin router has " +
+      "no update route for a pupil — the console's edit answers 404 today, and " +
+      "the pupil-self routes in students.routes.js are photo and profile only. " +
+      "Mirroring a 404 would be a second implementation of nothing. If the " +
+      "update endpoint is written with a tenancy check like its siblings, it is " +
+      "a natural offline write: every field it would edit lives in the mirror.",
+  },
+  // REMOVED: POST /admin/timetable — now handled offline in writes/timetable.js
+{
+    endpoint: "GET /results/:id/student/:id/reportcard",
+    because:
+      "The report-card payload is the input to the single shared rendering " +
+      "engine — the same coefficients, weighted averages and positions that " +
+      "the HTML and PDF paths run. An offline copy of it is a second " +
+      "implementation of the computation a child's grade depends on, and no " +
+      "console screen consumes it directly: the cards page asks for the " +
+      "rendered HTML, which is the next entry.",
+  },
+  {
+    endpoint: "GET /results/:id/student/:id/reportcard/html",
+    because:
+      "The printable card is the shared template engine (school template or " +
+      "built-in layout), the QR verification strip, and an archive to " +
+      "GeneratedReport — the single document a parent holds. A subtly " +
+      "different render from a local engine is exactly the drift this mirror " +
+      "exists to avoid, and printing a wrong grade is worse than the page " +
+      "asking for a connection.",
+  },
+  {
+    endpoint: "POST /results/:id/student/:id/reportcard/reissue",
+    because:
+      "Reissuing re-renders through the same engine and deliberately " +
+      "supersedes an archived document a parent may already hold — an " +
+      "admin-only act that records who did it. Both the render and the " +
+      "supersede need the server; a local answer would forge the record.",
+  },
+
+  // ── Office accounts and the profile: credentials and authority ──────────
+  //
+  // The settings screens' writes for the office accounts are the two kinds of
+  // never-offline: credentials the server invents, and authority the screen can
+  // claim but only the server can revoke. Both reading handlers — the accounts
+  // list and the analytics summary — ARE answered offline; it is the writes
+  // that stay online.
+  {
+    endpoint: "POST /admin/settings/admins",
+    because:
+      "Creates an office account, emails a temporary password only the " +
+      "server can invent, and answers with that password so the office can " +
+      "hand it on. A locally invented one is a credential that will not " +
+      "work, written on a piece of paper; and 'email sent' on the screen is " +
+      "a claim only the server can make true.",
+  },
+  {
+    endpoint: "POST /admin/settings/admins/:id/reset-password",
+    because:
+      "Same two facts as the create: only the server can invent the " +
+      "replacement password, and the reply that says it went out by email " +
+      "has to be real. The account also signs in with this password from " +
+      "other machines, which a local answer would not know about.",
+  },
+  {
+    endpoint: "DELETE /admin/settings/admins/:id",
+    because:
+      "Removing an admin revokes access to the school's records from every " +
+      "machine at once. 'Removed' on the screen while the account still " +
+      "signs in for the rest of the afternoon is exactly what that button " +
+      "must never mean. Deactivation is a plain, idempotent write — which " +
+      "is why it is tempting — and authority changes are only real when the " +
+      "server has applied them.",
+  },
+  {
+    endpoint: "PUT /admin/settings/profile",
+    because:
+      "The email uniqueness check is a query over every User in the " +
+      "deployment, and the mirror holds only this school's people. A " +
+      "locally-passed check can still collide with another school's account " +
+      "on replay, leaving the queue parked on a 409 the screen never saw " +
+      "coming.",
+  },
+
+  // ── Permissions: the definitions are code ─────────────────────────────────
+  //
+  // GET /admin/permissions serves the full permission matrix: a static defs
+  // list (backend/src/config/permissions.js, 300+ lines) plus the effective
+  // grants per role computed from the School document's overrides. The defs
+  // are code, not data — replicating them here would be a second source of
+  // truth that drifts when a developer adds a permission. The screen that
+  // consumes this endpoint is admin-only and rare enough to be online-only.
+  {
+    endpoint: "GET /admin/permissions",
+    because:
+      "The permission definitions are code in backend/src/config/permissions.js " +
+      "(300+ lines of structured data). Replicating them here would be a second " +
+      "source of truth that drifts whenever a developer adds a permission. " +
+      "The permissions screen is admin-only and infrequent.",
+  },
+  {
+    endpoint: "PUT /admin/permissions/:id",
+    because:
+      "Same as the read: the write applies overrides against the defs list. " +
+      "The server's permissions.service is the authority on what each role may " +
+      "hold, and granting a permission the local copy does not know about " +
+      "would silently succeed and then be undone by the next pull.",
+  },
+
+  // ── Assignments and periods: backend generates ids ────────────────────────
+  //
+  // Both endpoints always call uuidv4() for the new document's _id and do not
+  // accept req.body._id. A local write would invent an id the server does not
+  // agree with, creating an orphan that the next pull duplicates. The fix is a
+  // backend change (accept client-supplied _id), not a local workaround.
+  {
+    endpoint: "POST /admin/assignments",
+    because:
+      "The backend always generates _id via uuidv4() and does not accept " +
+      "req.body._id. A locally-invented id would not survive the server's " +
+      "own insert, and the outbox would settle the document under a wrong id.",
+  },
+  {
+    endpoint: "DELETE /admin/assignments/:id",
+    because:
+      "Deleting by server-assigned id. The delete itself is a plain " +
+      "findByIdAndDelete, but it depends on the id the server gave the " +
+      "document, which a local write cannot know.",
+  },
+  {
+    endpoint: "POST /admin/periods",
+    because:
+      "As assignments: backend always generates _id via uuidv4() and does " +
+      "not accept req.body._id.",
+  },
+
+  // ── Announcements create: teacher-class authorization ─────────────────────
+  {
+    endpoint: "POST /announcements",
+    because:
+      "Creating an announcement requires authorizing the teacher against " +
+      "TeacherAssignment to confirm they teach the selected class. That " +
+      "lookup may not be on every machine (it requires users.manage to " +
+      "mirror), and a wrong authorization is worse than a decline.",
+  },
+  // POST /announcements/read-all is NOT handled offline. It marks every unread
+  // announcement in the school read in one request against an unbounded number
+  // of documents. The write contract cannot express this honestly: `also` would
+  // carry every announcement in the school, freezing the pull cursor for the
+  // whole collection behind one queue entry. The `marked` count is also computed
+  // from the server's state at REPLAY time, so the number shown is not what the
+  // school records. See writes/announcements.js for the full reasoning.
+  {
+    endpoint: "POST /announcements/read-all",
+    because:
+      "One request against an unbounded number of documents. The write " +
+      "contract cannot express this honestly: `also` would carry every " +
+      "announcement, freezing the pull cursor. The `marked` count is " +
+      "computed from the server's state at REPLAY time.",
+  },
+
+  // ── Templates: unknown token vocabulary ───────────────────────────────────
+  //
+  // ── Payroll: money moves ──────────────────────────────────────────────────
+  //
+  // Confirming or reversing a payroll payment is a real financial transaction.
+  // The confirmation creates a payment record and may trigger disbursement;
+  // the reversal creates a reversal payment. Both affect the school's actual
+  // finances and must not be faked locally.
+  {
+    endpoint: "POST /finance/payroll/:id/confirm",
+    because:
+      "Confirming a payroll payment is a real financial transaction that " +
+      "creates a payment record. The school's money moves when this lands.",
+  },
+  {
+    endpoint: "POST /finance/payroll/:id/reverse",
+    because:
+      "Reversing a confirmed payroll payment is the same transaction in " +
+      "reverse — it creates a reversal payment and adjusts balances. " +
+      "Both must happen on the server.",
+  },
+  {
+    endpoint: "POST /finance/payroll/generate",
+    because:
+      "Generating payroll computes amounts from salary scales and attendance, " +
+      "which is server-side logic. The computed amounts must be authoritative.",
+  },
+
+  // ── Enrollment number: server-minted sequence ─────────────────────────────
+  {
+    endpoint: "POST /students/:id/enrollment-number",
+    because:
+      "The enrollment number is a sequential counter minted by the server " +
+      "across both student collections to prevent collisions. A locally " +
+      "invented number would conflict with the server's sequence.",
+  },
+
+  // ── Promotion runs: server-computed decisions ─────────────────────────────
+  //
+  // The generate, commit and reverse endpoints call promotion.service methods
+  // that make complex decisions about every student in the school. The draft
+  // DELETE is a simple operation on synced collections, but the other three
+  // require the server's full view of the data.
+  {
+    endpoint: "POST /promotion/runs",
+    because:
+      "Generating a promotion run drafts decisions for every student based " +
+      "on attendance, marks and class structure. This is server-side logic " +
+      "that cannot be replicated locally.",
+  },
+  {
+    endpoint: "POST /promotion/runs/:id/commit",
+    because:
+      "Committing a promotion run modifies Enrollment, Class and StudentStatus " +
+      "for every student in the school. The server's transactional logic " +
+      "ensures consistency across all these collections.",
+  },
+  {
+    endpoint: "POST /promotion/runs/:id/reverse",
+    because:
+      "Reversing a committed run undoes the same complex modifications. " +
+      "Must happen on the server to maintain data integrity.",
+  },
+  {
+    endpoint: "DELETE /promotion/runs/:id",
+    because:
+      "HARD deletes on PromotionRun and PromotionDecision. A write here " +
+      "can only put a row; there is no way to ask for one to be forgotten. " +
+      "The feed only sends documents that exist, so a hard-deleted run " +
+      "would sit in the local mirror for ever.",
+  },
+
+  // ── Documents and exports: files ──────────────────────────────────────────
+  {
+    endpoint: "GET /documents:id",
+    because:
+      "DocumentVerification is excluded from the feed: these records are " +
+      "reached by their own unauthenticated route and are the public check " +
+      "on a printed document. A stale local copy is worse than none.",
+  },
+  {
+    endpoint: "GET /exports",
+    because:
+      "Listing generated exports. The files are not in the document mirror, " +
+      "and the list is server-maintained.",
+  },
 ];
+
 
 /**
  * ── Endpoints that are answered offline EXCEPT in a named case ─────────────
@@ -331,14 +597,7 @@ const PARTIAL = [
       "the request out and lets the server resolve the name, rather than writing " +
       "a blank one that a later pull corrects.",
   },
-  {
-    endpoint: "PATCH /exams/:id/status",
-    except:   'setting the status to "published"',
-    because:
-      "Publishing also marks every ResultSummary for the exam published — an " +
-      "unbounded number of documents from one request. Every other status is " +
-      "answered offline.",
-  },
+  // REMOVED: PATCH /exams/:id/status — now fully handled offline including "published"
 ];
 
 /**

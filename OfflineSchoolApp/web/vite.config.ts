@@ -15,6 +15,9 @@ export default defineConfig({
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
+    // Prevents duplicate React instances when dependencies use CJS require()
+    // while the app uses ESM imports — the classic "invalid hook call" cause.
+    dedupe: ["react", "react-dom"],
   },
 
   server: {

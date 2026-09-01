@@ -18,7 +18,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import {
   Printer, LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
-  MessageSquare, Send, Loader2, ArrowLeft,
+  MessageSquare, Send, Loader2, ArrowLeft, Clock, BookOpen,
 } from "lucide-react";
 
 import { Card }        from "@/components/ui/Card";
@@ -34,6 +34,7 @@ import { resolveLogoSrc } from "@/utils/logoSrc";
 import {
   portalLogin, getPortalToken, setPortalToken, clearPortalToken,
   fetchMe, fetchFees, fetchResults, fetchAttendance, fetchAnnouncements,
+  fetchFeeReminders, fetchNotifications,
   fetchReceiptHtml,
   fetchPortalConversations, fetchPortalRecipients, openPortalConversation,
   fetchPortalThread, sendPortalMessage, markPortalRead,
@@ -93,6 +94,20 @@ export default function ParentPortalPage() {
   const newsQ = useQuery({
     queryKey: ["portal", "news", selected], queryFn: () => fetchAnnouncements(selected),
     enabled: signedIn && tab === "news", retry: false,
+  });
+
+  const feeRemindersQ = useQuery({
+    queryKey: ["portal", "fee-reminders", selected],
+    queryFn:  () => fetchFeeReminders(selected),
+    enabled:  signedIn && tab === "fees",
+    retry:    false,
+  });
+
+  const notificationsQ = useQuery({
+    queryKey: ["portal", "notifications", selected],
+    queryFn:  () => fetchNotifications(selected),
+    enabled:  signedIn && tab === "fees",
+    retry:    false,
   });
 
   const submit = async (e: React.FormEvent) => {
@@ -377,6 +392,128 @@ export default function ParentPortalPage() {
                   </ul>
                 )}
               </Card>
+
+              {/* ── Fee Reminders ── */}
+              {feeRemindersQ.data && feeRemindersQ.data.reminders.length > 0 && (
+                <Card padding={false}>
+                  <div className="border-b border-line px-4 py-2.5">
+                    <h2 className="text-sm font-semibold text-ink">
+                      {t("portal.feeReminders", "Fee Reminders")}
+                    </h2>
+                    <p className="text-xs text-ink-muted">
+                      {t("portal.feeRemindersHint", "What you owe and when it's due")}
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {feeRemindersQ.data.reminders.map((r) => (
+                      <li key={r.chargeId} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ink truncate">
+                              {r.label ?? r.code}
+                            </p>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className={cn(
+                                "text-xs",
+                                r.isOverdue ? "text-danger font-medium" : "text-ink-muted",
+                              )}>
+                                {t("portal.dueBy", "Due by")} {fmt.dateShort(r.dueDate)}
+                              </span>
+                              {r.isOverdue && (
+                                <Badge variant="danger">
+                                  {t("portal.overdue", "Overdue")} · {r.daysOverdue}d
+                                </Badge>
+                              )}
+                              {r.isDueSoon && !r.isOverdue && (
+                                <Badge variant="warning">
+                                  {t("portal.dueSoon", "Due soon")}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <span className="text-sm font-semibold text-ink tabular">
+                            {fmt.money(r.netAmount)}
+                          </span>
+                        </div>
+                        {r.term && (
+                          <p className="text-[11px] text-ink-faint mt-1">
+                            {r.academicYear} · {r.term}
+                          </p>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+
+              {/* Payment plan info */}
+              {feeRemindersQ.data?.hasPlan && feeRemindersQ.data.plan && (
+                <Card>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                    {t("portal.paymentPlan", "Payment Plan")}
+                  </p>
+                  {feeRemindersQ.data.plan.reason && (
+                    <p className="mt-1 text-xs text-ink-muted">
+                      {feeRemindersQ.data.plan.reason}
+                    </p>
+                  )}
+                  <ul className="mt-2 space-y-1">
+                    {feeRemindersQ.data.plan.instalments.map((inst) => {
+                      const dueDate = new Date(inst.dueDate);
+                      const isPast = dueDate < new Date();
+                      return (
+                        <li key={inst.seq} className="flex items-center justify-between text-xs">
+                          <span className={cn(
+                            isPast ? "text-ink-muted line-through" : "text-ink-body",
+                          )}>
+                            {t("portal.instalment", "Instalment")} {inst.seq} — {fmt.dateShort(inst.dueDate)}
+                          </span>
+                          <span className="font-medium text-ink tabular">
+                            {fmt.money(inst.amount)}
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              )}
+
+              {/* Notification history */}
+              {(notificationsQ.data?.length ?? 0) > 0 && (
+                <Card padding={false}>
+                  <div className="border-b border-line px-4 py-2.5">
+                    <h2 className="text-sm font-semibold text-ink">
+                      {t("portal.notificationHistory", "Notification History")}
+                    </h2>
+                    <p className="text-xs text-ink-muted">
+                      {t("portal.notificationHistoryHint", "Reminders and confirmations sent to you")}
+                    </p>
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {notificationsQ.data?.map((n) => (
+                      <li key={n._id} className="px-4 py-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ink">
+                              {n.kind === "fee.reminder"
+                                ? t("portal.feeReminderNotice", "Fee Reminder")
+                                : t("portal.paymentConfirmation", "Payment Confirmation")}
+                            </p>
+                            <p className="text-xs text-ink-muted">
+                              {n.sentAt
+                                ? fmt.dateShort(n.sentAt)
+                                : fmt.dateShort(n.createdAt)}
+                            </p>
+                          </div>
+                          <Badge variant={n.status === "sent" ? "success" : n.status === "failed" ? "danger" : "default"}>
+                            {n.status}
+                          </Badge>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
             </>
           )
         )}
@@ -434,24 +571,165 @@ export default function ParentPortalPage() {
           (attendanceQ.data?.total ?? 0) === 0 ? (
             <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noAttendance")}</p></Card>
           ) : (
-            <Card>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
-                {t("portal.attendanceRate")}
-              </p>
-              <p className="mt-2 font-display text-[32px] leading-none text-ink tabular">
-                {attendanceQ.data?.rate}%
-              </p>
-              <p className="mt-2 text-xs text-ink-muted">
-                {t("portal.daysRecorded", { count: attendanceQ.data?.total ?? 0 })}
-              </p>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {Object.entries(attendanceQ.data?.tally ?? {}).map(([status, n]) => (
-                  <Badge key={status} variant={status === "present" ? "success" : "default"}>
-                    {status} · {n}
-                  </Badge>
-                ))}
-              </div>
-            </Card>
+            <>
+              {/* Overall attendance rate */}
+              <Card>
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-faint">
+                  {t("portal.attendanceRate")}
+                </p>
+                <p className="mt-2 font-display text-[32px] leading-none text-ink tabular">
+                  {attendanceQ.data?.rate}%
+                </p>
+                <p className="mt-2 text-xs text-ink-muted">
+                  {t("portal.daysRecorded", { count: attendanceQ.data?.total ?? 0 })}
+                </p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {Object.entries(attendanceQ.data?.tally ?? {}).map(([status, n]) => (
+                    <Badge key={status} variant={status === "present" ? "success" : status === "absent" ? "danger" : "default"}>
+                      {status} · {n}
+                    </Badge>
+                  ))}
+                  {(attendanceQ.data?.lateCount ?? 0) > 0 && (
+                    <Badge variant="warning">
+                      <Clock className="inline h-3 w-3 mr-1" />
+                      {attendanceQ.data?.lateCount} late
+                    </Badge>
+                  )}
+                </div>
+              </Card>
+
+              {/* Today's periods */}
+              {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 0 && (
+                <Card padding={false}>
+                  <div className="border-b border-line px-4 py-2.5">
+                    <h2 className="text-sm font-semibold text-ink">Today's Attendance</h2>
+                    <p className="text-xs text-ink-muted">
+                      {attendanceQ.data.dailySummaries[0]?.date}
+                    </p>
+                  </div>
+                  <div className="px-4 py-2">
+                    <p className="text-xs font-medium text-ink-muted mb-2">
+                      {attendanceQ.data.dailySummaries[0]?.status}
+                    </p>
+                    <div className="flex flex-wrap gap-1.5 text-xs">
+                      <span className="text-emerald-600">
+                        {attendanceQ.data.dailySummaries[0]?.present} present
+                      </span>
+                      <span className="text-gray-300">·</span>
+                      <span className="text-red-600">
+                        {attendanceQ.data.dailySummaries[0]?.absent} absent
+                      </span>
+                      <span className="text-gray-300">·</span>
+                      <span className="text-amber-600">
+                        {attendanceQ.data.dailySummaries[0]?.late} late
+                      </span>
+                    </div>
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {(attendanceQ.data.dailySummaries[0]?.periods ?? []).map((p, i) => (
+                      <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2">
+                            {p.periodName && (
+                              <span className="flex items-center gap-1 text-xs text-ink-muted">
+                                <Clock className="h-3 w-3" />
+                                {p.periodName}
+                              </span>
+                            )}
+                            {p.periodTime && (
+                              <span className="text-[10px] text-ink-faint">{p.periodTime}</span>
+                            )}
+                          </div>
+                          <p className="text-sm font-medium text-ink truncate">
+                            {p.subjectName ?? "General"}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={
+                            p.status === "present" ? "success"
+                              : p.status === "absent" ? "danger"
+                              : p.status === "late" ? "warning"
+                              : "default"
+                          }
+                        >
+                          {p.status}
+                        </Badge>
+                      </li>
+                    ))}
+                    {(attendanceQ.data.dailySummaries[0]?.periods ?? []).length === 0 && (
+                      <li className="px-4 py-4 text-center text-xs text-ink-muted">
+                        No period records for today
+                      </li>
+                    )}
+                  </ul>
+                </Card>
+              )}
+
+              {/* Per-subject breakdown */}
+              {attendanceQ.data?.subjectSummary && attendanceQ.data.subjectSummary.length > 0 && (
+                <Card padding={false}>
+                  <div className="border-b border-line px-4 py-2.5">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
+                      <BookOpen className="h-4 w-4" />
+                      Attendance by Subject
+                    </h2>
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {attendanceQ.data.subjectSummary.map((s, i) => {
+                      const rate = s.total > 0 ? Math.round((s.present / s.total) * 100) : 0;
+                      return (
+                        <li key={i} className="flex items-center gap-3 px-4 py-2.5">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-ink truncate">
+                              {s.subjectName ?? "General"}
+                            </p>
+                            <p className="text-[11px] text-ink-faint">
+                              {s.present}P · {s.absent}A · {s.late}L · {s.excused}E
+                            </p>
+                          </div>
+                          <span className={cn(
+                            "text-sm font-semibold tabular",
+                            rate >= 90 ? "text-emerald-600" : rate >= 70 ? "text-amber-600" : "text-red-600",
+                          )}>
+                            {rate}%
+                          </span>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </Card>
+              )}
+
+              {/* Daily history */}
+              {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 1 && (
+                <Card padding={false}>
+                  <div className="border-b border-line px-4 py-2.5">
+                    <h2 className="text-sm font-semibold text-ink">Recent Days</h2>
+                  </div>
+                  <ul className="divide-y divide-line">
+                    {attendanceQ.data.dailySummaries.slice(1, 15).map((day) => (
+                      <li key={day.date} className="flex items-center gap-3 px-4 py-2.5">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-ink">{day.date}</p>
+                          <p className="text-[11px] text-ink-faint">
+                            {day.present}P · {day.absent}A · {day.late}L
+                          </p>
+                        </div>
+                        <Badge
+                          variant={
+                            day.status === "Present" ? "success"
+                              : day.status === "Absent" ? "danger"
+                              : "warning"
+                          }
+                        >
+                          {day.status}
+                        </Badge>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              )}
+            </>
           )
         )}
 

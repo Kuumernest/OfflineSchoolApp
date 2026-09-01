@@ -7,8 +7,12 @@ const router  = express.Router();
 const School        = require("../db/models/School");
 const Student       = require("../db/models/Student");
 const Class         = require("../db/models/Class");
+const Period        = require("../db/models/Period");
+const Subject       = require("../db/models/Subject");
 const FeeCharge     = require("../db/models/FeeCharge");
 const FeePayment    = require("../db/models/FeePayment");
+const PaymentPlan   = require("../db/models/PaymentPlan");
+const Notification  = require("../db/models/Notification");
 const ResultSummary = require("../db/models/ResultSummary");
 const GeneratedReport = require("../db/models/GeneratedReport");
 const Conversation  = require("../db/models/Conversation");
@@ -184,6 +188,119 @@ router.get("/fees", asyncHandler(async (req, res) => {
       })),
       totals: { charged, waived, paid, balance: charged - waived - paid },
     },
+  });
+}));
+
+/**
+ * Fee reminders — what this child owes, with due dates and status.
+ *
+ * This is the in-app alternative to email reminders: a guardian can see
+ * exactly what is outstanding, when it is due, and whether it is late.
+ * The school does not need to send an email — the parent checks the portal.
+ */
+router.get("/fees/reminders", asyncHandler(async (req, res) => {
+  const { studentId, schoolId } = req.portal;
+
+  const charges = await FeeCharge.find({
+    schoolId, studentId, deletedAt: null, voidedAt: null,
+  }).sort({ dueDate: 1, createdAt: 1 }).lean();
+
+  const payments = await FeePayment.find({
+    schoolId, studentId, deletedAt: null,
+  }).lean();
+
+  const totalPaid = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
+  const totalCharged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);
+  const totalWaived = charges.reduce((s, c) => s + (c.waivedAmount ?? 0), 0);
+  const balance = totalCharged - totalWaived - totalPaid;
+
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+  // Check for an active payment plan
+  const plan = await PaymentPlan.findOne({
+    schoolId, studentId, status: "active", deletedAt: null,
+  }).lean();
+
+  // Build reminders from undischarged charges with due dates
+  const reminders = charges
+    .filter((c) => c.dueDate && !c.voidedAt)
+    .map((c) => {
+      const dueDate = new Date(c.dueDate);
+      const isOverdue = dueDate < today;
+      const daysOverdue = isOverdue
+        ? Math.floor((today - dueDate) / 86_400_000)
+        : 0;
+      const isDueSoon = !isOverdue &&
+        dueDate <= new Date(today.getTime() + 14 * 86_400_000);
+
+      return {
+        chargeId:    c._id,
+        code:        c.code,
+        label:       c.label,
+        amount:      c.amount,
+        waivedAmount: c.waivedAmount ?? 0,
+        netAmount:   c.amount - (c.waivedAmount ?? 0),
+        dueDate:     c.dueDate,
+        isOverdue,
+        isDueSoon,
+        daysOverdue,
+        academicYear: c.academicYear,
+        term:        c.term,
+      };
+    });
+
+  return res.json({
+    success: true,
+    data: {
+      balance,
+      totalCharged,
+      totalWaived,
+      totalPaid,
+      reminders,
+      hasPlan: Boolean(plan),
+      plan: plan ? {
+        _id:         plan._id,
+        reason:      plan.reason,
+        instalments: plan.instalments ?? [],
+      } : null,
+    },
+  });
+}));
+
+/**
+ * Fee-related notifications (reminders, payment confirmations, etc.)
+ *
+ * This is the in-app alternative to email: the parent sees every reminder the
+ * school sent, right here in the portal. The notification record already exists
+ * from the email/SMS pipeline — this endpoint just surfaces it.
+ */
+router.get("/notifications", asyncHandler(async (req, res) => {
+  const { studentId, schoolId } = req.portal;
+
+  const notifications = await Notification.find({
+    schoolId,
+    studentId,
+    kind: { $in: ["fee.reminder", "fee.payment"] },
+    deletedAt: null,
+    status: { $ne: "skipped" },
+  })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+
+  return res.json({
+    success: true,
+    data: notifications.map((n) => ({
+      _id:       n._id,
+      kind:      n.kind,
+      subject:   n.subject,
+      body:      n.body,
+      data:      n.data,
+      status:    n.status,
+      sentAt:    n.sentAt,
+      createdAt: n.createdAt,
+    })),
   });
 }));
 
@@ -489,7 +606,7 @@ router.post("/messages/conversations/:id/read", asyncHandler(async (req, res) =>
   return res.json({ success: true });
 }));
 
-/** Attendance, summarised. A parent wants the pattern, not 180 rows. */
+/** Attendance, period-by-period. A parent wants to know exactly which lessons their child attended. */
 router.get("/attendance", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
 
@@ -500,8 +617,27 @@ router.get("/attendance", asyncHandler(async (req, res) => {
     if (req.query.to)   filter.date.$lte = String(req.query.to);
   }
 
-  const rows = await StudentAttendance.find(filter).sort({ date: -1 }).limit(400).lean();
+  const rows = await StudentAttendance.find(filter).sort({ date: -1, periodId: 1 }).limit(500).lean();
 
+  // Resolve names for periods and subjects referenced in the records
+  const periodIds  = [...new Set(rows.map((r) => r.periodId).filter(Boolean))];
+  const subjectIds = [...new Set(rows.map((r) => r.subjectId).filter(Boolean))];
+
+  const [periodDocs, subjectDocs] = await Promise.all([
+    periodIds.length
+      ? Period.find({ _id: { $in: periodIds }, schoolId, deletedAt: null })
+          .select("_id name startTime endTime sortOrder").lean()
+      : [],
+    subjectIds.length
+      ? Subject.find({ _id: { $in: subjectIds }, schoolId, deletedAt: null })
+          .select("_id name code").lean()
+      : [],
+  ]);
+
+  const periodMap  = new Map(periodDocs.map((p) => [String(p._id), p]));
+  const subjectMap = new Map(subjectDocs.map((s) => [String(s._id), s]));
+
+  // Tally by status
   const tally = rows.reduce((acc, r) => {
     const k = String(r.status ?? "unknown");
     acc[k] = (acc[k] ?? 0) + 1;
@@ -511,17 +647,73 @@ router.get("/attendance", asyncHandler(async (req, res) => {
   const present = tally.present ?? 0;
   const total   = rows.length;
 
+  // Daily summary — group records by date, compute per-day status
+  const byDate = {};
+  for (const r of rows) {
+    if (!byDate[r.date]) byDate[r.date] = { date: r.date, records: [], present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+    byDate[r.date].total += 1;
+    if (r.status in byDate[r.date]) byDate[r.date][r.status] += 1;
+    byDate[r.date].records.push(r);
+  }
+
+  // Daily summary status: all present → Present, some absent → Partial, etc.
+  const dailySummaries = Object.values(byDate).map((day) => {
+    let dailyStatus;
+    if (day.total === day.present) dailyStatus = "Present";
+    else if (day.total === day.absent) dailyStatus = "Absent";
+    else if (day.absent >= day.total / 2) dailyStatus = "Partial absence";
+    else dailyStatus = "Present with partial absence";
+
+    return {
+      date:    day.date,
+      status:  dailyStatus,
+      present: day.present,
+      absent:  day.absent,
+      late:    day.late,
+      excused: day.excused,
+      total:   day.total,
+      periods: day.records.map((r) => ({
+        date:        r.date,
+        status:      r.status,
+        periodId:    r.periodId ?? null,
+        periodName:  r.periodId ? (periodMap.get(String(r.periodId))?.name ?? null) : null,
+        periodTime:  r.periodId ? (periodMap.get(String(r.periodId))?.startTime ?? null) : null,
+        subjectId:   r.subjectId ?? null,
+        subjectName: r.subjectId ? (subjectMap.get(String(r.subjectId))?.name ?? null) : null,
+        note:        r.note ?? null,
+      })),
+    };
+  });
+
+  // Per-subject summary
+  const subjectSummary = {};
+  for (const r of rows) {
+    const sid = r.subjectId || "__no_subject";
+    if (!subjectSummary[sid]) subjectSummary[sid] = { subjectId: r.subjectId, subjectName: subjectMap.get(String(r.subjectId))?.name ?? null, present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+    subjectSummary[sid].total += 1;
+    if (r.status in subjectSummary[sid]) subjectSummary[sid][r.status] += 1;
+  }
+
   return res.json({
     success: true,
     data: {
       tally,
       total,
-      // Null rather than 0 when nothing is recorded: "0% attendance" is a
-      // frightening thing to show a parent when the truth is "not yet marked".
       rate: total > 0 ? Math.round((present / total) * 100) : null,
+      lateCount:    tally.late ?? 0,
+      excusedCount: tally.excused ?? 0,
       recent: rows.slice(0, 30).map((r) => ({
-        date: r.date, status: r.status, subjectId: r.subjectId ?? null,
+        date:        r.date,
+        status:      r.status,
+        periodId:    r.periodId ?? null,
+        periodName:  r.periodId ? (periodMap.get(String(r.periodId))?.name ?? null) : null,
+        periodTime:  r.periodId ? (periodMap.get(String(r.periodId))?.startTime ?? null) : null,
+        subjectId:   r.subjectId ?? null,
+        subjectName: r.subjectId ? (subjectMap.get(String(r.subjectId))?.name ?? null) : null,
+        note:        r.note ?? null,
       })),
+      dailySummaries: dailySummaries.slice(0, 30),
+      subjectSummary: Object.values(subjectSummary),
     },
   });
 }));

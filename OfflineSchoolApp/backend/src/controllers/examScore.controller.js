@@ -1,10 +1,10 @@
 // backend/src/controllers/examScore.controller.js
 "use strict";
 
-const ExamScore   = require("../db/models/ExamScore");
+const StudentScore = require("../db/models/StudentScore");
 const ExamSubject = require("../db/models/ExamSubject");
 const { gradeSubject } = require("../utils/gradeUtils");
-const { computeResults } = require("../services/examResult.service");
+const resultsService = require("../services/results.service");
 
 const resolveSchoolId = (req, provided) => {
   if (req.user?.role === "super_admin" && provided)
@@ -30,7 +30,7 @@ exports.getScores = asyncHandler(async (req, res) => {
   if (subjectId) filter.subjectId = subjectId;
   if (classId)   filter.classId   = classId;
 
-  const scores = await ExamScore.find(filter)
+  const scores = await StudentScore.find(filter)
     .sort({ studentId: 1 })
     .lean();
 
@@ -152,7 +152,7 @@ exports.saveBulkScores = asyncHandler(async (req, res) => {
     };
   });
 
-  await ExamScore.bulkWrite(ops, { ordered: false });
+  await StudentScore.bulkWrite(ops, { ordered: false });
 
   // ── Update ExamSubject submission status ───────────────
   if (examSubject) {
@@ -166,7 +166,7 @@ exports.saveBulkScores = asyncHandler(async (req, res) => {
   }
 
   // ── Fire-and-forget: recompute results ────────────────
-  computeResults({ examId, classId, schoolId }).catch((err) => {
+  resultsService.processResults({ examId, classId, schoolId }).catch((err) => {
     console.error("[saveBulkScores] computeResults error:", err.message);
   });
 
@@ -201,7 +201,7 @@ exports.approveSubmission = asyncHandler(async (req, res) => {
         rejectReason:     null,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!es) {
@@ -239,7 +239,7 @@ exports.rejectSubmission = asyncHandler(async (req, res) => {
         approvedAt:       null,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!es) {
@@ -272,7 +272,7 @@ exports.submitMarks = asyncHandler(async (req, res) => {
         rejectReason:     null,
       },
     },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!es) {

@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate, useParams }  from "react-router-dom";
 import { useAuthStore }            from "@/store/auth.store";
 import api                         from "@/services/api";
-import { getErrorMessage }         from "@/lib/api";
+import { getErrorMessage }         from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,

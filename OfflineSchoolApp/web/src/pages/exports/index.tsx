@@ -20,7 +20,7 @@ import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input, SelectField } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
 import { cn }          from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 
 import { fetchClasses } from "@/services/class.service";
 import {

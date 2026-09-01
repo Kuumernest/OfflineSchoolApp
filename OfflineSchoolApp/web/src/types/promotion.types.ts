@@ -7,6 +7,11 @@ export interface ProgressionClass {
   /** Null means no destination is stated — students there cannot be promoted. */
   nextClassId:  string | null;
   isFinalYear:  boolean;
+  /**
+   * Minimum yearly average this class demands for promotion. Null keeps the
+   * majority-of-terms rule; a number makes the average the deciding bar.
+   */
+  promotionAverage: number | null;
 }
 
 export interface ProgressionResponse {
@@ -21,7 +26,7 @@ export type RunStatus = "draft" | "committed" | "reversed";
 export type Outcome = "promoted" | "repeated" | "graduated" | "unassigned";
 
 export type Basis =
-  | "results_pass" | "results_fail" | "no_results" | "final_year" | "manual";
+  | "results_pass" | "results_fail" | "average_fail" | "no_results" | "final_year" | "manual";
 
 export interface PromotionCounts {
   total:      number;

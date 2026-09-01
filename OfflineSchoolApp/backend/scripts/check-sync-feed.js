@@ -150,7 +150,7 @@ const main = async () => {
     [ROLES.BURSAR,  "homework",        false, ""],
     [ROLES.BURSAR,  "student",         true,  "the roster, because they bill it"],
     [ROLES.TEACHER, "student",         true,  "a teacher's pupils — via viewTaught"],
-    [ROLES.TEACHER, "examScore",       true,  "and the marks they enter"],
+    [ROLES.TEACHER, "studentScore",     true,  "and the marks they enter"],
     [ROLES.TEACHER, "studentAttendance", true, ""],
     // The staff register reads on attendance.view too — markStaff gates writing
     // it — so a bursar mirrors it, which matches what the route allows them.
@@ -175,7 +175,7 @@ const main = async () => {
   // the school — which matters more offline than online, because offline it is a
   // permanent copy on the finance machine rather than a screen nobody visits.
   check("a bursar can mirror exam marks, which follows from results.view",
-    feed.satisfies(feed.byCollection.get("examScore"), byRole[ROLES.BURSAR]), true);
+    feed.satisfies(feed.byCollection.get("studentScore"), byRole[ROLES.BURSAR]), true);
 
   // And the gap in the other direction, written down in the feed itself.
   check("a teacher cannot mirror the class list, and that is documented",

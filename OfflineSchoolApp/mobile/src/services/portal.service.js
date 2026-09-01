@@ -124,6 +124,8 @@ const load = async (section, path, studentId) => {
 
 export const fetchMe            = (studentId) => load("me", "/me", studentId);
 export const fetchFees          = (studentId) => load("fees", "/fees", studentId);
+export const fetchFeeReminders  = (studentId) => load("fee-reminders", "/fees/reminders", studentId);
+export const fetchNotifications = (studentId) => load("notifications", "/notifications", studentId);
 export const fetchResults       = (studentId) => load("results", "/results", studentId);
 export const fetchAttendance    = (studentId) => load("attendance", "/attendance", studentId);
 export const fetchAnnouncements = (studentId) => load("news", "/announcements", studentId);
@@ -183,6 +185,7 @@ export const fetchReceiptHtml = async (paymentId, lang = "en") => {
 
 export default {
   login, signOut, getToken, clearToken,
-  fetchMe, fetchFees, fetchResults, fetchAttendance, fetchAnnouncements,
+  fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
+  fetchResults, fetchAttendance, fetchAnnouncements,
   fetchReceiptHtml,
 };

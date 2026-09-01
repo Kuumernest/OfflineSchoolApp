@@ -213,7 +213,7 @@ const SchoolSection = ({ schoolId }) => {
     setPostalCode(d.postalCode        || "");
     setSchoolType(d.schoolType        || "primary");
     setTermSystem(d.termSystem        || "trimester");
-    setSchoolCode(d.schoolCode        || "");
+    setSchoolCode(d.code || d.schoolCode || "");
     setRegNumber(d.registrationNumber || "");
     setFoundedYear(String(d.foundedYear || ""));
     setPrincipalName(d.principalName  || "");

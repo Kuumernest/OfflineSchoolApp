@@ -20,14 +20,9 @@ import { errorText } from "../../../../src/utils/appError";
 // ─────────────────────────────────────────────────────────
 
 const EXAM_TYPES = [
-  { value: "first_test",            labelKey: "examEdit.typeFirstTest"            },
-  { value: "second_test",           labelKey: "examEdit.typeSecondTest"           },
-  { value: "mid_term",              labelKey: "examEdit.typeMidTerm"              },
-  { value: "practical",             labelKey: "examEdit.typePractical"            },
-  { value: "final_exam",            labelKey: "examEdit.typeFinalExam"            },
-  { value: "mock_exam",             labelKey: "examEdit.typeMockExam"             },
-  { value: "promotion_exam",        labelKey: "examEdit.typePromotionExam"        },
-  { value: "continuous_assessment", labelKey: "examEdit.typeContinuousAssessment" },
+  { value: "test",            labelKey: "examEdit.typeTest"            },
+  { value: "practical",       labelKey: "examEdit.typePractical"       },
+  { value: "promotion_exam",  labelKey: "examEdit.typePromotionExam"   },
 ];
 
 const TERMS = [
@@ -328,7 +323,7 @@ export default function EditExamScreen() {
   const [classesLoading,   setClassesLoading]   = useState(false);
 
   const [name,            setName]            = useState("");
-  const [type,            setType]            = useState("first_test");
+  const [type,            setType]            = useState("test");
   const [term,            setTerm]            = useState("first_term");
   const [academicYear,    setAcademicYear]    = useState("");
   const [startDate,       setStartDate]       = useState("");
@@ -349,7 +344,7 @@ export default function EditExamScreen() {
 
       setExam(e);
       setName(e.name              || "");
-      setType(e.type              || "first_test");
+      setType(e.type              || "test");
       setTerm(e.term              || "first_term");
       setAcademicYear(e.academicYear || "");
       setStartDate(e.startDate    || "");

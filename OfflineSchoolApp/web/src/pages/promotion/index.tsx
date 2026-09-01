@@ -29,7 +29,7 @@ import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
 import { cn }              from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import {
   fetchRuns, fetchRun, generateRun, setDecision,
   commitRun, reverseRun, discardRun, fetchProgression,

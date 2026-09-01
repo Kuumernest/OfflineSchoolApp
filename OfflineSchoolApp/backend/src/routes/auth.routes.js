@@ -5,6 +5,7 @@ const express  = require("express");
 const router   = express.Router();
 const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
+const rateLimit = require("express-rate-limit");
 const User     = require("../db/models/User");
 const { authenticate } = require("../../middleware/auth");
 const {
@@ -12,6 +13,19 @@ const {
   defaultsFor,
 } = require("../services/permissions.service");
 const { normalizeRole } = require("../config/roles");
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RATE LIMITING — brute-force protection on login
+// ─────────────────────────────────────────────────────────────────────────────
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 10,                  // 10 attempts per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { success: false, message: "Too many login attempts. Please try again after 15 minutes." },
+  // Use the default keyGenerator which handles IPv6 correctly
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -144,7 +158,7 @@ const buildTokenResponse = async (user) => {
 // Dual-mode: { email, password } for staff | { enrollmentNo, password } for students
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post("/login", async (req, res) => {
+router.post("/login", loginLimiter, async (req, res) => {
   try {
     const { email, enrollmentNo, password } = req.body;
 

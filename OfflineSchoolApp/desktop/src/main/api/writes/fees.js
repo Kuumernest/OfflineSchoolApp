@@ -160,6 +160,40 @@ module.exports = [
   },
 
   {
+    route: "PATCH /api/fees/structures/:id/activate",
+
+    /**
+     * Putting a price list back into use.
+     *
+     * The mirror of deactivate: sets isActive true so the structure reappears
+     * in the charge picker. Does NOT prevent duplicates — same as the server,
+     * the unique index handles that at the database level.
+     */
+    handler: ({ params, body }, { docs, session }) => {
+      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+      if (!session?.permissions?.includes("fees.manage")) return null;
+
+      const row = docs.get("feeStructure", String(params.id));
+      if (!row) return null;
+      if (String(row.schoolId) !== String(schoolId)) return null;
+
+      const doc = { ...row, isActive: true, updatedAt: new Date().toISOString() };
+
+      return {
+        collection: "feeStructure",
+        doc,
+        request: {
+          method: "PATCH",
+          path:   `/api/fees/structures/${row._id}/activate`,
+          body,
+        },
+        response: { status: 200, data: { success: true, data: doc } },
+      };
+    },
+  },
+
+  {
     route: "POST /api/fees/plans/:id/cancel",
 
     /**

@@ -360,6 +360,39 @@ const schoolSchema = new mongoose.Schema(
     motto: { type: String, default: null, trim: true, maxlength: 300 },
 
     /**
+     * Extended school profile — written by the settings screens (web, mobile,
+     * desktop). Kept at the top level of the document rather than inside
+     * `settings` because nothing reads them as operational settings: they are
+     * printed on letters, report cards and the public profile.
+     */
+    postalCode:         { type: String,  default: null,  trim: true },
+    schoolType:         { type: String,  default: "primary",
+                          enum: ["primary", "jhs", "shs", "combined",
+                                 "vocational", "university", "other"] },
+    termSystem:         { type: String,  default: "trimester",
+                          enum: ["trimester", "semester", "quarter"] },
+    registrationNumber: { type: String,  default: null,  trim: true },
+    foundedYear:        { type: Number,  default: null,  min: 1000, max: 2100 },
+    principalName:      { type: String,  default: null,  trim: true },
+    description:        { type: String,  default: null,  trim: true },
+    academicYearStart:  { type: String,  default: null,  trim: true,
+                          match: [/^\d{4}-\d{2}-\d{2}$|^$/,
+                                  "academicYearStart must look like 2026-09-01"] },
+    academicYearEnd:    { type: String,  default: null,  trim: true,
+                          match: [/^\d{4}-\d{2}-\d{2}$|^$/,
+                                  "academicYearEnd must look like 2027-06-30"] },
+    schoolDays:         { type: [String], default: ["Monday", "Tuesday", "Wednesday",
+                                                    "Thursday", "Friday"],
+                          enum: ["Monday", "Tuesday", "Wednesday", "Thursday",
+                                 "Friday", "Saturday", "Sunday"] },
+    schoolStartTime:    { type: String,  default: "07:30", trim: true,
+                          match: [/^([01]\d|2[0-3]):[0-5]\d$|^$/,
+                                  "schoolStartTime must look like 07:30"] },
+    schoolEndTime:      { type: String,  default: "15:30", trim: true,
+                          match: [/^([01]\d|2[0-3]):[0-5]\d$|^$/,
+                                  "schoolEndTime must look like 15:30"] },
+
+    /**
      * The school's working language — the default for anyone who has not
      * chosen one, and the language a report card is printed in unless the
      * template says otherwise.
@@ -638,7 +671,7 @@ schoolSchema.statics.softDelete = async function (schoolId, deletedByUserId = nu
       deletedBy: deletedByUserId || null,
       isActive:  false,
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 };
 
@@ -656,7 +689,7 @@ schoolSchema.statics.restore = async function (schoolId) {
       deletedBy: null,
       isActive:  true,
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 };
 

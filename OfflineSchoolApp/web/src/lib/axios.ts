@@ -172,4 +172,33 @@ api.interceptors.response.use(
   },
 );
 
+// ─────────────────────────────────────────────────────────────────────────────
+// HELPER UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Extract the error message from an axios error.
+ * Handles both server-returned messages and network errors.
+ */
+export const getErrorMessage = (error: unknown): string => {
+  if (axios.isAxiosError(error)) {
+    const serverMsg =
+      (error.response?.data as Record<string, unknown>)?.message ||
+      (error.response?.data as Record<string, unknown>)?.error;
+    if (typeof serverMsg === "string" && serverMsg) return serverMsg;
+    if (error.message) return error.message;
+  }
+  if (error instanceof Error) return error.message;
+  return "An unexpected error occurred";
+};
+
+export const isNotFound = (error: unknown): boolean =>
+  axios.isAxiosError(error) && error.response?.status === 404;
+
+export const isConflict = (error: unknown): boolean =>
+  axios.isAxiosError(error) && error.response?.status === 409;
+
+export const isBadRequest = (error: unknown): boolean =>
+  axios.isAxiosError(error) && error.response?.status === 400;
+
 export default api;

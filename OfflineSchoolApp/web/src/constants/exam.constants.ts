@@ -1,9 +1,8 @@
 // web/src/constants/exam.constants.ts
-import type { ExamStatus, ExamType } from "@/types/exam.types";
+import type { ExamStatus, ExamType, SequenceNumber, TermNumber } from "@/types/exam.types";
 
-// `labelKey` rather than a literal: these render on the Exams, Results and
-// Report-cards pages, which are fully translated. The object key is the stored
-// status value and must not change.
+// ── Exam Status ─────────────────────────────────────────────────────────────
+
 export const EXAM_STATUS_META: Record<
   ExamStatus,
   { labelKey: string; color: string; bg: string; dot: string }
@@ -16,16 +15,12 @@ export const EXAM_STATUS_META: Record<
   archived:  { labelKey: "examStatus.archived",  color: "text-gray-400",   bg: "bg-gray-50",    dot: "bg-gray-300"   },
 };
 
-/** Keys are the stored exam-type values; only the label is localised. */
+// ── Exam Types (simplified) ─────────────────────────────────────────────────
+
 export const EXAM_TYPE_KEYS: Record<ExamType, string> = {
-  first_test:            "examType.first_test",
-  second_test:           "examType.second_test",
-  mid_term:              "examType.mid_term",
-  practical:             "examType.practical",
-  final_exam:            "examType.final_exam",
-  mock_exam:             "examType.mock_exam",
-  promotion_exam:        "examType.promotion_exam",
-  continuous_assessment: "examType.continuous_assessment",
+  test:            "examType.test",
+  practical:       "examType.practical",
+  promotion_exam:  "examType.promotion_exam",
 };
 
 export const EXAM_TYPE_OPTIONS = Object.entries(EXAM_TYPE_KEYS).map(
@@ -41,19 +36,41 @@ export const examTypeLabel = (
     ? t(EXAM_TYPE_KEYS[type as ExamType])
     : (type ?? "");
 
+// ── Sequences ───────────────────────────────────────────────────────────────
+
+export const SEQUENCE_MAP: Record<
+  SequenceNumber,
+  { term: TermNumber; name: string; labelKey: string }
+> = {
+  1: { term: 1, name: "Sequence 1", labelKey: "examSequence.seq1" },
+  2: { term: 1, name: "Sequence 2", labelKey: "examSequence.seq2" },
+  3: { term: 2, name: "Sequence 3", labelKey: "examSequence.seq3" },
+  4: { term: 2, name: "Sequence 4", labelKey: "examSequence.seq4" },
+  5: { term: 3, name: "Sequence 5", labelKey: "examSequence.seq5" },
+  6: { term: 3, name: "Sequence 6", labelKey: "examSequence.seq6" },
+};
+
+/** Get sequences for a given term */
+export const getSequencesForTerm = (term: TermNumber): SequenceNumber[] =>
+  (Object.entries(SEQUENCE_MAP) as [string, { term: TermNumber }][] )
+    .filter(([, v]) => v.term === term)
+    .map(([k]) => Number(k) as SequenceNumber);
+
+// ── Terms ───────────────────────────────────────────────────────────────────
+
+export const TERM_OPTIONS = [
+  { value: "1", labelKey: "examTerms.term1" },
+  { value: "2", labelKey: "examTerms.term2" },
+  { value: "3", labelKey: "examTerms.term3" },
+];
+
+// ── Status Options ──────────────────────────────────────────────────────────
+
 export const EXAM_STATUS_OPTIONS = Object.entries(EXAM_STATUS_META).map(
   ([value, meta]) => ({ value, labelKey: meta.labelKey })
 );
 
-// `value` is the term as the backend stores it and must stay English;
-// `label` is only the fallback when a translation key is missing.
-export const TERM_OPTIONS = [
-  { value: "Term 1",      label: "Term 1",     labelKey: "examTerms.term1"     },
-  { value: "Term 2",      label: "Term 2",     labelKey: "examTerms.term2"     },
-  { value: "Term 3",      label: "Term 3",     labelKey: "examTerms.term3"     },
-  { value: "Semester 1",  label: "Semester 1", labelKey: "examTerms.semester1" },
-  { value: "Semester 2",  label: "Semester 2", labelKey: "examTerms.semester2" },
-];
+// ── Academic Years ──────────────────────────────────────────────────────────
 
 const year = new Date().getFullYear();
 export const ACADEMIC_YEAR_OPTIONS = [

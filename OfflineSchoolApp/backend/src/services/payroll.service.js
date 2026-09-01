@@ -39,7 +39,7 @@ const nextPayslipNo = async (schoolId, periodMonth) => {
   const counter = await Counter.findOneAndUpdate(
     { _id: `payslipNo:${schoolId}:${periodMonth}` },
     { $inc: { seq: 1 }, $setOnInsert: { schoolId } },
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   );
   return `PSL-${periodMonth}-${String(counter.seq).padStart(4, "0")}`;
 };

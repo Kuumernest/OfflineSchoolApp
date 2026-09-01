@@ -34,7 +34,7 @@ import { PageSpinner } from "@/components/ui/Spinner";
 import { FormField, Input, Checkbox } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { useFormat } from "@/i18n/format";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import {
   fetchApprovalSummary, saveThresholds,
   type ApprovalThresholds,

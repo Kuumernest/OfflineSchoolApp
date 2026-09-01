@@ -36,7 +36,7 @@ import { FormField, Input, Textarea } from "@/components/ui/FormField";
 import { useToast } from "@/components/ui/Toast";
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { usePermission } from "@/lib/permissions";
 import { createPlan, cancelPlan } from "@/services/fee.service";
 import type { PaymentPlan, PlanStatus } from "@/types/fees.types";

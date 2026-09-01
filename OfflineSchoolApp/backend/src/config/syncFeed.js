@@ -223,18 +223,28 @@ const FEED = [
   { collection: "teacherAttendance", model: "TeacherAttendance", permission: "attendance.view" },
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
-  { collection: "examScore",    model: "ExamScore",    permission: "results.view" },
-  {
-    collection: "examResult", model: "ExamResult",
-    permission: "results.view",
-    scope: publishedUnlessAdmin,
-    why: "Scoped, not merely gated. The endpoint forces isPublished for anybody " +
-         "who is not an admin, so mirroring the whole collection would put " +
-         "unpublished marks on a teacher's machine — which the server would " +
-         "never show them.",
-  },
   { collection: "studentScore", model: "StudentScore", permission: "results.view" },
   { collection: "resultSummary", model: "ResultSummary", permission: "results.view" },
+  {
+    collection: "termResult", model: "TermResult",
+    permission: "results.view",
+    scope: publishedUnlessAdmin,
+    why: "Scoped like ExamResult: non-admins only see published term results. " +
+         "Mirrored so the desktop can render term report cards offline.",
+  },
+  {
+    collection: "annualResult", model: "AnnualResult",
+    permission: "results.view",
+    scope: publishedUnlessAdmin,
+    why: "Scoped like ExamResult: non-admins only see published annual results. " +
+         "Mirrored so the desktop can render annual report cards offline.",
+  },
+  {
+    collection: "academicStructure", model: "AcademicStructure",
+    permission: "exams.view",
+    why: "The academic year layout (terms, sequences, promotion rules). Needed " +
+         "by the desktop to create exams and compute term/annual averages offline.",
+  },
   { collection: "grade",        model: "Grade",        permission: "results.view" },
   { collection: "homework",     model: "Homework",     permission: "homework.view" },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },

@@ -24,6 +24,7 @@ import { useRouter } from "expo-router";
 import { Ionicons }        from "@expo/vector-icons";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
+import { PeriodsService }  from "../../../src/services/periods.service";
 import api                 from "../../../src/services/api";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
@@ -41,6 +42,93 @@ const formatDate = (d, t) => {
   const dt = new Date(d);
   return `${t(`attAdmin.day${dt.getDay()}`)}, ${t(`attAdmin.mon${dt.getMonth()}`)} ${dt.getDate()}`;
 };
+
+const PeriodSelector = ({ schoolId, selected, onSelect }) => {
+  const { t } = useTranslation();
+  const [periods, setPeriods] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const data = await PeriodsService.getAll();
+        if (!cancelled) setPeriods(data || []);
+      } catch (err) {
+        console.warn("Failed to load periods:", err.message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [schoolId]);
+
+  if (loading || periods.length === 0) return null;
+
+  return (
+    <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
+      <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 6 }}>
+        {t("attAdmin.selectPeriod", "Select period")}
+      </Text>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
+        <TouchableOpacity
+          style={[
+            ps.chip,
+            !selected && ps.chipActive,
+          ]}
+          onPress={() => onSelect(null)}
+          activeOpacity={0.7}
+        >
+          <Text style={[ps.chipText, !selected && ps.chipTextActive]}>
+            {t("attAdmin.allPeriods", "All")}
+          </Text>
+        </TouchableOpacity>
+        {periods.filter(p => p.isActive !== false).map((p) => (
+          <TouchableOpacity
+            key={p.id}
+            style={[
+              ps.chip,
+              selected === p.id && ps.chipActive,
+            ]}
+            onPress={() => onSelect(p.id)}
+            activeOpacity={0.7}
+          >
+            <Text style={[ps.chipText, selected === p.id && ps.chipTextActive]}>
+              {p.name}
+            </Text>
+            {!!p.startTime && (
+              <Text style={[ps.chipTime, selected === p.id && ps.chipTimeActive]}>
+                {p.startTime}
+              </Text>
+            )}
+          </TouchableOpacity>
+        ))}
+      </ScrollView>
+    </View>
+  );
+};
+
+const ps = StyleSheet.create({
+  chip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: "#F3F4F6",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  chipActive: {
+    backgroundColor: "#EEF2FF",
+    borderColor: "#4F46E5",
+  },
+  chipText: { fontSize: 13, fontWeight: "600", color: "#6B7280" },
+  chipTextActive: { color: "#4F46E5" },
+  chipTime: { fontSize: 11, color: "#9CA3AF" },
+  chipTimeActive: { color: "#818CF8" },
+});
 
 const ClassSelector = ({ schoolId, onSelect }) => {
   const { t } = useTranslation();
@@ -262,6 +350,7 @@ const cs = StyleSheet.create({
 const MarkAttendance = React.forwardRef(({
   schoolId,
   selectedClass,
+  periodId,
   today,
   onSaved,
 }, ref) => {
@@ -280,7 +369,8 @@ const MarkAttendance = React.forwardRef(({
 
       const data = await AttendanceService.getStudentAttendanceToday(
         selectedClass.id,
-        schoolId
+        schoolId,
+        periodId
       );
 
       const rosterData = data?.roster || [];
@@ -301,7 +391,7 @@ const MarkAttendance = React.forwardRef(({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, selectedClass.id]);
+  }, [schoolId, selectedClass.id, periodId]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -323,6 +413,7 @@ const MarkAttendance = React.forwardRef(({
         await AttendanceService.markClassAttendanceBulk({
           schoolId,
           classId: selectedClass.id,
+          periodId: periodId || undefined,
           date:    today,
           records,
         });
@@ -353,7 +444,7 @@ const MarkAttendance = React.forwardRef(({
     } else {
       doSave();
     }
-  }, [attendance, roster, schoolId, selectedClass.id, today, onSaved]);
+  }, [attendance, roster, schoolId, selectedClass.id, periodId, today, onSaved]);
 
   React.useImperativeHandle(ref, () => ({ save: handleSave, saving }));
 
@@ -726,6 +817,7 @@ export default function MarkStudentAttendanceScreen() {
   const today    = useMemo(() => todayStr(), []);
 
   const [selectedClass, setSelectedClass] = useState(null);
+  const [selectedPeriod, setSelectedPeriod] = useState(null);
   const [saving,        setSaving]        = useState(false);
 
   const markRef = useRef(null);
@@ -813,12 +905,21 @@ export default function MarkStudentAttendanceScreen() {
         </TouchableOpacity>
       )}
 
+      {selectedClass && (
+        <PeriodSelector
+          schoolId={schoolId}
+          selected={selectedPeriod}
+          onSelect={setSelectedPeriod}
+        />
+      )}
+
       {selectedClass ? (
         <MarkAttendance
-          key={selectedClass.id}
+          key={`${selectedClass.id}-${selectedPeriod ?? "all"}`}
           ref={markRef}
           schoolId={schoolId}
           selectedClass={selectedClass}
+          periodId={selectedPeriod}
           today={today}
           onSaved={handleSaved}
         />

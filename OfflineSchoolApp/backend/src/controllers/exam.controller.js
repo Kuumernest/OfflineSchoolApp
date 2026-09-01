@@ -3,14 +3,12 @@
 
 const Exam        = require("../db/models/Exam");
 const ExamSubject = require("../db/models/ExamSubject");
-const ExamScore   = require("../db/models/ExamScore");
-const ExamResult  = require("../db/models/ExamResult");
+const StudentScore = require("../db/models/StudentScore");
+const ResultSummary = require("../db/models/ResultSummary");
 const Subject     = require("../db/models/Subject");
 const User        = require("../db/models/User");
 const Class       = require("../db/models/Class");
-
-const { computeResults, publishResults } =
-  require("../services/examResult.service");
+const resultsService = require("../services/results.service");
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -101,7 +99,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     Exam.countDocuments({ ...base, status: "archived"  }),
   ]);
 
-  const publishedResults = await ExamResult.countDocuments({
+  const publishedResults = await ResultSummary.countDocuments({
     schoolId,
     isPublished: true,
   });
@@ -118,7 +116,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     deletedAt:        null,
   });
 
-  const avgAgg = await ExamResult.aggregate([
+  const avgAgg = await ResultSummary.aggregate([
     { $match: { schoolId } },
     { $group: { _id: null, avg: { $avg: "$percentage" } } },
   ]);
@@ -126,7 +124,7 @@ exports.getDashboard = asyncHandler(async (req, res) => {
     ? Math.round(avgAgg[0].avg)
     : 0;
 
-  const passAgg = await ExamResult.aggregate([
+  const passAgg = await ResultSummary.aggregate([
     { $match: { schoolId } },
     {
       $group: {
@@ -188,7 +186,7 @@ exports.getExam = asyncHandler(async (req, res) => {
     deletedAt: null,
   }).lean();
 
-  const scoresCount = await ExamScore.countDocuments({
+  const scoresCount = await StudentScore.countDocuments({
     examId:    id,
     deletedAt: null,
   });
@@ -266,7 +264,7 @@ exports.createExam = asyncHandler(async (req, res) => {
     ...(id ? { _id: String(id) } : {}),
     schoolId,
     name:         name.trim(),
-    type:         type         || "first_test",
+    type:         type         || "test",
     academicYear,
     term,
     classId:      resolvedClassId,
@@ -356,7 +354,7 @@ exports.updateExam = asyncHandler(async (req, res) => {
   const exam = await Exam.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
     updates,
-    { new: true, runValidators: true }
+    { returnDocument: 'after', runValidators: true }
   ).lean();
 
   if (!exam) {
@@ -393,17 +391,17 @@ exports.updateExamStatus = asyncHandler(async (req, res) => {
     extra.resultsPublishedAt = new Date();
     extra.publishedBy        = req.user?._id || null;
 
-    // Publish all ExamResult docs for this exam
-    await publishResults({
-      examId:      id,
-      publishedBy: req.user?._id || null,
-    });
+    // Publish all ResultSummary docs for this exam
+    await ResultSummary.updateMany(
+      { examId: id, deletedAt: null },
+      { $set: { isPublished: true, publishedAt: new Date() } }
+    );
   }
 
   const exam = await Exam.findOneAndUpdate(
     { _id: id, ...(schoolId ? { schoolId } : {}), deletedAt: null },
     { $set: { status, updatedBy: req.user?._id, ...extra } },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!exam) {
@@ -426,7 +424,7 @@ exports.deleteExam = asyncHandler(async (req, res) => {
   const exam = await Exam.findOneAndUpdate(
     { _id: id, schoolId, deletedAt: null },
     { $set: { deletedAt: new Date(), updatedBy: req.user?._id } },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!exam) {
@@ -461,7 +459,7 @@ exports.getSubmissions = asyncHandler(async (req, res) => {
   // Attach score count to each subject
   const enriched = await Promise.all(
     subjects.map(async (es) => {
-      const count = await ExamScore.countDocuments({
+      const count = await StudentScore.countDocuments({
         examSubjectId: es._id,
         score:         { $ne: null },
         deletedAt:     null,
@@ -483,7 +481,7 @@ exports.processResults = asyncHandler(async (req, res) => {
   const { examId } = req.params;
   const { classId } = req.body;
 
-  const result = await computeResults({ examId, classId, schoolId });
+  const result = await resultsService.processResults({ examId, classId, schoolId });
 
   // Update exam status to completed if not already published
   const exam = await Exam.findById(examId).lean();
@@ -524,8 +522,8 @@ exports.getResults = asyncHandler(async (req, res) => {
   if (!isAdmin) filter.isPublished = true;
 
   const skip    = (Number(page) - 1) * Number(limit);
-  const total   = await ExamResult.countDocuments(filter);
-  const results = await ExamResult.find(filter)
+  const total   = await ResultSummary.countDocuments(filter);
+  const results = await ResultSummary.find(filter)
     .sort({ classPosition: 1 })
     .skip(skip)
     .limit(Number(limit))

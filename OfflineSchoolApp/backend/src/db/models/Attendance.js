@@ -37,15 +37,16 @@ const studentAttendanceSchema = new mongoose.Schema(
   }
 );
 
-// Unique constraint — one record per student/class/subject/date
+// Unique constraint — one record per student/class/subject/period/date
 studentAttendanceSchema.index(
-  { schoolId: 1, classId: 1, studentId: 1, subjectId: 1, date: 1 },
+  { schoolId: 1, classId: 1, studentId: 1, subjectId: 1, periodId: 1, date: 1 },
   { unique: true, name: "unique_student_attendance" }
 );
 
 studentAttendanceSchema.index({ schoolId: 1, date: 1, status: 1 });
 studentAttendanceSchema.index({ classId:  1, date: 1             });
 studentAttendanceSchema.index({ studentId: 1, date: 1            });
+studentAttendanceSchema.index({ schoolId: 1, classId: 1, date: 1, periodId: 1 });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER ATTENDANCE

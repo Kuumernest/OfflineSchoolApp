@@ -247,14 +247,17 @@ router.get("/students/roster", staffRead, async (req, res) => {
 // ── GET /api/attendance/students/today ───────────────────────────────────────
 // Used by teachers/admins to view today's attendance for a class.
 // ⚠️  Does NOT scope to a single student — that's what /students/me is for.
+// Accepts optional periodId to filter to a specific class period.
 router.get("/students/today", staffRead, async (req, res) => {
   try {
     const schoolId = req.query.schoolId || req.user?.schoolId;
     const classId  = req.query.classId;
+    const periodId = req.query.periodId || null;
     const today    = todayStr();
 
     const query = { schoolId, date: today };
-    if (classId) query.classId = classId;
+    if (classId)  query.classId  = classId;
+    if (periodId) query.periodId = periodId;
 
     const records = await StudentAttendance.find(query).lean();
 
@@ -282,6 +285,7 @@ router.get("/students/today", staffRead, async (req, res) => {
     return res.json({
       success: true,
       date:    today,
+      periodId,
       records,
       roster:  rosterWithStatus,
       summary: {
@@ -303,7 +307,7 @@ router.get("/students/today", staffRead, async (req, res) => {
 
 // ── GET /api/attendance/students ─────────────────────────────────────────────
 // General-purpose endpoint used by teachers and admins.
-// Filters by any combination of schoolId, classId, studentId, date range.
+// Filters by any combination of schoolId, classId, studentId, periodId, date range.
 // ⚠️  NO role-based scoping here — teachers need to see all students.
 router.get("/students", scopeToSelfForStudents, async (req, res) => {
   try {
@@ -311,6 +315,7 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
       schoolId: qSchoolId,
       classId,
       studentId,
+      periodId,
       date,
       startDate,
       endDate,
@@ -325,6 +330,7 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
     // Optional filters — all passed explicitly by the caller
     if (classId)   query.classId   = classId;
     if (studentId) query.studentId = studentId;
+    if (periodId)  query.periodId  = periodId;
     if (status)    query.status    = status;
 
     // ── Self-scope for students ──────────────────────────────────────────────
@@ -369,6 +375,8 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
 
 // ── POST /api/attendance/students/bulk ───────────────────────────────────────
 // Used by teachers/admins to mark attendance for an entire class at once.
+// When periodId is provided, attendance is recorded per class period (the
+// recommended approach). Without it, a single daily record is created.
 router.post("/students/bulk", teachingOnly, async (req, res) => {
   try {
     const {
@@ -388,6 +396,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
 
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
+    const resolvedPeriodId = periodId || null;
     const validStatuses    = STUDENT_STATUSES;
 
     // ── Verify the students actually exist in this class ─────────────────────
@@ -434,25 +443,24 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
             schoolId:  resolvedSchoolId,
             classId,
             subjectId: subjectId || null,
+            periodId:  resolvedPeriodId,
             studentId: row.studentId,
             date:      resolvedDate,
           },
           {
             $set: {
-              periodId: periodId || null,
+              periodId: resolvedPeriodId,
               markedBy: req.user?._id,
               markedAt: new Date(),
               status:   row.status,
               note:     row.note || null,
             },
             $setOnInsert: {
-              // Derived from the natural key, not invented — so a machine that
-              // marked this register offline computed the same id and its queued
-              // request lands on this row rather than creating a second one.
               _id: attendanceId({
                 schoolId:  resolvedSchoolId,
                 classId,
                 subjectId: subjectId || null,
+                periodId:  resolvedPeriodId,
                 studentId: row.studentId,
                 date:      resolvedDate,
               }),
@@ -463,7 +471,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
               date:      resolvedDate,
             },
           },
-          { upsert: true, new: true }
+          { upsert: true, returnDocument: 'after' }
         );
         saved.push(record);
       } catch (e) {
@@ -473,7 +481,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
 
     console.log(
       `📋 Bulk student attendance: saved=${saved.length} failed=${failed.length}` +
-      ` [class=${classId}, date=${resolvedDate}]`
+      ` [class=${classId}, period=${resolvedPeriodId || "day"}, date=${resolvedDate}]`
     );
 
     return res.status(201).json({
@@ -519,6 +527,7 @@ router.post("/students", teachingOnly, async (req, res) => {
 
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
+    const resolvedPeriodId = periodId || null;
 
     // Same gap as the bulk route had: the upsert would happily create a row for
     // a studentId that belongs to nobody, and there is no DELETE route to undo
@@ -540,24 +549,24 @@ router.post("/students", teachingOnly, async (req, res) => {
         schoolId:  resolvedSchoolId,
         classId,
         subjectId: subjectId || null,
+        periodId:  resolvedPeriodId,
         studentId,
         date:      resolvedDate,
       },
       {
         $set: {
-          periodId: periodId || null,
+          periodId: resolvedPeriodId,
           markedBy: req.user?._id,
           markedAt: new Date(),
           status,
           note:     note || null,
         },
         $setOnInsert: {
-          // See the bulk route above: derived, so an offline register and this
-          // one cannot end up as two rows for the same child on the same day.
           _id: attendanceId({
             schoolId:  resolvedSchoolId,
             classId,
             subjectId: subjectId || null,
+            periodId:  resolvedPeriodId,
             studentId,
             date:      resolvedDate,
           }),
@@ -568,11 +577,12 @@ router.post("/students", teachingOnly, async (req, res) => {
           date:      resolvedDate,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     console.log(
-      `📋 Student attendance: studentId=${studentId} → ${status} [${resolvedDate}]`
+      `📋 Student attendance: studentId=${studentId} → ${status}` +
+      ` [period=${resolvedPeriodId || "day"}, ${resolvedDate}]`
     );
 
     return res.status(201).json({ success: true, record });
@@ -825,7 +835,7 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
               date:      resolvedDate,
             },
           },
-          { upsert: true, new: true }
+          { upsert: true, returnDocument: 'after' }
         );
         saved.push(record);
       } catch (e) {
@@ -918,7 +928,7 @@ router.post("/teachers", adminOnly, async (req, res) => {
           date:      resolvedDate,
         },
       },
-      { upsert: true, new: true }
+      { upsert: true, returnDocument: 'after' }
     );
 
     console.log(
@@ -1118,6 +1128,115 @@ router.get("/report/class/:classId", staffRead, async (req, res) => {
   } catch (err) {
     console.error("GET /attendance/report/class error:", err.message);
     return res.status(500).json({ message: "Failed to fetch class report" });
+  }
+});
+
+// ── GET /api/attendance/report/period/:periodId ───────────────────────────────
+// Per-period attendance report for a class on a given date.
+// Shows each student's status for that specific period.
+router.get("/report/period/:periodId", staffRead, async (req, res) => {
+  try {
+    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const periodId  = req.params.periodId;
+    const classId   = req.query.classId;
+    const date      = dateStr(req.query.date);
+
+    const query = { schoolId, periodId, date };
+    if (classId) query.classId = classId;
+
+    const records = await StudentAttendance.find(query).lean();
+
+    return res.json({
+      success: true,
+      periodId,
+      date,
+      classId: classId || null,
+      records,
+      summary: {
+        total:   records.length,
+        present: records.filter((r) => r.status === "present").length,
+        absent:  records.filter((r) => r.status === "absent").length,
+        late:    records.filter((r) => r.status === "late").length,
+        excused: records.filter((r) => r.status === "excused").length,
+      },
+    });
+  } catch (err) {
+    console.error("GET /attendance/report/period error:", err.message);
+    return res.status(500).json({ message: "Failed to fetch period report" });
+  }
+});
+
+// ── GET /api/attendance/report/student/:studentId ────────────────────────────
+// Student attendance summary: per-period breakdown over a date range.
+// Used by the parent portal to show detailed attendance statistics.
+router.get("/report/student/:studentId", staffRead, async (req, res) => {
+  try {
+    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const studentId = req.params.studentId;
+    const startDate = dateStr(req.query.startDate);
+    const endDate   = dateStr(req.query.endDate || new Date());
+
+    const records = await StudentAttendance.find({
+      schoolId,
+      studentId,
+      date: { $gte: startDate, $lte: endDate },
+    }).sort({ date: -1, periodId: 1 }).lean();
+
+    // Per-period breakdown
+    const byPeriod = {};
+    for (const r of records) {
+      const pid = r.periodId || "__no_period";
+      if (!byPeriod[pid]) byPeriod[pid] = { periodId: r.periodId, subjectId: r.subjectId, present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+      byPeriod[pid].total += 1;
+      if (r.status in byPeriod[pid]) byPeriod[pid][r.status] += 1;
+    }
+
+    // Per-subject breakdown
+    const bySubject = {};
+    for (const r of records) {
+      const sid = r.subjectId || "__no_subject";
+      if (!bySubject[sid]) bySubject[sid] = { subjectId: r.subjectId, present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+      bySubject[sid].total += 1;
+      if (r.status in bySubject[sid]) bySubject[sid][r.status] += 1;
+    }
+
+    // Daily summary
+    const byDate = {};
+    for (const r of records) {
+      if (!byDate[r.date]) byDate[r.date] = { date: r.date, present: 0, absent: 0, late: 0, excused: 0, total: 0 };
+      byDate[r.date].total += 1;
+      if (r.status in byDate[r.date]) byDate[r.date][r.status] += 1;
+    }
+
+    const totalPresent = records.filter((r) => r.status === "present").length;
+    const totalLate    = records.filter((r) => r.status === "late").length;
+    const totalExcused = records.filter((r) => r.status === "excused").length;
+    const totalAbsent  = records.filter((r) => r.status === "absent").length;
+    const totalRecords = records.length;
+
+    return res.json({
+      success: true,
+      studentId,
+      startDate,
+      endDate,
+      summary: {
+        total:     totalRecords,
+        present:   totalPresent,
+        absent:    totalAbsent,
+        late:      totalLate,
+        excused:   totalExcused,
+        rate:      totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : null,
+        lateCount: totalLate,
+        excusedCount: totalExcused,
+      },
+      byPeriod:  Object.values(byPeriod),
+      bySubject: Object.values(bySubject),
+      byDate:    Object.values(byDate),
+      recent:    records.slice(0, 30),
+    });
+  } catch (err) {
+    console.error("GET /attendance/report/student error:", err.message);
+    return res.status(500).json({ message: "Failed to fetch student attendance report" });
   }
 });
 

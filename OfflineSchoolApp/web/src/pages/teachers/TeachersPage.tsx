@@ -38,7 +38,7 @@ import {
 import api from "@/lib/axios";
 import { API } from "@/services/apiEndpoints";
 import { useUser } from "@/store/auth.store";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { cn } from "@/utils/cn";
 import type { Teacher } from "@/types";
 import { useTranslation } from "react-i18next";

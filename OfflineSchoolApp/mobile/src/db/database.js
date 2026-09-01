@@ -47,7 +47,7 @@ const _openDatabase = async () => {
         classIds         TEXT,
         classNames       TEXT,
         name             TEXT NOT NULL,
-        type             TEXT DEFAULT 'first_test',
+        type             TEXT DEFAULT 'test',
         academicYear     TEXT,
         term             TEXT,
         startDate        TEXT,

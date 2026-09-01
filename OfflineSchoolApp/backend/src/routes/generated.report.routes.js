@@ -103,7 +103,7 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
   const report = await GeneratedReport.findOneAndUpdate(
     filter,
     update,
-    { upsert: true, new: true }
+    { upsert: true, returnDocument: 'after' }
   ).lean();
 
   console.log(
@@ -222,7 +222,7 @@ router.put("/:id", writeReports, asyncHandler(async (req, res) => {
       ...(schoolId ? { schoolId } : {}),
     },
     { $set: updates },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!report) {
@@ -250,7 +250,7 @@ router.delete("/:id", writeReports, asyncHandler(async (req, res) => {
       deletedAt: null,
     },
     { $set: { deletedAt: new Date() } },
-    { new: true }
+    { returnDocument: 'after' }
   ).lean();
 
   if (!report) {

@@ -56,7 +56,7 @@ router.get("/progression", asyncHandler(async (req, res) => {
   if (!schoolId) return bad(res, "schoolId is required");
 
   const rows = await Class.find({ schoolId, deletedAt: null })
-    .select("name level nextClassId isFinalYear")
+    .select("name level nextClassId isFinalYear promotionAverage")
     .sort({ name: 1 })
     .lean();
 
@@ -94,6 +94,18 @@ router.put("/progression", asyncHandler(async (req, res) => {
   for (const e of entries) {
     const nextId = e.nextClassId ? String(e.nextClassId) : null;
 
+    // The promotion average is optional, but when given it must be a usable
+    // percentage — a typo like "150" or "8a" would silently decide who
+    // repeats for the whole school.
+    let avg = null;
+    if (e.promotionAverage !== undefined && e.promotionAverage !== null && e.promotionAverage !== "") {
+      avg = Number(e.promotionAverage);
+      if (!Number.isFinite(avg) || avg < 0 || avg > 100) {
+        return bad(res, "promotionAverage must be a number between 0 and 100", "BAD_AVERAGE");
+      }
+      avg = Math.round(avg * 10) / 10;
+    }
+
     // A class that leads to itself would promote a whole year group into the
     // class it just left, which reads as a successful rollover and is not one.
     if (nextId && nextId === String(e.classId)) {
@@ -111,12 +123,13 @@ router.put("/progression", asyncHandler(async (req, res) => {
       {
         nextClassId: e.isFinalYear ? null : nextId,
         isFinalYear: Boolean(e.isFinalYear),
+        promotionAverage: avg,
       }
     );
   }
 
   const rows = await Class.find({ schoolId, deletedAt: null })
-    .select("name level nextClassId isFinalYear").sort({ name: 1 }).lean();
+    .select("name level nextClassId isFinalYear promotionAverage").sort({ name: 1 }).lean();
 
   return res.json({ success: true, count: rows.length, data: rows });
 }));

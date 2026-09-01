@@ -295,7 +295,7 @@ exports.update = async (req, res) => {
         isBreak:   isBreak !== undefined ? !!isBreak : existing.isBreak,
         version:   existing.version + 1,
       },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     res.json({

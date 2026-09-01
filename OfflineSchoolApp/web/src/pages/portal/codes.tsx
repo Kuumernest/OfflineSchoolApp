@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat }   from "@/i18n/format";
 import { cn }          from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { fetchStudents } from "@/services/student.service";
 import {
   fetchGuardianAccess, issueGuardianCode, revokeGuardianAccess,

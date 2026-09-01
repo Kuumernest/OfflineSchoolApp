@@ -36,6 +36,7 @@
 
 const reads = [
   ...require("./handlers/students"),
+  ...require("./handlers/timetable"),
   ...require("./handlers/fees"),
   ...require("./handlers/school"),
   ...require("./handlers/finance"),

@@ -226,9 +226,14 @@ const outbox = (db) => {
      * mirror keeps a change the server will never have.
      */
     discard(seq) {
-      const row = db.prepare("SELECT collection, doc_id FROM outbox WHERE seq = ?").get(seq);
+      const row = db.prepare("SELECT collection, doc_id, extra_docs FROM outbox WHERE seq = ?").get(seq);
       db.prepare("DELETE FROM outbox WHERE seq = ?").run(seq);
-      return row ? { collection: row.collection, docId: row.doc_id } : null;
+      if (!row) return null;
+      return {
+        collection: row.collection,
+        docId:      row.doc_id,
+        extraDocs:  row.extra_docs ? JSON.parse(row.extra_docs) : [],
+      };
     },
 
     /** What the UI shows: how much is waiting, and whether anything is stuck. */

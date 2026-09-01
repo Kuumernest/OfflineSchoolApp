@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/DataTable";
 import { useFormat } from "@/i18n/format";
 import { cn } from "@/utils/cn";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { usePermission } from "@/lib/permissions";
 import {
   fetchReminderCandidates, sendReminders,
@@ -132,6 +132,8 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
   const willSend = reminderRows.filter(
     (r) => r.reachable && (force || !r.recentlyReminded)
   ).length;
+  const unreachableCount = reminderRows.filter((r) => !r.reachable).length;
+  const recentlyRemindedCount = reminderRows.filter((r) => r.reachable && r.recentlyReminded).length;
 
   return (
     <>
@@ -191,6 +193,28 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
 
         <p className="mt-3 text-xs text-ink-faint">{t("chase.modeHint")}</p>
 
+        {/* Summary of what will happen */}
+        {reminderRows.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-muted">
+            <span>{t("chase.totalCandidates", { count: reminderRows.length })}</span>
+            {willSend > 0 && (
+              <span className="text-success font-medium">
+                {t("chase.willSend", { count: willSend })}
+              </span>
+            )}
+            {unreachableCount > 0 && (
+              <span className="text-warning">
+                {t("chase.unreachable", { count: unreachableCount })}
+              </span>
+            )}
+            {recentlyRemindedCount > 0 && (
+              <span className="text-ink-faint">
+                {t("chase.recentlyReminded", { count: recentlyRemindedCount })}
+              </span>
+            )}
+          </div>
+        )}
+
         <div className="mt-4 max-h-72 overflow-y-auto">
           {remindersQ.isLoading ? (
             <p className="py-6 text-center text-sm text-ink-muted">{t("common.loading")}</p>
@@ -227,10 +251,21 @@ export default function ChaseArrears({ schoolId, academicYear, classId }: Props)
                         )}
                       </Td>
                       <Td className={skipped ? "text-ink-faint" : undefined}>
-                        <div className="text-sm">{fmt.dateShort(r.earliestDue)}</div>
+                        <div className="text-sm">
+                          {r.earliestDue
+                            ? fmt.dateShort(r.earliestDue)
+                            : t("chase.noDueDate", "No due date")}
+                        </div>
                         {r.isOverdue && (
                           <div className="text-xs text-danger">
-                            {t("chase.daysLate", { count: r.daysOverdue })}
+                            {r.earliestDue
+                              ? t("chase.daysLate", { count: r.daysOverdue })
+                              : t("chase.overdue", "Overdue")}
+                          </div>
+                        )}
+                        {r.undatedCharges > 0 && (
+                          <div className="text-xs text-ink-faint">
+                            {t("chase.undatedCharges", { count: r.undatedCharges })}
                           </div>
                         )}
                       </Td>

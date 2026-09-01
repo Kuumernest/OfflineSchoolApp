@@ -19,12 +19,12 @@ import { PageHeader }  from "@/components/ui/PageHeader";
 import { Card }        from "@/components/ui/Card";
 import { Button }      from "@/components/ui/Button";
 import { PageSpinner } from "@/components/ui/Spinner";
-import { SelectField, Checkbox } from "@/components/ui/FormField";
+import { SelectField, Checkbox, Input } from "@/components/ui/FormField";
 import { useToast }    from "@/components/ui/Toast";
 import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
-import { getErrorMessage } from "@/lib/api";
+import { getErrorMessage } from "@/lib/axios";
 import { fetchProgression, saveProgression } from "@/services/promotion.service";
 import type { ProgressionClass } from "@/types/promotion.types";
 
@@ -32,6 +32,7 @@ interface Entry {
   classId:     string;
   nextClassId: string | null;
   isFinalYear: boolean;
+  promotionAverage: number | null;
 }
 
 export default function ProgressionPage() {
@@ -58,6 +59,7 @@ export default function ProgressionPage() {
     classId:     c._id,
     nextClassId: c.nextClassId,
     isFinalYear: c.isFinalYear,
+    promotionAverage: c.promotionAverage ?? null,
     ...overrides[c._id],
   });
 
@@ -121,6 +123,7 @@ export default function ProgressionPage() {
                 <Th>{t("academic.class")}</Th>
                 <Th>{t("prog.nextClass")}</Th>
                 <Th>{t("prog.finalYear")}</Th>
+                <Th>{t("prog.average")}</Th>
               </Tr>
             </THead>
             <TBody>
@@ -159,6 +162,32 @@ export default function ProgressionPage() {
                             nextClassId: e.target.checked ? null : entry.nextClassId,
                           })
                         }
+                      />
+                    </Td>
+                    <Td>
+                      {/*
+                        The class's promotion bar, set by the school admin.
+                        Blank keeps the majority-of-terms rule; a number makes
+                        the student's yearly average the deciding mark. Typed
+                        through overrides like everything else, so a background
+                        refetch mid-edit cannot discard what was entered.
+                      */}
+                      <Input
+                        type="number"
+                        min={0}
+                        max={100}
+                        step={0.5}
+                        inputMode="decimal"
+                        aria-label={t("prog.average")}
+                        placeholder={t("prog.averageOff")}
+                        value={entry.promotionAverage ?? ""}
+                        onChange={(e) => {
+                          const raw = e.target.value;
+                          update(c._id, {
+                            promotionAverage:
+                              raw === "" ? null : Math.max(0, Math.min(100, Number(raw))),
+                          });
+                        }}
                       />
                     </Td>
                   </Tr>

@@ -633,6 +633,21 @@ app.use("/api/exams",
   loadRoute("./routes/exam.routes")
 );
 
+app.use("/api/academic-structure",
+  auth.authenticate,
+  loadRoute("./routes/academicStructure.routes")
+);
+
+app.use("/api/term-results",
+  auth.authenticate,
+  loadRoute("./routes/termResults.routes")
+);
+
+app.use("/api/annual-results",
+  auth.authenticate,
+  loadRoute("./routes/annualResults.routes")
+);
+
 // Fees. The router applies its own finance-role authorisation, so authenticate
 // here is only establishing who is asking.
 app.use("/api/fees",
