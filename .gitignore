@@ -1,0 +1,9 @@
+# Captured output from the backend verification suites (npm run check:*).
+# These are run logs, not source — regenerate them instead of committing them.
+be-*.txt
+exams-todo.txt
+
+# `nul` is a reserved device name on Windows; a stray `> nul` redirect creates
+# an empty file that git will happily track and no Windows tool can delete.
+nul
+**/nul
