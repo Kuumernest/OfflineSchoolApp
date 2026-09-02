@@ -1383,7 +1383,11 @@
     "accountRestoredBody": "{{name}} is active again as {{role}}, with everything previously recorded against their account. Give them the password below — the old one no longer works.",
     "gradingBlurb": "Cameroon Anglophone system — all marks are on a /20 scale. The pass mark and grade bands below are used when grading exam results.",
     "showGrades": "Show grades on report cards",
-    "showGradesHint": "When off, report cards show marks, remarks and positions but no letter grade. Averages and pass or fail are unaffected."
+    "showGradesHint": "When off, report cards show marks, remarks and positions but no letter grade. Averages and pass or fail are unaffected.",
+    "minOf20": "Min (/20)",
+    "maxOf20": "Max (/20)",
+    "remarkEn": "Remark (English)",
+    "remarkFr": "Remark (French)"
   },
   "permissions": {
     "title": "Who may do what",

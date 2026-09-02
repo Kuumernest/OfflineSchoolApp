@@ -368,21 +368,28 @@ const buildStudentReportCardData = async (examId, studentId) => {
   const bands = Array.isArray(gradingConfig?.grades)
     ? gradingConfig.grades.filter((b) => b && b.grade != null)
     : [];
+  // One lookup, from shared/, rather than a fourth hand-written band search.
+  // Both remarks come back: a report card renders in the reader's language and
+  // the renderer picks, so the payload cannot decide that for it.
   const gradeInfo = (normalizedMark) => {
-    if (normalizedMark == null) return { grade: null, remark: null };
-    if (bands.length > 0) {
-      const m = Number(normalizedMark);
-      const band = bands.find(
-        (b) =>
-          m >= Number(b.minMark) &&
-          (m < Number(b.maxMark) ||
-            (Number(b.maxMark) >= 20 && m <= 20))
-      );
-      if (band) return { grade: band.grade, remark: band.remark || null };
+    if (normalizedMark == null) {
+      return { grade: null, remark: null, remarkFr: null };
+    }
+    const band = GradingConfig.findGradeBand(normalizedMark, bands);
+    if (band) {
+      return {
+        grade:    band.grade,
+        remark:   band.remark   || null,
+        remarkFr: band.remarkFr || band.remark || null,
+      };
     }
     const fb = lookupGrade(normalizedMark);
-    return { grade: fb.grade, remark: fb.remark };
+    return { grade: fb.grade, remark: fb.remark, remarkFr: fb.remarkFr || fb.remark };
   };
+
+  /** The /20 average this card headlines, for the overall band lookup. */
+  const resolveAvg20 = () =>
+    summary?.average != null ? Number(summary.average) : null;
 
   // Lookup by both ref styles: StudentScore.examSubjectId → ExamSubject._id,
   // while rows entered before subjects were set up may only carry subjectId.
@@ -435,6 +442,9 @@ const buildStudentReportCardData = async (examId, studentId) => {
       // Remark shown on the card: the teacher's own remark wins, then the
       // school's configured band remark (§4).
       remark:        score.teacherRemark || gi.remark || null,
+      // The band remark in French. A teacher's own remark is their words and
+      // is not translated — it stands in whichever language it was written.
+      remarkFr:      score.teacherRemark || gi.remarkFr || null,
       coefficient:   coeff,
       percentage:    score.percentage    ?? null,
       grade:         score.grade         ?? gi.grade,
@@ -511,6 +521,10 @@ const buildStudentReportCardData = async (examId, studentId) => {
             average:         summary.average,
             overallGrade:    summary.overallGrade,
             overallRemark:   summary.overallRemark,
+            // Derived from the band the average falls in, so the overall
+            // remark translates like the per-subject ones rather than being
+            // the one line of English left on a French card.
+            overallRemarkFr: gradeInfo(resolveAvg20()).remarkFr,
             gpa:             summary.gpa,
             isPassing:       summary.isPassing,
             // Exposed so the archive can freeze only what has actually been

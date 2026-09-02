@@ -1383,7 +1383,11 @@
     "accountRestoredBody": "{{name}} est de nouveau actif en tant que {{role}}, avec tout ce qui avait été enregistré sur son compte. Communiquez-lui le mot de passe ci-dessous — l'ancien ne fonctionne plus.",
     "gradingBlurb": "Système anglophone camerounais — toutes les notes sont sur 20. La moyenne de passage et les tranches ci-dessous servent à noter les examens.",
     "showGrades": "Afficher les mentions sur les bulletins",
-    "showGradesHint": "Désactivé, le bulletin affiche les notes, les appréciations et les rangs, sans lettre. Les moyennes et l’admission ne changent pas."
+    "showGradesHint": "Désactivé, le bulletin affiche les notes, les appréciations et les rangs, sans lettre. Les moyennes et l’admission ne changent pas.",
+    "minOf20": "Min (/20)",
+    "maxOf20": "Max (/20)",
+    "remarkEn": "Appréciation (anglais)",
+    "remarkFr": "Appréciation (français)"
   },
   "permissions": {
     "title": "Qui peut faire quoi",

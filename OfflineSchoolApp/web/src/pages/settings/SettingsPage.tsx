@@ -56,7 +56,8 @@ interface GradingConfig {
   useGpa:      boolean;
   gpaScale:    number;
   gradingType: string;
-  grades?:     { grade: string; minMark: number; maxMark: number; gpaPoints?: number; remark?: string }[];
+  grades?:     { grade: string; minMark: number; maxMark: number; gpaPoints?: number;
+                 remark?: string; remarkFr?: string }[];
 }
 
 interface AdminUser {
@@ -1030,9 +1031,10 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                   <thead className="bg-gray-50 text-xs font-semibold uppercase text-gray-400">
                     <tr>
                       <th className="px-4 py-2.5 text-left">{t("academic.grade")}</th>
-                      <th className="px-4 py-2.5 text-left">Min (/20)</th>
-                      <th className="px-4 py-2.5 text-left">Max (/20)</th>
-                      <th className="px-4 py-2.5 text-left">Remark</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.minOf20")}</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.maxOf20")}</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.remarkEn")}</th>
+                      <th className="px-4 py-2.5 text-left">{t("settings.remarkFr")}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -1071,8 +1073,35 @@ function GradingSection({ schoolId }: { schoolId: string }) {
                             className="w-16 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
                           />
                         </td>
-                        <td className="px-4 py-2.5 text-gray-600">
-                          {g.remark}
+                        {/* Both remarks, both editable. A report card prints the
+                            one that matches the reader's language, so a school
+                            that rewrites its wording has to be able to rewrite
+                            both — and the French column being read-only is why
+                            French cards printed English remarks. */}
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="text"
+                            value={g.remark ?? ""}
+                            onChange={(e) => {
+                              const grades = [...config.grades!];
+                              grades[i] = { ...grades[i], remark: e.target.value };
+                              setConfig({ ...config, grades });
+                            }}
+                            className="w-40 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                          />
+                        </td>
+                        <td className="px-4 py-2.5">
+                          <input
+                            type="text"
+                            value={g.remarkFr ?? ""}
+                            placeholder={g.remark ?? ""}
+                            onChange={(e) => {
+                              const grades = [...config.grades!];
+                              grades[i] = { ...grades[i], remarkFr: e.target.value };
+                              setConfig({ ...config, grades });
+                            }}
+                            className="w-48 rounded-lg border border-gray-200 px-2 py-1 text-sm outline-none focus:border-indigo-400"
+                          />
                         </td>
                       </tr>
                     ))}

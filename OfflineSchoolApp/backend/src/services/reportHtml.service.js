@@ -170,6 +170,19 @@ function renderReportCardHtml(payload, opts = {}) {
   const showGrades = opts.showGrades ?? payload.showGrades ?? true;
   const school     = opts.school || {};
 
+  // The remark in the reader's language. The band carries both; a teacher's own
+  // remark carries one, in whichever language they wrote it, and is not
+  // translated. Until this existed a French card printed "Observation" over a
+  // column of English remarks, which is the half-translated document that makes
+  // a school stop trusting the language switch.
+  const remarkOf = (row) =>
+    (lang === "fr" ? (row?.remarkFr || row?.remark) : row?.remark) || null;
+
+  const overallRemarkText = remarkOf({
+    remark:   summary?.overallRemark,
+    remarkFr: summary?.overallRemarkFr,
+  });
+
   // 2nd / 35 — language-aware ordinal for subject and class positions.
   const ordinal = (n) => {
     if (n == null) return "—";
@@ -217,7 +230,7 @@ function renderReportCardHtml(payload, opts = {}) {
              </td>`
           : ""}
         <td style="text-align:center;color:${absent ? "#9CA3AF" : "#374151"}">
-          ${absent ? flag : esc(s.remark || "—")}
+          ${absent ? flag : esc(remarkOf(s) || "—")}
         </td>
         <td style="text-align:center">${absent ? "—" : posCell(s)}</td>
         <td style="text-align:center;color:${color}">
@@ -384,8 +397,8 @@ function renderReportCardHtml(payload, opts = {}) {
       : ""
   }
 
-  ${summary?.overallRemark
-    ? `<div class="remark"><strong>${t.remark}:</strong> ${esc(summary.overallRemark)}</div>`
+  ${overallRemarkText
+    ? `<div class="remark"><strong>${t.remark}:</strong> ${esc(overallRemarkText)}</div>`
     : ""}
 
   ${opts.verify
@@ -438,6 +451,12 @@ function toTemplateData(payload, opts = {}) {
   const term   = payload.termResult   || null;
   const annual = payload.annualResult || null;
 
+  // A school's own template renders in the reader's language too, so the remark
+  // it substitutes has to be picked the same way the built-in layout picks it.
+  const lang     = opts.lang === "fr" ? "fr" : "en";
+  const remarkOf = (row) =>
+    (lang === "fr" ? (row?.remarkFr || row?.remark) : row?.remark) || "";
+
   const avg20 = resolveAverage20(payload);
 
   return {
@@ -482,7 +501,10 @@ function toTemplateData(payload, opts = {}) {
       position:          summary?.classPosition   ?? null,
       totalStudents:     summary?.totalInClass    ?? null,
       grade:             summary?.overallGrade    || "",
-      remark:            summary?.overallRemark   || "",
+      remark:            remarkOf({
+        remark:   summary?.overallRemark,
+        remarkFr: summary?.overallRemarkFr,
+      }),
       // §8: promotion only exists on the final annual report — never leaked
       // onto sequence or term templates regardless of what the payload holds.
       promotionStatus:   payload.reportType === "annual"
@@ -503,7 +525,7 @@ function toTemplateData(payload, opts = {}) {
       // the engine renders "".
       termAverage:         term?.average        ?? null,
       termGrade:           term?.grade          ?? null,
-      termRemark:          term?.remark         ?? null,
+      termRemark:          remarkOf(term)        || null,
       termClassPosition:   term?.classPosition  ?? null,
       termTotalInClass:    term?.totalInClass   ?? null,
 
@@ -520,7 +542,7 @@ function toTemplateData(payload, opts = {}) {
 
       annualAverage:       annual?.average       ?? null,
       annualGrade:         annual?.grade         ?? null,
-      annualRemark:        annual?.remark        ?? null,
+      annualRemark:        remarkOf(annual)      || null,
       annualClassPosition: annual?.classPosition ?? null,
       annualTotalInClass:  annual?.totalInClass  ?? null,
 
@@ -549,7 +571,7 @@ function toTemplateData(payload, opts = {}) {
       grade:          r.grade          || "",
       // The controller now emits the remark at `remark` (school-configured
       // remark system); teacherRemark remains the legacy fallback.
-      remark:         r.remark         || r.teacherRemark || "",
+      remark:         remarkOf(r) || r.teacherRemark || "",
       // Per-subject rank over students who actually sat the subject
       // (§5). `position` keeps the legacy token name working.
       position:       r.subjectPosition ?? r.position ?? null,

@@ -13,6 +13,11 @@ const gradeBandSchema = new mongoose.Schema(
     maxMark:   { type: Number, required: true },
     gpaPoints: { type: Number, default: 0     },
     remark:    { type: String, default: ""    },
+    // The same remark in French. A report card renders in the reader's
+    // language and the remark is the part a parent actually reads, so it
+    // cannot be the one field that stays English. Empty falls back to
+    // `remark`, which is what a school writing in one language will have.
+    remarkFr:  { type: String, default: ""    },
   },
   { _id: false }
 );
@@ -88,7 +93,7 @@ GradingConfig.GRADING_TYPES = GRADING_TYPES;
  * scoring 11.5 got "C+ / Above Average" depended on whether an administrator
  * had ever opened that screen.
  */
-const { DEFAULT_GRADES: DEFAULT_GRADE_SCALE } =
+const { DEFAULT_GRADES: DEFAULT_GRADE_SCALE, findBand, bandRemark } =
   require("../../../../shared/gradeScale");
 
 /**
@@ -99,26 +104,10 @@ const { DEFAULT_GRADES: DEFAULT_GRADE_SCALE } =
  *                                to DEFAULT_GRADE_SCALE when empty/missing
  * @returns {{grade, remark, minMark, maxMark}|null}
  */
-const findGradeBand = (markOn20, bands) => {
-  if (markOn20 == null || !Number.isFinite(Number(markOn20))) return null;
-  const m = Number(markOn20);
-  const scale = Array.isArray(bands) && bands.length > 0
-    ? bands
-    : DEFAULT_GRADE_SCALE;
-  for (const b of scale) {
-    const min = Number(b.minMark);
-    const max = Number(b.maxMark);
-    if (!Number.isFinite(min) || !Number.isFinite(max)) continue;
-    if (m >= min && m < max) return b;
-    // Tolerance for a school's last band written with an inclusive top
-    // (maxMark: 20) — the strict `< max` test above already caught 20 only
-    // if an earlier band claimed it, so accept equality here as a fallback.
-    if (m === max && m === 20) return b;
-  }
-  return null;
-};
+const findGradeBand = (markOn20, bands) => findBand(markOn20, bands);
 
 GradingConfig.DEFAULT_GRADE_SCALE = DEFAULT_GRADE_SCALE;
 GradingConfig.findGradeBand = findGradeBand;
+GradingConfig.bandRemark    = bandRemark;
 
 module.exports = GradingConfig;

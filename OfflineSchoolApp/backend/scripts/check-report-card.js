@@ -26,7 +26,7 @@
 
 const { reportTypeFor, carriesPromotion, subjectRanking } =
   require("../../shared/reportCard");
-const { DEFAULT_GRADES } = require("../../shared/gradeScale");
+const { DEFAULT_GRADES, bandRemark } = require("../../shared/gradeScale");
 const GradingConfig = require("../src/db/models/GradingConfig");
 const { renderReportCardHtml } = require("../src/services/reportHtml.service");
 
@@ -140,6 +140,35 @@ check("a perfect 20 is A+, not a fall-through to F",
 check("a school's own bands win over the shipped table",
   GradingConfig.findGradeBand(85, [{ grade: "A", minMark: 80, maxMark: 100 }]).grade, "A");
 
+// The remarks the school specified, exactly. Three of the four tables that used
+// to exist got these wrong — "Fairly Good", "Poor", "Very Poor" — and those
+// three were the ones that actually graded a mark.
+check("every remark is the school's wording",
+  DEFAULT_GRADES.map((g) => g.remark),
+  ["Excellent", "Very Good", "Good", "Fair",
+   "Above Average", "Average", "Below Average", "Fail"]);
+check("and every band carries a French one",
+  DEFAULT_GRADES.filter((g) => !g.remarkFr).map((g) => g.grade), []);
+check("11.5 in French",
+  bandRemark(GradingConfig.findGradeBand(11.5), "fr"), "Au-dessus de la moyenne");
+check("and in English",
+  bandRemark(GradingConfig.findGradeBand(11.5), "en"), "Above Average");
+check("a band with no French remark falls back to the English one",
+  bandRemark({ remark: "Merit" }, "fr"), "Merit");
+
+// The grader and the stored scale must agree mark for mark. They did not: one
+// said C / Average where the other said C+ / Above Average.
+const { lookupGrade } = require("../src/services/grading.service");
+const disagreements = [];
+for (let m = 0; m <= 20; m += 0.5) {
+  const a = lookupGrade(m);
+  const b = GradingConfig.findGradeBand(m);
+  if (!b || a.grade !== b.grade || a.remark !== b.remark) {
+    disagreements.push([m, a.grade, b && b.grade]);
+  }
+}
+check("the grader and the stored scale agree on every half mark", disagreements, []);
+
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- the rendered card ---");
 
@@ -236,6 +265,43 @@ for (const [type, expected] of [
     toTemplateData(payload({ reportType: type }), SCHOOL).performance.promotionStatus,
     expected);
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the card in French ---");
+
+// A French card used to translate its LABELS and leave the remarks in English:
+// "Observation" over a column reading "Above Average". The remark is the part a
+// parent actually reads, so a half-translated card is the one that makes a
+// school stop trusting the language switch.
+const FR_SUBJECTS = [
+  { subjectName: "Physique", score: 11.5, maxScore: 20, normalizedMark: 11.5,
+    grade: "C+", remark: "Above Average", remarkFr: "Au-dessus de la moyenne",
+    subjectPosition: 18, subjectTotal: 35, coefficient: 1, isPassing: true },
+];
+const bilingual = (over) => payload({
+  subjects: FR_SUBJECTS,
+  summary: { ...payload().summary, overallRemark: "Good", overallRemarkFr: "Bien" },
+  ...over,
+});
+const frCard = renderReportCardHtml(bilingual(), { ...SCHOOL, lang: "fr" });
+const enCard = renderReportCardHtml(bilingual(), { ...SCHOOL, lang: "en" });
+
+check("the French card prints the French subject remark",
+  frCard.includes("Au-dessus de la moyenne"), true);
+check("and not the English one", frCard.includes("Above Average"), false);
+check("the English card prints the English one",
+  enCard.includes("Above Average"), true);
+check("and not the French one", enCard.includes("Au-dessus de la moyenne"), false);
+check("the French card's overall remark is French too", frCard.includes("Bien"), true);
+check("its column heading is French as well", frCard.includes("Observation"), true);
+
+// A teacher's own words are not translated — they stand in whichever language
+// they were written, on either card.
+const teacherWords = renderReportCardHtml(bilingual({
+  subjects: [{ ...FR_SUBJECTS[0], remark: "Doit se ressaisir", remarkFr: "Doit se ressaisir" }],
+}), { ...SCHOOL, lang: "en" });
+check("a teacher's own remark is left alone",
+  teacherWords.includes("Doit se ressaisir"), true);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

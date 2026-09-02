@@ -26,15 +26,17 @@
  */
 // Cameroon /20 scale — mirrors grading.service.js GRADES / GRADE_SCALE and the
 // GradingConfig defaults so the offline engine agrees with the server exactly.
-const GRADE_SCALE = [
-  { min: 18.0, max: 20.0,  grade: "A+", points: 4.0, remark: "Excellent"   },
-  { min: 16.0, max: 17.99, grade: "A",  points: 3.7, remark: "Very Good"   },
-  { min: 14.0, max: 15.99, grade: "B+", points: 3.3, remark: "Good"        },
-  { min: 12.0, max: 13.99, grade: "B",  points: 3.0, remark: "Fairly Good" },
-  { min: 10.0, max: 11.99, grade: "C",  points: 2.0, remark: "Average"     },
-  { min: 8.0,  max: 9.99,  grade: "D",  points: 1.0, remark: "Poor"        },
-  { min: 0.0,  max: 7.99,  grade: "F",  points: 0.0, remark: "Very Poor"   },
-];
+// The one table, from shared/. This file carried its own seven-band copy with
+// no C+ and remarks that disagreed with the school's — and since this is what
+// actually grades a mark, its copy is the one that reached the report card.
+const { GRADE_SCALE } = require("../../../../shared/gradeScale");
+
+/** The bottom band, for the marks no band claimed. Read off the table so it
+ *  cannot say something the table does not. */
+const failBand = () => {
+  const f = GRADE_SCALE[GRADE_SCALE.length - 1];
+  return { grade: f.grade, points: f.points, remark: f.remark, remarkFr: f.remarkFr };
+};
 
 const normalizeTo20 = (score, maxScore) => {
   if (!maxScore || maxScore <= 0)    return 0;
@@ -49,7 +51,7 @@ const lookupGrade = (markOutOf20) => {
   );
   return found
     ? { grade: found.grade, points: found.points, remark: found.remark }
-    : { grade: "F", points: 0, remark: "Very Poor" };
+    : failBand();
 };
 
 const computeGrade = (score, maxScore, gradingConfig) => {

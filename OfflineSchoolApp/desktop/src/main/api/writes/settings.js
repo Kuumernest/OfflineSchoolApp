@@ -115,17 +115,26 @@ const cleanBand = (band) => {
     : asNumber(band.gpaPoints);
   if (gpaPoints === null) return null;
 
-  const remark = band.remark === undefined || band.remark === null
-    ? ""
-    : band.remark;
-  if (typeof remark !== "string" && typeof remark !== "number") return null;
+  // Both remarks. This function is the mirror's whole idea of a band, so a
+  // field it does not name is a field a desktop save silently drops — and the
+  // French remark is exactly the sort of thing nobody notices going missing
+  // until a French report card prints in English.
+  const text = (v) => {
+    if (v === undefined || v === null) return "";
+    if (typeof v !== "string" && typeof v !== "number") return null;
+    return String(v);
+  };
+  const remark   = text(band.remark);
+  const remarkFr = text(band.remarkFr);
+  if (remark === null || remarkFr === null) return null;
 
   return {
     grade: String(label),
     minMark,
     maxMark,
     gpaPoints,
-    remark: String(remark),
+    remark,
+    remarkFr,
   };
 };
 

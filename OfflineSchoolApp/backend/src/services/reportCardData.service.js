@@ -168,6 +168,8 @@ function subjectRowsFor(studentId, byStudent, bands, showGrades) {
       coefficient:     row.coefficient,
       grade:           showGrades ? (band?.grade || null) : null,
       remark:          band?.remark || null,
+      // Both, so the renderer can pick by the reader's language.
+      remarkFr:        band?.remarkFr || band?.remark || null,
       subjectPosition: place.position,
       subjectTotal:    place.total,
       isPassing:       band ? band.grade !== "F" : null,
@@ -245,6 +247,9 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
       average:        record.termAverage,
       overallGrade:   grading.showGrades ? record.overallGrade : null,
       overallRemark:  record.overallRemark,
+      overallRemarkFr: GradingConfig.bandRemark(
+        GradingConfig.findGradeBand(record.termAverage ?? record.annualAverage, grading.bands),
+        "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,
       isPassing:      record.isPassing,
@@ -319,6 +324,9 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
       average:        record.annualAverage,
       overallGrade:   grading.showGrades ? record.overallGrade : null,
       overallRemark:  record.overallRemark,
+      overallRemarkFr: GradingConfig.bandRemark(
+        GradingConfig.findGradeBand(record.termAverage ?? record.annualAverage, grading.bands),
+        "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,
       isPassing:      record.isPassing,

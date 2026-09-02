@@ -4475,9 +4475,14 @@ const main = async () => {
         "FIRST band a percentage falls in, so the order IS the marking scheme",
     stgSaved.data.grading.grades.map((g) => g.grade),
     ["Distinction", "Credit", "Fail"]);
+  // remarkFr alongside remark: a band carries its remark in both languages now,
+  // because a report card renders in the reader's and the remark is the part a
+  // parent reads. Absent from the body, so it defaults to "" exactly as remark
+  // does — and it is listed here because cleanBand's shape IS the contract.
   check("numeric strings are cast, as mongoose casts them",
     stgSaved.data.grading.grades[1],
-    { grade: "Credit", minMark: 50, maxMark: 69, gpaPoints: 0, remark: "" });
+    { grade: "Credit", minMark: 50, maxMark: 69, gpaPoints: 0,
+      remark: "", remarkFr: "" });
   check("the local row keeps the server's ObjectId rather than inventing one",
     stgSaved.data.grading._id, stgConfigId);
   /**
