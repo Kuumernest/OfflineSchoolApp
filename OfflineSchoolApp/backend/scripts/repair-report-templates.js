@@ -2,9 +2,12 @@
 "use strict";
 
 /**
- * Repair the promotion banner in report-card templates a school already saved.
+ * Repair the verdict banner in report-card templates a school already saved.
  *
- * ── What is wrong with them ───────────────────────────────────────────────
+ * Two faults, both in the same block, both fixed in the seed and both still
+ * sitting in every copy a school made of it.
+ *
+ * ── One: it called passing a promotion ────────────────────────────────────
  *
  * The layout this project shipped gated its banner on {{if isPassing}} and
  * printed "✓ PROMOTED". Passing one exam is not a promotion, so every pupil who
@@ -13,6 +16,18 @@
  *
  * The seed is fixed. A school that saved a copy still holds the old text in its
  * own ReportTemplate row, and fixing the seed does nothing for them.
+ *
+ * ── Two: the verdict took a whole row, and pushed the code off the page ───
+ *
+ * That same banner is a full-width band with the remark printed inside it, at
+ * 16px bold. Any remark longer than a few words wraps to two or three lines,
+ * and the band plus the summary boxes above it is enough height to push the
+ * verification block — with the code a registrar types to check that the card
+ * is genuine — off the foot of the page. The document loses the one part of it
+ * that proves it is real.
+ *
+ * So the verdict becomes a short pill and the remark sits beside it, on one
+ * row. Same words, one line instead of four.
  *
  * ── Why this patches rather than reseeds ──────────────────────────────────
  *
@@ -41,6 +56,8 @@
 
 require("dotenv").config();
 const mongoose = require("mongoose");
+const path     = require("path");
+const fs       = require("fs");
 
 const ReportTemplate = require("../src/db/models/ReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
@@ -113,10 +130,7 @@ const PROMOTION_BLOCK = `
  *   no-promotion  | it has the block, but says nothing about promotion
  *   unbalanced    | the block does not close; reported, never guessed at
  */
-const repairHtml = (html) => {
-  if (typeof html !== "string" || !html.trim()) {
-    return { status: "no-banner", note: "empty template" };
-  }
+const promotionPass = (html) => {
   if (html.includes("{{if is_annual}}")) {
     return { status: "already-fixed" };
   }
@@ -142,6 +156,156 @@ const repairHtml = (html) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SECOND PASS: THE VERDICT OFF ITS OWN ROW
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The rules the rearranged markup needs, appended to a template's own CSS. */
+const LAYOUT_CSS = `
+
+  /* ── Verdict and remark, on one row ────────────────────
+     Added by scripts/repair-report-templates.js. The verdict used to be a
+     full-width band with the remark inside it: it wrapped to several lines and
+     pushed the verification code off the foot of the page. */
+  .verdict {
+    display:       flex;
+    align-items:   center;
+    gap:           10px;
+    flex-wrap:     wrap;
+    margin-bottom: 12px;
+  }
+
+  .verdict-pill {
+    flex:          none;
+    padding:       6px 12px;
+    border-radius: 999px;
+    font-size:     12px;
+    font-weight:   bold;
+    white-space:   nowrap;
+  }
+
+  .verdict-pill.pass { background: #d1fae5; color: #059669; }
+  .verdict-pill.fail { background: #fee2e2; color: #dc2626; }
+
+  .verdict-remark {
+    flex:        1;
+    min-width:   220px;
+    font-size:   11px;
+    font-style:  italic;
+    color:       #4b5563;
+    line-height: 1.5;
+  }`;
+
+/**
+ * A pass/fail band, and only one that has no markup of its own inside it.
+ *
+ * A school that put a table or a nested div in its banner gets left alone: the
+ * indentation and the structure are then its own design, and rebuilding the
+ * block would be rewriting the document rather than repairing it.
+ */
+const BANNER_RE =
+  /([ \t]*)<div class="pass-banner (pass|fail)"\s*>([\s\S]*?)<\/div>/g;
+
+/** Only a real dash divides the verdict from the remark. Never a hyphen: a
+ *  remark may well contain one, and splitting on it would cut a sentence. */
+const DASH_RE = /\s*(?:&mdash;|&#8212;|&ndash;|—|–)\s*/;
+
+/**
+ * Move the remark out of the band and put it beside a pill.
+ *
+ * @returns {{ status: string, html?: string, count?: number, note?: string }}
+ *   repaired      | at least one band was rearranged
+ *   already-fixed | it is a pill already, or its band holds no remark to move
+ *   no-banner     | there is no {{if isPassing}} block here
+ *   unbalanced    | the block does not close
+ */
+const layoutPass = (html) => {
+  const block = findIsPassingBlock(html);
+  if (!block) {
+    return html.includes("{{if isPassing}}")
+      ? { status: "unbalanced", note: "{{if isPassing}} has no matching {{endif}}" }
+      : { status: "no-banner" };
+  }
+  if (block.body.includes("verdict-pill")) return { status: "already-fixed" };
+
+  // The template's own line endings, not this file's: these rows came out of a
+  // database and may well be LF inside a CRLF repository.
+  const eol = block.body.includes("\r\n") ? "\r\n" : "\n";
+
+  let count = 0;
+  const body = block.body.replace(BANNER_RE, (match, indent, cls, inner) => {
+    if (inner.includes("<")) return match;              // markup of its own
+    const parts   = inner.split(DASH_RE);
+    const verdict = (parts[0] || "").trim();
+    const remark  = parts.slice(1).join(" ").trim();
+
+    // Nothing to unstack unless the band really is carrying the remark.
+    if (!verdict || !remark.includes("{{remark}}")) return match;
+
+    count += 1;
+    return [
+      `${indent}<div class="verdict">`,
+      `${indent}  <div class="verdict-pill ${cls}">${verdict}</div>`,
+      `${indent}  {{if remark}}<div class="verdict-remark">${remark}</div>{{endif}}`,
+      `${indent}</div>`,
+    ].join(eol);
+  });
+
+  if (!count) return { status: "already-fixed" };
+  return {
+    status: "repaired",
+    count,
+    html: html.slice(0, block.start) + body + html.slice(block.end),
+  };
+};
+
+/** The template's CSS with the new rules appended, or null if it has them. */
+const repairCss = (css) => {
+  if (typeof css !== "string") return null;
+  if (/\.verdict\b/.test(css)) return null;
+  return css + LAYOUT_CSS;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Both passes, in order, over one template.
+ *
+ * They are independent: a template repaired for the promotion months ago still
+ * needs the layout, so neither pass may return early on the other's behalf.
+ * When nothing changes, the promotion pass's answer is the one reported — it is
+ * the more specific of the two about why.
+ *
+ * @returns {{ status, html?, css?, changes?: string[], note? }}
+ */
+const repairHtml = (html, css) => {
+  if (typeof html !== "string" || !html.trim()) {
+    return { status: "no-banner", note: "empty template" };
+  }
+
+  const changes = [];
+  let out = html;
+
+  const promo = promotionPass(out);
+  if (promo.html) { out = promo.html; changes.push("promotion"); }
+
+  const layout = layoutPass(out);
+  if (layout.html) { out = layout.html; changes.push("layout"); }
+
+  if (!changes.length) {
+    const note = promo.note || layout.note;
+    return { status: promo.status, ...(note ? { note } : {}) };
+  }
+
+  const nextCss = changes.includes("layout") ? repairCss(css) : null;
+  return {
+    status: "repaired",
+    changes,
+    html: out,
+    ...(nextCss == null ? {} : { css: nextCss }),
+  };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PROVING IT BEFORE WRITING IT
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -156,7 +320,7 @@ const PROBE = (reportType) => ({
   }],
   summary: {
     average: 18, classPosition: 1, totalInClass: 2, isPassing: true,
-    overallGrade: "A+", overallRemark: "Excellent",
+    overallGrade: "A+", overallRemark: "Steady and careful work",
     promotionStatus: "PROMOTED TO THE NEXT CLASS",
   },
   computed: { totalCoefficients: 1, weightedAverage: 18, outOf: 20 },
@@ -169,12 +333,18 @@ const PROBE_OPTS = (html, css) => ({
 });
 
 /**
- * Render the candidate and insist on three things: the engine parsed it, the
- * promotion appears on the annual card, and it appears nowhere else.
+ * Render the candidate and insist on four things: the engine parsed it, the
+ * promotion appears on the annual card, it appears nowhere else, and — when the
+ * layout pass has just moved the remark out of the band — the remark is still
+ * on the card. That last one is the whole risk of rearranging markup: a repair
+ * that tidied the row by dropping the teacher's words would be a worse
+ * document than the one it replaced.
  *
+ * @param {object} [opts]
+ * @param {boolean} [opts.expectRemark] the layout pass moved a remark
  * @returns {string[]} reasons it is not safe to write; empty means it is
  */
-const verify = (html, css) => {
+const verify = (html, css, opts = {}) => {
   const problems = [];
   let annual, sequence;
 
@@ -196,6 +366,9 @@ const verify = (html, css) => {
   }
   if (!/PASSED/.test(sequence.html)) {
     problems.push("the sequence card lost its pass/fail banner");
+  }
+  if (opts.expectRemark && !/Steady and careful work/.test(sequence.html)) {
+    problems.push("the rearranged row dropped the remark");
   }
   return problems;
 };
@@ -225,7 +398,7 @@ const main = async () => {
 
   for (const row of rows) {
     const label  = `${row.name || "(unnamed)"} [${row._id}]`;
-    const result = repairHtml(row.html);
+    const result = repairHtml(row.html, row.css);
     tally[result.status] = (tally[result.status] || 0) + 1;
 
     if (result.status !== "repaired") {
@@ -234,7 +407,9 @@ const main = async () => {
       continue;
     }
 
-    const problems = verify(result.html, row.css);
+    const problems = verify(result.html, result.css ?? row.css, {
+      expectRemark: result.changes.includes("layout"),
+    });
     if (problems.length) {
       tally.repaired -= 1;
       tally["unsafe"] = (tally.unsafe || 0) + 1;
@@ -243,18 +418,33 @@ const main = async () => {
       continue;
     }
 
-    console.log(`  repaired       ${label}${row.isDefault ? "  (default)" : ""}`);
-    writes.push({ _id: row._id, html: result.html });
+    console.log(`  repaired       ${label}${row.isDefault ? "  (default)" : ""}` +
+                `  — ${result.changes.join(" + ")}`);
+    writes.push({
+      _id: row._id, html: result.html,
+      ...(result.css == null ? {} : { css: result.css }),
+      before: { name: row.name, html: row.html, css: row.css },
+    });
   }
 
   if (APPLY && writes.length) {
+    // The old rows on disk before the new ones go in. These are the school's
+    // own documents, and nothing in the app can put them back.
+    const dir = path.join(__dirname, "..", "backups");
+    fs.mkdirSync(dir, { recursive: true });
+    const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+    const file  = path.join(dir, `report-templates-${stamp}.json`);
+    fs.writeFileSync(file, JSON.stringify(
+      writes.map((w) => ({ _id: String(w._id), ...w.before })), null, 2));
+    console.log(`\n  backed up to ${path.relative(process.cwd(), file)}`);
+
     for (const w of writes) {
       await ReportTemplate.updateOne(
         { _id: w._id },
-        { $set: { html: w.html } }
+        { $set: { html: w.html, ...(w.css == null ? {} : { css: w.css }) } }
       );
     }
-    console.log(`\n  wrote ${writes.length} template(s)`);
+    console.log(`  wrote ${writes.length} template(s)`);
   } else if (writes.length) {
     console.log(`\n  ${writes.length} template(s) would be written — re-run with --apply`);
   }
@@ -271,7 +461,10 @@ const main = async () => {
 // Exported so scripts/check-template-repair.js can exercise the decision and
 // the verification without a database. Only connects when run directly, so
 // requiring this file costs nothing.
-module.exports = { repairHtml, findIsPassingBlock, verify, PROMOTION_BLOCK };
+module.exports = {
+  repairHtml, findIsPassingBlock, verify, PROMOTION_BLOCK,
+  promotionPass, layoutPass, repairCss, LAYOUT_CSS,
+};
 
 if (require.main === module) {
   main().catch((err) => {

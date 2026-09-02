@@ -176,6 +176,42 @@ const DEFAULT_TEMPLATE_CSS = `  * {
     color:      #dc2626;
   }
 
+  /* ── Verdict and remark, on one row ────────────────────
+     The verdict used to be a full-width band with the remark inside it, which
+     wrapped to two and three lines on any remark longer than a few words. That
+     block plus the summary boxes above it was enough height to push the
+     verification block, and the code a registrar types to check the card, off
+     the foot of the page. A short pill and the remark beside it says the same
+     thing in one line. */
+  .verdict {
+    display:       flex;
+    align-items:   center;
+    gap:           10px;
+    flex-wrap:     wrap;
+    margin-bottom: 12px;
+  }
+
+  .verdict-pill {
+    flex:          none;
+    padding:       6px 12px;
+    border-radius: 999px;
+    font-size:     12px;
+    font-weight:   bold;
+    white-space:   nowrap;
+  }
+
+  .verdict-pill.pass { background: #d1fae5; color: #059669; }
+  .verdict-pill.fail { background: #fee2e2; color: #dc2626; }
+
+  .verdict-remark {
+    flex:        1;
+    min-width:   220px;
+    font-size:   11px;
+    font-style:  italic;
+    color:       #4b5563;
+    line-height: 1.5;
+  }
+
   /* ── Remarks sections ──────────────────────────────── */
   .remarks-section {
     border:        1px solid #e5e7eb;
@@ -325,12 +361,14 @@ const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
        council has decided. The promotion decision has its own block below and
        appears on the annual card alone. -->
   {{if isPassing}}
-    <div class="pass-banner pass">
-      ✓ PASSED &mdash; {{remark}}
+    <div class="verdict">
+      <div class="verdict-pill pass">✓ PASSED</div>
+      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
     </div>
   {{else}}
-    <div class="pass-banner fail">
-      ✗ NOT PASSED &mdash; {{remark}}
+    <div class="verdict">
+      <div class="verdict-pill fail">✗ NOT PASSED</div>
+      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
     </div>
   {{endif}}
 

@@ -308,17 +308,31 @@ function renderReportCardHtml(payload, opts = {}) {
     thead th { background: #2563eb; color: #fff; font-size: 11px; }
     tr:nth-child(even) td { background: #f9fafb; }
     .teacher { font-size: 10px; color: #9ca3af; }
-    .boxes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+    .boxes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
     .box { flex: 1; min-width: 110px; max-width: 170px; text-align: center;
            border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; }
     .box-val { font-size: 18px; font-weight: 800; color: #111827; }
     .box-lbl { font-size: 10px; color: #6b7280; margin-top: 2px; }
-    .banner { text-align: center; padding: 12px; border-radius: 8px;
-              font-weight: bold; font-size: 16px; margin-bottom: 14px; }
+    .banner { text-align: center; padding: 10px; border-radius: 8px;
+              font-weight: bold; font-size: 15px; margin-bottom: 12px; }
     .pass-banner { background: #d1fae5; color: #059669; }
     .fail-banner { background: #fee2e2; color: #dc2626; }
+
+    /* The verdict and the remark share one row.
+       They were two full-width blocks stacked, each with its own margin — a
+       one-word verdict taking a whole band across the page and the remark
+       taking another. Together with the boxes above them that was enough
+       vertical space to push the verification block, and the code a registrar
+       types to check the document, off the foot of the page. */
+    .verdict { display: flex; align-items: center; gap: 10px;
+               margin-bottom: 12px; flex-wrap: wrap; }
+    .verdict-pill { flex: none; padding: 6px 12px; border-radius: 999px;
+                    font-weight: bold; font-size: 12px; white-space: nowrap; }
+    .verdict-remark { flex: 1; min-width: 220px; font-style: italic;
+                      font-size: 11px; color: #4b5563; line-height: 1.5; }
+    /* Kept for a school template that still says {{remark}} on its own. */
     .remark { font-style: italic; color: #4b5563; line-height: 1.6;
-              margin-bottom: 14px; }
+              margin-bottom: 12px; }
     .verify { display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
               border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px;
               background: #f9fafb; page-break-inside: avoid; }
@@ -379,10 +393,23 @@ function renderReportCardHtml(payload, opts = {}) {
     ? `<div class="boxes">${boxes.join("")}</div>` : ""}
 
   ${
-    isPassing != null
-      ? `<div class="banner ${isPassing ? "pass-banner" : "fail-banner"}">
-           ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}
-           ${summary?.overallGrade ? ` · ${t.overallGrade}: ${esc(summary.overallGrade)}` : ""}
+    // The verdict beside the remark rather than above it — see .verdict.
+    // Either may be absent, and the row is only drawn if one of them is there.
+    (isPassing != null || overallRemarkText)
+      ? `<div class="verdict">
+           ${isPassing != null
+             ? `<div class="verdict-pill ${isPassing ? "pass-banner" : "fail-banner"}">
+                  ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}${
+                    summary?.overallGrade
+                      ? ` · ${t.overallGrade}: ${esc(summary.overallGrade)}`
+                      : ""}
+                </div>`
+             : ""}
+           ${overallRemarkText
+             ? `<div class="verdict-remark">
+                  <strong>${t.remark}:</strong> ${esc(overallRemarkText)}
+                </div>`
+             : ""}
          </div>`
       : ""
   }
@@ -396,10 +423,6 @@ function renderReportCardHtml(payload, opts = {}) {
          </div>`
       : ""
   }
-
-  ${overallRemarkText
-    ? `<div class="remark"><strong>${t.remark}:</strong> ${esc(overallRemarkText)}</div>`
-    : ""}
 
   ${opts.verify
     ? `<div class="verify">
