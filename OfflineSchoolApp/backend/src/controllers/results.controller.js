@@ -373,18 +373,24 @@ const buildStudentReportCardData = async (examId, studentId) => {
   // the renderer picks, so the payload cannot decide that for it.
   const gradeInfo = (normalizedMark) => {
     if (normalizedMark == null) {
-      return { grade: null, remark: null, remarkFr: null };
+      return { grade: null, points: null, remark: null, remarkFr: null };
     }
     const band = GradingConfig.findGradeBand(normalizedMark, bands);
     if (band) {
       return {
         grade:    band.grade,
-        remark:   band.remark   || null,
-        remarkFr: band.remarkFr || band.remark || null,
+        points:   band.gpaPoints ?? null,
+        remark:   band.remark    || null,
+        remarkFr: band.remarkFr  || band.remark || null,
       };
     }
     const fb = lookupGrade(normalizedMark);
-    return { grade: fb.grade, remark: fb.remark, remarkFr: fb.remarkFr || fb.remark };
+    return {
+      grade:    fb.grade,
+      points:   fb.points ?? null,
+      remark:   fb.remark,
+      remarkFr: fb.remarkFr || fb.remark,
+    };
   };
 
   /** The /20 average this card headlines, for the overall band lookup. */
@@ -451,8 +457,15 @@ const buildStudentReportCardData = async (examId, studentId) => {
       remarkFr:      score.teacherRemark || gi.remarkFr || null,
       coefficient:   coeff,
       percentage:    score.percentage    ?? null,
-      grade:         score.grade         ?? gi.grade,
-      gradePoint:    score.gpaPoints     ?? null,
+      // Derived first, stored second — the other way round until now, and the
+      // stored value is a snapshot. Every grade in this database was computed
+      // under the previous /100 table keyed on percentage, so an 11/20 came
+      // back as "D" where the school's own table says "C+ / Above Average".
+      // The remark beside it was already derived, so the card was showing a
+      // grade and a remark from two different scales. The stored value remains
+      // the fallback for a score with no mark to look up.
+      grade:         gi.grade            ?? score.grade,
+      gradePoint:    gi.points           ?? score.gpaPoints ?? null,
       isPassing:     score.isPassing     ?? null,
       normalizedMark,
       weightedScore,
@@ -523,7 +536,10 @@ const buildStudentReportCardData = async (examId, studentId) => {
             totalMaxScore:   summary.maxTotalScore,
             percentage:      summary.percentage,
             average:         summary.average,
-            overallGrade:    summary.overallGrade,
+            // From the average, for the reason above: the stored overall grade
+            // was computed under the old table too, so the headline letter
+            // disagreed with the subject letters underneath it.
+            overallGrade:    gradeInfo(resolveAvg20()).grade ?? summary.overallGrade,
             overallRemark:   summary.overallRemark,
             // Derived from the band the average falls in, so the overall
             // remark translates like the per-subject ones rather than being
