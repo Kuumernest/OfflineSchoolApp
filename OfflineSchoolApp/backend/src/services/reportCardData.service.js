@@ -37,8 +37,11 @@ const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig     = require("../db/models/GradingConfig");
 const Student           = require("../db/models/Student");
 const School            = require("../db/models/School");
+const Class             = require("../db/models/Class");
 
 const { subjectRanking, periodName } = require("../../../shared/reportCard");
+const { coefficientFromWeight } =
+  require("./subjectCoefficient.service");
 
 /** A score as a mark out of 20, or null when the pupil did not sit it. */
 const outOf20 = (score, maxScore) => {
@@ -82,7 +85,10 @@ async function subjectMarksAcross(exams, weightOf) {
       .select("studentId examId examSubjectId subjectId score maxScore isAbsent isExempt")
       .lean(),
     ExamSubject.find({ examId: { $in: examIds }, deletedAt: null })
-      .select("_id examId subjectId subjectName coefficient maxScore")
+      // weight, not coefficient: ExamSubject stores the percentage-style
+      // weight and has no `coefficient` field at all, so reading one gave
+      // undefined and every subject on a term or annual card printed ×1.
+      .select("_id examId subjectId subjectName weight maxScore")
       .lean(),
   ]);
 
@@ -98,7 +104,7 @@ async function subjectMarksAcross(exams, weightOf) {
     if (!subjects.has(key)) {
       subjects.set(key, {
         subjectName: es.subjectName || key,
-        coefficient: es.coefficient ?? 1,
+        coefficient: coefficientFromWeight(es.weight),
       });
     }
   }
@@ -189,6 +195,23 @@ async function gradingFor(schoolId) {
   };
 }
 
+/**
+ * The class as it should be printed.
+ *
+ * TermResult.className is written from Student.className, which is not a field
+ * every pupil carries — the class is held as classId. So the stored name was
+ * usually null and the card printed an empty Class row. Looked up here instead,
+ * with the stored value still preferred: a pupil who has since moved class
+ * should print the class the result was earned in.
+ */
+async function classNameFor(classId, stored) {
+  if (stored) return stored;
+  if (!classId) return null;
+  const cls = await Class.findOne({ _id: String(classId) })
+    .select("name").lean().catch(() => null);
+  return cls?.name || null;
+}
+
 async function studentIdentity(studentId) {
   return Student.findOne({ _id: String(studentId) })
     .select("gender dateOfBirth studentName enrollmentNo admissionNo")
@@ -237,9 +260,14 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
     studentId:    String(studentId),
     studentName:  record.studentName || student?.studentName || null,
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
-    className:    record.className   || null,
+    className:    await classNameFor(classId, record.className),
     academicYear,
     term:         periodName({ reportType: "term", term: Number(term),
+                                name: termConfig?.name || null }, "en"),
+    // What this card is OF. The sequence card carries its exam's name here and
+    // a template prints it as {{exam_name}}; a term card carried nothing, so
+    // that field came out blank on every one of them.
+    examName:     periodName({ reportType: "term", term: Number(term),
                                 name: termConfig?.name || null }, "en"),
     // The facts, so the header can name the term in the reader's language.
     period:       { reportType: "term", term: Number(term),
@@ -318,9 +346,10 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
     studentId:    String(studentId),
     studentName:  record.studentName || student?.studentName || null,
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
-    className:    record.className   || null,
+    className:    await classNameFor(classId, record.className),
     academicYear,
     term:         null,
+    examName:     periodName({ reportType: "annual" }, "en"),
     period:       { reportType: "annual" },
     gender:       student?.gender      || null,
     dateOfBirth:  student?.dateOfBirth || null,

@@ -595,11 +595,27 @@ ${t("reportCards.reissueBody")}`
 
             {/* Summary */}
             <div className="space-y-2 mb-4">
+              {/*
+                * What this card is OF, which is an exam only for a sequence.
+                *
+                * This row read selectedExam whatever the card type, so a term
+                * or annual card showed "—" against the word Exam: the one line
+                * in the panel that should confirm what is about to be printed
+                * said nothing had been chosen.
+                */}
               <div className="flex justify-between text-sm">
-                <span className="text-gray-500">{t("academic.exam")}</span>
+                <span className="text-gray-500">
+                  {cardType === "sequence"
+                    ? t("academic.exam")
+                    : t("reportCards.selectPeriod")}
+                </span>
                 <span className="font-semibold text-gray-900 truncate
                                  ml-2 max-w-[160px] text-right">
-                  {selectedExam?.name || "—"}
+                  {cardType === "sequence"
+                    ? (selectedExam?.name || "—")
+                    : cardType === "term"
+                      ? (academicYear ? `${t(`exams.term${termNumber}`)} · ${academicYear}` : "—")
+                      : (academicYear || "—")}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -652,7 +668,16 @@ ${t("reportCards.reissueBody")}`
             {/* Generate button */}
             <button
               onClick={handleGenerate}
-              disabled={!selectedExam || !selectedClass || generating}
+              /*
+               * periodChosen, not selectedExam.
+               *
+               * A term or annual card has no exam to select — its period is a
+               * year and a term — so this gate was never satisfied and the
+               * button stayed disabled for ever. The two card types could be
+               * set up completely and still not be printable, with nothing on
+               * screen to say what was missing.
+               */
+              disabled={!periodChosen || !selectedClass || generating}
               className="w-full py-3 bg-green-600 hover:bg-green-700
                          text-white rounded-xl font-semibold text-sm
                          transition-colors disabled:opacity-50

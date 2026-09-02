@@ -407,13 +407,12 @@ const buildStudentReportCardData = async (examId, studentId) => {
 
   // Canonical weight semantics: ExamSubject.weight is percentage-style
   // (schema default 100). ÷100 → multiplier coefficient, so the default
-  // leaves every subject equally weighted (×1). This replaces the old
-  // `es.weight ?? 1`, which silently turned every subject into ×100.
-  const resolveCoeff = (es) => {
-    if (!es || es.weight == null) return 1;
-    const c = Math.round((Number(es.weight) / 100) * 100) / 100;
-    return c > 0 ? c : 1;
-  };
+  // leaves every subject equally weighted (×1).
+  //
+  // Shared, because the term and annual cards need the identical answer and
+  // their own copy of this read a field ExamSubject does not have — so the
+  // same pupil's sequence card said ×4 and their term card said ×1.
+  const resolveCoeff = (es) => coefficientFromWeight(es?.weight);
 
   const subjectRows = scores.map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
@@ -628,6 +627,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
  */
 // The template lookup moved to reportCardData.service.js, where the term and
 // annual cards reach the same one — see the note there.
+const { coefficientFromWeight } = require("../services/subjectCoefficient.service");
 const { loadReportTemplate, loadSchoolForCard } =
   require("../services/reportCardData.service");
 

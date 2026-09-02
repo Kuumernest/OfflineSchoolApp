@@ -52,10 +52,24 @@ const main = async () => {
     type: "test", classId: CLS, deletedAt: null,
   })));
 
+  /*
+   * WEIGHT, which is the field ExamSubject actually has.
+   *
+   * This fixture used to write `coefficient: 1` — through insertMany, so the
+   * schema never objected to a field it does not define. The card builder read
+   * the same imaginary field, so the two agreed with each other and disagreed
+   * with every real exam in the database: on a live card every subject printed
+   * ×1 however the school had weighted it, while the sequence card, which
+   * computes from weight, printed ×4.
+   *
+   * Different weights per subject, so a card that ignored them would show it.
+   */
+  const WEIGHTS = { "sub-m": 400, "sub-e": 300 };   // coefficients 4 and 3
   const es = [];
   for (const e of exams) for (const [sid, name] of [["sub-m", "Mathematics"], ["sub-e", "English"]]) {
     es.push({ _id: `es-${e._id}-${sid}`, examId: e._id, schoolId: S,
-      subjectId: sid, subjectName: name, coefficient: 1, maxScore: 20, deletedAt: null });
+      subjectId: sid, subjectName: name, weight: WEIGHTS[sid], maxScore: 20,
+      deletedAt: null });
   }
   await ExamSubject.collection.insertMany(es);
 
@@ -151,6 +165,60 @@ const main = async () => {
       ["the academic year", "2026/2027"],
     ]) check(`the ${name} card shows ${what}`, html.includes(needle), true);
   }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- the coefficient and the class, which came out blank ---");
+
+  /*
+   * Three fields that were empty or wrong on every term and annual card while
+   * the suite passed, because each was read from somewhere that does not hold
+   * it: the coefficient from a field ExamSubject does not define, the class
+   * from a Student field most pupils do not carry, and the exam name from
+   * nothing at all.
+   */
+  const tCard = term;
+  const aCard = annual;
+
+  const coeffOf = (card, subject) =>
+    card.subjects.find((x) => x.subjectName === subject)?.coefficient;
+
+  check("the term card weights Mathematics as the exam says",
+    coeffOf(tCard, "Mathematics"), 4);
+  check("and English",              coeffOf(tCard, "English"), 3);
+  check("the annual card agrees",   coeffOf(aCard, "Mathematics"), 4);
+  check("on both subjects",         coeffOf(aCard, "English"), 3);
+
+  check("the term card names its period where the exam name goes",
+    tCard.examName, "1st Term");
+  check("and the annual card says so",
+    aCard.examName, "Annual");
+
+  // The class comes off the class, not off a Student field that is usually
+  // absent — a term card printed an empty Class row on every pupil.
+  /*
+   * The class on a result that never stored one, which is most of them:
+   * TermResult.className is written from Student.className, a field a pupil
+   * does not generally carry — the class is held as classId.
+   */
+  const Class = require("../src/db/models/Class");
+  await Class.collection.insertOne({ _id: CLS, schoolId: S, name: "Form 3" });
+  await TermResult.collection.insertOne({
+    _id: "tr-2", schoolId: S, academicYear: YEAR, term: 1, classId: CLS,
+    studentId: "p2", studentName: "Bih Ndum", admissionNo: "ENR-002",
+    className: null,
+    // Deliberately below Ada: the listing assertions further down expect her
+    // first, and a fixture added for one purpose must not move another's ground.
+    sequenceAverages: [{ sequence: 1, average: 9 }, { sequence: 2, average: 9 }],
+    termAverage: 9, overallGrade: "D", overallRemark: "Below Average",
+    classPosition: 3, totalInClass: 3, isPassing: false, isPublished: true,
+    deletedAt: null,
+  });
+  check("a term card knows the class even when the result did not store one",
+    (await buildTermCard({
+      schoolId: S, academicYear: YEAR, term: 1, classId: CLS, studentId: "p2",
+    }))?.className, "Form 3");
+  check("and a stored name still wins, so a pupil who moved class keeps theirs",
+    tCard.className, "Form 3");
 
   // ═════════════════════════════════════════════════════════════════════════
   console.log("--- what the Report Cards page depends on ---");

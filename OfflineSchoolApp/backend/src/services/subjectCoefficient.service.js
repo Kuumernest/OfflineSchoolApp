@@ -63,6 +63,25 @@ const coefficientOf = (subject) =>
 const weightFor = (coefficient) => coefficient * WEIGHT_PER_COEFFICIENT;
 
 /**
+ * The other direction: an ExamSubject's stored weight as a coefficient.
+ *
+ * Every card needs this and each one had written it out again. The term and
+ * annual cards read `es.coefficient`, a field ExamSubject does not have, so
+ * every subject on those cards printed a coefficient of 1 however the school
+ * had weighted it — while the sequence card, computing it from `weight`,
+ * printed 4. Two cards for the same pupil disagreeing about how much a subject
+ * counts is not a rounding difference; it is a different average.
+ *
+ * A missing or nonsensical weight falls back to 1, which is the schema default
+ * expressed as a coefficient.
+ */
+const coefficientFromWeight = (weight) => {
+  if (weight == null) return 1;
+  const c = Math.round((Number(weight) / WEIGHT_PER_COEFFICIENT) * 100) / 100;
+  return c > 0 ? c : 1;
+};
+
+/**
  * Is this exam's marking finished as far as the school is concerned?
  *
  * Any one of these is enough. `status` alone is not: an exam can carry
@@ -157,6 +176,6 @@ async function cascadeCoefficient({ schoolId, subjectId, from, to, force = false
 }
 
 module.exports = {
-  cascadeCoefficient, coefficientOf, weightFor, isFinalised,
-  WEIGHT_PER_COEFFICIENT,
+  cascadeCoefficient, coefficientOf, weightFor, coefficientFromWeight,
+  isFinalised, WEIGHT_PER_COEFFICIENT,
 };
