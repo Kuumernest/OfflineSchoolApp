@@ -374,6 +374,29 @@ check("18 normalised against 20 is an A+",
   GradingConfig.findGradeBand((twenty / 20) * 20).grade, "A+");
 
 // ═══════════════════════════════════════════════════════════════════════════
+// ── The verification strip on the template path ────────────────────────────
+//
+// {{qr_code}} emitted the square and a school template showed nothing else:
+// a registrar with the paper card and no scanner had nothing to type. The
+// built-in layout always printed the code, so the gap was only ever on this
+// path — the same shape of miss as the gender and the delegations.
+const verified = renderReportCard(payload(), {
+  ...tplOpts,
+  verify: { code: "GBH-7A21-4C9F", url: "https://school.example.com/r/7a21",
+            qrSvg: "<svg data-qr></svg>" },
+}).html;
+check("a school template prints the verification code", verified.includes("GBH-7A21-4C9F"), true);
+check("and where to enter it", verified.includes("school.example.com/r/7a21"), true);
+check("beside the square, not instead of it", verified.includes("data-qr"), true);
+
+// Gated: a card printed with no verification shows no empty label.
+const unverified = onTemplate("sequence");
+check("a card printed without verification shows no strip",
+  // The markup, not the stylesheet: the rules for the strip are in the
+  // template's CSS whether or not this card had anything to verify.
+  /class="verify-words"/.test(unverified), false);
+check("and no orphaned label", /Verify this document/.test(unverified), false);
+
 console.log("--- §2: the official header ---");
 
 // The header a Cameroonian report card carries: the ministry and the

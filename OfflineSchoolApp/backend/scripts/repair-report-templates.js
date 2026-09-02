@@ -60,7 +60,8 @@ const path     = require("path");
 const fs       = require("fs");
 
 const ReportTemplate = require("../src/db/models/ReportTemplate");
-const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS } =
+const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
+        VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS } =
   require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
 
@@ -306,6 +307,42 @@ const headerPass = (html) => {
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FOURTH PASS: THE CODE BESIDE THE SQUARE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * A bare {{qr_code}} in a wrapper of its own, and nothing else.
+ *
+ * That is what the seed gave every school: the square, with no code beside it.
+ * A parent can scan it; a registrar holding the paper and no scanner has
+ * nothing to type. Matched narrowly — a lone div around the token — so a
+ * school that has already built its own strip around the square keeps it.
+ */
+const BARE_QR_RE = /<div>\s*\{\{qr_code\}\}\s*<\/div>/;
+
+/**
+ * @returns {{ status: string, html?: string }}
+ *   repaired      | the code and the URL now sit beside the square
+ *   already-fixed | the code is already on the card
+ *   no-qr         | no bare {{qr_code}} wrapper; the school's own strip
+ */
+const verifyStripPass = (html) => {
+  if (html.includes("{{verification_code}}")) return { status: "already-fixed" };
+  if (!BARE_QR_RE.test(html))                 return { status: "no-qr" };
+  return {
+    status: "repaired",
+    html: html.replace(BARE_QR_RE, () => VERIFY_BLOCK_HTML),
+  };
+};
+
+/** The template's CSS with the strip's rules appended, or null if it has them. */
+const repairVerifyCss = (css) => {
+  if (typeof css !== "string") return null;
+  if (/\.verify-code\b/.test(css)) return null;
+  return css + nlJoin(VERIFY_BLOCK_CSS);
+};
+
 /** The template's CSS with the header rules appended, or null if it has them. */
 const repairHeaderCss = (css) => {
   if (typeof css !== "string") return null;
@@ -355,8 +392,11 @@ const repairHtml = (html, css) => {
   const header = headerPass(out);
   if (header.html) { out = header.html; changes.push("header"); }
 
+  const strip = verifyStripPass(out);
+  if (strip.html) { out = strip.html; changes.push("verify"); }
+
   if (!changes.length) {
-    const note = promo.note || layout.note || header.note;
+    const note = promo.note || layout.note || header.note || strip.note;
     return { status: promo.status, ...(note ? { note } : {}) };
   }
 
@@ -365,6 +405,7 @@ const repairHtml = (html, css) => {
   let nextCss = typeof css === "string" ? css : null;
   if (changes.includes("layout")) nextCss = repairCss(nextCss) ?? nextCss;
   if (changes.includes("header")) nextCss = repairHeaderCss(nextCss) ?? nextCss;
+  if (changes.includes("verify")) nextCss = repairVerifyCss(nextCss) ?? nextCss;
 
   return {
     status: "repaired",
@@ -401,6 +442,10 @@ const PROBE = (reportType) => ({
 
 const PROBE_OPTS = (html, css) => ({
   template:   { html, css },
+  // So a repaired verification strip is rendered against a card that actually
+  // has something to verify.
+  verify:     { code: "PROBE-C0DE-1234", url: "https://probe.test/r/1234",
+                qrSvg: "<svg data-probe-qr></svg>" },
   schoolName: "Probe School",
   school:     {
     name: "Probe School", logo: null, motto: "Probe",
@@ -447,6 +492,17 @@ const verify = (html, css, opts = {}) => {
   }
   if (opts.expectRemark && !/Steady and careful work/.test(sequence.html)) {
     problems.push("the rearranged row dropped the remark");
+  }
+
+  // A rebuilt verification strip has to carry the code as well as the square:
+  // the square alone is the fault being repaired.
+  if (opts.expectVerify) {
+    if (!/PROBE-C0DE-1234/.test(sequence.html)) {
+      problems.push("the verification strip has no code to read");
+    }
+    if (!/data-probe-qr/.test(sequence.html)) {
+      problems.push("the verification strip lost its QR");
+    }
   }
 
   // A replaced header has to carry both margins and name its period, or the
@@ -508,6 +564,7 @@ const main = async () => {
     const problems = verify(result.html, result.css ?? row.css, {
       expectRemark: result.changes.includes("layout"),
       expectHeader: result.changes.includes("header"),
+      expectVerify: result.changes.includes("verify"),
     });
     if (problems.length) {
       tally.repaired -= 1;
@@ -549,7 +606,7 @@ const main = async () => {
   }
 
   const order = ["repaired", "already-fixed", "no-banner", "no-promotion",
-                 "no-header", "unbalanced", "unsafe"];
+                 "no-header", "no-qr", "unbalanced", "unsafe"];
   console.log("\n  " + order
     .filter((k) => tally[k])
     .map((k) => `${k}: ${tally[k]}`)
@@ -565,6 +622,7 @@ module.exports = {
   repairHtml, findIsPassingBlock, verify, PROMOTION_BLOCK,
   promotionPass, layoutPass, repairCss, LAYOUT_CSS,
   headerPass, repairHeaderCss, OLD_HEADER_RE,
+  verifyStripPass, repairVerifyCss, BARE_QR_RE,
 };
 
 if (require.main === module) {

@@ -108,6 +108,11 @@ const SIMPLE_TOKENS = [
   "header_type_fr",
   "header_separator",
   "report_title",
+
+  // The verification strip in words, beside the {{qr_code}} square.
+  // Blank when a card is printed without verification, so gate them.
+  "verification_code",
+  "verification_url",
 ];
 
 // ─── Composite tokens (resolved by dedicated functions) ─────────────────────

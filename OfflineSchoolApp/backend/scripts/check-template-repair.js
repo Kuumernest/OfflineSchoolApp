@@ -23,7 +23,8 @@
  */
 
 const { repairHtml, verify, layoutPass, repairCss,
-        headerPass, repairHeaderCss } = require("./repair-report-templates");
+        headerPass, repairHeaderCss,
+        verifyStripPass, repairVerifyCss } = require("./repair-report-templates");
 const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
   require("../src/print/defaultReportTemplate");
 
@@ -220,6 +221,56 @@ check("a header missing its French margin is refused",
   verify(headed.html.replace(/\{\{header_ministry_fr\}\}/g, "") + OLD_BANNER,
     DEFAULT_TEMPLATE_CSS, { expectHeader: true })
     .some((p) => /French ministry/.test(p)), true);
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the code goes beside the square ---");
+
+/** The footer as it was seeded: the QR alone, in a wrapper of its own. */
+const OLD_FOOTER = [
+  '  <div class="footer">',
+  '    <div>{{qr_code}}</div>',
+  '    <div style="text-align:right">SCHOOL FOOTER TEXT</div>',
+  '  </div>',
+].join("\n");
+
+const stripped = verifyStripPass(OLD_FOOTER);
+check("the bare QR wrapper is recognised", stripped.status, "repaired");
+check("the code a registrar types is now on the card",
+  stripped.html.includes("{{verification_code}}"), true);
+check("and where they type it",
+  stripped.html.includes("{{verification_url}}"), true);
+check("the square is still there",
+  stripped.html.includes("{{qr_code}}"), true);
+check("gated, so a card printed without verification shows no empty label",
+  stripped.html.includes("{{if verification_code}}"), true);
+check("the school's own footer text is untouched",
+  stripped.html.includes("SCHOOL FOOTER TEXT"), true);
+check("running it twice changes nothing",
+  verifyStripPass(stripped.html).status, "already-fixed");
+
+// A school that built its own strip around the square keeps it.
+check("a strip a school built itself is not touched",
+  verifyStripPass('<div class="mystrip">{{qr_code}} <b>Verify</b></div>').status,
+  "no-qr");
+check("nor a template with no QR at all",
+  verifyStripPass("<div>{{report_date}}</div>").status, "no-qr");
+check("the rules are appended to the school's own CSS",
+  /\.verify-code/.test(repairVerifyCss(".x { color: red }")), true);
+check("and a stylesheet that has them is not given them twice",
+  repairVerifyCss(DEFAULT_TEMPLATE_CSS), null);
+
+// All four faults on one template — a school that saved the original seed.
+const allFour = repairHtml(OLD_HEADER + OLD_BANNER + OLD_FOOTER, OLD_CSS);
+check("all four are repaired in one pass",
+  allFour.changes, ["promotion", "layout", "header", "verify"]);
+check("and it verifies",
+  verify(allFour.html, allFour.css,
+    { expectRemark: true, expectHeader: true, expectVerify: true }), []);
+
+// The guard: a strip rebuilt without the code is the fault, not the fix.
+check("a strip with only the square is refused",
+  verify('{{qr_code}}' + OLD_BANNER, DEFAULT_TEMPLATE_CSS, { expectVerify: true })
+    .some((p) => /no code to read/.test(p)), true);
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- what it refuses to touch ---");

@@ -104,6 +104,58 @@ const OFFICIAL_HEADER_CSS = `  /* ── The official header ──────�
   }
 `;
 
+/**
+ * The verification strip: the square, the code, and where to type it.
+ *
+ * {{qr_code}} alone was all a template had, so a school card carried the
+ * square and nothing else — and a registrar with the paper in front of them
+ * and no scanner to hand had no way to check it. Gated, because a card printed
+ * without verification should show no label rather than an empty one.
+ */
+const VERIFY_BLOCK_HTML = `<div class="verify-strip">
+      {{qr_code}}
+      {{if verification_code}}
+        <div class="verify-words">
+          <div class="verify-title">Verify this document</div>
+          <div class="verify-text">
+            Scan the code, or enter
+            <span class="verify-code">{{verification_code}}</span>
+            {{if verification_url}}&mdash; {{verification_url}}{{endif}}
+          </div>
+        </div>
+      {{endif}}
+    </div>`;
+
+const VERIFY_BLOCK_CSS = `
+  /* ── Verification strip ────────────────────────────────
+     The square beside the code a registrar types, rather than the square on
+     its own. */
+  .verify-strip {
+    display:     flex;
+    align-items: center;
+    gap:         10px;
+  }
+
+  .verify-words { line-height: 1.4; }
+
+  .verify-title {
+    font-size:       9px;
+    font-weight:     bold;
+    text-transform:  uppercase;
+    letter-spacing:  .06em;
+    color:           #374151;
+  }
+
+  .verify-text { font-size: 9px; color: #6b7280; }
+
+  .verify-code {
+    font-family:    Consolas, Menlo, monospace;
+    font-weight:    bold;
+    color:          #111827;
+    letter-spacing: .04em;
+  }
+`;
+
 const OFFICIAL_HEADER_HTML = `  <!-- The official header: English margin, school, French margin. -->
   <div class="school-header">
     <div class="report-header-top">
@@ -402,6 +454,7 @@ ${OFFICIAL_HEADER_CSS}
     color:           #9ca3af;
   }
 
+  ${VERIFY_BLOCK_CSS}
   /* ── Print ─────────────────────────────────────────── */
   @media print {
     body { padding: 0; }
@@ -545,7 +598,7 @@ ${OFFICIAL_HEADER_HTML}
 
   <!-- Footer -->
   <div class="footer">
-    <div>{{qr_code}}</div>
+    ${VERIFY_BLOCK_HTML}
     <div style="text-align:right">
       <p>Next Term Begins: <strong>{{next_term_date}}</strong></p>
       <p style="margin-top:4px">Report Generated: {{report_date}}</p>
@@ -559,4 +612,5 @@ ${OFFICIAL_HEADER_HTML}
 module.exports = {
   DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
   OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
+  VERIFY_BLOCK_HTML, VERIFY_BLOCK_CSS,
 };

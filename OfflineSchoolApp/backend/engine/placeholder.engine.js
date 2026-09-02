@@ -25,6 +25,8 @@
  *   {{student_photo}}         Student photo img tag
  *   {{school_logo}}           School logo img tag
  *   {{qr_code}}               QR code placeholder
+ *   {{verification_code}}     The code a registrar types to check the card
+ *   {{verification_url}}      Where they type it
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
@@ -385,6 +387,14 @@ function buildReplacementMap(data) {
 
     // "First Sequence Progress Record" — the period named, not numbered.
     report_title:       data.reportTitle      || "",
+
+    // The verification strip in words. {{qr_code}} has always emitted the
+    // square, and a school template could show nothing but the square: a
+    // registrar holding the paper card and no scanner had nothing to type.
+    // Blank when the caller passed no verification, so a template gates them
+    // with {{if verification_code}} rather than printing an empty label.
+    verification_code:  data.verify?.code     || "",
+    verification_url:   data.verify?.url      || "",
 
     // School
     school_name:        school.name           || "",
