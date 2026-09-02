@@ -155,8 +155,11 @@ return (
           );
         })}
       </div>
+      {errors.sequenceNumber && (
+        <p className="text-red-500 text-xs mt-1">{errors.sequenceNumber}</p>
+      )}
       <p className="text-xs text-gray-400 mt-1">
-        * Sequence 5 &amp; 6 can be configured as promotion exams
+        {t("examCreate.promoSequenceHint")}
       </p>
     </div>
   )}
@@ -907,8 +910,13 @@ term: "1",
 status: "draft",
 startDate: "",
 endDate: "",
-totalMarks: "100",
-passMark: "50",
+// /20 and 10, because that is the scale everything downstream assumes: the
+// grading bands, the pass mark, the averages and the printed card are all on
+// twenty. Defaulting to 100 and accepting it — which is what a hurried admin
+// does — stored a mark of 18 as "18 out of 100", normalised it to 3.6, and
+// printed an F against every subject on every report card.
+totalMarks: "20",
+passMark: "10",
 description: "",
 instructions: "",
 });
@@ -931,12 +939,18 @@ setErrors((p) => ({ ...p, [field]: undefined }));
 
 const validate = (): boolean => {
 const e: typeof errors = {};
-if (!form.name.trim()) e.name = "Exam name is required";
+if (!form.name.trim()) e.name = t("examCreate.nameRequired");
 const tm = Number(form.totalMarks);
 const pm = Number(form.passMark);
-if (isNaN(tm) || tm <= 0) e.totalMarks = "Must be a positive number";
+if (isNaN(tm) || tm <= 0) e.totalMarks = t("examCreate.mustBePositive");
 if (isNaN(pm) || pm < 0 || pm > tm)
-e.passMark = `Must be between 0 and ${tm}`;
+e.passMark = t("examCreate.passMarkRange", { max: tm });
+// Which sequence this is decides which report card it produces. Without one
+// the card can only be a term card, so an exam a school called "First
+// Sequence" printed "Term 1" across the top of every copy. A promotion exam
+// is exempt: it is the annual report whether or not a sequence is named.
+if (form.type !== "promotion_exam" && !form.sequenceNumber)
+e.sequenceNumber = t("examCreate.sequenceRequired");
 if (
 form.startDate &&
 form.endDate &&

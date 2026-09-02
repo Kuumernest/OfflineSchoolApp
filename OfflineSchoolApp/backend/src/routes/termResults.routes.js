@@ -6,7 +6,7 @@ const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
 const School             = require("../db/models/School");
 const { renderReportCard } = require("../services/reportHtml.service");
-const { buildTermCard, loadReportTemplate } =
+const { buildTermCard, loadReportTemplate, absoluteLogoUrl } =
   require("../services/reportCardData.service");
 
 // ── GET /api/term-results ──────────────────────────────────────────────────
@@ -193,7 +193,9 @@ router.get(
       const rendered = renderReportCard(data, {
         lang:       lang || "en",
         schoolName: school?.name || "School",
-        school:     { name: school?.name || "", logo: school?.logo || null, motto: school?.motto || null },
+        school:     { name:  school?.name || "",
+                     logo:  absoluteLogoUrl(school?.logo, req),
+                     motto: school?.motto || null },
         template,
       });
 

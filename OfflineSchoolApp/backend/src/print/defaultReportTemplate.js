@@ -320,15 +320,27 @@ const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
     </div>
   </div>
 
-  <!-- Pass / fail -->
+  <!-- Pass / fail. NOT a promotion: a pupil passing this exam has not been
+       promoted, and saying so on a sequence card tells a family something no
+       council has decided. The promotion decision has its own block below and
+       appears on the annual card alone. -->
   {{if isPassing}}
     <div class="pass-banner pass">
-      ✓ PROMOTED &mdash; {{remark}}
+      ✓ PASSED &mdash; {{remark}}
     </div>
   {{else}}
     <div class="pass-banner fail">
-      ✗ NOT PROMOTED &mdash; {{remark}}
+      ✗ NOT PASSED &mdash; {{remark}}
     </div>
+  {{endif}}
+
+  <!-- The promotion decision: the final annual report card only. -->
+  {{if is_annual}}
+    {{if promotion_status}}
+      <div class="pass-banner pass">
+        {{promotion_status}}
+      </div>
+    {{endif}}
   {{endif}}
 
   <!-- Attendance -->

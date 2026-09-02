@@ -840,7 +840,11 @@
     "noTeacher": "Aucun enseignant",
     "max": "Max",
     "pass": "Passage",
-    "coefficient": "Coefficient"
+    "coefficient": "Coefficient",
+    "mustBePositive": "Doit être un nombre positif",
+    "passMarkRange": "Doit être compris entre 0 et {{max}}",
+    "sequenceRequired": "Choisissez la séquence à laquelle cet examen appartient",
+    "promoSequenceHint": "* Les séquences 5 et 6 peuvent servir d’examens de passage"
   },
   "reportCards": {
     "title": "Bulletins de notes",

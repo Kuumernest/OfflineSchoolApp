@@ -398,9 +398,40 @@ async function loadReportTemplate(schoolId, templateId) {
   }
 }
 
+/**
+ * The school's logo as something an <img> can actually load.
+ *
+ * School.logo holds a server-relative path — "/uploads/logos/<file>.jpg". The
+ * report card is printed by writing the HTML into a new window, whose document
+ * is about:blank, so a relative src has no origin to resolve against. Behind a
+ * single reverse proxy it happens to work; in development, where the console is
+ * on one port and the API on another, it silently 404s and the card prints with
+ * no logo at all.
+ *
+ * Absolute, from the request, so the document carries its own answer.
+ *
+ * @param {string|null} logo  the stored value; a data: or http(s): URL is
+ *                            already usable and passes through untouched
+ * @param {object} req        to read the protocol and host, honouring the
+ *                            forwarded headers a proxy sets
+ */
+function absoluteLogoUrl(logo, req) {
+  if (!logo) return null;
+  if (/^(https?:|data:)/i.test(logo)) return logo;
+
+  const proto = String(req?.headers?.["x-forwarded-proto"] || req?.protocol || "http")
+    .split(",")[0].trim();
+  const host  = String(req?.headers?.["x-forwarded-host"] || req?.get?.("host") || "")
+    .split(",")[0].trim();
+  if (!host) return logo;
+
+  return `${proto}://${host}${logo.startsWith("/") ? "" : "/"}${logo}`;
+}
+
 module.exports = {
   buildTermCard,
   buildAnnualCard,
   promotionLabel,
   loadReportTemplate,
+  absoluteLogoUrl,
 };

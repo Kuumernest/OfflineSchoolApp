@@ -412,7 +412,11 @@ const buildStudentReportCardData = async (examId, studentId) => {
   const subjectRows = scores.map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
                      subjectMap.get(String(score.subjectId)) || {};
-    const maxScore = score.maxScore || es.maxScore || 100;
+    // The exam's own total before a literal 100. A subject row written before
+    // ExamSubject inherited the exam's totals says 100 even in a school that
+    // marks out of 20, and normalising an 18 against 100 gives 3.6 — an F on
+    // every subject of every card.
+    const maxScore = score.maxScore || es.maxScore || exam?.totalMarks || 100;
     const coeff    = resolveCoeff(es);
 
     const normalizedMark =
@@ -597,7 +601,8 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
  */
 // The template lookup moved to reportCardData.service.js, where the term and
 // annual cards reach the same one — see the note there.
-const { loadReportTemplate } = require("../services/reportCardData.service");
+const { loadReportTemplate, absoluteLogoUrl } =
+  require("../services/reportCardData.service");
 
 /**
  * Freeze what was just issued.
@@ -746,7 +751,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     // §2: logo + motto from the school's settings document
     school: {
       name:  schoolName || "",
-      logo:  schoolDoc?.logo  || null,
+      logo:  absoluteLogoUrl(schoolDoc?.logo, req),
       motto: schoolDoc?.motto || null,
     },
     verify,

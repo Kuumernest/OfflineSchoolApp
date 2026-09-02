@@ -681,8 +681,13 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
         teacherId:        s.teacherId   || null,
         subjectName:      subjectDoc?.name || null,
         teacherName:      teacherDoc?.name || null,
-        maxScore:         s.maxScore    ?? 100,
-        passMark:         s.passMark    ?? 50,
+        // The EXAM's own totals, not a literal 100/50. A school marking out of
+        // 20 — which is the whole system — created subjects that said 100, so
+        // an 18 was stored as "18 out of 100", normalised to 3.6, and printed
+        // as an F on every report card. exam.controller.js already inherited
+        // these; this path did not.
+        maxScore:         s.maxScore    ?? totalMarks ?? 100,
+        passMark:         s.passMark    ?? passMark   ?? 50,
         weight:           s.weight      ?? 100,
         isPractical:      s.isPractical ?? false,
         isTheory:         s.isTheory    ?? true,
@@ -899,8 +904,9 @@ router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
     teacherId:   teacherId   || null,
     subjectName: subjectDoc?.name || null,
     teacherName: teacherDoc?.name || null,
-    maxScore:    maxScore    ?? 100,
-    passMark:    passMark    ?? 50,
+    // As above: inherit the exam's totals rather than assuming /100.
+    maxScore:    maxScore    ?? exam.totalMarks ?? 100,
+    passMark:    passMark    ?? exam.passMark   ?? 50,
     weight:      resolvedWeight,
     isPractical: isPractical ?? false,
     isTheory:    isTheory    ?? true,

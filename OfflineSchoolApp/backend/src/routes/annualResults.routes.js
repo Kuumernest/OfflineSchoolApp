@@ -6,7 +6,7 @@ const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
 const School             = require("../db/models/School");
 const { renderReportCard } = require("../services/reportHtml.service");
-const { buildAnnualCard, loadReportTemplate } =
+const { buildAnnualCard, loadReportTemplate, absoluteLogoUrl } =
   require("../services/reportCardData.service");
 
 // ── GET /api/annual-results ────────────────────────────────────────────────
@@ -180,7 +180,9 @@ router.get(
       const rendered = renderReportCard(data, {
         lang:       lang || "en",
         schoolName: school?.name || "School",
-        school:     { name: school?.name || "", logo: school?.logo || null, motto: school?.motto || null },
+        school:     { name:  school?.name || "",
+                     logo:  absoluteLogoUrl(school?.logo, req),
+                     motto: school?.motto || null },
         template,
       });
 

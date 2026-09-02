@@ -382,6 +382,15 @@ function buildReplacementMap(data) {
 
     // Booleans for conditionals
     isPassing:          (performance.average ?? 0) >= 10,
+
+    // Which of the three cards this is, so a template can gate on it.
+    // The seeded layout printed "PROMOTED" whenever a pupil was passing,
+    // which put a promotion on sequence and term cards alike — a decision
+    // nobody had taken yet, on paper a family keeps. A template needs a
+    // flag it can ask about, and isPassing was the only one there was.
+    is_annual:          data.reportType === "annual",
+    is_term:            data.reportType === "term",
+    is_sequence:        data.reportType === "sequence",
     isRepeating:        performance.promotionStatus === "Repeated",
 
     // Exam / aggregate context
@@ -519,9 +528,23 @@ function resolveStudentPhoto(html, data) {
 function resolveSchoolLogo(html, data) {
   if (!html.includes("{{school_logo}}")) return html;
 
-  const logoHtml = data.school?.logoBase64
+  // The logo arrives in one of three shapes and only one of them is base64.
+  // This wrapped every one of them in a data:image/png;base64, prefix, so a
+  // school whose logo is a stored file — which is what the School model holds,
+  // "/uploads/logos/<file>.jpg" — got
+  //   src="data:image/png;base64,/uploads/logos/x.jpg"
+  // which no browser will load. The card printed with no logo and nothing
+  // said why. The web console had already learned this and has a helper for
+  // it; the engine had not.
+  const raw = data.school?.logoUrl || data.school?.logoBase64 || null;
+  const src = !raw ? null
+    : /^(https?:|data:|\/)/i.test(String(raw))
+      ? String(raw)                                   // a URL or a served path
+      : `data:image/png;base64,${raw}`;               // a bare base64 payload
+
+  const logoHtml = src
     ? `<img
-         src="data:image/png;base64,${data.school.logoBase64}"
+         src="${escapeHtml(src)}"
          class="school-logo"
          alt="${escapeHtml(data.school.name || "School Logo")}"
          style="max-height:80px;max-width:200px"

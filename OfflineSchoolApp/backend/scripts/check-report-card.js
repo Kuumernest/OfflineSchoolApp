@@ -303,5 +303,75 @@ const teacherWords = renderReportCardHtml(bilingual({
 check("a teacher's own remark is left alone",
   teacherWords.includes("Doit se ressaisir"), true);
 
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- a school's own template ---");
+
+/**
+ * Five things went wrong at once on a real card, and every one of them was on
+ * this path rather than the built-in layout: a school that has a template gets
+ * its template, and nothing here was covered.
+ */
+const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
+  require("../src/print/defaultReportTemplate");
+const { renderReportCard } = require("../src/services/reportHtml.service");
+const { absoluteLogoUrl }  = require("../src/services/reportCardData.service");
+
+const seeded  = { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS };
+const fakeReq = { protocol: "https", headers: {}, get: () => "school.example.com" };
+const tplOpts = {
+  template:   seeded,
+  schoolName: "GBHS Molyko",
+  school: {
+    name:  "GBHS Molyko",
+    logo:  absoluteLogoUrl("/uploads/logos/x.jpg", fakeReq),
+    motto: "Knowledge and Service",
+  },
+};
+const onTemplate = (reportType) => renderReportCard(payload({ reportType }), tplOpts).html;
+
+check("the school's template is what renders",
+  renderReportCard(payload(), tplOpts).source, "template");
+
+// The one that reached paper: the seeded layout gated its banner on isPassing,
+// so every pupil who passed was told they had been PROMOTED — on a sequence
+// card, in a document a family keeps.
+for (const [type, shown] of [["sequence", false], ["term", false], ["annual", true]]) {
+  check(`the template prints a promotion on a ${type} card: ${shown}`,
+    /PROMOTED TO FORM 4/.test(onTemplate(type)), shown);
+}
+check("a passing pupil is told they PASSED, not that they were promoted",
+  /PASSED/.test(onTemplate("sequence")), true);
+
+// These three were read from opts.student, which no route passes, so they were
+// blank on every school template while the built-in layout showed them.
+const seq = onTemplate("sequence");
+check("the template shows the gender",        seq.includes("Female"), true);
+// Formatted by the engine, so the year is what to look for rather than the
+// stored ISO string.
+check("and the date of birth",                seq.includes("2011"), true);
+check("and the school's motto",               seq.includes("Knowledge and Service"), true);
+
+// A stored logo is a server-relative path, and the card is printed into a
+// document that has no origin to resolve it against.
+// It was wrapped in a data:image/png;base64, prefix whatever shape it had, so
+// a stored file became "data:image/png;base64,/uploads/logos/x.jpg" and no
+// browser would load it. The card printed with no logo and nothing said why.
+check("the logo is an absolute URL, used as the src",
+  seq.includes('src="https://school.example.com/uploads/logos/x.jpg"'), true);
+check("and is not wrapped in a base64 prefix it does not need",
+  /base64,https/.test(seq), false);
+check("absoluteLogoUrl leaves a data URI alone",
+  absoluteLogoUrl("data:image/png;base64,AAA", fakeReq), "data:image/png;base64,AAA");
+check("and a URL that is already absolute",
+  absoluteLogoUrl("https://cdn.example/x.png", fakeReq), "https://cdn.example/x.png");
+
+// Marks out of twenty, normalised against a subject that claims 100, come out
+// at a fifth of themselves — which is an F for anything below 40/100.
+const twenty = 18, hundred = 100;
+check("18 normalised against 100 is an F",
+  GradingConfig.findGradeBand((twenty / hundred) * 20).grade, "F");
+check("18 normalised against 20 is an A+",
+  GradingConfig.findGradeBand((twenty / 20) * 20).grade, "A+");
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

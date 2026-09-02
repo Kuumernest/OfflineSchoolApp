@@ -462,12 +462,24 @@ function toTemplateData(payload, opts = {}) {
   return {
     reportId: `${payload.studentId || ""}_${payload.examId || ""}`,
 
+    // Which of the three cards this is. The engine turns it into the
+    // {{if is_annual}} / {{if is_term}} / {{if is_sequence}} flags a school's
+    // template gates on — without it the seeded layout had nothing to ask
+    // about but isPassing, and printed a promotion on every passing pupil's
+    // card whatever kind of card it was.
+    reportType: payload.reportType || "term",
+
     student: {
       fullName:        payload.studentName || "",
       studentId:       payload.studentId   || "",
       admissionNumber: payload.admissionNo || "",
-      gender:          student.gender      || "",
-      dateOfBirth:     student.dateOfBirth || null,
+      // The PAYLOAD first, then opts.student. The controller enriches the
+      // payload with gender and date of birth from the Student document; this
+      // read only opts.student, which the routes do not pass — so both fields
+      // came out blank on every school template, while the built-in layout
+      // (which does check the payload) showed them. Same order as there.
+      gender:          payload.gender      || student.gender      || "",
+      dateOfBirth:     payload.dateOfBirth || student.dateOfBirth || null,
       photoBase64:     student.photoBase64 || null,
     },
 
@@ -477,9 +489,13 @@ function toTemplateData(payload, opts = {}) {
       address:       school.address       || "",
       phone:         school.phone         || "",
       principalName: school.principalName || "",
-      // The School model stores the branding at `logo`; logoBase64 is the
-      // legacy caller-supplied shape. Either satisfies {{school.logoBase64}}.
-      logoBase64:    school.logoBase64    || school.logo || null,
+      // Two keys, because they mean different things and the engine now tells
+      // them apart. `logo` is a URL or a served path and goes straight into the
+      // src; logoBase64 is a raw payload the engine has to wrap. Putting a path
+      // in logoBase64 — which this did — produced
+      // "data:image/png;base64,/uploads/logos/x.jpg".
+      logoUrl:       school.logo          || null,
+      logoBase64:    school.logoBase64    || null,
     },
 
     className:    payload.className    || "",
