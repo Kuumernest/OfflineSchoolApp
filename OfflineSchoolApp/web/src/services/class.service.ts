@@ -264,12 +264,45 @@ export async function createSubject(
   return normaliseSubject(unwrapSingle<RawSubject>(data, "subject"));
 }
 
+/**
+ * What a coefficient change did to the exams beyond the subject row.
+ *
+ * The endpoint pushes a new coefficient into the exam subjects that were still
+ * following the old one, and leaves alone both the ones set for a single exam
+ * and the ones on exams whose results have already gone out. It reports which,
+ * because until it did, the only way to discover that an edit had reached
+ * nothing was to open a marks sheet and notice the old number.
+ *
+ * Nothing is recomputed: `reprocessRequired` says an exam that already has
+ * marks now has stale averages, and when to redo them is the school's call.
+ */
+export interface CoefficientCascade {
+  examSubjectsUpdated: number;
+  examsAffected:       number;
+  skippedFinalised:    number;
+  skippedOverridden:   number;
+  reprocessRequired:   boolean;
+}
+
+/** The subject, and what the change did elsewhere. */
+export async function updateSubjectDetailed(
+  subjectId: EntityId,
+  payload:   UpdateSubjectPayload,
+): Promise<{ subject: Subject; cascade: CoefficientCascade | null }> {
+  const { data } = await api.put(`/admin/subjects/${subjectId}`, payload);
+  return {
+    subject: normaliseSubject(unwrapSingle<RawSubject>(data, "subject")),
+    // Optional: a client may be talking to a server that predates it.
+    cascade: (data as { coefficientCascade?: CoefficientCascade })
+      ?.coefficientCascade ?? null,
+  };
+}
+
 export async function updateSubject(
   subjectId: EntityId,
   payload:   UpdateSubjectPayload,
 ): Promise<Subject> {
-  const { data } = await api.put(`/admin/subjects/${subjectId}`, payload);
-  return normaliseSubject(unwrapSingle<RawSubject>(data, "subject"));
+  return (await updateSubjectDetailed(subjectId, payload)).subject;
 }
 
 export async function deleteSubject(subjectId: EntityId): Promise<void> {

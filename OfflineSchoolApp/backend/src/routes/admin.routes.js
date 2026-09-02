@@ -17,6 +17,8 @@ const { sendEmail } = require("../services/email.service");
 const {
   applyActiveStructuresForStudent: billStudentForClass,
 } = require("../services/fees.service");
+const { cascadeCoefficient, coefficientOf } =
+  require("../services/subjectCoefficient.service");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — SHARED UTILITIES
@@ -1540,6 +1542,12 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
 
   const classIdStr = classId ? String(classId).trim() : undefined;
 
+  // Read before writing, for the coefficient the exams were following. Without
+  // it there is no way to tell an exam that had simply inherited the old value
+  // from one a head had deliberately weighted differently.
+  const before = await Subject.findOne(getTenantQuery(req, req.params.id)).lean();
+  if (!before) return sendError(res, 404, "Subject not found");
+
   const subject = await Subject.findOneAndUpdate(
     getTenantQuery(req, req.params.id),
     {
@@ -1552,6 +1560,26 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
   ).lean();
 
   if (!subject) return sendError(res, 404, "Subject not found");
+
+  /*
+   * The coefficient into the exams that were following it.
+   *
+   * This route used to write the subject and stop. Every ExamSubject already
+   * attached kept the weight it was seeded with, and both the grading service
+   * and the mark-entry screen read the weight — so a head could set a subject
+   * to 4, open the marks screen, and find it still counting as 1, with nothing
+   * to say the change had gone nowhere.
+   *
+   * Exams whose results are published, locked or archived are left alone, and
+   * nothing is recomputed: the caller is told a reprocess is needed and decides
+   * when, exactly as the per-exam route does.
+   */
+  const cascade = await cascadeCoefficient({
+    schoolId:  subject.schoolId,
+    subjectId: String(subject._id),
+    from:      coefficientOf(before),
+    to:        coefficientOf(subject),
+  });
 
   const assignment = await TeacherAssignment.findOne({
     subject: String(subject._id),
@@ -1573,6 +1601,15 @@ router.put("/subjects/:id", requirePermission("subjects.manage"), asyncHandler(a
       teacher_id:  teacher?._id  || null,
       teacherName: teacher?.name || null,
       teacher:     teacher       || null,
+    },
+    // What the coefficient change did beyond this row, so the screen can say
+    // so rather than leaving the head to discover it at the marks sheet.
+    coefficientCascade: {
+      examSubjectsUpdated: cascade.updated,
+      examsAffected:       cascade.examIds.length,
+      skippedFinalised:    cascade.skippedFinalised,
+      skippedOverridden:   cascade.skippedOverridden,
+      reprocessRequired:   cascade.reprocessRequired,
     },
   });
 }));

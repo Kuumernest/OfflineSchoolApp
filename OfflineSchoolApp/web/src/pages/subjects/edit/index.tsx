@@ -13,8 +13,9 @@ import { useUser }      from "@/store/auth.store";
 import {
   fetchClasses,
   fetchSubjects,
-  updateSubject,
+  updateSubjectDetailed,
 }                       from "@/services/class.service";
+import { useToast }     from "@/components/ui/Toast";
 import { fetchTeachers } from "@/services/teacher.service";
 import { cn }           from "@/utils/cn";
 import type { Class, Teacher, Subject } from "@/types";
@@ -137,6 +138,7 @@ const Field = ({ label, required, error, hint, children }: FieldProps) => (
 export default function EditSubjectPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const { toast } = useToast();
   const { id }   = useParams<{ id: string }>();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
@@ -197,7 +199,7 @@ export default function EditSubjectPage() {
   const mutation = useMutation({
     mutationFn: () => {
       if (!id) throw new Error("No subject ID");
-      return updateSubject(id, {
+      return updateSubjectDetailed(id, {
         name:      form.name.trim(),
         code:      form.code.trim() || undefined,
         classId:   form.classId,
@@ -207,7 +209,36 @@ export default function EditSubjectPage() {
           : undefined,
       });
     },
-    onSuccess: () => {
+    onSuccess: ({ cascade }) => {
+      /*
+       * Say what the coefficient reached.
+       *
+       * A coefficient lives in two places: the subject, and a copy on every
+       * exam it is attached to. The edit used to write only the first, so a
+       * head would set a subject to 4 and find the marks sheet still counting
+       * it as 1. The endpoint cascades now — and having done something to the
+       * exams, it has to say so, because a silent cascade is the same problem
+       * from the other side: averages that moved with nothing to show it.
+       */
+      if (cascade && cascade.examSubjectsUpdated > 0) {
+        toast({
+          kind:  cascade.reprocessRequired ? "warning" : "success",
+          title: t("subjectsEdit.coeffAppliedTitle"),
+          message: [
+            t("subjectsEdit.coeffApplied", {
+              count: cascade.examSubjectsUpdated,
+              exams: cascade.examsAffected,
+            }),
+            cascade.skippedOverridden > 0
+              ? t("subjectsEdit.coeffSkippedOwn", { count: cascade.skippedOverridden })
+              : null,
+            cascade.skippedFinalised > 0
+              ? t("subjectsEdit.coeffSkippedFinal", { count: cascade.skippedFinalised })
+              : null,
+            cascade.reprocessRequired ? t("subjectsEdit.coeffReprocess") : null,
+          ].filter(Boolean).join(" "),
+        });
+      }
       navigate("/subjects", { state: { updated: true } });
     },
     onError: (err: unknown) => {

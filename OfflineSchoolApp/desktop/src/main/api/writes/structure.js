@@ -113,6 +113,57 @@ const parseCoefficient = (raw) => {
 // ── Periods ─────────────────────────────────────────────────────────────────
 
 /** isValidTime(): two digits, a colon, two digits. Nothing about whether it is a real time. */
+/**
+ * The endpoint's coefficient cascade, mirrored.
+ *
+ * PUT /admin/subjects/:id pushes a new coefficient into the exam subjects that
+ * were still following the old one — see backend services/subjectCoefficient.
+ * The rule, in full, because a mirror that wrote only the subject row would
+ * show the head a coefficient the marks sheet on this same machine disagreed
+ * with, until the next sync corrected it:
+ *
+ *   ExamSubject.weight is percentage-style, 100 = coefficient 1
+ *   a row whose weight is not the OLD default was set per exam, and is kept
+ *   a row on a published, locked or archived exam is never touched
+ *
+ * @returns {{rows: Array<{collection: string, doc: object}>,
+ *            skippedFinalised: number, skippedOverridden: number}}
+ *   `rows` goes straight into `also`; the counts go into the response, which
+ *   reports them the way the endpoint does.
+ */
+const cascadeCoefficient = (docs, { schoolId, subjectId, from, to }) => {
+  const none = { rows: [], skippedFinalised: 0, skippedOverridden: 0 };
+  if (!(Number.isFinite(from) && Number.isFinite(to) && from !== to)) return none;
+
+  const finalised = (examId) => {
+    const exam = docs.get("exam", String(examId));
+    return Boolean(exam?.resultsPublished) ||
+           Boolean(exam?.resultsLockedAt) ||
+           ["published", "archived"].includes(String(exam?.status || ""));
+  };
+
+  const now = new Date().toISOString();
+  const rows = [];
+  let skippedFinalised = 0, skippedOverridden = 0;
+
+  for (const row of docs.find("examSubject", { subjectId: String(subjectId) })) {
+    if (row.deletedAt) continue;
+    if (String(row.schoolId) !== String(schoolId)) continue;
+    if (finalised(row.examId))            { skippedFinalised += 1; continue; }
+    if (Number(row.weight) === to * 100)  continue;              // already right
+    if (Number(row.weight) !== from * 100) { skippedOverridden += 1; continue; }
+    rows.push({
+      collection: "examSubject",
+      doc: { ...bare(row), weight: to * 100, updatedAt: now },
+    });
+  }
+  return { rows, skippedFinalised, skippedOverridden };
+};
+
+/** A coefficient as everything downstream reads it: absent means 1. */
+const coefficientOf = (row) =>
+  Number(row?.coefficient) > 0 ? Number(row.coefficient) : 1;
+
 const isValidTime = (t) => typeof t === "string" && /^\d{2}:\d{2}$/.test(t);
 
 /** toMinutes(), which is why "25:99" gets through — see the note on PUT below. */
@@ -391,6 +442,15 @@ module.exports = [
 
       const doc = { ...bare(row), ...updates, updatedAt: new Date().toISOString() };
 
+      // The exam subjects that were following the old coefficient, written in
+      // the same transaction as the subject itself.
+      const cascaded = updates.coefficient === undefined
+        ? { rows: [], skippedFinalised: 0, skippedOverridden: 0 }
+        : cascadeCoefficient(docs, {
+            schoolId, subjectId: String(row._id),
+            from: coefficientOf(row), to: updates.coefficient,
+          });
+
       /**
        * The teacher on the response, which is a different join from the one the
        * subject LIST does.
@@ -429,13 +489,37 @@ module.exports = [
         teacher:     teacher       || null,
       };
 
+      // Whether any of the touched exams already has marks, which is what
+      // decides reprocessRequired. Local rows, so the same question the
+      // endpoint asks of StudentScore.
+      const touched = new Set(cascaded.rows.map((c) => String(c.doc.examId)));
+      const marked  = [...touched].some((examId) =>
+        [...docs.find("studentScore", { examId })].some(
+          (sc) => !sc.deletedAt && String(sc.subjectId) === String(row._id)
+        )
+      );
+
       return {
         collection: "subject",
         doc,
+        also: cascaded.rows,
         request: { method: "PUT", path: `/api/admin/subjects/${row._id}`, body },
         // .lean(), so no `id` alias on this one — unlike the class response two
         // handlers up. Same router, two conventions.
-        response: { status: 200, data: { success: true, subject: shown } },
+        response: {
+          status: 200,
+          data: {
+            success: true,
+            subject: shown,
+            coefficientCascade: {
+              examSubjectsUpdated: cascaded.rows.length,
+              examsAffected:       touched.size,
+              skippedFinalised:    cascaded.skippedFinalised,
+              skippedOverridden:   cascaded.skippedOverridden,
+              reprocessRequired:   marked,
+            },
+          },
+        },
       };
     },
   },
