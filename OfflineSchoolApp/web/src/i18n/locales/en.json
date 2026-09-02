@@ -808,7 +808,11 @@
     "examCreated": "Exam created",
     "examUpdated": "Exam updated",
     "examDeleted": "Exam deleted",
-    "editExam": "Edit exam"
+    "editExam": "Edit exam",
+    "tileGoPublished": "Show published exams",
+    "tileGoPending": "Go to the results waiting to be published",
+    "tileGoMissing": "Go to the marks that are missing",
+    "tileGoAnalytics": "Open the results analytics"
   },
   "examCreate": {
     "title": "Create exam",

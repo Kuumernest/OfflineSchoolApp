@@ -288,6 +288,21 @@ module.exports = [
             const passed = rows.filter((r) => r.isPassing).length;
             return Math.round((passed / rows.length) * 100);
           })(),
+
+          // WHICH exams the two actionable counts are about, capped at twenty
+          // as the server caps them. The results strip turns each count into a
+          // link and a count alone has nowhere to send anybody; without these
+          // the strip works online and goes dead the moment the office loses
+          // its connection, which is the one thing this mirror exists to stop.
+          missingGradeExams: [...new Set(
+            docs.find("studentScore", {
+              schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
+            }).map((r) => String(r.examId))
+          )].slice(0, 20),
+          pendingExams: [...new Set(
+            docs.find("resultSummary", { schoolId, isPublished: false })
+              .map((r) => String(r.examId))
+          )].slice(0, 20),
         },
         recentExams: docs
           .find("exam", base, { order: "createdAt", dir: "DESC", limit: 5 }),

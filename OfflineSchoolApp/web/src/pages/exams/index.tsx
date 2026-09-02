@@ -993,27 +993,100 @@ export default function ExamsPage() {
         onAction: () => setStatusFilter("ongoing"),
       });
     }
+    // These two sent the reader to /exams/results, which is single-exam
+    // analytics and has no marks entry and no publish button — the same dead
+    // end the results strip had. Both now go where the work is done.
     if ((dashData?.dashboard?.results?.missingGrades ?? 0) > 0) {
-      const missing = dashData!.dashboard.results.missingGrades;
+      const missing     = dashData!.dashboard.results.missingGrades;
+      const missingExam = dashData!.dashboard.results.missingGradeExams?.[0] ?? null;
       derived.push({
         type:    "warning",
         message: t("exams.alertMissingGrades", { count: missing }),
         action:  t("exams.actionEnterResults"),
-        onAction: () => navigate("/exams/results"),
+        onAction: () => navigate(
+          missingExam ? `/exams/${missingExam}?tab=marks` : "/exams/results"
+        ),
       });
     }
     if ((dashData?.dashboard?.results?.pending ?? 0) > 0) {
-      const pending = dashData!.dashboard.results.pending;
+      const pending     = dashData!.dashboard.results.pending;
+      const pendingExam = dashData!.dashboard.results.pendingExams?.[0] ?? null;
       derived.push({
         type:    "atRisk",
         message: t("exams.alertPending", { count: pending }),
         action:  t("exams.actionPublishResults"),
-        onAction: () => navigate("/exams/results"),
+        onAction: () => navigate(
+          pendingExam ? `/exams/${pendingExam}?tab=results` : "/exams/results"
+        ),
       });
     }
 
     setAlerts(derived);
   }, [d, dashData, t, navigate, setStatusFilter]);
+
+  // ── The results strip's five tiles, each with somewhere to go ───────────
+  //
+  // A tile with no destination is disabled rather than silently inert: a
+  // number that looks clickable and does nothing is worse than one that does
+  // not look clickable. That happens when the count is zero, or when the
+  // server is old enough not to send the ids.
+  const resultTiles = useMemo(() => {
+    const r = dashData?.dashboard?.results;
+    if (!r) return [];
+
+    const missingExam = r.missingGradeExams?.[0] ?? null;
+    const pendingExam = r.pendingExams?.[0] ?? null;
+
+    return [
+      {
+        id: "published", label: t("results.published"),
+        value: r.published ?? 0, color: "text-purple-600",
+        // Published results belong to published exams; the list is where you
+        // see them, and it is already on this page.
+        go: (r.published ?? 0) > 0 ? () => setStatusFilter("published") : null,
+        hint: t("exams.tileGoPublished"),
+      },
+      {
+        id: "pending", label: t("results.pending"),
+        value: r.pending ?? 0, color: "text-amber-600",
+        // Results computed but not published. The publish button lives on the
+        // exam's own results tab, so go to the exam that is waiting; with more
+        // than one, filter to the completed exams instead of picking for them.
+        go: (r.pending ?? 0) === 0 ? null
+          : pendingExam && (r.pendingExams?.length ?? 0) === 1
+            ? () => navigate(`/exams/${pendingExam}?tab=results`)
+            : () => setStatusFilter("completed"),
+        hint: t("exams.tileGoPending"),
+      },
+      {
+        id: "missing", label: t("exams.missingGrades"),
+        value: r.missingGrades ?? 0, color: "text-red-600",
+        // One unmarked pupil-subject. The mark is entered on the exam's marks
+        // tab, which is the only place this number can honestly point.
+        go: (r.missingGrades ?? 0) > 0 && missingExam
+          ? () => navigate(`/exams/${missingExam}?tab=marks`)
+          : null,
+        hint: t("exams.tileGoMissing"),
+      },
+      {
+        id: "avg", label: t("exams.avgScore"),
+        value: `${r.averagePerformance ?? 0}%`, color: "text-green-600",
+        // The analytics page is where this figure is computed and broken down.
+        go: (r.published ?? 0) + (r.pending ?? 0) > 0
+          ? () => navigate("/exams/results")
+          : null,
+        hint: t("exams.tileGoAnalytics"),
+      },
+      {
+        id: "passRate", label: t("exams.passRate"),
+        value: `${r.passRate ?? 0}%`, color: "text-primary-600",
+        go: (r.published ?? 0) + (r.pending ?? 0) > 0
+          ? () => navigate("/exams/results")
+          : null,
+        hint: t("exams.tileGoAnalytics"),
+      },
+    ];
+  }, [dashData, t, navigate, setStatusFilter]);
 
   // ── Close quick menu on outside click ────────────────────────────────────
   useEffect(() => {
@@ -1269,24 +1342,32 @@ export default function ExamsPage() {
         </div>
       )}
 
-            {/* Results overview strip — every item links to the results page */}
+            {/* Results overview strip.
+                Every tile used to call navigate("/exams/results") — the same
+                destination whichever number you clicked, and that page is
+                single-exam analytics, so "1 missing grade" led somewhere with
+                nothing to say about it. Each tile now goes where its own number
+                is actionable: a status filter for the two that describe exam
+                status, the marks tab of the exam that is short a mark, the
+                results tab of the exam awaiting a publish, and the analytics
+                page for the two figures that page actually computes. */}
       {dashData?.dashboard?.results && (
         <div className="bg-white rounded-xl border border-gray-100 px-5 py-4 shadow-sm">
           <div className="flex items-center justify-between flex-wrap gap-4">
             <h3 className="text-sm font-semibold text-gray-700">{t("exams.resultsOverview")}</h3>
             <div className="flex flex-wrap gap-6">
-              {[
-                { id:    "published", label: t("results.published"),     value: (dashData.dashboard.results.published            ?? 0),               color: "text-purple-600" },
-                { id:    "pending",   label: t("results.pending"),       value: (dashData.dashboard.results.pending              ?? 0),               color: "text-amber-600"  },
-                { id:    "missing",   label: t("exams.missingGrades"),   value: (dashData.dashboard.results.missingGrades          ?? 0),               color: "text-red-600"    },
-                { id:    "avg",       label: t("exams.avgScore"),        value: `${dashData.dashboard.results.averagePerformance ?? 0}%`, color: "text-green-600" },
-                { id:    "passRate",  label: t("exams.passRate"),        value: `${dashData.dashboard.results.passRate             ?? 0}%`, color: "text-primary-600"},
-              ].map((item) => (
+              {resultTiles.map((item) => (
                 <button
                   key={item.id}
                   type="button"
-                  onClick={() => navigate("/exams/results")}
-                  className="text-center hover:opacity-80 transition-opacity cursor-pointer"
+                  onClick={item.go ?? undefined}
+                  disabled={!item.go}
+                  title={item.hint}
+                  className={`text-center transition-opacity ${
+                    item.go
+                      ? "hover:opacity-80 cursor-pointer"
+                      : "cursor-default"
+                  }`}
                 >
                   <p className={`text-xl font-bold ${item.color}`}>{item.value}</p>
                   <p className="text-xs text-gray-400 font-medium">{item.label}</p>

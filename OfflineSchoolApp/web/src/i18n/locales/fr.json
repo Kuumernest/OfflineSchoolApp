@@ -808,7 +808,11 @@
     "examCreated": "Examen créé",
     "examUpdated": "Examen mis à jour",
     "examDeleted": "Examen supprimé",
-    "editExam": "Modifier l'examen"
+    "editExam": "Modifier l'examen",
+    "tileGoPublished": "Afficher les examens publiés",
+    "tileGoPending": "Aller aux résultats en attente de publication",
+    "tileGoMissing": "Aller aux notes manquantes",
+    "tileGoAnalytics": "Ouvrir l’analyse des résultats"
   },
   "examCreate": {
     "title": "Créer une évaluation",

@@ -277,6 +277,15 @@ results: {
   missingGrades: number;
   averagePerformance: number;
   passRate: number;
+  /**
+   * The exams behind the two actionable counts, capped at twenty.
+   *
+   * A count is not a destination: the results strip links every tile, and
+   * without an id there is nowhere for "1 missing grade" to go. Optional
+   * because a client may be talking to a server that predates them.
+   */
+  missingGradeExams?: string[];
+  pendingExams?: string[];
 };
 };
 }

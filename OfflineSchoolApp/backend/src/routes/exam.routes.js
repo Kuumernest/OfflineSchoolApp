@@ -384,6 +384,22 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
     completedExamIds.length - examsWithResults.length
   );
 
+  // WHICH exams these counts are about, not just how many.
+  //
+  // The results strip on the exams page turns each of these numbers into a
+  // link, and a count alone has nowhere to send anybody: every tile went to
+  // /exams/results, which is single-exam analytics and shows nothing about a
+  // missing mark. An id is the difference between a number and a destination.
+  //
+  // Capped, because this is a dashboard: a school with a hundred exams missing
+  // marks does not need a hundred ids to be told to go and look.
+  const [missingGradeExams, pendingExams] = await Promise.all([
+    StudentScore.distinct("examId", {
+      schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
+    }),
+    ResultSummary.distinct("examId", { schoolId, isPublished: false }),
+  ]);
+
   return res.json({
     success: true,
     stats: {
@@ -403,6 +419,11 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
         missingGrades,
         averagePerformance,
         passRate,
+        // The exams behind the two actionable counts, so the strip can link to
+        // the screen where the work is done rather than to a page about
+        // something else.
+        missingGradeExams:  missingGradeExams.slice(0, 20).map(String),
+        pendingExams:       pendingExams.slice(0, 20).map(String),
       },
     },
   });
