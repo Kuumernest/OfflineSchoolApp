@@ -848,7 +848,8 @@
     "mustBePositive": "Doit être un nombre positif",
     "passMarkRange": "Doit être compris entre 0 et {{max}}",
     "sequenceRequired": "Choisissez la séquence à laquelle cet examen appartient",
-    "promoSequenceHint": "* Les séquences 5 et 6 peuvent servir d’examens de passage"
+    "promoSequenceHint": "* Les séquences 5 et 6 peuvent servir d’examens de passage",
+    "createFailed": "Impossible de créer l’examen."
   },
   "reportCards": {
     "title": "Bulletins de notes",

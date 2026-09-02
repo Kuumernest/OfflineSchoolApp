@@ -901,6 +901,29 @@ const createExam = useCreateExam();
 
 const [step, setStep] = useState<Step>(0);
 
+/**
+ * The id this exam will have, chosen once when the form opens.
+ *
+ * POST /exams already returns the existing exam rather than a duplicate when
+ * it is given an _id it has seen — it just was not being given one, so every
+ * click minted a fresh uuid and a second click made a second exam. Deciding
+ * the id here makes the request idempotent: click twice and the server answers
+ * with the same exam both times.
+ */
+const [draftId] = useState<string>(() =>
+  (globalThis.crypto?.randomUUID?.() ??
+    `exam-${Date.now()}-${Math.random().toString(16).slice(2)}`));
+
+/**
+ * Covers the WHOLE submit, not just the create.
+ *
+ * createExam.isPending goes false the moment the exam is created — while the
+ * subject assignments are still being posted and before the navigate. The
+ * button re-enabled in that window, which is exactly when somebody who thinks
+ * nothing happened clicks again.
+ */
+const [submitting, setSubmitting] = useState(false);
+
 const [form, setForm] = useState<DetailsForm>({
 name: "",
 type: "test",
@@ -972,8 +995,11 @@ else setStep((s) => (s - 1) as Step);
 };
 
 const handleSubmit = async () => {
+if (submitting) return;
+setSubmitting(true);
 try {
 const result = await createExam.mutateAsync({
+_id: draftId,
 name: form.name.trim(),
 type: form.type as ExamType,
 sequenceNumber: form.sequenceNumber ? (Number(form.sequenceNumber) as SequenceNumber) : null,
@@ -1018,7 +1044,10 @@ schoolId, // ✅ add this
 
   navigate(`/exams/${examId}`);
 } catch (err) {
-  alert(getErrorMessage(err) || "Failed to create exam");
+  // Only released on failure. On success the navigate takes the form away, and
+  // re-enabling the button first would offer one last chance to click it.
+  setSubmitting(false);
+  alert(getErrorMessage(err) || t("examCreate.createFailed"));
 }
 };
 
@@ -1091,17 +1120,17 @@ return (
     ) : (
       <button
         onClick={handleSubmit}
-        disabled={createExam.isPending}
+        disabled={submitting}
         className="px-8 py-2.5 bg-green-600 hover:bg-green-700
                    text-white rounded-xl text-sm font-semibold
                    transition-colors disabled:opacity-60
                    flex items-center gap-2"
       >
-        {createExam.isPending && (
+        {submitting && (
           <div className="w-4 h-4 border-2 border-white
                          border-t-transparent rounded-full animate-spin" />
         )}
-        {createExam.isPending ? t("exams.creating") : `✓ ${t("exams.create")}`}
+        {submitting ? t("exams.creating") : `✓ ${t("exams.create")}`}
       </button>
     )}
   </div>

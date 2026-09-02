@@ -632,7 +632,7 @@ router.get("/:id", staffOnly, asyncHandler(async (req, res) => {
 
 router.post("/", adminOnly, asyncHandler(async (req, res) => {
   const {
-    name, type, academicYear, term,
+    name, type, academicYear, term, sequenceNumber,
     startDate, endDate, description, instructions,
     totalMarks, passMark, status, subjects,
   } = req.body;
@@ -640,6 +640,14 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   if (!name?.trim())  return res.status(400).json({ message: "name is required" });
   if (!academicYear)  return res.status(400).json({ message: "academicYear is required" });
   if (!term)          return res.status(400).json({ message: "term is required" });
+  // The schema constrains this to 1-6, so an out-of-range value would arrive
+  // as a ValidationError and leave with a 500. A 400 says which field.
+  if (sequenceNumber != null && sequenceNumber !== "") {
+    const sq = Number(sequenceNumber);
+    if (!Number.isInteger(sq) || sq < 1 || sq > 6) {
+      return res.status(400).json({ message: "sequenceNumber must be 1-6" });
+    }
+  }
 
   const schoolId = resolveSchoolId(req, req.body.schoolId);
 
@@ -695,6 +703,15 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
     type:         type         || "test",
     academicYear,
     term,
+    // Which sequence this exam is, and the reason it must be stored: it is what
+    // decides whether the card printed from this exam is a SEQUENCE card. This
+    // was not read from the body at all, so every exam created here came out
+    // with sequenceNumber null, reportTypeFor called it a term report, and a
+    // card the school had named "First Sequence" printed "Term 1" across the
+    // top. Requiring it on the form fixed nothing while the server dropped it.
+    ...(sequenceNumber != null && sequenceNumber !== ""
+      ? { sequenceNumber: Number(sequenceNumber) }
+      : {}),
     startDate:    startDate    || null,
     endDate:      endDate      || null,
     description:  description  || null,

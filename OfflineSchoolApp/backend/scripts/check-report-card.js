@@ -373,5 +373,20 @@ check("18 normalised against 100 is an F",
 check("18 normalised against 20 is an A+",
   GradingConfig.findGradeBand((twenty / 20) * 20).grade, "A+");
 
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- §7 depends on the exam actually storing its sequence ---");
+
+// POST /exams did not read sequenceNumber from the body, so every exam created
+// through it came out with null and reportTypeFor called it a term report — a
+// card the school had named "First Sequence" printed "Term 1" across the top.
+// Requiring the field on the form fixed nothing while the server dropped it, so
+// the rule is asserted against the shape a stored exam actually has.
+check("an exam that stored its sequence is a sequence report",
+  reportTypeFor({ type: "test", term: 1, sequenceNumber: 1 }), "sequence");
+check("and one that lost it is not",
+  reportTypeFor({ type: "test", term: 1, sequenceNumber: null }), "term");
+check("a sequence of 6 still counts",
+  reportTypeFor({ type: "test", term: 3, sequenceNumber: 6 }), "sequence");
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

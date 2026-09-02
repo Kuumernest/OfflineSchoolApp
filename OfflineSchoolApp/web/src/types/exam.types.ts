@@ -371,6 +371,14 @@ total: number;
 // ─── Form Shapes ──────────────────────────────────────────
 
 export interface CreateExamForm {
+/**
+ * The id the client chose for this exam, sent so the create is idempotent.
+ *
+ * POST /exams answers with the existing exam when it is given an _id it has
+ * already seen, so a double click cannot make a second exam. Optional: a caller
+ * that does not care lets the server mint one.
+ */
+_id?: string;
 name: string;
 type: ExamType;
 sequenceNumber: SequenceNumber | null;

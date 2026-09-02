@@ -848,7 +848,8 @@
     "mustBePositive": "Must be a positive number",
     "passMarkRange": "Must be between 0 and {{max}}",
     "sequenceRequired": "Choose the sequence this exam belongs to",
-    "promoSequenceHint": "* Sequences 5 and 6 can be configured as promotion exams"
+    "promoSequenceHint": "* Sequences 5 and 6 can be configured as promotion exams",
+    "createFailed": "Could not create the exam."
   },
   "reportCards": {
     "title": "Report cards",
