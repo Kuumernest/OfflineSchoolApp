@@ -7,3 +7,7 @@ exams-todo.txt
 # an empty file that git will happily track and no Windows tool can delete.
 nul
 **/nul
+
+# Template backups taken by scripts/repair-report-templates.js.
+# School documents — not ours to commit.
+OfflineSchoolApp/backend/backups/
