@@ -265,6 +265,13 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
     },
   ]);
 
+  const [dashMissingExams, dashPendingExams] = await Promise.all([
+    StudentScore.distinct("examId", {
+      schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
+    }),
+    ResultSummary.distinct("examId", { schoolId, isPublished: false }),
+  ]);
+
   const averagePerformance = avgResult[0]?.avg
     ? Math.round(avgResult[0].avg) : 0;
   const passRate = avgResult[0]?.total > 0
@@ -280,6 +287,18 @@ router.get("/dashboard", staffOnly, asyncHandler(async (req, res) => {
         missingGrades:      studentsWithMissingGrades,
         averagePerformance,
         passRate,
+        // WHICH exams the two actionable counts are about.
+        //
+        // The results strip on the exams page turns each count into a link, and
+        // a count has nowhere to send anybody. Note that /stats returns the
+        // same figures from the same queries and is NOT what that page reads —
+        // adding these there first fixed nothing, and this is the endpoint the
+        // dashboard hook calls.
+        //
+        // Capped: a school with a hundred exams short of a mark does not need a
+        // hundred ids to be told to go and look.
+        missingGradeExams:  dashMissingExams.slice(0, 20).map(String),
+        pendingExams:       dashPendingExams.slice(0, 20).map(String),
       },
       recentExams,
     },

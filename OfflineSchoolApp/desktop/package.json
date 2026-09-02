@@ -8,7 +8,7 @@
     "start": "node scripts/launch.js",
     "smoke": "node scripts/launch.js --smoke",
     "probe": "node scripts/probe-launch.js",
-    "check": "npm run check:store && npm run check:outbox && npm run check:sync && npm run check:path && npm run check:student-writes && npm run check:results && npm run check:settings",
+    "check": "npm run check:routes && npm run check:store && npm run check:outbox && npm run check:sync && npm run check:path && npm run check:student-writes && npm run check:results && npm run check:settings",
     "check:store": "node scripts/check-doc-store.js",
     "check:outbox": "node scripts/check-outbox.js",
     "check:sync": "node scripts/check-sync-engine.js",
@@ -20,7 +20,8 @@
     "build:web": "npm --prefix ../web run build",
     "package": "npm run build:web && electron-builder --config electron-builder.yml",
     "package:dir": "npm run build:web && electron-builder --config electron-builder.yml --dir",
-    "coverage": "node scripts/coverage.js"
+    "coverage": "node scripts/coverage.js",
+    "check:routes": "node scripts/check-route-shadowing.js"
   },
   "devDependencies": {
     "electron": "^44.0.0",

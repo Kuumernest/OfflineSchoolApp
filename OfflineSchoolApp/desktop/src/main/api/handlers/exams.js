@@ -42,6 +42,140 @@
 const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
 
 module.exports = [
+  // ── The literal routes come FIRST, and must stay first ──────────────────
+  //
+  // index.js matches this table in order and returns on the first hit, so
+  // GET /api/exams/:id registered above these would swallow both: "dashboard"
+  // and "reports" are perfectly good ids as far as a pattern is concerned. It
+  // did, and both of these were unreachable offline — the handler ran,
+  // found no exam called "dashboard", and declined, which from outside is
+  // indistinguishable from a route nobody had written.
+  //
+  // scripts/check-route-shadowing.js fails if a literal route is ever
+  // registered behind a pattern that matches it.
+
+  {
+    route: "GET /api/exams/dashboard",
+
+    /**
+     * The dashboard tile — counts and a couple of aggregations, all reducible to
+     * things the mirror holds: exam rows grouped by status, ResultSummary rows
+     * flagged published, StudentScore rows still blank, and an average over the
+     * published percentages.
+     *
+     * The grading config is NOT consulted here — the dashboard shows positions,
+     * not grades, so the computation that lives in gradeUtils.js is not needed.
+     */
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      const base = { schoolId, deletedAt: null };
+
+      const results = {
+        exams: {
+          total:     docs.count("exam", base),
+          draft:     docs.count("exam", { ...base, status: "draft"     }),
+          scheduled: docs.count("exam", { ...base, status: "scheduled" }),
+          ongoing:   docs.count("exam", { ...base, status: "ongoing"   }),
+          completed: docs.count("exam", { ...base, status: "completed" }),
+          published: docs.count("exam", { ...base, status: "published" }),
+          archived:  docs.count("exam", { ...base, status: "archived"  }),
+        },
+        results: {
+          published:       docs.count("resultSummary", { schoolId, isPublished: true  }),
+          pending:         docs.count("resultSummary", { schoolId, isPublished: false }),
+          missingGrades:   docs.count("studentScore", {
+            schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
+          }),
+          averagePerformance: (() => {
+            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
+            if (!rows.length) return 0;
+            const valid = rows.map((r) => r.percentage).filter((p) => p != null);
+            if (!valid.length) return 0;
+            return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
+          })(),
+          passRate: (() => {
+            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
+            if (!rows.length) return 0;
+            const passed = rows.filter((r) => r.isPassing).length;
+            return Math.round((passed / rows.length) * 100);
+          })(),
+
+          // WHICH exams the two actionable counts are about, capped at twenty
+          // as the server caps them. The results strip turns each count into a
+          // link and a count alone has nowhere to send anybody; without these
+          // the strip works online and goes dead the moment the office loses
+          // its connection, which is the one thing this mirror exists to stop.
+          missingGradeExams: [...new Set(
+            docs.find("studentScore", {
+              schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
+            }).map((r) => String(r.examId))
+          )].slice(0, 20),
+          pendingExams: [...new Set(
+            docs.find("resultSummary", { schoolId, isPublished: false })
+              .map((r) => String(r.examId))
+          )].slice(0, 20),
+        },
+        recentExams: docs
+          .find("exam", base, { order: "createdAt", dir: "DESC", limit: 5 }),
+      };
+
+      return ok({ dashboard: results });
+    },
+  },
+
+
+  {
+    route: "GET /api/exams/reports/results",
+
+    /**
+     * The results export screen — paginated ResultSummary, the same data shape
+     * as /exams/:examId/results but with page/limit honoured.
+     *
+     * The web screen asks for this as a blob for download, but the server
+     * answers JSON — so the envelope mirrors the server's exactly.
+     */
+    handler: ({ params, query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      // examId is an optional query parameter on this route, not a path param.
+      const examId = query.examId ? String(query.examId).trim() : null;
+
+      if (examId) {
+        const exam = docs.get("exam", examId);
+        if (!exam) return null;
+        if (String(exam.schoolId) !== String(schoolId)) return null;
+        if (exam.deletedAt) return null;
+      }
+
+      const page  = query.page  === undefined ? 1  : Number(query.page);
+      const limit = query.limit === undefined ? 50 : Number(query.limit);
+      if (!Number.isFinite(page) || !Number.isFinite(limit)) return null;
+      if (page < 1 || limit < 1) return null;
+
+      const filter = { schoolId };
+      if (examId)   filter.examId  = examId;
+      if (query.classId) filter.classId = String(query.classId);
+
+      const rows = docs.find(
+        "resultSummary", filter,
+        { order: "classPosition", dir: "ASC" }
+      );
+
+      const total = rows.length;
+      const skip  = (page - 1) * limit;
+      const results = rows.slice(skip, skip + limit);
+
+      return ok({
+        results,
+        total,
+        page:  Number(page),
+        pages: Math.ceil(total / Number(limit)),
+      });
+    },
+  },
   {
     route: "GET /api/admin/exams/stats",
 
@@ -241,125 +375,4 @@ module.exports = [
     },
   },
 
-  {
-    route: "GET /api/exams/dashboard",
-
-    /**
-     * The dashboard tile — counts and a couple of aggregations, all reducible to
-     * things the mirror holds: exam rows grouped by status, ResultSummary rows
-     * flagged published, StudentScore rows still blank, and an average over the
-     * published percentages.
-     *
-     * The grading config is NOT consulted here — the dashboard shows positions,
-     * not grades, so the computation that lives in gradeUtils.js is not needed.
-     */
-    handler: ({ query }, { docs, session }) => {
-      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
-      if (!schoolId) return null;
-
-      const base = { schoolId, deletedAt: null };
-
-      const results = {
-        exams: {
-          total:     docs.count("exam", base),
-          draft:     docs.count("exam", { ...base, status: "draft"     }),
-          scheduled: docs.count("exam", { ...base, status: "scheduled" }),
-          ongoing:   docs.count("exam", { ...base, status: "ongoing"   }),
-          completed: docs.count("exam", { ...base, status: "completed" }),
-          published: docs.count("exam", { ...base, status: "published" }),
-          archived:  docs.count("exam", { ...base, status: "archived"  }),
-        },
-        results: {
-          published:       docs.count("resultSummary", { schoolId, isPublished: true  }),
-          pending:         docs.count("resultSummary", { schoolId, isPublished: false }),
-          missingGrades:   docs.count("studentScore", {
-            schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
-          }),
-          averagePerformance: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const valid = rows.map((r) => r.percentage).filter((p) => p != null);
-            if (!valid.length) return 0;
-            return Math.round(valid.reduce((s, v) => s + v, 0) / valid.length);
-          })(),
-          passRate: (() => {
-            const rows = docs.find("resultSummary", { schoolId, isPublished: true });
-            if (!rows.length) return 0;
-            const passed = rows.filter((r) => r.isPassing).length;
-            return Math.round((passed / rows.length) * 100);
-          })(),
-
-          // WHICH exams the two actionable counts are about, capped at twenty
-          // as the server caps them. The results strip turns each count into a
-          // link and a count alone has nowhere to send anybody; without these
-          // the strip works online and goes dead the moment the office loses
-          // its connection, which is the one thing this mirror exists to stop.
-          missingGradeExams: [...new Set(
-            docs.find("studentScore", {
-              schoolId, score: null, isAbsent: false, isExempt: false, deletedAt: null,
-            }).map((r) => String(r.examId))
-          )].slice(0, 20),
-          pendingExams: [...new Set(
-            docs.find("resultSummary", { schoolId, isPublished: false })
-              .map((r) => String(r.examId))
-          )].slice(0, 20),
-        },
-        recentExams: docs
-          .find("exam", base, { order: "createdAt", dir: "DESC", limit: 5 }),
-      };
-
-      return ok({ dashboard: results });
-    },
-  },
-
-  {
-    route: "GET /api/exams/reports/results",
-
-    /**
-     * The results export screen — paginated ResultSummary, the same data shape
-     * as /exams/:examId/results but with page/limit honoured.
-     *
-     * The web screen asks for this as a blob for download, but the server
-     * answers JSON — so the envelope mirrors the server's exactly.
-     */
-    handler: ({ params, query }, { docs, session }) => {
-      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
-      if (!schoolId) return null;
-
-      // examId is an optional query parameter on this route, not a path param.
-      const examId = query.examId ? String(query.examId).trim() : null;
-
-      if (examId) {
-        const exam = docs.get("exam", examId);
-        if (!exam) return null;
-        if (String(exam.schoolId) !== String(schoolId)) return null;
-        if (exam.deletedAt) return null;
-      }
-
-      const page  = query.page  === undefined ? 1  : Number(query.page);
-      const limit = query.limit === undefined ? 50 : Number(query.limit);
-      if (!Number.isFinite(page) || !Number.isFinite(limit)) return null;
-      if (page < 1 || limit < 1) return null;
-
-      const filter = { schoolId };
-      if (examId)   filter.examId  = examId;
-      if (query.classId) filter.classId = String(query.classId);
-
-      const rows = docs.find(
-        "resultSummary", filter,
-        { order: "classPosition", dir: "ASC" }
-      );
-
-      const total = rows.length;
-      const skip  = (page - 1) * limit;
-      const results = rows.slice(skip, skip + limit);
-
-      return ok({
-        results,
-        total,
-        page:  Number(page),
-        pages: Math.ceil(total / Number(limit)),
-      });
-    },
-  },
 ];

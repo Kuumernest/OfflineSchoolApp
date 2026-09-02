@@ -1132,6 +1132,41 @@ const main = async () => {
   await parity("a class with no exams",      `/api/exams?schoolId=${SCHOOL}&classId=cls-none`, asHead);
   await parity("a status nothing has",       `/api/exams?schoolId=${SCHOOL}&status=cancelled`, asHead);
 
+  /**
+   * The dashboard, and the ids the results strip links to.
+   *
+   * Two endpoints compute these same figures from the same queries — /dashboard
+   * and /stats — and the exams page reads /dashboard. Adding the ids to /stats
+   * fixed nothing and looked exactly like a fix, so both are asserted: the
+   * strip is entitled to somewhere to go, and an id is what makes a count a
+   * destination rather than a number.
+   */
+  await parity("the exam dashboard", `/api/exams/dashboard?schoolId=${SCHOOL}`, asHead);
+
+  for (const [label, path] of [
+    ["dashboard", `/api/exams/dashboard?schoolId=${SCHOOL}`],
+    ["stats",     `/api/exams/stats?schoolId=${SCHOOL}`],
+  ]) {
+    const res  = await fetch(`http://127.0.0.1:${port}${path}`, {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const body = await res.json();
+    const r    = body?.dashboard?.results ?? body?.stats?.results ?? null;
+    check(`${label} answers with a results block`, Boolean(r), true);
+    if (!r) continue;
+
+    // The invariant the strip depends on: a count above zero has at least one
+    // exam behind it, or the tile it draws has nowhere to send anybody.
+    check(`${label}: a missing-grade count comes with an exam to go to`,
+      (r.missingGrades ?? 0) > 0 ? (r.missingGradeExams ?? []).length > 0 : true, true);
+    check(`${label}: so does a pending count`,
+      (r.pending ?? 0) > 0 ? (r.pendingExams ?? []).length > 0 : true, true);
+    // And no more than the cap, whatever the school's history looks like.
+    check(`${label}: the id lists are capped`,
+      [(r.missingGradeExams ?? []).length <= 20, (r.pendingExams ?? []).length <= 20],
+      [true, true]);
+  }
+
   // Stated outright, because every one of these is a number a screen draws
   // page controls from.
   const paged = api.handle({
