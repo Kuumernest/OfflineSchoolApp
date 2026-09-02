@@ -5575,14 +5575,24 @@ const main = async () => {
       String(missing.body?.message || "").startsWith("Admin route not found"), true);
   }
 
-  // ── 2, 3, 4. The creates: the server picks the id ────────────────────────
+  // ── 2, 3, 4. The creates: the client picks the id, and they ARE queued ──
   for (const [what, path, body] of [
     ["a class",   "/api/admin/classes",  { id: "client-cls", name: "Form 3", schoolId: SCHOOL }],
     ["a subject", "/api/admin/subjects", { id: "client-sub", name: "Geography",
                                           classId: "cls-1", schoolId: SCHOOL }],
   ]) {
-    check(`creating ${what} is not queued`,
-      api.handle({ method: "POST", path, query: {}, body }, structureCtx), null);
+    // Queued, at last. Two things had to change for this: the endpoint had to
+    // accept the client's id, and the handler had to return a write descriptor
+    // rather than a response body — it returned the body, so `collection` was
+    // undefined, the store threw, and api.handle caught it and fell through to
+    // the network. From out here that was indistinguishable from a decline,
+    // which is why it went unnoticed for as long as it did.
+    const queuedLocally = api.handle(
+      { method: "POST", path, query: {}, body }, structureCtx
+    );
+    check(`creating ${what} is answered locally`, queuedLocally?.status, 201);
+    check(`and the row is in the mirror under the id the client chose`,
+      Boolean(docs.get(path.includes("classes") ? "class" : "subject", body.id)), true);
 
     const created = await askStructure("POST", path, body);
     check(`the server accepts ${what}`, created.status, 201);
@@ -5639,27 +5649,45 @@ const main = async () => {
   docs.put("user", JSON.parse(JSON.stringify(await UserModel.findById("t2").lean())));
 
   /**
-   * With an id it is STILL not queued, and for a reason worth writing down.
+   * With an id it IS queued now, on both of the server's paths.
    *
-   * writes/assignments.js returns a response body — { success, assignment,
-   * serverId } — where this layer expects a write descriptor, { collection,
-   * doc, request, response }. So `collection` and `doc` are undefined,
-   * ctx.docs.put throws, api.handle catches it, and the request goes to the
-   * network having logged "failed locally". The same is true of writes for
-   * classes, subjects, staff and permissions: five modules, and none of them
-   * has ever written a row.
+   * Two things had to change. The endpoint had to accept the client's id, which
+   * writes/structure.js and the coverage census both asked for. And the handler
+   * had to return a write descriptor rather than a response body — it returned
+   * the body, so `collection` was undefined, ctx.docs.put threw, api.handle
+   * caught it and the request went to the network having logged "failed
+   * locally". That was true of the writes for classes, subjects, assignments,
+   * staff and permissions alike: five modules, none of which had ever written a
+   * row, and all of which looked from out here exactly like a decline. Which is
+   * why it went unnoticed.
    *
-   * It reads as a decline from out here, which is why nothing caught it. That
-   * is also why this assertion is written against the observable behaviour
-   * rather than deleted: when the shape is fixed it will fail, and the reason
-   * will be in this comment.
+   * The console posts to /admin/assignments while the endpoint table names
+   * /admin/teacher-assignments, so both are registered — one of them alone
+   * leaves the screen that actually creates assignments talking to the network.
    */
-  for (const p of ["/api/admin/assignments", "/api/admin/teacher-assignments"]) {
-    check(`creating an assignment is not queued either way: ${p}`,
-      api.handle({ method: "POST", path: p, query: {},
-        body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx),
-      null);
-  }
+  const asProbe = api.handle({
+    method: "POST", path: "/api/admin/assignments", query: {},
+    body: { ...strNewAssignment, id: "client-as-probe" },
+  }, structureCtx);
+  check("creating an assignment is answered locally", asProbe?.status, 201);
+  check("and the row is in the mirror under the client's id",
+    Boolean(docs.get("teacherAssignment", "client-as-probe")), true);
+  // The same id again: already in the mirror, so the handler declines rather
+  // than writing a second row — on either path.
+  check("the same id twice is not a second row",
+    api.handle({ method: "POST", path: "/api/admin/teacher-assignments", query: {},
+      body: { ...strNewAssignment, id: "client-as-probe" } }, structureCtx),
+    null);
+  // Out of the mirror AND out of the queue again. The direct create below files
+  // the same teacher/class/subject triple, so leaving this queued would have the
+  // server answer 409 "Assignment already exists" and block the outbox — which
+  // the finance section, three thousand lines down, would report as its own
+  // failure. The probe is about whether the create is queued, not about syncing.
+  const asProbeSeqs = queue.all()
+    .filter((r) => String(r.path).endsWith("/assignments"))
+    .map((r) => r.seq);
+  for (const seq of asProbeSeqs) queue.discard(seq);
+  docs.forget("teacherAssignment", "client-as-probe");
 
   {
     const created = await askStructure("POST", "/api/admin/assignments",
@@ -5788,8 +5816,13 @@ const main = async () => {
     }
   }
 
-  check("the outbox is still empty — nothing in this section queued a refusal",
-    queue.all().length, 0);
+  // Not empty any more, and what is in it is the point: the two creates this
+  // section queued and left there, and nothing else. A refusal reaching the
+  // outbox is what this assertion has always guarded against, and the paths say
+  // plainly which requests are present.
+  check("the outbox holds the two creates, and no refusal",
+    queue.all().map((r) => r.path).sort(),
+    ["/api/admin/classes", "/api/admin/subjects"]);
 
   await parity("the class list, after all of that",
     `/api/admin/classes?schoolId=${SCHOOL}`);

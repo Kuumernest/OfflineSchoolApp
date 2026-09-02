@@ -24,7 +24,12 @@
  * not help: GET /admin/subjects applies no deleted filter, so the subject would
  * keep appearing on the screen that had just deleted it.
  *
- * Both reasons are the ones already recorded in writes/structure.js.
+ * PUT /admin/classes/:id is not here either, for a different reason: it is
+ * registered in writes/structure.js, which is pushed onto the route table
+ * first and therefore wins. A second copy here was dead code that could only
+ * ever diverge from the one that runs.
+ *
+ * The first two reasons are the ones already recorded in writes/structure.js.
  */
 
 const nowISO = () => new Date().toISOString();
@@ -34,13 +39,6 @@ const schoolOf = (body, session) => {
   const fromSession = session?.schoolId ? String(session.schoolId).trim() : null;
   if (fromBody && fromSession && fromBody !== fromSession) return null;
   return fromSession || fromBody || null;
-};
-
-const classOf = (docs, schoolId, id) => {
-  if (!id || !schoolId) return null;
-  const row = docs.get("class", String(id).trim());
-  if (!row || String(row.schoolId) !== String(schoolId)) return null;
-  return row;
 };
 
 module.exports = [
@@ -79,29 +77,21 @@ module.exports = [
         createdAt:        now,
         updatedAt:        now,
       };
-      docs.put("class", cls);
-      return { success: true, class: cls, serverId: id, clientId: id };
+      // A descriptor, not a response body, and not a docs.put of its own: index.js
+      // stores the row and queues the request in one transaction. Returning the
+      // body meant `collection` was undefined, docs.put threw on it, and every
+      // offline class create went quietly to the network instead.
+      return {
+        collection: "class",
+        doc:        cls,
+        request: { method: "POST", path: "/api/admin/classes", body },
+        // serverId equals clientId now that the endpoint takes the id it is
+        // given — which is what made queueing this create possible at all.
+        response: {
+          status: 201,
+          data: { success: true, class: cls, serverId: id, clientId: id },
+        },
+      };
     },
   },
-
-  {
-    route: "PUT /api/admin/classes/:id",
-    handler: ({ body, params }, { docs, session }) => {
-      const schoolId = schoolOf(body, session);
-      if (!schoolId) return null;
-      if (!session?.permissions?.includes("classes.manage")) return null;
-      const cls = classOf(docs, schoolId, params.id);
-      if (!cls) return null;
-      if (body?.name !== undefined && typeof body.name !== "string") return null;
-      const u = {};
-      if (body?.name !== undefined) { const n = String(body.name).trim(); if (!n) return null; u.name = n; }
-      if (body?.level !== undefined) u.level = body.level;
-      if (body?.section !== undefined) u.section = body.section;
-      if (body?.isActive !== undefined) u.isActive = !!body.isActive;
-      const updated = { ...cls, ...u, updatedAt: nowISO() };
-      docs.put("class", updated);
-      return { success: true, class: updated };
-    },
-  },
-
 ];

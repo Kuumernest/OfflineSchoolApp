@@ -2,12 +2,21 @@
 "use strict";
 
 /**
- * Subject records, answered from the local mirror when the school office has no
- * connection.
+ * Subjects, answered from the local mirror when the office has no connection.
  *
- * Three writes. The server's POST refuses creates without a client id (the mirror
- * stores under that id), and DELETE refuses a subject that still has teacher
- * assignments — both rules reproduced here.
+ * One write. The other two in this domain are not here:
+ *
+ *   PUT /admin/subjects/:id is registered in writes/structure.js, which is
+ *   pushed onto the route table first and wins. A second copy here was dead
+ *   code that could only ever diverge from the one that runs.
+ *
+ *   DELETE /admin/subjects/:id is a HARD delete on the server. This layer
+ *   describes rows to WRITE and has no way to say "this row is gone"; the sync
+ *   feed cannot say it either, because the feed sends documents that exist. A
+ *   local copy would sit on the machine for ever, and marking it deleted does
+ *   not help — GET /admin/subjects applies no deleted filter, so the subject
+ *   would keep appearing on the screen that had just deleted it. The reason is
+ *   recorded in writes/structure.js too.
  */
 
 const nowISO = () => new Date().toISOString();
@@ -58,52 +67,23 @@ module.exports = [
       if (docs.get("subject", id)) return null;
       const coeff = parseCoefficient(body?.coefficient);
       if (!coeff.ok) return null;
-      const clash = docs.find("subject", { name, schoolId, $or: [{ class: classId }, { classId }] })[0];
+      // The store's filter language has equality, in, not and the comparisons —
+      // no $or, which threw "Unsupported filter" on every call and sent the
+      // create to the network. Two reads and a union say the same thing.
+      const clash = [...docs.find("subject", { name, schoolId, class: classId }),
+                     ...docs.find("subject", { name, schoolId, classId })][0];
       if (clash) return null;
       const now = nowISO();
       const subject = { _id: id, name, code: body?.code?.trim() || "", class: classId, classId, schoolId, ...(coeff.value !== undefined && { coefficient: coeff.value }), createdAt: now, updatedAt: now };
-      docs.put("subject", subject);
-      return { success: true, subject, serverId: id };
-    },
-  },
-
-  {
-    route: "PUT /api/admin/subjects/:id",
-    handler: ({ body, params }, { docs, session }) => {
-      const schoolId = schoolOf(body, session);
-      if (!schoolId) return null;
-      if (!session?.permissions?.includes("subjects.manage")) return null;
-      const subject = subjectOf(docs, schoolId, params.id);
-      if (!subject) return null;
-      if (body?.classId) {
-        const cls = classOf(docs, schoolId, String(body.classId).trim());
-        if (!cls) return null;
-      }
-      const coeff = parseCoefficient(body?.coefficient);
-      if (!coeff.ok) return null;
-      const u = {};
-      if (body?.name !== undefined) { const n = String(body.name).trim(); if (!n) return null; u.name = n; }
-      if (body?.code !== undefined) u.code = body.code?.trim() || "";
-      if (body?.classId !== undefined) { u.class = String(body.classId).trim(); u.classId = String(body.classId).trim(); }
-      if (coeff.value !== undefined) u.coefficient = coeff.value;
-      const updated = { ...subject, ...u, updatedAt: nowISO() };
-      docs.put("subject", updated);
-      return { success: true, subject: updated };
-    },
-  },
-
-  {
-    route: "DELETE /api/admin/subjects/:id",
-    handler: ({ body, params }, { docs, session }) => {
-      const schoolId = schoolOf(body, session);
-      if (!schoolId) return null;
-      if (!session?.permissions?.includes("subjects.manage")) return null;
-      const subject = subjectOf(docs, schoolId, params.id);
-      if (!subject) return null;
-      const inUse = docs.find("teacherAssignment", { subject: subject._id })[0];
-      if (inUse) return null;
-      docs.forget("subject", subject._id);
-      return { success: true, message: "Subject deleted" };
+      return {
+        collection: "subject",
+        doc:        subject,
+        request: { method: "POST", path: "/api/admin/subjects", body },
+        response: {
+          status: 201,
+          data: { success: true, subject, serverId: id, clientId: id },
+        },
+      };
     },
   },
 ];

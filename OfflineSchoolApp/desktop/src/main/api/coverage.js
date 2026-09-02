@@ -40,6 +40,48 @@
 
 /** @type {OnlineOnly[]} */
 const ONLINE_ONLY = [
+  // ── Writing staff, and changing what somebody may do ────────────────────
+  //
+  // Recorded in check-desktop-parity.js and now here, where the census counts
+  // it. Handlers for all five of these were written and none of them ever ran
+  // — they returned a response body where the write layer expects a document
+  // descriptor, so the store threw and the request went to the network, which
+  // from outside is indistinguishable from a decline.
+  {
+    endpoint: "POST /admin/teachers",
+    because:
+      "The server mints a temporary password, stores its hash and emails it. " +
+      "A locally-created teacher would have no password at all, so the account " +
+      "could not be signed into while the screen said it had been created.",
+  },
+  {
+    endpoint: "PUT /admin/teachers/:id",
+    because:
+      "An email change re-sends credentials. Same reason as the create: the " +
+      "screen would report an email that was never sent.",
+  },
+  {
+    endpoint: "DELETE /admin/teachers/:id",
+    because:
+      "Deactivating a member of staff revokes their access to the school's " +
+      "records. \"Removed\" on the screen while the account still signs in is " +
+      "the one thing that button must never mean.",
+  },
+  {
+    endpoint: "POST /admin/teachers/:id/reset-password",
+    because:
+      "The server generates the password, hashes it and emails it. A locally " +
+      "invented one would not match the stored hash.",
+  },
+  {
+    endpoint: "PUT /admin/permissions/:role",
+    because:
+      "It changes what somebody may do. Applied locally, the console would " +
+      "start offering actions the server has not authorised — and if the " +
+      "queued request is then refused, it offered them on the strength of " +
+      "nothing.",
+  },
+
   // ── The server is the point ─────────────────────────────────────────────
   {
     endpoint: "POST /auth/login",
