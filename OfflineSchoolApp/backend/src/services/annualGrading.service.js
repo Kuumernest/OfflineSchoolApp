@@ -237,7 +237,10 @@ async function computeClassAnnualAverages({
         schoolId,
         academicYear,
         classId,
-        studentId:   student.userId ?? student._id,
+        // Student._id, which is what TermResult.studentId holds and what
+        // buildAnnualCard looks the pupil up by. Reading the login id here
+        // matched no term results at all for any pupil who had an account.
+        studentId:   student._id,
         studentName: student.studentName,
         admissionNo: student.enrollmentNo,
         className:   student.className,
@@ -270,17 +273,19 @@ async function computeAnnualPositions({ schoolId, academicYear, classId }) {
 
   const totalInClass = results.length;
 
-  const bulkOps = results.map((r, i) => ({
-    updateOne: {
-      filter: { _id: r._id },
-      update: {
-        $set: {
-          classPosition:  i + 1,
-          totalInClass,
-        },
+  // Ties share a place, as they do for a subject and for a term — see the note
+  // in termGrading.service.js. Ranking by sorted index gave two pupils on the
+  // same annual average different positions.
+  const bulkOps = results.map((r) => {
+    const mine  = Number(r.annualAverage) || 0;
+    const ahead = results.filter((o) => (Number(o.annualAverage) || 0) > mine).length;
+    return {
+      updateOne: {
+        filter: { _id: r._id },
+        update: { $set: { classPosition: ahead + 1, totalInClass } },
       },
-    },
-  }));
+    };
+  });
 
   if (bulkOps.length > 0) {
     await AnnualResult.bulkWrite(bulkOps);

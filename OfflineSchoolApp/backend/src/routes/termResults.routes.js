@@ -124,7 +124,22 @@ router.post(
         });
       }
 
-      res.json({ success: true, ...result });
+      /*
+       * Say why nothing came out, when nothing does.
+       *
+       * A run that computes 0 used to answer `{ success: true, computed: 0 }`,
+       * which a screen can only render as silence. There are two ordinary
+       * reasons and the caller can act on both: the term's exams have no
+       * sequence set, so no exam belongs to a sequence of this term; or the
+       * sequences simply have not been marked yet.
+       */
+      const reason = result.computed > 0
+        ? null
+        : result.unsequencedExams?.length
+          ? "no_sequence_on_exams"
+          : "no_marks";
+
+      res.json({ success: true, ...result, reason });
     } catch (err) {
       console.error("[termResults] COMPUTE error:", err.message);
       res.status(500).json({ success: false, error: err.message });
