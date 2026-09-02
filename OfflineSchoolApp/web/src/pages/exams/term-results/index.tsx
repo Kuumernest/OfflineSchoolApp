@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Loader2, ArrowLeft, Calculator, Send, ChevronDown, Award, TrendingUp, Users,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -49,6 +50,8 @@ export default function TermResultsPage() {
 
   const results: TermResult[] = data?.results ?? [];
   const total = data?.total ?? 0;
+  /** How many stored results the sequence marks have overtaken. */
+  const staleCount = data?.staleCount ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
   // Summary stats
@@ -150,6 +153,37 @@ export default function TermResultsPage() {
         </button>
       </div>
 
+      {/* Overtaken by the marks behind them.
+          A term average is computed once, on purpose — it is the school's call
+          when a term is final. But nothing recomputes it afterwards, so a mark
+          corrected since then leaves the stored average disagreeing with the
+          subject rows on the very same report card. Saying so is the point:
+          recomputing silently would take the decision away, and saying nothing
+          is what let a parent receive a card that did not add up. */}
+      {staleCount > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200
+                        bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-900">
+              {t("termResults.staleTitle", { count: staleCount })}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-800">
+              {t("termResults.staleBody")}
+            </p>
+          </div>
+          <button
+            onClick={handleCompute}
+            disabled={computeMutation.isPending}
+            className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs
+                       font-semibold text-white hover:bg-amber-700
+                       disabled:opacity-50"
+          >
+            {t("termResults.recompute")}
+          </button>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <SummaryCard icon={Users} label={t("termResults.totalStudents")} value={String(total)} />
@@ -193,9 +227,27 @@ export default function TermResultsPage() {
                 const seq1 = r.sequenceAverages?.find((s) => s.sequence === ((r.term - 1) * 2 + 1));
                 const seq2 = r.sequenceAverages?.find((s) => s.sequence === ((r.term - 1) * 2 + 2));
                 return (
-                  <tr key={r._id} className="hover:bg-gray-50 transition">
+                  <tr
+                    key={r._id}
+                    className={cn("transition",
+                      r.isStale ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-gray-50")}
+                  >
                     <td className="px-4 py-3 text-gray-500">{(page - 1) * 50 + idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{r.studentName}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {r.studentName}
+                      {/* Marked per pupil, not only counted: "4 need
+                          recomputing" is little use without knowing which. */}
+                      {r.isStale && (
+                        <span
+                          title={t("termResults.staleRow")}
+                          className="ml-2 inline-flex items-center rounded-full
+                                     bg-amber-100 px-2 py-0.5 text-[10px]
+                                     font-semibold text-amber-800"
+                        >
+                          {t("termResults.staleTag")}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
                     <td className="px-4 py-3 text-gray-500">{r.className}</td>
                     <td className="px-4 py-3 text-center text-gray-700">

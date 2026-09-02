@@ -4,6 +4,7 @@
 const router           = require("express").Router();
 const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
+const staleness        = require("../services/resultStaleness.service");
 const School             = require("../db/models/School");
 const { renderReportCard } = require("../services/reportHtml.service");
 const { buildAnnualCard, loadReportTemplate, absoluteLogoUrl } =
@@ -41,9 +42,20 @@ router.get(
         AnnualResult.countDocuments(filter),
       ]);
 
+      // Stale against the TERM results, not the marks: an annual average is
+      // built from term averages, so a corrected mark makes the term stale
+      // first. Reporting the year as stale before its term has been recomputed
+      // would tell a school to redo the year when it needs to redo one term.
+      const { staleIds, latestTerm } = await staleness.annualStaleness({
+        schoolId, academicYear, results,
+      });
+      const stamped = staleness.withStaleness(results, staleIds);
+
       res.json({
         success: true,
-        results,
+        results:    stamped.results,
+        staleCount: stamped.staleCount,
+        latestTerm,
         total,
         page: Number(page),
         totalPages: Math.ceil(total / Number(limit)),

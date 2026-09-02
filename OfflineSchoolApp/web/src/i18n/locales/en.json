@@ -2461,7 +2461,13 @@
     "fail": "Fail",
     "noResults": "No results computed yet. Click Compute to generate term averages.",
     "termComputed": "Term results computed",
-    "termPublished": "Term results published"
+    "termPublished": "Term results published",
+    "staleTitle": "{{count}} result is older than the marks behind it",
+    "staleTitle_other": "{{count}} results are older than the marks behind them",
+    "staleBody": "A sequence mark was changed after this term was computed. The report cards will show the new subject marks but the old term average until you recompute.",
+    "recompute": "Recompute",
+    "staleTag": "needs recomputing",
+    "staleRow": "A sequence mark for this pupil changed after the term was computed."
   },
   "annualResults": {
     "title": "Annual Results",
@@ -2490,6 +2496,12 @@
     "status_repeated": "Repeated",
     "status_conditional": "Conditional",
     "status_graduated": "Graduated",
-    "status_pending": "Pending"
+    "status_pending": "Pending",
+    "staleTitle": "{{count}} result is older than the term results behind it",
+    "staleTitle_other": "{{count}} results are older than the term results behind them",
+    "staleBody": "A term was recomputed after this year was. Recompute the year so the annual average and the promotion decision match the terms.",
+    "recompute": "Recompute",
+    "staleTag": "needs recomputing",
+    "staleRow": "A term result for this pupil was recomputed after the year was."
   }
 }

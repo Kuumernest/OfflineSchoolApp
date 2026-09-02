@@ -4,6 +4,7 @@
 const router           = require("express").Router();
 const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
+const staleness        = require("../services/resultStaleness.service");
 const School             = require("../db/models/School");
 const { renderReportCard } = require("../services/reportHtml.service");
 const { buildTermCard, loadReportTemplate, absoluteLogoUrl } =
@@ -43,9 +44,20 @@ router.get(
         TermResult.countDocuments(filter),
       ]);
 
+      // Which of these the sequence marks have overtaken. Computed here rather
+      // than recomputing the averages: the school decides when a term is final,
+      // and a stored average that silently disagreed with the marks behind it
+      // was the actual problem.
+      const { staleIds, latestMark } = await staleness.termStaleness({
+        schoolId, academicYear, term: Number(term), results,
+      });
+      const stamped = staleness.withStaleness(results, staleIds);
+
       res.json({
         success: true,
-        results,
+        results:    stamped.results,
+        staleCount: stamped.staleCount,
+        latestMark,
         total,
         page: Number(page),
         totalPages: Math.ceil(total / Number(limit)),

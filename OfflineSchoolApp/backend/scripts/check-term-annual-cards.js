@@ -212,6 +212,66 @@ const main = async () => {
 
   srv.close();
 
+  // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- a computed result overtaken by its marks ---");
+
+  /**
+   * The warning that replaces recomputing behind the school's back.
+   *
+   * A term average is computed once, deliberately. Nothing recomputes it, so a
+   * mark corrected afterwards leaves the report card disagreeing with itself:
+   * the subject rows are rebuilt on every print and show the new mark, the
+   * average is read from storage and shows the old one. Nobody was told.
+   *
+   * Timestamps are set explicitly here rather than by saving in sequence —
+   * "save, wait, save again" is a test that passes because a machine was slow.
+   */
+  const stale = require("../src/services/resultStaleness.service");
+  const At = (iso) => new Date(iso);
+
+  await TermResult.collection.updateOne(
+    { _id: "tr-1" }, { $set: { updatedAt: At("2026-03-02T12:00:00Z") } });
+  // Ada's mark predates the computation; nothing is stale yet.
+  await Score.collection.updateMany(
+    { studentId: "p1" }, { $set: { updatedAt: At("2026-03-01T10:00:00Z") } });
+
+  const freshRows = await TermResult.find({ schoolId: S, academicYear: YEAR, term: 1 }).lean();
+  let sres = await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: freshRows });
+  check("a term computed after its marks is not stale", sres.staleIds.size, 0);
+
+  // A mark corrected after the computation.
+  await Score.collection.updateMany(
+    { studentId: "p1" }, { $set: { updatedAt: At("2026-03-05T09:00:00Z") } });
+  sres = await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: freshRows });
+  check("a mark changed afterwards makes it stale", sres.staleIds.has("p1"), true);
+  check("and the pupil is named, not just counted",
+    stale.withStaleness(freshRows, sres.staleIds).results.find((r) => r.studentId === "p1").isStale,
+    true);
+  check("the count matches", stale.withStaleness(freshRows, sres.staleIds).staleCount, 1);
+
+  // The same instant is not evidence of anything, and calling it stale would
+  // leave a warning no amount of recomputing could clear.
+  await Score.collection.updateMany(
+    { studentId: "p1" }, { $set: { updatedAt: At("2026-03-02T12:00:00Z") } });
+  sres = await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: freshRows });
+  check("a mark saved in the same instant is not stale", sres.staleIds.size, 0);
+
+  // Annual is compared against the TERMS, not the marks.
+  await Annual.collection.updateOne(
+    { _id: "ar-1" }, { $set: { updatedAt: At("2026-06-01T10:00:00Z") } });
+  const annualRows = await Annual.find({ schoolId: S, academicYear: YEAR }).lean();
+  let ares = await stale.annualStaleness({ schoolId: S, academicYear: YEAR, results: annualRows });
+  check("a year computed after its terms is not stale", ares.staleIds.size, 0);
+
+  await TermResult.collection.updateOne(
+    { _id: "tr-1" }, { $set: { updatedAt: At("2026-07-01T10:00:00Z") } });
+  ares = await stale.annualStaleness({ schoolId: S, academicYear: YEAR, results: annualRows });
+  check("a term recomputed afterwards makes the year stale", ares.staleIds.has("p1"), true);
+
+  check("nothing to check is not stale",
+    (await stale.termStaleness({ schoolId: S, academicYear: YEAR, term: 1, results: [] })).staleIds.size,
+    0);
+
   console.log(`
   ${pass} passed, ${fail} failed`);
   await mongoose.disconnect();

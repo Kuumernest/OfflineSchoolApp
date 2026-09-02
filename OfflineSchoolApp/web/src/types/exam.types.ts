@@ -199,6 +199,16 @@ studentName: string | null;
 admissionNo: string | null;
 className: string | null;
 sequenceAverages: SequenceAverage[];
+/**
+ * True when a sequence mark behind this term is newer than the term itself.
+ *
+ * A term average is computed once and never recomputed on its own, so a mark
+ * corrected afterwards leaves it disagreeing with the subject rows on the same
+ * report card — those are rebuilt on every print. The server compares the
+ * timestamps and says so rather than recomputing, because when a term is final
+ * is the school's call.
+ */
+isStale?: boolean;
 termAverage: number;
 overallGrade: string | null;
 overallRemark: string | null;
@@ -229,6 +239,15 @@ studentName: string | null;
 admissionNo: string | null;
 className: string | null;
 termAverages: TermAverage[];
+/**
+ * True when a TERM result behind this year is newer than the year itself.
+ *
+ * Compared against the terms rather than the marks: an annual average is built
+ * from term averages, so a corrected mark makes the term stale first. Saying
+ * the year is stale before its term has been recomputed would send a school to
+ * the wrong screen.
+ */
+isStale?: boolean;
 annualAverage: number;
 overallGrade: string | null;
 overallRemark: string | null;
@@ -301,6 +320,10 @@ results: ResultSummary[];
 }
 
 export interface TermResultsResponse {
+/** How many of the results on this page the sequence marks have overtaken. */
+staleCount?: number;
+/** The latest mark behind them, for a screen that wants to say when. */
+latestMark?: string | null;
 success: boolean;
 results: TermResult[];
 total: number;
@@ -309,6 +332,9 @@ totalPages: number;
 }
 
 export interface AnnualResultsResponse {
+/** How many of these the TERM results have overtaken. */
+staleCount?: number;
+latestTerm?: string | null;
 success: boolean;
 results: AnnualResult[];
 total: number;

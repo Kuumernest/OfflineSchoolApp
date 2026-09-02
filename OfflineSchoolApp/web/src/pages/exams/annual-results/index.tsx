@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
   Loader2, ArrowLeft, Calculator, Send, Award, TrendingUp, Users, GraduationCap,
+  AlertTriangle,
 } from "lucide-react";
 import { useToast } from "@/components/ui/Toast";
 import {
@@ -50,6 +51,8 @@ export default function AnnualResultsPage() {
 
   const results: AnnualResult[] = data?.results ?? [];
   const total = data?.total ?? 0;
+  /** How many stored annual results their TERM results have overtaken. */
+  const staleCount = data?.staleCount ?? 0;
   const totalPages = data?.totalPages ?? 1;
 
   // Summary stats
@@ -136,6 +139,35 @@ export default function AnnualResultsPage() {
         </button>
       </div>
 
+      {/* Overtaken by the term results behind them.
+          Stale against the TERMS, not the marks: an annual average is built
+          from term averages, so a corrected mark makes the term stale first.
+          Telling a school to redo the year when it needs to redo one term
+          would send it to the wrong screen. */}
+      {staleCount > 0 && (
+        <div className="flex items-start gap-3 rounded-2xl border border-amber-200
+                        bg-amber-50 px-4 py-3">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-900">
+              {t("annualResults.staleTitle", { count: staleCount })}
+            </p>
+            <p className="mt-0.5 text-xs text-amber-800">
+              {t("annualResults.staleBody")}
+            </p>
+          </div>
+          <button
+            onClick={handleCompute}
+            disabled={computeMutation.isPending}
+            className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs
+                       font-semibold text-white hover:bg-amber-700
+                       disabled:opacity-50"
+          >
+            {t("annualResults.recompute")}
+          </button>
+        </div>
+      )}
+
       {/* Summary cards */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
         <SummaryCard icon={Users} label={t("annualResults.totalStudents")} value={String(total)} />
@@ -182,9 +214,25 @@ export default function AnnualResultsPage() {
                 const t2 = r.termAverages?.find((t) => t.term === 2);
                 const t3 = r.termAverages?.find((t) => t.term === 3);
                 return (
-                  <tr key={r._id} className="hover:bg-gray-50 transition">
+                  <tr
+                    key={r._id}
+                    className={cn("transition",
+                      r.isStale ? "bg-amber-50/60 hover:bg-amber-50" : "hover:bg-gray-50")}
+                  >
                     <td className="px-4 py-3 text-gray-500">{(page - 1) * 50 + idx + 1}</td>
-                    <td className="px-4 py-3 font-medium text-gray-900">{r.studentName}</td>
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      {r.studentName}
+                      {r.isStale && (
+                        <span
+                          title={t("annualResults.staleRow")}
+                          className="ml-2 inline-flex items-center rounded-full
+                                     bg-amber-100 px-2 py-0.5 text-[10px]
+                                     font-semibold text-amber-800"
+                        >
+                          {t("annualResults.staleTag")}
+                        </span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
                     <td className="px-4 py-3 text-gray-500">{r.className}</td>
                     <td className="px-4 py-3 text-center text-gray-700">

@@ -2461,7 +2461,13 @@
     "fail": "Refusé",
     "noResults": "Aucun résultat calculé. Cliquez sur Calculer pour générer les moyennes.",
     "termComputed": "Résultats trimestriels calculés",
-    "termPublished": "Résultats trimestriels publiés"
+    "termPublished": "Résultats trimestriels publiés",
+    "staleTitle": "{{count}} résultat est antérieur aux notes dont il découle",
+    "staleTitle_other": "{{count}} résultats sont antérieurs aux notes dont ils découlent",
+    "staleBody": "Une note de séquence a été modifiée après le calcul de ce trimestre. Les bulletins afficheront les nouvelles notes par matière mais l’ancienne moyenne trimestrielle jusqu’au recalcul.",
+    "recompute": "Recalculer",
+    "staleTag": "à recalculer",
+    "staleRow": "Une note de séquence de cet élève a changé après le calcul du trimestre."
   },
   "annualResults": {
     "title": "Résultats annuels",
@@ -2490,6 +2496,12 @@
     "status_repeated": "Redoublant",
     "status_conditional": "Admis conditionnel",
     "status_graduated": "Diplômé",
-    "status_pending": "En attente"
+    "status_pending": "En attente",
+    "staleTitle": "{{count}} résultat est antérieur aux résultats trimestriels dont il découle",
+    "staleTitle_other": "{{count}} résultats sont antérieurs aux résultats trimestriels dont ils découlent",
+    "staleBody": "Un trimestre a été recalculé après cette année. Recalculez l’année pour que la moyenne annuelle et la décision de passage correspondent aux trimestres.",
+    "recompute": "Recalculer",
+    "staleTag": "à recalculer",
+    "staleRow": "Un résultat trimestriel de cet élève a été recalculé après l’année."
   }
 }
