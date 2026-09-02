@@ -88,6 +88,16 @@ const target = (docs, { params, schoolId }) => {
   return row;
 };
 
+/**
+ * The sequence as it is stored: a number, or null.
+ *
+ * Blank means "no sequence" rather than "leave it alone" — a promotion exam
+ * belongs to none — so it becomes null rather than the empty string a select
+ * hands over.
+ */
+const sequenceOf = (value) =>
+  value === null || value === undefined || value === "" ? null : Number(value);
+
 module.exports = [
   {
     route: "POST /api/exams",
@@ -128,6 +138,11 @@ module.exports = [
         type:               body.type         || "test",
         academicYear:       body.academicYear,
         term:               body.term,
+        // Which sequence this is, and so whether the card printed from it is a
+        // sequence card. Neither this nor the edit below read it, so an exam
+        // created offline came out belonging to no sequence — the same fault
+        // the endpoint had, and it has to be mirrored to agree with it.
+        sequenceNumber:     sequenceOf(body.sequenceNumber),
         startDate:          body.startDate    || null,
         endDate:            body.endDate      || null,
         description:        body.description   || null,
@@ -193,6 +208,13 @@ module.exports = [
       for (const field of fields) {
         if (body[field] === undefined) continue;
         updates[field] = field === "name" ? String(body[field]).trim() : body[field];
+      }
+
+      // Separately from the loop, because blank has to become null here rather
+      // than the empty string: the key being present is the instruction, and
+      // clearing the sequence is a thing an edit is allowed to say.
+      if (body.sequenceNumber !== undefined) {
+        updates.sequenceNumber = sequenceOf(body.sequenceNumber);
       }
       updates.updatedBy = session?.userId ?? null;
 

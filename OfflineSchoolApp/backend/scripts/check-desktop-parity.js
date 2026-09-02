@@ -1880,6 +1880,64 @@ const main = async () => {
   check("the server agrees after syncing",
     (await Exam.findById(examId).lean())?.status, "scheduled");
 
+  // ── The sequence an edit was silently dropping ─────────────────────────
+  //
+  // PUT /api/exams/:id never read sequenceNumber from the body. The form sent
+  // it, the server ignored it, and reopening the form read back the stored
+  // null — so the selection "disappeared" every time it was set, and the card
+  // printed from that exam still said Term 1. Asserted on both sides and
+  // through a sync, because the mirror was dropping it too.
+  const seqEdit = api.handle({
+    method: "PUT", path: `/api/exams/${examId}`, query: {},
+    body: { schoolId: SCHOOL, sequenceNumber: 3 },
+  }, examCtx);
+  check("an edit setting the sequence is accepted locally", seqEdit?.status, 200);
+  check("and the mirror holds it at once",
+    docs.get("exam", examId)?.sequenceNumber, 3);
+
+  await examEngine.cycle();
+  check("the server stored it too",
+    (await Exam.findById(examId).lean())?.sequenceNumber, 3);
+  // The whole point: read it back the way the edit form does.
+  const reread = await (await fetch(
+    `http://127.0.0.1:${port}/api/exams/${examId}?schoolId=${SCHOOL}`,
+    { headers: { authorization: `Bearer ${token}` } }
+  )).json();
+  check("and the edit form reads it back rather than a blank",
+    reread?.exam?.sequenceNumber, 3);
+
+  // Clearing it has to be possible: a promotion exam belongs to no sequence,
+  // and "not sent" and "sent as empty" are different instructions.
+  const seqCleared = api.handle({
+    method: "PUT", path: `/api/exams/${examId}`, query: {},
+    body: { schoolId: SCHOOL, sequenceNumber: "" },
+  }, examCtx);
+  check("clearing the sequence is accepted", seqCleared?.status, 200);
+  check("and stores null, not an empty string",
+    docs.get("exam", examId)?.sequenceNumber, null);
+  await examEngine.cycle();
+  check("the server clears it as well",
+    (await Exam.findById(examId).lean())?.sequenceNumber, null);
+
+  // An edit that says nothing about it leaves it where it was.
+  await Exam.collection.updateOne({ _id: examId }, { $set: { sequenceNumber: 5 } });
+  await examEngine.cycle();
+  api.handle({
+    method: "PUT", path: `/api/exams/${examId}`, query: {},
+    body: { schoolId: SCHOOL, description: "Untouched by the sequence" },
+  }, examCtx);
+  await examEngine.cycle();
+  check("an edit that does not mention the sequence leaves it alone",
+    (await Exam.findById(examId).lean())?.sequenceNumber, 5);
+
+  // Out of range is a 400 from the endpoint, not a 500 from the schema.
+  const badSeq = await fetch(`http://127.0.0.1:${port}/api/exams/${examId}`, {
+    method:  "PUT",
+    headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
+    body:    JSON.stringify({ schoolId: SCHOOL, sequenceNumber: 9 }),
+  });
+  check("a sequence outside 1-6 is refused with a 400", badSeq.status, 400);
+
   // Two statuses are the server's business, for reasons in writes/exams.js.
   check("an invalid status is left to the server to refuse",
     api.handle({

@@ -770,10 +770,19 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
 router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const {
-    name, type, academicYear, term,
+    name, type, academicYear, term, sequenceNumber,
     startDate, endDate, description, instructions,
     totalMarks, passMark, status,
   } = req.body;
+
+  // Same 1-6 check the create route makes: the schema constrains it, so an
+  // out-of-range value would arrive as a ValidationError and leave as a 500.
+  if (sequenceNumber != null && sequenceNumber !== "") {
+    const sq = Number(sequenceNumber);
+    if (!Number.isInteger(sq) || sq < 1 || sq > 6) {
+      return res.status(400).json({ message: "sequenceNumber must be 1-6" });
+    }
+  }
 
   const resolvedIds = resolveClassIdsFromBody(req.body);
   const classData   = resolvedIds.length > 0
@@ -784,6 +793,24 @@ router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
     ...(type         !== undefined && { type }),
     ...(academicYear !== undefined && { academicYear }),
     ...(term         !== undefined && { term }),
+    /*
+     * The sequence, which this route did not read at all.
+     *
+     * The create route was fixed to store it; editing an exam went on dropping
+     * it. The form sent the value, the server ignored it, and reopening the
+     * form read back the stored null — so the selection "disappeared" every
+     * time, and the card printed from that exam still said Term 1.
+     *
+     * Blank clears it rather than being skipped: a promotion exam belongs to no
+     * sequence, and switching an exam to one has to be able to say so. That is
+     * why this is `!== undefined` on the key rather than a truthiness test —
+     * "not sent" and "sent as empty" are different instructions.
+     */
+    ...(sequenceNumber !== undefined && {
+      sequenceNumber: sequenceNumber === null || sequenceNumber === ""
+        ? null
+        : Number(sequenceNumber),
+    }),
     ...(startDate    !== undefined && { startDate }),
     ...(endDate      !== undefined && { endDate }),
     ...(description  !== undefined && { description }),
