@@ -1380,7 +1380,10 @@
     "restore": "Restaurer",
     "restoreConfirm": "Restaurer le compte de {{name}} ? Ses données reviennent avec lui, et un nouveau mot de passe temporaire est généré.",
     "accountRestored": "Compte restauré",
-    "accountRestoredBody": "{{name}} est de nouveau actif en tant que {{role}}, avec tout ce qui avait été enregistré sur son compte. Communiquez-lui le mot de passe ci-dessous — l'ancien ne fonctionne plus."
+    "accountRestoredBody": "{{name}} est de nouveau actif en tant que {{role}}, avec tout ce qui avait été enregistré sur son compte. Communiquez-lui le mot de passe ci-dessous — l'ancien ne fonctionne plus.",
+    "gradingBlurb": "Système anglophone camerounais — toutes les notes sont sur 20. La moyenne de passage et les tranches ci-dessous servent à noter les examens.",
+    "showGrades": "Afficher les mentions sur les bulletins",
+    "showGradesHint": "Désactivé, le bulletin affiche les notes, les appréciations et les rangs, sans lettre. Les moyennes et l’admission ne changent pas."
   },
   "permissions": {
     "title": "Qui peut faire quoi",

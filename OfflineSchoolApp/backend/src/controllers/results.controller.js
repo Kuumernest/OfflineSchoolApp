@@ -17,6 +17,7 @@ const {
   diffField,
 } = require("../services/resultAudit.service");
 const Student = require("../db/models/Student");
+const AcademicStructure = require("../db/models/AcademicStructure");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const docVerify = require("../services/documentVerify.service");
@@ -25,6 +26,10 @@ const annualGrading = require("../services/annualGrading.service");
 const resultsService = require("../services/results.service");
 const { getRankings } = resultsService;
 const { lookupGrade } = require("../services/grading.service");
+// The §5/§7/§8 rules, shared with the term and annual cards and covered by
+// scripts/check-report-card.js.
+const { reportTypeFor, subjectRanking } =
+  require("../../../shared/reportCard");
 
 // ─────────────────────────────────────────────────────────
 // UTILITIES
@@ -348,33 +353,12 @@ const buildStudentReportCardData = async (examId, studentId) => {
   const showGrades = gradingConfig?.showGrades ?? true;
 
   // ── Per-subject positions (§5) ─────────────────────────────────────────────
-  // Students who did not sit a subject are excluded from that subject's
-  // ranking entirely; the denominator is the number of valid results.
-  // Equal marks share the same rank (competition ranking: 1, 1, 3, …).
-  const scoresBySubject = new Map();
-  for (const sc of allExamScores) {
-    if (sc.isAbsent || sc.isExempt || sc.score == null) continue;
-    const key = String(sc.examSubjectId || sc.subjectId);
-    if (!scoresBySubject.has(key)) scoresBySubject.set(key, []);
-    scoresBySubject.get(key).push(sc);
-  }
-  for (const list of scoresBySubject.values()) {
-    list.sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  }
-  const computeSubjectPosition = (score) => {
-    if (score == null || score.isAbsent || score.isExempt || score.score == null)
-      return { position: null, total: null };
-    const list = scoresBySubject.get(
-      String(score.examSubjectId || score.subjectId)
-    );
-    if (!list || list.length === 0) return { position: null, total: null };
-    const total = list.length;
-    let position = 1;
-    for (const other of list) {
-      if ((other.score ?? 0) > (score.score ?? 0)) position += 1;
-    }
-    return { position, total };
-  };
+  // The rule itself is in shared/reportCard.js, where the term and annual cards
+  // reach it too and where scripts/check-report-card.js can test it: pupils who
+  // did not sit a subject are out of both the ranking and the denominator, and
+  // equal marks share a place.
+  const ranking = subjectRanking(allExamScores);
+  const computeSubjectPosition = (score) => ranking.positionOf(score);
 
   // ── Grade + remark per the school's configured bands (§3, §4) ──────────────
   // The school's GradingConfig.grades bands are on the /20 Cameroon scale
@@ -478,10 +462,25 @@ const buildStudentReportCardData = async (examId, studentId) => {
   // ── Report type (§7) ────────────────────────────────────────────────────────
   // sequence → a bound sequence (1–6); annual → the promotion exam, the only
   // card allowed to carry a promotion decision (§8); everything else → term.
-  const reportType =
-    exam?.type === "promotion_exam" ? "annual"
-    : exam?.sequenceNumber != null  ? "sequence"
-    : "term";
+  const reportType = reportTypeFor(exam);
+
+  // The period this card is FOR, spelled the way a parent reads it. A
+  // sequence card names its sequence, a term card names its term, and the
+  // annual card names neither because it covers the whole year.
+  let periodLabel = null;
+  if (reportType === "sequence") {
+    const structure = exam?.schoolId
+      ? await AcademicStructure.findOne({
+          schoolId: String(exam.schoolId), academicYear: exam.academicYear,
+        }).lean().catch(() => null)
+      : null;
+    const named = structure?.terms
+      ?.flatMap((t) => t.sequences || [])
+      ?.find((sq) => sq.number === exam.sequenceNumber);
+    periodLabel = named?.name || `Sequence ${exam.sequenceNumber}`;
+  } else if (reportType === "term" && exam?.term != null) {
+    periodLabel = `Term ${exam.term}`;
+  }
 
   const data = {
       examId,
@@ -491,7 +490,11 @@ const buildStudentReportCardData = async (examId, studentId) => {
       className:    summary?.className   || null,
       examName:     exam?.name           || null,
       academicYear: exam?.academicYear   || null,
-      term:         exam?.term           || null,
+      // §7 wants the sequence NAMED on a sequence card. Exam.term is a number
+      // now, so printing it raw put "1" in the subtitle where "First Sequence"
+      // belongs. The school's own name for the sequence wins; "Sequence 3" is
+      // the fallback for a school that has not named them.
+      term:         periodLabel,
       totalMarks:   exam?.totalMarks     || null,
       passMark:     exam?.passMark       || null,
       // §1 student identity + §3 grade toggle, consumed by the renderer
@@ -578,23 +581,9 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
  * Never throws: a template lookup failure must not cost the school its
  * report cards, so it degrades to the built-in layout.
  */
-const loadReportTemplate = async (schoolId, templateId) => {
-  if (!schoolId || templateId === "builtin") return null;
-  try {
-    const query = { schoolId: String(schoolId), deletedAt: null };
-    if (templateId) query._id = String(templateId);
-    else            query.isDefault = true;
-
-    const tpl = await ReportTemplate.findOne(query)
-      .select("_id name html css version")
-      .lean();
-
-    return tpl?.html ? tpl : null;
-  } catch (err) {
-    console.error("[reportcard] template lookup failed:", err.message);
-    return null;
-  }
-};
+// The template lookup moved to reportCardData.service.js, where the term and
+// annual cards reach the same one — see the note there.
+const { loadReportTemplate } = require("../services/reportCardData.service");
 
 /**
  * Freeze what was just issued.

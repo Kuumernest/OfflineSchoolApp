@@ -155,7 +155,10 @@ const esc = (str) =>
 function renderReportCardHtml(payload, opts = {}) {
   const lang = opts.lang === "fr" ? "fr" : "en";
   const t    = LABELS[lang];
-  const schoolName = opts.schoolName || "School";
+  // Both spellings, because toTemplateData() below already accepts both and a
+  // caller that passes only `school` — the object the logo and motto come from
+  // — would otherwise print the word "School" as the school's name.
+  const schoolName = opts.schoolName || opts.school?.name || "School";
 
   const subjects = Array.isArray(payload.subjects) ? payload.subjects : [];
   const summary  = payload.summary || null;
@@ -428,6 +431,12 @@ function toTemplateData(payload, opts = {}) {
   const computed = payload.computed || {};
   const school   = opts.school      || {};
   const student  = opts.student     || {};
+  // Present on a term or annual card, absent on a sequence one. Deliberately
+  // NOT payload.term — that is the term's name, printed in the subtitle, and
+  // one key meaning two things is how a subtitle ends up reading "[object
+  // Object]".
+  const term   = payload.termResult   || null;
+  const annual = payload.annualResult || null;
 
   const avg20 = resolveAverage20(payload);
 
@@ -482,6 +491,47 @@ function toTemplateData(payload, opts = {}) {
       subjectsPassed:    summary?.subjectsPassed  ?? 0,
       subjectsFailed:    summary?.subjectsFailed  ?? 0,
       totalCoefficients: computed.totalCoefficients ?? null,
+
+      // ── Term, sequence and annual figures ────────────────────────────────
+      //
+      // The engine has always mapped {{term_average}}, {{annual_class_position}},
+      // {{sequence_3_average}} and the rest off this object, and shared/
+      // reportTokens.js offers every one of them in the template builder's
+      // variable picker — but nothing populated them, so a school that put
+      // {{annual_average}} on its layout got a silent blank. They are filled
+      // from the term and annual cards; a sequence card leaves them null and
+      // the engine renders "".
+      termAverage:         term?.average        ?? null,
+      termGrade:           term?.grade          ?? null,
+      termRemark:          term?.remark         ?? null,
+      termClassPosition:   term?.classPosition  ?? null,
+      termTotalInClass:    term?.totalInClass   ?? null,
+
+      // sequence1Average … sequence6Average, from the term card's per-sequence
+      // breakdown. Spread rather than written out six times so a school running
+      // four sequences leaves the other two empty rather than at zero.
+      ...Object.fromEntries(
+        (payload.sequenceAverages || []).flatMap((s) =>
+          s && s.sequence >= 1 && s.sequence <= 6
+            ? [[`sequence${s.sequence}Average`, s.average ?? null]]
+            : []
+        )
+      ),
+
+      annualAverage:       annual?.average       ?? null,
+      annualGrade:         annual?.grade         ?? null,
+      annualRemark:        annual?.remark        ?? null,
+      annualClassPosition: annual?.classPosition ?? null,
+      annualTotalInClass:  annual?.totalInClass  ?? null,
+
+      // term1Average … term3Average, from the annual card's per-term breakdown.
+      ...Object.fromEntries(
+        (payload.termAverages || []).flatMap((tm) =>
+          tm && tm.term >= 1 && tm.term <= 3
+            ? [[`term${tm.term}Average`, tm.average ?? null]]
+            : []
+        )
+      ),
     },
 
     // Field names here are the engine's, not the pipeline's: {{subjects_table}}

@@ -4,6 +4,10 @@
 const router           = require("express").Router();
 const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
+const School             = require("../db/models/School");
+const { renderReportCard } = require("../services/reportHtml.service");
+const { buildAnnualCard, loadReportTemplate } =
+  require("../services/reportCardData.service");
 
 // ── GET /api/annual-results ────────────────────────────────────────────────
 router.get(
@@ -136,6 +140,54 @@ router.post(
       });
     } catch (err) {
       console.error("[annualResults] PUBLISH error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+// ── GET /api/annual-results/:studentId/report-card ─────────────────────────
+/**
+ * The final annual report card, as printable HTML.
+ *
+ * The only card that carries a promotion decision, and it carries it alongside
+ * the annual average and the annual position — which is the whole reason a
+ * promotion may appear here and nowhere else.
+ */
+router.get(
+  "/:studentId/report-card",
+  async (req, res) => {
+    try {
+      const { schoolId, academicYear, classId, lang, templateId } = req.query;
+      if (!schoolId || !academicYear || !classId) {
+        return res.status(400).json({
+          success: false,
+          error: "schoolId, academicYear and classId are required",
+        });
+      }
+
+      const data = await buildAnnualCard({
+        schoolId, academicYear, classId, studentId: req.params.studentId,
+      });
+      if (!data) {
+        return res.status(404).json({ success: false, error: "No annual result for this student" });
+      }
+
+      const [school, template] = await Promise.all([
+        School.findOne({ _id: String(schoolId) }).select("name logo motto").lean(),
+        loadReportTemplate(schoolId, templateId),
+      ]);
+
+      const rendered = renderReportCard(data, {
+        lang:       lang || "en",
+        schoolName: school?.name || "School",
+        school:     { name: school?.name || "", logo: school?.logo || null, motto: school?.motto || null },
+        template,
+      });
+
+      res.set("content-type", "text/html; charset=utf-8");
+      return res.send(rendered.html);
+    } catch (err) {
+      console.error("[annualResults] report-card error:", err.message);
       res.status(500).json({ success: false, error: err.message });
     }
   }

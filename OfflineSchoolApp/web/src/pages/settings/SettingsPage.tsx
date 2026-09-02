@@ -51,6 +51,8 @@ interface SchoolSettings {
 
 interface GradingConfig {
   passMark:    number;
+  /** Whether letter grades appear on report cards at all. */
+  showGrades:  boolean;
   useGpa:      boolean;
   gpaScale:    number;
   gradingType: string;
@@ -973,12 +975,30 @@ function GradingSection({ schoolId }: { schoolId: string }) {
         <CardTitle>{t("settings.gradingSettings")}</CardTitle>
 
         {/* Explanation */}
-        <p className="text-xs text-gray-500 mb-4">
-          Cameroon Anglophone system — all marks are on a /20 scale.
-          The pass mark and grade bands below are used when grading exam results.
-        </p>
+        <p className="text-xs text-gray-500 mb-4">{t("settings.gradingBlurb")}</p>
 
         <div className="space-y-5">
+
+          {/* Grades on or off. The bands below stay editable either way: a
+              school that turns grades off today may turn them back on, and
+              re-entering eight rows to do it would be its own deterrent. */}
+          <label className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.showGrades !== false}
+              onChange={(e) => setConfig({ ...config, showGrades: e.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
+                         focus:ring-2 focus:ring-indigo-200"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">
+                {t("settings.showGrades")}
+              </span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                {t("settings.showGradesHint")}
+              </span>
+            </span>
+          </label>
 
           {/* Pass mark */}
           <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">

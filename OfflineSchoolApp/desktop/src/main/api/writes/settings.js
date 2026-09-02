@@ -47,6 +47,9 @@ const {
   GRADING_TYPES,
 } = require("../handlers/settings");
 
+// The same table and pass mark the read side and the server serve.
+const { DEFAULT_PASS_MARK } = require("../../../../../shared/gradeScale");
+
 /**
  * The read handlers export these alongside their route array — the array is what
  * index.js spreads, and the helpers ride on it as named properties.
@@ -275,10 +278,11 @@ module.exports = [
       const gradingType = body.gradingType || "percentage";
       if (!GRADING_TYPES.includes(gradingType)) return null;
 
-      // `?? 50` and `?? 4.0`, so null takes the default and 0 does NOT. A school
-      // that sets a pass mark of zero means it.
+      // The shared default and `?? 4.0`, so null takes the default and 0 does
+      // NOT. A school that sets a pass mark of zero means it. The literal here
+      // used to be 50, from when marks were out of 100.
       const passMark = body.passMark === undefined || body.passMark === null
-        ? 50
+        ? DEFAULT_PASS_MARK
         : asNumber(body.passMark);
       if (passMark === null) return null;
 
@@ -296,11 +300,21 @@ module.exports = [
         useGpa = body.useGpa;
       }
 
+      // Same treatment, and defaulting to TRUE rather than false: the server's
+      // `showGrades ?? true` means an omitted value turns grades back on, so a
+      // mirror that defaulted to false would disagree the moment it synced.
+      let showGrades = true;
+      if (body.showGrades !== undefined && body.showGrades !== null) {
+        if (typeof body.showGrades !== "boolean") return null;
+        showGrades = body.showGrades;
+      }
+
       const doc = {
         ...withoutPending(existing),
         schoolId,
         grades,
         passMark,
+        showGrades,
         useGpa,
         gpaScale,
         gradingType,

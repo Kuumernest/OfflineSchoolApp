@@ -78,22 +78,18 @@ const GradingConfig = mongoose.model("GradingConfig", gradingConfigSchema);
 GradingConfig.GRADING_TYPES = GRADING_TYPES;
 
 /**
- * The built-in /20 Cameroon grading scale, used verbatim when a school has
- * not configured its own `grades` bands. minMark is inclusive, maxMark
- * exclusive on the top end (18 ≤ mark < 20 → A+) except the final band,
- * which is inclusive (0 ≤ mark < 8 → F). Deliberately NOT hard-coded at
- * the usage sites: a school's own bands always win over this.
+ * The built-in /20 Cameroon grading scale, used verbatim when a school has not
+ * configured its own `grades` bands. Deliberately NOT hard-coded at the usage
+ * sites: a school's own bands always win over this.
+ *
+ * From shared/, which is also what the settings screen offers. It was a second
+ * copy here and the two had diverged — this one carried the eight bands the
+ * school specified while the settings screen served seven, so whether a pupil
+ * scoring 11.5 got "C+ / Above Average" depended on whether an administrator
+ * had ever opened that screen.
  */
-const DEFAULT_GRADE_SCALE = [
-  { grade: "A+", minMark: 18, maxMark: 20, remark: "Excellent" },
-  { grade: "A",  minMark: 16, maxMark: 18, remark: "Very Good" },
-  { grade: "B+", minMark: 14, maxMark: 16, remark: "Good" },
-  { grade: "B",  minMark: 12, maxMark: 14, remark: "Fair" },
-  { grade: "C+", minMark: 11, maxMark: 12, remark: "Above Average" },
-  { grade: "C",  minMark: 10, maxMark: 11, remark: "Average" },
-  { grade: "D",  minMark: 8,  maxMark: 10, remark: "Below Average" },
-  { grade: "F",  minMark: 0,  maxMark: 8,  remark: "Fail" },
-];
+const { DEFAULT_GRADES: DEFAULT_GRADE_SCALE } =
+  require("../../../../shared/gradeScale");
 
 /**
  * Look up the band a /20 mark falls in.

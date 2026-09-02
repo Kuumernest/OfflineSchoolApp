@@ -322,6 +322,10 @@ module.exports = [
         schoolId,
         grades:      DEFAULT_GRADES,
         passMark:    DEFAULT_PASS_MARK,
+        // Grades are on unless a school turns them off, which is the server's
+        // default too. Absent here, the settings screen would read undefined
+        // and write it back as "off" on the next save.
+        showGrades:  true,
         useGpa:      false,
         gpaScale:    4.0,
         gradingType: "percentage",

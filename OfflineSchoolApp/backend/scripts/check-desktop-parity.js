@@ -4429,14 +4429,14 @@ const main = async () => {
   check("and the server ACCEPTS it, substituting its own default table — so this " +
         "decline is conservatism, not a predicted 4xx",
     stgNoGrades.status, 200);
-  // Against the shared table's own length rather than a literal: the number
-  // changed once already when the default moved from a /100 scale to /20, and a
-  // magic number here fails for a reason that reads like a broken endpoint.
-  // What matters is that the school's own bands were replaced by the shipped
-  // ones, and the school's table is a different length from this.
+  // Band names against the shared table's, not a count against a literal. The
+  // count changed twice already — once when the default moved from /100 to /20,
+  // once when it went back to the school's eight-band table — and each time a
+  // magic number here failed in a way that read like a broken endpoint. Naming
+  // the bands also says WHICH table replaced the school's three.
   check("which is exactly the damage being avoided: the school's bands are gone",
-    stgNoGrades.body.grading.grades.length,
-    require("../../shared/gradeScale").DEFAULT_GRADES.length);
+    stgNoGrades.body.grading.grades.map((g) => g.grade),
+    require("../../shared/gradeScale").DEFAULT_GRADES.map((g) => g.grade));
 
   // Back in step with the server before the write that is meant to succeed.
   docs.putMany("gradingConfig",
