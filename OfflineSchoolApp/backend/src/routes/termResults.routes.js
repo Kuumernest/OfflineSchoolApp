@@ -186,7 +186,12 @@ router.get(
       }
 
       const [school, template] = await Promise.all([
-        School.findOne({ _id: String(schoolId) }).select("name logo motto").lean(),
+        // .catch, as the sequence card's route already does. A schoolId that
+        // does not cast to an ObjectId throws here, and losing the whole report
+        // card because its letterhead could not be looked up is the wrong
+        // trade: the renderer falls back to the school name it was given.
+        School.findOne({ _id: String(schoolId) })
+          .select("name logo motto").lean().catch(() => null),
         loadReportTemplate(schoolId, templateId),
       ]);
 

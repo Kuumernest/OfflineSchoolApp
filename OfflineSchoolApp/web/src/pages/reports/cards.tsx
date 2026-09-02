@@ -17,6 +17,19 @@ import { useTranslation } from "react-i18next";
 interface ClassOption   { _id: string; name: string }
 interface StudentOption { _id: string; name: string; studentName?: string }
 
+/**
+ * Which of the three report cards to print.
+ *
+ * All three come from the same shared renderer and are chosen here rather than
+ * on three pages, which is the same reason report cards live under Reports at
+ * all: they used to appear in two places and read as two features.
+ *
+ * A sequence card is one exam's, so it is chosen by exam. A term card and an
+ * annual card have no exam behind them — their marks are the sequences and the
+ * terms combined — so they are chosen by the period they cover.
+ */
+type CardType = "sequence" | "term" | "annual";
+
 // ─────────────────────────────────────────────────────────
 // EXAM CARD
 // ─────────────────────────────────────────────────────────
@@ -78,6 +91,9 @@ export default function ReportCardsPage() {
 
   const { data: examsData, isLoading: examsLoading } = useExams();
 
+  const [cardType,        setCardType]        = useState<CardType>("sequence");
+  const [academicYear,    setAcademicYear]    = useState<string>("");
+  const [termNumber,      setTermNumber]      = useState<string>("1");
   const [selectedExam,    setSelectedExam]    = useState<Exam | null>(null);
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [selectedClass,   setSelectedClass]   = useState<ClassOption | null>(null);
@@ -96,9 +112,35 @@ export default function ReportCardsPage() {
     (e) => e.status === "completed" || e.status === "published"
   );
 
+  /**
+   * The academic years to offer for a term or annual card.
+   *
+   * Read off the exams the school has actually run rather than generated from
+   * today's date: a school printing last year's annual cards needs last year in
+   * the list, and one that has not started this year does not need it yet.
+   */
+  const academicYears = [...new Set(
+    (examsData?.exams ?? []).map((e) => e.academicYear).filter(Boolean)
+  )].sort().reverse() as string[];
+
+  useEffect(() => {
+    if (!academicYear && academicYears.length) setAcademicYear(academicYears[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [academicYears.join(",")]);
+
+  /** Enough chosen to ask for the classes. */
+  const periodChosen = cardType === "sequence"
+    ? Boolean(selectedExam)
+    : cardType === "term"
+      ? Boolean(academicYear && termNumber)
+      : Boolean(academicYear);
+
+  /** What this card is of, for the messages and the confirm. */
+  const typeLabel = t(`reportCards.type_${cardType}`);
+
   // Load classes when exam selected
   useEffect(() => {
-    if (!selectedExam) return;
+    if (!periodChosen) return;
     setClassLoading(true);
     setClasses([]);
     setSelectedClass(null);
@@ -109,23 +151,50 @@ export default function ReportCardsPage() {
       ))
       .catch(() => setClasses([]))
       .finally(() => setClassLoading(false));
-  }, [selectedExam, schoolId]);
+  }, [periodChosen, cardType, selectedExam, academicYear, termNumber, schoolId]);
 
-  // Load students when class selected
+  /**
+   * Load the pupils this card can be printed for.
+   *
+   * A sequence card comes from the class roster: the exam covers the class, and
+   * a pupil with no marks prints an empty card, which is a legitimate thing to
+   * hand a parent.
+   *
+   * A term or annual card cannot. Its marks are computed — the sequences
+   * combined by weight, then the terms — and a pupil the computation has not
+   * run for has no card to print, only a 404. So those two read the pupils out
+   * of the computed results themselves, which is also what tells an admin that
+   * Compute has not been run yet: the list comes back empty.
+   */
   useEffect(() => {
     if (!selectedClass) return;
     setStudentLoading(true);
     setStudents([]);
     setSelectedStudent(null);
-    api.get("/admin/students", {
-      params: { schoolId, classId: selectedClass._id },
-    })
-      .then((res) => setStudents(
-        res.data?.students || (Array.isArray(res.data) ? res.data : [])
-      ))
+
+    const request = cardType === "sequence"
+      ? api.get("/admin/students", {
+          params: { schoolId, classId: selectedClass._id },
+        }).then((res) =>
+          res.data?.students || (Array.isArray(res.data) ? res.data : []))
+      : api.get(cardType === "term" ? "/term-results" : "/annual-results", {
+          params: {
+            schoolId, academicYear, classId: selectedClass._id,
+            ...(cardType === "term" ? { term: termNumber } : {}),
+            limit: 200,
+          },
+        }).then((res) => (res.data?.results ?? []).map(
+          (r: { studentId: string; studentName?: string }) => ({
+            _id:         String(r.studentId),
+            name:        r.studentName ?? "",
+            studentName: r.studentName ?? "",
+          })));
+
+    request
+      .then(setStudents)
       .catch(() => setStudents([]))
       .finally(() => setStudentLoading(false));
-  }, [selectedClass, schoolId]);
+  }, [selectedClass, cardType, academicYear, termNumber, schoolId]);
 
   // ── Generate ────────────────────────────────────────────
   /**
@@ -140,11 +209,11 @@ export default function ReportCardsPage() {
     if (!selectedExam || !selectedStudent) return;
 
     const ok = window.confirm(
-      `Reissue the report card for ${selectedStudent.studentName ?? "this student"}?
+      `${t("reportCards.reissueConfirm", {
+        name: selectedStudent.studentName ?? t("reportCards.thisStudent"),
+      })}
 
-` +
-      "This replaces the copy already issued to the parent with one built " +
-      "from the current marks and template. The old copy is not kept."
+${t("reportCards.reissueBody")}`
     );
     if (!ok) return;
 
@@ -160,8 +229,8 @@ export default function ReportCardsPage() {
         success: 1,
         error:   0,
         message: revived
-          ? "Report card restored and replaced with a fresh copy."
-          : "Report card reissued — the parent's copy now reflects the current marks.",
+          ? t("reportCards.reissueRevived")
+          : t("reportCards.reissueDone"),
       });
     } catch (err) {
       const data = (err as {
@@ -170,16 +239,41 @@ export default function ReportCardsPage() {
       setResult({
         success: 0,
         error:   1,
-        message: data?.detail ?? data?.error ?? "Reissue failed.",
+        message: data?.detail ?? data?.error ?? t("reportCards.reissueFailed"),
       });
     } finally {
       setReissuing(false);
     }
   };
 
+  /**
+   * Where this card's HTML comes from.
+   *
+   * Three endpoints, one renderer behind all of them. The sequence one answers
+   * JSON with the html inside; the term and annual ones answer the document
+   * itself, because they were written for a browser to open directly.
+   */
+  const cardRequest = (sid: string) => {
+    const lang   = i18n?.resolvedLanguage ?? "en";
+    const school = user?.schoolName || user?.school?.name || "";
+    if (cardType === "sequence") {
+      return api.get(
+        `/results/${selectedExam!._id}/student/${sid}/reportcard/html`,
+        { params: { schoolId, lang, schoolName: school } }
+      );
+    }
+    const base = cardType === "term" ? "/term-results" : "/annual-results";
+    return api.get(`${base}/${sid}/report-card`, {
+      params: {
+        schoolId, academicYear, classId: selectedClass!._id, lang,
+        ...(cardType === "term" ? { term: termNumber } : {}),
+      },
+    });
+  };
+
   const handleGenerate = async () => {
-    if (!selectedExam || !selectedClass) {
-      alert("Please select an exam and a class");
+    if (!periodChosen || !selectedClass) {
+      alert(t("reportCards.chooseFirst"));
       return;
     }
 
@@ -188,7 +282,7 @@ export default function ReportCardsPage() {
       : students;
 
     if (targetStudents.length === 0) {
-      alert("No students found in this class");
+      alert(t("reportCards.noStudents"));
       return;
     }
 
@@ -202,18 +296,16 @@ export default function ReportCardsPage() {
     for (let i = 0; i < targetStudents.length; i++) {
       const student = targetStudents[i];
       try {
-        // Phase 2: fetch pre-rendered HTML from the shared backend engine
-        const sid    = String(student._id);
-        const lang   = i18n?.resolvedLanguage ?? "en";
-        const school = user?.schoolName || user?.school?.name || "";
-        const res2   = await api.get(
-          `/results/${selectedExam._id}/student/${sid}/reportcard/html`,
-          { params: { schoolId, lang, schoolName: school } }
-        );
+        // One renderer, three endpoints — see cardRequest.
+        const sid  = String(student._id);
+        const res2 = await cardRequest(sid);
 
-        const body  = res2?.data;
-        const html  = typeof res2 === "string"
-          ? res2
+        // The term and annual routes send the document; the sequence route
+        // wraps it in JSON. The old check here tested the axios RESPONSE for
+        // being a string, which it never is, so the raw-HTML branch was dead.
+        const body = res2?.data;
+        const html = typeof body === "string"
+          ? body
           : body?.data?.html || body?.html || "";
 
         if (!html) {
@@ -242,10 +334,10 @@ export default function ReportCardsPage() {
     setResult({
       success,
       error,
-      message: `${success} report card(s) sent to print.${
-        error > 0
-          ? ` ${error} failed — no processed result found. Run Results → Compute for this exam first.`
-          : ""
+      // The remedy differs by card: a sequence card needs the exam's results
+      // processed, a term or annual card needs Compute run for that period.
+      message: `${t("reportCards.sentToPrint", { count: success })}${
+        error > 0 ? ` ${t(`reportCards.someFailed_${cardType}`, { count: error })}` : ""
       }`,
     });
   };
@@ -267,7 +359,7 @@ export default function ReportCardsPage() {
                      border-indigo-200 rounded-xl text-sm font-semibold
                      hover:bg-indigo-100 transition-colors"
         >
-          📊 View Results
+          📊 {t("reportCards.viewResults")}
         </Link>
       </div>
 
@@ -276,17 +368,101 @@ export default function ReportCardsPage() {
         {/* Main form */}
         <div className="space-y-4">
 
-          {/* Step 1: Exam */}
+          {/* Which of the three cards. Chosen first, because it decides what the
+              next step even asks for: a sequence card is one exam's, a term or
+              annual card covers a period and has no exam behind it. */}
           <div className="bg-white rounded-xl border border-gray-100 p-5">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+            <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
               <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                flex items-center justify-center text-xs font-bold">
                 1
               </span>
-              {t("results.selectExam")}
+              {t("reportCards.selectType")}
+            </h3>
+            <p className="text-xs text-gray-400 mb-3 ml-9">
+              {t(`reportCards.typeHint_${cardType}`)}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {(["sequence", "term", "annual"] as CardType[]).map((ct) => (
+                <button
+                  key={ct}
+                  type="button"
+                  onClick={() => {
+                    setCardType(ct);
+                    // The pickers below mean different things per type, so
+                    // nothing chosen under one carries over to another.
+                    setSelectedExam(null);
+                    setSelectedClass(null);
+                    setSelectedStudent(null);
+                    setStudents([]);
+                    setResult(null);
+                  }}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold border
+                    transition-colors ${cardType === ct
+                      ? "bg-primary-600 border-primary-600 text-white"
+                      : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                >
+                  {t(`reportCards.type_${ct}`)}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Step 2: the period this card covers */}
+          <div className="bg-white rounded-xl border border-gray-100 p-5">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <span className="w-7 h-7 bg-primary-600 text-white rounded-full
+                               flex items-center justify-center text-xs font-bold">
+                2
+              </span>
+              {cardType === "sequence"
+                ? t("results.selectExam")
+                : t("reportCards.selectPeriod")}
             </h3>
 
-            {examsLoading ? (
+            {cardType !== "sequence" && (
+              <div className="flex flex-wrap gap-4 mb-2">
+                <label className="block">
+                  <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                    {t("academic.schoolYear")}
+                  </span>
+                  <select
+                    value={academicYear}
+                    onChange={(e) => { setAcademicYear(e.target.value); setSelectedClass(null); }}
+                    className="rounded-xl border border-gray-200 px-3 py-2 text-sm
+                               outline-none focus:border-primary-400"
+                  >
+                    {academicYears.length === 0 && <option value="">—</option>}
+                    {academicYears.map((y) => <option key={y} value={y}>{y}</option>)}
+                  </select>
+                </label>
+
+                {cardType === "term" && (
+                  <label className="block">
+                    <span className="block text-xs font-semibold text-gray-500 mb-1.5">
+                      {t("academic.term")}
+                    </span>
+                    <div className="flex gap-2">
+                      {["1", "2", "3"].map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => { setTermNumber(n); setSelectedClass(null); }}
+                          className={`px-3 py-2 rounded-xl text-sm font-semibold border
+                            transition-colors ${termNumber === n
+                              ? "bg-primary-600 border-primary-600 text-white"
+                              : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"}`}
+                        >
+                          {t(`exams.term${n}`)}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                )}
+              </div>
+            )}
+
+            {cardType !== "sequence" ? null : examsLoading ? (
               <div className="flex items-center justify-center py-8">
                 <div className="w-6 h-6 border-4 border-primary-600
                                border-t-transparent rounded-full animate-spin" />
@@ -317,13 +493,13 @@ export default function ReportCardsPage() {
             )}
           </div>
 
-          {/* Step 2: Class */}
-          {selectedExam && (
+          {/* Step 3: Class */}
+          {periodChosen && (
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
-                  2
+                  3
                 </span>
                 {t("reportCards.selectClass")}
               </h3>
@@ -357,17 +533,17 @@ export default function ReportCardsPage() {
             </div>
           )}
 
-          {/* Step 3: Student (optional) */}
+          {/* Step 4: Student (optional) */}
           {selectedClass && (
             <div className="bg-white rounded-xl border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-1 flex items-center gap-2">
                 <span className="w-7 h-7 bg-primary-600 text-white rounded-full
                                  flex items-center justify-center text-xs font-bold">
-                  3
+                  4
                 </span>
                 {t("reportCards.selectStudent")}
                 <span className="text-xs text-gray-400 font-normal">
-                  (optional — leave empty for full class)
+                  {t("reportCards.optionalWholeClass")}
                 </span>
               </h3>
 
@@ -492,14 +668,16 @@ export default function ReportCardsPage() {
                 <>
                   🖨️{" "}
                   {selectedStudent
-                    ? "Print Report Card"
-                    : `Print All ${students.length || ""} Reports`}
+                    ? t("reportCards.printOne")
+                    : t("reportCards.printAll", { count: students.length })}
                 </>
               )}
             </button>
 
-            {/* Reissue — only meaningful for one student at a time */}
-            {selectedStudent && (
+            {/* Reissue — one pupil at a time, and sequence cards only: the
+                archive that gets replaced is keyed on an exam, and a term or
+                annual card has no exam behind it. */}
+            {selectedStudent && cardType === "sequence" && (
               <button
                 onClick={handleReissue}
                 disabled={reissuing || generating}
@@ -509,7 +687,7 @@ export default function ReportCardsPage() {
                            disabled:opacity-50 flex items-center
                            justify-center gap-2"
               >
-                {reissuing ? "Reissuing…" : "♻️ Reissue this card"}
+                {reissuing ? t("reportCards.reissuing") : `♻️ ${t("reportCards.reissue")}`}
               </button>
             )}
 

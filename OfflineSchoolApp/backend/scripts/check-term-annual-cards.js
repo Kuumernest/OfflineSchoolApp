@@ -152,6 +152,66 @@ const main = async () => {
     ]) check(`the ${name} card shows ${what}`, html.includes(needle), true);
   }
 
+  // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- what the Report Cards page depends on ---");
+
+  /**
+   * The page prints all three cards and picks the endpoint from the card type.
+   * Two things it relies on that nothing else asserts:
+   *
+   *   the listing it reads its pupils from returns studentId and studentName,
+   *     because a term or annual card exists only for a pupil the computation
+   *     has run for — the class roster would offer pupils with no card, and
+   *     each of those is a 404 an admin has to interpret
+   *
+   *   the card endpoints answer with the DOCUMENT, not JSON with the html
+   *     inside it, which is the opposite of the sequence endpoint. The page
+   *     handles both; if either changed shape it would print blank pages.
+   */
+  const express = require("express");
+  const app = express();
+  app.use(express.json());
+  app.use((req, _r, n) => {
+    req.user = { _id: "admin-1", schoolId: S, role: "school_admin",
+                 permissions: ["results.view", "exams.view"] };
+    n();
+  });
+  app.use("/api/term-results",   require("../src/routes/termResults.routes"));
+  app.use("/api/annual-results", require("../src/routes/annualResults.routes"));
+  const srv  = app.listen(0);
+  const base = `http://127.0.0.1:${srv.address().port}/api`;
+  const yr   = encodeURIComponent(YEAR);
+
+  const termList = await (await fetch(
+    `${base}/term-results?schoolId=${S}&academicYear=${yr}&classId=${CLS}&term=1&limit=200`)).json();
+  check("the term listing carries the pupil's id and name",
+    [termList.results?.[0]?.studentId, termList.results?.[0]?.studentName], ["p1", "Ada Ngu"]);
+
+  const annualList = await (await fetch(
+    `${base}/annual-results?schoolId=${S}&academicYear=${yr}&classId=${CLS}&limit=200`)).json();
+  check("and so does the annual listing", annualList.results?.[0]?.studentId, "p1");
+
+  for (const [label, url, promoted] of [
+    ["term",   `${base}/term-results/p1/report-card?schoolId=${S}&academicYear=${yr}&classId=${CLS}&term=1&lang=en`, false],
+    ["annual", `${base}/annual-results/p1/report-card?schoolId=${S}&academicYear=${yr}&classId=${CLS}&lang=en`,      true ],
+  ]) {
+    const res  = await fetch(url);
+    const body = await res.text();
+    check(`the ${label} card answers 200`, res.status, 200);
+    check(`the ${label} card is a document, not JSON`,
+      String(res.headers.get("content-type")).startsWith("text/html"), true);
+    check(`the ${label} card names the pupil`, body.includes("Ada Ngu"), true);
+    check(`the ${label} card shows a promotion: ${promoted}`, /PROMOTED/.test(body), promoted);
+  }
+
+  // A pupil the computation has not run for. The page counts this as a failure
+  // and tells the admin to Compute, which only reads correctly if it is a 404.
+  const missing = await fetch(
+    `${base}/annual-results/p1/report-card?schoolId=${S}&academicYear=${yr}&classId=cls-none&lang=en`);
+  check("a class with no computed result is a 404, not an empty card", missing.status, 404);
+
+  srv.close();
+
   console.log(`
   ${pass} passed, ${fail} failed`);
   await mongoose.disconnect();
