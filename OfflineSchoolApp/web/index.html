@@ -1,7 +1,24 @@
 <!doctype html>
-<html lang="en">
+<!--
+  translate="no" is not a preference, it is a correctness requirement.
+
+  This app ships its own English and French and switches between them itself.
+  A browser that ALSO translates it rewrites the page's text nodes underneath
+  React — Google Translate wraps each one in a <font> element — and the next
+  render that touches one of those nodes dies with "Failed to execute
+  'insertBefore' on 'Node': The node before which the new node is to be
+  inserted is not a child of this node". The work already succeeded by then;
+  only the re-render fails, which is what makes it look like a save bug.
+
+  lang is set here as a starting value and kept in step with the chosen
+  language by src/i18n/index.ts. It was hardcoded to "en" and never updated,
+  which is what invited the translate prompt in the first place — and told a
+  screen reader to read French aloud in an English voice.
+-->
+<html lang="en" translate="no">
   <head>
     <meta charset="UTF-8" />
+    <meta name="google" content="notranslate" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>My School On The Move</title>

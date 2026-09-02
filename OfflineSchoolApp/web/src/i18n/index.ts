@@ -65,6 +65,33 @@ void i18n
     returnEmptyString: false,
   });
 
+/**
+ * Keep <html lang> in step with the language the app is actually showing.
+ *
+ * index.html ships lang="en" and nothing updated it, so a French console still
+ * announced itself as English. Two things follow from that, and the second is
+ * the one that broke a screen:
+ *
+ *   a screen reader reads French text with an English voice, and
+ *
+ *   the browser offers to translate a page it believes is in the wrong
+ *     language. Accepting rewrites every text node under React — Google
+ *     Translate wraps them in <font> elements — and the next render that
+ *     touches one throws "insertBefore ... is not a child of this node",
+ *     after the save it was rendering has already succeeded.
+ *
+ * translate="no" in index.html is the guard; this is the reason the browser
+ * should not have been asking in the first place.
+ */
+const syncDocumentLanguage = (lng?: string) => {
+  if (typeof document === "undefined") return;
+  const code = (lng || i18n.resolvedLanguage || "en").split("-")[0];
+  document.documentElement.setAttribute("lang", code);
+};
+
+syncDocumentLanguage();
+i18n.on("languageChanged", syncDocumentLanguage);
+
 /** The BCP-47 locale for the active language — for Intl, not for i18next. */
 export const currentLocale = (): string =>
   SUPPORTED_LANGUAGES.find((l) => l.code === i18n.resolvedLanguage)?.locale ??
