@@ -28,7 +28,7 @@ const { getRankings } = resultsService;
 const { lookupGrade } = require("../services/grading.service");
 // The §5/§7/§8 rules, shared with the term and annual cards and covered by
 // scripts/check-report-card.js.
-const { reportTypeFor, subjectRanking } =
+const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
 
 // ─────────────────────────────────────────────────────────
@@ -494,20 +494,30 @@ const buildStudentReportCardData = async (examId, studentId) => {
   // The period this card is FOR, spelled the way a parent reads it. A
   // sequence card names its sequence, a term card names its term, and the
   // annual card names neither because it covers the whole year.
-  let periodLabel = null;
+  let ownName = null;
   if (reportType === "sequence") {
     const structure = exam?.schoolId
       ? await AcademicStructure.findOne({
           schoolId: String(exam.schoolId), academicYear: exam.academicYear,
         }).lean().catch(() => null)
       : null;
-    const named = structure?.terms
+    ownName = structure?.terms
       ?.flatMap((t) => t.sequences || [])
-      ?.find((sq) => sq.number === exam.sequenceNumber);
-    periodLabel = named?.name || `Sequence ${exam.sequenceNumber}`;
-  } else if (reportType === "term" && exam?.term != null) {
-    periodLabel = `Term ${exam.term}`;
+      ?.find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
+
+  // The facts about the period, not a sentence about it. The header names the
+  // period in the reader's language ("Première Séquence"), so a string built
+  // here would be the one line of English left on a French card — the same
+  // fault the remarks had. periodLabel stays for {{term}}, which templates
+  // already reference.
+  const period = {
+    reportType,
+    sequenceNumber: exam?.sequenceNumber ?? null,
+    term:           exam?.term ?? null,
+    name:           ownName,
+  };
+  const periodLabel = periodName(period, "en");
 
   const data = {
       examId,
@@ -522,6 +532,7 @@ const buildStudentReportCardData = async (examId, studentId) => {
       // belongs. The school's own name for the sequence wins; "Sequence 3" is
       // the fallback for a school that has not named them.
       term:         periodLabel,
+      period,
       totalMarks:   exam?.totalMarks     || null,
       passMark:     exam?.passMark       || null,
       // §1 student identity + §3 grade toggle, consumed by the renderer
@@ -617,7 +628,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
  */
 // The template lookup moved to reportCardData.service.js, where the term and
 // annual cards reach the same one — see the note there.
-const { loadReportTemplate, absoluteLogoUrl } =
+const { loadReportTemplate, loadSchoolForCard } =
   require("../services/reportCardData.service");
 
 /**
@@ -691,16 +702,11 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     });
   }
 
-  let schoolName = req.user?.schoolName || null;
-  let schoolDoc = null;
-  if (req.user?.schoolId) {
-    // Logo + motto come from the school's settings (§2) — never hard-coded.
-    schoolDoc = await School.findOne({ _id: req.user.schoolId })
-      .select("name logo motto")
-      .lean()
-      .catch(() => null);
-    schoolName = schoolName || schoolDoc?.name || null;
-  }
+  // Logo, motto and the official header's delegations come from the school's
+  // settings (§2) — never hard-coded, and loaded by the one function all three
+  // card routes share so they cannot select different fields from each other.
+  const letterhead = await loadSchoolForCard(req.user?.schoolId, req);
+  const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
 
   /**
    * The verification strip: QR + code resolving to a public page that shows
@@ -764,12 +770,8 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
-    // §2: logo + motto from the school's settings document
-    school: {
-      name:  schoolName || "",
-      logo:  absoluteLogoUrl(schoolDoc?.logo, req),
-      motto: schoolDoc?.motto || null,
-    },
+    // §2: logo, motto and delegations from the school's settings document
+    school: { ...letterhead.school, name: schoolName || "" },
     verify,
     template,
   });

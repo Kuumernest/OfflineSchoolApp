@@ -204,6 +204,9 @@ module.exports = [
         schoolType:         school.schoolType          || "primary",
         termSystem:         school.termSystem          || "trimester",
         registrationNumber: school.registrationNumber  || null,
+        // The delegations the report-card header prints down its margins.
+        region:             school.region              || null,
+        division:           school.division            || null,
         foundedYear:        school.foundedYear         ?? null,
         principalName:      school.principalName       || null,
         description:        school.description         || null,

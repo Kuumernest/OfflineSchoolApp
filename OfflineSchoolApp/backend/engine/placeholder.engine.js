@@ -283,6 +283,7 @@ function buildReplacementMap(data) {
     school      = {},
     attendance  = {},
     performance = {},
+    header      = {},
   } = data;
 
   return {
@@ -361,6 +362,29 @@ function buildReplacementMap(data) {
     term_3_average:         performance.term3Average != null
                               ? Number(performance.term3Average).toFixed(1)
                               : "",
+
+    // The official header. Two columns, always both, because that is the
+    // format: a Cameroonian card carries the ministry and the delegations in
+    // English on one side and French on the other whatever language the reader
+    // chose. A delegation the school has not named resolves to "" so a
+    // template can gate on it with {{if header_regional_en}} and leave the
+    // line out rather than printing a label trailing into nothing.
+    header_country_en:    header.en?.country    || "",
+    header_country_fr:    header.fr?.country    || "",
+    header_peace_en:      header.en?.peace      || "",
+    header_peace_fr:      header.fr?.peace      || "",
+    header_ministry_en:   header.en?.ministry   || "",
+    header_ministry_fr:   header.fr?.ministry   || "",
+    header_regional_en:   header.en?.regional   || "",
+    header_regional_fr:   header.fr?.regional   || "",
+    header_divisional_en: header.en?.divisional || "",
+    header_divisional_fr: header.fr?.divisional || "",
+    header_type_en:       header.en?.schoolType || "",
+    header_type_fr:       header.fr?.schoolType || "",
+    header_separator:     header.separator      || "",
+
+    // "First Sequence Progress Record" — the period named, not numbered.
+    report_title:       data.reportTitle      || "",
 
     // School
     school_name:        school.name           || "",

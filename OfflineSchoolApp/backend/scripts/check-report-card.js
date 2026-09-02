@@ -374,6 +374,85 @@ check("18 normalised against 20 is an A+",
   GradingConfig.findGradeBand((twenty / 20) * 20).grade, "A+");
 
 // ═══════════════════════════════════════════════════════════════════════════
+console.log("--- §2: the official header ---");
+
+// The header a Cameroonian report card carries: the ministry and the
+// delegations in English down one margin and French down the other, at once,
+// on every card. Both columns regardless of the reader's language — that is
+// the format of the document, not a translation setting.
+const HEADED = {
+  school: {
+    ...SCHOOL.school,
+    region: "South West", division: "Fako", schoolType: "shs",
+  },
+};
+const headed = (lang) =>
+  renderReportCardHtml(payload({ period: { reportType: "sequence", sequenceNumber: 1 } }),
+    { ...HEADED, lang });
+
+for (const lang of ["en", "fr"]) {
+  const h = headed(lang);
+  check(`${lang}: the English margin is on the card`,
+    h.includes("Republic of Cameroon") &&
+    h.includes("Ministry of Secondary Education"), true);
+  check(`${lang}: and the French margin`,
+    h.includes("République du Cameroun") &&
+    h.includes("Ministère des Enseignements Secondaires"), true);
+  check(`${lang}: the regional delegation is named`,
+    h.includes("Regional Delegation of South West") &&
+    h.includes("Délégation Régionale de South West"), true);
+  check(`${lang}: and the divisional one`,
+    h.includes("Divisional Delegation of Fako") &&
+    h.includes("Délégation Départementale de Fako"), true);
+}
+
+// Only the title follows the reader.
+check("the title names the period, in English",
+  /report-title">First Sequence Progress Record</.test(headed("en")), true);
+check("and in French",
+  /report-title">Relevé de Notes — Première Séquence</.test(headed("fr")), true);
+check("a term card names its term, not its number",
+  renderReportCardHtml(
+    payload({ reportType: "term", period: { reportType: "term", term: 2 } }), HEADED)
+    .includes("Second Term Progress Record"), true);
+check("and the annual card says so",
+  renderReportCardHtml(
+    payload({ reportType: "annual", period: { reportType: "annual" } }), HEADED)
+    .includes("Annual Progress Record"), true);
+check("a school's own name for a sequence wins over the ordinal",
+  renderReportCardHtml(payload({
+    period: { reportType: "sequence", sequenceNumber: 1, name: "Evaluation A" },
+  }), HEADED).includes("Evaluation A Progress Record"), true);
+
+// The ministry follows the school's type, which is the only part of the header
+// that is derived rather than typed.
+check("a primary school reports to Basic Education",
+  renderReportCardHtml(payload(), { school: { ...HEADED.school, schoolType: "primary" } })
+    .includes("Ministry of Basic Education"), true);
+check("a technical one to Secondary Education",
+  renderReportCardHtml(payload(), { school: { ...HEADED.school, schoolType: "vocational" } })
+    .includes("Ministry of Secondary Education"), true);
+check("and a school that never set its type is treated as the default, primary",
+  renderReportCardHtml(payload(), { school: { name: "X" } })
+    .includes("Ministry of Basic Education"), true);
+
+// The delegations fall back to the postal address, because a card reading
+// "Regional Delegation of" with nothing after it is worse than one naming the
+// region the address already gives.
+const viaAddress = renderReportCardHtml(payload(),
+  { school: { name: "X", state: "Littoral", city: "Wouri" } });
+check("an unset region falls back to the postal state",
+  viaAddress.includes("Regional Delegation of Littoral"), true);
+check("and an unset division to the city",
+  viaAddress.includes("Divisional Delegation of Wouri"), true);
+
+// And with neither, the line is left out rather than printed blank.
+const bare = renderReportCardHtml(payload(), { school: { name: "X" } });
+check("with nothing to name, no delegation line is printed",
+  /class="delegation"/.test(bare), false);
+check("but the ministry and the country still are",
+  bare.includes("Republic of Cameroon") && bare.includes("Ministry of"), true);
+
 console.log("--- §7 depends on the exam actually storing its sequence ---");
 
 // POST /exams did not read sequenceNumber from the body, so every exam created

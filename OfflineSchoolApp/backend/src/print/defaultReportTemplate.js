@@ -23,6 +23,148 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+/**
+ * The official header, kept apart because two things need the identical copy:
+ * this template, and the repair that puts it into the templates schools saved
+ * before it existed. A second hand-written copy in the repair script is how
+ * the two would drift.
+ */
+const OFFICIAL_HEADER_CSS = `  /* ── The official header ───────────────────────────────
+     Ministry and delegations in English down the left margin, the school in
+     the middle, the same in French down the right. Both languages on every
+     card: that is the Cameroonian format, not a translation setting. */
+  .school-header {
+    text-align:     center;
+    margin-bottom:  16px;
+    padding-bottom: 12px;
+    border-bottom:  1px solid #e5e5e5;
+    font-family:    "Times New Roman", Times, serif;
+  }
+
+  .report-header-top {
+    display:               grid;
+    grid-template-columns: 1fr 1.2fr 1fr;
+    align-items:           start;
+    gap:                   16px;
+  }
+
+  .ministry-column {
+    text-align:  center;
+    color:       #2e3440;
+    font-size:   10px;
+    line-height: 1.35;
+  }
+
+  .ministry-column p { margin: 0 0 3px; }
+
+  .ministry-column .country {
+    font-weight:     bold;
+    text-transform:  uppercase;
+    text-decoration: underline;
+  }
+
+  .ministry-column .peace { font-style: italic; font-weight: bold; }
+
+  .ministry-column .ministry {
+    margin-top:      8px;
+    text-transform:  uppercase;
+    text-decoration: underline;
+  }
+
+  .ministry-column .delegation,
+  .ministry-column .sub-delegation {
+    margin-top:      8px;
+    font-weight:     bold;
+    text-transform:  uppercase;
+    text-decoration: underline;
+  }
+
+  .ministry-column .school-type {
+    margin-top:     6px;
+    font-weight:    bold;
+    text-transform: uppercase;
+  }
+
+  /* A real card does not underline its French column. */
+  .ministry-column.french .country,
+  .ministry-column.french .ministry,
+  .ministry-column.french .delegation,
+  .ministry-column.french .sub-delegation { text-decoration: none; }
+
+  .school-identity { padding: 0 8px; }
+
+  .school-name {
+    font-size:      17px;
+    font-weight:    bold;
+    color:          #1f2933;
+    font-family:    Arial, Helvetica, sans-serif;
+    text-transform: uppercase;
+    line-height:    1.25;
+    margin:         6px 0 4px;
+  }
+`;
+
+const OFFICIAL_HEADER_HTML = `  <!-- The official header: English margin, school, French margin. -->
+  <div class="school-header">
+    <div class="report-header-top">
+
+      <div class="ministry-column">
+        <p class="country">{{header_country_en}}</p>
+        <p class="peace">{{header_peace_en}}</p>
+        <p>{{header_separator}}</p>
+        <p class="ministry">{{header_ministry_en}}</p>
+        {{if header_regional_en}}
+          <p>{{header_separator}}</p>
+          <p class="delegation">{{header_regional_en}}</p>
+        {{endif}}
+        {{if header_divisional_en}}
+          <p>{{header_separator}}</p>
+          <p class="sub-delegation">{{header_divisional_en}}</p>
+        {{endif}}
+        {{if header_type_en}}
+          <p class="school-type">{{header_type_en}}</p>
+        {{endif}}
+      </div>
+
+      <div class="school-identity">
+        {{school_logo}}
+        <div class="school-name">{{school_name}}</div>
+        <div class="school-motto">{{school_motto}}</div>
+        {{if school_address}}
+          <div class="school-contact">{{school_address}}</div>
+        {{endif}}
+        {{if school_phone}}
+          <div class="school-contact">{{school_phone}}</div>
+        {{endif}}
+      </div>
+
+      <div class="ministry-column french">
+        <p class="country">{{header_country_fr}}</p>
+        <p class="peace">{{header_peace_fr}}</p>
+        <p>{{header_separator}}</p>
+        <p class="ministry">{{header_ministry_fr}}</p>
+        {{if header_regional_fr}}
+          <p>{{header_separator}}</p>
+          <p class="delegation">{{header_regional_fr}}</p>
+        {{endif}}
+        {{if header_divisional_fr}}
+          <p>{{header_separator}}</p>
+          <p class="sub-delegation">{{header_divisional_fr}}</p>
+        {{endif}}
+        {{if header_type_fr}}
+          <p class="school-type">{{header_type_fr}}</p>
+        {{endif}}
+      </div>
+
+    </div>
+  </div>
+
+  <!-- The period this card is for, named rather than numbered. -->
+  <div class="report-title">{{report_title}}</div>
+  <p style="text-align:center;margin-bottom:12px;font-size:13px;color:#374151">
+    {{academic_year}}
+  </p>`;
+
 const DEFAULT_TEMPLATE_CSS = `  * {
     box-sizing: border-box;
     margin:     0;
@@ -44,20 +186,7 @@ const DEFAULT_TEMPLATE_CSS = `  * {
     border-radius: 8px;
   }
 
-  /* ── School header ─────────────────────────────────── */
-  .school-header {
-    text-align:     center;
-    margin-bottom:  16px;
-    padding-bottom: 12px;
-    border-bottom:  2px solid #2563EB;
-  }
-
-  .school-name {
-    font-size:   20px;
-    font-weight: bold;
-    color:       #1e40af;
-    margin:      8px 0 4px;
-  }
+${OFFICIAL_HEADER_CSS}
 
   .school-motto {
     font-size:   11px;
@@ -282,19 +411,7 @@ const DEFAULT_TEMPLATE_CSS = `  * {
 
 const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
 
-  <!-- School header -->
-  <div class="school-header">
-    {{school_logo}}
-    <div class="school-name">{{school_name}}</div>
-    <div class="school-motto">{{school_motto}}</div>
-    <div class="school-contact">{{school_address}} | {{school_phone}}</div>
-  </div>
-
-  <div class="report-title">ACADEMIC REPORT CARD</div>
-  <p style="text-align:center;margin-bottom:12px;font-size:13px;color:#374151">
-    {{term}} &mdash; {{academic_year}}
-  </p>
-
+${OFFICIAL_HEADER_HTML}
   <!-- Student information -->
   <div class="student-info-grid">
     <div class="info-row">
@@ -439,4 +556,7 @@ const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
 </div>
 `;
 
-module.exports = { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS };
+module.exports = {
+  DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
+  OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
+};

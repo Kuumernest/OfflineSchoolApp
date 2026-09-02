@@ -3363,6 +3363,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "name code address city state country phone email " +
     "motto website applicationsOpen isActive updatedAt " +
     "postalCode schoolType termSystem registrationNumber foundedYear " +
+    "region division " +
     "principalName description academicYearStart academicYearEnd " +
     "schoolDays schoolStartTime schoolEndTime";
 
@@ -3420,6 +3421,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     phone, email, website, applicationsOpen, logoBase64,
     motto, postalCode, schoolType, termSystem, schoolCode,
     registrationNumber, foundedYear, principalName, description,
+    region, division,
     academicYearStart, academicYearEnd, schoolDays,
     schoolStartTime, schoolEndTime, removeLogo,
   } = req.body;
@@ -3444,6 +3446,10 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(schoolType       !== undefined && { schoolType                            }),
     ...(termSystem       !== undefined && { termSystem                            }),
     ...(registrationNumber !== undefined && { registrationNumber: registrationNumber?.trim() }),
+    // The delegations printed in the report-card header. Blank clears the
+    // field rather than storing "", so the header falls back to the address.
+    ...(region   !== undefined && { region:   region?.trim()   || null }),
+    ...(division !== undefined && { division: division?.trim() || null }),
     ...(foundedYear      !== undefined && { foundedYear                           }),
     ...(principalName    !== undefined && { principalName: principalName?.trim()  }),
     ...(description      !== undefined && { description: description?.trim()      }),

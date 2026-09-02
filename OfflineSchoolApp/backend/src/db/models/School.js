@@ -366,6 +366,24 @@ const schoolSchema = new mongoose.Schema(
      * printed on letters, report cards and the public profile.
      */
     postalCode:         { type: String,  default: null,  trim: true },
+
+    /*
+     * The delegations named in the official header.
+     *
+     * Every Cameroonian report card carries the ministry, the regional
+     * delegation and the divisional delegation down its left and right margins,
+     * in English and in French. They are the school's own administrative
+     * placement, not something that can be derived: two schools in the same
+     * city can sit under different sub-divisional delegations.
+     *
+     * Separate from `state` and `city`, which are a postal address. The header
+     * falls back to them when these are blank — a card with "Regional
+     * Delegation of ..." on it is worse than one naming the region the address
+     * already gives — but a school that fills these in gets what it typed.
+     */
+    region:   { type: String, default: null, trim: true, maxlength: 120 },
+    division: { type: String, default: null, trim: true, maxlength: 120 },
+
     schoolType:         { type: String,  default: "primary",
                           enum: ["primary", "jhs", "shs", "combined",
                                  "vocational", "university", "other"] },

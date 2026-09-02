@@ -38,6 +38,8 @@ interface SchoolSettings {
   termSystem:         string;
   schoolCode:         string;
   registrationNumber: string;
+  region:             string;
+  division:           string;
   foundedYear:        string;
   principalName:      string;
   description:        string;
@@ -329,6 +331,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     address: "", city: "", state: "", country: "", postalCode: "",
     schoolType: "primary", termSystem: "trimester", schoolCode: "",
     registrationNumber: "", foundedYear: "", principalName: "",
+    region: "", division: "",
     description: "", academicYearStart: "", academicYearEnd: "",
     // API values, never translated.
     schoolDays: ["Monday","Tuesday","Wednesday","Thursday","Friday"],
@@ -366,6 +369,8 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             termSystem:         s.termSystem         ?? "trimester",
             schoolCode:         s.code ?? s.schoolCode ?? "",
             registrationNumber: s.registrationNumber ?? "",
+            region:             s.region             ?? "",
+            division:           s.division           ?? "",
             foundedYear:        s.foundedYear        ? String(s.foundedYear) : "",
             principalName:      s.principalName      ?? "",
             description:        s.description        ?? "",
@@ -564,6 +569,16 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
           <div>
             <FieldLabel>{t("settings.regNumber")}</FieldLabel>
             <Input value={form.registrationNumber} onChange={(v) => set("registrationNumber", v)} placeholder={t("settings.regNumberHint")} />
+          </div>
+          {/* Printed down the margins of every report card, in both
+              languages. Blank falls back to the region and city above. */}
+          <div>
+            <FieldLabel>{t("settings.region")}</FieldLabel>
+            <Input value={form.region} onChange={(v) => set("region", v)} placeholder={t("settings.regionPh")} />
+          </div>
+          <div>
+            <FieldLabel>{t("settings.division")}</FieldLabel>
+            <Input value={form.division} onChange={(v) => set("division", v)} placeholder={t("settings.divisionPh")} />
           </div>
           <div>
             <FieldLabel>{t("settings.yearFounded")}</FieldLabel>

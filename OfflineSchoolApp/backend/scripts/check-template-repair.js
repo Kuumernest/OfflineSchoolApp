@@ -22,8 +22,8 @@
  *   node scripts/check-template-repair.js
  */
 
-const { repairHtml, verify, layoutPass, repairCss } =
-  require("./repair-report-templates");
+const { repairHtml, verify, layoutPass, repairCss,
+        headerPass, repairHeaderCss } = require("./repair-report-templates");
 const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
   require("../src/print/defaultReportTemplate");
 
@@ -148,6 +148,78 @@ check("a template repaired for the promotion months ago still gets the layout",
     '{{if isPassing}}<div class="pass-banner pass">✓ PASSED &mdash; {{remark}}</div>{{endif}}' +
     '{{if is_annual}}{{if promotion_status}}x{{endif}}{{endif}}').status,
   "repaired");
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the official header replaces the centred strip ---");
+
+/** The header exactly as this project used to seed it. */
+const OLD_HEADER = [
+  "<div class=\"report-wrapper\">",
+  "",
+  "  <!-- School header -->",
+  "  <div class=\"school-header\">",
+  "    {{school_logo}}",
+  "    <div class=\"school-name\">{{school_name}}</div>",
+  "    <div class=\"school-motto\">{{school_motto}}</div>",
+  "    <div class=\"school-contact\">{{school_address}} | {{school_phone}}</div>",
+  "  </div>",
+  "",
+  "  <div class=\"report-title\">ACADEMIC REPORT CARD</div>",
+  "  <p style=\"text-align:center;font-size:13px\">",
+  "    {{term}} &mdash; {{academic_year}}",
+  "  </p>",
+  "",
+  "  <!-- Student information -->",
+  "  <div class=\"student-info-grid\">SCHOOL OWN CONTENT</div>",
+].join("\n");
+
+const headed = headerPass(OLD_HEADER);
+check("the seeded header is recognised", headed.status, "repaired");
+check("the English margin is there",
+  /class="ministry-column">/.test(headed.html), true);
+check("and the French one",
+  /class="ministry-column french">/.test(headed.html), true);
+check("the period is named rather than titled ACADEMIC REPORT CARD",
+  headed.html.includes("{{report_title}}") &&
+  !headed.html.includes("ACADEMIC REPORT CARD"), true);
+check("a delegation the school has not filled in is gated, not printed blank",
+  headed.html.includes("{{if header_regional_en}}"), true);
+check("the rest of the school's document is untouched",
+  headed.html.includes("SCHOOL OWN CONTENT"), true);
+check("and everything before the header is byte-identical",
+  headed.html.slice(0, OLD_HEADER.indexOf("  <div class=\"school-header\">")),
+  OLD_HEADER.slice(0, OLD_HEADER.indexOf("  <div class=\"school-header\">")));
+check("running it twice changes nothing",
+  headerPass(headed.html).status, "already-fixed");
+
+// A header is the most personal part of a school's document. Anything that is
+// not the shape this project seeded is left exactly as the school made it.
+check("a header a school built itself is not touched",
+  headerPass('<div class="crest-row">{{school_logo}}<h1>{{school_name}}</h1></div>').status,
+  "no-header");
+check("nor one that has kept the shape but changed the fields",
+  headerPass(OLD_HEADER.replace("{{school_motto}}", "{{school_slogan}}")).status,
+  "no-header");
+check("the header rules are appended to the school's own CSS",
+  /\.ministry-column\.french/.test(repairHeaderCss(".x { color: red }")), true);
+check("and a stylesheet that has them is not given them twice",
+  repairHeaderCss(DEFAULT_TEMPLATE_CSS), null);
+
+// All three passes over one template, which is what a school that saved the
+// original layout actually needs.
+const allThree = repairHtml(OLD_HEADER + OLD_BANNER, OLD_CSS);
+check("all three faults are repaired in one pass",
+  allThree.changes, ["promotion", "layout", "header"]);
+check("and the stylesheet gains both sets of rules",
+  /\.verdict-pill/.test(allThree.css) && /\.ministry-column/.test(allThree.css), true);
+check("a template needing all three verifies",
+  verify(allThree.html, allThree.css, { expectRemark: true, expectHeader: true }), []);
+
+// The guard that matters for a header: one that lost a margin must be refused.
+check("a header missing its French margin is refused",
+  verify(headed.html.replace(/\{\{header_ministry_fr\}\}/g, "") + OLD_BANNER,
+    DEFAULT_TEMPLATE_CSS, { expectHeader: true })
+    .some((p) => /French ministry/.test(p)), true);
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- what it refuses to touch ---");

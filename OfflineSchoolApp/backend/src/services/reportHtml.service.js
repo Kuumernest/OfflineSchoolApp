@@ -30,9 +30,13 @@
  * ═══════════════════════════════════════════════════════════════════════════
  */
 
+const { officialHeader, reportTitle } = require("../../../shared/officialHeader");
+const { periodName }                  = require("../../../shared/reportCard");
+
 const LABELS = {
   en: {
     title:        "ACADEMIC REPORT CARD",
+    noLogo:       "NO LOGO",
     subject:      "Subject",
     score:        "Score",
     outOf20:      "/20",
@@ -73,6 +77,7 @@ const LABELS = {
   },
   fr: {
     title:        "BULLETIN DE NOTES",
+    noLogo:       "SANS LOGO",
     subject:      "Matière",
     score:        "Note",
     outOf20:      "/20",
@@ -270,6 +275,43 @@ function renderReportCardHtml(payload, opts = {}) {
   const schoolLogo = school.logo || null;
   const schoolMotto = school.motto || null;
 
+  // ── The official header ──────────────────────────────────────────────────
+  //
+  // Both margin columns are rendered on every card, in both languages, because
+  // that is what the document is: a Cameroonian report card carries the
+  // ministry and the delegations in English on one side and French on the
+  // other regardless of which language the reader chose. Only the title under
+  // the rule follows `lang`.
+  const headers = officialHeader(school);
+
+  const ministryColumn = (col) => {
+    const h = headers[col];
+    const sep = `<p>${headers.separator}</p>`;
+    return [
+      `<div class="ministry-column${col === "fr" ? " french" : ""}">`,
+      `<p class="country">${esc(h.country)}</p>`,
+      `<p class="peace">${esc(h.peace)}</p>`,
+      sep,
+      `<p class="ministry">${esc(h.ministry)}</p>`,
+      // A delegation with nothing to name is left out rather than printed as a
+      // label trailing into nothing; its separator goes with it.
+      ...(h.regional   ? [sep, `<p class="delegation">${esc(h.regional)}</p>`]       : []),
+      ...(h.divisional ? [sep, `<p class="sub-delegation">${esc(h.divisional)}</p>`] : []),
+      ...(h.schoolType ? [`<p class="school-type">${esc(h.schoolType)}</p>`]         : []),
+      `</div>`,
+    ].join("");
+  };
+
+  // "First Sequence Progress Record" — the period named, not numbered, and in
+  // the reader's language. payload.term is the English label the payload has
+  // always carried, and is the fallback for a caller that predates `period`.
+  const reportTitleText = reportTitle(
+    periodName({ ...(payload.period || {}), reportType: payload.reportType }, lang)
+      || payload.term
+      || null,
+    lang
+  );
+
   // Student info — payload first (controller enriches it), opts.student as
   // the caller-supplied fallback.
   const stu        = opts.student || {};
@@ -291,14 +333,54 @@ function renderReportCardHtml(payload, opts = {}) {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: Arial, Helvetica, sans-serif; font-size: 12px;
            color: #111827; padding: 24px; max-width: 800px; margin: 0 auto; }
-    .school-head { display: flex; align-items: center; gap: 14px;
-                   justify-content: center; margin-bottom: 4px; }
-    .school-head img { max-height: 70px; max-width: 70px; object-fit: contain; }
-    .school-head-text { text-align: center; }
-    h1 { font-size: 20px; color: #1e40af; text-align: center; }
-    .motto { text-align: center; font-style: italic; color: #6b7280;
-             font-size: 11px; }
-    .subtitle { text-align: center; color: #6b7280; margin-bottom: 18px; }
+    /* ── The official header ───────────────────────────────────────────
+       Ministry and delegations in English down the left, the school in the
+       middle, the same in French down the right. Both languages on every
+       card: that is the Cameroonian format, not a translation setting. */
+    .report-header { border-bottom: 1px solid #e5e5e5; padding-bottom: 14px;
+                     margin-bottom: 16px; font-family: "Times New Roman", Times, serif; }
+    .report-header-top { display: grid; grid-template-columns: 1fr 1.2fr 1fr;
+                         align-items: start; gap: 16px; }
+    .ministry-column { text-align: center; color: #2e3440; font-size: 10px;
+                       line-height: 1.35; }
+    .ministry-column p { margin: 0 0 3px; }
+    .ministry-column .country { font-weight: bold; text-transform: uppercase;
+                                text-decoration: underline; }
+    .ministry-column .peace { font-style: italic; font-weight: bold; }
+    .ministry-column .ministry { margin-top: 8px; text-transform: uppercase;
+                                 text-decoration: underline; }
+    .ministry-column .delegation,
+    .ministry-column .sub-delegation { margin-top: 8px; font-weight: bold;
+                                       text-transform: uppercase;
+                                       text-decoration: underline; }
+    .ministry-column .school-type { margin-top: 6px; font-weight: bold;
+                                    text-transform: uppercase; }
+    /* French does not underline its own column on a real card. */
+    .ministry-column.french .country,
+    .ministry-column.french .ministry,
+    .ministry-column.french .delegation,
+    .ministry-column.french .sub-delegation { text-decoration: none; }
+    .school-head { text-align: center; padding: 0 8px; }
+    .school-head img { max-height: 78px; max-width: 78px; object-fit: contain;
+                       margin: 0 auto 6px; display: block; }
+    .school-logo-placeholder { width: 78px; height: 78px; margin: 0 auto 6px;
+                               display: flex; align-items: center;
+                               justify-content: center; border: 1px solid #d5d5d5;
+                               border-radius: 50%; color: #9ca3af;
+                               font-family: Arial, sans-serif; font-size: 9px; }
+    h1 { font-size: 17px; color: #1f2933; text-align: center;
+         font-family: Arial, Helvetica, sans-serif; text-transform: uppercase;
+         line-height: 1.25; }
+    .motto { text-align: center; font-style: italic; color: #555;
+             font-size: 11px; margin-top: 4px;
+             font-family: Arial, Helvetica, sans-serif; }
+    .report-title { margin-top: 16px; padding-top: 12px;
+                    border-top: 1px solid #eeeeee; text-align: center;
+                    color: #30343b; font-family: Arial, Helvetica, sans-serif;
+                    font-size: 14px; font-weight: bold; text-transform: uppercase;
+                    letter-spacing: .3px; }
+    .subtitle { text-align: center; color: #6b7280; margin-bottom: 18px;
+                font-size: 11px; }
     .info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px 20px;
                  background: #f0f4ff; padding: 12px; border-radius: 8px; margin-bottom: 14px; }
     .lbl { font-weight: bold; font-size: 10px; color: #374151; text-transform: uppercase; }
@@ -349,17 +431,28 @@ function renderReportCardHtml(payload, opts = {}) {
   </style>
 </head>
 <body>
-  <div class="school-head">
-    ${schoolLogo ? `<img src="${esc(schoolLogo)}" alt="">` : ""}
-    <div class="school-head-text">
-      <h1>${esc(schoolName)}</h1>
-      ${schoolMotto ? `<div class="motto">${esc(schoolMotto)}</div>` : ""}
+  <header class="report-header">
+    <div class="report-header-top">
+      ${ministryColumn("en")}
+
+      <div class="school-head">
+        ${schoolLogo
+          ? `<img src="${esc(schoolLogo)}" alt="">`
+          : `<div class="school-logo-placeholder">${t.noLogo}</div>`}
+        <h1>${esc(schoolName)}</h1>
+        ${schoolMotto ? `<div class="motto">${esc(schoolMotto)}</div>` : ""}
+      </div>
+
+      ${ministryColumn("fr")}
     </div>
-  </div>
+
+    <div class="report-title">${esc(reportTitleText)}</div>
+  </header>
+
   <p class="subtitle">
-    ${t.title}${payload.examName ? ` · ${esc(payload.examName)}` : ""}
-    ${payload.term || payload.academicYear
-      ? ` · ${esc(payload.term || "")} ${esc(payload.academicYear || "")}`
+    ${payload.examName ? esc(payload.examName) : ""}
+    ${payload.academicYear
+      ? `${payload.examName ? " · " : ""}${esc(payload.academicYear)}`
       : ""}
   </p>
 
@@ -491,6 +584,19 @@ function toTemplateData(payload, opts = {}) {
     // about but isPassing, and printed a promotion on every passing pupil's
     // card whatever kind of card it was.
     reportType: payload.reportType || "term",
+
+    // The official header, resolved the same way the built-in layout resolves
+    // it, so a school's own template cannot end up with a different ministry
+    // in its French column than in its English one. Both languages, always.
+    header: officialHeader(school),
+
+    // "First Sequence Progress Record", in the reader's language.
+    reportTitle: reportTitle(
+      periodName({ ...(payload.period || {}), reportType: payload.reportType }, lang)
+        || payload.term
+        || null,
+      lang
+    ),
 
     student: {
       fullName:        payload.studentName || "",

@@ -36,8 +36,9 @@ const AnnualResult      = require("../db/models/AnnualResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig     = require("../db/models/GradingConfig");
 const Student           = require("../db/models/Student");
+const School            = require("../db/models/School");
 
-const { subjectRanking } = require("../../../shared/reportCard");
+const { subjectRanking, periodName } = require("../../../shared/reportCard");
 
 /** A score as a mark out of 20, or null when the pupil did not sit it. */
 const outOf20 = (score, maxScore) => {
@@ -238,7 +239,11 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
     className:    record.className   || null,
     academicYear,
-    term:         termConfig?.name || `Term ${term}`,
+    term:         periodName({ reportType: "term", term: Number(term),
+                                name: termConfig?.name || null }, "en"),
+    // The facts, so the header can name the term in the reader's language.
+    period:       { reportType: "term", term: Number(term),
+                    name: termConfig?.name || null },
     gender:       student?.gender      || null,
     dateOfBirth:  student?.dateOfBirth || null,
     showGrades:   grading.showGrades,
@@ -316,6 +321,7 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
     className:    record.className   || null,
     academicYear,
     term:         null,
+    period:       { reportType: "annual" },
     gender:       student?.gender      || null,
     dateOfBirth:  student?.dateOfBirth || null,
     showGrades:   grading.showGrades,
@@ -428,7 +434,55 @@ function absoluteLogoUrl(logo, req) {
   return `${proto}://${host}${logo.startsWith("/") ? "" : "/"}${logo}`;
 }
 
+/**
+ * The school's letterhead, loaded once and the same for all three cards.
+ *
+ * Every card route used to do this itself, and all three selected exactly
+ * "name logo motto" — so the official header's ministry and delegations, which
+ * live on the same document, arrived empty no matter what a school had typed
+ * into its settings. Three copies of a field list is how the payload came to
+ * disagree with itself about gender and date of birth, and this is the same
+ * shape of bug waiting to happen again.
+ *
+ * The logo comes back absolute, since that is what every caller then did to it.
+ *
+ * @param {string|null} schoolId
+ * @param {object}      req  for the absolute logo URL
+ * @returns {{ doc: object|null, school: object }}  `school` is renderer-ready
+ */
+async function loadSchoolForCard(schoolId, req) {
+  // .catch: a schoolId that does not cast to an ObjectId throws, and losing a
+  // whole report card because its letterhead could not be looked up is the
+  // wrong trade — the renderer falls back to the name it was given.
+  const doc = schoolId
+    ? await School.findOne({ _id: String(schoolId) })
+        .select("name logo motto region division state city schoolType " +
+                "address phone")
+        .lean().catch(() => null)
+    : null;
+
+  return {
+    doc,
+    school: {
+      name:       doc?.name  || "",
+      logo:       absoluteLogoUrl(doc?.logo, req),
+      motto:      doc?.motto || null,
+      // The seeded template prints these under the school's name; nothing
+      // selected them, so it printed the separator between two blanks.
+      address:    doc?.address   || null,
+      phone:      doc?.phone     || null,
+      // §2 of the header: the delegations and the ministry they imply.
+      region:     doc?.region     || null,
+      division:   doc?.division   || null,
+      state:      doc?.state      || null,
+      city:       doc?.city       || null,
+      schoolType: doc?.schoolType || null,
+    },
+  };
+}
+
 module.exports = {
+  loadSchoolForCard,
   buildTermCard,
   buildAnnualCard,
   promotionLabel,

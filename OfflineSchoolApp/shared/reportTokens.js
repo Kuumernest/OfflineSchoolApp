@@ -89,6 +89,25 @@ const SIMPLE_TOKENS = [
   // Dates
   "report_date",
   "next_term_date",
+
+  // The official header: ministry and delegations in both languages, and the
+  // period named ("First Sequence Progress Record"). A school building its own
+  // header needs these by name, and the ones that can be blank — a delegation
+  // it has not filled in — are meant to be gated with {{if}}.
+  "header_country_en",
+  "header_country_fr",
+  "header_peace_en",
+  "header_peace_fr",
+  "header_ministry_en",
+  "header_ministry_fr",
+  "header_regional_en",
+  "header_regional_fr",
+  "header_divisional_en",
+  "header_divisional_fr",
+  "header_type_en",
+  "header_type_fr",
+  "header_separator",
+  "report_title",
 ];
 
 // ─── Composite tokens (resolved by dedicated functions) ─────────────────────

@@ -5,9 +5,8 @@ const router           = require("express").Router();
 const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
 const staleness        = require("../services/resultStaleness.service");
-const School             = require("../db/models/School");
 const { renderReportCard } = require("../services/reportHtml.service");
-const { buildAnnualCard, loadReportTemplate, absoluteLogoUrl } =
+const { buildAnnualCard, loadReportTemplate, loadSchoolForCard } =
   require("../services/reportCardData.service");
 
 // ── GET /api/annual-results ────────────────────────────────────────────────
@@ -184,22 +183,15 @@ router.get(
         return res.status(404).json({ success: false, error: "No annual result for this student" });
       }
 
-      const [school, template] = await Promise.all([
-        // .catch, as the sequence card's route already does. A schoolId that
-        // does not cast to an ObjectId throws here, and losing the whole report
-        // card because its letterhead could not be looked up is the wrong
-        // trade: the renderer falls back to the school name it was given.
-        School.findOne({ _id: String(schoolId) })
-          .select("name logo motto").lean().catch(() => null),
+      const [letterhead, template] = await Promise.all([
+        loadSchoolForCard(schoolId, req),
         loadReportTemplate(schoolId, templateId),
       ]);
 
       const rendered = renderReportCard(data, {
         lang:       lang || "en",
-        schoolName: school?.name || "School",
-        school:     { name:  school?.name || "",
-                     logo:  absoluteLogoUrl(school?.logo, req),
-                     motto: school?.motto || null },
+        schoolName: letterhead.doc?.name || "School",
+        school:     letterhead.school,
         template,
       });
 

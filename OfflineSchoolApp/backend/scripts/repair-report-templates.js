@@ -60,6 +60,8 @@ const path     = require("path");
 const fs       = require("fs");
 
 const ReportTemplate = require("../src/db/models/ReportTemplate");
+const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS } =
+  require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
 
 const APPLY  = process.argv.includes("--apply");
@@ -258,6 +260,65 @@ const layoutPass = (html) => {
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THIRD PASS: THE OFFICIAL HEADER
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The header block as this project seeded it, and the only shape replaced.
+ *
+ * Matched loosely on whitespace but strictly on content: the logo, the name,
+ * the motto and the contact line, then a hard-coded title and the term. A
+ * school that has changed any of it — its own crest block, a different title,
+ * fields added — does not match, and its header is left alone. That is
+ * deliberate: a header is the most personal part of a school's document, and
+ * "we could not tell" has to mean "we do not touch it" here.
+ */
+const OLD_HEADER_RE = new RegExp(
+  [
+    String.raw`<div class="school-header">`,
+    String.raw`\s*\{\{school_logo\}\}`,
+    String.raw`\s*<div class="school-name">\{\{school_name\}\}</div>`,
+    String.raw`\s*<div class="school-motto">\{\{school_motto\}\}</div>`,
+    String.raw`\s*<div class="school-contact">\{\{school_address\}\}\s*\|`,
+    String.raw`\s*\{\{school_phone\}\}</div>`,
+    String.raw`\s*</div>`,
+    String.raw`\s*<div class="report-title">[^<]*</div>`,
+    String.raw`\s*<p[^>]*>[^<]*\{\{term\}\}[\s\S]*?</p>`,
+  ].join(""),
+  ""
+);
+
+/**
+ * Put the official three-column header where the centred strip was.
+ *
+ * @returns {{ status: string, html?: string, note?: string }}
+ *   repaired      | the seeded header was replaced
+ *   already-fixed | it is the official header already
+ *   no-header     | not the shape this seeded; the school's own design
+ */
+const headerPass = (html) => {
+  if (html.includes("ministry-column")) return { status: "already-fixed" };
+  if (!OLD_HEADER_RE.test(html))        return { status: "no-header" };
+  return {
+    status: "repaired",
+    html: html.replace(OLD_HEADER_RE, () => OFFICIAL_HEADER_HTML.trim()),
+  };
+};
+
+/** The template's CSS with the header rules appended, or null if it has them. */
+const repairHeaderCss = (css) => {
+  if (typeof css !== "string") return null;
+  if (/\.ministry-column/.test(css)) return null;
+  return css + nlJoin(OFFICIAL_HEADER_CSS);
+};
+
+/** Two blank lines, then the block — the spacing the stylesheet already uses. */
+const nlJoin = (block) => `
+
+${block.trim()}
+`;
+
 /** The template's CSS with the new rules appended, or null if it has them. */
 const repairCss = (css) => {
   if (typeof css !== "string") return null;
@@ -291,17 +352,25 @@ const repairHtml = (html, css) => {
   const layout = layoutPass(out);
   if (layout.html) { out = layout.html; changes.push("layout"); }
 
+  const header = headerPass(out);
+  if (header.html) { out = header.html; changes.push("header"); }
+
   if (!changes.length) {
-    const note = promo.note || layout.note;
+    const note = promo.note || layout.note || header.note;
     return { status: promo.status, ...(note ? { note } : {}) };
   }
 
-  const nextCss = changes.includes("layout") ? repairCss(css) : null;
+  // Each pass brings its own rules, and each declines if the stylesheet has
+  // them already. Applied in order so the second sees the first's work.
+  let nextCss = typeof css === "string" ? css : null;
+  if (changes.includes("layout")) nextCss = repairCss(nextCss) ?? nextCss;
+  if (changes.includes("header")) nextCss = repairHeaderCss(nextCss) ?? nextCss;
+
   return {
     status: "repaired",
     changes,
     html: out,
-    ...(nextCss == null ? {} : { css: nextCss }),
+    ...(nextCss == null || nextCss === css ? {} : { css: nextCss }),
   };
 };
 
@@ -313,6 +382,10 @@ const PROBE = (reportType) => ({
   studentName: "Probe Pupil", admissionNo: "PROBE-1", className: "Form 3",
   academicYear: "2026/2027", gender: "Female", dateOfBirth: "2011-04-02",
   examName: "Probe", term: "Probe", reportType, showGrades: true,
+  // So the official header has a period to name in its title.
+  period: reportType === "sequence"
+    ? { reportType, sequenceNumber: 1 }
+    : reportType === "term" ? { reportType, term: 1 } : { reportType },
   subjects: [{
     subjectName: "Mathematics", score: 18, maxScore: 20, normalizedMark: 18,
     grade: "A+", remark: "Excellent", subjectPosition: 1, subjectTotal: 2,
@@ -329,7 +402,12 @@ const PROBE = (reportType) => ({
 const PROBE_OPTS = (html, css) => ({
   template:   { html, css },
   schoolName: "Probe School",
-  school:     { name: "Probe School", logo: null, motto: "Probe" },
+  school:     {
+    name: "Probe School", logo: null, motto: "Probe",
+    // The official header reads these; without them a repaired header would
+    // verify against a card that never exercised its delegation lines.
+    region: "Probe Region", division: "Probe Division", schoolType: "shs",
+  },
 });
 
 /**
@@ -370,6 +448,26 @@ const verify = (html, css, opts = {}) => {
   if (opts.expectRemark && !/Steady and careful work/.test(sequence.html)) {
     problems.push("the rearranged row dropped the remark");
   }
+
+  // A replaced header has to carry both margins and name its period, or the
+  // card has lost the letterhead that makes it an official document.
+  if (opts.expectHeader) {
+    if (!/Ministry of Secondary Education/.test(sequence.html)) {
+      problems.push("the header lost its English ministry");
+    }
+    if (!/Enseignements Secondaires/.test(sequence.html)) {
+      problems.push("the header lost its French ministry");
+    }
+    if (!/Regional Delegation of Probe Region/.test(sequence.html)) {
+      problems.push("the header lost the regional delegation");
+    }
+    if (!/First Sequence Progress Record/.test(sequence.html)) {
+      problems.push("the header does not name the period");
+    }
+    if (!/Probe School/.test(sequence.html)) {
+      problems.push("the header lost the school's name");
+    }
+  }
   return problems;
 };
 
@@ -409,6 +507,7 @@ const main = async () => {
 
     const problems = verify(result.html, result.css ?? row.css, {
       expectRemark: result.changes.includes("layout"),
+      expectHeader: result.changes.includes("header"),
     });
     if (problems.length) {
       tally.repaired -= 1;
@@ -449,7 +548,8 @@ const main = async () => {
     console.log(`\n  ${writes.length} template(s) would be written — re-run with --apply`);
   }
 
-  const order = ["repaired", "already-fixed", "no-banner", "no-promotion", "unbalanced", "unsafe"];
+  const order = ["repaired", "already-fixed", "no-banner", "no-promotion",
+                 "no-header", "unbalanced", "unsafe"];
   console.log("\n  " + order
     .filter((k) => tally[k])
     .map((k) => `${k}: ${tally[k]}`)
@@ -464,6 +564,7 @@ const main = async () => {
 module.exports = {
   repairHtml, findIsPassingBlock, verify, PROMOTION_BLOCK,
   promotionPass, layoutPass, repairCss, LAYOUT_CSS,
+  headerPass, repairHeaderCss, OLD_HEADER_RE,
 };
 
 if (require.main === module) {
