@@ -185,19 +185,15 @@ router.post("/login", loginLimiter, async (req, res) => {
 
     if (isStaffLogin) {
       const cleanEmail = email.toLowerCase().trim();
-      console.log("=== LOGIN (staff) ===");
-      console.log("Email:", cleanEmail);
 
       user = await User.findOne({ email: cleanEmail, isActive: true }).select("+password");
 
       if (!user) {
-        console.log("User found: NO");
         // Spend what a real comparison would have spent — see DUMMY_HASH.
         await bcrypt.compare(password, DUMMY_HASH);
         return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
       if (user.role === "student") {
-        console.log("Blocked: student tried email login");
         return res.status(401).json({
           success: false,
           message: "Students must log in with their enrollment number",
@@ -205,8 +201,6 @@ router.post("/login", loginLimiter, async (req, res) => {
       }
     } else {
       const cleanNo = enrollmentNo.trim().toUpperCase();
-      console.log("=== LOGIN (student) ===");
-      console.log("Enrollment No:", cleanNo);
 
       user = await User.findOne({
         enrollmentNo: cleanNo,
@@ -215,7 +209,6 @@ router.post("/login", loginLimiter, async (req, res) => {
       }).select("+password");
 
       if (!user) {
-        console.log("Student found: NO");
         await bcrypt.compare(password, DUMMY_HASH);
         return res.status(401).json({
           success: false,
@@ -224,13 +217,22 @@ router.post("/login", loginLimiter, async (req, res) => {
       }
     }
 
-    console.log(`User     : ${user.name} (${user.role})`);
-    console.log(`Hash len : ${user.password?.length}`);
-    console.log(`MustReset: ${user.mustResetPassword}`);
-
+    /*
+     * Nothing is logged about the attempt itself.
+     *
+     * This block used to print the identifier tried, the account's name and
+     * role, the length of its hash and whether the password matched — on every
+     * attempt, successful or not. Three things were wrong with it. It put an
+     * email address or enrolment number into stdout for anything collecting
+     * logs; it recorded a name against a failed password, which is a record of
+     * who is having trouble rather than of anything operational; and printing
+     * "User found: NO" for a miss while printing a name for a hit turned the
+     * log into a user-enumeration oracle for anybody who could read it.
+     *
+     * A successful login is still recorded below, by id — enough to answer
+     * "who signed in" without writing down what was typed to get there.
+     */
     const isMatch = await bcrypt.compare(password, user.password);
-    console.log(`PwdMatch : ${isMatch}`);
-    console.log("======================");
 
     if (!isMatch) {
       return res.status(401).json({
@@ -241,7 +243,7 @@ router.post("/login", loginLimiter, async (req, res) => {
       });
     }
 
-    console.log(`🔐 Login success: ${user.name} (${user.role})`);
+    console.log(`🔐 Login success: ${user._id} (${user.role})`);
     return res.json(await buildTokenResponse(user));
 
   } catch (err) {
@@ -289,7 +291,7 @@ router.post("/refresh", async (req, res, next) => {
       });
     }
 
-    console.log(`🔄 Token refreshed (A): ${user.enrollmentNo ?? user.email}`);
+    console.log(`🔄 Token refreshed: ${user._id}`);
     return res.json(await buildTokenResponse(user));
 
   } catch (err) {
@@ -308,7 +310,7 @@ router.post("/refresh", authenticate, async (req, res) => {
         message: "User not found or account deactivated",
       });
     }
-    console.log(`🔄 Token refreshed (B): ${user.enrollmentNo ?? user.email}`);
+    console.log(`🔄 Token refreshed: ${user._id}`);
     return res.json(await buildTokenResponse(user));
   } catch (err) {
     console.error("Refresh error (B):", err.message);
@@ -405,7 +407,7 @@ router.post("/change-password", authenticate, async (req, res) => {
     user.mustResetPassword = false;
     await user.save();
 
-    console.log(`🔑 Password changed: ${user.enrollmentNo ?? user.email} (${user.role})`);
+    console.log(`🔑 Password changed: ${user._id} (${user.role})`);
 
     return res.json({
       success: true,

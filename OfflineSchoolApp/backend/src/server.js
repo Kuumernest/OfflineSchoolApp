@@ -2,6 +2,14 @@
 
 require("dotenv").config();
 
+/*
+ * Before anything else. A server missing JWT_SECRET starts happily, reports
+ * itself healthy and then throws on the first login — jsonwebtoken raises at
+ * signing time, not at import — so the deployment looks fine to the person who
+ * did it and is broken for everybody else. See config/env.js.
+ */
+require("./config/env").validateEnv();
+
 const express     = require("express");
 const cors        = require("cors");
 const helmet      = require("helmet");
@@ -85,7 +93,20 @@ app.use(helmet({
 }));
 
 app.use(compression());
-app.use(morgan("dev"));
+
+/*
+ * Behind a reverse proxy — which is how this is deployed — every request
+ * arrives from the proxy's address. Without this, req.ip is the proxy for all
+ * of them, so the login rate limiter counts the whole school as one client:
+ * either it locks everybody out together or it never triggers.
+ */
+if (process.env.NODE_ENV === "production") {
+  app.set("trust proxy", 1);
+}
+
+// `dev` is colourised and writes a line per request including 304s. Production
+// gets the Apache combined format, which is what log collectors parse.
+app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 app.use(cors({
   origin: process.env.NODE_ENV === "production"
