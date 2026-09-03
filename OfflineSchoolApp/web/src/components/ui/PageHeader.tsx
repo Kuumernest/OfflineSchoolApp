@@ -2,6 +2,8 @@
 import { useLocation } from "react-router-dom";
 import { cn }              from "@/utils/cn";
 import { sectionForPath }  from "@/config/sections";
+import { flowStepForPath } from "@/config/resultsFlow";
+import { ResultsFlow }     from "./ResultsFlow";
 
 /**
  * The title block every page opens with.
@@ -35,13 +37,21 @@ export function PageHeader({
    * anybody remembering. See config/sections.ts for why a section has a hue
    * at all.
    */
-  const section = sectionForPath(useLocation().pathname);
+  const { pathname } = useLocation();
+  const section  = sectionForPath(pathname);
+  /*
+   * Exam → results → report card is five actions across four screens, and
+   * every screen used to be silent about the order. Shown here so a page in
+   * that flow says where it sits without the page being edited, and a page
+   * outside it shows nothing at all. See config/resultsFlow.ts.
+   */
+  const flowStep = flowStepForPath(pathname);
 
   return (
+    <div className={cn("flex flex-col", className)}>
     <div
       className={cn(
-        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between",
-        className
+        "flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"
       )}
     >
       <div className="flex min-w-0 gap-3.5">
@@ -72,6 +82,9 @@ export function PageHeader({
           {actions}
         </div>
       )}
+    </div>
+
+    {flowStep !== null && <ResultsFlow current={flowStep} />}
     </div>
   );
 }

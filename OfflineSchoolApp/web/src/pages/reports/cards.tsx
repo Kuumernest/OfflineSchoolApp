@@ -1,6 +1,7 @@
 // web/src/pages/reports/cards.tsx
 import { useState, useEffect } from "react";
 import { Link }                from "react-router-dom";
+import { ArrowRight }          from "lucide-react";
 import { useAuthStore }        from "@/store/auth.store";
 import { useExams }            from "@/hooks/useExams";
 import { EXAM_STATUS_META,
@@ -552,6 +553,34 @@ ${t("reportCards.reissueBody")}`
                   <div className="w-6 h-6 border-4 border-primary-600
                                  border-t-transparent rounded-full animate-spin" />
                 </div>
+              ) : students.length === 0 ? (
+                /*
+                 * The dead end this flow was famous for.
+                 *
+                 * A term or annual card is printed from computed results, so an
+                 * empty list here does not mean the class is empty — it means
+                 * step four was never run. The screen used to render a single
+                 * "All 0 Students" button and leave the reader to work that out,
+                 * which is the moment the whole flow felt broken rather than
+                 * unfinished.
+                 */
+                <div className="mt-3 rounded-card border border-warning-line bg-warning-soft p-4">
+                  <p className="text-sm font-semibold text-warning">
+                    {cardType === "sequence"
+                      ? t("reportCards.emptyRoster")
+                      : t("reportCards.emptyComputed", { type: typeLabel })}
+                  </p>
+                  {cardType !== "sequence" && (
+                    <Link
+                      to={cardType === "term" ? "/exams/term-results" : "/exams/annual-results"}
+                      className="mt-2 inline-flex items-center gap-1.5 text-sm
+                                 font-semibold text-primary-700 hover:underline"
+                    >
+                      {t("reportCards.emptyComputeCta")}
+                      <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  )}
+                </div>
               ) : (
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button
@@ -563,7 +592,7 @@ ${t("reportCards.reissueBody")}`
                         : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
                       }`}
                   >
-                    All {students.length} Students
+                    {t("reportCards.allStudents", { count: students.length })}
                   </button>
                   {students.map((s) => {
                     const name = s.studentName || s.name || "Unknown";

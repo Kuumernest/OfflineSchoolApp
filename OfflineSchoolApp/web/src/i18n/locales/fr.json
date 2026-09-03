@@ -101,6 +101,20 @@
     "processing": "Traitement…",
     "cannotUndo": "Cette action est irréversible."
   },
+  "flow": {
+    "title": "Déroulement des résultats",
+    "exam": "Créer l'examen",
+    "examHint": "Nommez-le, indiquez sa séquence, puis choisissez les classes et les matières.",
+    "marks": "Saisir les notes",
+    "marksHint": "Matière par matière, pour chaque élève de la classe.",
+    "calculate": "Calculer les résultats",
+    "calculateHint": "Transforme les notes en moyenne et en rang de chaque élève pour cet examen.",
+    "term": "Calculer le trimestre",
+    "termHint": "Combine les deux séquences du trimestre selon leur poids. Les deux doivent être calculées d'abord.",
+    "print": "Imprimer les bulletins",
+    "printHint": "Bulletins de séquence, de trimestre ou annuels, pour une classe entière ou un seul élève.",
+    "publishNote": "La publication est facultative : elle rend les résultats visibles aux familles sur le portail. Le trimestre se calcule et les bulletins s'impriment sans elle."
+  },
   "navGroup": {
     "overview": "Vue d'ensemble",
     "people": "Personnes",
@@ -861,6 +875,11 @@
     "createFailed": "Impossible de créer l’examen."
   },
   "reportCards": {
+    "allStudents": "Les {{count}} élève",
+    "allStudents_other": "Les {{count}} élèves",
+    "emptyRoster": "Cette classe n'a encore aucun élève inscrit.",
+    "emptyComputed": "Aucun résultat {{type}} n'a encore été calculé pour cette classe : il n'y a donc rien à imprimer.",
+    "emptyComputeCta": "Les calculer maintenant",
     "title": "Bulletins de notes",
     "blurb": "Générer et imprimer les bulletins des élèves",
     "selectClass": "Choisir une classe",

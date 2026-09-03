@@ -101,6 +101,20 @@
     "processing": "Processing...",
     "cannotUndo": "This action cannot be undone."
   },
+  "flow": {
+    "title": "Results workflow",
+    "exam": "Create the exam",
+    "examHint": "Name it, set its sequence, and choose the classes and subjects it covers.",
+    "marks": "Enter marks",
+    "marksHint": "Subject by subject, for every pupil in the class.",
+    "calculate": "Calculate results",
+    "calculateHint": "Turns the marks into each pupil's average and position for this exam.",
+    "term": "Compute the term",
+    "termHint": "Combines the term's two sequences by weight. Both must be calculated first.",
+    "print": "Print report cards",
+    "printHint": "Sequence, term or annual cards for a whole class or one pupil.",
+    "publishNote": "Publishing results is optional — it shows them to families in the portal. The term can be computed and cards printed without it."
+  },
   "navGroup": {
     "overview": "Overview",
     "people": "People",
@@ -861,6 +875,11 @@
     "createFailed": "Could not create the exam."
   },
   "reportCards": {
+    "allStudents": "All {{count}} pupil",
+    "allStudents_other": "All {{count}} pupils",
+    "emptyRoster": "This class has no pupils on its roster yet.",
+    "emptyComputed": "No {{type}} results have been computed for this class yet, so there is nothing to print.",
+    "emptyComputeCta": "Compute them now",
     "title": "Report cards",
     "blurb": "Generate and print student report cards",
     "selectClass": "Select class",
