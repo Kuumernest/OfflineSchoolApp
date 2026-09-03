@@ -215,7 +215,7 @@ async function classNameFor(classId, stored) {
 
 async function studentIdentity(studentId) {
   return Student.findOne({ _id: String(studentId) })
-    .select("gender dateOfBirth studentName enrollmentNo admissionNo")
+    .select("gender dateOfBirth studentName enrollmentNo admissionNo photoUrl")
     .lean()
     .catch(() => null);
 }
@@ -263,6 +263,8 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
     className:    await classNameFor(classId, record.className),
     academicYear,
+    // The stored path. The route makes it absolute, where the request is.
+    photoUrl:     student?.photoUrl || null,
     term:         periodName({ reportType: "term", term: Number(term),
                                 name: termConfig?.name || null }, "en"),
     // What this card is OF. The sequence card carries its exam's name here and
@@ -349,6 +351,7 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
     className:    await classNameFor(classId, record.className),
     academicYear,
+    photoUrl:     student?.photoUrl || null,
     term:         null,
     examName:     periodName({ reportType: "annual" }, "en"),
     period:       { reportType: "annual" },

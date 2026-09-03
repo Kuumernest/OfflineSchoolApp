@@ -7,7 +7,7 @@ const termGrading      = require("../services/termGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
 const { buildTermCard, loadReportTemplate, loadSchoolForCard,
-        cardVerification, periodDocumentKey } =
+        cardVerification, periodDocumentKey, absoluteLogoUrl } =
   require("../services/reportCardData.service");
 
 // ── GET /api/term-results ──────────────────────────────────────────────────
@@ -211,6 +211,11 @@ router.get(
       if (!data) {
         return res.status(404).json({ success: false, error: "No term result for this student" });
       }
+
+      // The pupil's photo is stored as a served path, and the card is printed
+      // into a window whose document is about:blank — so it has to carry its
+      // own origin or the image 404s. Same treatment as the school logo.
+      data.photoUrl = absoluteLogoUrl(data.photoUrl, req);
 
       const [letterhead, template, verify] = await Promise.all([
         loadSchoolForCard(schoolId, req),

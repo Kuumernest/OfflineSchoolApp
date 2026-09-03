@@ -427,7 +427,63 @@ function renderReportCardHtml(payload, opts = {}) {
                    color: #111827; letter-spacing: .04em; }
     .footer { text-align: center; font-size: 10px; color: #9ca3af;
               border-top: 1px solid #e5e7eb; padding-top: 10px; }
-    @media print { body { padding: 12px; } }
+
+    /* ── Fitting one A4 sheet ──────────────────────────────────────────
+       The card is a one-page document and it ran onto two — not from
+       carrying too much, but from a screen-comfortable gap under every one
+       of a dozen blocks. Nothing is dropped; every gap and step of type
+       comes down a notch for paper.
+
+       The break rules are the other half: a block split down the fold is
+       how a signature ends up alone at the top of a second sheet. */
+    @page { size: A4; margin: 9mm; }
+
+    @media print {
+      body { padding: 0; font-size: 10.5px; max-width: none; }
+
+      .report-header     { margin-bottom: 8px; padding-bottom: 6px; }
+      .report-header-top { gap: 10px; }
+      .ministry-column   { font-size: 8px; line-height: 1.25; }
+      .ministry-column p { margin: 0 0 1px; }
+      h1                 { font-size: 14px; }
+      .motto             { font-size: 9px; }
+      .report-title      { font-size: 12px; margin-top: 8px; padding-top: 6px; }
+      .subtitle          { margin-bottom: 8px; font-size: 9.5px; }
+
+      .info-grid         { padding: 7px; margin-bottom: 8px; gap: 2px 12px; }
+      .lbl               { font-size: 8px; }
+      .val               { font-size: 10px; }
+
+      table              { margin-bottom: 8px; }
+      th, td             { padding: 3px 6px; }
+      thead th           { font-size: 9.5px; }
+
+      .boxes             { margin-bottom: 8px; gap: 6px; }
+      .box               { padding: 5px 3px; }
+      .box-val           { font-size: 14px; }
+      .box-lbl           { font-size: 8px; }
+
+      .banner            { padding: 6px; font-size: 12px; margin-bottom: 8px; }
+      .verdict           { margin-bottom: 8px; gap: 8px; }
+      .verdict-pill      { padding: 3px 9px; font-size: 10px; }
+      .verdict-remark    { font-size: 9.5px; min-width: 160px; }
+
+      .verify            { margin-bottom: 8px; padding: 6px 8px; gap: 7px; }
+      .verify-qr         { width: 52px; height: 52px; }
+      .verify-title,
+      .verify-text       { font-size: 8px; }
+      .footer            { padding-top: 7px; font-size: 8.5px; }
+
+      .report-header,
+      .info-grid,
+      .boxes,
+      .verdict,
+      .banner,
+      .verify,
+      .footer            { break-inside: avoid; page-break-inside: avoid; }
+      thead              { display: table-header-group; }
+      tr                 { break-inside: avoid; page-break-inside: avoid; }
+    }
   </style>
 </head>
 <body>
@@ -610,6 +666,11 @@ function toTemplateData(payload, opts = {}) {
       gender:          payload.gender      || student.gender      || "",
       dateOfBirth:     payload.dateOfBirth || student.dateOfBirth || null,
       photoBase64:     student.photoBase64 || null,
+      // The payload first, then opts.student — the same order gender and date
+      // of birth needed, and for the same reason: the routes populate the
+      // payload and pass no `student`. {{student_photo}} read only the base64
+      // field, which nothing writes, so every card printed "No Photo".
+      photoUrl:        payload.photoUrl || student.photoUrl || null,
     },
 
     school: {
@@ -755,7 +816,18 @@ function wrapTemplateHtml(body, css, { lang, title }) {
     .subjects-table th { background: #f0f0f0; font-weight: bold; }
     .student-photo { width: 80px; height: 100px; object-fit: cover; }
     .school-logo { max-height: 80px; max-width: 200px; }
-    @media print { body { padding: 12px; } }
+
+    /* A4 and a tight margin for a school template too. This is a default:
+       the template's own CSS goes in below, and one that carries its own
+       @page rule — the seeded template now does — overrides it. A
+       template that predates it still gets a sheet-sized page rather than
+       the browser default with 12mm of padding inside it. */
+    @page { size: A4; margin: 9mm; }
+    @media print {
+      body { padding: 0; }
+      thead { display: table-header-group; }
+      tr { break-inside: avoid; page-break-inside: avoid; }
+    }
     ${css || ""}
   </style>
 </head>

@@ -542,9 +542,25 @@ function resolveAttendanceTable(html, data) {
 function resolveStudentPhoto(html, data) {
   if (!html.includes("{{student_photo}}")) return html;
 
-  const photoHtml = data.student?.photoBase64
+  /*
+   * Three shapes, one of which is base64 — the same lesson the school logo
+   * below already learned.
+   *
+   * This read photoBase64 and nothing else. Student.photoUrl is what the
+   * database actually holds ("/uploads/photos/<file>.jpg", the path the ID
+   * card prints from), so a pupil WITH a photo still printed the dashed "No
+   * Photo" box, because the one field this looked at is not the field anything
+   * writes.
+   */
+  const raw = data.student?.photoUrl || data.student?.photoBase64 || null;
+  const src = !raw ? null
+    : /^(https?:|data:|\/)/i.test(String(raw))
+      ? String(raw)                                  // a URL or a served path
+      : `data:image/jpeg;base64,${raw}`;             // a bare base64 payload
+
+  const photoHtml = src
     ? `<img
-         src="data:image/jpeg;base64,${data.student.photoBase64}"
+         src="${escapeHtml(src)}"
          class="student-photo"
          alt="Student Photo"
          style="width:80px;height:100px;object-fit:cover;border:1px solid #ccc"

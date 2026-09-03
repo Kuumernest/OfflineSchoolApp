@@ -331,7 +331,7 @@ const buildStudentReportCardData = async (examId, studentId) => {
   const [student, gradingConfig, allExamScores] = await Promise.all([
     // gender / dateOfBirth live on the Student document, not the summary
     Student.findOne({ _id: studentId })
-      .select("gender dateOfBirth studentName enrollmentNo admissionNo")
+      .select("gender dateOfBirth studentName enrollmentNo admissionNo photoUrl")
       .lean()
       .catch(() => null),
     // showGrades + the school's configurable grade bands (§3). Falls back to
@@ -533,6 +533,11 @@ const buildStudentReportCardData = async (examId, studentId) => {
       // §1 student identity + §3 grade toggle, consumed by the renderer
       gender:       student?.gender      || null,
       dateOfBirth:  student?.dateOfBirth || null,
+      // Absolute, for the same reason the logo is: the card is printed by
+      // writing the HTML into a new window whose document is about:blank, so
+      // a served path like /uploads/photos/x.jpg has no origin to resolve
+      // against and the image silently 404s.
+      photoUrl:     absoluteLogoUrl(student?.photoUrl, req),
       showGrades,
       reportType,
       subjects:     subjectRows,
@@ -625,7 +630,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // annual cards reach the same one — see the note there.
 const { coefficientFromWeight } = require("../services/subjectCoefficient.service");
 const { cardVerification } = require("../services/reportCardData.service");
-const { loadReportTemplate, loadSchoolForCard } =
+const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl } =
   require("../services/reportCardData.service");
 
 /**

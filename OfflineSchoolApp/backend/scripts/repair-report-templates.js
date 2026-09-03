@@ -61,7 +61,8 @@ const fs       = require("fs");
 
 const ReportTemplate = require("../src/db/models/ReportTemplate");
 const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
-        VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS } =
+        VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS,
+        PRINT_CSS } =
   require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
 
@@ -336,6 +337,86 @@ const verifyStripPass = (html) => {
   };
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// FIFTH PASS: ONE SHEET OF A4
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * The print rules, and the two classes they need to reach.
+ *
+ * The card is a one-page document that printed onto two. Not from carrying too
+ * much — from a screen-comfortable gap under every one of a dozen blocks, plus
+ * a browser page default that is not A4.
+ *
+ * Two of the blocks the compaction has to reach are styled inline in the
+ * markup, and an inline style beats a stylesheet. So this pass adds the class
+ * names the print rules hook onto — `stat-row` on the attendance strip,
+ * `remarks-row` and `signature-row` on the remark panels — and leaves the
+ * inline styles exactly where they are, so the screen rendering does not
+ * change at all.
+ *
+ * @returns {{ status: string, html?: string }}
+ *   repaired      | classes added
+ *   already-fixed | it has them
+ *   no-rows       | neither block is the shape this seeded
+ */
+const PRINT_ROWS = [
+  /*
+   * Matched by what the row CONTAINS, not by the inline style it happens to
+   * carry.
+   *
+   * The first version of this matched the seeded strings literally and found
+   * one row of three on the live template, because the school had edited the
+   * others — `gap:12px` where the seed said 16, `margin-top:13px` where it
+   * said 24. Those are the school's numbers and this pass must not touch them;
+   * it only needs somewhere to hang a class. So each row is identified by the
+   * thing inside it that cannot have changed: the attendance strip holds
+   * {{days_open}}, the remarks row opens with a remarks-section, a signature
+   * block wraps a signature-line.
+   */
+  { cls: "stat-row",
+    re: /<div style="display:flex;[^"]*">(?=[\s\S]{0,500}?\{\{days_open\}\})/g },
+  { cls: "remarks-row",
+    re: /<div style="display:flex;[^"]*">(?=\s*<div class="remarks-section")/g },
+  { cls: "signature-row",
+    re: /<div style="margin-top:[^"]*">(?=\s*<span class="signature-line")/g },
+];
+
+const printClassPass = (html) => {
+  /*
+   * No global "has it already" guard, deliberately.
+   *
+   * There was one, testing for any of the three classes, and it was wrong in
+   * exactly the way that matters: a template that had picked up one class
+   * already — as the live one had, from a first run that matched only the
+   * strip — was declared finished, and the other two rows never got theirs.
+   *
+   * The guard is per row instead, and it comes free: the pattern matches
+   * `<div style=`, so a div whose class was already inserted in front of its
+   * style attribute cannot match a second time.
+   */
+  let out = html, changed = 0;
+  for (const { cls, re } of PRINT_ROWS) {
+    out = out.replace(re, (match) => {
+      changed += 1;
+      // The class goes in front; every existing attribute is left as it was.
+      return match.replace("<div ", `<div class="${cls}" `);
+    });
+  }
+
+  if (changed) return { status: "repaired", html: out, count: changed };
+  return /class="(stat|remarks|signature)-row"/.test(html)
+    ? { status: "already-fixed" }
+    : { status: "no-rows" };
+};
+
+/** The template's CSS with the print rules appended, or null if it has them. */
+const repairPrintCss = (css) => {
+  if (typeof css !== "string") return null;
+  if (/@page/.test(css)) return null;
+  return css + nlJoin(PRINT_CSS);
+};
+
 /** The template's CSS with the strip's rules appended, or null if it has them. */
 const repairVerifyCss = (css) => {
   if (typeof css !== "string") return null;
@@ -395,8 +476,17 @@ const repairHtml = (html, css) => {
   const strip = verifyStripPass(out);
   if (strip.html) { out = strip.html; changes.push("verify"); }
 
+  const printable = printClassPass(out);
+  if (printable.html) { out = printable.html; changes.push("print"); }
+
   if (!changes.length) {
     const note = promo.note || layout.note || header.note || strip.note;
+    const cssOnly = repairPrintCss(typeof css === "string" ? css : null);
+    // The print rules are CSS only, so a template whose markup is already
+    // classed still needs them if its stylesheet has no @page.
+    if (cssOnly) {
+      return { status: "repaired", changes: ["print"], html: out, css: cssOnly };
+    }
     return { status: promo.status, ...(note ? { note } : {}) };
   }
 
@@ -406,6 +496,7 @@ const repairHtml = (html, css) => {
   if (changes.includes("layout")) nextCss = repairCss(nextCss) ?? nextCss;
   if (changes.includes("header")) nextCss = repairHeaderCss(nextCss) ?? nextCss;
   if (changes.includes("verify")) nextCss = repairVerifyCss(nextCss) ?? nextCss;
+  nextCss = repairPrintCss(nextCss) ?? nextCss;
 
   return {
     status: "repaired",
@@ -606,7 +697,7 @@ const main = async () => {
   }
 
   const order = ["repaired", "already-fixed", "no-banner", "no-promotion",
-                 "no-header", "no-qr", "unbalanced", "unsafe"];
+                 "no-header", "no-qr", "no-rows", "unbalanced", "unsafe"];
   console.log("\n  " + order
     .filter((k) => tally[k])
     .map((k) => `${k}: ${tally[k]}`)
@@ -623,6 +714,7 @@ module.exports = {
   promotionPass, layoutPass, repairCss, LAYOUT_CSS,
   headerPass, repairHeaderCss, OLD_HEADER_RE,
   verifyStripPass, repairVerifyCss, BARE_QR_RE,
+  printClassPass, repairPrintCss,
 };
 
 if (require.main === module) {

@@ -112,6 +112,116 @@ const OFFICIAL_HEADER_CSS = `  /* ── The official header ──────�
  * and no scanner to hand had no way to check it. Gated, because a card printed
  * without verification should show no label rather than an empty one.
  */
+/**
+ * The print rules that make the card one page.
+ *
+ * Separate and exported for the same reason the header is: the templates
+ * schools already saved carry their own copy of the stylesheet, and the repair
+ * has to be able to put the identical block into them.
+ */
+const PRINT_CSS = `
+  /* ── Fitting one A4 sheet ──────────────────────────────────────────────
+     A report card is a one-page document. This one ran onto two, and not
+     because it carried too much: the header, six blocks, two tables and two
+     remark panels each kept screen-comfortable padding and a 16px gap below
+     it, and sixteen of those gaps is two centimetres of nothing.
+
+     So the compaction lives here rather than in the layout. On screen the
+     card stays comfortable to read; on paper every gap, pad and step of type
+     comes down one notch. Nothing is removed — a card that fits by dropping
+     the attendance figures is not the same document.
+
+     The break rules matter as much as the sizes. Without them a block that
+     does not fit is split down the middle by the printer, which is how you
+     get a signature line alone at the top of a second sheet. */
+  @page {
+    size:   A4;
+    margin: 9mm;
+  }
+
+  @media print {
+    body {
+      padding:    0;
+      background: #fff;
+      font-size:  10.5px;
+    }
+
+    .report-wrapper {
+      border:    0;
+      padding:   0;
+      max-width: none;
+    }
+
+    /* Header: the tallest block on the page, and the one with the most air. */
+    .school-header   { margin-bottom: 8px; padding-bottom: 6px; }
+    .report-header-top { gap: 10px; }
+    .ministry-column { font-size: 8px; line-height: 1.25; }
+    .ministry-column p { margin: 0 0 1px; }
+    .ministry-column .ministry,
+    .ministry-column .delegation,
+    .ministry-column .sub-delegation { margin-top: 4px; }
+    .ministry-column .school-type    { margin-top: 3px; }
+    .school-name     { font-size: 14px; margin: 4px 0 2px; }
+    .school-motto,
+    .school-contact  { font-size: 9px; margin-top: 2px; }
+    .report-title    { font-size: 12px; padding: 5px; margin: 7px 0; }
+
+    /* Section rules. !important because the seeded markup sets these inline,
+       and an inline style beats a stylesheet without it. */
+    h3 { margin: 8px 0 4px !important; font-size: 11px !important; }
+    h4 { margin: 0 0 4px !important; font-size: 10px !important; }
+
+    .student-info-grid { padding: 7px; margin-bottom: 8px; gap: 2px 12px; }
+    .info-row, .info-lbl, .info-val { font-size: 10px; }
+
+    .subjects-table  { margin-bottom: 8px; }
+    .subjects-table th,
+    .subjects-table td { padding: 3px 6px; font-size: 10px; }
+
+    .summary-section { padding: 6px; margin-bottom: 8px; gap: 6px; }
+    .summary-item .val { font-size: 15px; }
+    .summary-item .lbl { font-size: 8px; margin-top: 1px; }
+
+    .verdict         { margin-bottom: 8px; gap: 8px; }
+    .verdict-pill    { padding: 3px 9px; font-size: 10px; }
+    .verdict-remark  { font-size: 9.5px; min-width: 160px; }
+    .pass-banner     { padding: 6px; font-size: 12px; margin-bottom: 8px; }
+
+    .stat-row        { gap: 8px !important; margin-bottom: 8px !important; }
+    .stat-row > div  { padding: 5px 8px !important; font-size: 10px !important; }
+
+    .attendance-table { margin-bottom: 8px; }
+    .attendance-table th,
+    .attendance-table td { padding: 3px 6px; font-size: 9.5px; }
+
+    .remarks-row     { gap: 10px !important; margin-bottom: 8px !important; }
+    .remarks-section { padding: 8px; margin-bottom: 0; }
+    .remarks-section p { font-size: 10px; line-height: 1.35; }
+    .signature-row   { margin-top: 12px !important; }
+    .signature-line  { margin-top: 0; font-size: 9px; }
+
+    .footer          { padding-top: 7px; margin-top: 6px; font-size: 9px; }
+    .verify-strip    { gap: 7px; }
+    .verify-title,
+    .verify-text     { font-size: 8px; }
+
+    /* A block is either on the page or on the next one, never across the
+       fold. Repeating the table head is what makes the second page of a long
+       subject list readable at all. */
+    .school-header,
+    .student-info-grid,
+    .summary-section,
+    .verdict,
+    .stat-row,
+    .remarks-row,
+    .remarks-section,
+    .footer,
+    .verify-strip    { break-inside: avoid; page-break-inside: avoid; }
+    thead            { display: table-header-group; }
+    tr               { break-inside: avoid; page-break-inside: avoid; }
+  }
+`;
+
 const VERIFY_BLOCK_HTML = `<div class="verify-strip">
       {{qr_code}}
       {{if verification_code}}
@@ -455,11 +565,7 @@ ${OFFICIAL_HEADER_CSS}
   }
 
   ${VERIFY_BLOCK_CSS}
-  /* ── Print ─────────────────────────────────────────── */
-  @media print {
-    body { padding: 0; }
-    .report-wrapper { border: 1px solid #ccc; padding: 16px; }
-  }
+${PRINT_CSS}
 `;
 
 const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
@@ -557,7 +663,7 @@ ${OFFICIAL_HEADER_HTML}
     Attendance
   </h3>
 
-  <div style="display:flex;gap:12px;margin-bottom:16px">
+  <div class="stat-row" style="display:flex;gap:12px;margin-bottom:16px">
     <div style="flex:1;background:#f9fafb;border-radius:6px;
                 padding:8px 12px;font-size:12px">
       Days Open: <strong>{{days_open}}</strong>
@@ -579,18 +685,18 @@ ${OFFICIAL_HEADER_HTML}
   {{attendance_table}}
 
   <!-- Remarks -->
-  <div style="display:flex;gap:16px;margin-bottom:16px">
+  <div class="remarks-row" style="display:flex;gap:16px;margin-bottom:16px">
     <div class="remarks-section" style="flex:1">
       <h4>CLASS TEACHER'S REMARK</h4>
       <p>{{teacher_comment}}</p>
-      <div style="margin-top:24px">
+      <div class="signature-row" style="margin-top:24px">
         <span class="signature-line">{{class_teacher}}</span>
       </div>
     </div>
     <div class="remarks-section" style="flex:1">
       <h4>PRINCIPAL'S REMARK</h4>
       <p>{{principal_comment}}</p>
-      <div style="margin-top:24px">
+      <div class="signature-row" style="margin-top:24px">
         <span class="signature-line">{{principal_name}}</span>
       </div>
     </div>
@@ -613,4 +719,5 @@ module.exports = {
   DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
   OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
   VERIFY_BLOCK_HTML, VERIFY_BLOCK_CSS,
+  PRINT_CSS,
 };

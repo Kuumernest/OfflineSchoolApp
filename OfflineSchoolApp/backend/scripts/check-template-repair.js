@@ -24,7 +24,8 @@
 
 const { repairHtml, verify, layoutPass, repairCss,
         headerPass, repairHeaderCss,
-        verifyStripPass, repairVerifyCss } = require("./repair-report-templates");
+        verifyStripPass, repairVerifyCss,
+        printClassPass, repairPrintCss } = require("./repair-report-templates");
 const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
   require("../src/print/defaultReportTemplate");
 
@@ -271,6 +272,58 @@ check("and it verifies",
 check("a strip with only the square is refused",
   verify('{{qr_code}}' + OLD_BANNER, DEFAULT_TEMPLATE_CSS, { expectVerify: true })
     .some((p) => /no code to read/.test(p)), true);
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- one sheet of A4 ---");
+
+/*
+ * Two of the blocks the print rules must compact are styled inline, and an
+ * inline style beats a stylesheet — so the pass adds the class names the rules
+ * hook onto and leaves the inline styles alone, which is what keeps the screen
+ * rendering identical.
+ */
+const INLINE_ROWS = [
+  '  <div style="display:flex;gap:12px;margin-bottom:16px">',
+  '    <div>Days Open: {{days_open}}</div>',
+  '  </div>',
+  '  <div style="display:flex;gap:16px;margin-bottom:16px">',
+  '    <div class="remarks-section" style="flex:1">',
+  '      <div style="margin-top:24px">',
+  '        <span class="signature-line">{{class_teacher}}</span>',
+  '      </div>',
+  '    </div>',
+  '  </div>',
+].join("\n");
+
+const printed = printClassPass(INLINE_ROWS);
+check("the inline rows are recognised", printed.status, "repaired");
+check("the attendance strip gets its class",
+  printed.html.includes('<div class="stat-row" style="display:flex;gap:12px'), true);
+check("the remarks row gets its class",
+  printed.html.includes('<div class="remarks-row" style="display:flex;gap:16px'), true);
+check("and the signature block",
+  printed.html.includes('<div class="signature-row" style="margin-top:24px">'), true);
+// The whole point: the screen must look exactly as it did.
+check("every inline style is left exactly where it was",
+  printed.html.includes('style="display:flex;gap:12px;margin-bottom:16px"') &&
+  printed.html.includes('style="display:flex;gap:16px;margin-bottom:16px"') &&
+  printed.html.includes('style="margin-top:24px"'), true);
+check("running it twice changes nothing",
+  printClassPass(printed.html).status, "already-fixed");
+check("a template with neither row is left alone",
+  printClassPass("<div>{{student_name}}</div>").status, "no-rows");
+
+check("the print rules are appended to a stylesheet without them",
+  /@page/.test(repairPrintCss(".x { color: red }")), true);
+check("and a stylesheet that has @page is not given a second one",
+  repairPrintCss(DEFAULT_TEMPLATE_CSS), null);
+check("A4 and a 9mm margin",
+  /@page\s*\{[^}]*size:\s*A4[^}]*margin:\s*9mm/.test(repairPrintCss(".x{}")), true);
+// A block split down the fold is how a signature ends up alone on page two.
+check("blocks are told not to break across the fold",
+  /break-inside:\s*avoid/.test(repairPrintCss(".x{}")), true);
+check("and the table head repeats on a second page",
+  /display:\s*table-header-group/.test(repairPrintCss(".x{}")), true);
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- what it refuses to touch ---");
