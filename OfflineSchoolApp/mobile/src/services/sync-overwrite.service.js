@@ -13,7 +13,6 @@
  */
 
 import { getDatabase } from "../db/database";
-import { generateUUID } from "../utils/idHelpers";
 
 // ─────────────────────────────────────────────────────────────
 // SCHEMA

@@ -5,7 +5,6 @@ const express = require("express");
 const router  = express.Router();
 
 const School        = require("../db/models/School");
-const Student       = require("../db/models/Student");
 const Class         = require("../db/models/Class");
 const Period        = require("../db/models/Period");
 const Subject       = require("../db/models/Subject");

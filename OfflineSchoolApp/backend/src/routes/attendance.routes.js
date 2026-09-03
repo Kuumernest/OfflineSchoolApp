@@ -3,12 +3,10 @@
 
 const express = require("express");
 const router  = express.Router();
-const { v4: uuidv4 } = require("uuid");
 
 const { StudentAttendance, TeacherAttendance } =
   require("../db/models/Attendance");
 const User    = require("../db/models/User");
-const Class   = require("../db/models/Class");
 const Student = require("../db/models/Student");
 
 // ─────────────────────────────────────────────────────────────────────────────

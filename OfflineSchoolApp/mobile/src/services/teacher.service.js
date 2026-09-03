@@ -38,7 +38,7 @@ import {
   withTransaction,
   NOT_DELETED,
 }                                                     from "../db/dbHelpers";
-import { resolveColumns, resolveColumnOptional, COL } from "../db/schemaUtils";
+import { resolveColumns, COL } from "../db/schemaUtils";
 import {
   isServerGeneratedId,
   isLocalId,

@@ -2847,7 +2847,7 @@ router.delete("/assignments/:id", requirePermission("teachers.manage"), handleDe
 
 // The scale itself lives in shared/ so the desktop mirror cannot drift from
 // it — the two copies already had, on /20 versus /100.
-const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("../../../shared/gradeScale");
+const { DEFAULT_GRADES } = require("../../../shared/gradeScale");
 
 const { defaultGradingConfig: getDefaultGradingConfig } = require("../../../shared/gradeScale");
 

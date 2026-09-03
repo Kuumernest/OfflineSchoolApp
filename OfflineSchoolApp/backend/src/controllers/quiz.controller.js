@@ -1,7 +1,6 @@
 // backend/controllers/quiz.controller.js
 "use strict";
 
-const mongoose        = require("mongoose");
 const Question        = require("../db/models/Question");
 const QuestionCategory= require("../db/models/QuestionCategory");
 const Quiz            = require("../db/models/Quiz");

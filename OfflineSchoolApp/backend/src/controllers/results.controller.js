@@ -8,7 +8,6 @@ const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
 const School          = require("../db/models/School");
-const ReportTemplate  = require("../db/models/ReportTemplate");
 const GeneratedReport = require("../db/models/GeneratedReport");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
@@ -20,8 +19,6 @@ const Student = require("../db/models/Student");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
-const termGrading  = require("../services/termGrading.service");
-const annualGrading = require("../services/annualGrading.service");
 const resultsService = require("../services/results.service");
 const { getRankings } = resultsService;
 const { lookupGrade } = require("../services/grading.service");

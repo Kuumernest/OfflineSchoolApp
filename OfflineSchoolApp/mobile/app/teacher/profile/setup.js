@@ -16,7 +16,6 @@ import {
   StatusBar,
   Modal,
 } from "react-native";
-import DateTimePicker           from "@react-native-community/datetimepicker";
 import { router }               from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../../src/store/auth.store";

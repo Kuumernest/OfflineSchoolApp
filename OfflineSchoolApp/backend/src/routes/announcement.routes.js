@@ -4,7 +4,6 @@
 const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
-const mongoose       = require("mongoose");
 
 const Announcement = require("../db/models/Announcement");
 const User         = require("../db/models/User");

@@ -3,8 +3,7 @@ import { useState, useCallback }  from "react";
 import { useQuery }               from "@tanstack/react-query";
 import { useNavigate }            from "react-router-dom";
 import {
-  GraduationCap, Plus, Mail, Phone,
-  MoreVertical, AlertCircle,
+  GraduationCap, Plus, Mail, Phone, AlertCircle,
 } from "lucide-react";
 
 import { useUser }         from "@/store/auth.store";
@@ -236,21 +235,14 @@ function StudentRow({ student, onNavigate }: StudentRowProps) {
         />
       </Td>
 
-      {/* Actions */}
-      <Td>
-        <button
-          type="button"
-          aria-label={`More options for ${student.name}`}
-          onClick={(e: React.MouseEvent) => {
-            e.stopPropagation();
-            // TODO: open context menu
-          }}
-          className="p-1 text-gray-400 hover:text-gray-600
- rounded"
-        >
-          <MoreVertical className="w-4 h-4" aria-hidden="true" />
-        </button>
-      </Td>
+      {/*
+        The "more options" button that used to sit here did nothing.
+        It stopped propagation and returned, so it was worse than absent: a
+        control that looks like a menu, opens none, and swallows the row click
+        that WOULD have opened the pupil. The row navigates to the pupil, where
+        every action lives, so nothing is lost by removing it — including the
+        empty column it needed in the header.
+      */}
     </Tr>
   );
 }
@@ -449,9 +441,6 @@ export default function StudentsPage() {
                   <Th>{t("common.contact")}</Th>
                   <Th>{t("students.guardian")}</Th>
                   <Th>{t("common.status")}</Th>
-                  <Th className="w-10">
-                    <span className="sr-only">{t("common.actions")}</span>
-                  </Th>
                 </tr>
               </THead>
 
