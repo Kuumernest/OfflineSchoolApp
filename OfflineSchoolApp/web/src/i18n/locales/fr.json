@@ -565,6 +565,8 @@
     "noneAssignedHint": "Les matières apparaissent ici dès qu'un administrateur vous les attribue."
   },
   "classes": {
+    "classTeacher": "Professeur titulaire",
+    "classTeacherHint": "Imprimé au-dessus de la ligne de signature sur les bulletins de cette classe.",
     "title": "Classes",
     "add": "Ajouter une classe",
     "edit": "Modifier la classe",
@@ -1300,6 +1302,8 @@
     "tplNextTerm": "Rentrée le :"
   },
   "settings": {
+    "nextTermResumption": "Rentrée du prochain trimestre",
+    "nextTermResumptionHint": "Imprimée au bas de chaque bulletin.",
     "title": "Paramètres",
     "blurb": "Gérer votre établissement, votre profil et les préférences du système",
     "basicInfo": "Informations générales",

@@ -399,6 +399,24 @@ const schoolSchema = new mongoose.Schema(
     academicYearEnd:    { type: String,  default: null,  trim: true,
                           match: [/^\d{4}-\d{2}-\d{2}$|^$/,
                                   "academicYearEnd must look like 2027-06-30"] },
+
+    /*
+     * When the next term begins, as printed at the foot of a report card.
+     *
+     * The card has always had a line for it and the engine has always had a
+     * {{next_term_date}} token; what was missing was anywhere for a school to
+     * put the date, so every card printed "To be announced" — which is what
+     * the token falls back to, and reads like an oversight on a document a
+     * family plans around.
+     *
+     * A plain YYYY-MM-DD string, matching academicYearStart and End rather
+     * than a Date: these are school calendar dates, not instants, and storing
+     * them as Dates is how a date drifts a day either side of midnight in a
+     * timezone nobody was thinking about.
+     */
+    nextTermResumption: { type: String,  default: null,  trim: true,
+                          match: [/^\d{4}-\d{2}-\d{2}$|^$/,
+                                  "nextTermResumption must look like 2027-01-06"] },
     schoolDays:         { type: [String], default: ["Monday", "Tuesday", "Wednesday",
                                                     "Thursday", "Friday"],
                           enum: ["Monday", "Tuesday", "Wednesday", "Thursday",

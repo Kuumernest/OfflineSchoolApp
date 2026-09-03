@@ -171,7 +171,7 @@ module.exports = [
         "name", "code", "address", "city", "state", "country",
         "phone", "email", "website", "motto",
         "postalCode", "schoolType", "termSystem", "registrationNumber",
-        "region", "division",
+        "region", "division", "nextTermResumption",
         "foundedYear", "principalName", "description",
         "academicYearStart", "academicYearEnd", "schoolDays",
         "schoolStartTime", "schoolEndTime",

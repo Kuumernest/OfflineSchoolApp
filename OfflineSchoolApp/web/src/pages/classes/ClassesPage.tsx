@@ -41,6 +41,10 @@ const classSchema = z.object({
   name:    z.string().min(1, "Class name is required"),
   level:   z.string().optional(),
   section: z.string().optional(),
+  // The form master. Optional: a class may genuinely not have one assigned
+  // yet, and the report card prints an empty signature rule in that case
+  // rather than refusing to print.
+  classTeacherId: z.string().optional(),
 });
 
 const subjectSchema = z.object({
@@ -175,15 +179,17 @@ export default function ClassesPage() {
   // ── Class form ─────────────────────────────────────────
   const classForm = useForm<ClassForm>({
     resolver:      zodResolver(classSchema),
-    defaultValues: { name: "", level: "", section: "" },
+    defaultValues: { name: "", level: "", section: "", classTeacherId: "" },
   });
 
   const openClassModal = (cls?: Class) => {
     setEditingClass(cls ?? null);
     classForm.reset(
       cls
-        ? { name: cls.name, level: cls.level ?? "", section: cls.section ?? "" }
-        : { name: "",       level: "",              section: ""              }
+        ? { name: cls.name, level: cls.level ?? "", section: cls.section ?? "",
+            classTeacherId: cls.classTeacherId ?? "" }
+        : { name: "",       level: "",              section: "",
+            classTeacherId: "" }
     );
     setClassModal(true);
   };
@@ -510,6 +516,22 @@ export default function ClassesPage() {
             <Input
               {...classForm.register("section")}
               placeholder={t("classes.sectionPh")}
+            />
+          </FormField>
+
+          {/*
+            The form master. This is the name printed over the signature rule
+            at the foot of every report card the class issues — until now
+            there was nowhere to set it, so that rule sat over a blank.
+          */}
+          <FormField
+            label={t("classes.classTeacher")}
+            error={classForm.formState.errors.classTeacherId?.message}
+            hint={t("classes.classTeacherHint")}
+          >
+            <SelectField
+              {...classForm.register("classTeacherId")}
+              options={teacherOptions}
             />
           </FormField>
 

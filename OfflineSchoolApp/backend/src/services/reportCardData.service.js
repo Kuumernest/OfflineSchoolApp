@@ -205,12 +205,24 @@ async function gradingFor(schoolId) {
  * with the stored value still preferred: a pupil who has since moved class
  * should print the class the result was earned in.
  */
-async function classNameFor(classId, stored) {
-  if (stored) return stored;
-  if (!classId) return null;
+async function classInfoFor(classId, storedName) {
+  if (!classId) return { name: storedName || null, teacherName: null };
   const cls = await Class.findOne({ _id: String(classId) })
-    .select("name").lean().catch(() => null);
-  return cls?.name || null;
+    .select("name classTeacherName").lean().catch(() => null);
+  return {
+    // A stored name still wins: a pupil who has moved class should print the
+    // class the result was earned in.
+    name:        storedName || cls?.name || null,
+    /*
+     * The form master, for the signature line at the foot of the card.
+     *
+     * Read from the class rather than looked up through the teacher's User row,
+     * because the class carries the name denormalised on purpose — a teacher
+     * who leaves has their account deactivated, and a card reprinted a year
+     * later must still name the person who signed it.
+     */
+    teacherName: cls?.classTeacherName || null,
+  };
 }
 
 async function studentIdentity(studentId) {
@@ -256,12 +268,18 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
     exams, (examId) => weightByExam.get(examId) ?? 50
   );
 
+  const classInfo = await classInfoFor(classId, record.className);
+
   return {
     reportType:   "term",
     studentId:    String(studentId),
     studentName:  record.studentName || student?.studentName || null,
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
-    className:    await classNameFor(classId, record.className),
+    className:    classInfo.name,
+    // The form master, printed over the signature rule. Nothing populated this
+    // before — the class had no teacher field at all — so every card issued
+    // carried an empty box with a rule under it.
+    classTeacher: classInfo.teacherName,
     academicYear,
     // The stored path. The route makes it absolute, where the request is.
     photoUrl:     student?.photoUrl || null,
@@ -344,12 +362,15 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
     exams, (examId) => weightByExam.get(examId) ?? 1
   );
 
+  const classInfo = await classInfoFor(classId, record.className);
+
   return {
     reportType:   "annual",
     studentId:    String(studentId),
     studentName:  record.studentName || student?.studentName || null,
     admissionNo:  record.admissionNo || student?.enrollmentNo || student?.admissionNo || null,
-    className:    await classNameFor(classId, record.className),
+    className:    classInfo.name,
+    classTeacher: classInfo.teacherName,
     academicYear,
     photoUrl:     student?.photoUrl || null,
     term:         null,
@@ -490,7 +511,7 @@ async function loadSchoolForCard(schoolId, req) {
   const doc = schoolId
     ? await School.findOne({ _id: String(schoolId) })
         .select("name logo motto region division state city schoolType " +
-                "address phone")
+                "address phone nextTermResumption")
         .lean().catch(() => null)
     : null;
 
@@ -510,6 +531,10 @@ async function loadSchoolForCard(schoolId, req) {
       state:      doc?.state      || null,
       city:       doc?.city       || null,
       schoolType: doc?.schoolType || null,
+      // Printed at the foot of the card. The engine has always had a
+      // {{next_term_date}} token and there was never anywhere to set it, so
+      // every card said "To be announced".
+      nextTermResumption: doc?.nextTermResumption || null,
     },
   };
 }

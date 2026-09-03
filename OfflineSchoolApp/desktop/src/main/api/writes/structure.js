@@ -344,6 +344,28 @@ module.exports = [
         updates.isActive = body.isActive;
       }
 
+      /*
+       * The form master, stored as the id AND the name the card prints.
+       *
+       * The endpoint resolves the name from the teacher's User row and refuses
+       * a teacher this school does not have — a 403 it is not this layer's to
+       * invent. So a teacher the mirror cannot find locally is DECLINED, and
+       * the request goes to the network where that check lives. Only a
+       * teacher this machine can see is answered offline.
+       */
+      if (body.classTeacherId !== undefined) {
+        const id = String(body.classTeacherId ?? "").trim();
+        if (!id) {
+          updates.classTeacherId   = null;
+          updates.classTeacherName = null;
+        } else {
+          const teacher = tenant(docs, "user", id, schoolId);
+          if (!teacher) return null;          // the endpoint's 403
+          updates.classTeacherId   = id;
+          updates.classTeacherName = teacher.name || null;
+        }
+      }
+
       const doc = { ...bare(row), ...updates, updatedAt: new Date().toISOString() };
 
       return {

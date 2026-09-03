@@ -1178,8 +1178,40 @@ router.get("/classes", requirePermission("classes.view"), asyncHandler(async (re
   return sendSuccess(res, { classes });
 }));
 
+/**
+ * The class teacher's id AND their name, resolved together.
+ *
+ * The name is denormalised onto the class on purpose: a report card prints the
+ * teacher who held the class when it was issued, and a teacher who leaves has
+ * their User row deactivated. Looking the name up at print time would blank
+ * the signature on every card that pupil has ever been given.
+ *
+ * Returns `{}` when the caller said nothing about the teacher — the difference
+ * between "not mentioned" and "cleared" is the whole reason this is a helper
+ * and not an inline spread.
+ *
+ * @returns {Promise<{classTeacherId?: string|null, classTeacherName?: string|null}>}
+ */
+const classTeacherFields = async (req, classTeacherId) => {
+  if (classTeacherId === undefined) return {};
+
+  const id = String(classTeacherId ?? "").trim();
+  if (!id) return { classTeacherId: null, classTeacherName: null };
+
+  // Under the tenant query: another school's teacher is not a candidate.
+  const teacher = await User.findOne(getTenantQuery(req, id))
+    .select("name role").lean().catch(() => null);
+  if (!teacher) {
+    const err = new Error("Selected teacher does not exist or access denied");
+    err.status = 403;
+    throw err;
+  }
+
+  return { classTeacherId: id, classTeacherName: teacher.name || null };
+};
+
 router.post("/classes", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
-  const { id, name, level, section, schoolId } = req.body;
+  const { id, name, level, section, schoolId, classTeacherId } = req.body;
   if (!name?.trim()) return sendError(res, 400, "name is required");
 
   // Class._id is a String UUID, so a client that created this class offline can
@@ -1228,6 +1260,7 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
     schoolId:  resolvedSchoolId,
     isActive:  true,
     deletedAt: null,
+    ...(await classTeacherFields(req, classTeacherId)),
   });
 
   console.log(`✅ Class created: ${cls.name} [${cls._id}]`);
@@ -1239,7 +1272,7 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
 }));
 
 router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(async (req, res) => {
-  const { name, level, section, isActive } = req.body;
+  const { name, level, section, isActive, classTeacherId } = req.body;
 
   // A non-string name reached .trim() and threw a TypeError, which is a 500 the
   // offline queue would retry for ever. Refused as the input error it is.
@@ -1256,6 +1289,7 @@ router.put("/classes/:id", requirePermission("classes.manage"), asyncHandler(asy
         ...(level   !== undefined  && { level }),
         ...(section !== undefined  && { section }),
         ...(isActive !== undefined && { isActive }),
+        ...(await classTeacherFields(req, classTeacherId)),
       },
       { returnDocument: 'after', runValidators: true }
     );
@@ -3400,7 +3434,7 @@ router.get("/school-info", requirePermission("school.view"), asyncHandler(async 
     "name code address city state country phone email " +
     "motto website applicationsOpen isActive updatedAt " +
     "postalCode schoolType termSystem registrationNumber foundedYear " +
-    "region division " +
+    "region division nextTermResumption " +
     "principalName description academicYearStart academicYearEnd " +
     "schoolDays schoolStartTime schoolEndTime";
 
@@ -3459,7 +3493,7 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     motto, postalCode, schoolType, termSystem, schoolCode,
     registrationNumber, foundedYear, principalName, description,
     region, division,
-    academicYearStart, academicYearEnd, schoolDays,
+    academicYearStart, academicYearEnd, nextTermResumption, schoolDays,
     schoolStartTime, schoolEndTime, removeLogo,
   } = req.body;
 
@@ -3492,6 +3526,10 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     ...(description      !== undefined && { description: description?.trim()      }),
     ...(academicYearStart !== undefined && { academicYearStart                    }),
     ...(academicYearEnd  !== undefined && { academicYearEnd                       }),
+    // Printed at the foot of every report card. Blank clears it, so a
+    // school between terms is not left advertising last term's date.
+    ...(nextTermResumption !== undefined && {
+      nextTermResumption: String(nextTermResumption ?? "").trim() || null }),
     ...(schoolDays       !== undefined && { schoolDays                            }),
     ...(schoolStartTime  !== undefined && { schoolStartTime                       }),
     ...(schoolEndTime    !== undefined && { schoolEndTime                         }),

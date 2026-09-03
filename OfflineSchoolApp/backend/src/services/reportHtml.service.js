@@ -409,7 +409,15 @@ function renderReportCardHtml(payload, opts = {}) {
     thead th { background: #2563eb; color: #fff; font-size: 11px; }
     tr:nth-child(even) td { background: #f9fafb; }
     .teacher { font-size: 10px; color: #9ca3af; }
-    .boxes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 12px; }
+    /* The outcome card: figures left, verdict right, one panel. */
+    .outcome { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+               background: #f0f4ff; border: 1px solid #e0e6f8;
+               border-radius: 8px; padding: 10px; margin-bottom: 12px; }
+    .outcome-verdict { display: flex; align-items: center; gap: 10px;
+                       flex: 1 1 230px; padding-left: 14px;
+                       border-left: 1px solid #d7ddf0; }
+    .boxes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+             flex: 1 1 320px; }
     .box { flex: 1; min-width: 110px; max-width: 170px; text-align: center;
            border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; }
     .box-val { font-size: 18px; font-weight: 800; color: #111827; }
@@ -477,7 +485,9 @@ function renderReportCardHtml(payload, opts = {}) {
       th, td             { padding: 3px 6px; }
       thead th           { font-size: 9.5px; }
 
-      .boxes             { margin-bottom: 8px; gap: 6px; }
+      .outcome           { padding: 6px; margin-bottom: 8px; gap: 10px; }
+      .outcome-verdict   { padding-left: 10px; gap: 8px; }
+      .boxes             { gap: 6px; }
       .box               { padding: 5px 3px; }
       .box-val           { font-size: 14px; }
       .box-lbl           { font-size: 8px; }
@@ -495,6 +505,7 @@ function renderReportCardHtml(payload, opts = {}) {
 
       .report-header,
       .info-grid,
+      .outcome,
       .boxes,
       .verdict,
       .banner,
@@ -558,29 +569,34 @@ function renderReportCardHtml(payload, opts = {}) {
   </table>
 
   ${(avg20 != null || pct != null || summary?.overallGrade || summary?.classPosition != null)
-    ? `<div class="boxes">${boxes.join("")}</div>` : ""}
-
-  ${
-    // The verdict beside the remark rather than above it — see .verdict.
-    // Either may be absent, and the row is only drawn if one of them is there.
-    (isPassing != null || overallRemarkText)
-      ? `<div class="verdict">
-           ${isPassing != null
-             ? `<div class="verdict-pill ${isPassing ? "pass-banner" : "fail-banner"}">
-                  ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}${
-                    summary?.overallGrade
-                      ? ` · ${t.overallGrade}: ${esc(summary.overallGrade)}`
-                      : ""}
-                </div>`
-             : ""}
-           ${overallRemarkText
-             ? `<div class="verdict-remark">
-                  <strong>${t.remark}:</strong> ${esc(overallRemarkText)}
-                </div>`
-             : ""}
-         </div>`
-      : ""
-  }
+    || isPassing != null || overallRemarkText
+    /*
+     * One card for the outcome.
+     *
+     * Average, position, grade, class size and the verdict all answer the same
+     * question — how did this pupil do — and they sat in two blocks with a gap
+     * between them, reading as two unrelated things and costing a band of the
+     * page. The verdict is now to the right of the figures it summarises,
+     * separated by a rule rather than by whitespace.
+     */
+    ? `<div class="outcome">
+         ${boxes.length ? `<div class="boxes">${boxes.join("")}</div>` : ""}
+         ${(isPassing != null || overallRemarkText)
+           ? `<div class="outcome-verdict">
+                ${isPassing != null
+                  ? `<div class="verdict-pill ${isPassing ? "pass-banner" : "fail-banner"}">
+                       ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}
+                     </div>`
+                  : ""}
+                ${overallRemarkText
+                  ? `<div class="verdict-remark">
+                       <strong>${t.remark}:</strong> ${esc(overallRemarkText)}
+                     </div>`
+                  : ""}
+              </div>`
+           : ""}
+       </div>`
+    : ""}
 
   ${
     // §8: the promotion decision is rendered ONLY here, and only when the
@@ -806,10 +822,16 @@ function toTemplateData(payload, opts = {}) {
       isExempt:       r.isExempt       ?? false,
     })),
 
-    classTeacher:     opts.classTeacher     || "",
+    // The payload first, then opts — the same order the gender, the photo and
+    // the delegations all needed, and for the same reason: the routes fill the
+    // payload and pass no opts for these. Both of these tokens have existed
+    // since the engine did, and neither had a source, so every card printed an
+    // empty signature box and "To be announced".
+    classTeacher:     payload.classTeacher   || opts.classTeacher || "",
     teacherComment:   opts.teacherComment   || summary?.overallRemark || "",
     principalComment: opts.principalComment || "",
-    nextTermDate:     opts.nextTermDate     || null,
+    nextTermDate:     payload.nextTermDate  || school.nextTermResumption ||
+                      opts.nextTermDate     || null,
 
     // Lets {{qr_code}} emit the real verification QR instead of a placeholder.
     verify: opts.verify || null,

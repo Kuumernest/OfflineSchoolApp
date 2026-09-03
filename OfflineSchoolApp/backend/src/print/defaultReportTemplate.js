@@ -178,7 +178,13 @@ const PRINT_CSS = `
     .subjects-table th,
     .subjects-table td { padding: 3px 6px; font-size: 10px; }
 
-    .summary-section { padding: 6px; margin-bottom: 8px; gap: 6px; }
+    .summary-section  { padding: 6px; margin-bottom: 8px; gap: 10px; }
+    .summary-figures  { gap: 6px; }
+    .summary-verdict  { padding-left: 10px; gap: 8px; }
+    .closing-section  { gap: 8px; margin-bottom: 8px; }
+    .closing-absences { flex-basis: 76px; padding: 6px 4px; }
+    .closing-absences .val { font-size: 17px; }
+    .closing-absences .lbl { font-size: 8px; }
     .summary-item .val { font-size: 15px; }
     .summary-item .lbl { font-size: 8px; margin-top: 1px; }
 
@@ -195,6 +201,7 @@ const PRINT_CSS = `
     .attendance-table td { padding: 3px 6px; font-size: 9.5px; }
 
     .remarks-row     { gap: 10px !important; margin-bottom: 8px !important; }
+    .signature-row   { margin-top: 10px; }
     .remarks-section { padding: 8px; margin-bottom: 0; }
     .remarks-section p { font-size: 10px; line-height: 1.35; }
     .signature-row   { margin-top: 12px !important; }
@@ -211,6 +218,7 @@ const PRINT_CSS = `
     .school-header,
     .student-info-grid,
     .summary-section,
+    .closing-section,
     .verdict,
     .stat-row,
     .remarks-row,
@@ -265,6 +273,87 @@ const VERIFY_BLOCK_CSS = `
     letter-spacing: .04em;
   }
 `;
+
+/**
+ * The outcome card: the figures and the verdict that summarises them.
+ *
+ * Exported for the same reason the header is — the templates schools already
+ * saved carry their own copy of the markup, and the repair has to be able to
+ * put the identical block into them.
+ */
+const OUTCOME_BLOCK_HTML = `  <!-- The outcome, in one card.
+
+       Average, position, grade, class size and the verdict all answer the same
+       question — how did this pupil do — and they were spread over two blocks
+       with a gap between them, which read as two unrelated things and cost a
+       band of the page. The verdict sits to the right of the figures it
+       summarises.
+
+       Pass/fail is NOT a promotion: a pupil passing this exam has not been
+       promoted, and saying so on a sequence card tells a family something no
+       council has decided. The promotion decision keeps its own block below
+       and appears on the annual card alone. -->
+  <div class="summary-section">
+    <div class="summary-figures">
+      <div class="summary-item">
+        <div class="val">{{average}}</div>
+        <div class="lbl">Average /20</div>
+      </div>
+      <div class="summary-item">
+        <div class="val">{{position}}</div>
+        <div class="lbl">Position</div>
+      </div>
+      <div class="summary-item">
+        <div class="val">{{grade}}</div>
+        <div class="lbl">Grade</div>
+      </div>
+      <div class="summary-item">
+        <div class="val">{{total_students}}</div>
+        <div class="lbl">In Class</div>
+      </div>
+    </div>
+
+    <div class="summary-verdict">
+      {{if isPassing}}
+        <div class="verdict-pill pass">✓ PASSED</div>
+      {{else}}
+        <div class="verdict-pill fail">✗ NOT PASSED</div>
+      {{endif}}
+      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
+    </div>
+  </div>`;
+
+/** Absences and the two staff remarks, which used to be three bands. */
+const CLOSING_BLOCK_HTML = `  <!-- Absences and what the staff said, in one card.
+
+       Attendance was four figures — days open, present, absent, rate — and
+       three of them are arithmetic on the fourth. A parent reads a report card
+       to learn how many days their child missed; the school's opening count
+       and a percentage derived from it belong on an attendance report, not
+       here. So: absences, and the two remarks that used to sit in a separate
+       band below with a heading and a gap of their own. -->
+  <div class="closing-section">
+    <div class="closing-absences">
+      <div class="val">{{days_absent}}</div>
+      <div class="lbl">Days absent</div>
+    </div>
+
+    <div class="remarks-section">
+      <h4>CLASS TEACHER'S REMARK</h4>
+      <p>{{teacher_comment}}</p>
+      <div class="signature-row">
+        <span class="signature-line">{{class_teacher}}</span>
+      </div>
+    </div>
+
+    <div class="remarks-section">
+      <h4>PRINCIPAL'S REMARK</h4>
+      <p>{{principal_comment}}</p>
+      <div class="signature-row">
+        <span class="signature-line">{{principal_name}}</span>
+      </div>
+    </div>
+  </div>`;
 
 const OFFICIAL_HEADER_HTML = `  <!-- The official header: English margin, school, French margin. -->
   <div class="school-header">
@@ -423,16 +512,71 @@ ${OFFICIAL_HEADER_CSS}
     background: #f9fafb;
   }
 
-  /* ── Summary boxes ─────────────────────────────────── */
+  /* ── The outcome card ──────────────────────────────────
+     The figures on the left, the verdict on the right, in one panel. */
   .summary-section {
+    display:       flex;
+    align-items:   center;
+    gap:           14px;
+    flex-wrap:     wrap;
+    background:    #f0f4ff;
+    border-radius: 6px;
+    padding:       10px;
+    margin-bottom: 12px;
+  }
+
+  .summary-figures {
     display:               grid;
     grid-template-columns: repeat(4, 1fr);
     text-align:            center;
-    background:            #f0f4ff;
-    border-radius:         6px;
-    padding:               10px;
     gap:                   8px;
-    margin-bottom:         16px;
+    flex:                  1 1 340px;
+  }
+
+  .summary-verdict {
+    display:      flex;
+    align-items:  center;
+    gap:          10px;
+    flex:         1 1 240px;
+    padding-left: 14px;
+    border-left:  1px solid #d7ddf0;
+  }
+
+  /* ── The closing card ──────────────────────────────────
+     Absences and the two remarks, which were three separate bands. */
+  .closing-section {
+    display:       flex;
+    align-items:   stretch;
+    gap:           12px;
+    flex-wrap:     wrap;
+    margin-bottom: 12px;
+  }
+
+  .closing-absences {
+    flex:          0 0 92px;
+    text-align:    center;
+    background:    #f9fafb;
+    border:        1px solid #e5e7eb;
+    border-radius: 6px;
+    padding:       10px 6px;
+  }
+
+  .closing-absences .val {
+    font-size:   22px;
+    font-weight: bold;
+    color:       #b45309;
+    line-height: 1.1;
+  }
+
+  .closing-absences .lbl {
+    font-size:  10px;
+    color:      #6b7280;
+    margin-top: 3px;
+  }
+
+  .closing-section .remarks-section {
+    flex:          1 1 200px;
+    margin-bottom: 0;
   }
 
   .summary-item .val {
@@ -523,6 +667,8 @@ ${OFFICIAL_HEADER_CSS}
     line-height: 1.5;
   }
 
+  .signature-row { margin-top: 14px; }
+
   .signature-line {
     margin-top:  20px;
     border-top:  1px solid #333;
@@ -612,41 +758,7 @@ ${OFFICIAL_HEADER_HTML}
 
   {{subjects_table}}
 
-  <!-- Summary stats -->
-  <div class="summary-section">
-    <div class="summary-item">
-      <div class="val">{{average}}</div>
-      <div class="lbl">Average /20</div>
-    </div>
-    <div class="summary-item">
-      <div class="val">{{position}}</div>
-      <div class="lbl">Position</div>
-    </div>
-    <div class="summary-item">
-      <div class="val">{{grade}}</div>
-      <div class="lbl">Grade</div>
-    </div>
-    <div class="summary-item">
-      <div class="val">{{total_students}}</div>
-      <div class="lbl">In Class</div>
-    </div>
-  </div>
-
-  <!-- Pass / fail. NOT a promotion: a pupil passing this exam has not been
-       promoted, and saying so on a sequence card tells a family something no
-       council has decided. The promotion decision has its own block below and
-       appears on the annual card alone. -->
-  {{if isPassing}}
-    <div class="verdict">
-      <div class="verdict-pill pass">✓ PASSED</div>
-      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
-    </div>
-  {{else}}
-    <div class="verdict">
-      <div class="verdict-pill fail">✗ NOT PASSED</div>
-      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
-    </div>
-  {{endif}}
+${OUTCOME_BLOCK_HTML}
 
   <!-- The promotion decision: the final annual report card only. -->
   {{if is_annual}}
@@ -657,50 +769,7 @@ ${OFFICIAL_HEADER_HTML}
     {{endif}}
   {{endif}}
 
-  <!-- Attendance -->
-  <h3 style="font-size:13px;border-bottom:1px solid #e5e7eb;
-             padding-bottom:4px;margin:16px 0 8px">
-    Attendance
-  </h3>
-
-  <div class="stat-row" style="display:flex;gap:12px;margin-bottom:16px">
-    <div style="flex:1;background:#f9fafb;border-radius:6px;
-                padding:8px 12px;font-size:12px">
-      Days Open: <strong>{{days_open}}</strong>
-    </div>
-    <div style="flex:1;background:#f9fafb;border-radius:6px;
-                padding:8px 12px;font-size:12px">
-      Present: <strong>{{days_present}}</strong>
-    </div>
-    <div style="flex:1;background:#f9fafb;border-radius:6px;
-                padding:8px 12px;font-size:12px">
-      Absent: <strong>{{days_absent}}</strong>
-    </div>
-    <div style="flex:1;background:#f9fafb;border-radius:6px;
-                padding:8px 12px;font-size:12px">
-      Rate: <strong>{{attendance_percent}}</strong>
-    </div>
-  </div>
-
-  {{attendance_table}}
-
-  <!-- Remarks -->
-  <div class="remarks-row" style="display:flex;gap:16px;margin-bottom:16px">
-    <div class="remarks-section" style="flex:1">
-      <h4>CLASS TEACHER'S REMARK</h4>
-      <p>{{teacher_comment}}</p>
-      <div class="signature-row" style="margin-top:24px">
-        <span class="signature-line">{{class_teacher}}</span>
-      </div>
-    </div>
-    <div class="remarks-section" style="flex:1">
-      <h4>PRINCIPAL'S REMARK</h4>
-      <p>{{principal_comment}}</p>
-      <div class="signature-row" style="margin-top:24px">
-        <span class="signature-line">{{principal_name}}</span>
-      </div>
-    </div>
-  </div>
+${CLOSING_BLOCK_HTML}
 
   <!-- Footer -->
   <div class="footer">
@@ -719,5 +788,6 @@ module.exports = {
   DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
   OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
   VERIFY_BLOCK_HTML, VERIFY_BLOCK_CSS,
+  OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML,
   PRINT_CSS,
 };

@@ -565,6 +565,8 @@
     "noneAssignedHint": "Subjects appear here once an administrator assigns you to teach them."
   },
   "classes": {
+    "classTeacher": "Class teacher (form master)",
+    "classTeacherHint": "Printed over the signature line on this class's report cards.",
     "title": "Classes",
     "add": "Add class",
     "edit": "Edit class",
@@ -1300,6 +1302,8 @@
     "tplNextTerm": "Next Term Begins:"
   },
   "settings": {
+    "nextTermResumption": "Next term resumes",
+    "nextTermResumptionHint": "Printed at the foot of every report card.",
     "title": "Settings",
     "blurb": "Manage your school, profile and system preferences",
     "basicInfo": "Basic information",

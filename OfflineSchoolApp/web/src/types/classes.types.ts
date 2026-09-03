@@ -95,6 +95,16 @@ export interface Class {
   /** Owning school identifier */
   schoolId:      EntityId;
 
+  /**
+   * The class teacher — the form master.
+   *
+   * Both the id and the name, because the name is stored on the class: a
+   * report card prints whoever held the class when it was issued, and a
+   * teacher who leaves has their account deactivated.
+   */
+  classTeacherId?:   EntityId | null;
+  classTeacherName?: string | null;
+
   /** Whether the class is active. Always a real boolean. */
   isActive:      boolean;
 
@@ -182,6 +192,8 @@ export interface CreateClassPayload {
   level?:   string;
   section?: string;
   schoolId: EntityId;
+  /** The form master. Send "" to leave the class without one. */
+  classTeacherId?: EntityId | null;
 }
 
 /**
@@ -193,6 +205,11 @@ export interface UpdateClassPayload {
   level?:    string;
   section?:  string;
   schoolId?: EntityId;
+  /**
+   * The form master. Omit to leave it alone; send "" or null to clear it —
+   * "not mentioned" and "cleared" are different instructions.
+   */
+  classTeacherId?: EntityId | null;
   /** Explicit flag sent by toggleActive() */
   isActive?: boolean;
 }

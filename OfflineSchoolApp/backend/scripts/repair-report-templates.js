@@ -62,6 +62,7 @@ const fs       = require("fs");
 const ReportTemplate = require("../src/db/models/ReportTemplate");
 const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
         VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS,
+        OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML,
         PRINT_CSS } =
   require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
@@ -338,6 +339,115 @@ const verifyStripPass = (html) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// SIXTH PASS: TWO CARDS INSTEAD OF FIVE BANDS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Fold the outcome into one card, and the closing block into another.
+ *
+ * ── What the card looked like ─────────────────────────────────────────────
+ *
+ * Five stacked bands where two would do:
+ *
+ *   the summary figures      average, position, grade, class size
+ *   the verdict              passed / not passed, and the remark
+ *   an Attendance heading    with days open, present, absent and a rate
+ *   the attendance table     usually empty
+ *   two remark panels        class teacher and principal
+ *
+ * The figures and the verdict answer one question — how did this pupil do —
+ * and sat apart with a gap between them. Attendance was four numbers of which
+ * three are arithmetic on the fourth: a parent reads a card to learn how many
+ * days their child missed, not the school's opening count.
+ *
+ * ── Why this pass is stricter than the others ─────────────────────────────
+ *
+ * The others add something: a class, a stylesheet, a block after another
+ * block. This one MOVES the school's content, which is the most invasive thing
+ * a repair can do, so it only acts on the exact shape this project seeded and
+ * refuses everything else. A school that rearranged its own card keeps it.
+ *
+ * The blocks it inserts are imported from defaultReportTemplate rather than
+ * written out here, so the repaired template and a freshly seeded one cannot
+ * drift apart.
+ */
+
+const SUMMARY_OPEN = '<div class="summary-section">';
+
+/**
+ * The seeded summary grid through the end of the verdict conditional.
+ *
+ * Found by counting {{if}} depth rather than by a regex, for the reason the
+ * promotion pass learned first: the verdict block contains {{if remark}}, so a
+ * non-greedy match for {{endif}} stops at the INNER one and leaves the
+ * {{else}} branch — and a second verdict band — behind. The first version of
+ * this pass did exactly that.
+ *
+ * @returns {{start: number, end: number}|null}
+ */
+const outcomeRegion = (html) => {
+  const start = html.indexOf(SUMMARY_OPEN);
+  if (start === -1) return null;
+
+  const block = findIsPassingBlock(html);
+  if (!block || block.start < start) return null;
+
+  // The verdict has to be what follows the figures, not something further down
+  // the document that happens to be a conditional.
+  const between = html.slice(start + SUMMARY_OPEN.length, block.start);
+  if (between.includes("summary-section")) return null;
+  if (between.length > 1200) return null;
+
+  return { start, end: block.end };
+};
+
+/** The Attendance heading through the end of the remarks row. */
+const CLOSING_REGION_RE = new RegExp(
+  [
+    String.raw`<h3[^>]*>[\s]*Attendance[\s]*</h3>`,
+    String.raw`[\s\S]*?\{\{attendance_table\}\}`,
+    String.raw`[\s\S]*?class="remarks-row"`,
+    String.raw`[\s\S]*?\{\{principal_name\}\}`,
+    String.raw`[\s\S]*?</div>[\s]*</div>[\s]*</div>`,
+  ].join(""),
+  ""
+);
+
+/**
+ * @returns {{ status: string, html?: string, note?: string }}
+ *   repaired      | one or both regions were folded into a card
+ *   already-fixed | it carries the cards
+ *   no-region     | not the shape this seeded; the school's own arrangement
+ */
+const layoutCardsPass = (html) => {
+  if (html.includes("summary-verdict") || html.includes("closing-absences")) {
+    return { status: "already-fixed" };
+  }
+
+  let out = html, changed = 0;
+
+  const region = outcomeRegion(out);
+  if (region) {
+    out = out.slice(0, region.start) + OUTCOME_BLOCK_HTML.trim() + out.slice(region.end);
+    changed += 1;
+  }
+  if (CLOSING_REGION_RE.test(out)) {
+    out = out.replace(CLOSING_REGION_RE, () => CLOSING_BLOCK_HTML.trim());
+    changed += 1;
+  }
+
+  if (!changed) {
+    return { status: "no-region", note: "not the seeded arrangement" };
+  }
+  // Half a fold is not a fold: if only one region matched, the card would carry
+  // one new block and one old band, which is worse than leaving both alone.
+  if (changed < 2) {
+    return { status: "no-region", note: "only one of the two regions matched" };
+  }
+  return { status: "repaired", html: out };
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // FIFTH PASS: ONE SHEET OF A4
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -478,6 +588,12 @@ const repairHtml = (html, css) => {
 
   const printable = printClassPass(out);
   if (printable.html) { out = printable.html; changes.push("print"); }
+
+  // Last, because it consumes the blocks the passes above have already
+  // corrected — the verdict pill the layout pass built, and the classes the
+  // print pass added to the rows it replaces.
+  const cards = layoutCardsPass(out);
+  if (cards.html) { out = cards.html; changes.push("cards"); }
 
   if (!changes.length) {
     const note = promo.note || layout.note || header.note || strip.note;
@@ -697,7 +813,8 @@ const main = async () => {
   }
 
   const order = ["repaired", "already-fixed", "no-banner", "no-promotion",
-                 "no-header", "no-qr", "no-rows", "unbalanced", "unsafe"];
+                 "no-header", "no-qr", "no-rows", "no-region",
+                 "unbalanced", "unsafe"];
   console.log("\n  " + order
     .filter((k) => tally[k])
     .map((k) => `${k}: ${tally[k]}`)
@@ -715,6 +832,7 @@ module.exports = {
   headerPass, repairHeaderCss, OLD_HEADER_RE,
   verifyStripPass, repairVerifyCss, BARE_QR_RE,
   printClassPass, repairPrintCss,
+  layoutCardsPass, outcomeRegion, CLOSING_REGION_RE,
 };
 
 if (require.main === module) {

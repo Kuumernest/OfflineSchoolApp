@@ -45,6 +45,7 @@ interface SchoolSettings {
   description:        string;
   academicYearStart:  string;
   academicYearEnd:    string;
+  nextTermResumption: string;
   schoolDays:         string[];
   schoolStartTime:    string;
   schoolEndTime:      string;
@@ -333,6 +334,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
     registrationNumber: "", foundedYear: "", principalName: "",
     region: "", division: "",
     description: "", academicYearStart: "", academicYearEnd: "",
+    nextTermResumption: "",
     // API values, never translated.
     schoolDays: ["Monday","Tuesday","Wednesday","Thursday","Friday"],
     schoolStartTime: "07:30", schoolEndTime: "15:30", logo: null,
@@ -376,6 +378,7 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             description:        s.description        ?? "",
             academicYearStart:  s.academicYearStart  ?? "",
             academicYearEnd:    s.academicYearEnd    ?? "",
+            nextTermResumption: s.nextTermResumption ?? "",
             schoolDays:         Array.isArray(s.schoolDays) && s.schoolDays.length
               ? s.schoolDays
               : ["Monday","Tuesday","Wednesday","Thursday","Friday"],
@@ -677,6 +680,19 @@ function SchoolSection({ schoolId }: { schoolId: string }) {
             <div>
               <FieldLabel hint="YYYY-MM-DD">{t("settings.yearEnd")}</FieldLabel>
               <Input type="date" value={form.academicYearEnd} onChange={(v) => set("academicYearEnd", v)} placeholder={t("settings.yearEndPh")} />
+            </div>
+            {/*
+              Printed at the foot of every report card. The card has always had
+              a line for it and the engine a token, but there was nowhere for a
+              school to set the date — so every card said "To be announced",
+              which reads like an oversight on a document families plan around.
+            */}
+            <div>
+              <FieldLabel hint="YYYY-MM-DD">{t("settings.nextTermResumption")}</FieldLabel>
+              <Input type="date" value={form.nextTermResumption} onChange={(v) => set("nextTermResumption", v)} />
+              <p className="mt-1 text-xs text-ink-muted">
+                {t("settings.nextTermResumptionHint")}
+              </p>
             </div>
           </div>
 

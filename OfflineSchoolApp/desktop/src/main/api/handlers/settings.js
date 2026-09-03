@@ -207,6 +207,8 @@ module.exports = [
         // The delegations the report-card header prints down its margins.
         region:             school.region              || null,
         division:           school.division            || null,
+        // Printed at the foot of every report card.
+        nextTermResumption: school.nextTermResumption || null,
         foundedYear:        school.foundedYear         ?? null,
         principalName:      school.principalName       || null,
         description:        school.description         || null,

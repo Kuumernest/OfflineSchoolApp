@@ -25,7 +25,8 @@
 const { repairHtml, verify, layoutPass, repairCss,
         headerPass, repairHeaderCss,
         verifyStripPass, repairVerifyCss,
-        printClassPass, repairPrintCss } = require("./repair-report-templates");
+        printClassPass, repairPrintCss,
+        layoutCardsPass } = require("./repair-report-templates");
 const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
   require("../src/print/defaultReportTemplate");
 
@@ -324,6 +325,78 @@ check("blocks are told not to break across the fold",
   /break-inside:\s*avoid/.test(repairPrintCss(".x{}")), true);
 check("and the table head repeats on a second page",
   /display:\s*table-header-group/.test(repairPrintCss(".x{}")), true);
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- five bands fold into two cards ---");
+
+/** The card as the live school held it, with its own edited spacing. */
+const FIVE_BANDS = [
+  '  <div class="summary-section">',
+  '    <div class="summary-item"><div class="val">{{average}}</div></div>',
+  '    <div class="summary-item"><div class="val">{{total_students}}</div></div>',
+  '  </div>',
+  '  {{if isPassing}}',
+  '    <div class="verdict"><div class="verdict-pill pass">✓ PASSED</div>',
+  '      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}</div>',
+  '  {{else}}',
+  '    <div class="verdict"><div class="verdict-pill fail">✗ NOT PASSED</div>',
+  '      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}</div>',
+  '  {{endif}}',
+  '  {{if is_annual}}{{if promotion_status}}<div class="pass-banner pass">{{promotion_status}}</div>{{endif}}{{endif}}',
+  '  <h3 style="margin:16px 0 8px">',
+  '    Attendance',
+  '  </h3>',
+  '  <div class="stat-row" style="display:flex;gap:12px;margin-bottom:16px">',
+  '    <div>Days Open: <strong>{{days_open}}</strong></div>',
+  '    <div>Absent: <strong>{{days_absent}}</strong></div>',
+  '  </div>',
+  '  {{attendance_table}}',
+  '  <div class="remarks-row" style="display:flex;gap:12px;margin-bottom:12px">',
+  '    <div class="remarks-section" style="flex:1"><p>{{teacher_comment}}</p>',
+  '      <div class="signature-row" style="margin-top:13px"><span class="signature-line">{{class_teacher}}</span></div>',
+  '    </div>',
+  '    <div class="remarks-section" style="flex:1"><p>{{principal_comment}}</p>',
+  '      <div class="signature-row" style="margin-top:13px"><span class="signature-line">{{principal_name}}</span></div>',
+  '    </div>',
+  '  </div>',
+  '  <div class="footer">FOOTER</div>',
+].join("\n");
+
+const folded = layoutCardsPass(FIVE_BANDS);
+check("the seeded arrangement is recognised", folded.status, "repaired");
+check("the verdict is inside the summary card",
+  folded.html.includes("summary-verdict"), true);
+/*
+ * The nesting hazard this pass hit first, and the promotion pass hit before
+ * it: the verdict block contains {{if remark}}, so a non-greedy match for
+ * {{endif}} stops at the INNER one and leaves the {{else}} branch — and a
+ * second verdict band — sitting in the document. The region is found by
+ * counting depth instead.
+ */
+check("and the old band is gone, both branches of it",
+  /<div class="verdict">/.test(folded.html), false);
+check("absences and both remarks are one card",
+  folded.html.includes("closing-absences") &&
+  folded.html.includes("{{teacher_comment}}") &&
+  folded.html.includes("{{principal_comment}}"), true);
+check("days open, present and the rate are gone",
+  /\{\{days_open\}\}|\{\{days_present\}\}|\{\{attendance_percent\}\}/.test(folded.html),
+  false);
+check("but the absences remain", folded.html.includes("{{days_absent}}"), true);
+check("the promotion block is untouched",
+  folded.html.includes("{{promotion_status}}"), true);
+check("and everything after it", folded.html.includes("FOOTER"), true);
+check("running it twice changes nothing",
+  layoutCardsPass(folded.html).status, "already-fixed");
+
+// This pass MOVES a school's content, which is the most invasive thing a
+// repair can do, so it acts only on the exact shape this project seeded.
+check("a card a school arranged itself is refused",
+  layoutCardsPass("<div>{{average}}</div><div>{{days_absent}}</div>").status,
+  "no-region");
+// Half a fold is worse than none: one new card and one old band.
+check("and so is a card where only one region matches",
+  layoutCardsPass(FIVE_BANDS.split("<h3")[0]).status, "no-region");
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- what it refuses to touch ---");

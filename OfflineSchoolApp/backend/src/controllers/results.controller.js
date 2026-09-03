@@ -327,6 +327,20 @@ const buildStudentReportCardData = async (examId, studentId) => {
 
   if (!summary && !scores.length) return { ok: false };
 
+  /*
+   * The form master, from the class this card belongs to.
+   *
+   * Read off the class rather than through the teacher's account, because the
+   * class stores the name denormalised: a teacher who leaves has their User
+   * row deactivated, and a card reprinted afterwards must still name whoever
+   * signed it.
+   */
+  const cardClassId = summary?.classId || scores[0]?.classId || exam?.classId || null;
+  const classTeacherName = cardClassId
+    ? (await Class.findOne({ _id: String(cardClassId) })
+        .select("classTeacherName").lean().catch(() => null))?.classTeacherName || null
+    : null;
+
   // ── Student info + school grading settings (requirements §1, §3) ──────────
   const [student, gradingConfig, allExamScores] = await Promise.all([
     // gender / dateOfBirth live on the Student document, not the summary
@@ -538,6 +552,8 @@ const buildStudentReportCardData = async (examId, studentId) => {
       // a served path like /uploads/photos/x.jpg has no origin to resolve
       // against and the image silently 404s.
       photoUrl:     absoluteLogoUrl(student?.photoUrl, req),
+      // The form master, over the signature rule at the foot of the card.
+      classTeacher: classTeacherName,
       showGrades,
       reportType,
       subjects:     subjectRows,

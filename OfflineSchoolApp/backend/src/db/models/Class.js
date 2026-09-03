@@ -157,6 +157,33 @@ const classSchema = new mongoose.Schema(
       min:     [0, "capacity cannot be negative"],
     },
 
+    /**
+     * The class teacher — the form master, in Cameroonian usage.
+     *
+     * Every report card has a line for this person and a signature under it,
+     * and until now there was nowhere for the name to come from: the class had
+     * no teacher field at all, so {{class_teacher}} printed an empty box with
+     * a rule under it on every card the school issued.
+     *
+     * Two fields rather than one. The id is the reference; the name is
+     * denormalised because a report card must print the teacher who held the
+     * class when the card was issued, and a teacher who leaves the school has
+     * their User row deactivated. A card reprinted a year later should not
+     * lose the name of the person who signed it.
+     */
+    classTeacherId: {
+      type:    String,
+      ref:     "User",
+      default: null,
+      index:   true,
+    },
+
+    classTeacherName: {
+      type:    String,
+      default: null,
+      trim:    true,
+    },
+
     isActive: {
       type:    Boolean,
       default: true,
