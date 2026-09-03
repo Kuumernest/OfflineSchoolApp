@@ -296,6 +296,74 @@ const main = async () => {
   check("and the same average the card prints", factOf("Average /20"), "15.00");
 
   // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- the average the card headlines ---");
+
+  /*
+   * A term average is already out of 20. The renderer multiplied summary.average
+   * by 5 unconditionally — right for a sequence card, whose average is GPA
+   * points on a /4 scale, and wrong for these two: a term average of 15
+   * printed as "75.0" on a tile labelled "Average /20", next to an overall
+   * grade read from the stored record that was correct. The card contradicted
+   * itself in two adjacent boxes, and the verification page — which had been
+   * corrected — disagreed with the paper.
+   */
+  const avgOnCard = (html) => {
+    const box = html.match(/class="box-val">([^<]*)</);
+    return box ? box[1].trim() : null;
+  };
+  check("the term card headlines its term average, not five times it",
+    avgOnCard(th), "15.00");
+  check("and the annual card its annual average",
+    avgOnCard(ah), "15.00");
+  // The page and the paper have to agree — that is the whole point of the page.
+  check("the verification page says the same number the card prints",
+    factOf("Average /20"), "15.00");
+
+  // A sequence card's average IS gpa points, so it still gets the x5.
+  check("a sequence card still converts gpa points",
+    avgOnCard(renderReportCardHtml(
+      { ...term, reportType: "sequence", computed: {},
+        summary: { ...term.summary, average: 3 } }, opts)),
+    "15.00");
+
+  console.log("--- the subject table carries no dead columns ---");
+
+  /*
+   * It printed nine columns. CA was hard-coded null by everything that builds
+   * these rows, so it was a dash on every line; Total and Exam were both
+   * r.score, the same number twice. A third of the width said nothing, which
+   * is what squeezed Remark and Position — the two a parent reads.
+   */
+  /*
+   * Asserted on the TEMPLATE render, because {{subjects_table}} is the engine's
+   * table and that is the one this touched. The built-in layout builds its own,
+   * with a Result column the engine's has never had — two tables, and only one
+   * of them had the dead columns.
+   */
+  const { renderReportCard, toTemplateData } =
+    require("../src/services/reportHtml.service");
+  const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
+    require("../src/print/defaultReportTemplate");
+  const tplHtml = renderReportCard(term, {
+    ...opts, template: { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
+  }).html;
+  const headers = [...tplHtml.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1].trim());
+  check("seven columns, not nine", headers.length, 7);
+  check("in this order",
+    headers, ["Subject", "Score", "/20", "Coeff", "Grade", "Remark", "Position"]);
+  check("the always-empty CA column is gone", headers.includes("CA"), false);
+  check("and Total, which duplicated Exam", headers.includes("Total"), false);
+  // The data keeps the fields, so a school template reading them still works.
+  check("the fields survive for a template that addresses them",
+    Object.prototype.hasOwnProperty.call(
+      toTemplateData(term, opts).subjects[0], "caScore"), true);
+
+  console.log("--- an empty table prints nothing, not a sentence about itself ---");
+
+  check("no monthly attendance means no line",
+    /No monthly attendance data available/.test(tplHtml), false);
+
+  // ═════════════════════════════════════════════════════════════════════════
   console.log("--- what the Report Cards page depends on ---");
 
   /**

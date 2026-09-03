@@ -131,14 +131,33 @@ const LABELS = {
 // contract with engine/placeholder.engine.js.
 const ENGINE_ERROR_MARKER = "<!-- Template Engine Error:";
 
+/**
+ * The /20 average this card headlines.
+ *
+ * ── Why the ×5 is conditional ─────────────────────────────────────────────
+ *
+ * It was not, and that is the bug. A sequence card's summary.average is GPA
+ * points on a /4 scale, so ×5 is how it becomes a mark out of 20. A term or
+ * annual card's summary.average is the termAverage or annualAverage, which is
+ * ALREADY out of 20 — multiplying it printed a term average of 13.2 as "66.0"
+ * on a tile labelled "Average /20", beside an overall grade of C+ that had
+ * been read from the stored record and was right. The card contradicted itself
+ * in two adjacent boxes.
+ *
+ * The same distinction cardVerification() makes for the verification page,
+ * which is how the two came to disagree: that one was corrected and this one
+ * was not, so the page said 15.00 where the paper said 75.00.
+ */
 function resolveAverage20(payload) {
   const computed = payload.computed || {};
   const summary  = payload.summary  || null;
   if (computed.weightedAverage != null) return Number(computed.weightedAverage);
-  if (summary?.average != null) {
-    return Math.round(Number(summary.average) * 5 * 100) / 100;
-  }
-  return null;
+  if (summary?.average == null) return null;
+
+  const stored = Number(summary.average);
+  return payload.reportType === "term" || payload.reportType === "annual"
+    ? stored
+    : Math.round(stored * 5 * 100) / 100;
 }
 
 const esc = (str) =>

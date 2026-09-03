@@ -451,6 +451,28 @@ function buildReplacementMap(data) {
 
 // ── Composite Resolvers ───────────────────────────────────────────────────
 
+/**
+ * The subject rows.
+ *
+ * ── Nine columns, three of which said nothing ─────────────────────────────
+ *
+ * It printed Subject, CA, Exam, Total, /20, Coeff, Grade, Remark, Position.
+ *
+ * CA was hard-coded null by everything that builds these rows — nothing in the
+ * app produces a continuous-assessment split — so it was fourteen dashes down
+ * the page. Total was `r.score`, and Exam was `r.score` too: the same number
+ * printed twice, side by side. On a school marking out of 20 the /20 column
+ * made it three times.
+ *
+ * So a third of the width went to columns carrying no information, which is
+ * what squeezed Remark and Position — the two a parent actually reads — into
+ * the narrowest columns on the sheet.
+ *
+ * Score and /20 both stay, and they are not redundant: a school marking out of
+ * 100 has 82 in one and 16.40 in the other. The FIELDS are all still on the
+ * data, so a school template addressing subject.caScore or subject.total in its
+ * own {{each subjects}} block keeps working.
+ */
 function resolveSubjectsTable(html, data) {
   if (!html.includes("{{subjects_table}}")) return html;
 
@@ -460,10 +482,8 @@ function resolveSubjectsTable(html, data) {
     return `
     <tr>
       <td>${escapeHtml(s.subjectName || s.name || "")}</td>
-      <td style="text-align:center">${s.caScore   != null ? s.caScore   : "—"}</td>
-      <td style="text-align:center">${s.examScore != null ? s.examScore : "—"}</td>
       <td style="text-align:center"><strong>${
-        absent ? flag : s.total != null ? s.total : "—"
+        absent ? flag : s.examScore != null ? s.examScore : "—"
       }</strong></td>
       <td style="text-align:center">${
         s.normalizedMark != null && !absent
@@ -483,9 +503,7 @@ function resolveSubjectsTable(html, data) {
       <thead>
         <tr>
           <th style="text-align:left">Subject</th>
-          <th style="text-align:center">CA</th>
-          <th style="text-align:center">Exam</th>
-          <th style="text-align:center">Total</th>
+          <th style="text-align:center">Score</th>
           <th style="text-align:center">/20</th>
           <th style="text-align:center">Coeff</th>
           <th style="text-align:center">Grade</th>
@@ -494,7 +512,7 @@ function resolveSubjectsTable(html, data) {
         </tr>
       </thead>
       <tbody>
-        ${rows || "<tr><td colspan='9' style='text-align:center'>No subjects</td></tr>"}
+        ${rows || "<tr><td colspan='7' style='text-align:center'>No subjects</td></tr>"}
       </tbody>
     </table>
   `;
@@ -507,10 +525,18 @@ function resolveAttendanceTable(html, data) {
 
   const months = data.attendance?.monthly || [];
 
+  /*
+   * Nothing at all when there is nothing to show.
+   *
+   * This printed "No monthly attendance data available." — a sentence whose
+   * only effect on a report card going home is to take up a line saying the
+   * school has not recorded something. On the live card it sat under a strip
+   * of four zeros, and between them they spent a band of the page on an
+   * absence of data. A parent does not need to be told which tables were
+   * empty; they need the page to fit.
+   */
   if (!months.length) {
-    return html.split("{{attendance_table}}").join(
-      "<p><em>No monthly attendance data available.</em></p>"
-    );
+    return html.split("{{attendance_table}}").join("");
   }
 
   const rows = months.map((m) => `
