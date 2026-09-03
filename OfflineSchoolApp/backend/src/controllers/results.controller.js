@@ -20,7 +20,6 @@ const Student = require("../db/models/Student");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
-const docVerify = require("../services/documentVerify.service");
 const termGrading  = require("../services/termGrading.service");
 const annualGrading = require("../services/annualGrading.service");
 const resultsService = require("../services/results.service");
@@ -628,6 +627,7 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // The template lookup moved to reportCardData.service.js, where the term and
 // annual cards reach the same one — see the note there.
 const { coefficientFromWeight } = require("../services/subjectCoefficient.service");
+const { cardVerification } = require("../services/reportCardData.service");
 const { loadReportTemplate, loadSchoolForCard } =
   require("../services/reportCardData.service");
 
@@ -711,54 +711,19 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   /**
    * The verification strip: QR + code resolving to a public page that shows
    * what the school's records say, so a registrar elsewhere can check a paper
-   * bulletin against them. Values are bilingual where they are words — the
-   * verifier's language is unknown, and the page shows both anyway.
+   * bulletin against them.
    *
-   * Mirrors the renderer's average arithmetic (weightedAverage is already
-   * /20; summary.average is GPA points ×5) so the page and the paper carry
-   * the same number.
+   * Shared with the term and annual cards, which had no strip at all until it
+   * moved out of this controller — they rendered {{qr_code}} with nothing
+   * behind it and printed the inert placeholder box.
    */
-  const d = built.data;
-  const avg20 = d.computed?.weightedAverage != null
-    ? Number(d.computed.weightedAverage)
-    : d.summary?.average != null
-      ? Math.round(Number(d.summary.average) * 5 * 100) / 100
-      : null;
-  const isPassing = d.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
-
-  const verify = req.user?.schoolId
-    ? await docVerify.printableBlock({
-        schoolId: String(req.user.schoolId),
-        kind: "report_card",
-        studentId: String(studentId),
-        examId: String(examId),
-        origin: (() => {
-          const proto = req.headers["x-forwarded-proto"] || req.protocol || "http";
-          const host  = req.headers["x-forwarded-host"]  || req.get("host");
-          return host ? `${proto}://${host}` : null;
-        })(),
-        snapshot: {
-          facts: [
-            { label: { en: "Student", fr: "Élève" },           value: d.studentName },
-            { label: { en: "Admission no.", fr: "Matricule" }, value: d.admissionNo },
-            { label: { en: "Class", fr: "Classe" },            value: d.className },
-            { label: { en: "Exam", fr: "Examen" },             value: d.examName },
-            { label: { en: "Term / year", fr: "Trimestre / année" },
-              value: [d.term, d.academicYear].filter(Boolean).join(" · ") || "—" },
-            { label: { en: "Average /20", fr: "Moyenne /20" },
-              value: avg20 != null ? avg20.toFixed(2) : "—" },
-            { label: { en: "Overall grade", fr: "Mention" },
-              value: d.summary?.overallGrade ?? "—" },
-            { label: { en: "Class position", fr: "Rang" },
-              value: d.summary?.classPosition != null
-                ? `${d.summary.classPosition}${d.summary.totalInClass != null ? ` / ${d.summary.totalInClass}` : ""}`
-                : "—" },
-            { label: { en: "Decision", fr: "Décision" },
-              value: isPassing == null ? "—" : isPassing ? "Passed / Admis(e)" : "Failed / Ajourné(e)" },
-          ],
-        },
-      })
-    : null;
+  const verify = await cardVerification({
+    data:        built.data,
+    schoolId:    req.user?.schoolId,
+    studentId,
+    documentKey: examId,
+    req,
+  });
 
   // Per-school template drives the layout when the school has one; the
   // built-in layout is the fallback, including when a template fails to render.

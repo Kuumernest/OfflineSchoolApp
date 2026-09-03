@@ -6,7 +6,8 @@ const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
-const { buildTermCard, loadReportTemplate, loadSchoolForCard } =
+const { buildTermCard, loadReportTemplate, loadSchoolForCard,
+        cardVerification, periodDocumentKey } =
   require("../services/reportCardData.service");
 
 // ── GET /api/term-results ──────────────────────────────────────────────────
@@ -211,9 +212,15 @@ router.get(
         return res.status(404).json({ success: false, error: "No term result for this student" });
       }
 
-      const [letterhead, template] = await Promise.all([
+      const [letterhead, template, verify] = await Promise.all([
         loadSchoolForCard(schoolId, req),
         loadReportTemplate(schoolId, templateId),
+        // The QR and the code. This card had neither: {{qr_code}} rendered the
+        // inert placeholder box and there was nothing to type underneath it.
+        cardVerification({
+          data: data, schoolId, studentId: req.params.studentId,
+          documentKey: periodDocumentKey(data), req,
+        }),
       ]);
 
       const rendered = renderReportCard(data, {
@@ -221,6 +228,7 @@ router.get(
         schoolName: letterhead.doc?.name || "School",
         school:     letterhead.school,
         template,
+        verify,
       });
 
       res.set("content-type", "text/html; charset=utf-8");

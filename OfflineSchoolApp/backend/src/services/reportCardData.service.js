@@ -38,6 +38,7 @@ const GradingConfig     = require("../db/models/GradingConfig");
 const Student           = require("../db/models/Student");
 const School            = require("../db/models/School");
 const Class             = require("../db/models/Class");
+const docVerify         = require("./documentVerify.service");
 
 const { subjectRanking, periodName } = require("../../../shared/reportCard");
 const { coefficientFromWeight } =
@@ -510,7 +511,101 @@ async function loadSchoolForCard(schoolId, req) {
   };
 }
 
+/**
+ * The verification strip for any of the three cards.
+ *
+ * ── Why it is here and not in the sequence controller ─────────────────────
+ *
+ * It was in the controller, so only the sequence card had one. A term or annual
+ * card rendered {{qr_code}} with nothing behind it, which the engine turns into
+ * the inert placeholder box — a card printed with a grey square where its QR
+ * belongs, and no code beneath it. The document that is hardest to check by eye,
+ * because its marks are combined from several exams and stored nowhere a
+ * registrar can see, was the one with no way to check it.
+ *
+ * ── The document key ──────────────────────────────────────────────────────
+ *
+ * The verification row is unique per (school, kind, pupil, examId), and a term
+ * card has no exam. Passing nothing would collapse every term of every year for
+ * one pupil onto a single code, so each card names its own period as the key:
+ * `term:2026/2027:1`, `annual:2026/2027`. A real examId is a uuid, so these
+ * cannot collide with one.
+ *
+ * @param {object} p
+ * @param {object} p.data       the card payload
+ * @param {string} p.schoolId
+ * @param {string} p.studentId
+ * @param {string} p.documentKey  what stands in for the exam id
+ * @param {object} p.req        for the origin the QR points at
+ * @returns {Promise<{code, url, qrSvg}|null>} null if a code cannot be issued —
+ *   a document that cannot get its QR is still a valid document
+ */
+async function cardVerification({ data, schoolId, studentId, documentKey, req }) {
+  if (!schoolId) return null;
+
+  /*
+   * The average as /20, which is what the page must agree with the paper about.
+   *
+   * A sequence card's summary.average is GPA points, which the renderer shows
+   * as ×5; a term or annual card's is already the /20 average it was computed
+   * as. Reading them the same way would print a mark on the verification page
+   * that the card beside it contradicts.
+   */
+  const avg20 = data.computed?.weightedAverage != null
+    ? Number(data.computed.weightedAverage)
+    : data.summary?.average == null
+      ? null
+      : data.reportType === "sequence"
+        ? Math.round(Number(data.summary.average) * 5 * 100) / 100
+        : Number(data.summary.average);
+
+  const isPassing = data.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
+  const position  = data.summary?.classPosition;
+
+  const origin = (() => {
+    const proto = req?.headers?.["x-forwarded-proto"] || req?.protocol || "http";
+    const host  = req?.headers?.["x-forwarded-host"]  || req?.get?.("host");
+    return host ? `${proto}://${host}` : null;
+  })();
+
+  return docVerify.printableBlock({
+    schoolId: String(schoolId),
+    kind:     "report_card",
+    studentId: String(studentId),
+    examId:   String(documentKey),
+    origin,
+    snapshot: {
+      facts: [
+        { label: { en: "Student", fr: "Élève" },           value: data.studentName },
+        { label: { en: "Admission no.", fr: "Matricule" }, value: data.admissionNo },
+        { label: { en: "Class", fr: "Classe" },            value: data.className },
+        { label: { en: "Exam", fr: "Examen" },             value: data.examName },
+        { label: { en: "Term / year", fr: "Trimestre / année" },
+          value: [data.term, data.academicYear].filter(Boolean).join(" · ") || "—" },
+        { label: { en: "Average /20", fr: "Moyenne /20" },
+          value: avg20 != null ? avg20.toFixed(2) : "—" },
+        { label: { en: "Overall grade", fr: "Mention" },
+          value: data.summary?.overallGrade ?? "—" },
+        { label: { en: "Class position", fr: "Rang" },
+          value: position != null
+            ? `${position}${data.summary?.totalInClass != null ? ` / ${data.summary.totalInClass}` : ""}`
+            : "—" },
+        { label: { en: "Decision", fr: "Décision" },
+          value: isPassing == null ? "—" : isPassing ? "Passed / Admis(e)" : "Failed / Ajourné(e)" },
+      ],
+    },
+  });
+}
+
+/** The document key for a card with no exam behind it. */
+const periodDocumentKey = (data) =>
+  data.reportType === "annual"
+    ? `annual:${data.academicYear}`
+    : `term:${data.academicYear}:${data.period?.term ?? data.term}`;
+
 module.exports = {
+  cardVerification,
+  periodDocumentKey,
   loadSchoolForCard,
   buildTermCard,
   buildAnnualCard,

@@ -221,6 +221,81 @@ const main = async () => {
     tCard.className, "Form 3");
 
   // ═════════════════════════════════════════════════════════════════════════
+  console.log("--- the QR and the code, which these cards did not have ---");
+
+  /*
+   * The verification strip lived in the sequence card's controller, so only
+   * that card had one. A term or annual card rendered {{qr_code}} with nothing
+   * behind it, and the engine turns that into the inert placeholder box: a grey
+   * square where the QR belongs and no code beneath it. The document hardest to
+   * check by eye — its marks combined from several exams and stored nowhere a
+   * registrar can see — was the one that could not be checked at all.
+   */
+  const { cardVerification, periodDocumentKey } =
+    require("../src/services/reportCardData.service");
+  const fakeReq = { protocol: "https", headers: {}, get: () => "school.example.com" };
+
+  const tVerify = await cardVerification({
+    data: term, schoolId: S, studentId: "p1",
+    documentKey: periodDocumentKey(term), req: fakeReq,
+  });
+  check("a term card gets a verification block", Boolean(tVerify), true);
+  check("with a QR to scan", /<svg/.test(tVerify?.qrSvg || ""), true);
+  check("and a code to type", /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/.test(tVerify?.code || ""),
+    true);
+  check("pointing at the page that answers for it",
+    (tVerify?.url || "").includes("/api/verify/"), true);
+
+  const aVerify = await cardVerification({
+    data: annual, schoolId: S, studentId: "p1",
+    documentKey: periodDocumentKey(annual), req: fakeReq,
+  });
+  check("so does an annual card", Boolean(aVerify?.code), true);
+
+  /*
+   * Each period is its own document.
+   *
+   * The verification row is unique per (school, kind, pupil, examId), and a
+   * term card has no exam. Passing nothing would give every term of every year
+   * for one pupil the same code — one piece of paper's code would verify
+   * another's marks.
+   */
+  check("the term card's key names its term",
+    periodDocumentKey(term), "term:2026/2027:1");
+  check("and the annual card's names the year",
+    periodDocumentKey(annual), "annual:2026/2027");
+  check("so the two cards do not share a code",
+    tVerify.code === aVerify.code, false);
+
+  // Reprinting keeps the code: the paper already in circulation must go on
+  // working, which is the whole point of printing it.
+  const tAgain = await cardVerification({
+    data: term, schoolId: S, studentId: "p1",
+    documentKey: periodDocumentKey(term), req: fakeReq,
+  });
+  check("reprinting a card reuses its code", tAgain.code, tVerify.code);
+
+  /*
+   * And the record behind the code says what the paper says.
+   *
+   * Read from the collection rather than through documentVerify.verify(), which
+   * also loads the School to put its letterhead on the public page — this
+   * fixture's schoolId is a plain string and that lookup casts to an ObjectId.
+   * The snapshot is what this section is about.
+   */
+  const DocumentVerification = require("../src/db/models/DocumentVerification");
+  const record = await DocumentVerification.findOne({
+    schoolId: S, studentId: "p1", examId: periodDocumentKey(term),
+  }).lean();
+  check("the code has a record behind it", Boolean(record), true);
+  const factOf = (label) =>
+    record.snapshot.facts.find((f) => f.label.en === label)?.value;
+  check("naming the pupil", factOf("Student"), "Ada Ngu");
+  // The average must match the card beside it: a term average is already /20,
+  // where a sequence card's is GPA points shown as x5.
+  check("and the same average the card prints", factOf("Average /20"), "15.00");
+
+  // ═════════════════════════════════════════════════════════════════════════
   console.log("--- what the Report Cards page depends on ---");
 
   /**

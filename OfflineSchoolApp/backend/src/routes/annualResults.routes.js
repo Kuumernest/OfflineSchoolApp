@@ -6,7 +6,8 @@ const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
-const { buildAnnualCard, loadReportTemplate, loadSchoolForCard } =
+const { buildAnnualCard, loadReportTemplate, loadSchoolForCard,
+        cardVerification, periodDocumentKey } =
   require("../services/reportCardData.service");
 
 // ── GET /api/annual-results ────────────────────────────────────────────────
@@ -183,9 +184,15 @@ router.get(
         return res.status(404).json({ success: false, error: "No annual result for this student" });
       }
 
-      const [letterhead, template] = await Promise.all([
+      const [letterhead, template, verify] = await Promise.all([
         loadSchoolForCard(schoolId, req),
         loadReportTemplate(schoolId, templateId),
+        // The QR and the code, which this card did not have either — and it is
+        // the one a family keeps.
+        cardVerification({
+          data, schoolId, studentId: req.params.studentId,
+          documentKey: periodDocumentKey(data), req,
+        }),
       ]);
 
       const rendered = renderReportCard(data, {
@@ -193,6 +200,7 @@ router.get(
         schoolName: letterhead.doc?.name || "School",
         school:     letterhead.school,
         template,
+        verify,
       });
 
       res.set("content-type", "text/html; charset=utf-8");
