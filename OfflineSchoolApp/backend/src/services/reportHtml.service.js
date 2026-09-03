@@ -409,15 +409,18 @@ function renderReportCardHtml(payload, opts = {}) {
     thead th { background: #2563eb; color: #fff; font-size: 11px; }
     tr:nth-child(even) td { background: #f9fafb; }
     .teacher { font-size: 10px; color: #9ca3af; }
-    /* The outcome card: figures left, verdict right, one panel. */
-    .outcome { display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    /* The outcome card, on ONE row: the figures, then the verdict.
+       A flex-basis wide enough to be refused is a wrap instruction in
+       disguise — these ask for zero and divide what the panel has. */
+    .outcome { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
                background: #f0f4ff; border: 1px solid #e0e6f8;
                border-radius: 8px; padding: 10px; margin-bottom: 12px; }
-    .outcome-verdict { display: flex; align-items: center; gap: 10px;
-                       flex: 1 1 230px; padding-left: 14px;
-                       border-left: 1px solid #d7ddf0; }
-    .boxes { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
-             flex: 1 1 320px; }
+    .outcome-verdict { display: flex; align-items: center; flex-wrap: nowrap;
+                       gap: 8px; flex: 0 1 auto; max-width: 46%; min-width: 0;
+                       padding-left: 10px; border-left: 1px solid #d7ddf0; }
+    .boxes { display: flex; gap: 8px; flex-wrap: nowrap;
+             flex: 1 1 0; min-width: 0; }
+    .boxes .box { flex: 1 1 0; min-width: 0; max-width: none; }
     .box { flex: 1; min-width: 110px; max-width: 170px; text-align: center;
            border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; }
     .box-val { font-size: 18px; font-weight: 800; color: #111827; }

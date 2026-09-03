@@ -281,6 +281,44 @@ const VERIFY_BLOCK_CSS = `
  * saved carry their own copy of the markup, and the repair has to be able to
  * put the identical block into them.
  */
+/**
+ * The rules that keep each card on ONE row, appendable on their own.
+ *
+ * The templates schools saved already carry the folded cards; what they carry
+ * with them is the first version of these rules, which wrapped. A flex-basis
+ * wide enough to be refused — 340px for the figures, 240 for the verdict, 200
+ * per remark panel — is a wrap instruction in disguise, so the verdict dropped
+ * below the figures and the second remark below the first. Each "one card" was
+ * two or three rows in a box.
+ *
+ * Appended rather than edited into place: CSS of equal specificity later in the
+ * sheet wins, so adding these overrides the earlier ones without the repair
+ * having to find and rewrite rules inside a school's stylesheet.
+ */
+const ONE_ROW_CSS = `
+  /* ── One row per card ──────────────────────────────────
+     Basis zero, no wrap: the cells divide the width they have instead of
+     asking for a width the panel cannot give them. */
+  .summary-section { flex-wrap: nowrap; gap: 10px; }
+  .summary-figures { display: flex; flex-wrap: nowrap; gap: 8px;
+                     flex: 1 1 0; min-width: 0; }
+  .summary-figures .summary-item { flex: 1 1 0; min-width: 0; }
+  .summary-verdict { flex-wrap: nowrap; gap: 8px; flex: 0 1 auto;
+                     max-width: 46%; min-width: 0; padding-left: 10px; }
+
+  .closing-section { flex-wrap: nowrap; gap: 10px; }
+  .closing-absences { flex: 0 0 86px; }
+  .closing-section .remarks-section { flex: 1 1 0; min-width: 0; }
+
+  @media print {
+    .summary-section   { gap: 8px; }
+    .summary-figures   { gap: 6px; }
+    .summary-verdict   { max-width: 44%; padding-left: 8px; }
+    .closing-section   { gap: 8px; }
+    .closing-absences  { flex: 0 0 70px; }
+  }
+`;
+
 const OUTCOME_BLOCK_HTML = `  <!-- The outcome, in one card.
 
        Average, position, grade, class size and the verdict all answer the same
@@ -513,12 +551,18 @@ ${OFFICIAL_HEADER_CSS}
   }
 
   /* ── The outcome card ──────────────────────────────────
-     The figures on the left, the verdict on the right, in one panel. */
+     ONE ROW: average, position, grade, class size, verdict.
+
+     This wrapped. The figures took a flex-basis of 340px and the verdict 240,
+     which at any ordinary card width is wider than the panel — so the verdict
+     dropped onto a second line and the "one card" was two rows in a box.
+     nowrap, and a basis of zero so the five cells divide the width they have
+     instead of asking for a width they cannot get. */
   .summary-section {
     display:       flex;
     align-items:   center;
-    gap:           14px;
-    flex-wrap:     wrap;
+    flex-wrap:     nowrap;
+    gap:           10px;
     background:    #f0f4ff;
     border-radius: 6px;
     padding:       10px;
@@ -526,34 +570,46 @@ ${OFFICIAL_HEADER_CSS}
   }
 
   .summary-figures {
-    display:               grid;
-    grid-template-columns: repeat(4, 1fr);
-    text-align:            center;
-    gap:                   8px;
-    flex:                  1 1 340px;
+    display:     flex;
+    flex-wrap:   nowrap;
+    text-align:  center;
+    gap:         8px;
+    flex:        1 1 0;
+    min-width:   0;
+  }
+
+  .summary-figures .summary-item {
+    flex:      1 1 0;
+    min-width: 0;
   }
 
   .summary-verdict {
     display:      flex;
     align-items:  center;
-    gap:          10px;
-    flex:         1 1 240px;
-    padding-left: 14px;
+    flex-wrap:    nowrap;
+    gap:          8px;
+    flex:         0 1 auto;
+    max-width:    46%;
+    min-width:    0;
+    padding-left: 10px;
     border-left:  1px solid #d7ddf0;
   }
 
   /* ── The closing card ──────────────────────────────────
-     Absences and the two remarks, which were three separate bands. */
+     ONE ROW: days absent, class teacher's remark, principal's remark.
+
+     Same fault as above — the remark panels asked for 200px each beside the
+     absences box, so the second one wrapped underneath. */
   .closing-section {
     display:       flex;
     align-items:   stretch;
-    gap:           12px;
-    flex-wrap:     wrap;
+    flex-wrap:     nowrap;
+    gap:           10px;
     margin-bottom: 12px;
   }
 
   .closing-absences {
-    flex:          0 0 92px;
+    flex:          0 0 86px;
     text-align:    center;
     background:    #f9fafb;
     border:        1px solid #e5e7eb;
@@ -575,7 +631,8 @@ ${OFFICIAL_HEADER_CSS}
   }
 
   .closing-section .remarks-section {
-    flex:          1 1 200px;
+    flex:          1 1 0;
+    min-width:     0;
     margin-bottom: 0;
   }
 
@@ -788,6 +845,6 @@ module.exports = {
   DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
   OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
   VERIFY_BLOCK_HTML, VERIFY_BLOCK_CSS,
-  OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML,
+  OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML, ONE_ROW_CSS,
   PRINT_CSS,
 };

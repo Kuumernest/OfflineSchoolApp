@@ -62,7 +62,7 @@ const fs       = require("fs");
 const ReportTemplate = require("../src/db/models/ReportTemplate");
 const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
         VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS,
-        OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML,
+        OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML, ONE_ROW_CSS,
         PRINT_CSS } =
   require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
@@ -520,6 +520,24 @@ const printClassPass = (html) => {
     : { status: "no-rows" };
 };
 
+/**
+ * The template's CSS with the one-row rules appended, or null if it has them.
+ *
+ * CSS-only, which is what makes it reachable at all: the templates that already
+ * carry the folded cards carry the first version of their rules with them, and
+ * those wrapped. Appending overrides them — later rules of equal specificity
+ * win — so the repair does not have to find and rewrite declarations inside a
+ * school's own stylesheet.
+ */
+const repairOneRowCss = (css) => {
+  if (typeof css !== "string") return null;
+  // Tested by the declaration, not by a comment: the seeded stylesheet writes
+  // these rules itself with its own wording, and matching a marker string
+  // meant appending a redundant copy to the very sheet that defined them.
+  if (/\.summary-section[^}]*flex-wrap:\s*nowrap/.test(css)) return null;
+  return css + nlJoin(ONE_ROW_CSS);
+};
+
 /** The template's CSS with the print rules appended, or null if it has them. */
 const repairPrintCss = (css) => {
   if (typeof css !== "string") return null;
@@ -597,7 +615,8 @@ const repairHtml = (html, css) => {
 
   if (!changes.length) {
     const note = promo.note || layout.note || header.note || strip.note;
-    const cssOnly = repairPrintCss(typeof css === "string" ? css : null);
+    let cssOnly = repairPrintCss(typeof css === "string" ? css : null);
+    cssOnly = repairOneRowCss(cssOnly ?? (typeof css === "string" ? css : null)) ?? cssOnly;
     // The print rules are CSS only, so a template whose markup is already
     // classed still needs them if its stylesheet has no @page.
     if (cssOnly) {
@@ -613,6 +632,7 @@ const repairHtml = (html, css) => {
   if (changes.includes("header")) nextCss = repairHeaderCss(nextCss) ?? nextCss;
   if (changes.includes("verify")) nextCss = repairVerifyCss(nextCss) ?? nextCss;
   nextCss = repairPrintCss(nextCss) ?? nextCss;
+  nextCss = repairOneRowCss(nextCss) ?? nextCss;
 
   return {
     status: "repaired",
@@ -831,7 +851,7 @@ module.exports = {
   promotionPass, layoutPass, repairCss, LAYOUT_CSS,
   headerPass, repairHeaderCss, OLD_HEADER_RE,
   verifyStripPass, repairVerifyCss, BARE_QR_RE,
-  printClassPass, repairPrintCss,
+  printClassPass, repairPrintCss, repairOneRowCss,
   layoutCardsPass, outcomeRegion, CLOSING_REGION_RE,
 };
 
