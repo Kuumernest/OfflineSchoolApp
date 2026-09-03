@@ -147,9 +147,37 @@ export default function ReportCardsPage() {
     setSelectedClass(null);
     setStudents([]);
     api.get("/admin/classes", { params: { schoolId } })
-      .then((res) => setClasses(
-        res.data?.classes || (Array.isArray(res.data) ? res.data : [])
-      ))
+      .then((res) => {
+        const all: ClassOption[] =
+          res.data?.classes || (Array.isArray(res.data) ? res.data : []);
+
+        /*
+         * A sequence card can only be printed for a class the exam covers.
+         *
+         * This offered every class in the school, so picking one the exam does
+         * not sit for produced a full roster of pupils with no marks — and
+         * every print then failed with a message telling the reader to run
+         * Compute, which could not have helped: there was nothing to compute,
+         * because the exam was never written for that class. On the live school
+         * both exams cover Form 1 and there are six other classes to choose
+         * from, so this was five wrong choices out of six.
+         *
+         * A term or annual card is not filtered this way: its results are
+         * computed per class and any class may legitimately have them.
+         */
+        const covered = cardType === "sequence" && selectedExam
+          ? new Set([
+              ...(selectedExam.classIds ?? []),
+              ...(selectedExam.classId ? [selectedExam.classId] : []),
+            ].map(String))
+          : null;
+
+        setClasses(
+          covered && covered.size
+            ? all.filter((c) => covered.has(String(c._id)))
+            : all
+        );
+      })
       .catch(() => setClasses([]))
       .finally(() => setClassLoading(false));
   }, [periodChosen, cardType, selectedExam, academicYear, termNumber, schoolId]);

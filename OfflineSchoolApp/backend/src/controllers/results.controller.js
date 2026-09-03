@@ -16,6 +16,7 @@ const {
   diffField,
 } = require("../services/resultAudit.service");
 const Student = require("../db/models/Student");
+const Class   = require("../db/models/Class");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
@@ -88,7 +89,7 @@ const getExamResults = asyncHandler(async (req, res) => {
       Student.find({ _id: { $in: ids }, schoolId })
         .select("_id studentName firstName lastName enrollmentNo admissionNo classId")
         .lean(),
-      require("../db/models/Class").find({ schoolId }).select("_id name").lean(),
+      Class.find({ schoolId }).select("_id name").lean(),
     ]);
     const sMap = new Map(students.map((s) => [String(s._id), s]));
     const cMap = new Map(classes.map((c) => [String(c._id), c.name]));
@@ -313,7 +314,13 @@ const getStudentResult = asyncHandler(async (req, res) => {
 // Shared payload builder — used by the JSON endpoint and the HTML renderer
 // endpoint (Phase 2 single-engine consolidation). Returns
 // { ok: true, data } or { ok: false }.
-const buildStudentReportCardData = async (examId, studentId) => {
+/**
+ * @param {object} [req]  only to make the pupil's photo URL absolute — the
+ *   card is printed into an about:blank window, so a served path has no origin
+ *   to resolve against. Optional: a caller without a request gets the stored
+ *   relative path, which is still correct data.
+ */
+const buildStudentReportCardData = async (examId, studentId, req) => {
   // ✅ Phase 0 repoint: reads the LIVE pipeline collections (StudentScore +
   //    ResultSummary, written by processResults) instead of ExamResult/ExamScore.
   //    Payload shape is unchanged — the mobile ReportCard (admin + student
@@ -610,7 +617,7 @@ const buildStudentReportCardData = async (examId, studentId) => {
 const getStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
 
-  const built = await buildStudentReportCardData(examId, studentId);
+  const built = await buildStudentReportCardData(examId, studentId, req);
   if (!built?.ok) {
     return res.status(404).json({
       success: false,
@@ -711,7 +718,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   const lang =
     String(req.query.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
 
-  const built = await buildStudentReportCardData(examId, studentId);
+  const built = await buildStudentReportCardData(examId, studentId, req);
   if (!built?.ok) {
     return res.status(404).json({
       success: false,
@@ -828,7 +835,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  const built = await buildStudentReportCardData(examId, studentId);
+  const built = await buildStudentReportCardData(examId, studentId, req);
   if (!built?.ok) {
     return res.status(404).json({
       success: false,

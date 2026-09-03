@@ -1249,6 +1249,46 @@ const main = async () => {
   ];
   await ResultSummary.collection.insertMany(resultRows);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- the sequence report card actually renders ---");
+
+  /*
+   * THE HOLE THIS FILLS.
+   *
+   * Two undefined bindings shipped in one commit — a Class model used without
+   * being imported, and `req` referenced inside a builder that never received
+   * it — and both made GET .../reportcard/html answer 500 for every pupil in
+   * the school. Nothing caught either, because check:reportcard exercises the
+   * RENDERER with a hand-built payload and no suite had ever called the route
+   * that assembles one.
+   *
+   * A renderer test cannot find a missing require in its controller. Only a
+   * request can, so there is now a request.
+   */
+  const cardRes = await fetch(
+    `http://127.0.0.1:${port}/api/results/exam-0/student/stu-1/reportcard/html` +
+    `?schoolId=${SCHOOL}&lang=en`,
+    { headers: { authorization: `Bearer ${token}` } }
+  );
+  check("the sequence card route answers 200", cardRes.status, 200);
+  const cardBody = cardRes.status === 200 ? await cardRes.json() : null;
+  const cardHtml = cardBody?.data?.html ?? "";
+  check("with a document in it", cardHtml.length > 2000, true);
+  check("and no unresolved tokens",
+    (cardHtml.match(/\{\{[^}]+\}\}/g) || []), []);
+  // The route builds the payload the renderer needs; these are the pieces the
+  // controller is responsible for assembling.
+  check("carrying the outcome card", /class="(outcome|summary-verdict)"/.test(cardHtml), true);
+  check("and the school's name", cardHtml.includes("Parity College"), true);
+
+  // A pupil with neither marks nor a summary is a 404 with a reason, not a 500.
+  const missingRes = await fetch(
+    `http://127.0.0.1:${port}/api/results/exam-0/student/stu-nobody/reportcard/html` +
+    `?schoolId=${SCHOOL}&lang=en`,
+    { headers: { authorization: `Bearer ${token}` } }
+  );
+  check("a pupil with no marks is refused, not crashed", missingRes.status, 404);
+
   // Mirrored WITHOUT the feed's scope, deliberately: this is the state a machine
   // is in if it pulled as an admin. The handler must still hide unpublished rows
   // from a non-admin reading that same machine.

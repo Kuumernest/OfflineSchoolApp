@@ -439,7 +439,10 @@ function renderReportCardHtml(payload, opts = {}) {
                     font-weight: bold; font-size: 12px; white-space: nowrap; }
     .verdict-remark { flex: 1; min-width: 220px; font-style: italic;
                       font-size: 11px; color: #4b5563; line-height: 1.5; }
-    /* Kept for a school template that still says {{remark}} on its own. */
+    /* Kept for a school template that still places the remark token on a
+       line of its own. Written out rather than shown, because a literal
+       token in a comment trips every check that scans a rendered card for
+       placeholders the engine failed to resolve — and one did. */
     .remark { font-style: italic; color: #4b5563; line-height: 1.6;
               margin-bottom: 12px; }
     .verify { display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
