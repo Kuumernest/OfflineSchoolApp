@@ -4,6 +4,7 @@ import { useTranslation }                from "react-i18next";
 import { NavLink, useLocation }         from "react-router-dom";
 import { ChevronRight, GraduationCap, X } from "lucide-react";
 import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
+import { sectionForPath, NAV_GROUPS, groupIndexFor } from "@/config/sections";
 import { useUser }                      from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
 import { type UserRole }                from "@/types";
@@ -36,7 +37,11 @@ const useNavLabel = () => {
    second thing to navigate. */
 const ROW =
   "group flex w-full items-center gap-2.5 rounded-control " +
-  "px-2.5 h-[34px] text-[13px] font-medium transition-colors";
+  "px-2.5 h-[38px] text-sm font-medium transition-colors";
+
+/** A top-level entry's own path, or the first child's if it is a group. */
+const firstPath = (item: NavItem): string | undefined =>
+  item.path ?? item.children?.find((c) => c.path)?.path;
 
 // ─────────────────────────────────────────────────────────
 // SINGLE ITEM
@@ -68,7 +73,18 @@ function SingleItem({
       {({ isActive }) => (
         <>
           {depth === 0 ? (
-            <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+            /* The icon carries its section's colour when the row is at rest,
+               and turns white when the row is the one you are on. That is the
+               whole of the wayfinding: nineteen destinations that used to be
+               nineteen identical grey glyphs now differ before you read them.
+               See config/sections.ts. */
+            <item.icon
+              className={cn(
+                "h-[18px] w-[18px] shrink-0 transition-colors",
+                isActive ? "text-white" : sectionForPath(item.path ?? "").navIcon
+              )}
+              aria-hidden="true"
+            />
           ) : (
             /* Children get a dot rather than a second icon. Two icon columns
                at different sizes made the nesting read as noise; one dot that
@@ -142,7 +158,13 @@ function GroupItem({
             : "text-nav-text hover:bg-nav-raised hover:text-nav-text-active"
         )}
       >
-        <item.icon className="h-4 w-4 shrink-0" aria-hidden="true" />
+        <item.icon
+          className={cn(
+            "h-[18px] w-[18px] shrink-0 transition-colors",
+            active ? "text-white" : sectionForPath(firstPath(item) ?? "").navIcon
+          )}
+          aria-hidden="true"
+        />
         <span className="flex-1 truncate text-left">{navLabel(item)}</span>
         <ChevronRight
           className={cn(
@@ -232,13 +254,39 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Nav */}
-        <nav className="scrollbar-hide flex-1 space-y-0.5 overflow-y-auto px-2 py-3">
-          {NAV_ITEMS.map((item) => {
-            if (!hasAccess(item, role)) return null;
-            return item.children ? (
-              <GroupItem key={item.label} item={item} role={role} />
-            ) : (
-              <SingleItem key={item.path} item={item} />
+        {/*
+          * Nineteen destinations with a labelled break every few rows.
+          *
+          * Nothing moves: an entry is exactly where whoever learned this rail
+          * last week left it. What changes is that the eye lands on "Money"
+          * and reads three entries, instead of scanning nineteen identical
+          * rows for the one it wants. A heading is only drawn when a group has
+          * a visible entry, so a bursar — who sees six of the nineteen — gets
+          * three headings rather than seven with gaps between them.
+          */}
+        <nav className="scrollbar-hide flex-1 overflow-y-auto px-2 py-3">
+          {NAV_GROUPS.map((group, gi) => {
+            const items = NAV_ITEMS.filter(
+              (item) => hasAccess(item, role) && groupIndexFor(firstPath(item)) === gi
+            );
+            if (!items.length) return null;
+
+            return (
+              <div key={group.labelKey} className={cn(gi > 0 && "mt-5")}>
+                <p className="px-2.5 pb-1.5 text-[11px] font-semibold uppercase
+                              tracking-[0.1em] text-nav-text/70">
+                  {t(group.labelKey, { defaultValue: group.label })}
+                </p>
+                <div className="space-y-0.5">
+                  {items.map((item) =>
+                    item.children ? (
+                      <GroupItem key={item.label} item={item} role={role} />
+                    ) : (
+                      <SingleItem key={item.path} item={item} />
+                    )
+                  )}
+                </div>
+              </div>
             );
           })}
         </nav>

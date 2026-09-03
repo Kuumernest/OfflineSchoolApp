@@ -1,5 +1,7 @@
 // web/src/components/ui/PageHeader.tsx
-import { cn } from "@/utils/cn";
+import { useLocation } from "react-router-dom";
+import { cn }              from "@/utils/cn";
+import { sectionForPath }  from "@/config/sections";
 
 /**
  * The title block every page opens with.
@@ -25,6 +27,16 @@ export function PageHeader({
   meta?:        React.ReactNode;
   className?:   string;
 }) {
+  /*
+   * The colour comes from the route, not from a prop.
+   *
+   * Forty-one pages render this and none of them should have to know what
+   * colour they are — and a page added tomorrow gets the right one without
+   * anybody remembering. See config/sections.ts for why a section has a hue
+   * at all.
+   */
+  const section = sectionForPath(useLocation().pathname);
+
   return (
     <div
       className={cn(
@@ -32,18 +44,27 @@ export function PageHeader({
         className
       )}
     >
-      <div className="min-w-0">
-        <h1 className="font-display text-[26px] leading-[1.15] text-ink">
-          {title}
-        </h1>
-        {description && (
-          <p className="mt-1 text-sm text-ink-muted">{description}</p>
-        )}
-        {meta && (
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-faint">
-            {meta}
-          </div>
-        )}
+      <div className="flex min-w-0 gap-3.5">
+        {/* The one element on the page that carries the section's colour. A
+            rule rather than a block: it marks the title without competing
+            with it. */}
+        <span
+          aria-hidden="true"
+          className={cn("mt-1 w-1 shrink-0 self-stretch rounded-full", section.rule)}
+        />
+        <div className="min-w-0">
+          <h1 className="font-display text-[28px] leading-[1.15] text-ink">
+            {title}
+          </h1>
+          {description && (
+            <p className="mt-1.5 text-sm text-ink-body">{description}</p>
+          )}
+          {meta && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-ink-muted">
+              {meta}
+            </div>
+          )}
+        </div>
       </div>
 
       {actions && (
@@ -70,7 +91,10 @@ export function SectionHeading({
 }) {
   return (
     <div className={cn("flex items-center justify-between gap-4", className)}>
-      <h2 className="text-[11px] font-semibold uppercase tracking-[0.09em] text-ink-faint">
+      {/* Was 11px in the faintest ink the palette has — a label nobody could
+          read, on the element whose whole job is to say what a block of the
+          page is. */}
+      <h2 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-muted">
         {title}
       </h2>
       {action}

@@ -32,6 +32,49 @@
   --font-sans:    "Inter", ui-sans-serif, system-ui, sans-serif;
   --font-display: "Source Serif 4", ui-serif, Georgia, serif;
 
+  /* ── Type scale ────────────────────────────────────────────────────────────
+     The floor was too low. 623 places in the app set text at 12px or smaller
+     — 553 of them `text-xs` — against 19 that use 16px. A console can be
+     dense, but a label, a timestamp and a table caption are content, and at
+     12px on a laptop at arm's length they are guesswork.
+
+     Every step up by one notch. Nothing here changes a layout: the same
+     classes resolve to slightly larger type, so the whole app gains
+     legibility without a single page being edited. Line heights come with
+     them, because raising size without leading just makes a tighter block. */
+  --text-xs:      0.8125rem;   /* 13px — was 12 */
+  --text-xs--line-height:   1.125rem;
+  --text-sm:      0.9375rem;   /* 15px — was 14 */
+  --text-sm--line-height:   1.375rem;
+  --text-base:    1rem;        /* 16px */
+  --text-base--line-height: 1.5rem;
+  --text-lg:      1.125rem;
+  --text-lg--line-height:   1.625rem;
+
+  /* ── The neutral ramp, pointed at the measured ink ──────────────────────────
+     The ink tokens below were chosen against contrast ratios. Then the pages
+     went and used Tailwind's stock greys instead — 245 uses of `text-gray-400`
+     and 254 of `text-gray-500`. Stock grey-400 is #9ca3af: 2.79:1 on white,
+     which fails AA outright and is most of why the interface reads as faded.
+
+     So the scale itself is redefined onto the ink ramp. Every existing
+     `text-gray-400` in the app becomes legible where it stands, with no page
+     touched — which is the only honest way to fix five hundred call sites.
+
+     The pale end keeps its job as surfaces and lines and barely moves; it is
+     the text end that had to change. */
+  --color-gray-50:  #f6f7fa;
+  --color-gray-100: #eceef4;
+  --color-gray-200: #dfe2eb;
+  --color-gray-300: #c3c9d6;
+  --color-gray-400: #6d768c;   /* was #9ca3af (2.79:1) → 5.28:1 */
+  --color-gray-500: #545e75;   /* was #6b7280 (4.83:1) → 7.24:1 */
+  --color-gray-600: #3f485c;
+  --color-gray-700: #2c3446;
+  --color-gray-800: #1a2132;
+  --color-gray-900: #0d1220;
+  --color-gray-950: #070a13;
+
   /* ── Accent ────────────────────────────────────────────────────────────────
      ONE hue carries interaction: primary buttons, the active nav item, focus
      rings, links. Everything else is neutral. Anything that is coloured but
@@ -44,17 +87,66 @@
      of every bootstrapped admin panel; taking the accent darker and quieter is
      most of why an interface reads as expensive. It also buys contrast: white
      on this passes AA comfortably at any size. */
-  --color-primary-50:  #f2f4fb;
-  --color-primary-100: #e3e8f6;
-  --color-primary-200: #c8d1ed;
-  --color-primary-300: #a3b1df;
-  --color-primary-400: #7688cb;
-  --color-primary-500: #5464b2;
-  --color-primary-600: #3b4996;  /* primary action */
-  --color-primary-700: #2e3878;
-  --color-primary-800: #262e60;
-  --color-primary-900: #20264e;
-  --color-primary-950: #141833;
+  --color-primary-50:  #eef1ff;
+  --color-primary-100: #e0e5ff;
+  --color-primary-200: #c6cfff;
+  --color-primary-300: #a3b0fd;
+  --color-primary-400: #7f8bf8;
+  --color-primary-500: #6366f1;
+  --color-primary-600: #4f46e5;  /* primary action */
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #2f2b7f;
+  --color-primary-950: #1e1b4b;
+
+  /* ── Section colour ────────────────────────────────────────────────────────
+     One accent for actions is correct and was also the whole palette, so every
+     area of a 44-entry app looked identical to every other. Colour is the
+     cheapest wayfinding there is: a person who has seen the fees screen twice
+     should recognise it from the corner of their eye before reading a word.
+
+     So each section of the navigation carries a hue, used on its nav icon, its
+     page header and its stat tiles — and nowhere else. It marks WHERE you are.
+     It never marks what something means: that is what status colour is for,
+     and mixing the two is how a colourful interface stops being readable.
+
+     `-soft` is the tint a card or tile sits on; `-line` its border; the base is
+     text and icon weight, all of them AA on white. */
+  --color-sec-students:      #0f766e;   /* teal    */
+  --color-sec-students-soft: #eaf6f4;
+  --color-sec-students-line: #b9dedb;
+
+  --color-sec-teachers:      #0369a1;   /* sky     */
+  --color-sec-teachers-soft: #eaf4fb;
+  --color-sec-teachers-line: #b6dbf0;
+
+  --color-sec-academic:      #6d28d9;   /* violet  */
+  --color-sec-academic-soft: #f2edfd;
+  --color-sec-academic-line: #d9c9f7;
+
+  --color-sec-exams:         #4f46e5;   /* indigo  */
+  --color-sec-exams-soft:    #eef1ff;
+  --color-sec-exams-line:    #c9d0fb;
+
+  --color-sec-finance:       #a16207;   /* amber   */
+  --color-sec-finance-soft:  #fdf6e7;
+  --color-sec-finance-line:  #f0dfb4;
+
+  --color-sec-attendance:    #15803d;   /* green   */
+  --color-sec-attendance-soft: #edf7f0;
+  --color-sec-attendance-line: #bfe3ca;
+
+  --color-sec-reports:       #be123c;   /* rose    */
+  --color-sec-reports-soft:  #fdeef2;
+  --color-sec-reports-line:  #f7c9d5;
+
+  --color-sec-comms:         #a21caf;   /* fuchsia */
+  --color-sec-comms-soft:    #fbeefb;
+  --color-sec-comms-line:    #efc7ee;
+
+  --color-sec-settings:      #475569;   /* slate   */
+  --color-sec-settings-soft: #f1f3f7;
+  --color-sec-settings-line: #d3d9e3;
 
   /* ── Surfaces ──────────────────────────────────────────────────────────────
      A faintly cool canvas under pure-white cards. The gap between them is
@@ -88,31 +180,33 @@
   /* ── Navigation rail ───────────────────────────────────────────────────────
      Near-black with a blue cast, so the rail reads as a solid architectural
      edge rather than a dark grey panel. */
-  --color-nav-bg:          #0b0f1a;
-  --color-nav-raised:      #171d2d;
-  --color-nav-line:        #222941;
-  --color-nav-text:        #8e98ae;
+  --color-nav-bg:          #101728;
+  --color-nav-raised:      #1c2438;
+  --color-nav-line:        #2a3350;
+  /* Was #8e98ae — 4.4:1 on the rail, under AA, and the rail is where somebody
+     scans for a word they half-remember. */
+  --color-nav-text:        #b4bed6;
   --color-nav-text-active: #ffffff;
 
   /* ── Status ────────────────────────────────────────────────────────────────
      Colour here MEANS something. Reserved for state, never for decoration.
      Deep text on a pale tint, so a status pill sits at the same visual weight
      as the ink around it instead of flaring. */
-  --color-success:      #12683a;
-  --color-success-soft: #eef7f1;
-  --color-success-line: #c3e2d0;
+  --color-success:      #047857;
+  --color-success-soft: #e6f6ef;
+  --color-success-line: #b0e0c8;
 
-  --color-warning:      #96570b;
-  --color-warning-soft: #fdf6ec;
-  --color-warning-line: #f0dcbb;
+  --color-warning:      #b45309;
+  --color-warning-soft: #fdf3e3;
+  --color-warning-line: #f3dcae;
 
-  --color-danger:       #9f2318;
-  --color-danger-soft:  #fdf2f1;
-  --color-danger-line:  #f2d3cf;
+  --color-danger:       #b91c1c;
+  --color-danger-soft:  #fdecec;
+  --color-danger-line:  #f6c9c6;
 
-  --color-info:         #1c4ea8;
-  --color-info-soft:    #f0f4fc;
-  --color-info-line:    #cfdbf2;
+  --color-info:         #1d4ed8;
+  --color-info-soft:    #eaf0fe;
+  --color-info-line:    #c4d4fa;
 
   /* ── Radius ────────────────────────────────────────────────────────────────
      Two values, not five. Controls are tighter than the containers holding

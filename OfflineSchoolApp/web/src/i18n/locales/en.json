@@ -101,6 +101,15 @@
     "processing": "Processing...",
     "cannotUndo": "This action cannot be undone."
   },
+  "navGroup": {
+    "overview": "Overview",
+    "people": "People",
+    "academics": "Academics",
+    "money": "Money",
+    "documents": "Documents",
+    "communication": "Communication",
+    "administration": "Administration"
+  },
   "nav": {
     "dashboard": "Dashboard",
     "watchlist": "Students to watch",

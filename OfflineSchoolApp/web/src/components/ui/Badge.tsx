@@ -49,8 +49,10 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 px-2 py-0.5",
-        "rounded-control text-xs font-medium leading-5",
+        "inline-flex items-center gap-1 px-2.5 py-0.5",
+        // semibold, not medium: a badge is read at a glance from across
+        // a table, which is the one place weight earns its keep.
+        "rounded-control text-xs font-semibold leading-5",
         // An inset ring instead of a border: it costs no layout height, so a
         // badge never nudges the table row it sits in.
         "ring-1 ring-inset",

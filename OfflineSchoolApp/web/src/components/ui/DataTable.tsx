@@ -35,7 +35,7 @@ export function Table({
 
 // ── Head ─────────────────────────────────────────────────
 export function THead({ children }: { children: React.ReactNode }) {
-  return <thead className="bg-surface-muted">{children}</thead>;
+  return <thead className="bg-gray-50">{children}</thead>;
 }
 
 // ── Header cell ──────────────────────────────────────────
@@ -53,12 +53,15 @@ export function Th({
     <th
       scope="col"
       className={cn(
-        "px-4 h-10 text-xs font-semibold text-ink-muted",
+        // Darker and a touch wider: a column heading is the label you read
+        // to know what a column of numbers means, and it was set in the
+        // second-faintest ink the palette has.
+        "px-4 h-11 text-xs font-semibold uppercase tracking-[0.05em] text-ink-body",
         // Sentence case, not SCREAMING. Uppercase headers cost legibility and
         // buy nothing once the header row is already tinted and ruled.
         "border-b border-line",
         // sticky so the header survives a long scroll inside the card
-        "sticky top-0 z-10 bg-surface-muted",
+        "sticky top-0 z-10 bg-gray-50",
         numeric ? "text-right" : "text-left",
         className
       )}
@@ -126,7 +129,7 @@ export function Td({
   return (
     <td
       className={cn(
-        "px-4 h-11 text-ink-body whitespace-nowrap",
+        "px-4 h-12 text-ink-body whitespace-nowrap",
         // Border on the cell rather than divide-y on the body: with
         // border-separate that is what keeps the rule under the sticky header
         // from detaching when the body scrolls.
@@ -159,9 +162,9 @@ export function EmptyTable({
           {icon}
         </div>
       )}
-      <p className="text-sm font-semibold text-ink">{title}</p>
+      <p className="text-base font-semibold text-ink">{title}</p>
       {subtitle && (
-        <p className="mt-1 max-w-sm text-xs text-ink-muted">{subtitle}</p>
+        <p className="mt-1 max-w-sm text-sm text-ink-muted">{subtitle}</p>
       )}
       {action && <div className="mt-4">{action}</div>}
     </div>

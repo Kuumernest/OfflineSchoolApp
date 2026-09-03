@@ -234,7 +234,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const totalResults = results.length;
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line bg-surface px-4 lg:px-6">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-4 border-b border-line-strong bg-surface px-4 lg:px-6">
 
       {/* ── Left ─────────────────────────────────────────────────────────── */}
       <div className="flex min-w-0 items-center gap-2">
@@ -252,7 +252,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
           loudest thing on the screen and told you nothing — so it is a quiet
           breadcrumb here, not a heading.
         */}
-        <span className="truncate text-sm font-medium text-ink-muted">
+        {/* This is the only thing on screen that says which page you are on
+            once you have scrolled past the header, and it was set at the same
+            weight and colour as the placeholder text in the search box. */}
+        <span className="truncate text-sm font-semibold text-ink">
           {title}
         </span>
       </div>
@@ -284,7 +287,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
             }}
             placeholder={t("common.searchPlaceholder")}
             className="
-              h-9 w-full rounded-control border border-line bg-canvas
+              h-10 w-full rounded-control border border-line bg-canvas
               pl-9 pr-9 text-sm text-ink-body placeholder:text-ink-faint
               transition-colors
               hover:border-line-strong

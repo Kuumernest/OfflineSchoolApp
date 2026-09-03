@@ -101,6 +101,15 @@
     "processing": "Traitement…",
     "cannotUndo": "Cette action est irréversible."
   },
+  "navGroup": {
+    "overview": "Vue d'ensemble",
+    "people": "Personnes",
+    "academics": "Scolarité",
+    "money": "Finances",
+    "documents": "Documents",
+    "communication": "Communication",
+    "administration": "Administration"
+  },
   "nav": {
     "dashboard": "Tableau de bord",
     "watchlist": "Élèves à suivre",

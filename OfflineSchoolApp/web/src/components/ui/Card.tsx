@@ -1,5 +1,7 @@
 // web/src/components/ui/Card.tsx
-import { cn } from "@/utils/cn";
+import { useLocation } from "react-router-dom";
+import { cn }             from "@/utils/cn";
+import { sectionForPath } from "@/config/sections";
 
 interface CardProps {
   className?: string;
@@ -64,11 +66,17 @@ export function CardHeader({
             panel is what separates a designed header from a bold paragraph —
             and it costs nothing in space. */}
         <span
-          className="mt-[3px] h-3.5 w-0.5 shrink-0 rounded-full bg-primary-600"
+          className={cn(
+            "mt-[3px] h-4 w-[3px] shrink-0 rounded-full",
+            // The section's hue rather than the accent, so every panel on a
+            // page agrees with the rule beside its title and with the icon in
+            // the rail. See config/sections.ts.
+            sectionForPath(useLocation().pathname).rule
+          )}
           aria-hidden="true"
         />
         <div className="min-w-0">
-          <h3 className="truncate text-sm font-semibold text-ink">{title}</h3>
+          <h3 className="truncate text-base font-semibold text-ink">{title}</h3>
           {subtitle && (
             <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>
           )}
