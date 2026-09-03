@@ -73,7 +73,7 @@ export default function SystemHealthGrid({
         live, since it can carry a tinted surface and border that a table row
         cannot without striping the whole grid.
       */}
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {METRICS.map((metric) => {
           const Icon    = metric.icon;
           const value   = s[metric.key] ?? 0;
@@ -83,7 +83,7 @@ export default function SystemHealthGrid({
             <div
               key={metric.key}
               className={cn(
-                "rounded-control border p-2.5 transition-colors",
+                "rounded-control border p-3.5 transition-colors",
                 isAlert
                   ? "border-danger-line bg-danger-soft"
                   : "border-line bg-gradient-to-b from-surface to-[#fcfcfe]"
@@ -92,18 +92,18 @@ export default function SystemHealthGrid({
               <div className="flex items-center justify-between gap-2">
                 <span
                   className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-control ring-1 ring-inset",
+                    "flex h-10 w-10 shrink-0 items-center justify-center rounded-control ring-1 ring-inset",
                     isAlert
                       ? "bg-surface text-danger ring-danger-line"
                       : "bg-canvas text-ink-muted ring-line"
                   )}
                 >
-                  <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
 
                 <p
                   className={cn(
-                    "text-lg font-semibold leading-none tabular",
+                    "text-2xl font-semibold leading-none tabular",
                     isAlert ? "text-danger" : "text-ink"
                   )}
                 >
@@ -113,7 +113,7 @@ export default function SystemHealthGrid({
 
               <p
                 className={cn(
-                  "mt-2 truncate text-xs leading-tight",
+                  "mt-2.5 text-sm leading-snug",
                   isAlert ? "font-medium text-danger" : "text-ink-muted"
                 )}
                 title={t(`health.${metric.key}`, { defaultValue: metric.label })}

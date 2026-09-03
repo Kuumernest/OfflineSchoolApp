@@ -24,7 +24,7 @@ export default function QuickActions() {
     <Card>
       <CardHeader title={t("dashboard.quickActions")} />
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
         {QUICK_ACTIONS.map(({ label, labelKey, icon: Icon, path }) => (
           <button
             key={path}
@@ -33,22 +33,22 @@ export default function QuickActions() {
             className="
               group flex flex-col items-start gap-2 rounded-control
               border border-line bg-gradient-to-b from-surface to-[#fcfcfe]
-              p-2.5 text-left
+              p-3.5 text-left
               transition duration-150 ease-[var(--ease-out-quiet)]
               hover:-translate-y-px hover:border-line-strong hover:shadow-card
             "
           >
             <span
               className="
-                flex h-7 w-7 items-center justify-center rounded-control
+                flex h-10 w-10 items-center justify-center rounded-control
                 bg-canvas text-ink-muted ring-1 ring-inset ring-line
                 transition-colors duration-150
                 group-hover:bg-primary-600 group-hover:text-white group-hover:ring-primary-600
               "
             >
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icon className="h-5 w-5" aria-hidden="true" />
             </span>
-            <span className="w-full truncate text-xs font-medium leading-tight text-ink-body transition-colors group-hover:text-ink">
+            <span className="w-full text-sm font-semibold leading-snug text-ink-body transition-colors group-hover:text-ink">
               {t(labelKey, { defaultValue: label })}
             </span>
           </button>

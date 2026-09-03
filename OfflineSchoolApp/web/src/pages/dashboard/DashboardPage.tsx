@@ -327,48 +327,57 @@ export default function DashboardPage() {
       </div>
 
       {/*
-        Content column + rail, rather than six full-width bands stacked down
-        the page. The wide column takes the things you read (lists of exams and
-        notices); the narrow one takes the things you glance at.
+        Six panels, two to a row, every one of them half the page.
+
+        This was a wide content column beside a narrow rail, which put the two
+        lists — recent exams and recent notices — in a stack two thirds wide
+        while the tile grids were squeezed into a third. Tiles are the panels
+        that most need room: each one is an icon, a number and a label, and at
+        a third of the page the label truncates and the number shrinks to fit.
+        Equal halves give the tiles room to be legible and stop implying that
+        the exam list outranks the notices.
       */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
 
-        <div className="space-y-4 lg:col-span-2">
-          <RecentExams exams={recentExamsQ.data ?? []} />
+        {/* Read: the two lists, side by side and equal. They are the same kind
+            of thing — the most recent few of something, each row a link — so
+            giving one of them two thirds of the page said they ranked, which
+            they do not. */}
+        <RecentExams exams={recentExamsQ.data ?? []} />
 
-          <RecentAnnouncements
-            announcements={announcementsQ.data ?? []}
-            loading={announcementsQ.isLoading}
-            error={
-              announcementsQ.isError
-                ? ((announcementsQ.error as Error)?.message ??
-                    "Failed to load announcements")
-                : undefined
-            }
-          />
+        <RecentAnnouncements
+          announcements={announcementsQ.data ?? []}
+          loading={announcementsQ.isLoading}
+          error={
+            announcementsQ.isError
+              ? ((announcementsQ.error as Error)?.message ??
+                  "Failed to load announcements")
+              : undefined
+          }
+        />
 
-          {hd && <SystemHealthGrid stats={hd} />}
-        </div>
+        {/* Glance: today's attendance against the exam mix. */}
+        <AttendanceWidget
+          present={ad?.todayPresent ?? 0}
+          absent={ad?.todayAbsent   ?? 0}
+          rate={ad?.rate            ?? 0}
+          loading={attendanceQ.isLoading}
+        />
 
-        <div className="space-y-4">
-          <AttendanceWidget
-            present={ad?.todayPresent ?? 0}
-            absent={ad?.todayAbsent   ?? 0}
-            rate={ad?.rate            ?? 0}
-            loading={attendanceQ.isLoading}
-          />
+        <ExamStatusChart
+          stats={{
+            ongoing:   ed?.ongoing   ?? 0,
+            completed: ed?.completed ?? 0,
+            draft:     ed?.draft     ?? 0,
+            total:     ed?.total     ?? 0,
+          }}
+        />
 
-          <ExamStatusChart
-            stats={{
-              ongoing:   ed?.ongoing   ?? 0,
-              completed: ed?.completed ?? 0,
-              draft:     ed?.draft     ?? 0,
-              total:     ed?.total     ?? 0,
-            }}
-          />
+        {/* Act: what is unfinished, and where to go next. Both are grids of
+            tiles, so they sit at the same width and read as a pair. */}
+        {hd && <SystemHealthGrid stats={hd} />}
 
-          <QuickActions />
-        </div>
+        <QuickActions />
 
       </div>
     </div>
