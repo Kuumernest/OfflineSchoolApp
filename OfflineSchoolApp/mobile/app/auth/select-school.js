@@ -289,7 +289,7 @@ export default function SelectSchoolScreen() {
         setLoadingMore(false);
       }
     },
-    []
+    [t]
   );
 
   // Initial load

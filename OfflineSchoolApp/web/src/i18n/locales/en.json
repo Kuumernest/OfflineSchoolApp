@@ -99,7 +99,8 @@
     "tryDifferent": "Try a different name or keyword",
     "clearSearch": "Clear search",
     "processing": "Processing...",
-    "cannotUndo": "This action cannot be undone."
+    "cannotUndo": "This action cannot be undone.",
+    "discardChanges": "Discard unsaved changes and go back?"
   },
   "flow": {
     "title": "Results workflow",
@@ -533,7 +534,10 @@
     "restoredEmailed": "A new password has been emailed to them.",
     "restoredPassword": "Temporary password: {{password}}",
     "restoredNoPassword": "They must set a new password at next sign-in.",
-    "errRestore": "Could not restore this teacher"
+    "errRestore": "Could not restore this teacher",
+    "removeSubjectFailed": "Failed to remove subject.",
+    "assignSubjectFailed": "Failed to assign subject.",
+    "unassignConfirm": "Remove “{{name}}” from this teacher?"
   },
   "subjects": {
     "title": "Subjects",
@@ -941,7 +945,14 @@
     "rejectionPh": "Write a reason for rejection…",
     "copyPassword": "Copy password",
     "approvedShare": "Approved - Share Credentials Manually",
-    "noPendingBody": "No pending applications at the moment. New submissions will appear here for review."
+    "noPendingBody": "No pending applications at the moment. New submissions will appear here for review.",
+    "noDocumentLink": "No document link is available.",
+    "copyFailed": "Copy failed. Value: {{value}}",
+    "selectClassFirst": "Please select a class before approving this application.",
+    "approveFailed": "Failed to approve application",
+    "rejectFailed": "Failed to reject application",
+    "approveConfirm": "Approve {{name}} and assign them to “{{className}}”?",
+    "rejectConfirm": "Reject {{name}}’s application? This cannot be undone."
   },
   "teachersAdd": {
     "title": "Add teacher",
@@ -1090,7 +1101,10 @@
     "previewNote1": "Showing layout only - placeholders are still visible.",
     "previewNote2": "Open with a real student to see filled data.",
     "noTemplateId": "No template ID provided.",
-    "rendering": "Rendering preview..."
+    "rendering": "Rendering preview...",
+    "cannotDeleteDefault": "Cannot delete the default template. Set another as default first.",
+    "setDefaultConfirm": "Set this template as the default for all reports?",
+    "deleteConfirm": "Delete “{{name}}”? This cannot be undone."
   },
   "notifications": {
     "title": "Notifications",

@@ -362,7 +362,7 @@ export default function ExamReportsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useEffect(() => { fetchReports(); }, [fetchReports]);
 

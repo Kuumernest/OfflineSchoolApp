@@ -141,8 +141,24 @@ export const needsServerSync = (id) =>
  * @returns {string}
  */
 export const generateLocalId = () => {
-  const ts   = Date.now().toString(36);
-  const rand = Math.random().toString(36).substring(2, 10);
+  const ts = Date.now().toString(36);
+
+  // expo-crypto is the platform CSPRNG. Math.random() would do for a local
+  // scratch id, but the same 8 characters also ride along into sync, where a
+  // collision between two offline devices means one record silently overwrites
+  // the other — randomness from a real generator costs nothing here.
+  let rand;
+  try {
+    const ExpoCrypto = require("expo-crypto");
+    const bytes = ExpoCrypto.getRandomBytes(6);
+    rand = [...bytes]
+      .map((b) => b.toString(36).padStart(2, "0"))
+      .join("")
+      .slice(0, 8);
+  } catch {
+    rand = Math.random().toString(36).substring(2, 10);
+  }
+
   return `${LOCAL_PREFIX}${ts}_${rand}`;
 };
 
@@ -161,7 +177,23 @@ export const generateUUID = () => {
     return crypto.randomUUID();
   }
 
-  // Pure-JS fallback — not cryptographically secure but sufficient for IDs
+  // expo-crypto fallback — the platform CSPRNG, not Math.random(). The pure-JS
+  // generator below used Math.random(), whose state is recoverable from a
+  // handful of observed outputs; these ids name homework and quiz documents in
+  // the outbox, so a predictable id is a collision waiting to be replayed.
+  try {
+    const ExpoCrypto = require("expo-crypto");
+    const bytes = ExpoCrypto.getRandomBytes(16);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // RFC 4122 variant
+    const hex = [...bytes]
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+    return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-` +
+      `${hex.slice(16, 20)}-${hex.slice(20)}`;
+  } catch { /* fall through to the last resort */ }
+
+  // Last resort only — neither crypto.randomUUID nor expo-crypto available.
   return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
     const r = (Math.random() * 16) | 0;
     const v = c === "x" ? r : (r & 0x3) | 0x8;

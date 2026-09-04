@@ -295,6 +295,12 @@ const fetchMergedStudents = async (query = {}) => {
 // ─── Misc helpers ─────────────────────────────────────────────────────────────
 
 const generateTempPassword = () => {
+  // crypto.randomInt, not Math.random: this output becomes a credential, and
+  // Math.random() is not a cryptographic generator (its state is recoverable
+  // from a handful of observed outputs). The Adjective+Noun+digits format is
+  // unchanged — see src/utils/tempPassword.js for the same rule applied to the
+  // student generator.
+  const { randomInt } = require("crypto");
   const adjectives = [
     "Swift","Brave","Calm","Bold","Keen","Pure","Wise","Kind",
     "Fair","Glad","Firm","Safe","True","Warm","Neat",
@@ -303,9 +309,9 @@ const generateTempPassword = () => {
     "River","Stone","Eagle","Cedar","Flame","Ocean","Tiger",
     "Haven","Pearl","Maple","Tower","Cloud","Frost","Spark","Grove",
   ];
-  const adj    = adjectives[Math.floor(Math.random() * adjectives.length)];
-  const noun   = nouns[Math.floor(Math.random() * nouns.length)];
-  const digits = String(Math.floor(1000 + Math.random() * 9000));
+  const adj    = adjectives[randomInt(adjectives.length)];
+  const noun   = nouns[randomInt(nouns.length)];
+  const digits = String(1000 + randomInt(9000));
   return `${adj}${noun}${digits}`;
 };
 
@@ -930,18 +936,50 @@ router.get("/attendance/stats", requirePermission("dashboard.view"), asyncHandle
   }
 
   try {
-    const dateStr    = new Date().toISOString().split("T")[0];
-    const baseFilter = { schoolId, date: dateStr };
+    const { todayStr } = require("../../../shared/attendance");
+    const Student      = require("../db/models/Student");
 
-    const [todayPresent, todayAbsent] = await Promise.all([
-      StudentAttendance.countDocuments({ ...baseFilter, status: "present" }),
-      StudentAttendance.countDocuments({ ...baseFilter, status: "absent"  }),
+    const date       = todayStr();
+    const baseFilter = { schoolId, date };
+
+    // Counted the way /attendance/report/overview counts, because these are
+    // the same figures on two screens and they used to disagree.
+    //
+    // A register has four states. This counted two of them and then divided
+    // by their sum, so a pupil marked late or excused was missing from the
+    // figures AND from the denominator: 30 present, 5 absent and 5 late in a
+    // class of 40 reported 86% of 35 here, while the attendance report called
+    // the same day 75% of 40. Five children were invisible on the dashboard
+    // and the headline rate flattered the school.
+    const [records, totalStudents] = await Promise.all([
+      StudentAttendance.find(baseFilter).select("status").lean(),
+      Student.countDocuments({ schoolId, isActive: { $ne: false } }),
     ]);
 
-    const total = todayPresent + todayAbsent;
-    const rate  = total > 0 ? Math.round((todayPresent / total) * 100) : 0;
+    const countOf = (status) => records.filter((r) => r.status === status).length;
 
-    return sendSuccess(res, { todayPresent, todayAbsent, total, rate });
+    const todayPresent = countOf("present");
+    const todayAbsent  = countOf("absent");
+    const todayLate    = countOf("late");
+    const todayExcused = countOf("excused");
+
+    // The roster is the denominator, so a day nobody marked reads as 0% of a
+    // known number of pupils rather than 0% of nothing — and `unmarked` is
+    // what tells the two apart.
+    const rate = totalStudents > 0
+      ? Math.round((todayPresent / totalStudents) * 100)
+      : 0;
+
+    return sendSuccess(res, {
+      todayPresent,
+      todayAbsent,
+      todayLate,
+      todayExcused,
+      total:    totalStudents,
+      marked:   records.length,
+      unmarked: Math.max(0, totalStudents - records.length),
+      rate,
+    });
   } catch (queryErr) {
     console.error("❌ [attendance/stats] Query failed:", queryErr.message);
     return sendSuccess(res, {

@@ -382,7 +382,7 @@ export default function AssignmentsIndex() {
         return acc;
       }, {});
     },
-    [assignments]
+    [assignments, t]
   );
 
   const groupedByClass = useMemo(
@@ -400,7 +400,7 @@ export default function AssignmentsIndex() {
         return acc;
       }, {});
     },
-    [assignments]
+    [assignments, t]
   );
 
   const matchesSearch = useCallback(
@@ -448,7 +448,7 @@ export default function AssignmentsIndex() {
         </>
       );
     },
-    [filteredAssignments, searchQuery, handleRemoveAssignment, deletingId]
+    [filteredAssignments, searchQuery, t, handleRemoveAssignment, deletingId]
   );
 
   const renderByTeacherTab = useCallback(() => {
@@ -533,15 +533,7 @@ export default function AssignmentsIndex() {
       );
     }
     return <>{rows}</>;
-  }, [
-    groupedByTeacher,
-    isGroupExpanded,
-    searchQuery,
-    matchesSearch,
-    toggleGroup,
-    handleRemoveAssignment,
-    deletingId,
-  ]);
+  }, [groupedByTeacher, searchQuery, t, isGroupExpanded, matchesSearch, toggleGroup, deletingId, handleRemoveAssignment]);
 
   const renderByClassTab = useCallback(() => {
     const groups = Object.entries(groupedByClass);
@@ -625,15 +617,7 @@ export default function AssignmentsIndex() {
       );
     }
     return <>{rows}</>;
-  }, [
-    groupedByClass,
-    isGroupExpanded,
-    searchQuery,
-    matchesSearch,
-    toggleGroup,
-    handleRemoveAssignment,
-    deletingId,
-  ]);
+  }, [groupedByClass, searchQuery, t, isGroupExpanded, matchesSearch, toggleGroup, deletingId, handleRemoveAssignment]);
 
   const renderUnassignedTab = useCallback(
     () => {
@@ -664,7 +648,7 @@ export default function AssignmentsIndex() {
         </View>
       );
     },
-    [unassignedTeachers, handleAssignTeacher]
+    [unassignedTeachers, t, handleAssignTeacher]
   );
 
   const renderTabContent = useCallback(() => {

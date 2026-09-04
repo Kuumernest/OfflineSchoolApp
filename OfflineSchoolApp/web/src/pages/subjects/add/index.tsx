@@ -18,6 +18,7 @@ import { createSubject } from "@/services/subject.service";
 import { cn }            from "@/utils/cn";
 import type { Class, Teacher } from "@/types";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TYPES
@@ -216,6 +217,7 @@ function ResultsSummary({
 
 export default function AddSubjectPage() {
   const { t } = useTranslation();
+  const { confirm } = useToast();
   const navigate = useNavigate();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
@@ -364,7 +366,7 @@ export default function AddSubjectPage() {
     [form, mutate]
   );
 
-  const handleDiscard = useCallback(() => {
+  const handleDiscard = useCallback(async () => {
     const isDirty =
       form.name.trim()     !== "" ||
       form.code.trim()        !== "" ||
@@ -373,13 +375,16 @@ export default function AddSubjectPage() {
       form.teacherId       !== "";
 
     if (isDirty) {
-      if (window.confirm("Discard unsaved changes and go back?")) {
-        navigate(-1);
-      }
+      const ok = await confirm({
+        title:   t("common.discard"),
+        message: t("common.discardChanges"),
+        kind:    "warning",
+      });
+      if (ok) navigate(-1);
     } else {
       navigate(-1);
     }
-  }, [form, navigate]);
+  }, [form, navigate, confirm, t]);
 
   const nameLen     = form.name.trim().length;
   const isNearLimit = nameLen > MAX_NAME_LENGTH - 15;

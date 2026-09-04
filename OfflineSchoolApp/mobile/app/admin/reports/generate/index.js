@@ -572,10 +572,7 @@ export default function ReportGeneratorScreen() {
     } finally {
       setGenerating(false);
     }
-  }, [
-    selectedClass, selectedStudent, selectedExam, selectedTerm,
-    selectedYear, selectedTemplate, schoolId, students, user, params.examId,
-  ]);
+  },[selectedClass, selectedTerm, selectedYear, t, user?.schoolName, user?.school?.name, selectedExam?.id, params.examId, selectedStudent, schoolId, students]);
 
   // ── Print single ───────────────────────────────────────
   const handlePrintSingle = useCallback(async () => {

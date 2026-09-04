@@ -65,8 +65,7 @@ const DATE_PRESETS = [
 // DATA — build per-student summaries from flat records array
 // ─────────────────────────────────────────────────────────────
 
-const buildStudentSummaries = (records) => {
-  const { t } = useTranslation();
+const buildStudentSummaries = (records, t) => {
   const byStudent = {};
 
   for (const r of records) {
@@ -498,7 +497,7 @@ export default function TeacherAttendanceReportScreen() {
         data?.data    ||
         (Array.isArray(data) ? data : []);
 
-      setStudents(buildStudentSummaries(rawRecords));
+      setStudents(buildStudentSummaries(rawRecords, t));
     } catch (err) {
       console.error("[TeacherReport] loadReport failed:", err?.message || err);
       setError(t("attTeacher.repLoadPull"));
@@ -506,7 +505,7 @@ export default function TeacherAttendanceReportScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [classId, schoolId, selectedPreset]);
+  }, [classId, schoolId, selectedPreset.end, selectedPreset.start, t]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
 

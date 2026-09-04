@@ -14,3 +14,4 @@
 
 export { default } from "@/lib/axios";
 export { default as api } from "@/lib/axios";
+export { TIMEOUTS } from "@/lib/axios";

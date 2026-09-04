@@ -39,8 +39,7 @@ const formatDate = (d) => {
 // FETCH TEACHER'S ASSIGNED CLASSES FROM SQLITE
 // ─────────────────────────────────────────────────────────────
 
-const getTeacherAssignedClasses = async (teacherId, schoolId) => {
-  const { t } = useTranslation();
+const getTeacherAssignedClasses = async (teacherId, schoolId, t) => {
   try {
     const db = await getDatabase();
 
@@ -264,7 +263,8 @@ export default function TeacherAttendanceScreen() {
       // 1. Get teacher's assigned classes from SQLite
       const assignedClasses = await getTeacherAssignedClasses(
         teacherId,
-        schoolId
+        schoolId,
+        t
       );
       setClasses(assignedClasses);
 
@@ -314,7 +314,7 @@ export default function TeacherAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [teacherId, schoolId]);
+  }, [teacherId, schoolId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

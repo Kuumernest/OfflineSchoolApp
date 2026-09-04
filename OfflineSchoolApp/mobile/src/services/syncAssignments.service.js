@@ -668,22 +668,15 @@ const backfillMissingJsonNames = async (db) => {
 // MAIN SYNC
 // ─────────────────────────────────────────────────────────────
 
-let _syncInProgress    = false;
 let _lastSyncAt        = 0;
 const SYNC_THROTTLE_MS = 30_000;
 
-export const syncTeacherAssignments = async (force = false) => {
-  if (!force && Date.now() - _lastSyncAt < SYNC_THROTTLE_MS) {
-    console.log("⏭️  syncTeacherAssignments: throttled");
-    return { synced: 0, total: 0 };
-  }
-  if (_syncInProgress) {
-    console.log("⏭️  syncTeacherAssignments: already running");
-    return { synced: 0, total: 0 };
-  }
-
-  _syncInProgress = true;
-
+// The private worker. Both gates that used to live here — the throttle and
+// a boolean in-progress flag — now sit in the exported wrapper below, which
+// holds the in-flight promise itself. One place decides whether a request
+// happens, and a second caller gets the first caller's result rather than
+// an empty one.
+const runSyncTeacherAssignments = async () => {
   try {
     const { schoolId, role } = getUserInfo();
 
@@ -756,9 +749,41 @@ export const syncTeacherAssignments = async (force = false) => {
   } catch (err) {
     console.error("[syncAssignments] unexpected error:", err);
     return { synced: 0, total: 0 };
-  } finally {
-    _syncInProgress = false;
   }
+};
+
+let _inFlight = null;
+
+/**
+ * One request, however many callers.
+ *
+ * The admin dashboard and the admin-stats service both ask for assignments
+ * the moment that screen mounts, and both pass force — which skips the
+ * throttle by design, so a pull-to-refresh is never swallowed. The result
+ * was the same GET going out three or four times per launch. On a LAN that
+ * was invisible; over a WAN it is several real round trips for one answer.
+ *
+ * Callers now share the request already in flight and get its result,
+ * rather than the empty { synced: 0 } the in-progress guard used to hand
+ * back — which read as "no assignments" to whoever asked second.
+ */
+export const syncTeacherAssignments = async (force = false) => {
+  // The throttle is checked before anything is shared. Checked afterwards,
+  // a throttled background call would be the promise a pull-to-refresh
+  // adopted, and the refresh would report "0 synced" without ever asking
+  // the server.
+  if (!force && Date.now() - _lastSyncAt < SYNC_THROTTLE_MS) {
+    console.log("⏭️  syncTeacherAssignments: throttled");
+    return { synced: 0, total: 0 };
+  }
+
+  if (_inFlight) return _inFlight;
+
+  _inFlight = runSyncTeacherAssignments().finally(() => {
+    _inFlight = null;
+  });
+
+  return _inFlight;
 };
 
 // ─────────────────────────────────────────────────────────────

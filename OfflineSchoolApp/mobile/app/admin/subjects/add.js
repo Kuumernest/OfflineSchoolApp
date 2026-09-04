@@ -136,7 +136,7 @@ export default function AddSubjectScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const db  = await getDB();
+        const db  = await getDatabase();
 
         const cls = await db.getAllAsync(
           "SELECT * FROM classes WHERE schoolId = ? ORDER BY name ASC",
@@ -235,7 +235,7 @@ export default function AddSubjectScreen() {
     }
 
     setResults(outcomes);
-  }, [form, classes, schoolId, router]);
+  }, [form, t, classes, schoolId, router]);
 
   // ── Discard ─────────────────────────────────────────────
 

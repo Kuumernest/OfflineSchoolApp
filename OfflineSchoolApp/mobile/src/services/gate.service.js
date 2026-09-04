@@ -94,9 +94,27 @@ export const syncRoster = async ({ schoolId }) => {
   return rows.length;
 };
 
-const lookup = async (db, token) =>
-  db.getFirstAsync(`SELECT * FROM gate_roster WHERE token = ?`, [token])
-    .catch(() => null);
+/**
+ * A gate token is crypto.randomBytes(12).toString("base64url") — always
+ * exactly 16 base64url characters. Checking the shape before anything else
+ * is what stops the camera treating every QR code in the world as a possible
+ * card: a poster, a drinks can, another school's card. Each of those used to
+ * be queued as a scan, and each came back 404 UNKNOWN_CARD — which the outbox
+ * classifies as permanent, so it sat in the failed count until cleared by
+ * hand. A card this school never issued is now refused on the device.
+ */
+const TOKEN_SHAPE = /^[A-Za-z0-9_-]{16}$/;
+
+// Scoped by school as well as token. syncRoster clears the whole table
+// before refilling it, so today a device only ever holds one school's
+// cards — but the column is stored and a lookup that ignores it would
+// resolve another school's card the moment that stops being true.
+const lookup = async (db, token, schoolId) =>
+  db.getFirstAsync(
+    `SELECT * FROM gate_roster
+      WHERE token = ? AND (school_id = ? OR school_id IS NULL)`,
+    [token, schoolId ?? null]
+  ).catch(() => null);
 
 /**
  * Unknown tokens already queued this session, so an operator holding an
@@ -116,10 +134,16 @@ export const scan = async ({ schoolId, token, station = null }) => {
   const value = String(token ?? "").trim();
   if (!value) return { ok: false, reason: "empty" };
 
+  // Refused, not queued: the server can only answer 404 for a token it never
+  // issued, and that answer is permanent.
+  if (!TOKEN_SHAPE.test(value)) {
+    return { ok: false, reason: "not_a_card", queued: false };
+  }
+
   const db = await getDatabase();
   await ensureSchema(db);
 
-  const known = await lookup(db, value);
+  const known = await lookup(db, value, schoolId);
   if (!known) {
     // Not refused outright: a card issued after this device last synced is
     // unknown here but valid at the server. The scan is queued and sent —

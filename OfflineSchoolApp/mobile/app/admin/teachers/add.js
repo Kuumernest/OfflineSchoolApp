@@ -68,7 +68,7 @@ export default function AddTeacherScreen() {
 
     setErrors(next);
     return Object.keys(next).length === 0;
-  }, [trimName, trimEmail]);
+  }, [trimName, trimEmail, t]);
 
   // ── Submit ──────────────────────────────────────────────
 
@@ -116,7 +116,7 @@ export default function AddTeacherScreen() {
     } finally {
       setSaving(false);
     }
-  }, [validate, trimName, trimEmail]);
+  }, [validate, trimName, trimEmail, t]);
 
   // ── Discard ─────────────────────────────────────────────
 
@@ -131,7 +131,7 @@ export default function AddTeacherScreen() {
         { text: t("common.discard"), style: "destructive", onPress: () => router.back() },
       ]
     );
-  }, [trimName, trimEmail, router]);
+  }, [trimName, trimEmail, t, router]);
 
   // ── Copy password ───────────────────────────────────────
 

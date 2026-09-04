@@ -7,6 +7,7 @@ import { ClassPicker }                  from "./ClassPicker";
 import { Spinner }                      from "./Spinner";
 import { formatDate }                   from "../../utils/formatDate";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 import type {
   NormalisedApplication,
@@ -99,6 +100,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   onClose,
 }) => {
   const { t } = useTranslation();
+  const { toast, confirm } = useToast();
   const [selectedClassId, setSelectedClassId] = useState<string | null>(
     application.classId ? String(application.classId) : null
   );
@@ -147,7 +149,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   const openDocument = useCallback((doc: ApplicationDocument) => {
     const uri = doc.uri || doc.url || doc.fileUrl || doc.path;
     if (!uri) {
-      alert("No document link available.");
+      toast({ kind: "error", title: t("admissions.noDocumentLink") });
       return;
     }
     window.open(uri, "_blank", "noopener,noreferrer");
@@ -159,8 +161,14 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       setError("Please select a class before approving.");
       return;
     }
-    const msg = `Approve ${application.name} and assign them to "${selectedClass?.name}"?`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("admissions.approveConfirm", {
+        name:      application.name,
+        className: selectedClass?.name ?? "",
+      }),
+    });
+    if (!ok) return;
 
     try {
       setError(null);
@@ -176,8 +184,12 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
 
   // ── Reject ──────────────────────────────────────────────────────────────
   const handleReject = async () => {
-    const msg = `Reject ${application.name}'s application? This cannot be undone.`;
-    if (!window.confirm(msg)) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("admissions.rejectConfirm", { name: application.name }),
+      kind:    "danger",
+    });
+    if (!ok) return;
 
     try {
       setError(null);

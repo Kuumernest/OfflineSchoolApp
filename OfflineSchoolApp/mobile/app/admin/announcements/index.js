@@ -52,8 +52,12 @@ const AUTHOR_ROLE_COLORS = {
   teacher:      { labelKey: "annAdmin.roleTeacher",       color: "#0891B2", bg: "#E0F2FE" },
 };
 
-const formatDate = (dateStr) => {
-  const { t } = useTranslation();
+// `t` is a parameter, not a hook call: this runs once per announcement row
+// inside a .map(), and a hook fired a list-length-dependent number of times
+// per render throws "Rendered more hooks than during the previous render" the
+// first time the list changes size. Same convention as formatDate(today, t)
+// in attendance/index.js.
+const formatDate = (dateStr, t) => {
   if (!dateStr) return "";
   const d       = new Date(dateStr);
   const now     = new Date();
@@ -178,7 +182,7 @@ export default function AdminAnnouncementsScreen() {
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   const handleTogglePin = useCallback(async (id) => {
     try {
@@ -191,7 +195,7 @@ export default function AdminAnnouncementsScreen() {
     } catch (err) {
       Alert.alert(t("annAdmin.errorTitle"), errorText(t, err));
     }
-  }, []);
+  }, [t]);
 
   const handleCardPress = useCallback((id) => {
     router.push(`/admin/announcements/${id}`);
@@ -574,7 +578,7 @@ export default function AdminAnnouncementsScreen() {
                     </Text>
                   </View>
                   <Text style={styles.dateText}>
-                    {formatDate(item.createdAt)}
+                    {formatDate(item.createdAt, t)}
                   </Text>
                 </View>
               </TouchableOpacity>

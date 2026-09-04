@@ -316,7 +316,7 @@ export default function TemplateBuilderScreen() {
         );
       })
       .finally(() => setLoading(false));
-  }, [templateId]);
+  }, [t, templateId]);
 
   // ── Save ───────────────────────────────────────────────
   const handleSave = useCallback(async () => {

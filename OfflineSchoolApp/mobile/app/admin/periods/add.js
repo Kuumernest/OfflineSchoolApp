@@ -82,7 +82,7 @@ export default function AddPeriod() {
 
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [name, startTime, endTime]);
+  }, [name, startTime, endTime, t]);
 
   const handleSubmit = useCallback(async () => {
     if (!validate()) return;
@@ -129,7 +129,7 @@ export default function AddPeriod() {
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [validate, name, startTime, endTime, isBreak, schoolId, router]);
+  }, [validate, name, startTime, endTime, isBreak, schoolId, t, router]);
 
   const isDisabled = saving || !name.trim() || !startTime || !endTime;
 

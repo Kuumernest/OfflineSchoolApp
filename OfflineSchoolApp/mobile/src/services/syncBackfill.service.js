@@ -820,6 +820,43 @@ export const registerReconcilers = () => {
     ).catch(() => {});
   });
 
+  /**
+   * A homework submission reached the server; adopt the id it minted.
+   *
+   * Submissions are subdocuments, so the server assigns the _id on push and
+   * this device's generated id has no meaning upstream. Grading addresses a
+   * submission by id, so without this mapping every grade would be sent to
+   * an id the server has never seen and come back "Submission not found".
+   */
+  registerReconciler("homeworkSubmission", async ({ response, args }) => {
+    const localId = args?.localId;
+    if (!localId) return;
+
+    const db = await getDatabase();
+    const ts = new Date().toISOString();
+    const created = response?.data?.submission ?? null;
+    const serverId = created?._id ?? created?.id ?? null;
+
+    if (serverId && String(serverId) !== String(localId)) {
+      await mapId(localId, String(serverId), "homework_submissions");
+      await db.runAsync(
+        `UPDATE homework_submissions
+         SET id = ?, _synced = 1, updated_at = ? WHERE id = ?`,
+        [String(serverId), ts, localId]
+      ).catch(async () => {
+        // The server's row already arrived by sync — drop the local one.
+        await db.runAsync(
+          `DELETE FROM homework_submissions WHERE id = ?`, [localId]
+        ).catch(() => {});
+      });
+    } else {
+      await db.runAsync(
+        `UPDATE homework_submissions SET _synced = 1, updated_at = ? WHERE id = ?`,
+        [ts, localId]
+      ).catch(() => {});
+    }
+  });
+
   /** A gate scan reached the server. */
   registerReconciler("gateScan", async ({ args }) => {
     const db = await getDatabase();

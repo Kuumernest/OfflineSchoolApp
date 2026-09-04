@@ -62,7 +62,6 @@ const STATUS_OPTION_KEYS = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const statusVariant = (status: string | undefined): BadgeVariant => {
-  const { t } = useTranslation();
   switch ((status ?? "").toLowerCase()) {
     case "approved":  return "success";
     case "suspended": return "danger";

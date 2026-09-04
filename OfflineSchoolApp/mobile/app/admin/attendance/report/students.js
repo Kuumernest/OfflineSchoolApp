@@ -58,8 +58,7 @@ const DATE_PRESETS = [
   { labelKey: "attAdmin.repLast3Mo",  start: monthStart(2), end: monthEnd(0)   },
 ];
 
-const buildStudentSummaries = (records, studentMap = {}) => {
-  const { t } = useTranslation();
+const buildStudentSummaries = (records, studentMap = {}, t) => {
   const byStudent = {};
 
   for (const r of records) {
@@ -486,7 +485,7 @@ export default function StudentAttendanceReportScreen() {
         console.warn("[loadReport] buildStudentMap failed:", mapErr?.message);
       }
 
-      const summaries = buildStudentSummaries(rawRecords, studentMap);
+      const summaries = buildStudentSummaries(rawRecords, studentMap, t);
       setStudents(summaries);
 
       console.log(
@@ -500,7 +499,7 @@ export default function StudentAttendanceReportScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, selectedPreset]);
+  }, [schoolId, selectedPreset.end, selectedPreset.start, t]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
 

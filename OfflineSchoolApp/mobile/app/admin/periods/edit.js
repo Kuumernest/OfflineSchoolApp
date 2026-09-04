@@ -101,7 +101,7 @@ export default function EditPeriod() {
 
     setErrors(e);
     return Object.keys(e).length === 0;
-  }, [name, startTime, endTime]);
+  }, [name, t, startTime, endTime]);
 
   const handleSave = useCallback(async () => {
     if (!validate()) return;
@@ -128,7 +128,7 @@ export default function EditPeriod() {
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [validate, id, name, startTime, endTime, isBreak, router]);
+  }, [validate, id, name, startTime, endTime, isBreak, t, router]);
 
   const handleDelete = useCallback(() => {
     Alert.alert(
@@ -158,7 +158,7 @@ export default function EditPeriod() {
         },
       ]
     );
-  }, [id, name, router]);
+  }, [id, name, router, t]);
 
   if (loading) {
     return (

@@ -62,7 +62,7 @@ export default function TemplatePreviewScreen() {
         setError(err?.response?.data?.error || errorText(t, err));
       })
       .finally(() => setLoading(false));
-  }, [templateId, examId, studentId]);
+  }, [templateId, examId, studentId, t]);
 
   return (
     <View style={s.screen}>

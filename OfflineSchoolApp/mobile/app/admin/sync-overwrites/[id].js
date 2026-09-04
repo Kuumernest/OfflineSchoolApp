@@ -140,7 +140,7 @@ export default function OverwriteDetailScreen() {
         },
       ]
     );
-  }, [id, router]);
+  }, [id, router, t]);
 
   // ── Loading ─────────────────────────────────────────
 

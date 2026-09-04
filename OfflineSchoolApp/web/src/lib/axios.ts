@@ -12,7 +12,12 @@ import { offlineAdapter } from "@/lib/offline/adapter";
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? "/api",
-  timeout: 15_000,
+  // 30s, not 15s. The schools run over the public internet, and 15s was
+  // short enough that an ordinary slow response looked like a failure —
+  // the request was aborted while the server was still working on it, so
+  // the user saw an error for something that would have succeeded.
+  // Genuinely long operations override this; see TIMEOUTS below.
+  timeout: 30_000,
   headers: { "Content-Type": "application/json" },
 
   /**
@@ -200,5 +205,22 @@ export const isConflict = (error: unknown): boolean =>
 
 export const isBadRequest = (error: unknown): boolean =>
   axios.isAxiosError(error) && error.response?.status === 400;
+
+/**
+ * Per-operation timeouts, for the calls that do real work on the server
+ * before they can answer.
+ *
+ * The instance default above is sized for ordinary reads and writes. It is
+ * the wrong ceiling for rendering a report card or recomputing a term: for
+ * those, thirty seconds is the length of a normal success rather than the
+ * sign of a problem, and aborting at that point throws away work the server
+ * has already done and is about to return.
+ */
+export const TIMEOUTS = {
+  /** The server renders one document per request — report cards. */
+  render: 60_000,
+  /** Whole-cohort work: compute, publish, promote, export. */
+  long: 120_000,
+} as const;
 
 export default api;

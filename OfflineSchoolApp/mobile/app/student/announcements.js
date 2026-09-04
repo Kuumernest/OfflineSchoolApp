@@ -50,8 +50,7 @@ const C = {
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
 
-const timeAgo = (dateStr) => {
-  const { t } = useTranslation();
+const timeAgo = (dateStr, t) => {
   if (!dateStr) return "";
   try {
     const now  = new Date();
@@ -82,7 +81,6 @@ const formatFullDate = (dateStr) => {
 };
 
 const getPriorityConfig = (priority = "normal") => {
-  const { t } = useTranslation();
   const p = (priority || "normal").toLowerCase();
   switch (p) {
     case "urgent":
@@ -97,7 +95,6 @@ const getPriorityConfig = (priority = "normal") => {
 };
 
 const getAuthorConfig = (authorRole = "") => {
-  const { t } = useTranslation();
   const r = (authorRole || "").toLowerCase();
   if (["super_admin", "school_admin", "admin"].includes(r)) {
     return { icon: "shield-checkmark", color: C.primary, labelKey: "annStudent.roleAdministrator" };
@@ -196,7 +193,7 @@ function DetailModal({ ann, visible, onClose, onAcknowledge }) {
               </View>
               <View style={md.dateBox}>
                 <Ionicons name="time-outline" size={13} color={C.gray400} />
-                <Text style={md.dateText}>{timeAgo(ann.createdAt)}</Text>
+                <Text style={md.dateText}>{timeAgo(ann.createdAt, t)}</Text>
               </View>
             </View>
 
@@ -556,7 +553,7 @@ export default function StudentAnnouncements() {
               {ann.authorName || t("annStudent.schoolFallback")}
             </Text>
             <Text style={s.cardDot}>·</Text>
-            <Text style={s.cardTime}>{timeAgo(ann.createdAt)}</Text>
+            <Text style={s.cardTime}>{timeAgo(ann.createdAt, t)}</Text>
             {ann.isAcknowledged && (
               <>
                 <Text style={s.cardDot}>·</Text>
@@ -574,7 +571,7 @@ export default function StudentAnnouncements() {
         />
       </TouchableOpacity>
     );
-  }, [openDetail]);
+  }, [openDetail, t]);
 
   // ─────────────────────────────────────────────────────────────────────────
   // RENDER

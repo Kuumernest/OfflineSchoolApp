@@ -48,8 +48,7 @@ const AUDIENCE_CONFIG = {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const formatRelative = (dateStr) => {
-  const { t } = useTranslation();
+const formatRelative = (dateStr, t) => {
   if (!dateStr) return "";
   const date   = new Date(dateStr);
   const diffMs = Date.now() - date.getTime();
@@ -185,7 +184,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
             </Text>
           </View>
 
-          <Text style={styles.dateText}>{formatRelative(item.createdAt)}</Text>
+          <Text style={styles.dateText}>{formatRelative(item.createdAt, t)}</Text>
         </View>
 
         {/* Body preview */}
@@ -329,7 +328,7 @@ export default function AnnouncementsScreen() {
         ]
       );
     }
-  }, [activeTab, acknowledge, remove]);
+  }, [activeTab, t, remove, acknowledge]);
 
   // ── Computed ───────────────────────────────────────────────────────────
   const data    = activeTab === "inbox" ? inbox : sent;

@@ -51,7 +51,7 @@ export default function PortalNewMessageScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   // Debounced so a fast typist does not fire a request per keystroke.
   useEffect(() => {
@@ -75,7 +75,7 @@ export default function PortalNewMessageScreen() {
     } finally {
       setOpening(null);
     }
-  }, [router]);
+  }, [router, t]);
 
   const renderItem = ({ item }) => {
     const key = `${item.kind}:${item.id}`;

@@ -73,8 +73,16 @@ export default function GateScannerScreen() {
     (async () => {
       await refreshLog();
       setReady(true);
+
+      // The roster used to refresh only when someone thought to tap the
+      // toolbar button, so a card cancelled this morning still resolved to a
+      // child's name all day. Silent on failure: no signal is the normal
+      // state at a gate, and the cached roster is the right fallback.
+      try {
+        setRoster(await GateService.syncRoster({ schoolId }));
+      } catch { /* cached roster stands */ }
     })();
-  }, [refreshLog]);
+  }, [refreshLog, schoolId]);
 
   const pullRoster = useCallback(async () => {
     setSyncing(true);
@@ -120,7 +128,7 @@ export default function GateScannerScreen() {
       // result before the next child's card replaces it.
       setTimeout(() => { busy.current = false; setResult(null); }, RESULT_MS);
     }
-  }, [schoolId, refreshLog]);
+  }, [schoolId, refreshLog, t]);
 
   if (!permission) {
     return <View style={styles.centre}><ActivityIndicator color={C.primary} /></View>;

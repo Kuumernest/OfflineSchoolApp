@@ -89,6 +89,8 @@ const STEP_KEYS = ["teacherContent.type", "teacherContent.subject", "teacherCont
 // ─────────────────────────────────────────────────────────────
 
 function StepIndicator({ currentStep }) {
+  const { t } = useTranslation();
+
   return (
     <View style={stepStyles.container}>
       {STEP_KEYS.map((stepKey, index) => {
@@ -175,7 +177,7 @@ function SelectSubjectPage() {
     } finally {
       setLoading(false);
     }
-  }, [teacherId]);
+  }, [t, teacherId]);
 
   useEffect(() => { loadSubjects(); }, [loadSubjects]);
 

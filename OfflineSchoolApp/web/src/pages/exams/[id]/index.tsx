@@ -20,6 +20,7 @@ import * as ExamService                      from "@/services/exam.service";
 import api                                   from "@/services/api";
 import { getErrorMessage }                   from "@/lib/axios";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 import {
   EXAM_STATUS_META,
   EXAM_TYPE_KEYS,
@@ -600,6 +601,7 @@ const ScoreEntryPanel = ({
   onClose:  () => void;
 }) => {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const [students, setStudents] = useState<MarkEntryStudent[]>([]);
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
@@ -743,7 +745,7 @@ const ScoreEntryPanel = ({
       });
       setSaved(true);
     } catch (err) {
-      alert(getErrorMessage(err) || t("exams.saveFailed"));
+      toast({ kind: "error", title: getErrorMessage(err) || t("exams.saveFailed") });
     } finally {
       setSaving(false);
     }
@@ -982,6 +984,7 @@ const MarksTab = ({
   schoolId:    string;
 }) => {
   const { t } = useTranslation();
+  const { confirm } = useToast();
   const [openSubjectId, setOpenSubjectId] = useState<string | null>(null);
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
@@ -1012,8 +1015,12 @@ const MarksTab = ({
   const toggleSubject = (id: string) =>
     setOpenSubjectId((prev) => (prev === id ? null : id));
 
-  const handleApprove = (sub: ExamSubject) => {
-    if (!window.confirm(t("exams.approveConfirm", { subject: sub.subjectName }))) return;
+  const handleApprove = async (sub: ExamSubject) => {
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.approveConfirm", { subject: sub.subjectName }),
+    });
+    if (!ok) return;
     approve.mutate(sub._id);
   };
 
@@ -1278,6 +1285,7 @@ const ResultsTab = ({
   submissions: ExamSubjectWithTotals[];
 }) => {
   const { t } = useTranslation();
+  const { confirm } = useToast();
   const { data: resultsData, isLoading } = useExamResults(examId);
   const { data: statsData }              = useExamStats(examId);
   const processResults                   = useProcessResults();
@@ -1300,13 +1308,21 @@ const ResultsTab = ({
     !resultsProcessed ? 2 :
     !resultsPublished ? 3 : 4;
 
-  const handleProcess = () => {
-    if (!window.confirm(t("exams.processConfirm"))) return;
+  const handleProcess = async () => {
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.processConfirm"),
+    });
+    if (!ok) return;
     processResults.mutate({ examId });
   };
 
-  const handlePublish = () => {
-    if (!window.confirm(t("exams.publishConfirm"))) return;
+  const handlePublish = async () => {
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.publishConfirm"),
+    });
+    if (!ok) return;
     publishResults.mutate(examId);
   };
 
@@ -1559,6 +1575,7 @@ const ResultsTab = ({
 
 export default function ExamDetailPage() {
   const { t } = useTranslation();
+  const { confirm } = useToast();
   const { id }         = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
   const navigate       = useNavigate();
@@ -1581,11 +1598,15 @@ export default function ExamDetailPage() {
     if (tab && TABS.find((tb) => tb.key === tab)) setActiveTab(tab);
   }, [searchParams]);
 
-  const handleStatusChange = (status: ExamStatus) => {
+  const handleStatusChange = async (status: ExamStatus) => {
     if (!id) return;
-    if (!window.confirm(t("exams.statusChangeConfirm", {
-      status: t(EXAM_STATUS_META[status].labelKey),
-    }))) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.statusChangeConfirm", {
+        status: t(EXAM_STATUS_META[status].labelKey),
+      }),
+    });
+    if (!ok) return;
     updateStatus.mutate({ examId: id, status });
   };
 

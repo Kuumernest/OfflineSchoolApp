@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 // ─────────────────────────────────────────────────────────
 // VARIABLE REFERENCE
@@ -283,6 +284,7 @@ type Tab = "html" | "css" | "vars" | "preview";
 
 export default function TemplateBuilderPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
   const navigate    = useNavigate();
   const [params]    = useSearchParams();
   const user        = useAuthStore((s) => s.user);
@@ -324,8 +326,14 @@ export default function TemplateBuilderPage() {
   // ── Save ───────────────────────────────────────────────
 
   const handleSave = useCallback(async () => {
-    if (!name.trim()) { alert(t("builder.nameRequired")); return; }
-    if (!html.trim()) { alert(t("builder.htmlRequired")); return; }
+    if (!name.trim()) {
+      toast({ kind: "warning", title: t("builder.nameRequired") });
+      return;
+    }
+    if (!html.trim()) {
+      toast({ kind: "warning", title: t("builder.htmlRequired") });
+      return;
+    }
 
     setSaving(true);
     setError(null);

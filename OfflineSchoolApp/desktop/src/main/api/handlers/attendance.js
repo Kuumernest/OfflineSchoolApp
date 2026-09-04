@@ -106,6 +106,45 @@ const rateOf = (rows, total) =>
 
 module.exports = [
   {
+    /**
+     * The administrator dashboard's attendance card.
+     *
+     * Every other figure on that dashboard is answered from this mirror —
+     * students/stats, classes/stats, subjects/stats, teachers/stats are all
+     * here. This one was not, so it alone went to the network, and a desktop
+     * that could not reach the server showed a dashboard where every card had
+     * a number except attendance, which read nought present. Nothing looked
+     * broken; the school just appeared to be empty.
+     *
+     * The same rows and the same arithmetic as report/overview above, so the
+     * card and the report cannot disagree.
+     */
+    route: "GET /api/admin/attendance/stats",
+
+    handler: ({ query }, { docs, session }) => {
+      const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
+      if (!schoolId) return null;
+
+      // Students only, so — unlike report/overview — this does not need the
+      // staff directory and does not decline when it is absent.
+      const date  = dateStr(query.date);
+      const total = population(docs, schoolId).students;
+      const rows  = docs.find("studentAttendance", { schoolId, date });
+
+      return ok({
+        todayPresent: countOf(rows, "present"),
+        todayAbsent:  countOf(rows, "absent"),
+        todayLate:    countOf(rows, "late"),
+        todayExcused: countOf(rows, "excused"),
+        total,
+        marked:   rows.length,
+        unmarked: total - rows.length,
+        rate:     rateOf(rows, total),
+      });
+    },
+  },
+
+  {
     route: "GET /api/attendance/report/overview",
 
     /**

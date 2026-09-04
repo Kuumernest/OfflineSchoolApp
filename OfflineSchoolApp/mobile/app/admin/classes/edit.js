@@ -78,7 +78,7 @@ export default function EditClass() {
     }
     if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";
-  }, []);
+  }, [t]);
 
   const handleChangeText = useCallback((text) => {
     setClassName(text);
@@ -121,7 +121,7 @@ export default function EditClass() {
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [className, classId, hasChanges, validate, router]);
+  }, [className, validate, hasChanges, classId, t, router]);
 
   const handleDiscard = useCallback(() => {
     if (hasChanges) {
@@ -136,7 +136,7 @@ export default function EditClass() {
     } else {
       router.back();
     }
-  }, [hasChanges, router]);
+  }, [hasChanges, router, t]);
 
   if (loading) {
     return (

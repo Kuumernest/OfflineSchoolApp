@@ -472,13 +472,6 @@ export default function ReportCard({
 }) {
   const { t, locale } = useTranslation();
 
-  if (!result) return null;
-
-  const isPassing  = result.isPassing;
-  const passColor  = isPassing ? C.success : C.error;
-  const percentage = result.percentage ?? 0;
-  const subjects   = result.subjectBreakdown || [];
-
   // ── PDF export ──────────────────────────────────────────
   const resolveHtml = async () => {
     // Primary: shared backend renderer (canonical, translated, coeff-aware).
@@ -518,6 +511,16 @@ export default function ReportCard({
       Alert.alert(t("reportCardDoc.shareError"), errorText(t, err));
     }
   }, [result, exam, schoolName, examId, studentId, schoolId]);
+
+  // Every hook above must run on every render. This guard used to sit before
+  // the two useCallback hooks, so the hook count jumped from 1 to 3 the moment
+  // `result` arrived — React throws on that change.
+  if (!result) return null;
+
+  const isPassing  = result.isPassing;
+  const passColor  = isPassing ? C.success : C.error;
+  const percentage = result.percentage ?? 0;
+  const subjects   = result.subjectBreakdown || [];
 
   // ─────────────────────────────────────────────────────────
   // RENDER

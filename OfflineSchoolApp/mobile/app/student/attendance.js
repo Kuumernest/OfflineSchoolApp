@@ -685,7 +685,7 @@ export default function StudentAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [userId, schoolId]);
+  }, [userId, t, schoolId]);
 
   useEffect(() => { load(); }, [load]);
 

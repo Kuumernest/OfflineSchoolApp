@@ -270,7 +270,13 @@ class SyncManagerClass {
     // mechanism — reconnect, foreground, and enqueue-then-drain all push
     // sooner. At 30 s a full backfill + pull + quiz sweep ran twice a minute
     // forever, which is what made the app feel sluggish while idle.
-    this.SYNC_INTERVAL_MS      = 120_000;
+    // Five minutes, not two. The schools run over the public internet, so a
+    // pull that is going to fail can spend most of a minute failing, and at
+    // 120s the next tick landed almost on top of the last one — the device
+    // spent its life syncing. This interval is only the safety net anyway:
+    // the reconnect and foreground triggers below are what make the app
+    // feel live, and they are immediate.
+    this.SYNC_INTERVAL_MS      = 300_000;
     this._staleSubjectsCleared = false;
     this._classIdsRepaired     = false;
     this._destroyed            = false;
@@ -293,7 +299,12 @@ class SyncManagerClass {
     // migrations, not sync work — running them on every tick was the single
     // most expensive thing the 30 s loop did.
     this._repairsDone          = false;
-    this.MAX_RETRIES           = 3;
+    // Two attempts, not three. With the per-request timeout raised for the
+    // pull below, three attempts could occupy ~3 minutes before the sync
+    // gave up — longer than the old interval, so cycles overlapped and the
+    // lock rejected the next one. A link that fails twice in a row is
+    // reliably down; the reconnect trigger will fire the moment it is not.
+    this.MAX_RETRIES           = 2;
     this.RETRY_DELAY_MS        = 1_000;
     // School details barely change; re-reading them every sync cycle meant
     // re-downloading a ~160 KB base64 logo every 30 seconds.
@@ -1083,11 +1094,25 @@ class SyncManagerClass {
 
       // ── PULL ──────────────────────────────────────────────────────────────
       if (this._isUnauthenticated()) return;
-      await this.pullChanges();
+      const cursor = await this.pullChanges();
+
+      // Commit the cursor the moment the pull itself has succeeded.
+      //
+      // It used to be written only after syncQuizData(), at the very end of
+      // syncAll. Any throw after this point — a failing quiz sync, a dropped
+      // connection, a 500 — left the cursor untouched, so the next run asked
+      // for everything since 1970 again. Each retry was therefore larger and
+      // slower than the one before it, and on a link flaky enough to fail
+      // once it would never converge: the sync that keeps failing is the one
+      // that keeps re-downloading the whole school.
+      //
+      // Quiz sync keeps its own cursor (getLastQuizSync), so it is not
+      // covered by this one and loses nothing by being moved below it.
+      if (cursor) await this.setLastSync(cursor);
+
       if (this._isUnauthenticated()) return;
       await this.syncQuizData();
 
-      await this.setLastSync(new Date().toISOString());
       console.log("[SyncManager] Sync completed at", this.lastSync);
     } catch (err) {
       console.warn("[SyncManager] Sync incomplete:", err.message);
@@ -1478,6 +1503,11 @@ class SyncManagerClass {
     const schoolId = await this.getSchoolId();
     if (!schoolId) { console.warn("[SyncManager] No schoolId — skipping pull"); return; }
 
+    // Cursor for the NEXT pull. Seeded from the device clock and replaced
+    // by the server's own timestamp below; the seed only survives for a
+    // student, whose branch never calls /sync/pull at all.
+    let cursor = new Date().toISOString();
+
     let lastSyncTime   = await this.getLastSync();
     const lastSyncDate = new Date(lastSyncTime);
     const now          = new Date();
@@ -1498,8 +1528,23 @@ class SyncManagerClass {
       if (!this.isStudent()) {
         const response = await this._withRetry(
           "pullChanges",
-          () => api.get(API.sync.pull, { params: { schoolId, lastSync: lastSyncTime } })
+          () => api.get(API.sync.pull, {
+            params: { schoolId, lastSync: lastSyncTime },
+            // Longer than the 30s default: the first pull after an install
+            // carries the whole school in a single response, and over a WAN
+            // that can legitimately outlast 30s while the server is working
+            // perfectly well. Every later pull is incremental — the cursor
+            // is committed as soon as this call succeeds — so this ceiling
+            // is reached once, not routinely.
+            timeout: 60_000,
+          })
         );
+        // Prefer the server's clock over this device's. A phone running
+        // even a minute fast would otherwise store a cursor ahead of the
+        // server and skip every record stamped in the gap, for good.
+        const serverTs = response.data?.timestamp;
+        if (serverTs) cursor = serverTs;
+
         const data = response.data?.data;
         if (data) {
           // Sequential, not Promise.all: these all write through the one
@@ -1523,6 +1568,7 @@ class SyncManagerClass {
       if (this.isAdmin()) await this.pullStudentApplications(lastSyncTime);
       await this.syncSchoolInfo();
       console.log("[SyncManager] Pull complete");
+      return cursor;
     } catch (err) {
       console.warn("[SyncManager] Pull failed (using cached data):", err.message);
       throw err;

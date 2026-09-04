@@ -32,8 +32,6 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ success: false, message: "Invalid token" });
     }
 
-    console.log("JWT decoded id:", decoded.id);
-
     let user;
     try {
       user = await User.findById(decoded.id).lean();
@@ -51,6 +49,32 @@ const authenticate = async (req, res, next) => {
 
     if (!user.isActive) {
       return res.status(401).json({ success: false, message: "Account is deactivated" });
+    }
+
+    // A token minted before the last password change is dead.
+    //
+    // passwordChangedAt is stamped by the pre("save") hook on the User model
+    // every time a password is set — creation, a forced reset, a self-service
+    // change — but until now nothing read it. Without this check, "change
+    // password" only moved the goalposts: a session token issued from a leaked
+    // temporary password kept working for its full thirty days, and the
+    // fifteen-minute rule on mustResetPassword accounts could not close the
+    // hole, because a thief who signed in once already held a long-lived token.
+    //
+    // decoded.iat is in seconds; passwordChangedAt is a Date. The leeway
+    // absorbs the ordering noise between the second this token was signed and
+    // the second the comparison runs, so a token issued in the same breath as
+    // the change (change-password returns a fresh one) is never rejected.
+    if (user.passwordChangedAt && decoded.iat) {
+      const issuedAtMs = decoded.iat * 1000;
+      const changedMs  = user.passwordChangedAt.getTime();
+      if (issuedAtMs < changedMs - 5_000) {
+        return res.status(401).json({
+          success: false,
+          message: "Your session ended when your password changed. Please sign in again.",
+          code:    "TOKEN_STALE",
+        });
+      }
     }
 
     // Every guard downstream compares req.user.role against the canonical

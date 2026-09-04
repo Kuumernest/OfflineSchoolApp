@@ -8,8 +8,9 @@ import { EXAM_STATUS_META,
          examTypeLabel }    from "@/constants/exam.constants";
 import type { Exam }           from "@/types/exam.types";
 
-import api                     from "@/lib/axios";
+import api, { TIMEOUTS }       from "@/lib/axios";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -87,6 +88,7 @@ const ExamCard = ({
 
 export default function ReportCardsPage() {
   const { t, i18n } = useTranslation();
+  const { toast, confirm } = useToast();
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   const user     = useAuthStore((s) => s.user);
 
@@ -237,13 +239,13 @@ export default function ReportCardsPage() {
   const handleReissue = async () => {
     if (!selectedExam || !selectedStudent) return;
 
-    const ok = window.confirm(
-      `${t("reportCards.reissueConfirm", {
+    const ok = await confirm({
+      title:   t("reportCards.reissue"),
+      message: `${t("reportCards.reissueConfirm", {
         name: selectedStudent.studentName ?? t("reportCards.thisStudent"),
-      })}
-
-${t("reportCards.reissueBody")}`
-    );
+      })}\n\n${t("reportCards.reissueBody")}`,
+      kind:    "warning",
+    });
     if (!ok) return;
 
     setReissuing(true);
@@ -288,7 +290,14 @@ ${t("reportCards.reissueBody")}`
     if (cardType === "sequence") {
       return api.get(
         `/results/${selectedExam!._id}/student/${sid}/reportcard/html`,
-        { params: { schoolId, lang, schoolName: school } }
+        {
+          params: { schoolId, lang, schoolName: school },
+          // One rendered card per request, and a class is generated one
+          // pupil at a time — so this ceiling is reached per pupil, not
+          // once. At 30s a slow render aborted mid-class and the run
+          // reported failures for cards the server was still drawing.
+          timeout: TIMEOUTS.render,
+        }
       );
     }
     const base = cardType === "term" ? "/term-results" : "/annual-results";
@@ -297,12 +306,13 @@ ${t("reportCards.reissueBody")}`
         schoolId, academicYear, classId: selectedClass!._id, lang,
         ...(cardType === "term" ? { term: termNumber } : {}),
       },
+      timeout: TIMEOUTS.render,
     });
   };
 
   const handleGenerate = async () => {
     if (!periodChosen || !selectedClass) {
-      alert(t("reportCards.chooseFirst"));
+      toast({ kind: "warning", title: t("reportCards.chooseFirst") });
       return;
     }
 
@@ -311,7 +321,7 @@ ${t("reportCards.reissueBody")}`
       : students;
 
     if (targetStudents.length === 0) {
-      alert(t("reportCards.noStudents"));
+      toast({ kind: "warning", title: t("reportCards.noStudents") });
       return;
     }
 

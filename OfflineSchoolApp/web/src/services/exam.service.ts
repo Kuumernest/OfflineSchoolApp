@@ -1,5 +1,5 @@
 // web/src/services/exam.service.ts
-import api from "@/lib/axios";
+import api, { TIMEOUTS } from "@/lib/axios";
 import type {
 ExamsListResponse,
 ExamDetailResponse,
@@ -273,7 +273,7 @@ export const processResults = async (
   const { data } = await api.post(`/exams/${examId}/process`, {
     schoolId,
     classId,
-  }, { timeout: 120_000 });
+  }, { timeout: TIMEOUTS.long });
   return data;
 };
 
@@ -393,7 +393,7 @@ academicYear: string;
 term: number;
 classId?: string;
 }) => {
-const { data } = await api.post("/term-results/compute", payload);
+const { data } = await api.post("/term-results/compute", payload, { timeout: TIMEOUTS.long });
 return data;
 };
 
@@ -403,7 +403,7 @@ academicYear: string;
 term: number;
 classId?: string;
 }) => {
-const { data } = await api.post("/term-results/publish", payload);
+const { data } = await api.post("/term-results/publish", payload, { timeout: TIMEOUTS.long });
 return data;
 };
 
@@ -427,7 +427,7 @@ schoolId: string;
 academicYear: string;
 classId?: string;
 }) => {
-const { data } = await api.post("/annual-results/compute", payload);
+const { data } = await api.post("/annual-results/compute", payload, { timeout: TIMEOUTS.long });
 return data;
 };
 
@@ -436,6 +436,6 @@ schoolId: string;
 academicYear: string;
 classId?: string;
 }) => {
-const { data } = await api.post("/annual-results/publish", payload);
+const { data } = await api.post("/annual-results/publish", payload, { timeout: TIMEOUTS.long });
 return data;
 };

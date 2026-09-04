@@ -22,6 +22,7 @@
 const express = require("express");
 const path    = require("path");
 const fs      = require("fs");
+const crypto  = require("crypto");
 const router  = express.Router();
 
 const Conversation = require("../db/models/Conversation");
@@ -30,6 +31,7 @@ const Message      = require("../db/models/Message");
 const policy = require("../services/communication/policy.service");
 const svc    = require("../services/communication/conversation.service");
 const permissions = require("../services/permissions.service");
+const { signAttachmentUrls } = require("../utils/mediaSignature");
 
 // Optional, exactly as the content routes treat it: a deployment without
 // multer should lose file attachments, not the whole messaging module.
@@ -83,7 +85,15 @@ const getUpload = () => {
         .replace(/\s+/g, "_")
         .replace(/[^a-zA-Z0-9_\-]/g, "")
         .slice(0, 60) || "file";
-      cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${base}${ext}`);
+      // 16 CSPRNG bytes, not Math.random(): while /uploads serves attachments,
+      // the filename IS their only access control, and a timestamp plus six
+      // predictable characters narrowed a guess to seconds. The sanitised
+      // original name stays for humans; the random segment makes the URL
+      // unguessable. Entropy rather than a signed expiry is deliberate — these
+      // URLs are stored inside Message documents and re-served for years, so
+      // no signature is ever allowed to break an old message.
+      const random = crypto.randomBytes(16).toString("hex");
+      cb(null, `${Date.now()}-${random}-${base}${ext}`);
     },
   });
 
@@ -374,8 +384,15 @@ router.get("/conversations/:id/messages", asyncHandler(async (req, res) => {
     success:  true,
     count:    docs.length,
     // An admin auditing sees the real rows, including deleted bodies — that
-    // is the point of an audit. Everyone else gets the redacted view.
-    messages: docs.map((m) => (loaded.audit ? m.toObject() : m.toClientJSON())),
+    // is the point of an audit. Everyone else gets the redacted view. Either
+    // way attachment URLs go out signed: a signature says nothing about who
+    // is reading, only that the server handed this link out now, and an
+    // unsigned audit link would die the day REQUIRE_MEDIA_SIGNATURE goes to 1.
+    messages: docs.map((m) => {
+      const row = loaded.audit ? m.toObject() : m.toClientJSON();
+      row.attachments = signAttachmentUrls(row.attachments ?? []);
+      return row;
+    }),
     viaAudit: loaded.audit,
   });
 }));

@@ -68,8 +68,7 @@ const normDay = (raw) =>
  * Fetches periods from SQLite first, falls back to server if online.
  * FIXED (Issue 7): wraps table existence check before any query.
  */
-const fetchPeriods = async (db, schoolId) => {
-  const { t } = useTranslation();
+const fetchPeriods = async (db, schoolId, t) => {
   try {
     // FIXED (Issue 7): check table exists before querying
     const tableCheck = await db.getFirstAsync(
@@ -326,7 +325,7 @@ export default function TeacherTimetable() {
       const { slots } = await fetchTeacherSchedule(db, teacherId, schoolId);
       setSchedule(slots);
 
-      const loadedPeriods = await fetchPeriods(db, schoolId);
+      const loadedPeriods = await fetchPeriods(db, schoolId, t);
       setPeriods(
         loadedPeriods.sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0))
       );
@@ -338,7 +337,7 @@ export default function TeacherTimetable() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [teacherId, schoolId]);
+  }, [teacherId, schoolId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

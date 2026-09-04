@@ -138,7 +138,7 @@ export default function PeriodsScreen() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadPeriods();
@@ -166,7 +166,7 @@ export default function PeriodsScreen() {
         },
       ]
     );
-  }, [loadPeriods]);
+  }, [loadPeriods, t]);
 
   const handleMove = useCallback(async (id, direction) => {
     try {
@@ -175,7 +175,7 @@ export default function PeriodsScreen() {
     } catch (err) {
       Alert.alert(t("periodsAdmin.errorTitle"), t("periodsAdmin.reorderFailed"));
     }
-  }, [loadPeriods]);
+  }, [loadPeriods, t]);
 
   const handleEdit = useCallback((period) => {
     router.push({

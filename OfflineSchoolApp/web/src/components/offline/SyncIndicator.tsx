@@ -31,12 +31,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { CloudOff, RefreshCw, AlertTriangle, Check, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 import { desktop, type SyncStatus, type OutboxSummary } from "@/lib/offline/bridge";
 import { cn } from "@/utils/cn";
 
 export default function SyncIndicator() {
   const { t } = useTranslation();
+  const { confirm } = useToast();
   const bridge = desktop();
 
   const [status,  setStatus]  = useState<SyncStatus | null>(null);
@@ -211,7 +213,12 @@ export default function SyncIndicator() {
                             // Discarding removes the local row as well, in the
                             // main process — otherwise the desktop would keep
                             // showing a change the server never accepted.
-                            if (!window.confirm(t("sync.discardConfirm"))) return;
+                            const ok = await confirm({
+                              title:   t("sync.discard"),
+                              message: t("sync.discardConfirm"),
+                              kind:    "danger",
+                            });
+                            if (!ok) return;
                             setBusy(item.seq);
                             try { setOutbox(await bridge.outbox.discard(item.seq)); }
                             finally { setBusy(null); }

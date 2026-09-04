@@ -40,8 +40,7 @@ const timeLabel = (iso) => {
 };
 
 /** Direct threads carry no title; they are named for the other person. */
-const titleFor = (c, myId) => {
-  const { t } = useTranslation();
+const titleFor = (c, myId, t) => {
   if (c.title) return c.title;
   const other = (c.participants || []).find((p) => String(p.id) !== String(myId));
   return other?.name || t("msgMobile.conversation");
@@ -81,7 +80,7 @@ export default function ConversationsScreen() {
     const res = await MessageService.syncConversations({ myId, myKind: "user" });
     setSyncNote(res.ok ? null : t("msgMobile.syncNote"));
     await loadLocal();
-  }, [myId, loadLocal]);
+  }, [myId, t, loadLocal]);
 
   useEffect(() => {
     loadLocal().then(refresh);
@@ -109,7 +108,7 @@ export default function ConversationsScreen() {
       <View style={s.rowBody}>
         <View style={s.rowTop}>
           <Text style={s.rowTitle} numberOfLines={1}>
-            {titleFor(item, myId)}
+            {titleFor(item, myId, t)}
           </Text>
           <Text style={s.rowTime}>{timeLabel(item.lastMessageAt)}</Text>
         </View>

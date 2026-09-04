@@ -144,8 +144,7 @@ const isAudioType = (item) =>
     (item.fileName || item.fileUrl || "").split("?")[0].split(".").pop()?.toLowerCase()
   );
 
-const openLocalFile = async (localUri, mime) => {
-  const { t } = useTranslation();
+const openLocalFile = async (localUri, mime, t) => {
   if (Platform.OS === "android") {
     if (IntentLauncher) {
       try {
@@ -175,8 +174,7 @@ const openLocalFile = async (localUri, mime) => {
   }
 };
 
-const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
-  const { t } = useTranslation();
+const downloadAndOpen = async (url, mimeType, onProgress, onDone, t) => {
   if (!url) {
     Alert.alert(t("studentSubj.noFileTitle"), t("studentSubj.noFileBody"));
     return;
@@ -191,7 +189,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
     if (info.exists && info.size > 0) {
       console.log("[downloadAndOpen] cache hit →", fileName);
       onDone?.(true);
-      await openLocalFile(localUri, mime);
+      await openLocalFile(localUri, mime, t);
       return;
     }
 
@@ -211,7 +209,7 @@ const downloadAndOpen = async (url, mimeType, onProgress, onDone) => {
     if (!result?.uri) throw new Error(t("studentSubj.downloadFailed"));
 
     onDone?.(false);
-    await openLocalFile(result.uri, mime);
+    await openLocalFile(result.uri, mime, t);
 
   } catch (err) {
     console.warn("[downloadAndOpen]", err.message);
@@ -246,12 +244,13 @@ const MediaCard = ({ item, color, bg, isVideo: isVid }) => {
       await downloadAndOpen(
         item.fileUrl, item.mimeType,
         (pct) => setProgress(pct),
-        () => setIsCached(true)
+        () => setIsCached(true),
+        t
       );
     } catch { /* Alert shown inside */ } finally {
       setProgress(null);
     }
-  }, [item.fileUrl, item.mimeType, progress]);
+  }, [item.fileUrl, item.mimeType, progress, t]);
 
   const isDownloading = progress !== null;
 
@@ -384,10 +383,11 @@ const ContentCard = React.memo(({ item }) => {
       await downloadAndOpen(
         item.fileUrl, item.mimeType,
         (pct) => setProgress(pct),
-        () => {}
+        () => {},
+        t
       );
     } finally { setProgress(null); }
-  }, [item.fileUrl, item.mimeType, progress]);
+  }, [item.fileUrl, item.mimeType, progress, t]);
 
   return (
     <View style={cc.card}>
@@ -592,7 +592,7 @@ export default function SubjectDetailScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [subjectId, classId]);
+  }, [subjectId, classId, t]);
 
   useEffect(() => { load(); }, [load]);
 

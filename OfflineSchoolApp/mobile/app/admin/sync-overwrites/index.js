@@ -195,7 +195,7 @@ export default function SyncOverwritesScreen() {
         },
       ]
     );
-  }, [overwrites, schoolId]);
+  }, [overwrites, schoolId, t]);
 
   // ── Derived counts ───────────────────────────────────
 

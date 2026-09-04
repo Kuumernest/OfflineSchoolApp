@@ -1160,7 +1160,7 @@ function AdminsSection({
   currentUserId: string;
 }) {
   const { t } = useTranslation();
-  const { toast }    = useToast();
+  const { toast, confirm } = useToast();
   const [admins,     setAdmins]     = useState<AdminUser[]>([]);
   const [loading,    setLoading]    = useState(true);
   const [showModal,  setShowModal]  = useState(false);
@@ -1266,7 +1266,11 @@ function AdminsSection({
    * before the dialog closes.
    */
   const handleReset = async (admin: AdminUser) => {
-    if (!window.confirm(t("settings.resetPasswordConfirm", { name: admin.name }))) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("settings.resetPasswordConfirm", { name: admin.name }),
+    });
+    if (!ok) return;
     try {
       const { data } = await api.post(
         `/admin/settings/admins/${admin._id}/reset-password`,
@@ -1298,7 +1302,11 @@ function AdminsSection({
    * which is what somebody will try first.
    */
   const handleRestore = async (admin: AdminUser) => {
-    if (!window.confirm(t("settings.restoreConfirm", { name: admin.name }))) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("settings.restoreConfirm", { name: admin.name }),
+    });
+    if (!ok) return;
     try {
       const { data } = await api.post("/admin/settings/admins", {
         name: admin.name, email: admin.email, role: admin.role, schoolId,
@@ -1331,7 +1339,12 @@ function AdminsSection({
       toast({ kind: "error", title: t("settings.cannotRemoveSelf") });
       return;
     }
-    if (!window.confirm(t("settings.removeAdminConfirm", { name: adminName }))) return;
+    const ok = await confirm({
+      title:   t("common.remove"),
+      message: t("settings.removeAdminConfirm", { name: adminName }),
+      kind:    "danger",
+    });
+    if (!ok) return;
     try {
       await api.delete(`/admin/settings/admins/${adminId}`);
       setAdmins((prev) => prev.filter((a) => a._id !== adminId));

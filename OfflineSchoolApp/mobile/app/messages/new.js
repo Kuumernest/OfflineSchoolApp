@@ -59,7 +59,7 @@ export default function NewConversationScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     const timer = setTimeout(() => load(query.trim()), 250);
@@ -88,7 +88,7 @@ export default function NewConversationScreen() {
     } finally {
       setOpening(null);
     }
-  }, [myId]);
+  }, [myId, t]);
 
   const renderItem = ({ item }) => {
     const key = `${item.kind}:${item.id}`;

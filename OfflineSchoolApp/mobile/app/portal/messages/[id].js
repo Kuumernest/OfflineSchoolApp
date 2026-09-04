@@ -76,7 +76,7 @@ export default function PortalThreadScreen() {
     } finally {
       setLoading(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -109,7 +109,7 @@ export default function PortalThreadScreen() {
     } finally {
       setSending(false);
     }
-  }, [draft, sending, id, load]);
+  }, [draft, sending, id, load, t]);
 
   const ordered = [...messages].sort((a, b) => a.seq - b.seq);
 

@@ -145,7 +145,7 @@ export default function ThreadScreen() {
     } finally {
       setAttaching(false);
     }
-  }, [id]);
+  }, [id, t]);
 
   // ── Send ──────────────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ export default function ThreadScreen() {
     } finally {
       setSending(false);
     }
-  }, [draft, pending, sending, id, myId, user, loadLocal]);
+  }, [draft, pending, sending, id, myId, user?.name, loadLocal, t]);
 
   // ── Render ────────────────────────────────────────────────────────────────
 

@@ -699,7 +699,7 @@ export default function AttemptScreen() {
         ]
       );
     }
-  }, [totalQ, answeredCount, attemptId]);
+  }, [totalQ, answeredCount, attemptId, t]);
 
   // ── Timer expire ──────────────────────────────────────────
   const handleTimerExpire = useCallback(async () => {

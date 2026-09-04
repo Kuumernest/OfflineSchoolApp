@@ -1,5 +1,5 @@
 // web/src/services/export.service.ts
-import api from "@/services/api";
+import api, { TIMEOUTS } from "@/services/api";
 
 const BASE = "/exports";
 
@@ -41,6 +41,8 @@ export async function downloadExport(
   const response = await api.get(`${BASE}/${kind}`, {
     params: { schoolId, lang, ...params },
     responseType: "blob",
+    // The workbook is built server-side before a single byte comes back.
+    timeout: TIMEOUTS.long,
   });
 
   const disposition = String(response.headers?.["content-disposition"] ?? "");

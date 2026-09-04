@@ -638,7 +638,7 @@ export default function TeacherSubjectsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [teacherId, schoolId]);
+  }, [teacherId, schoolId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

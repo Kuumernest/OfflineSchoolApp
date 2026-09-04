@@ -101,8 +101,7 @@ const formatCount = (n) => {
   return String(n);
 };
 
-const getTypeConfig = (type = "") => {
-  const { t } = useTranslation();
+const getTypeConfig = (type = "", t) => {
   const map = {
     syllabus: { icon: "list",          color: "#7C3AED", bg: "#EDE9FE", labelKey: "studentSubj.tabSyllabus" },
     notes:    { icon: "document-text", color: "#2563EB", bg: "#DBEAFE", labelKey: "studentSubj.tabNotes"    },
@@ -145,6 +144,8 @@ function SummaryCard({ icon, color, bg, count, label, onPress, active }) {
 }
 
 function TypeTab({ tab, active, count, onPress }) {
+  const { t } = useTranslation();
+
   return (
     <TouchableOpacity
       style={[tabStyles.tab, active && { backgroundColor: tab.color }]}
@@ -178,7 +179,8 @@ function TypeTab({ tab, active, count, onPress }) {
 }
 
 function ContentCard({ item, onPress, onOptions }) {
-  const cfg    = getTypeConfig(item.type);
+  const { t }  = useTranslation();
+  const cfg    = getTypeConfig(item.type, t);
   const status = STATUS_COLORS[item.status] || STATUS_COLORS.active;
 
   return (
@@ -257,7 +259,7 @@ function ContentCard({ item, onPress, onOptions }) {
 
 function EmptyState({ activeTab, onUpload }) {
   const { t } = useTranslation();
-  const cfg = getTypeConfig(activeTab === "all" ? "document" : activeTab);
+  const cfg = getTypeConfig(activeTab === "all" ? "document" : activeTab, t);
   return (
     <View style={emptyStyles.container}>
       <View style={[emptyStyles.iconBox, { backgroundColor: cfg.bg }]}>
@@ -292,7 +294,7 @@ function OptionsSheet({
 }) {
   const { t } = useTranslation();
   if (!item) return null;
-  const cfg = getTypeConfig(item.type);
+  const cfg = getTypeConfig(item.type, t);
 
   const OPTIONS = [
     {
@@ -506,7 +508,7 @@ function ContentLibraryPage() {
         setRefreshing(false);
       }
     },
-    [teacherId]
+    [t, teacherId]
   );
 
   useEffect(() => { loadContent(); }, [loadContent]);
@@ -599,7 +601,7 @@ function ContentLibraryPage() {
     } else {
       Alert.alert(t("teacherContent.noFile"), t("teacherContent.noFileBody"));
     }
-  }, []);
+  }, [t]);
 
   const handleShareItem = useCallback(async (item) => {
     try {
@@ -611,7 +613,7 @@ function ContentLibraryPage() {
     } catch {
       Alert.alert(t("teacherContent.shareFailed"), t("teacherContent.shareFailedBody"));
     }
-  }, []);
+  }, [t]);
 
   const handleArchiveItem = useCallback((item) => {
     const newStatus = item.status === "archived" ? "active" : "archived";
@@ -641,7 +643,7 @@ function ContentLibraryPage() {
         },
       },
     ]);
-  }, []);
+  }, [t]);
 
   const handleDeleteItem = useCallback((item) => {
     Alert.alert(
@@ -672,7 +674,7 @@ function ContentLibraryPage() {
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   const openOptions = useCallback((item) => {
     setSelectedItem(item);
@@ -693,13 +695,13 @@ function ContentLibraryPage() {
       subjects.find((s) => s.subjectId === filterSubject)?.subjectName ||
       t("teacherContent.subject")
     );
-  }, [filterSubject, subjects]);
+  }, [filterSubject, subjects, t]);
 
   const activeSortLabel = useMemo(
     () => {
       return (() => { const o = SORT_OPTIONS.find((so) => so.id === sortBy); return o ? t(o.labelKey) : t("teacherContent.sort"); })();
     },
-    [sortBy]
+    [sortBy, t]
   );
 
   // ─────────────────────────────────────────────────────────

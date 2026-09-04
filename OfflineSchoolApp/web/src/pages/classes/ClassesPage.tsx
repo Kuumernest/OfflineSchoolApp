@@ -353,8 +353,7 @@ export default function ClassesPage() {
               className={`pb-3 text-sm font-medium capitalize border-b-2 transition-colors ${
                 tab === t
                   ? "border-primary-600 text-primary-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 \
-"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
               {t}

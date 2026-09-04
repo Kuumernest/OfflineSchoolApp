@@ -35,8 +35,7 @@ import { useTranslation } from "../../../src/i18n/useTranslation";
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
-const formatTime = (minutes) => {
-  const { t } = useTranslation();
+const formatTime = (minutes, t) => {
   if (!minutes) return t("studentQuiz.noLimit");
   if (minutes < 60) return `${minutes} min`;
   const h = Math.floor(minutes / 60);
@@ -67,8 +66,7 @@ const sameId = (a, b) =>
 //    is_published status or availability window expiry
 // ─────────────────────────────────────────────────────────────
 
-const getQuizStatus = (quiz, attempts = []) => {
-  const { t } = useTranslation();
+const getQuizStatus = (quiz, attempts = [], t) => {
   const now          = new Date();
   const qId          = quiz.id || quiz._id;
   const quizAttempts = attempts.filter((a) => sameId(a.quiz_id, qId));
@@ -198,7 +196,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
   if (!quiz) return null;
 
   const qId    = quiz.id || quiz._id;
-  const status = getQuizStatus(quiz, attempts);
+  const status = getQuizStatus(quiz, attempts, t);
 
   const submitted = attempts.filter(
     (a) =>
@@ -247,7 +245,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
               {
                 icon:  "time-outline",
                 label: t("studentQuiz.timeLimit"),
-                value: formatTime(quiz.time_limit_minutes),
+                value: formatTime(quiz.time_limit_minutes, t),
                 color: "#D97706",
                 bg:    "#FEF3C7",
               },
@@ -537,7 +535,7 @@ export default function StudentQuizzesScreen() {
 
   const quizzesWithStatus = quizzes.map((quiz) => ({
     quiz,
-    status: getQuizStatus(quiz, attempts),
+    status: getQuizStatus(quiz, attempts, t),
   }));
 
   // ✅ Completed = any quiz with at least 1 submission
@@ -756,7 +754,7 @@ export default function StudentQuizzesScreen() {
                   },
                   {
                     icon:  "time-outline",
-                    label: formatTime(quiz.time_limit_minutes),
+                    label: formatTime(quiz.time_limit_minutes, t),
                   },
                   {
                     icon:  "ribbon-outline",

@@ -43,9 +43,13 @@ const ALLOWED_MIMES = {
     "image/png",
     "image/gif",
     "image/webp",
-    "image/svg+xml",
     "image/bmp",
     "image/tiff",
+    // image/svg+xml is deliberately absent. SVG can carry <script>, and these
+    // files are served from this origin by /uploads — a teacher upload would
+    // become a stored cross-site-scripting vector against every staff member
+    // who opens the file in a browser. Vector uploads are rare in a school
+    // workflow; the risk is not worth the capability.
   ],
   document : [
     "application/pdf",

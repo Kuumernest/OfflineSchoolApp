@@ -231,7 +231,7 @@ export default function EditTeacher() {
         setRefreshing(false);
       }
     }
-  }, [teacherId]);
+  }, [t, teacherId]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
 
@@ -337,7 +337,7 @@ export default function EditTeacher() {
         },
       ]
     );
-  }, [teacherId]);
+  }, [t, teacherId]);
 
   // ── Assign ──────────────────────────────────────────────────────────────────
 
@@ -397,7 +397,7 @@ export default function EditTeacher() {
         });
       }
     }
-  }, [teacherId, actioningIds]);
+  }, [actioningIds, teacherId, t]);
 
   // ── Render guards ───────────────────────────────────────────────────────────
 

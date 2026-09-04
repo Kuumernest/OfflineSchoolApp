@@ -27,6 +27,8 @@ const {
   ensureStudentGateTokenIndex,
   ensureIdempotencyIndex,
 } = require("./db/ensureStudentIndexes");
+const { generateTempPassword } = require("./utils/tempPassword");
+const mediaSignature = require("./utils/mediaSignature");
 
 const app  = express();
 const PORT = process.env.PORT || 5000;
@@ -145,16 +147,49 @@ app.get(BROWSER_AUTO_REQUESTS, (_req, res) => res.status(204).end());
 // ─────────────────────────────────────────────────────────────────────────────
 
 app.get("/uploads/{*path}", (req, res, next) => {
-  const rawParam     = req.params.path || req.params[0] || "";
-  const relativePath = decodeURIComponent(
-    Array.isArray(rawParam) ? rawParam.join("/") : String(rawParam)
-  );
+  const rawParam = req.params.path || req.params[0] || "";
+
+  // A malformed percent-encoding is a bad request, not a server error:
+  // decodeURIComponent throws on a stray "%", and unguarded that surfaced as
+  // a 500 through the error handler.
+  let relativePath;
+  try {
+    relativePath = decodeURIComponent(
+      Array.isArray(rawParam) ? rawParam.join("/") : String(rawParam)
+    );
+  } catch {
+    return res.status(400).json({ error: "Malformed path" });
+  }
 
   const filePath    = path.resolve(__dirname, "uploads", relativePath);
   const uploadsRoot = path.resolve(__dirname, "uploads");
 
-  if (!filePath.startsWith(uploadsRoot)) {
+  // The separator is the whole point. startsWith(uploadsRoot) alone also
+  // accepts a sibling directory whose name merely begins with "uploads" —
+  // "uploads-private", "uploads_backup" — and a resolve() into one of those
+  // sailed past this check.
+  if (!filePath.startsWith(uploadsRoot + path.sep)) {
     return res.status(403).json({ error: "Forbidden" });
+  }
+
+  // ── Signature gate for private uploads ─────────────────────────────────
+  // messages/ attachments are PII and now carry signed URLs (Message.js signs
+  // them at read time — see utils/mediaSignature.js). The default is observe
+  // mode: unsigned access is logged, nothing is blocked, because URLs already
+  // sitting in clients' SQLite caches were received unsigned and every message
+  // read since the signing change re-issues them. Give caches a signature
+  // lifetime to refresh, then REQUIRE_MEDIA_SIGNATURE=1 enforces.
+  if (mediaSignature.isProtectedPath(relativePath)) {
+    const sig = req.query?.sig;
+    if (!mediaSignature.verifyMediaSignature(relativePath, sig)) {
+      if (process.env.REQUIRE_MEDIA_SIGNATURE === "1") {
+        return res.status(401).json({
+          error: "This link has expired. Ask for the file to be shared again.",
+          code:  "MEDIA_SIGNATURE_REQUIRED",
+        });
+      }
+      console.warn(`[media] unsigned access to protected path: ${relativePath}`);
+    }
   }
 
   const ext      = path.extname(filePath).toLowerCase();
@@ -457,7 +492,6 @@ app.post(
     try {
       const Student        = require("./db/models/Student");
       const User           = require("./db/models/User");
-      const bcrypt         = require("bcryptjs");
       const { v4: uuidv4 } = require("uuid");
 
       const student = await Student.findById(req.params.id).lean();
@@ -511,8 +545,11 @@ app.post(
       const year   = new Date().getFullYear();
       const prefix = `${schoolCode}-${year}-`;
 
+      // schoolCode comes from the school's own "code" field — escaped, not
+      // trusted: a code like "G.V.A" would otherwise build a regex whose dot
+      // matches anything and could read another school's sequence.
       const last = await User.findOne(
-        { enrollmentNo: { $regex: `^${prefix}` }, role: "student" },
+        { enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` }, role: "student" },
         { enrollmentNo: 1 },
         { sort: { enrollmentNo: -1 } }
       ).lean();
@@ -524,34 +561,75 @@ app.post(
         if (!isNaN(seq)) nextNum = seq + 1;
       }
 
-      const enrollmentNo = `${prefix}${String(nextNum).padStart(4, "0")}`;
+      // ── The first password is random, never the enrollment number ────────
+      // This used to be bcrypt.hash(enrollmentNo, 12): the credential was the
+      // enrollment number itself — printed on documents, read aloud across an
+      // office, reconstructable by anybody who can see a class list. Every
+      // other provisioning path in the app (generateTempPassword in
+      // students.routes and admin.routes) mints a random one; this route now
+      // does too. It comes back in the response so the caller can hand it over
+      // once — nothing server-side needs to remember it, the fifteen-minute
+      // token rule still applies while mustResetPassword is set, and from the
+      // next change on the stale-token gate in middleware/auth.js applies.
+      const tempPassword = generateTempPassword();
 
-      if (userDoc) {
-        userDoc.enrollmentNo = enrollmentNo;
-        await userDoc.save();
-      } else {
-        const displayName =
-          [student.firstName, student.lastName].filter(Boolean).join(" ").trim() ||
-          student.name || "Student";
-        const email = (
-          student.email || student.studentEmail || ""
-        ).toLowerCase().trim();
+      // ── Race-safe numbering ─────────────────────────────────────────────
+      // nextNum is read from the current highest number, so two admins
+      // provisioning two students at the same moment could read the same
+      // "last" row and mint the same number. The unique partial index
+      // (enrollmentNo_unique_present on the User model) is what makes the
+      // retry below sound: the loser of the race gets E11000 and simply takes
+      // the next number — the same shape as saveUserWithUniqueEnrollment in
+      // students.routes.
+      let enrollmentNo = null;
 
-        userDoc = await User.create({
-          _id:               uuidv4(),
-          name:              displayName,
-          email:             email || undefined,
-          role:              "student",
-          schoolId,
-          isActive:          true,
-          enrollmentNo,
-          password:          await bcrypt.hash(enrollmentNo, 12),
-          mustResetPassword: true,
-        });
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const candidate = `${prefix}${String(nextNum).padStart(4, "0")}`;
 
-        await Student.findByIdAndUpdate(student._id, {
-          $set: { userId: userDoc._id },
-        });
+        try {
+          if (userDoc) {
+            userDoc.enrollmentNo = candidate;
+            await userDoc.save();
+          } else {
+            const displayName =
+              [student.firstName, student.lastName].filter(Boolean).join(" ").trim() ||
+              student.name || "Student";
+            const email = (
+              student.email || student.studentEmail || ""
+            ).toLowerCase().trim();
+
+            // ❌ Do NOT bcrypt.hash() here — the pre-save hook hashes the
+            //    password and stamps passwordChangedAt, which the token
+            //    staleness gate in middleware/auth.js then enforces.
+            userDoc = await User.create({
+              _id:               uuidv4(),
+              name:              displayName,
+              email:             email || undefined,
+              role:              "student",
+              schoolId,
+              isActive:          true,
+              enrollmentNo:      candidate,
+              password:          tempPassword,
+              mustResetPassword: true,
+            });
+
+            await Student.findByIdAndUpdate(student._id, {
+              $set: { userId: userDoc._id },
+            });
+          }
+
+          enrollmentNo = candidate;
+          break;
+        } catch (err) {
+          const dupKeys = JSON.stringify(err?.keyPattern || err?.keyValue || {});
+          const isDupNo = err?.code === 11000 && dupKeys.includes("enrollmentNo");
+          if (!isDupNo || attempt === 4) throw err;
+
+          console.warn(
+            `[enrollment-number] "${candidate}" collided — taking the next number`
+          );
+          nextNum += 1;
+        }
       }
 
       if (!student.enrollmentNo) {
@@ -563,7 +641,7 @@ app.post(
       console.log(
         `✅ Enrollment number generated: ${enrollmentNo} → student ${student._id}`
       );
-      return res.json({ success: true, enrollmentNo });
+      return res.json({ success: true, enrollmentNo, tempPassword });
 
     } catch (err) {
       console.error("[enrollment-number] error:", err.message);

@@ -1,0 +1,110 @@
+name: CI
+
+# Runs the backend's own verification suites (they boot an in-memory MongoDB
+# and exercise the real routes) and the mobile type check, on every push to
+# master and every pull request. A suite that passes on one machine but not in
+# CI is exactly the kind of thing check-desktop-parity exists to catch — so it
+# belongs here, not only in a terminal.
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/backend/package-lock.json
+      - run: npm ci
+      # Boots mongodb-memory-server (downloads a MongoDB binary — no service
+      # needed) and runs every check:* suite, including the desktop-parity and
+      # login-response runs that cover the auth changes.
+      - run: npm run check:all
+
+  mobile:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/mobile/package-lock.json
+      - run: npm ci
+      # node scripts/check.js (parse + i18n parity), then eslint, then
+      # tsc --noEmit across the app (JS included).
+      #
+      # The eslint step is the one that catches what the other two cannot:
+      # hooks called from plain helpers, and identifiers used but never
+      # imported. Both crash only at runtime — the parse check and tsc stay
+      # green on them — so this is the step that keeps the admin dashboard
+      # class of failure from reaching a device again. Errors fail the build;
+      # exhaustive-deps stays a warning and does not.
+      - run: npm run check
+
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/web/package-lock.json
+      - run: npm ci
+      # `npm run build` is `tsc -b && vite build`, so it type-checks and then
+      # parses every module in the app. A single bad character in one lazily
+      # imported page is invisible until a user opens that route — a stray
+      # backslash in ClassesPage.tsx took the classes page down while every
+      # other route kept working, because each is its own lazy chunk. The
+      # build is what turns that into a failed push instead.
+      - run: npm run build
+      # Both locale files parse, cover the same keys, and every t() reference
+      # in the source resolves to one of them.
+      - run: npm run i18n:check
+      #
+      # `npm run lint` is deliberately NOT wired in yet: it currently reports
+      # 35 pre-existing errors (20 react-hooks/set-state-in-effect, 10 unused
+      # vars, plus a few others) that need clearing first. Add it here as a
+      # blocking step once that backlog is gone — the mobile job shows the
+      # shape it should take.
+
+  desktop:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: OfflineSchoolApp/desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: OfflineSchoolApp/desktop/package-lock.json
+      # Nothing in `npm run check` touches Electron — only launch.js,
+      # probe-launch.js and seam-launch.js require it, and none of those run
+      # here. Skipping the ~100MB binary download keeps the job fast and
+      # removes the flakiest step in an Electron install.
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+      # Eight suites over the offline seam: route shadowing, the document
+      # store, the outbox, the sync engine, request-path resolution, student
+      # writes, results and settings. This is the half of the desktop/server
+      # contract that the backend's own check:desktop parity run cannot see.
+      - run: npm run check

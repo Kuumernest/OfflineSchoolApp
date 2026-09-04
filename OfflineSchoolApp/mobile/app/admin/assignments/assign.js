@@ -240,7 +240,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [preselectedTeacherId, refreshExistingAssignments]);
+  }, [preselectedTeacherId, refreshExistingAssignments, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -269,7 +269,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     } finally {
       if (isMountedRef.current) setLoadingSubjects(false);
     }
-  }, []);
+  }, [t]);
 
   const handleTeacherSelect = useCallback(async (teacher) => {
     const normalized = normalizeId(teacher);
@@ -418,7 +418,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
     } finally {
       if (isMountedRef.current) setSubmitting(false);
     }
-  }, [selectedTeacher, selectedClass, selectedSubjects, submitting, refreshExistingAssignments, router]);
+  }, [selectedTeacher, selectedClass, selectedSubjects, submitting, t, refreshExistingAssignments, router]);
 
   const renderStepIndicator = () => (
     <View style={styles.stepIndicator}>

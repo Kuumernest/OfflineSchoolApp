@@ -682,6 +682,7 @@ export class MutationQueue {
     if (!exists) return 0;
 
     let migrated = 0;
+    let dropped  = 0;
     try {
       // Only the quiz-shaped schema ever produced rows; probe for it.
       const cols = await db.getAllAsync(`PRAGMA table_info(sync_queue)`).catch(() => []);
@@ -692,20 +693,41 @@ export class MutationQueue {
           `SELECT * FROM sync_queue WHERE COALESCE(synced, 0) = 0`
         ).catch(() => []);
 
+        // The real create routes. These used to have "/sync" appended (and
+        // "/sync-one" for attempts), which matched nothing on the server: the
+        // quiz router only ever exposed POST /questions, /quizzes and
+        // /attempts. So every row this migration rescued was re-queued against
+        // a 404, and a 404 on a POST is classified permanent — a device
+        // carrying legacy rows converted them straight into failed mutations
+        // that no retry would ever clear.
+        //
+        // Anything else returns null rather than a guessed path. A row we
+        // cannot address is dropped with a warning, which is honest; inventing
+        // an endpoint for it only manufactures another dead mutation.
         const endpointFor = (entity) => {
           switch (entity) {
-            case "quiz_attempt":  return "/quiz/attempts/sync-one";
-            case "quiz_question": return "/quiz/questions/sync";
-            case "quiz":          return "/quiz/quizzes/sync";
-            default:              return `/quiz/${entity}/sync`;
+            case "quiz_attempt":  return "/quiz/attempts";
+            case "quiz_question": return "/quiz/questions";
+            case "quiz":          return "/quiz/quizzes";
+            default:              return null;
           }
         };
 
         for (const r of rows ?? []) {
+          const endpoint = endpointFor(r.entity);
+          if (!endpoint) {
+            dropped++;
+            console.warn(
+              `[MutationQueue] legacy sync_queue row for unknown entity ` +
+              `"${r.entity}" dropped — there is no route to send it to`
+            );
+            continue;
+          }
+
           await this.enqueue({
             entityKey: `legacy:${r.entity}:${r.id}`,
             method: "POST",
-            endpoint: endpointFor(r.entity),
+            endpoint,
             payload: parse(r.payload),
           });
           migrated++;
@@ -715,7 +737,9 @@ export class MutationQueue {
       await db.execAsync(`DROP TABLE IF EXISTS sync_queue`);
       console.log(
         `[MutationQueue] Legacy sync_queue removed` +
-        (migrated ? ` — ${migrated} row(s) migrated into the outbox` : " (was empty)")
+        (migrated ? ` — ${migrated} row(s) migrated into the outbox` : "") +
+        (dropped  ? ` — ${dropped} row(s) dropped (unknown entity)` : "") +
+        (migrated || dropped ? "" : " (was empty)")
       );
     } catch (err) {
       console.warn("[MutationQueue] legacy queue migration failed:", err.message);

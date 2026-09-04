@@ -104,8 +104,7 @@ const MAX_PAGES  = 20;
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const getDisplayName = (student) => {
-                         const { t } = useTranslation();
+const getDisplayName = (student, t) => {
                          return student.name ||
   [student.firstName, student.lastName].filter(Boolean).join(" ") ||
   t("approvedStudents.unknownStudent");
@@ -121,8 +120,7 @@ const getStatusConfig = getStudentStatusConfig;
  * Mirrors web resolveClassName():
  * prefers nested `class.name`, falls back to flat `className`.
  */
-const resolveClassName = (student) => {
-                           const { t } = useTranslation();
+const resolveClassName = (student, t) => {
                            return student?.class?.name ?? student?.className ?? t("approvedStudents.unassigned");
                          };
 
@@ -301,10 +299,10 @@ const ClassFilterPills = React.memo(({ classes, activeClass, onChange }) => {
 
 const StudentCard = React.memo(({ student, onPress }) => {
   const { t } = useTranslation();
-  const displayName  = getDisplayName(student);
+  const displayName  = getDisplayName(student, t);
   const firstLetter  = displayName.charAt(0).toUpperCase() || "?";
   const statusConfig = getStatusConfig(student.status);
-  const className    = resolveClassName(student);
+  const className    = resolveClassName(student, t);
   const isSuspended  = student.status === "suspended";
   const isRejected   = student.status === "rejected";
   const isPending    = student.status === "pending";
@@ -496,7 +494,7 @@ export default function ApprovedStudents() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -512,7 +510,7 @@ export default function ApprovedStudents() {
       pathname: "/admin/students/detail",
       params:   { studentId },
     });
-  }, [router]);
+  }, [router, t]);
 
   // ── Derived: per-status counts  (mirrors web countLabel logic) ────────────
 
@@ -535,7 +533,7 @@ export default function ApprovedStudents() {
                 })
     );
     return Array.from(set).sort((a, b) => a.localeCompare(b));
-  }, [allStudents]);
+  }, [allStudents, t]);
 
   // ── Derived: filtered + grouped sections ─────────────────────────────────
 
@@ -549,13 +547,13 @@ export default function ApprovedStudents() {
 
       // 2. Class filter pill
       const classMatch =
-        !activeClass || resolveClassName(s) === activeClass;
+        !activeClass || resolveClassName(s, t) === activeClass;
 
       // 3. Search  — mirrors web search fields: name, email, class, admissionNo
       const searchMatch = !query || (() => {
-        const name  = getDisplayName(s).toLowerCase();
+        const name  = getDisplayName(s, t).toLowerCase();
         const email = (s.email ?? "").toLowerCase();
-        const cls   = resolveClassName(s).toLowerCase();
+        const cls   = resolveClassName(s, t).toLowerCase();
         const admNo = (
           s.admissionNumber ?? s.admissionNo ?? ""
         ).toLowerCase();
@@ -573,7 +571,7 @@ export default function ApprovedStudents() {
     // Group by class name (matches web resolveClassName grouping)
     const grouped = {};
     filtered.forEach((student) => {
-      const key = resolveClassName(student);
+      const key = resolveClassName(student, t);
       if (!grouped[key]) grouped[key] = [];
       grouped[key].push(student);
     });
@@ -588,7 +586,7 @@ export default function ApprovedStudents() {
         title: className,
         data:  grouped[className],
       }));
-  }, [allStudents, searchQuery, activeStatus, activeClass]);
+  }, [searchQuery, allStudents, activeStatus, activeClass, t]);
 
   // ── Derived: visible student count for header ─────────────────────────────
 

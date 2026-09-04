@@ -250,7 +250,7 @@ export default function AdminTeachers() {
         setRefreshing(false);
       }
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     loadTeachers();
@@ -339,7 +339,7 @@ export default function AdminTeachers() {
       );
     },
     // FIX #3: dependency array was empty [] — added missing deps
-    [isMountedRef]
+    [t]
   );
 
   // ── FlatList helpers ────────────────────────────────────────────────────────

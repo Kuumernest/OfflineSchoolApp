@@ -1,5 +1,5 @@
 // web/src/services/promotion.service.ts
-import api from "@/services/api";
+import api, { TIMEOUTS } from "@/services/api";
 import type {
   ProgressionClass, ProgressionResponse,
   PromotionRun, PromotionDetail, PromotionDecision,
@@ -54,7 +54,10 @@ export async function fetchRun(runId: string, schoolId: string): Promise<Promoti
 export async function generateRun(
   schoolId: string, fromYear: string, toYear: string
 ): Promise<{ run: PromotionRun; message: string }> {
-  const { data } = await api.post(`${BASE}/runs`, { schoolId, fromYear, toYear });
+  // A promotion run walks every pupil in the school.
+  const { data } = await api.post(
+    `${BASE}/runs`, { schoolId, fromYear, toYear }, { timeout: TIMEOUTS.long }
+  );
   return data as { run: PromotionRun; message: string };
 }
 
@@ -72,14 +75,18 @@ export async function setDecision(
 export async function commitRun(
   runId: string, schoolId: string
 ): Promise<{ run: PromotionRun; applied: number }> {
-  const { data } = await api.post(`${BASE}/runs/${runId}/commit`, { schoolId });
+  const { data } = await api.post(
+    `${BASE}/runs/${runId}/commit`, { schoolId }, { timeout: TIMEOUTS.long }
+  );
   return data as { run: PromotionRun; applied: number };
 }
 
 export async function reverseRun(
   runId: string, schoolId: string, reason: string
 ): Promise<{ run: PromotionRun; restored: number }> {
-  const { data } = await api.post(`${BASE}/runs/${runId}/reverse`, { schoolId, reason });
+  const { data } = await api.post(
+    `${BASE}/runs/${runId}/reverse`, { schoolId, reason }, { timeout: TIMEOUTS.long }
+  );
   return data as { run: PromotionRun; restored: number };
 }
 

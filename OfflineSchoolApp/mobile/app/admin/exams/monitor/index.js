@@ -310,7 +310,7 @@ export default function SubmissionMonitorScreen() {
         },
       ]
     );
-  }, [selectedExam, schoolId, loadSubmissions]);
+  }, [t, selectedExam._id, schoolId, loadSubmissions]);
 
   // ── Reject ─────────────────────────────────────────────
   const handleRejectConfirm = useCallback(async (reason) => {
@@ -330,7 +330,7 @@ export default function SubmissionMonitorScreen() {
     } finally {
       setRejectLoading(false);
     }
-  }, [rejectModal, selectedExam, schoolId, loadSubmissions]);
+  }, [rejectModal, selectedExam._id, schoolId, loadSubmissions, t]);
 
   // ── View scores ────────────────────────────────────────
   const handleViewScores = useCallback((subject) => {

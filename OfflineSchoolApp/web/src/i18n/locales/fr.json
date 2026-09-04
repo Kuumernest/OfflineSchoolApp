@@ -99,7 +99,8 @@
     "tryDifferent": "Essayez un autre nom ou mot-clé",
     "clearSearch": "Effacer la recherche",
     "processing": "Traitement…",
-    "cannotUndo": "Cette action est irréversible."
+    "cannotUndo": "Cette action est irréversible.",
+    "discardChanges": "Abandonner les modifications non enregistrées et revenir en arrière ?"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -533,7 +534,10 @@
     "restoredEmailed": "Un nouveau mot de passe lui a été envoyé par e-mail.",
     "restoredPassword": "Mot de passe temporaire : {{password}}",
     "restoredNoPassword": "Il devra définir un nouveau mot de passe à la prochaine connexion.",
-    "errRestore": "Impossible de restaurer cet enseignant"
+    "errRestore": "Impossible de restaurer cet enseignant",
+    "removeSubjectFailed": "Échec de la suppression de la matière.",
+    "assignSubjectFailed": "Échec de l'attribution de la matière.",
+    "unassignConfirm": "Retirer « {{name}} » de cet enseignant ?"
   },
   "subjects": {
     "title": "Matières",
@@ -941,7 +945,14 @@
     "rejectionPh": "Indiquez le motif du refus…",
     "copyPassword": "Copier le mot de passe",
     "approvedShare": "Approuvé — communiquer les identifiants manuellement",
-    "noPendingBody": "Aucune demande en attente pour l’instant. Les nouvelles demandes apparaîtront ici pour examen."
+    "noPendingBody": "Aucune demande en attente pour l’instant. Les nouvelles demandes apparaîtront ici pour examen.",
+    "noDocumentLink": "Aucun lien de document n'est disponible.",
+    "copyFailed": "Échec de la copie. Valeur : {{value}}",
+    "selectClassFirst": "Veuillez sélectionner une classe avant d'approuver cette demande.",
+    "approveFailed": "Échec de l'approbation de la demande",
+    "rejectFailed": "Échec du rejet de la demande",
+    "approveConfirm": "Approuver {{name}} et l’affecter à « {{className}} » ?",
+    "rejectConfirm": "Rejeter la demande de {{name}} ? Cette action est irréversible."
   },
   "teachersAdd": {
     "title": "Ajouter un enseignant",
@@ -1090,7 +1101,10 @@
     "previewNote1": "Mise en page seule — les champs sont encore visibles.",
     "previewNote2": "Ouvrez avec un vrai élève pour voir les données remplies.",
     "noTemplateId": "Aucun identifiant de modèle fourni.",
-    "rendering": "Génération de l’aperçu…"
+    "rendering": "Génération de l’aperçu…",
+    "cannotDeleteDefault": "Impossible de supprimer le modèle par défaut. Définissez d'abord un autre modèle par défaut.",
+    "setDefaultConfirm": "Définir ce modèle par défaut pour tous les bulletins ?",
+    "deleteConfirm": "Supprimer « {{name}} » ? Cette action est irréversible."
   },
   "notifications": {
     "title": "Notifications",

@@ -291,6 +291,19 @@ router.post("/refresh", async (req, res, next) => {
       });
     }
 
+    // Same rule middleware/auth.js applies to access tokens: a refresh token
+    // minted before the last password change must not mint new ones. Without
+    // this, "sign out everybody" never actually finished — the access token
+    // died but the ninety-day refresh token quietly reissued sessions.
+    if (user.passwordChangedAt && decoded.iat &&
+        decoded.iat * 1000 < user.passwordChangedAt.getTime() - 5_000) {
+      return res.status(401).json({
+        success: false,
+        message: "Session ended when your password changed — please log in again",
+        code:    "REFRESH_STALE",
+      });
+    }
+
     console.log(`🔄 Token refreshed: ${user._id}`);
     return res.json(await buildTokenResponse(user));
 

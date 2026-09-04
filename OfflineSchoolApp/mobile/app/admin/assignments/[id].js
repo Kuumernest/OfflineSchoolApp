@@ -233,7 +233,7 @@ export default function TeacherAssignmentDetail() {
       }
       // ✅ On re-focus after assigning, always reload to show new assignments
       loadData(hasLoadedRef.current);
-    }, [teacherId, loadData])
+    }, [teacherId, loadData, t])
   );
 
   // ── Remove assignment ─────────────────────────────────────────────────────
@@ -301,7 +301,7 @@ export default function TeacherAssignmentDetail() {
       return acc;
     }, {});
                                  }
-  , [assignments]);
+  , [assignments, t]);
 
   const classCount = useMemo(
     () =>

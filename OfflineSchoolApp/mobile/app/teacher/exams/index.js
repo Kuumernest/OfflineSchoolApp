@@ -293,7 +293,7 @@ export default function TeacherExamsScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [teacherId, schoolId, loadAssignedSubjectIds]);
+  }, [teacherId, loadAssignedSubjectIds, schoolId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 

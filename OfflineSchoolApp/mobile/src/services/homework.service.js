@@ -8,11 +8,11 @@ import { appError }      from "../utils/appError";
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
-const generateId = () =>
-  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+// Delegated to the shared id helpers: the local copy generated ids with
+// Math.random(), which is not a cryptographic generator and whose state is
+// recoverable from observed outputs. These ids name homework documents in the
+// offline outbox — a predictable id is a collision waiting to be replayed.
+import { generateUUID as generateId } from "../utils/idHelpers";
 
 // ─────────────────────────────────────────────────────────────
 // ENSURE TABLES EXIST
@@ -561,16 +561,31 @@ export const gradeSubmission = async ({
     [Number(score), feedback, String(gradedBy), submissionId]
   );
 
-  // ✅ Enqueue grade mutation for offline-first sync
+  // The grade route is nested under the homework and is a PATCH, not a PUT:
+  // PATCH /homework/:id/submissions/:submissionId/grade.
+  const owner = await db.getFirstAsync(
+    `SELECT homework_id FROM homework_submissions WHERE id = ?`,
+    [submissionId]
+  ).catch(() => null);
+  if (!owner?.homework_id) {
+    throw appError("svcErr.homeworkNotFound", "Homework not found");
+  }
+
   await MutationQueue.enqueue({
-    entityKey: "homework_submission:" + submissionId,
-    method: "PUT",
-    endpoint: `/homework/submissions/${submissionId}/grade`,
+    // Its own key. Sharing the submission's key would let a grade queued
+    // before the submission had synced replace the submission itself.
+    entityKey: "homework_grade:" + submissionId,
+    method: "PATCH",
+    // If the submission is still queued, this id is the local one. The
+    // outbox rewrites any id-shaped path segment through the id map at send
+    // time, so once the submission syncs and its reconciler records the
+    // mapping, this path resolves to the id the server actually minted.
+    endpoint: `/homework/${owner.homework_id}/submissions/${submissionId}/grade`,
     payload: {
-      id: submissionId,
+      // .strict() again: score and feedback only. gradedBy is taken from
+      // the token, and sending it made this a 422.
       score: Number(score),
       feedback,
-      gradedBy: String(gradedBy),
       __local: { table: "homework_submissions", ids: [submissionId] },
     },
   });
@@ -618,6 +633,15 @@ export const getStudentsWithoutSubmission = async (homeworkId) => {
 // SUBMISSIONS — STUDENT SIDE
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * The server validates `attachmentUrl` with z.string().url() and stores it
+ * for other people to open, so only an address the server can itself resolve
+ * is worth sending. A device-local file:// path is either refused outright or
+ * saved as a link that works on exactly one phone.
+ */
+const remoteAttachmentUrl = (url) =>
+  typeof url === "string" && /^https?:\/\//i.test(url) ? url : null;
+
 export const submitHomework = async ({
   homeworkId,
   studentId,
@@ -664,22 +688,25 @@ export const submitHomework = async ({
       ]
     );
 
-    // ✅ Enqueue submission update mutation for offline-first sync
-    //    NOTE: Backend submission schema uses `text` (not `submissionText`)
+    // A re-submission is the same call as a first submission. Submissions
+    // are subdocuments of the homework and POST .../submissions already
+    // $pulls this student's previous one before pushing the new one, so
+    // there is no update route to address — the PUT this used to send had
+    // no counterpart on the server and could only 404.
     await MutationQueue.enqueue({
       entityKey: "homework_submission:" + existing.id,
-      method: "PUT",
-      endpoint: `/homework/submissions/${existing.id}`,
+      method: "POST",
+      endpoint: `/homework/${homeworkId}/submissions`,
       payload: {
-        id: existing.id,
-        homeworkId,
-        studentId: String(studentId),
+        // The server parses this body with a .strict() schema that admits
+        // only these two fields, and reads the student from the token. Every
+        // other key sent here — id, homeworkId, studentId, the attachment
+        // metadata, isLate — made the request a 422, which the outbox files
+        // as permanent and never retries.
         text: submission_text,
-        attachmentUrl: attachment_url,
-        attachmentName: attachment_name,
-        attachmentType: attachment_type,
-        isLate: !!is_late,
+        attachmentUrl: remoteAttachmentUrl(attachment_url),
         __local: { table: "homework_submissions", ids: [existing.id] },
+        __reconcile: { kind: "homeworkSubmission", localId: existing.id },
       },
     });
 
@@ -701,22 +728,22 @@ export const submitHomework = async ({
     ]
   );
 
-  // ✅ Enqueue submission create mutation for offline-first sync
-  //    NOTE: Backend submission schema uses `text` (not `submissionText`)
+  // Nested under the homework: POST /homework/:id/submissions. The flat
+  // /homework/submissions this used to post to does not exist.
   await MutationQueue.enqueue({
     entityKey: "homework_submission:" + id,
     method: "POST",
-    endpoint: "/homework/submissions",
+    endpoint: `/homework/${homeworkId}/submissions`,
     payload: {
-      id,
-      homeworkId,
-      studentId: String(studentId),
+      // .strict() on the server — text and attachmentUrl only.
       text: submission_text,
-      attachmentUrl: attachment_url,
-      attachmentName: attachment_name,
-      attachmentType: attachment_type,
-      isLate: !!is_late,
+      attachmentUrl: remoteAttachmentUrl(attachment_url),
       __local: { table: "homework_submissions", ids: [id] },
+      // The submission id is minted server-side (it is a subdocument), so
+      // the id this device generated is meaningless upstream. The reconciler
+      // records the mapping, which is what lets the teacher's grade — a
+      // PATCH addressed by submission id — reach the right subdocument.
+      __reconcile: { kind: "homeworkSubmission", localId: id },
     },
   });
 

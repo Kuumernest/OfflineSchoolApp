@@ -72,8 +72,7 @@ const formatDateTime = (dateStr) => {
   return date && time ? `${date} at ${time}` : date || time || "—";
 };
 
-const getDueStatus = (dueDateStr, submittedAt = null) => {
-  const { t } = useTranslation();
+const getDueStatus = (dueDateStr, submittedAt = null, t) => {
   if (!dueDateStr) {
     return { label: t("studentHome.dueNoDeadline"), color: "#6B7280", bg: "#F3F4F6", urgent: false };
   }
@@ -113,8 +112,7 @@ const getDueStatus = (dueDateStr, submittedAt = null) => {
   return { label: `${weeks}w left`, color: "#059669", bg: "#ECFDF5", urgent: false };
 };
 
-const getSubmissionStatus = (hw) => {
-  const { t } = useTranslation();
+const getSubmissionStatus = (hw, t) => {
   const hasSubmission = !!hw.submission_id;
   const isGraded      = hasSubmission && hw.submission_score != null;
 
@@ -185,8 +183,8 @@ const SubmitModal = memo(({
   if (!homework) return null;
 
   const isResubmit = !!homework.submission_id;
-  const subStatus  = getSubmissionStatus(homework);
-  const due        = getDueStatus(homework.due_date, homework.submission_submitted_at);
+  const subStatus  = getSubmissionStatus(homework, t);
+  const due        = getDueStatus(homework.due_date, homework.submission_submitted_at, t);
   const isGraded   = subStatus.type === "graded";
   const isClosed   = subStatus.type === "closed";
 
@@ -477,8 +475,8 @@ const SubmitModal = memo(({
 const HomeworkCard = memo(
   ({ item, onPress }) => {
     const { t } = useTranslation();
-    const subStatus = getSubmissionStatus(item);
-    const due       = getDueStatus(item.due_date, item.submission_submitted_at);
+    const subStatus = getSubmissionStatus(item, t);
+    const due       = getDueStatus(item.due_date, item.submission_submitted_at, t);
 
     return (
       <TouchableOpacity
@@ -683,19 +681,19 @@ export default function StudentHomeworkScreen() {
   const stats = useMemo(() => {
     const submitted = homework.filter((h) => !!h.submission_id).length;
     const graded    = homework.filter((h) => h.submission_score != null).length;
-    const pending   = homework.filter((h) => getSubmissionStatus(h).type === "pending").length;
+    const pending   = homework.filter((h) => getSubmissionStatus(h, t).type === "pending").length;
     const urgent    = homework.filter((h) => {
-      const due = getDueStatus(h.due_date, h.submission_submitted_at);
-      return due.urgent && getSubmissionStatus(h).type === "pending";
+      const due = getDueStatus(h.due_date, h.submission_submitted_at, t);
+      return due.urgent && getSubmissionStatus(h, t).type === "pending";
     }).length;
     return { total: homework.length, submitted, graded, pending, urgent };
-  }, [homework]);
+  }, [homework, t]);
 
   const sorted = useMemo(() => {
     const lowerSearch = search.toLowerCase();
 
     const filtered = homework.filter((hw) => {
-      const sub = getSubmissionStatus(hw);
+      const sub = getSubmissionStatus(hw, t);
 
       const matchSearch =
         !search ||
@@ -708,15 +706,15 @@ export default function StudentHomeworkScreen() {
         activeFilter === "submitted" ? sub.type === "submitted"  :
         activeFilter === "graded"    ? sub.type === "graded"     :
         activeFilter === "urgent"    ?
-          getDueStatus(hw.due_date).urgent && sub.type === "pending" :
+          getDueStatus(hw.due_date, null, t).urgent && sub.type === "pending" :
         true;
 
       return matchSearch && matchFilter;
     });
 
     return [...filtered].sort((a, b) => {
-      const aUrgent = getDueStatus(a.due_date).urgent && !a.submission_id;
-      const bUrgent = getDueStatus(b.due_date).urgent && !b.submission_id;
+      const aUrgent = getDueStatus(a.due_date, null, t).urgent && !a.submission_id;
+      const bUrgent = getDueStatus(b.due_date, null, t).urgent && !b.submission_id;
       if (aUrgent && !bUrgent) return -1;
       if (!aUrgent && bUrgent) return  1;
       if (!a.due_date && b.due_date) return  1;
@@ -724,7 +722,7 @@ export default function StudentHomeworkScreen() {
       if (!a.due_date && !b.due_date) return 0;
       return new Date(a.due_date) - new Date(b.due_date);
     });
-  }, [homework, activeFilter, search]);
+  }, [search, homework, t, activeFilter]);
 
   if (loading) {
     return (

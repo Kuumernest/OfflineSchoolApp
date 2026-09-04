@@ -7,11 +7,10 @@ import { appError } from "../utils/appError";
 // HELPERS
 // ─────────────────────────────────────────────────────────────
 
-const generateId = () =>
-  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0;
-    return (c === 'x' ? r : (r & 0x3) | 0x8).toString(16);
-  });
+// Delegated to the shared id helpers (same rule as homework.service): the
+// local copy generated ids with Math.random(), which is not a cryptographic
+// generator. Quiz attempts and answers are named by these ids in the outbox.
+import { generateUUID as generateId } from "../utils/idHelpers";
 
 const shuffleArray = (arr) => {
   const a = [...arr];

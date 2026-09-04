@@ -361,6 +361,7 @@ export default function DashboardPage() {
           present={ad?.todayPresent ?? 0}
           absent={ad?.todayAbsent   ?? 0}
           rate={ad?.rate            ?? 0}
+          marked={ad?.marked        ?? 0}
           loading={attendanceQ.isLoading}
         />
 

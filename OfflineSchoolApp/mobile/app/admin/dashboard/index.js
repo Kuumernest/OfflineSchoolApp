@@ -373,8 +373,11 @@ const MODULES_PREVIEW_COUNT = 7;
 // UTILITIES
 // ─────────────────────────────────────────────────────────
 
-const getGreeting = () => {
-  const { t } = useTranslation();
+// `t` is a parameter, not a hook call: getGreeting runs inside useState's
+// initializer and inside useFocusEffect's callback, and a hook called from
+// either is a rules-of-hooks violation that crashes the screen on mount.
+// Same shape as getGreeting in teacher/dashboard.js.
+const getGreeting = (t) => {
   const h = new Date().getHours();
   if (h < 12) return t("studentHome.greetingMorning");
   if (h < 17) return t("studentHome.greetingAfternoon");
@@ -474,13 +477,18 @@ const sb = StyleSheet.create({
 // SUB-COMPONENTS
 // ─────────────────────────────────────────────────────────
 
-const StatCard = React.memo(({ item, value }) => (
-  <View style={[styles.statCard, { backgroundColor: item.color + "15" }]}>
-    <Ionicons name={item.icon} size={18} color={item.color} />
-    <Text style={styles.statNumber}>{value}</Text>
-    <Text style={styles.statLabel}>{t(item.labelKey)}</Text>
-  </View>
-));
+const StatCard = React.memo(({ item, value }) => {
+  // Each memoised child owns its translation hook: none of these components
+  // close over the screen's `t`, which does not exist at module scope.
+  const { t } = useTranslation();
+  return (
+    <View style={[styles.statCard, { backgroundColor: item.color + "15" }]}>
+      <Ionicons name={item.icon} size={18} color={item.color} />
+      <Text style={styles.statNumber}>{value}</Text>
+      <Text style={styles.statLabel}>{t(item.labelKey)}</Text>
+    </View>
+  );
+});
 
 const AlertRow = React.memo(({ alert, onPress }) => {
   const st = ALERT_STYLES[alert.type] ?? ALERT_STYLES.info;
@@ -499,37 +507,43 @@ const AlertRow = React.memo(({ alert, onPress }) => {
   );
 });
 
-const ActionButton = React.memo(({ action, onPress }) => (
-  <TouchableOpacity
-    style={styles.actionButton}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <View style={[styles.actionIconWrap, { backgroundColor: action.color + "15" }]}>
-      <Ionicons name={action.icon} size={22} color={action.color} />
-    </View>
-    <Text style={styles.actionTitle} numberOfLines={2}>
-      {t(action.titleKey)}
-    </Text>
-  </TouchableOpacity>
-));
+const ActionButton = React.memo(({ action, onPress }) => {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      style={styles.actionButton}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={[styles.actionIconWrap, { backgroundColor: action.color + "15" }]}>
+        <Ionicons name={action.icon} size={22} color={action.color} />
+      </View>
+      <Text style={styles.actionTitle} numberOfLines={2}>
+        {t(action.titleKey)}
+      </Text>
+    </TouchableOpacity>
+  );
+});
 
-const ModuleRow = React.memo(({ module, onPress }) => (
-  <TouchableOpacity
-    style={styles.moduleCard}
-    onPress={onPress}
-    activeOpacity={0.75}
-  >
-    <View style={[styles.moduleIconWrap, { backgroundColor: module.color + "15" }]}>
-      <Ionicons name={module.icon} size={20} color={module.color} />
-    </View>
-    <View style={styles.moduleInfo}>
-      <Text style={styles.moduleTitle}>{t(module.titleKey)}</Text>
-      <Text style={styles.moduleDesc}>{t(module.descKey)}</Text>
-    </View>
-    <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
-  </TouchableOpacity>
-));
+const ModuleRow = React.memo(({ module, onPress }) => {
+  const { t } = useTranslation();
+  return (
+    <TouchableOpacity
+      style={styles.moduleCard}
+      onPress={onPress}
+      activeOpacity={0.75}
+    >
+      <View style={[styles.moduleIconWrap, { backgroundColor: module.color + "15" }]}>
+        <Ionicons name={module.icon} size={20} color={module.color} />
+      </View>
+      <View style={styles.moduleInfo}>
+        <Text style={styles.moduleTitle}>{t(module.titleKey)}</Text>
+        <Text style={styles.moduleDesc}>{t(module.descKey)}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />
+    </TouchableOpacity>
+  );
+});
 
 // ─────────────────────────────────────────────────────────
 // MAIN COMPONENT
@@ -558,7 +572,7 @@ export default function AdminDashboard() {
   const [refreshing,     setRefreshing]     = useState(false);
   const [error,          setError]          = useState(null);
   const [showAllModules, setShowAllModules] = useState(false);
-  const [greeting,       setGreeting]       = useState(getGreeting);
+  const [greeting,       setGreeting]       = useState(() => getGreeting(t));
   const [overwriteCount, setOverwriteCount] = useState(0);
 
   const mountedRef         = useRef(true);
@@ -627,7 +641,7 @@ export default function AdminDashboard() {
         initialLoadDoneRef.current = true;
       }
     },
-    [schoolId, showSchoolHealth]
+    [schoolId, showSchoolHealth, t]
   );
 
   // Initial load on mount
@@ -639,9 +653,9 @@ export default function AdminDashboard() {
   useFocusEffect(
     useCallback(() => {
       if (!initialLoadDoneRef.current) return;
-      setGreeting(getGreeting());
+      setGreeting(getGreeting(t));
       loadStats(true, true);
-    }, [loadStats])
+    }, [loadStats, t])
   );
 
   // ── Navigation helper ─────────────────────────────────
@@ -653,7 +667,7 @@ export default function AdminDashboard() {
       }
       router.push(path);
     },
-    [router]
+    [router, t]
   );
 
   // ── Logout ────────────────────────────────────────────
@@ -669,7 +683,7 @@ export default function AdminDashboard() {
         },
       },
     ]);
-  }, [logout, router]);
+  }, [logout, router, t]);
 
   // ── Derived alerts ────────────────────────────────────
   const alerts = useMemo(() => {
@@ -788,7 +802,7 @@ export default function AdminDashboard() {
     }
 
     return list;
-  }, [stats, overwriteCount, showSchoolHealth]);
+  }, [stats, showSchoolHealth, overwriteCount, t]);
 
   const statValue = useCallback(
     (key) => stats?.[key] ?? 0,

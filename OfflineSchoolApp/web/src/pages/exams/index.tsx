@@ -907,7 +907,7 @@ const ADMIN_ROLES = new Set(["super_admin", "school_admin", "admin"]);
 
 export default function ExamsPage() {
   const { t } = useTranslation();
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const navigate  = useNavigate();
   const user      = useAuthStore((s) => s.user);
   const schoolId  = user?.schoolId ?? "";
@@ -1148,10 +1148,15 @@ export default function ExamsPage() {
     updateStatus.mutate({ examId, status });
   }, [updateStatus]);
 
-  const handleDelete = useCallback((examId: string, name: string) => {
-    if (!window.confirm(t("exams.deleteConfirm", { name }))) return;
+  const handleDelete = useCallback(async (examId: string, name: string) => {
+    const ok = await confirm({
+      title:   t("common.delete"),
+      message: t("exams.deleteConfirm", { name }),
+      kind:    "danger",
+    });
+    if (!ok) return;
     deleteExam.mutate(examId);
-  }, [deleteExam, t]);
+  }, [deleteExam, t, confirm]);
 
   const handleArchiveCompleted = useCallback(async () => {
     const completed = (examsData?.exams ?? []).filter((e) => e.status === "completed");
@@ -1159,7 +1164,11 @@ export default function ExamsPage() {
       toast({ title: t("exams.noCompletedToArchive"), kind: "info" });
       return;
     }
-    if (!window.confirm(t("exams.archiveConfirm", { count: completed.length }))) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("exams.archiveConfirm", { count: completed.length }),
+    });
+    if (!ok) return;
 
     let count = 0;
     for (const e of completed) {

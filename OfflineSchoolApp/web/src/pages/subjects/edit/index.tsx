@@ -138,7 +138,7 @@ const Field = ({ label, required, error, hint, children }: FieldProps) => (
 export default function EditSubjectPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { toast } = useToast();
+  const { toast, confirm } = useToast();
   const { id }   = useParams<{ id: string }>();
   const user     = useUser();
   const schoolId = user?.schoolId ?? "";
@@ -286,15 +286,18 @@ export default function EditSubjectPage() {
     [form, mutation, t]
   );
 
-  const handleDiscard = useCallback(() => {
+  const handleDiscard = useCallback(async () => {
     if (hasChanges) {
-      if (window.confirm(t("subjectsEdit.discardConfirm"))) {
-        navigate(-1);
-      }
+      const ok = await confirm({
+        title:   t("common.discard"),
+        message: t("subjectsEdit.discardConfirm"),
+        kind:    "warning",
+      });
+      if (ok) navigate(-1);
     } else {
       navigate(-1);
     }
-  }, [hasChanges, navigate, t]);
+  }, [hasChanges, navigate, t, confirm]);
 
   // ── Loading ───────────────────────────────────────────────────────────────
 

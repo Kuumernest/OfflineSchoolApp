@@ -38,8 +38,7 @@ const resolveClassCol = async () => {
   }
 };
 
-const normaliseSubject = (subject, classMap, classCol) => {
-  const { t } = useTranslation();
+const normaliseSubject = (subject, classMap, classCol, t) => {
   const rawClassId =
     subject.classId ?? subject.class_id ??
     (classCol ? subject[classCol] : undefined) ??
@@ -213,7 +212,7 @@ export default function AdminSubjects() {
       const safeSubjects = Array.isArray(rawSubjects) ? rawSubjects : [];
 
       const classMap = new Map(safeClasses.map((cls) => [normaliseId(cls.id), cls]));
-      const normSubjects = safeSubjects.map((s) => normaliseSubject(s, classMap, classCol));
+      const normSubjects = safeSubjects.map((s) => normaliseSubject(s, classMap, classCol, t));
 
       setClasses(safeClasses);
       setSubjects(normSubjects);
@@ -228,7 +227,7 @@ export default function AdminSubjects() {
         setRefreshing(false);
       }
     }
-  }, [selectedClassId]);
+  }, [selectedClassId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -275,7 +274,7 @@ export default function AdminSubjects() {
         },
       ]
     );
-  }, [loadData]);
+  }, [loadData, t]);
 
   const handleAddSubject = useCallback(() => router.push("/admin/subjects/add"), [router]);
   const handleAddClass   = useCallback(() => router.push("/admin/classes/add"), [router]);

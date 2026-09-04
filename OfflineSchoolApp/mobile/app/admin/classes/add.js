@@ -36,7 +36,7 @@ export default function AddClass() {
     }
     if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";
-  }, []);
+  }, [t]);
 
   const handleChangeText = useCallback((text) => {
     setClassName(text);
@@ -78,7 +78,7 @@ export default function AddClass() {
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [className, validate, router]);
+  }, [className, validate, t, router]);
 
   const trimmed = className.trim();
   const isDisabled = loading || trimmed.length === 0;

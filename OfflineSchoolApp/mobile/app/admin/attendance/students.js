@@ -391,7 +391,7 @@ const MarkAttendance = React.forwardRef(({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, selectedClass.id, periodId]);
+  }, [selectedClass.id, schoolId, periodId, t]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -444,7 +444,7 @@ const MarkAttendance = React.forwardRef(({
     } else {
       doSave();
     }
-  }, [attendance, roster, schoolId, selectedClass.id, periodId, today, onSaved]);
+  }, [attendance, roster.length, t, schoolId, selectedClass.id, periodId, today, onSaved]);
 
   React.useImperativeHandle(ref, () => ({ save: handleSave, saving }));
 

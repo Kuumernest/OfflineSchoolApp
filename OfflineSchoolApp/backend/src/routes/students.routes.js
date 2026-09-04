@@ -189,19 +189,11 @@ const getSchoolName = async (schoolId) => {
   } catch { return fallback; }
 };
 
-const generateTempPassword = () => {
-  const words = [
-    "Apple", "Mango", "Cedar", "Delta", "Eagle", "Flame",
-    "Grace", "Haven", "Ivory", "Jewel", "Karma", "Lemon",
-    "Maple", "Noble", "Ocean", "Pearl", "Queen", "River",
-    "Stone", "Tiger", "Unity", "Vivid", "Witty", "Xenon",
-    "Yield", "Zesty",
-  ];
-  const word   = words[Math.floor(Math.random() * words.length)];
-  const digits = String(Math.floor(1000 + Math.random() * 9000));
-  const symbol = ["!", "@", "#", "$"][Math.floor(Math.random() * 4)];
-  return `${word}${digits}${symbol}`;
-};
+// Delegated to the shared generator (src/utils/tempPassword.js): the local
+// copy picked the word, the digits and the symbol with Math.random(), which is
+// not a cryptographic generator — and this output becomes a credential. The
+// output format (Word1234!) is unchanged.
+const generateTempPassword = require("../utils/tempPassword").generateTempPassword;
 
 const sendEmailSafe = async ({ to, template, data, context = "" }) => {
   try {

@@ -37,6 +37,10 @@ export interface AttendanceStats {
   todayPresent: number;
   todayAbsent:  number;
   rate:         number;
+  /** Register rows written today — includes late and excused. */
+  marked:       number;
+  /** The roster this rate is a percentage of. */
+  total:        number;
 }
 
 export interface RecentExam {
@@ -279,7 +283,15 @@ export async function fetchAttendanceStats(
       const absent  = n(r.todayAbsent  ?? r.absent     ?? r.totalAbsent);
       const rate    = n(r.rate         ?? r.percentage  ?? r.attendanceRate);
 
-      return { todayPresent: present, todayAbsent: absent, rate };
+      // `marked` counts every register row, late and excused included.
+      // The widget used to derive it as present + absent, which reads a
+      // register where nobody was simply present or absent as a register
+      // nobody took. Older responses carry neither field, hence the
+      // fallback to the old arithmetic.
+      const marked = n(r.marked ?? (present + absent));
+      const total  = n(r.total  ?? marked);
+
+      return { todayPresent: present, todayAbsent: absent, rate, marked, total };
 
     } catch (err) {
       const status = (err as { response?: { status?: number } })
@@ -295,17 +307,17 @@ export async function fetchAttendanceStats(
           `[dashboard] fetchAttendanceStats: ${endpoint} returned 500 — ` +
           `attendance module may not be configured yet`
         );
-        return { todayPresent: 0, todayAbsent: 0, rate: 0 };
+        return { todayPresent: 0, todayAbsent: 0, rate: 0, marked: 0, total: 0 };
       }
 
       // Network / other error — log and fall through to zeros
       console.warn(`[dashboard] fetchAttendanceStats (${endpoint}):`, err);
-      return { todayPresent: 0, todayAbsent: 0, rate: 0 };
+      return { todayPresent: 0, todayAbsent: 0, rate: 0, marked: 0, total: 0 };
     }
   }
 
   // All endpoints exhausted
-  return { todayPresent: 0, todayAbsent: 0, rate: 0 };
+  return { todayPresent: 0, todayAbsent: 0, rate: 0, marked: 0, total: 0 };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

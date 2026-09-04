@@ -477,7 +477,7 @@ export default function EditExamScreen() {
       return false;
     }
     return true;
-  }, [name, academicYear, startDate, endDate, totalMarks, passMark]);
+  }, [name, academicYear, startDate, endDate, totalMarks, passMark, t]);
 
   // ── Save ───────────────────────────────────────────────
   const handleSave = useCallback(async () => {

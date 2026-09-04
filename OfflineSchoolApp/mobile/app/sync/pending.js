@@ -138,7 +138,7 @@ export default function PendingChangesScreen() {
         },
       ]
     );
-  }, [load, refreshStats]);
+  }, [load, refreshStats, t]);
 
   const renderItem = ({ item }) => {
     const { labelKey, rawKind, detail } = describe(item);

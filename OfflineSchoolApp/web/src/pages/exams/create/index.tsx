@@ -7,6 +7,7 @@ import type { ExamType, ExamStatus, SequenceNumber, TermNumber } from "@/types/e
 // "../../lib/api" resolves to src/pages/lib/api, which does not exist.
 import api, { getErrorMessage } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 import {
   EXAM_TYPE_KEYS,
@@ -895,6 +896,7 @@ const currentYear = new Date().getFullYear();
 
 export default function CreateExamPage() {
   const { t } = useTranslation();
+  const { toast } = useToast();
 const navigate = useNavigate();
 const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
 const createExam = useCreateExam();
@@ -1047,7 +1049,7 @@ schoolId, // ✅ add this
   // Only released on failure. On success the navigate takes the form away, and
   // re-enabling the button first would offer one last chance to click it.
   setSubmitting(false);
-  alert(getErrorMessage(err) || t("examCreate.createFailed"));
+  toast({ kind: "error", title: getErrorMessage(err) || t("examCreate.createFailed") });
 }
 };
 

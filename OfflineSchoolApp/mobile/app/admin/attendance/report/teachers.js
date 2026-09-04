@@ -62,8 +62,7 @@ const DATE_PRESETS = [
   { labelKey: "attAdmin.repLast3Mo",  start: monthStart(2), end: monthEnd(0)   },
 ];
 
-const buildTeacherSummaries = (records, teacherMap) => {
-  const { t } = useTranslation();
+const buildTeacherSummaries = (records, teacherMap, t) => {
   const byTeacher = {};
 
   for (const r of records) {
@@ -519,7 +518,7 @@ export default function TeacherAttendanceReportScreen() {
         teacherMap
       );
 
-      const summaries = buildTeacherSummaries(rawRecords, teacherMap);
+      const summaries = buildTeacherSummaries(rawRecords, teacherMap, t);
       setTeachers(summaries);
 
       console.log(
@@ -542,7 +541,7 @@ export default function TeacherAttendanceReportScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, selectedPreset]);
+  }, [schoolId, selectedPreset.end, selectedPreset.start, t]);
 
   useEffect(() => { loadReport(); }, [loadReport]);
 

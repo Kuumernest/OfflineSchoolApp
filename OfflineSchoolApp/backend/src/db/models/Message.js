@@ -4,6 +4,10 @@
 const mongoose       = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 
+// Signing of attachment URLs happens in toClientJSON below, at read time —
+// see utils/mediaSignature.js for why the stored value must stay unsigned.
+const mediaSignature = require("../../utils/mediaSignature");
+
 /**
  * ═══════════════════════════════════════════════════════════════════════════
  * MESSAGE
@@ -181,7 +185,22 @@ messageSchema.methods.toClientJSON = function () {
     return { ...base, body: null, attachments: [] };
   }
 
-  return { ...base, body: this.body, attachments: this.attachments };
+  // ── Attachments are signed HERE, at read time, not at upload time ──────
+  // A stored attachment URL outlives any signature: it sits inside Message
+  // documents for years and is re-served to every reader of the thread. The
+  // stored value therefore stays unsigned and stable, and every client that
+  // reads the message gets a fresh signature bound to that read — old
+  // messages never break, and a link copied out of one dies with the week.
+  //
+  // The mobile caches these URLs in SQLite for the offline view, so a device
+  // offline longer than the signature's life loses attachment previews until
+  // it reconnects and the list is re-read. That is the accepted trade: an
+  // expired preview is recoverable, a leaked permanent link is not.
+  return {
+    ...base,
+    body: this.body,
+    attachments: mediaSignature.signAttachmentUrls(this.attachments),
+  };
 };
 
 module.exports =

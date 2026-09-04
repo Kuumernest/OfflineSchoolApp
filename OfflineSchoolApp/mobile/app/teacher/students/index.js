@@ -389,7 +389,7 @@ export default function TeacherStudentsScreen() {
         setRefreshing(false);
       }
     }
-  }, [classId, schoolId]);
+  }, [classId, schoolId, t]);
 
   useEffect(() => { load(); }, [load]);
 

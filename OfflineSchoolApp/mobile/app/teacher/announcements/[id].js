@@ -101,7 +101,7 @@ export default function AnnouncementDetailScreen() {
     //    tap from list, deep-link, push notification tap.
     //    The store skips the call internally if already read.
     markRead(String(id));
-  }, [id, markRead]);
+  }, [id, markRead, t]);
 
   // ✅ Keep local item in sync with store's optimistic updates
   useEffect(() => {
@@ -128,7 +128,7 @@ export default function AnnouncementDetailScreen() {
     } catch (err) {
       Alert.alert(t("annTeacher.errorTitle"), errorText(t, err));
     }
-  }, [id, acknowledge]);
+  }, [acknowledge, id, t]);
 
   // ── Delete ─────────────────────────────────────────────────────────────
   const handleDelete = useCallback(() => {
@@ -153,7 +153,7 @@ export default function AnnouncementDetailScreen() {
         },
       ]
     );
-  }, [id, remove, router]);
+  }, [id, remove, router, t]);
 
   // ── Share ──────────────────────────────────────────────────────────────
   const handleShare = useCallback(async () => {
@@ -164,7 +164,7 @@ export default function AnnouncementDetailScreen() {
         message: `📢 ${item.title}\n\n${item.body}\n\n— ${item.authorName || t("annTeacher.shareFallback")}`,
       });
     } catch { /* ignore */ }
-  }, [item]);
+  }, [item, t]);
 
   // ─── Derived ───────────────────────────────────────────────────────────
   const isMine   = item?.authorId === teacherId;

@@ -66,7 +66,7 @@ export default function MarkTeacherAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -111,7 +111,7 @@ export default function MarkTeacherAttendanceScreen() {
     } finally {
       setSaving(false);
     }
-  }, [attendance, schoolId, today, router]);
+  }, [attendance, t, schoolId, today, router]);
 
   const markedCount = Object.keys(attendance).length;
 

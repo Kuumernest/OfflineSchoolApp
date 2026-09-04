@@ -16,6 +16,7 @@ import {
   Alert,
   StatusBar,
   RefreshControl,
+  ScrollView,
   TextInput,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
@@ -245,7 +246,7 @@ export default function TeacherMarkAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [classId, schoolId, selectedPeriod]);
+  }, [classId, schoolId, selectedPeriod, t]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -321,7 +322,7 @@ export default function TeacherMarkAttendanceScreen() {
     } else {
       doSave();
     }
-  }, [attendance, roster, schoolId, classId, selectedPeriod, today, router]);
+  }, [attendance, roster.length, t, schoolId, classId, selectedPeriod, today, router]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();

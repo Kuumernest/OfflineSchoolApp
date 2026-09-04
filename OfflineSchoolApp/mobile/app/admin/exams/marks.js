@@ -248,7 +248,7 @@ const ExamSelector = ({ schoolId, role, onSelect }) => {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -608,7 +608,7 @@ const ClassSubjectPicker = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [examId, schoolId, role]);
+  }, [examId, schoolId, role, t]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -910,7 +910,7 @@ const ScoreEntry = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [examId, subjectId, classId, schoolId, role]);
+  }, [classId, examId, schoolId, role, subjectId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -1036,7 +1036,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
     }
 
     await doSave();
-  }, [saving, students, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
+  }, [saving, students, t, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
 
   useEffect(() => {
     if (saveRef) saveRef.current = handleSave;
@@ -1426,7 +1426,7 @@ export default function MarkEntryScreen() {
     }
 
     leaveStep();
-  }, [step, entrySaving, entryDirty, leaveStep]);
+  }, [step, entrySaving, entryDirty, leaveStep, t]);
 
   // Route the Android hardware / gesture back through the same guard.
   useEffect(() => {

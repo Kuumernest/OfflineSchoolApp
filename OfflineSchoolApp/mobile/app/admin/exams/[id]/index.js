@@ -975,7 +975,7 @@ export default function ExamDetailScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [id, schoolId]);
+  }, [id, schoolId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -983,7 +983,7 @@ export default function ExamDetailScreen() {
 
   const classes = useMemo(
     () => deriveClasses(subjects, exam, t),
-    [subjects, exam]
+    [subjects, exam, t]
   );
 
   const submissionStats = useMemo(() => ({
@@ -1077,7 +1077,7 @@ export default function ExamDetailScreen() {
         { text: t("examDetail.cancel"), style: "cancel" },
       ]
     );
-  }, [exam, id, schoolId, loadData]);
+  }, [t, exam.status, id, schoolId, loadData]);
 
   // ── Process ───────────────────────────────────────────────
 
@@ -1120,7 +1120,7 @@ export default function ExamDetailScreen() {
         },
       ]
     );
-  }, [id, exam, schoolId, loadData]);
+  }, [t, id, exam?.classId, schoolId, loadData]);
 
   // ── Publish ───────────────────────────────────────────────
 
@@ -1146,7 +1146,7 @@ export default function ExamDetailScreen() {
         },
       ]
     );
-  }, [id, schoolId, loadData]);
+  }, [t, id, schoolId, loadData]);
 
   // ── Approve ───────────────────────────────────────────────
 
@@ -1161,7 +1161,7 @@ export default function ExamDetailScreen() {
     } catch (err) {
       Alert.alert(t("examDetail.errorTitle"), errorText(t, err));
     }
-  }, [id, schoolId, loadData]);
+  }, [id, schoolId, loadData, t]);
 
   // ── Coefficient (opens modal — Alert.prompt is iOS-only) ──
 
@@ -1193,7 +1193,7 @@ export default function ExamDetailScreen() {
     } finally {
       setCoeffSaving(false);
     }
-  }, [coeffModal, id, schoolId, loadData]);
+  }, [coeffModal, id, schoolId, loadData, t]);
 
   // ── Reject (opens modal — no Alert.prompt) ────────────────
 
@@ -1218,7 +1218,7 @@ export default function ExamDetailScreen() {
     } finally {
       setRejectLoading(false);
     }
-  }, [rejectModal, id, schoolId, loadData]);
+  }, [rejectModal, id, schoolId, loadData, t]);
 
   // ─────────────────────────────────────────────────────────
   // RENDER GUARDS

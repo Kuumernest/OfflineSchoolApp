@@ -195,7 +195,7 @@ export default function AdminClasses() {
         setRefreshing(false);
       }
     }
-  }, [showInactive]);
+  }, [showInactive, t]);
 
   useEffect(() => { loadClasses(); }, [loadClasses]);
 
@@ -252,7 +252,7 @@ export default function AdminClasses() {
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   const handleDelete = useCallback((classItem) => {
     Alert.alert(
@@ -296,7 +296,7 @@ export default function AdminClasses() {
         },
       ]
     );
-  }, []);
+  }, [t]);
 
   const handleAddClass = useCallback(() => router.push("/admin/classes/add"), [router]);
 

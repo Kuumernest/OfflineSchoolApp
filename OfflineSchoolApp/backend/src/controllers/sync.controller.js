@@ -189,6 +189,14 @@ exports.pullChanges = async (req, res) => {
 
     console.log(`📥 Pull requested for school ${schoolId} since ${effectiveDate.toISOString()}`);
 
+    // The cursor the client will send back as `lastSync` next time, taken
+    // BEFORE the queries below run. Taken after them, any record written
+    // while they were in flight would carry an updatedAt earlier than the
+    // returned timestamp, so the next pull's `since` filter would never
+    // match it and the client would miss that row permanently. Taken
+    // first, the worst case is re-sending a row the client already has.
+    const pulledAt = new Date().toISOString();
+
     const since = sinceFilter(effectiveDate);
 
     // ── Who is asking ────────────────────────────────────────────────────
@@ -275,7 +283,7 @@ exports.pullChanges = async (req, res) => {
         students,
         deletedItems: [],
       },
-      timestamp: new Date().toISOString(),
+      timestamp: pulledAt,
     });
 
   } catch (err) {

@@ -8,6 +8,8 @@ interface Props {
   present:  number;
   absent:   number;
   rate:     number;   // 0–100
+  /** Register rows written today — late and excused included. */
+  marked?:  number;
   loading?: boolean;
 }
 
@@ -22,11 +24,15 @@ export default function AttendanceWidget({
   present,
   absent,
   rate,
+  marked,
   loading = false,
 }: Props) {
   const { t } = useTranslation();
   const fmt   = useFormat();
-  const total = present + absent;
+  // Whether a register was taken, not how many pupils were in one of two
+  // particular states: a morning where every child arrived late is a
+  // register that exists, and present + absent calls it an empty day.
+  const total = marked ?? present + absent;
   const healthy = rate >= 75;
   const pct = Math.max(0, Math.min(rate, 100));
 

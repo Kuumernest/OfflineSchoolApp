@@ -29,6 +29,7 @@ import {
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -636,6 +637,7 @@ function ReviewSheet({
 
 export default function AdmissionsPage() {
   const { t } = useTranslation();
+  const { toast, confirm } = useToast();
   const user      = useUser();
   const schoolId  = user?.schoolId ?? "";
   const qc        = useQueryClient();
@@ -708,7 +710,7 @@ export default function AdmissionsPage() {
     );
 
     if (!url) {
-      window.alert("No document link is available.");
+      toast({ kind: "error", title: t("admissions.noDocumentLink") });
       return;
     }
 
@@ -718,9 +720,9 @@ export default function AdmissionsPage() {
   const copyToClipboard = useCallback(async (value: string) => {
     try {
       await navigator.clipboard.writeText(value);
-      window.alert("Copied to clipboard.");
+      toast({ kind: "success", title: t("common.copied") });
     } catch {
-      window.alert(`Copy failed. Value: ${value}`);
+      toast({ kind: "error", title: t("admissions.copyFailed", { value }) });
     }
   }, []);
 
@@ -787,9 +789,9 @@ export default function AdmissionsPage() {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ??
         (err instanceof Error ? err.message : null) ??
-        "Failed to approve application";
+        t("admissions.approveFailed");
 
-      window.alert(message);
+      toast({ kind: "error", title: message });
       qc.invalidateQueries({ queryKey: ["applications", schoolId] });
     },
   });
@@ -817,47 +819,53 @@ export default function AdmissionsPage() {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ??
         (err instanceof Error ? err.message : null) ??
-        "Failed to reject application";
+        t("admissions.rejectFailed");
 
-      window.alert(message);
+      toast({ kind: "error", title: message });
       qc.invalidateQueries({ queryKey: ["applications", schoolId] });
     },
   });
 
   // ── Actions ─────────────────────────────────────────────
 
-  const handleApprove = useCallback(() => {
+  const handleApprove = useCallback(async () => {
     if (!selectedApplication) return;
 
     if (!selectedClassId) {
-      window.alert("Please select a class before approving this application.");
+      toast({ kind: "warning", title: t("admissions.selectClassFirst") });
       return;
     }
 
-    const confirmed = window.confirm(
-      `Approve ${selectedApplication.name} and assign them to "${selectedClass?.name ?? "the selected class"}"?`
-    );
+    const confirmed = await confirm({
+      title:   t("common.confirm"),
+      message: t("admissions.approveConfirm", {
+        name:      selectedApplication.name,
+        className: selectedClass?.name ?? "",
+      }),
+    });
     if (!confirmed) return;
 
     approveMutation.mutate({
       id:      selectedApplication.id,
       classId: selectedClassId,
     });
-  }, [selectedApplication, selectedClassId, selectedClass, approveMutation]);
+  }, [selectedApplication, selectedClassId, selectedClass, approveMutation, confirm, t, toast]);
 
-  const handleReject = useCallback(() => {
+  const handleReject = useCallback(async () => {
     if (!selectedApplication) return;
 
-    const confirmed = window.confirm(
-      `Reject ${selectedApplication.name}'s application? This cannot be undone.`
-    );
+    const confirmed = await confirm({
+      title:   t("common.confirm"),
+      message: t("admissions.rejectConfirm", { name: selectedApplication.name }),
+      kind:    "danger",
+    });
     if (!confirmed) return;
 
     rejectMutation.mutate({
       id:     selectedApplication.id,
       reason: rejectReason,
     });
-  }, [selectedApplication, rejectReason, rejectMutation]);
+  }, [selectedApplication, rejectReason, rejectMutation, confirm, t]);
 
   // ── Loading ─────────────────────────────────────────────
 

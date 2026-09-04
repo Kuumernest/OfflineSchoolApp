@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/auth.store";
 import api              from "@/services/api";
 import { getErrorMessage } from "@/lib/axios";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 import {
   Plus, Edit2, Eye, Star, Copy, Trash2,
   FileText, Info, Loader2, AlertCircle,
@@ -29,6 +30,7 @@ interface Template {
 
 export default function TemplatesPage() {
   const { t } = useTranslation();
+  const { toast, confirm } = useToast();
   const navigate = useNavigate();
   const user     = useAuthStore((s) => s.user);
   const schoolId = user?.schoolId;
@@ -77,10 +79,10 @@ export default function TemplatesPage() {
       const res = await api.post("/templates/seed-default", { schoolId });
       await load();
       if (res.data?.created === false) {
-        alert(t("templates.seedExists"));
+        toast({ kind: "info", title: t("templates.seedExists") });
       }
     } catch (err) {
-      alert(getErrorMessage(err));
+      toast({ kind: "error", title: getErrorMessage(err) });
     } finally {
       setActionId(null);
     }
@@ -89,13 +91,17 @@ export default function TemplatesPage() {
   // ── Set default ────────────────────────────────────────
 
   const handleSetDefault = async (id: string) => {
-    if (!window.confirm("Set this template as default for all reports?")) return;
+    const ok = await confirm({
+      title:   t("common.confirm"),
+      message: t("templates.setDefaultConfirm"),
+    });
+    if (!ok) return;
     try {
       setActionId(id);
       await api.patch(`/templates/${id}/default`, { schoolId });
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      toast({ kind: "error", title: getErrorMessage(err) });
     } finally {
       setActionId(null);
     }
@@ -109,7 +115,7 @@ export default function TemplatesPage() {
       await api.post(`/templates/${id}/duplicate`, { schoolId });
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      toast({ kind: "error", title: getErrorMessage(err) });
     } finally {
       setActionId(null);
     }
@@ -119,16 +125,21 @@ export default function TemplatesPage() {
 
   const handleDelete = async (id: string, name: string, isDefault: boolean) => {
     if (isDefault) {
-      alert("Cannot delete the default template. Set another as default first.");
+      toast({ kind: "warning", title: t("templates.cannotDeleteDefault") });
       return;
     }
-    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const ok = await confirm({
+      title:   t("common.delete"),
+      message: t("templates.deleteConfirm", { name }),
+      kind:    "danger",
+    });
+    if (!ok) return;
     try {
       setActionId(id);
       await api.delete(`/templates/${id}`, { params: { schoolId } });
       await load();
     } catch (err) {
-      alert(getErrorMessage(err));
+      toast({ kind: "error", title: getErrorMessage(err) });
     } finally {
       setActionId(null);
     }

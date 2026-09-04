@@ -62,7 +62,7 @@ export default function TemplatesScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
@@ -86,7 +86,7 @@ export default function TemplatesScreen() {
         },
       ]
     );
-  }, [load]);
+  }, [load, t]);
 
   // ── Seed the built-in layout ──────────────────────────
   /**
@@ -112,7 +112,7 @@ export default function TemplatesScreen() {
     } finally {
       setSeeding(false);
     }
-  }, [schoolId, load]);
+  }, [schoolId, load, t]);
 
   // ── Duplicate ─────────────────────────────────────────
   const handleDuplicate = useCallback(async (id) => {
@@ -122,7 +122,7 @@ export default function TemplatesScreen() {
     } catch (err) {
       Alert.alert(t("templatesList.errTitle"), err?.response?.data?.error || errorText(t, err));
     }
-  }, [schoolId, load]);
+  }, [schoolId, load, t]);
 
   // ── Delete ────────────────────────────────────────────
   const handleDelete = useCallback((id, name, isDefault) => {
@@ -152,7 +152,7 @@ export default function TemplatesScreen() {
         },
       ]
     );
-  }, [load]);
+  }, [load, t]);
 
   if (loading) {
     return (

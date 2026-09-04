@@ -464,8 +464,7 @@ const loadQuizResults = async (teacherId, classIds) => {
 
 // ── API loader ─────────────────────────────────────────────────────────────
 
-const loadResultsFromAPI = async (schoolId) => {
-  const { t } = useTranslation();
+const loadResultsFromAPI = async (schoolId, t) => {
   try {
     const res  = await api.get("/teacher/results", {
       params:  { schoolId },
@@ -1334,7 +1333,7 @@ export default function TeacherResultsScreen() {
       }
 
       // #R7 — merge API results with composite-key dedup
-      const apiResults = await loadResultsFromAPI(schoolId);
+      const apiResults = await loadResultsFromAPI(schoolId, t);
       if (apiResults.length > 0) {
         const existingIds = new Set(combined.map((r) => String(r.id)));
         // Composite key: source + examTitle + studentName prevents phantom

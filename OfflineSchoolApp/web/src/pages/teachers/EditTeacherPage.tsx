@@ -5,6 +5,7 @@ import { useAuthStore }            from "@/store/auth.store";
 import api                         from "@/services/api";
 import { getErrorMessage }         from "@/lib/axios";
 import { useTranslation } from "react-i18next";
+import { useToast }       from "@/components/ui/Toast";
 import {
   ArrowLeft, Save, Loader2, AlertCircle,
   BookOpen, Plus, X, RefreshCw, User, Mail,
@@ -102,6 +103,7 @@ const normaliseAvailable = (raw: RawSubjectRow): AvailableSubject => ({
 
 export default function EditTeacherPage() {
   const { t } = useTranslation();
+  const { toast, confirm } = useToast();
   const navigate              = useNavigate();
   const { id: teacherId }     = useParams<{ id: string }>();
   const user                  = useAuthStore((s) => s.user);
@@ -255,7 +257,12 @@ export default function EditTeacherPage() {
 
   const handleUnassign = useCallback(
     async (subject: AssignedSubject) => {
-      if (!window.confirm(`Remove "${subject.name}" from this teacher?`)) return;
+      const ok = await confirm({
+        title:   t("common.remove"),
+        message: t("teachers.unassignConfirm", { name: subject.name }),
+        kind:    "danger",
+      });
+      if (!ok) return;
 
       const sid = subject.subjectId || subject.id;
       setActioningIds((p) => new Set([...p, sid]));
@@ -295,7 +302,10 @@ export default function EditTeacherPage() {
             return exists ? p : [...p, subject];
           });
           setAvailable((p) => p.filter((s) => (s.subjectId || s.id) !== sid));
-          alert(getErrorMessage(err) || "Failed to remove subject.");
+          toast({
+            kind:  "error",
+            title: getErrorMessage(err) || t("teachers.removeSubjectFailed"),
+          });
         }
       } finally {
         if (isMounted.current) {
@@ -394,7 +404,10 @@ export default function EditTeacherPage() {
             const exists = p.some((s) => (s.subjectId || s.id) === sid);
             return exists ? p : [...p, subject];
           });
-          alert(getErrorMessage(err) || "Failed to assign subject.");
+          toast({
+            kind:  "error",
+            title: getErrorMessage(err) || t("teachers.assignSubjectFailed"),
+          });
         }
       } finally {
         if (isMounted.current) {
