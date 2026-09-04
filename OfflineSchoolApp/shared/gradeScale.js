@@ -6,7 +6,6 @@
  *
  * Used by:
  *   - backend/src/services/grading.service.js    (grades every mark entered)
- *   - backend/src/utils/gradeUtils.js            (grades a single subject)
  *   - backend/src/db/models/GradingConfig.js     (findGradeBand's fallback)
  *   - backend/src/routes/admin.routes.js         (GET/PUT /settings/grading)
  *   - desktop/src/main/api/gradeUtils.js         (the same grading, offline)

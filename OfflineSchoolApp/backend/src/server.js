@@ -25,6 +25,12 @@ const path        = require("path");
 const fs          = require("fs");
 
 const connectDatabase = require("./config/database");
+
+// Registers every model in src/db/models. The sync feed resolves models by
+// NAME through mongoose.models, so a model no live module happens to require
+// is missing from the feed and its collection is silently never mirrored —
+// which was true of Grade. See the note in that file.
+require("./db/models");
 const errorHandler    = require("../middleware/errorHandler");
 const auth            = require("../middleware/auth");
 const { requirePermission } = require("../middleware/permissions");

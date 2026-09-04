@@ -354,6 +354,11 @@ const MODELS_DIR = path.join(__dirname, "..", "db", "models");
 const modelNames = () =>
   fs.readdirSync(MODELS_DIR)
     .filter((f) => f.endsWith(".js"))
+    // index.js registers the others; it declares no schema of its own, so it
+    // is not a model to classify. It exists because the feed resolves models
+    // by name through mongoose.models, and a model no live module happened to
+    // require was silently unservable — see the note in db/models/index.js.
+    .filter((f) => f !== "index.js")
     .map((f) => f.replace(/\.js$/, ""));
 
 /**
