@@ -572,7 +572,10 @@ export class MutationQueue {
     if (includeUploads) {
       try {
         const { processPendingUploads } = require("./content.service");
-        uploads = await processPendingUploads
+        // Called, not just awaited. `await processPendingUploads` resolves to
+        // the function object — no call, no error, and every queued
+        // attachment stayed queued while the summary reported 0 uploads.
+        uploads = await processPendingUploads()
       } catch (err) {
         console.warn("[MutationQueue] upload drain failed:", err.message);
       }

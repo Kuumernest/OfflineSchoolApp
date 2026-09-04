@@ -126,6 +126,35 @@ const lookup = async (db, token, schoolId) =>
 const unknownQueuedAt = new Map();
 
 /**
+ * Push what was just queued, without making the operator wait for it.
+ *
+ * The outbox is otherwise drained only by SyncManager's periodic tick, which
+ * is minutes apart — deliberately, because it is a safety net for a device
+ * that may have no signal. A gate is the opposite case: it is a fixed
+ * position on the school's own network, an operator is watching the screen,
+ * and the pending count sitting there through a queue of arriving children
+ * reads as a scanner that is not working.
+ *
+ * Deliberately not awaited by the caller — the scan result is already known
+ * locally and the next child should not wait on a round trip. Errors are
+ * swallowed: the row stays queued and the periodic drain will retry it, which
+ * is exactly the behaviour without this.
+ *
+ * One at a time. Two concurrent drains can select the same pending row
+ * before either marks it retrying; the Idempotency-Key means the server
+ * would dedupe it, but there is no reason to send it twice.
+ */
+let _pushInFlight = null;
+
+const pushQueuedScans = () => {
+  if (_pushInFlight) return _pushInFlight;
+  _pushInFlight = MutationQueue.drain({ includeUploads: false })
+    .catch(() => {})
+    .finally(() => { _pushInFlight = null; });
+  return _pushInFlight;
+};
+
+/**
  * Record a scan.
  *
  * @returns {Promise<{ok, student, direction, at, duplicate, reason}>}
@@ -163,6 +192,7 @@ export const scan = async ({ schoolId, token, station = null }) => {
       endpoint:  "/gate/scan",
       payload:   { _id: id, schoolId, token: value, at: new Date().toISOString(), station },
     });
+    pushQueuedScans();
     return { ok: false, reason: "unknown", queued: true, token: value };
   }
 
@@ -208,6 +238,8 @@ export const scan = async ({ schoolId, token, station = null }) => {
       __reconcile: { kind: "gateScan", localId: id },
     },
   });
+
+  pushQueuedScans();
 
   return { ok: true, duplicate: false, student: known, direction, at };
 };

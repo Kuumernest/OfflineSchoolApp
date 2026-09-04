@@ -27,6 +27,17 @@ const EXAMPLE_KEYS = [
 ];
 const INITIAL  = { name: "", code: "", coefficient: "", classIds: [], teacherId: "" };
 
+// SQLite rows use `id` as the primary key, while this screen (and the rest of
+// the app's objects) read `_id`. Normalise once at load so key prop, includes,
+// toggle and find() all see a real id. Matches mapRowToAnnouncement.
+const mapRowsToObjects = (rows) =>
+  (rows || []).map((row) => ({
+    ...row,
+    id:       row.id       || row._id,
+    _id:      row._id      || row.id,
+    schoolId: row.schoolId || row.school_id,
+  }));
+
 // ─────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────
@@ -151,8 +162,8 @@ export default function AddSubjectScreen() {
           );
         } catch { /* teachers table optional */ }
 
-        setClasses(cls  || []);
-        setTeachers(tch || []);
+        setClasses(mapRowsToObjects(cls));
+        setTeachers(mapRowsToObjects(tch));
       } catch (err) {
         console.warn("AddSubject: failed to load data", err);
       } finally {
