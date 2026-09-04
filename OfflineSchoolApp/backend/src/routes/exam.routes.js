@@ -1331,8 +1331,25 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
       if (!s.isAbsent && !s.isExempt && s.score !== null) {
         totalScore += s.score;
         const pct  = Math.round((s.score / maxScore) * 100);
-        if (s.isPassing) passed++;
-        else             failedCount++;
+
+        // Recomputed here, not copied off the score row.
+        //
+        // maxScore above is read from the exam subject as it stands NOW, and
+        // normalizedMark is derived from it — but grade, points, remark and
+        // isPassing used to be taken from StudentScore, where they were
+        // computed when the mark was saved, against whatever maxScore applied
+        // then. One function deriving one field from the current scale and
+        // copying four that depend on the same input is a straightforward
+        // inconsistency, and it had a sharp edge: correcting a subject's
+        // maxScore and reprocessing moved the mark and left the letter alone.
+        // A subject marked out of 20 while its maxScore said 100 graded F, and
+        // no amount of fixing the scale afterwards could shift it.
+        //
+        // scripts/check-grade-pipeline.js pins this.
+        const graded = computeGrade(s.score, maxScore, gradingConfig);
+
+        if (graded.isPassing) passed++;
+        else                  failedCount++;
 
         subjectBreakdown.push({
           subjectId:      s.subjectId,
@@ -1340,10 +1357,10 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
           score:          s.score,
           maxScore,
           normalizedMark: Math.round((pct / 100) * 20 * 10) / 10,
-          grade:          s.grade,
-          points:         s.gpaPoints,
-          remark:         s.remark,
-          isPassing:      s.isPassing,
+          grade:          graded.grade,
+          points:         graded.gpaPoints,
+          remark:         graded.remark,
+          isPassing:      graded.isPassing,
           isAbsent:       false,
         });
       } else {
