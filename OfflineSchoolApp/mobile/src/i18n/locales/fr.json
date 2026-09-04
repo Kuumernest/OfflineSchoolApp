@@ -3128,7 +3128,8 @@
     "printError": "Erreur d'impression",
     "examFallback": "Évaluation",
     "schoolFallback": "École",
-    "generateCta": "Générer les bulletins"
+    "generateCta": "Générer les bulletins",
+    "generatingCards": "Génération des bulletins"
   },
   "applyForm": {
     "title": "Candidater",
@@ -5351,7 +5352,21 @@
     "hNoSubjects": "Sans matières"
   },
   "sync": {
-    "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer"
+    "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer",
+    "needAttention": {
+      "one": "1 modification requiert votre attention",
+      "other": "{{count}} modifications requièrent votre attention"
+    },
+    "offlineSaved": {
+      "one": "Hors ligne — 1 modification enregistrée sur cet appareil",
+      "other": "Hors ligne — {{count}} modifications enregistrées sur cet appareil"
+    },
+    "offlineIdle": "Hors ligne — les modifications sont enregistrées sur cet appareil",
+    "uploading": {
+      "one": "Envoi d'1 modification…",
+      "other": "Envoi de {{count}} modifications…"
+    },
+    "syncing": "Synchronisation…"
   },
   "svcErr": {
     "titleRequired": "Le titre est obligatoire",
@@ -5454,5 +5469,20 @@
     "noOfflineAccount": "Aucun compte hors ligne trouvé",
     "invalidEnrollmentOrPassword": "Numéro de matricule ou mot de passe invalide",
     "invalidCredentials": "Identifiants invalides"
+  },
+  "syncStep": {
+    "prepare": "Préparation",
+    "upload": "Envoi des modifications",
+    "download": "Téléchargement",
+    "classes": "Classes",
+    "subjects": "Matières",
+    "teachers": "Enseignants",
+    "periods": "Périodes",
+    "assignments": "Affectations",
+    "students": "Élèves",
+    "announcements": "Annonces",
+    "applications": "Candidatures",
+    "school": "Détails de l'école",
+    "quizzes": "Quiz"
   }
 }

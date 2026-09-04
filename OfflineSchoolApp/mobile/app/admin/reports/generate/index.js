@@ -17,6 +17,7 @@ import * as Sharing     from "expo-sharing";
 import { tableExists as _tableExists } from "../../../../src/db/dbHelpers";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../src/utils/appError";
+import { ProgressBar } from "../../../../src/components/ProgressBar";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -388,6 +389,9 @@ export default function ReportGeneratorScreen() {
 
   const [generating,    setGenerating]    = useState(false);
   const [progress,      setProgress]      = useState(0);
+  // Which student is being rendered. A count says how long is left; the
+  // name says which card to look at when one comes out wrong.
+  const [currentName,   setCurrentName]   = useState("");
   const [totalStudents, setTotalStudents] = useState(0);
   const [result,        setResult]        = useState(null);
   const [lastReport,    setLastReport]    = useState(null);
@@ -516,6 +520,7 @@ export default function ReportGeneratorScreen() {
 
                 for (let i = 0; i < classStudents.length; i++) {
           const student = classStudents[i];
+          setCurrentName(student.name || String(student.id));
       try {
             const html = examId
               ? await fetchReportCardHtml(student.id, examId, schoolId, schoolName)
@@ -777,18 +782,16 @@ export default function ReportGeneratorScreen() {
         {/* Progress */}
         {generating && (
           <View style={s.progressCard}>
-            <ActivityIndicator color={C.primary} />
-            <Text style={s.progressText}>
-              Generating {progress} of {totalStudents || "…"}
-            </Text>
-            {totalStudents > 0 && (
-              <View style={s.progressBar}>
-                <View style={[
-                  s.progressFill,
-                  { width: `${Math.round((progress / totalStudents) * 100)}%` },
-                ]} />
-              </View>
-            )}
+            {/* The label was an English sentence built by interpolation —
+                "Generating 3 of 40" — in an app that ships in French. The
+                count moved to the bar, where it is a number rather than
+                prose, and the label is a key. */}
+            <ProgressBar
+              done={progress}
+              total={totalStudents}
+              label={t("reportGen.generatingCards")}
+              detail={currentName}
+            />
           </View>
         )}
 

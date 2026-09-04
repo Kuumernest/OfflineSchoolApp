@@ -333,7 +333,7 @@ export class MutationQueue {
     return id;
   }
 
-  static async processPending({ limit = 50, onSuccess } = {}) {
+  static async processPending({ limit = 50, onSuccess, onProgress } = {}) {
     const db = await getDatabase();
     await ensureSchema(db);
     const now = new Date().toISOString();
@@ -348,7 +348,19 @@ export class MutationQueue {
 
     const summary = { synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0 };
 
-    for (const row of rows ?? []) {
+    // Indexed, and reported at the TOP of each iteration.
+    //
+    // Every branch of the error handling below ends in `continue`, so a
+    // tally at the foot of the loop would skip exactly the rows that went
+    // wrong — the ones somebody watching a progress bar most needs counted.
+    // Reporting i on entry means "i finished, this is i+1 starting", which
+    // no branch can escape.
+    const queued = rows?.length ?? 0;
+    onProgress?.(0, queued);
+
+    for (let i = 0; i < queued; i++) {
+      const row = rows[i];
+      onProgress?.(i, queued);
       const payload = parse(row.payload);
       try {
         await db.runAsync(
@@ -415,6 +427,8 @@ export class MutationQueue {
         else summary.retried++;
       }
     }
+
+    onProgress?.(queued, queued);
 
     // Report work that exists but isn't due yet, so callers don't read
     // "0 pending" as "nothing left to send".
@@ -567,7 +581,7 @@ export class MutationQueue {
    * them, so a homework row never lands pointing at a file the server has
    * not received.
    */
-  static async drain({ limit = 50, onSuccess, includeUploads = true } = {}) {
+  static async drain({ limit = 50, onSuccess, onProgress, includeUploads = true } = {}) {
     let uploads = null;
     if (includeUploads) {
       try {
@@ -581,7 +595,7 @@ export class MutationQueue {
       }
     }
 
-    const summary = await this.processPending({ limit, onSuccess });
+    const summary = await this.processPending({ limit, onSuccess, onProgress });
     return { ...summary, uploads: uploads?.succeeded ?? 0, uploadsFailed: uploads?.failed ?? 0 };
   }
 

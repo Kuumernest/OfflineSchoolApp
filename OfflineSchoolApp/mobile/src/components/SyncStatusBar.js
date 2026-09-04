@@ -26,13 +26,19 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSyncStatus } from "../hooks/useSyncStatus";
+import { useSyncProgress } from "../hooks/useSyncProgress";
+import { ProgressBar } from "./ProgressBar";
 import { useTranslation } from "../i18n/useTranslation";
 
 const C = {
   offline:  "#6B7280",
   pending:  "#B45309",
   blocked:  "#B91C1C",
+  syncing:  "#4338CA",
   text:     "#FFFFFF",
+  // The strip is a saturated colour, so the track behind the fill has to
+  // be a wash of white rather than the component default grey.
+  track:    "rgba(255,255,255,0.28)",
 };
 
 /**
@@ -53,6 +59,7 @@ export const SyncStatusBar = ({ style }) => {
   const router = useRouter();
   const bottomInset = useBottomInset();
   const { isConnected, isOfflineSession, stats, pendingCount, hasBlocked } = useSyncStatus();
+  const progress = useSyncProgress();
 
   const blockedCount = stats.conflict + stats.failed;
   const waitingCount = pendingCount - blockedCount;
@@ -65,7 +72,11 @@ export const SyncStatusBar = ({ style }) => {
   if (hasBlocked) {
     tone = C.blocked;
     icon = "alert-circle-outline";
-    label = `${blockedCount} change${blockedCount === 1 ? "" : "s"} need attention`;
+    // Was an English sentence assembled here, plural "s" and all, in an app
+    // that ships in French. A key now, with a real one/other pair: i18n-js
+    // reads nested plural forms and NOT the `key_other` spelling that 28
+    // keys elsewhere in these locale files use and nothing consults.
+    label = t("sync.needAttention", { count: blockedCount });
     tappable = true;
   } else if (isOfflineSession) {
     tone = C.pending;
@@ -75,13 +86,19 @@ export const SyncStatusBar = ({ style }) => {
     tone = C.offline;
     icon = "cloud-offline-outline";
     label = waitingCount > 0
-      ? `Offline — ${waitingCount} change${waitingCount === 1 ? "" : "s"} saved on this device`
-      : "Offline — changes are saved on this device";
+      ? t("sync.offlineSaved", { count: waitingCount })
+      : t("sync.offlineIdle");
   } else if (waitingCount > 0) {
     tone = C.pending;
     icon = "cloud-upload-outline";
-    label = `Uploading ${waitingCount} change${waitingCount === 1 ? "" : "s"}…`;
+    label = t("sync.uploading", { count: waitingCount });
   }
+
+  // A running sync outranks "N waiting to upload": it is the same work with
+  // something concrete to say about it. Blocked rows still win, because they
+  // need a person and progress does not.
+  const showProgress = progress.visible && !hasBlocked && !isOfflineSession;
+  if (showProgress && (!tone || tone === C.pending)) tone = C.syncing;
 
   if (!tone) return null;
 
@@ -98,13 +115,32 @@ export const SyncStatusBar = ({ style }) => {
         ? { onPress: () => router.push("/sync/pending"), activeOpacity: 0.8 }
         : {})}
     >
-      {isConnected && waitingCount > 0 && !hasBlocked
-        ? <ActivityIndicator size="small" color={C.text} />
-        : <Ionicons name={icon} size={15} color={C.text} />}
+      {showProgress ? (
+        // done/total against 100, not the step count: the percentage already
+        // folds the tally inside the current step into the whole, so it moves
+        // during a long drain rather than once per step.
+        <ProgressBar
+          style={styles.progress}
+          done={progress.percent}
+          total={100}
+          hideCount
+          label={progress.label || t("sync.syncing")}
+          detail={progress.detail}
+          color={C.text}
+          trackColor={C.track}
+          textColor={C.text}
+        />
+      ) : (
+        <>
+          {isConnected && waitingCount > 0 && !hasBlocked
+            ? <ActivityIndicator size="small" color={C.text} />
+            : <Ionicons name={icon} size={15} color={C.text} />}
 
-      <Text style={styles.text} numberOfLines={1}>{label}</Text>
+          <Text style={styles.text} numberOfLines={1}>{label}</Text>
 
-      {tappable && <Ionicons name="chevron-forward" size={15} color={C.text} />}
+          {tappable && <Ionicons name="chevron-forward" size={15} color={C.text} />}
+        </>
+      )}
     </Wrapper>
   );
 };
@@ -129,6 +165,9 @@ const styles = StyleSheet.create({
     fontSize: 12.5,
     fontWeight: "600",
   },
+  // flex: 1 so the bar takes the strip's width. The strip is a row, and an
+  // unflexed child would collapse to its content and leave the fill a stub.
+  progress: { flex: 1, paddingVertical: 2 },
 });
 
 export default SyncStatusBar;

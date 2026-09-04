@@ -11,6 +11,7 @@ import type { Exam }           from "@/types/exam.types";
 import api, { TIMEOUTS }       from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
+import { ProgressBar }    from "@/components/ui/ProgressBar";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -106,7 +107,10 @@ export default function ReportCardsPage() {
   const [studentLoading,  setStudentLoading]  = useState(false);
   const [generating,      setGenerating]      = useState(false);
   const [reissuing,       setReissuing]       = useState(false);
-  const [progress,        setProgress]        = useState({ done: 0, total: 0 });
+  // `current` names the student in flight. A bar that only counts tells you
+  // how long is left; one that names the row tells you what to look at when
+  // a card comes out wrong.
+  const [progress,        setProgress]        = useState({ done: 0, total: 0, current: "" });
   const [result,          setResult]          = useState<{
     success: number; error: number; message: string;
   } | null>(null);
@@ -327,13 +331,18 @@ export default function ReportCardsPage() {
 
     setGenerating(true);
     setResult(null);
-    setProgress({ done: 0, total: targetStudents.length });
+    setProgress({ done: 0, total: targetStudents.length, current: "" });
 
     let success = 0;
     let error   = 0;
 
     for (let i = 0; i < targetStudents.length; i++) {
       const student = targetStudents[i];
+      setProgress({
+        done:    i,
+        total:   targetStudents.length,
+        current: student.name || String(student._id),
+      });
       try {
         // One renderer, three endpoints — see cardRequest.
         const sid  = String(student._id);
@@ -366,7 +375,11 @@ export default function ReportCardsPage() {
       } catch {
         error++;
       }
-      setProgress({ done: i + 1, total: targetStudents.length });
+      setProgress({
+        done:    i + 1,
+        total:   targetStudents.length,
+        current: student.name || String(student._id),
+      });
     }
 
     setGenerating(false);
@@ -703,22 +716,13 @@ export default function ReportCardsPage() {
 
             {/* Progress */}
             {generating && (
-              <div className="mb-4">
-                <div className="flex justify-between text-xs text-gray-500 mb-1">
-                  <span>{t("reportCards.generating")}</span>
-                  <span>{progress.done} / {progress.total}</span>
-                </div>
-                <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-primary-500 rounded-full transition-all"
-                    style={{
-                      width: progress.total > 0
-                        ? `${Math.round((progress.done / progress.total) * 100)}%`
-                        : "0%",
-                    }}
-                  />
-                </div>
-              </div>
+              <ProgressBar
+                className="mb-4"
+                done={progress.done}
+                total={progress.total}
+                label={t("reportCards.generating")}
+                detail={progress.current}
+              />
             )}
 
             {/* Result */}

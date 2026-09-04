@@ -354,3 +354,31 @@
     display: none;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   INDETERMINATE PROGRESS
+
+   For work whose total is genuinely unknown. It sweeps rather than fills, so
+   it promises nothing about how much is left — see ProgressBar, which reaches
+   for this only when no total was passed.
+
+   Under prefers-reduced-motion the sweep stops and the bar sits full-width at
+   reduced opacity: still visibly "busy", without the sliding.
+   ───────────────────────────────────────────────────────────────────────────── */
+
+@keyframes progress-sweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
+.progress-indeterminate {
+  animation: progress-sweep 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress-indeterminate {
+    animation: none;
+    width: 100%;
+    opacity: 0.45;
+  }
+}

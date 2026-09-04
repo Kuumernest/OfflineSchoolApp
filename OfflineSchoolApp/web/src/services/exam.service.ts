@@ -220,12 +220,63 @@ isAbsent: boolean;
 teacherRemark: string | null;
 }>;
 schoolId: string;
-}) => {
-const { data } = await api.post(
-`/exams/${payload.examId}/scores/bulk`,
-payload
-);
-return data;
+},
+  opts: {
+    /** Rows per request. 0 or below sends everything in one. */
+    chunkSize?:  number;
+    onProgress?: (done: number, total: number) => void;
+  } = {},
+) => {
+  // Sent in chunks, for two reasons that turn out to be one reason.
+  //
+  // A mark sheet is the screen where somebody types for twenty minutes and
+  // then presses Save, and over a school WAN a single request carrying four
+  // hundred rows is precisely the request that times out — losing all of it.
+  // Each row is an independent upsert keyed on (exam, student, subject), so
+  // a chunk is safe to send alone and safe to send twice; nothing in the
+  // write depends on the rest of the sheet.
+  //
+  // And a chunk boundary is the only honest source of a percentage. A single
+  // request can report that it is in flight, and nothing beyond that.
+  const rows  = payload.scores;
+  const size  = opts.chunkSize ?? 25;
+  const total = rows.length;
+
+  if (size <= 0 || total <= size) {
+    opts.onProgress?.(0, total);
+    const { data } = await api.post(
+      `/exams/${payload.examId}/scores/bulk`,
+      payload,
+    );
+    opts.onProgress?.(total, total);
+    return data;
+  }
+
+  let saved  = 0;
+  let failed = 0;
+  const failedRecords: unknown[] = [];
+
+  for (let i = 0; i < total; i += size) {
+    const slice = rows.slice(i, i + size);
+    opts.onProgress?.(i, total);
+
+    // Deliberately not caught: a failed chunk stops the run and throws, so
+    // the caller reports a failure rather than a save that half happened.
+    // The chunks already sent stay sent, which is the point — the teacher
+    // presses Save again and the upserts make the retry cost nothing.
+    const { data } = await api.post(
+      `/exams/${payload.examId}/scores/bulk`,
+      { ...payload, scores: slice },
+    );
+
+    saved  += Number(data?.saved)  || 0;
+    failed += Number(data?.failed) || 0;
+    if (Array.isArray(data?.failedRecords)) failedRecords.push(...data.failedRecords);
+
+    opts.onProgress?.(Math.min(i + size, total), total);
+  }
+
+  return { success: true, saved, failed, failedRecords };
 };
 
 // ─────────────────────────────────────────────────────────

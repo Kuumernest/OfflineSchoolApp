@@ -147,7 +147,12 @@ export const useSaveBulkScores = () => {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: ExamService.saveBulkScores,
+    // Wrapped, not passed by reference: saveBulkScores takes a second
+    // options argument now (chunk size, progress), and a mutationFn is
+    // only ever handed one. Passing it bare made the payload type the
+    // options type as far as react-query was concerned.
+    mutationFn: (payload: Parameters<typeof ExamService.saveBulkScores>[0]) =>
+      ExamService.saveBulkScores(payload),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({
         queryKey: submissionKeys.scores(vars.examId, vars.subjectId, vars.classId),

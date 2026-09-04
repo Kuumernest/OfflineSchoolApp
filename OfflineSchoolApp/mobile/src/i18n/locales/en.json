@@ -3128,7 +3128,8 @@
     "printError": "Print Error",
     "examFallback": "Exam",
     "schoolFallback": "School",
-    "generateCta": "Generate Reports"
+    "generateCta": "Generate Reports",
+    "generatingCards": "Generating report cards"
   },
   "applyForm": {
     "title": "Apply",
@@ -5351,7 +5352,21 @@
     "hNoSubjects": "No Subjects"
   },
   "sync": {
-    "offlineSession": "Signed in offline — sign in again while connected to upload"
+    "offlineSession": "Signed in offline — sign in again while connected to upload",
+    "needAttention": {
+      "one": "1 change needs attention",
+      "other": "{{count}} changes need attention"
+    },
+    "offlineSaved": {
+      "one": "Offline — 1 change saved on this device",
+      "other": "Offline — {{count}} changes saved on this device"
+    },
+    "offlineIdle": "Offline — changes are saved on this device",
+    "uploading": {
+      "one": "Uploading 1 change…",
+      "other": "Uploading {{count}} changes…"
+    },
+    "syncing": "Syncing…"
   },
   "svcErr": {
     "titleRequired": "Title is required",
@@ -5454,5 +5469,20 @@
     "noOfflineAccount": "No offline account found",
     "invalidEnrollmentOrPassword": "Invalid enrollment number or password",
     "invalidCredentials": "Invalid credentials"
+  },
+  "syncStep": {
+    "prepare": "Preparing",
+    "upload": "Uploading changes",
+    "download": "Downloading",
+    "classes": "Classes",
+    "subjects": "Subjects",
+    "teachers": "Teachers",
+    "periods": "Periods",
+    "assignments": "Assignments",
+    "students": "Students",
+    "announcements": "Announcements",
+    "applications": "Applications",
+    "school": "School details",
+    "quizzes": "Quizzes"
   }
 }

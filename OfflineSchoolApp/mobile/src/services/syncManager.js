@@ -15,6 +15,7 @@ import {
   IS_DELETED,
 }                                       from "../db/dbHelpers";
 import { ensureSchemaColumns }          from "../db/schema";
+import * as SyncProgress               from "./syncProgress";
 import { generateUUID }                 from "../utils/idHelpers";
 import {
   isAuthenticated,
@@ -1061,6 +1062,21 @@ class SyncManagerClass {
     this.isSyncing = true;
     console.log(`[SyncManager] Starting full sync…${force ? " (forced)" : ""}`);
 
+    // visible: force.
+    //
+    // The five-minute tick is a safety net and has nothing to say to
+    // somebody reading a screen. The runs a person is actually waiting on
+    // are all forced — reconnect, foreground, pull to refresh — so those
+    // are the ones that get a bar.
+    SyncProgress.begin({
+      visible: force,
+      steps:   SyncProgress.planFor({
+        isStudent: this.isStudent(),
+        isAdmin:   this.isAdmin(),
+      }),
+    });
+    SyncProgress.step("prepare");
+
     try {
       if (this._isUnauthenticated()) { console.log("[SyncManager] User logged out — aborting"); return; }
 
@@ -1088,6 +1104,7 @@ class SyncManagerClass {
       if (this._isUnauthenticated()) return;
       await this.backfillOutbox();
       if (this._isUnauthenticated()) return;
+      SyncProgress.step("upload");
       await this.drainOutbox();
 
       // ── PULL ──────────────────────────────────────────────────────────────
@@ -1109,6 +1126,7 @@ class SyncManagerClass {
       if (cursor) await this.setLastSync(cursor);
 
       if (this._isUnauthenticated()) return;
+      SyncProgress.step("quizzes");
       await this.syncQuizData();
 
       console.log("[SyncManager] Sync completed at", this.lastSync);
@@ -1116,6 +1134,10 @@ class SyncManagerClass {
       console.warn("[SyncManager] Sync incomplete:", err.message);
     } finally {
       this.isSyncing = false;
+      // In the finally, so an aborted or failed sync clears the bar too.
+      // A bar left at 60% after a thrown pull is the exact ambiguity this
+      // was built to remove.
+      SyncProgress.end();
       releaseSyncLock();
     }
   }
@@ -1145,7 +1167,12 @@ class SyncManagerClass {
    * separately without one, so a row in backoff could still be sent twice.
    */
   async drainOutbox() {
-    const result = await MutationQueue.drain();
+    const result = await MutationQueue.drain({
+      // The queue knows how many mutations it is holding, so this step is
+      // the one place in the sync with a true item count rather than a
+      // step count.
+      onProgress: (done, total) => SyncProgress.items(done, total),
+    });
 
     if (result.synced || result.conflicts || result.failed || result.uploads) {
       console.log("[SyncManager] Outbox", result);
@@ -1524,6 +1551,7 @@ class SyncManagerClass {
 
     try {
       if (!this.isStudent()) {
+        SyncProgress.step("download");
         const response = await this._withRetry(
           "pullChanges",
           () => api.get(API.sync.pull, {
@@ -1548,11 +1576,21 @@ class SyncManagerClass {
           // Sequential, not Promise.all: these all write through the one
           // SQLite connection, so running two of them at once bought no
           // parallelism and would interleave their transactions.
+          // A step each, so the bar moves through the apply rather than
+          // sitting at one value for the whole of it. Each carries its own
+          // row count as the detail — "students · 412" is the difference
+          // between a sync that is working and one that is stuck.
+          SyncProgress.step("classes",     this._count(data.classes));
           await this.syncClasses(data.classes);
+          SyncProgress.step("subjects",    this._count(data.subjects));
           await this.syncSubjects(data.subjects);
+          SyncProgress.step("teachers",    this._count(data.teachers));
           await this.syncTeachers(data.teachers);
+          SyncProgress.step("periods",     this._count(data.periods));
           await this.syncPeriods(data.periods);
+          SyncProgress.step("assignments", this._count(data.assignments));
           await this.syncAssignments(data.assignments);
+          SyncProgress.step("students",    this._count(data.students));
           await this.syncStudents(data.students);
         }
       }
@@ -1562,8 +1600,13 @@ class SyncManagerClass {
       // server already has so the backfill won't queue duplicates.
       if (this.isAdmin()) await this.pullAssignmentsFromServer();
 
+      SyncProgress.step("announcements");
       await this.pullAnnouncements(lastSyncTime);
-      if (this.isAdmin()) await this.pullStudentApplications(lastSyncTime);
+      if (this.isAdmin()) {
+        SyncProgress.step("applications");
+        await this.pullStudentApplications(lastSyncTime);
+      }
+      SyncProgress.step("school");
       await this.syncSchoolInfo();
       console.log("[SyncManager] Pull complete");
       return cursor;
@@ -1571,6 +1614,11 @@ class SyncManagerClass {
       console.warn("[SyncManager] Pull failed (using cached data):", err.message);
       throw err;
     }
+  }
+
+  /** Row count for a pulled slice, as a string, or "" when it is absent. */
+  _count(slice) {
+    return Array.isArray(slice) && slice.length ? String(slice.length) : "";
   }
 
   async pullAnnouncements(lastSyncTime) {

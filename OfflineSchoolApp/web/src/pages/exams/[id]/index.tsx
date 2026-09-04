@@ -23,6 +23,7 @@ import api                                   from "@/services/api";
 import { getErrorMessage }                   from "@/lib/axios";
 import { useTranslation } from "react-i18next";
 import { useToast }       from "@/components/ui/Toast";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   EXAM_STATUS_META,
   EXAM_TYPE_KEYS,
@@ -661,6 +662,9 @@ const ScoreEntryPanel = ({
   const [scores,   setScores]   = useState<Record<string, ScoreEntry>>({});
   const [loading,  setLoading]  = useState(false);
   const [saving,   setSaving]   = useState(false);
+  // Chunks completed, out of rows in the sheet. Real, because the save is
+  // genuinely sent in pieces — see saveBulkScores.
+  const [saveProgress, setSaveProgress] = useState({ done: 0, total: 0 });
   const [saved,    setSaved]    = useState(false);
   const [search,   setSearch]   = useState("");
   // Rows that failed validation (out-of-range or missing score). Flagging them
@@ -790,19 +794,24 @@ const ScoreEntryPanel = ({
       setInvalidIds(new Set());
       setFormError("");
 
-      await ExamService.saveBulkScores({
-        examId,
-        classId,
-        subjectId,
-        examSubjectId: subId,
-        scores:        records,
-        schoolId,
-      });
+      setSaveProgress({ done: 0, total: records.length });
+      await ExamService.saveBulkScores(
+        {
+          examId,
+          classId,
+          subjectId,
+          examSubjectId: subId,
+          scores:        records,
+          schoolId,
+        },
+        { onProgress: (done, total) => setSaveProgress({ done, total }) },
+      );
       setSaved(true);
     } catch (err) {
       toast({ kind: "error", title: getErrorMessage(err) || t("exams.saveFailed") });
     } finally {
       setSaving(false);
+      setSaveProgress({ done: 0, total: 0 });
     }
   };
 
@@ -844,6 +853,16 @@ const ScoreEntryPanel = ({
           </p>
         </div>
         <div className="flex items-center gap-2">
+          {saving && saveProgress.total > 0 && (
+            // The save goes out in chunks, so this percentage is a count of
+            // rows actually acknowledged by the server — not a timer.
+            <ProgressBar
+              className="w-40"
+              done={saveProgress.done}
+              total={saveProgress.total}
+              label={t("common.saving")}
+            />
+          )}
           <button
             onClick={handleSave}
             disabled={saving}
