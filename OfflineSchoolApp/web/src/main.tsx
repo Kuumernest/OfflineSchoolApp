@@ -17,6 +17,10 @@
 // run here rather than inside an effect. Doing it before createRoot means the
 // very first paint already knows whether there is a session.
 
+// First, before the app: the SDK has to be installed before anything it is
+// meant to catch runs. Inert without VITE_SENTRY_DSN.
+import "@/lib/instrument";
+
 import { StrictMode }        from "react";
 import { createRoot }        from "react-dom/client";
 import { BrowserRouter }     from "react-router-dom";

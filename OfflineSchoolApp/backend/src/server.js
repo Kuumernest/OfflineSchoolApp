@@ -2,6 +2,11 @@
 
 require("dotenv").config();
 
+// Before the app, before the routers: the SDK instruments modules as they are
+// loaded, so anything required ahead of it is invisible to it. Inert without
+// SENTRY_DSN — see the note in that file about what is stripped before send.
+const { Sentry, enabled: errorReporting } = require("./instrument");
+
 /*
  * Before anything else. A server missing JWT_SECRET starts happily, reports
  * itself healthy and then throws on the first login — jsonwebtoken raises at
@@ -918,6 +923,16 @@ if (process.env.NODE_ENV !== "production") {
     });
   });
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ERROR REPORTING
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Ahead of the handlers below, because they are what turns a thrown error
+// into a tidy JSON response — after them there is nothing left to report.
+// A no-op when SENTRY_DSN is unset.
+
+if (errorReporting) Sentry.setupExpressErrorHandler(app);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // MULTER ERROR HANDLER

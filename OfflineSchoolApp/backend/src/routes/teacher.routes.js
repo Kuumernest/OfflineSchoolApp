@@ -54,8 +54,16 @@ const ALLOWED_MIMES = {
   ],
   image: [
     "image/jpeg", "image/jpg", "image/png",
-    "image/gif",  "image/webp","image/svg+xml",
+    "image/gif",  "image/webp",
     "image/bmp",  "image/tiff",
+    // image/svg+xml is deliberately absent. An SVG is a document that can
+    // carry <script>, and these files are served from the API origin by
+    // /uploads — so a teacher uploading one would be storing script that runs
+    // with the session of whoever opens it.
+    //
+    // middleware/upload.js documents the same omission, but nothing imports
+    // that module: its own comment claims this file uses it and this file has
+    // its own multer instead. This list is the one the running code reads.
   ],
   document: [
     "application/pdf",

@@ -23,9 +23,18 @@ COPY backend/middleware/ ./middleware/
 # Copy built web assets into a path the backend can serve
 COPY --from=web-builder /app/web/dist ./public/web
 
-# Create upload directories the server bootstraps at startup
-RUN mkdir -p uploads/content/{syllabus,notes,video,audio,document,image} \
-             uploads/logos uploads/photos uploads/messages
+# Create the upload directories the server bootstraps at startup.
+#
+# Under src/, not /app/uploads. server.js runs as `node src/server.js`, so
+# its __dirname is /app/src and every uploads path in the codebase resolves
+# from there — src/utils/photoStorage.js, src/utils/logoStorage.js,
+# src/routes/messages.routes.js and the rest all build `../uploads` off a
+# file inside src/. Creating /app/uploads made a directory the application
+# never opens, and mounting the volume there meant every uploaded file was
+# written to the container's own writable layer and lost on the next deploy.
+RUN mkdir -p src/uploads/content/{syllabus,notes,video,audio,document,image} \
+             src/uploads/logos src/uploads/photos src/uploads/messages \
+             src/uploads/applications
 
 # Non-root user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup

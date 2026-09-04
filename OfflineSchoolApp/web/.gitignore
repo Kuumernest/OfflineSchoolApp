@@ -10,6 +10,9 @@ lerna-debug.log*
 # env files
 .env
 .env.*
+# ...but the example is documentation, not a secret. Without it nothing in the
+# repository records that VITE_SENTRY_DSN or VITE_API_URL exist.
+!.env.production.example
 !.env.example
 
 node_modules
