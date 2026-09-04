@@ -71,20 +71,22 @@ async function ensureSchema() {
 
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS ${CONVERSATIONS} (
-        id                   TEXT PRIMARY KEY,
-        school_id            TEXT,
-        kind                 TEXT,
-        title                TEXT,
-        class_id             TEXT,
-        subject_id           TEXT,
-        participants         TEXT,
-        last_message_at      TEXT,
-        last_message_seq     INTEGER DEFAULT 0,
-        last_message_preview TEXT,
-        last_read_seq        INTEGER DEFAULT 0,
-        is_archived          INTEGER DEFAULT 0,
-        is_read_only         INTEGER DEFAULT 0,
-        updated_at           TEXT
+        id                       TEXT PRIMARY KEY,
+        school_id                TEXT,
+        kind                     TEXT,
+        title                    TEXT,
+        class_id                 TEXT,
+        subject_id               TEXT,
+        participants             TEXT,
+        last_message_at          TEXT,
+        last_message_seq         INTEGER DEFAULT 0,
+        last_message_preview     TEXT,
+        last_read_seq            INTEGER DEFAULT 0,
+        last_read_seq_by_other   INTEGER DEFAULT 0,
+        last_delivered_seq_by_other INTEGER DEFAULT 0,
+        is_archived              INTEGER DEFAULT 0,
+        is_read_only             INTEGER DEFAULT 0,
+        updated_at               TEXT
       )
     `);
 
@@ -149,18 +151,20 @@ const rowToMessage = (r) => ({
 });
 
 const rowToConversation = (r) => ({
-  _id:                r.id,
-  kind:               r.kind,
-  title:              r.title,
-  classId:            r.class_id,
-  subjectId:          r.subject_id,
-  participants:       parse(r.participants, []),
-  lastMessageAt:      r.last_message_at,
-  lastMessageSeq:     r.last_message_seq,
-  lastMessagePreview: r.last_message_preview,
-  isArchived:         r.is_archived === 1,
-  isReadOnly:         r.is_read_only === 1,
-  unread:             Math.max(0, (r.last_message_seq || 0) - (r.last_read_seq || 0)),
+  _id:                       r.id,
+  kind:                      r.kind,
+  title:                     r.title,
+  classId:                   r.class_id,
+  subjectId:                 r.subject_id,
+  participants:              parse(r.participants, []),
+  lastMessageAt:             r.last_message_at,
+  lastMessageSeq:            r.last_message_seq,
+  lastMessagePreview:        r.last_message_preview,
+  isArchived:                r.is_archived === 1,
+  isReadOnly:                r.is_read_only === 1,
+  unread:                    Math.max(0, (r.last_message_seq || 0) - (r.last_read_seq || 0)),
+  lastReadSeqByOther:        r.last_read_seq_by_other || 0,
+  lastDeliveredSeqByOther:   r.last_delivered_seq_by_other || 0,
 });
 
 // ── Local writes ────────────────────────────────────────────────────────────
@@ -263,7 +267,7 @@ export async function listMessages(conversationId, { limit = 50 } = {}) {
 }
 
 /** Pull a thread from the server and reconcile locally. */
-export async function syncMessages(conversationId) {
+export async function syncMessages(conversationId, myId) {
   await ensureSchema();
   try {
     const res  = await api.get(
@@ -271,9 +275,43 @@ export async function syncMessages(conversationId) {
       { timeout: 10000 }
     );
     const list = res.data?.messages ?? [];
+    const participantReads = res.data?.participantReads ?? [];
     const db   = await getDatabase();
 
     for (const m of list) await upsertMessage(db, conversationId, m, "sent");
+
+    // Store the other participant's read/delivered state so the sender can
+    // derive per-message read receipts (✓ sent, ✓✓ delivered, ✓✓ blue read).
+    if (myId && participantReads.length) {
+      // Anyone but me. The kind === "user" it replaces excluded a
+      // guardian counterpart, so a parent thread — the one kind of
+      // thread where a teacher most wants to know the message landed —
+      // never advanced past a single tick. This device signs in as a
+      // user, so only a user row can be me.
+      const other = participantReads.find(
+        (p) => !(p.kind === "user" && String(p.id) === String(myId)),
+      );
+      if (other) {
+        await db.runAsync(
+          `UPDATE ${CONVERSATIONS}
+           SET last_read_seq_by_other = ?, last_delivered_seq_by_other = ?
+           WHERE id = ?`,
+          [other.lastReadSeq || 0, other.lastDeliveredSeq || 0, String(conversationId)]
+        );
+      }
+    }
+
+    // Tell the server this device received up to the newest message, so the
+    // sender sees "delivered" on their messages.
+    //
+    // Max, not .pop(): the server sorts seq descending, so the last
+    // element of the page is its OLDEST message. Reporting that as the
+    // high-water mark, against a $max on the server, left delivery stuck
+    // near the bottom of the first page forever.
+    const seqs = list.map((m) => Number(m.seq)).filter(Number.isFinite);
+    if (seqs.length) {
+      await markDelivered(conversationId, Math.max(...seqs));
+    }
 
     return { ok: true, count: list.length };
   } catch (err) {
@@ -402,6 +440,38 @@ export async function markRead(conversationId, seq) {
 }
 
 /**
+ * Tell the server this device has received messages up to a given seq.
+ *
+ * Called during sync so the sender sees "delivered" on their messages.
+ * Queued silently like markRead — a failed delivery receipt is not the
+ * user's problem.
+ */
+export async function markDelivered(conversationId, seq) {
+  await ensureSchema();
+
+  // Nothing is written locally, deliberately.
+  //
+  // last_delivered_seq_by_other holds how far the OTHER person has got,
+  // and it is filled from the server in syncMessages. Writing my own
+  // pointer into it — with MAX, so it never came back down — made every
+  // outgoing message show the double tick the moment I opened the thread,
+  // whether or not the recipient had ever been online. My own delivered
+  // pointer is the server's business; no screen here reads it.
+
+  // delivered alone, no seq: seq is the read marker, and the route moves
+  // it whenever it is present. Sending both meant a delivery receipt also
+  // marked the thread read. markRead is called separately, from the thread
+  // screen, which is the one place that knows the person actually looked.
+  await MutationQueue.enqueue({
+    entityKey: `message-delivered:${conversationId}`,   // coalescing is CORRECT here
+    method:    "POST",
+    endpoint:  `/messages/conversations/${conversationId}/read`,
+    payload:   { delivered: Number(seq) || 0 },
+    silent:    true,
+  });
+}
+
+/**
  * Upload one attachment and get back its metadata.
  *
  * Deliberately NOT queued through the outbox. The outbox carries JSON and
@@ -453,6 +523,24 @@ export async function fetchRecipients(q = "", limit = 40) {
     timeout: 10000,
   });
   return res.data?.recipients ?? [];
+}
+
+/**
+ * Get the other participant's read/delivered state for a conversation.
+ * Used by the thread screen to show read receipts on sent messages.
+ */
+export async function getParticipantReadState(conversationId) {
+  await ensureSchema();
+  const db = await getDatabase();
+  const row = await db.getFirstAsync(
+    `SELECT last_read_seq_by_other, last_delivered_seq_by_other
+     FROM ${CONVERSATIONS} WHERE id = ?`,
+    [String(conversationId)]
+  );
+  return {
+    lastReadSeq:      row?.last_read_seq_by_other      || 0,
+    lastDeliveredSeq: row?.last_delivered_seq_by_other || 0,
+  };
 }
 
 /** Open, or reuse, a direct thread. Needs a connection. */
@@ -517,6 +605,8 @@ export default {
   confirmSent,
   markFailed,
   markRead,
+  markDelivered,
   openDirect,
   unreadTotal,
+  getParticipantReadState,
 };

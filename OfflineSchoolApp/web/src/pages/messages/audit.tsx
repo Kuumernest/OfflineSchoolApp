@@ -70,7 +70,12 @@ export default function MessageAuditPage() {
 
   const threadQuery = useQuery<Message[], Error>({
     queryKey: ["audit-thread", opened?._id],
-    queryFn:  () => fetchMessages(opened!._id, { limit: 200 }),
+    // .messages, because fetchMessages now returns the per-participant read
+    // states alongside them for the checkmarks in the main thread view. This
+    // page is the compliance read and wants the messages only — spreading the
+    // whole object threw "not iterable" the moment a thread was opened.
+    queryFn:  async () =>
+      (await fetchMessages(opened!._id, { limit: 200 })).messages,
     enabled:  Boolean(opened),
   });
 

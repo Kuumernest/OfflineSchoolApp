@@ -33,6 +33,7 @@ import {
   type Message,
   type Recipient,
   type Attachment,
+  type ParticipantReadState,
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
@@ -76,6 +77,76 @@ const KindIcon = ({ kind }: { kind: Conversation["kind"] }) => {
   if (kind === "class" || kind === "subject") return <Hash size={14} className="text-gray-400" />;
   return <MessageSquare size={14} className="text-gray-400" />;
 };
+
+/**
+ * WhatsApp-style read receipt checkmarks for a sent message.
+ *
+ *   ✓       sent (message has a seq, server has it)
+ *   ✓✓      delivered (recipient's lastDeliveredSeq >= msg.seq)
+ *   ✓✓ blue  read (recipient's lastReadSeq >= msg.seq)
+ *
+ * Only meaningful in direct (2-person) conversations. In groups, showing
+ * "read by N" is a separate feature.
+ */
+function ReadReceipt({
+  msg,
+  myId,
+  participants,
+  conversationKind,
+}: {
+  msg:           Message;
+  myId:          string;
+  participants:  ParticipantReadState[];
+  conversationKind: Conversation["kind"];
+}) {
+  // Only show on messages sent by me.
+  if (String(msg.sender?.id) !== myId) return null;
+  // Only meaningful in direct threads for now.
+  if (conversationKind !== "direct") return null;
+  // Queued messages (no seq yet) have their own state mark.
+  if (msg.seq == null) return null;
+
+  // Find the other participant's read state: anyone who is not me.
+  //
+  // The kind === "user" this replaces quietly excluded a guardian, so on a
+  // parent thread — a direct thread like any other — no receipt rendered at
+  // all. This caller signs in as staff, so only a user row can be me.
+  const other = participants.find(
+    (p) => !(p.kind === "user" && String(p.id) === String(myId)),
+  );
+  if (!other) return null;
+
+  const isRead      = other.lastReadSeq      >= msg.seq;
+  const isDelivered = other.lastDeliveredSeq >= msg.seq;
+
+  // Read = blue double check, delivered = gray double check, sent = gray single check.
+  if (isRead) {
+    return (
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+        <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
+              fill="#3B82F6" />
+        <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
+              fill="#3B82F6" />
+      </svg>
+    );
+  }
+  if (isDelivered) {
+    return (
+      <svg viewBox="0 0 16 11" width="16" height="11" className="inline-block ml-0.5">
+        <path d="M11.07.67l.71.71L5.12 8.04l-2.83-2.83-.71.71L5.12 9.46l7.22-7.22-.27-.57z"
+              fill="#9CA3AF" />
+        <path d="M8.07.67l.71.71L2.12 8.04l-.71-.71L8.07.67z"
+              fill="#9CA3AF" />
+      </svg>
+    );
+  }
+  // Sent (single check).
+  return (
+    <svg viewBox="0 0 10 8" width="10" height="8" className="inline-block ml-0.5">
+      <path d="M3.5 7.3L.2 4l-.7.7L3.5 8.7l7-7L9.8 1z" fill="#9CA3AF" />
+    </svg>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -121,7 +192,7 @@ export default function MessagesPage() {
 
   // ── Messages ──────────────────────────────────────────────────────────────
 
-  const messagesQuery = useQuery<Message[], Error>({
+  const messagesQuery = useQuery<{ messages: Message[]; participantReads: ParticipantReadState[] }, Error>({
     queryKey: ["messages", activeId],
     queryFn:  () => fetchMessages(activeId as string, { limit: 100 }),
     enabled:  Boolean(activeId),
@@ -131,7 +202,12 @@ export default function MessagesPage() {
   // The server returns newest first; a thread reads oldest at the top.
   // Sorted by seq — see the header note.
   const messages = useMemo(
-    () => [...(messagesQuery.data ?? [])].sort((a, b) => a.seq - b.seq),
+    () => [...(messagesQuery.data?.messages ?? [])].sort((a, b) => a.seq - b.seq),
+    [messagesQuery.data],
+  );
+
+  const participantReads = useMemo(
+    () => messagesQuery.data?.participantReads ?? [],
     [messagesQuery.data],
   );
 
@@ -362,6 +438,14 @@ export default function MessagesPage() {
                           )}
                         >
                           <span>{timeLabel(m.createdAt)}</span>
+                          {mine && !m.isDeleted && (
+                            <ReadReceipt
+                              msg={m}
+                              myId={myId}
+                              participants={participantReads}
+                              conversationKind={active.kind}
+                            />
+                          )}
                           {mine && !m.isDeleted && (
                             <button
                               onClick={() => deleteMutation.mutate(m._id)}

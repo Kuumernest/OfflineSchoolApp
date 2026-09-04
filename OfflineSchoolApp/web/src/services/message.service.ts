@@ -69,6 +69,14 @@ export interface Message {
   isDeleted?:      boolean;
 }
 
+/** Per-participant read/delivered state for a conversation. */
+export interface ParticipantReadState {
+  kind:             PrincipalKind;
+  id:               string;
+  lastReadSeq:      number;
+  lastDeliveredSeq: number;
+}
+
 /** Somebody this caller is permitted to start a conversation with. */
 export interface Recipient {
   kind:      PrincipalKind;
@@ -159,12 +167,15 @@ export async function uploadAttachment(
 export async function fetchMessages(
   conversationId: string,
   opts: { limit?: number; beforeSeq?: number } = {},
-): Promise<Message[]> {
+): Promise<{ messages: Message[]; participantReads: ParticipantReadState[] }> {
   const { data } = await api.get(
     `/messages/conversations/${conversationId}/messages`,
     { params: { limit: opts.limit, beforeSeq: opts.beforeSeq } },
   );
-  return data?.messages ?? [];
+  return {
+    messages:        data?.messages ?? [],
+    participantReads: data?.participantReads ?? [],
+  };
 }
 
 export async function sendMessage(
@@ -236,3 +247,5 @@ export default {
   toggleReaction,
   auditConversations,
 };
+
+export type { ParticipantReadState as ParticipantRead };

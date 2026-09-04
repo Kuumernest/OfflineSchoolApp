@@ -380,6 +380,15 @@ router.get("/conversations/:id/messages", asyncHandler(async (req, res) => {
     );
   }
 
+  // Include participant read states so the sender can derive per-message
+  // delivery and read status (e.g. WhatsApp-style checkmarks).
+  const participantReads = (loaded.conversation.participants || []).map((p) => ({
+    kind:             p.kind,
+    id:               p.id,
+    lastReadSeq:      p.lastReadSeq      || 0,
+    lastDeliveredSeq: p.lastDeliveredSeq || 0,
+  }));
+
   return res.json({
     success:  true,
     count:    docs.length,
@@ -393,6 +402,7 @@ router.get("/conversations/:id/messages", asyncHandler(async (req, res) => {
       row.attachments = signAttachmentUrls(row.attachments ?? []);
       return row;
     }),
+    participantReads,
     viaAudit: loaded.audit,
   });
 }));
@@ -447,9 +457,15 @@ router.post("/conversations/:id/read", asyncHandler(async (req, res) => {
   const me = requirePrincipal(req, res);
   if (!me) return;
 
+  // Either marker on its own is a valid receipt. seq moves the read
+  // pointer, delivered moves the delivery pointer, and a device that has
+  // merely received messages sends only the second — it has no business
+  // claiming the person read them.
   const { seq, delivered } = req.body || {};
-  if (seq == null) {
-    return res.status(400).json({ success: false, error: "seq is required" });
+  if (seq == null && delivered == null) {
+    return res.status(400).json({
+      success: false, error: "seq or delivered is required",
+    });
   }
 
   // Only a participant has a read marker to move; an auditing admin has none.
@@ -461,7 +477,9 @@ router.post("/conversations/:id/read", asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Conversation not found" });
   }
 
-  await svc.markRead(conversation._id, me, seq);
+  if (seq != null) {
+    await svc.markRead(conversation._id, me, seq);
+  }
   if (delivered != null) {
     await svc.markDelivered(conversation._id, me, delivered);
   }

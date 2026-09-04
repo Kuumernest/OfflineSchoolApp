@@ -44,17 +44,47 @@ const timeLabel = (iso) => {
 };
 
 /**
- * The little state marker on an outgoing bubble.
+ * WhatsApp-style read receipt checkmarks on an outgoing bubble.
  *
- * Only three states are shown, and none of them claims anything about the
- * recipient's device. t("msgMobile.delivered") and "read" are the recipient's business
- * and arrive late or never on this kind of link, so promising them here
- * would be a lie the UI cannot keep.
+ *   ✓       sent (server has it)
+ *   ✓✓      delivered (recipient's device confirmed receiving)
+ *   ✓✓ blue  read (recipient has seen it)
+ *
+ * The "queued" and "failed" states still use their own icons — those are
+ * about the sender's device, not the recipient's.
  */
-function StateMark({ state }) {
+function StateMark({ state, seq, participantRead }) {
   if (state === "queued")  return <Ionicons name="time-outline"    size={12} color="#BFDBFE" />;
   if (state === "failed")  return <Ionicons name="alert-circle"    size={12} color="#FCA5A5" />;
-  return <Ionicons name="checkmark" size={12} color="#BFDBFE" />;
+
+  // No seq yet — treat as sent.
+  if (seq == null) return <Ionicons name="checkmark" size={12} color="#BFDBFE" />;
+
+  const isRead      = (participantRead?.lastReadSeq      || 0) >= seq;
+  const isDelivered = (participantRead?.lastDeliveredSeq || 0) >= seq;
+
+  if (isRead) {
+    // Blue double check.
+    return (
+      <View style={{ flexDirection: "row", marginLeft: 2 }}>
+        <Ionicons name="checkmark-done" size={14} color="#3B82F6" />
+      </View>
+    );
+  }
+  if (isDelivered) {
+    // Gray double check.
+    return (
+      <View style={{ flexDirection: "row", marginLeft: 2 }}>
+        <Ionicons name="checkmark-done" size={14} color="#BFDBFE" />
+      </View>
+    );
+  }
+  // Sent — single gray check.
+  return (
+    <View style={{ flexDirection: "row", marginLeft: 2 }}>
+      <Ionicons name="checkmark" size={12} color="#BFDBFE" />
+    </View>
+  );
 }
 
 export default function ThreadScreen() {
@@ -69,6 +99,7 @@ export default function ThreadScreen() {
   const [sending,  setSending]  = useState(false);
   const [pending,  setPending]  = useState([]);   // uploaded, not yet sent
   const [attaching, setAttaching] = useState(false);
+  const [participantRead, setParticipantRead] = useState({ lastReadSeq: 0, lastDeliveredSeq: 0 });
 
   const listRef = useRef(null);
 
@@ -91,9 +122,12 @@ export default function ThreadScreen() {
   }, [id]);
 
   const refresh = useCallback(async () => {
-    await MessageService.syncMessages(id);
+    await MessageService.syncMessages(id, myId);
     await loadLocal();
-  }, [id, loadLocal]);
+    // Fetch the other participant's read state for read receipts.
+    const readState = await MessageService.getParticipantReadState(id);
+    setParticipantRead(readState);
+  }, [id, loadLocal, myId]);
 
   useEffect(() => {
     loadLocal().then(refresh);
@@ -236,7 +270,13 @@ export default function ThreadScreen() {
             <Text style={[s.bubbleTime, mine && s.bubbleTimeMine]}>
               {timeLabel(item.createdAt)}
             </Text>
-            {mine && !item.isDeleted && <StateMark state={item.state} />}
+            {mine && !item.isDeleted && (
+              <StateMark
+                state={item.state}
+                seq={item.seq}
+                participantRead={participantRead}
+              />
+            )}
           </View>
 
           {item.state === "failed" && (
