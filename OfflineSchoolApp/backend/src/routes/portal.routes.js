@@ -277,10 +277,32 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
 router.get("/notifications", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
 
+  // An ALLOW-list, deliberately, and not to be turned into a blocklist.
+  //
+  // `body` below is the rendered message the pipeline sent, and that is why
+  // config/syncFeed.js refuses to mirror this collection at all: for an admin
+  // welcome or a password reset the body contains a temporary password. None
+  // of those kinds are listed here and none may be added. Anything new is
+  // opted in by name after somebody has looked at what its body holds.
+  //
+  // Until now the list was fee reminders and payments only, so a parent could
+  // see what they owed and never that their child had been marked absent,
+  // scanned through the gate, or that a term's results had been published —
+  // messages the school had already sent them by email or SMS.
+  const GUARDIAN_NOTICE_KINDS = [
+    "fee.reminder",
+    "fee.payment",
+    "attendance.absent",
+    "gate.arrival",
+    "gate.departure",
+    "result.published",
+    "announcement",
+  ];
+
   const notifications = await Notification.find({
     schoolId,
     studentId,
-    kind: { $in: ["fee.reminder", "fee.payment"] },
+    kind: { $in: GUARDIAN_NOTICE_KINDS },
     deletedAt: null,
     status: { $ne: "skipped" },
   })
@@ -374,9 +396,20 @@ router.get("/results", asyncHandler(async (req, res) => {
       className: r.className, average: r.average, percentage: r.percentage,
       overallGrade: r.overallGrade, classPosition: r.classPosition,
       totalInClass: r.totalInClass, isPassing: r.isPassing,
+      // Summary aggregates — the same figures the report card prints, so the
+      // portal can mirror the issued card instead of showing a bare average.
+      totalScore: r.totalScore, maxTotalScore: r.maxTotalScore,
+      gpa: r.gpa, overallRemark: r.overallRemark,
+      principalRemark: r.principalRemark, promotionStatus: r.promotionStatus,
+      subjectsPassed: r.subjectsPassed, subjectsFailed: r.subjectsFailed,
+      subjectsTotal: r.subjectsTotal, isPartial: r.isPartial,
+      issuedAt: r.publishedAt,
       subjects: (r.subjectBreakdown ?? []).map((s) => ({
-        subjectName: s.subjectName, normalizedMark: s.normalizedMark,
-        grade: s.grade, isPassing: s.isPassing, isAbsent: s.isAbsent,
+        subjectId: s.subjectId, subjectName: s.subjectName,
+        score: s.score, maxScore: s.maxScore,
+        normalizedMark: s.normalizedMark, coefficient: s.coefficient,
+        weightedMark: s.weightedMark, grade: s.grade, remark: s.remark,
+        isPassing: s.isPassing, isAbsent: s.isAbsent,
       })),
     })),
   });
@@ -460,11 +493,29 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
       const mine = (c.participants || []).find(
         (p) => p.kind === "guardian" && String(p.id) === String(me.id)
       );
+
+      // Everyone on the thread except this guardian.
+      //
+      // A direct thread carries no title — it is named for the other person,
+      // the same convention the staff app uses. The portal had no way to apply
+      // it, because naming the other side means knowing which participant is
+      // you, and only the server does. So it joined every participant instead
+      // and showed a parent their own name over a message from a teacher, or
+      // fell through to the word "Conversation" when the names were absent.
+      // Either way the one thing a parent needs — who wrote to me — was the
+      // thing missing.
+      const others = (c.participants || []).filter(
+        (p) => !(p.kind === "guardian" && String(p.id) === String(me.id))
+      );
+
       return {
         _id:                c._id,
         kind:               c.kind,
         title:              c.title,
         participants:       c.participants,
+        otherParticipants:  others.map((p) => ({
+          kind: p.kind, id: p.id, name: p.name, role: p.role,
+        })),
         lastMessageAt:      c.lastMessageAt,
         lastMessagePreview: c.lastMessagePreview,
         isArchived:         c.isArchived,
@@ -545,11 +596,19 @@ router.get("/messages/conversations/:id", asyncHandler(async (req, res) => {
     beforeSeq: req.query.beforeSeq,
   });
 
+  const participantReads = (conversation.participants || []).map((p) => ({
+    kind:             p.kind,
+    id:               p.id,
+    lastReadSeq:      p.lastReadSeq      || 0,
+    lastDeliveredSeq: p.lastDeliveredSeq || 0,
+  }));
+
   return res.json({
     success: true,
     data: {
       conversation,
       messages: docs.map((m) => m.toClientJSON()),
+      participantReads,
     },
   });
 }));

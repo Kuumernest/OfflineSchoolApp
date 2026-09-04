@@ -43,7 +43,59 @@ const C = {
   canvas:    "#F4F5F8",
 };
 
-const TABS = ["fees", "results", "attendance", "news", "messages"];
+// "notices" is what the school has already sent this parent by email or SMS —
+// gate arrivals, absences, fee reminders, published results. The records
+// existed all along; nothing in the portal read them.
+const TABS = ["fees", "results", "attendance", "notices", "news", "messages"];
+
+// Results arrive sorted newest-first (academic year desc, then term desc).
+// Grouping preserves that order while giving each school year its own
+// section — the way a report-card file is kept year by year.
+const groupResultsByYear = (rows) => {
+  const groups = [];
+  const index  = {};
+  for (const r of rows ?? []) {
+    const year = r.academicYear || "—";
+    if (!index[year]) {
+      index[year] = { year, items: [] };
+      groups.push(index[year]);
+    }
+    index[year].items.push(r);
+  }
+  return groups;
+};
+
+// Trim trailing zeros on a mark: 18.00 → "18", 16.40 → "16.4".
+const trimMark = (v) => {
+  if (v == null || v === "") return "—";
+  const n = Number(v);
+  return Number.isNaN(n) ? "—" : String(Math.round(n * 100) / 100);
+};
+
+// Attendance statuses arrive as English words; map them through i18n so a
+// French portal stays French.
+// One row per notification kind the portal is allowed to show. Keyed on the
+// kind the server sends, so a kind that is added server-side and not listed
+// here falls back rather than rendering a blank card.
+const NOTICE_META = {
+  "gate.arrival":     { icon: "log-in-outline",       fg: "#12683A", bg: "#EEF7F1", labelKey: "portal.noticeArrival" },
+  "gate.departure":   { icon: "log-out-outline",      fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeDeparture" },
+  "attendance.absent":{ icon: "alert-circle-outline", fg: "#9F2318", bg: "#FDF2F1", labelKey: "portal.noticeAbsent" },
+  "fee.reminder":     { icon: "cash-outline",          fg: "#96570B", bg: "#FDF6EC", labelKey: "portal.noticeFeeReminder" },
+  "fee.payment":      { icon: "receipt-outline",       fg: "#12683A", bg: "#EEF7F1", labelKey: "portal.noticePayment" },
+  "result.published": { icon: "school-outline",        fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeResults" },
+  "announcement":     { icon: "megaphone-outline",     fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeAnnouncement" },
+  default:            { icon: "notifications-outline", fg: "#4F5A70", bg: "#F4F5F8", labelKey: "portal.noticeOther" },
+};
+
+const ATTD_STATUS_KEY = {
+  "Present":                      "portal.present",
+  "Absent":                       "portal.absent",
+  "Late":                         "portal.late",
+  "Excused":                      "portal.excused",
+  "Partial absence":              "portal.partialAbsence",
+  "Present with partial absence": "portal.presentPartial",
+};
 
 export default function ParentPortalScreen() {
   const router          = useRouter();
@@ -113,6 +165,7 @@ export default function ParentPortalScreen() {
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
         attendance: PortalService.fetchAttendance,
+        notices:    PortalService.fetchNotifications,
         news:       PortalService.fetchAnnouncements,
         messages:   PortalService.fetchConversations,
       }[tab];
@@ -170,6 +223,29 @@ export default function ParentPortalScreen() {
     } catch (err) {
       if (!(await handle401(err))) {
         Alert.alert(t("portal.receipt"), errorText(t, err) || String(err));
+      }
+    } finally {
+      setPrinting(null);
+    }
+  };
+
+  // Open the FROZEN card the school issued for a published result — the exact
+  // report card, never a re-render from today's numbers.
+  const openReportCard = async (summary) => {
+    setPrinting(`card-${summary._id}`);
+    try {
+      const card = await PortalService.fetchReportCardHtml(summary._id);
+      if (card?.html) await Print.printAsync({ html: card.html });
+    } catch (err) {
+      if (err?.response?.status === 404) {
+        Alert.alert(
+          t("portal.reportCardView"),
+          err?.response?.data?.code === "NOT_ISSUED"
+            ? t("portal.reportCardNotIssued")
+            : errorText(t, err) || String(err)
+        );
+      } else if (!(await handle401(err))) {
+        Alert.alert(t("portal.reportCardView"), errorText(t, err) || String(err));
       }
     } finally {
       setPrinting(null);
@@ -470,44 +546,157 @@ export default function ParentPortalScreen() {
               </>
             )}
 
-            {/* ── Results ── */}
+            {/* ── Results — mirrors the issued report card ── */}
             {tab === "results" && (
               (data?.length ?? 0) === 0 ? (
                 <View style={styles.card}>
                   <Text style={styles.empty}>{t("portal.noResults")}</Text>
                 </View>
               ) : (
-                data.map((r) => (
-                  <View key={r._id} style={styles.card}>
-                    <View style={styles.resultHead}>
-                      <View style={{ flex: 1, minWidth: 0 }}>
-                        <Text style={styles.cardTitle}>
-                          {r.term || "—"} · {r.academicYear || "—"}
-                        </Text>
-                        <Text style={styles.lineMeta}>{r.className || ""}</Text>
-                      </View>
-                      <View style={{ alignItems: "flex-end" }}>
-                        <Text style={styles.average}>{r.average ?? "—"}</Text>
-                        {r.classPosition && (
-                          <Text style={styles.lineMeta}>
-                            {t("portal.position")} {r.classPosition}
-                            {r.totalInClass ? ` / ${r.totalInClass}` : ""}
-                          </Text>
-                        )}
-                      </View>
+                groupResultsByYear(data).map((group) => (
+                  <View key={group.year} style={{ marginBottom: 4 }}>
+                    <View style={styles.yearHeader}>
+                      <Ionicons name="school-outline" size={15} color={C.primary} />
+                      <Text style={styles.yearHeaderText}>{group.year}</Text>
+                      <Text style={styles.yearHeaderCount}>
+                        {t("portal.resultsCount", { count: group.items.length })}
+                      </Text>
                     </View>
-                    {r.subjects?.map((s, i) => (
-                      <View key={i} style={styles.line}>
-                        <Text style={styles.lineLabel} numberOfLines={1}>
-                          {s.subjectName || "—"}
-                        </Text>
-                        <Text style={styles.lineAmount}>{s.normalizedMark ?? "—"}</Text>
-                        <Text style={[
-                          styles.grade,
-                          { color: s.isPassing ? C.success : C.danger },
-                        ]}>
-                          {s.grade || "—"}
-                        </Text>
+
+                    {group.items.map((r) => (
+                      <View key={r._id} style={styles.card}>
+                        <View style={styles.resultHead}>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <Text style={styles.cardTitle}>
+                              {r.term || "—"} · {r.className || ""}
+                            </Text>
+                            <Text style={styles.lineMeta}>
+                              {r.subjectsTotal
+                                ? t("portal.subjectsSummary", {
+                                    passed: r.subjectsPassed ?? 0,
+                                    failed: r.subjectsFailed ?? 0,
+                                  })
+                                : ""}
+                            </Text>
+                          </View>
+                          <View style={{ alignItems: "flex-end" }}>
+                            {/* The figure was rendered bare, which left a
+                                parent looking at "14" with nothing saying what
+                                it was — and no way to tell 14/20 from 14%. The
+                                label and the denominator are the whole point of
+                                the number. */}
+                            <Text style={styles.averageLabel}>
+                              {t("portal.average")}
+                            </Text>
+                            <Text style={styles.average}>
+                              {trimMark(r.average)}
+                              <Text style={styles.averageOutOf}> / 20</Text>
+                            </Text>
+                            {r.classPosition && (
+                              <Text style={styles.lineMeta}>
+                                {t("portal.position")} {r.classPosition}
+                                {r.totalInClass ? ` / ${r.totalInClass}` : ""}
+                              </Text>
+                            )}
+                          </View>
+                        </View>
+
+                        {r.overallGrade && (
+                          <View
+                            style={[
+                              styles.gradeChip,
+                              r.isPassing
+                                ? { backgroundColor: C.successBg }
+                                : { backgroundColor: C.dangerBg },
+                            ]}
+                          >
+                            <Text
+                              style={[
+                                styles.gradeChipText,
+                                { color: r.isPassing ? C.success : C.danger },
+                              ]}
+                            >
+                              {t("portal.overallGrade")}: {r.overallGrade}
+                              {r.gpa != null ? ` · GPA ${trimMark(r.gpa)}` : ""}
+                            </Text>
+                          </View>
+                        )}
+
+                        {r.subjects?.map((s, i) => (
+                          <View key={i} style={styles.subjectRow}>
+                            <View style={{ flex: 1, minWidth: 0 }}>
+                              <Text style={styles.lineLabel} numberOfLines={1}>
+                                {s.subjectName || "—"}
+                              </Text>
+                              <Text style={styles.subjectMeta} numberOfLines={2}>
+                                {s.isAbsent
+                                  ? "Absent"
+                                  : `${trimMark(s.score)}${s.maxScore ? `/${s.maxScore}` : ""}`}
+                                {s.coefficient
+                                  ? ` · ${t("portal.coefficient")} ${s.coefficient}`
+                                  : ""}
+                                {!s.isAbsent && s.remark
+                                  ? ` · ${s.remark}`
+                                  : ""}
+                              </Text>
+                            </View>
+                            <View style={{ alignItems: "flex-end" }}>
+                              <Text style={styles.subjectMark}>
+                                {s.isAbsent ? "—" : trimMark(s.normalizedMark)}
+                                <Text style={styles.subjectMarkScale}>/20</Text>
+                              </Text>
+                            </View>
+                            <View
+                              style={[
+                                styles.subjectGrade,
+                                s.isAbsent
+                                  ? { backgroundColor: C.warningBg }
+                                  : s.isPassing
+                                    ? { backgroundColor: C.successBg }
+                                    : { backgroundColor: C.dangerBg },
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.gradeChipText,
+                                  {
+                                    color: s.isAbsent
+                                      ? C.warning
+                                      : s.isPassing ? C.success : C.danger,
+                                  },
+                                ]}
+                              >
+                                {s.isAbsent ? "ABS" : (s.grade || "—")}
+                              </Text>
+                            </View>
+                          </View>
+                        ))}
+
+                        {r.principalRemark && (
+                          <View style={styles.resultFooter}>
+                            <Text style={styles.cardHint}>
+                              {t("portal.principalRemark")}
+                            </Text>
+                            <Text style={styles.remarkText}>
+                              {r.principalRemark}
+                            </Text>
+                          </View>
+                        )}
+
+                        <TouchableOpacity
+                          style={styles.reportCardBtn}
+                          activeOpacity={0.8}
+                          onPress={() => openReportCard(r)}
+                        >
+                          {printing === `card-${r._id}` ? (
+                            <ActivityIndicator size="small" color={C.primary} />
+                          ) : (
+                            <Ionicons name="document-text-outline" size={16} color={C.primary} />
+                          )}
+                          <Text style={styles.reportCardBtnText}>
+                            {t("portal.viewReportCard")}
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     ))}
                   </View>
@@ -515,24 +704,70 @@ export default function ParentPortalScreen() {
               )
             )}
 
-            {/* ── Attendance ── */}
+            {/* ── Attendance — rate, status counts and recent days ── */}
             {tab === "attendance" && (
               (data?.total ?? 0) === 0 ? (
                 <View style={styles.card}>
                   <Text style={styles.empty}>{t("portal.noAttendance")}</Text>
                 </View>
               ) : (
-                <View style={styles.card}>
-                  <Text style={styles.balanceLabel}>{t("portal.attendanceRate")}</Text>
-                  <Text style={[styles.balanceValue, { color: C.ink }]}>{data.rate}%</Text>
-                  <Text style={styles.lineMeta}>
-                    {t("portal.daysRecorded", { count: data.total })}
-                  </Text>
-                </View>
+                <>
+                  <View style={styles.card}>
+                    <Text style={styles.balanceLabel}>{t("portal.attendanceRate")}</Text>
+                    <Text style={[styles.balanceValue, { color: C.ink }]}>{data.rate}%</Text>
+                    <Text style={styles.lineMeta}>
+                      {t("portal.daysRecorded", { count: data.total })}
+                    </Text>
+                  </View>
+
+                  <View style={styles.attdCounts}>
+                    {["present", "absent", "late", "excused"].map((key) => (
+                      <View key={key} style={styles.attdCell}>
+                        <Text style={styles.attdCellValue}>
+                          {data.tally?.[key] ?? 0}
+                        </Text>
+                        <Text style={styles.attdCellLabel}>{t(`portal.${key}`)}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  {(data.dailySummaries?.length ?? 0) > 0 && (
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>{t("portal.recentDays")}</Text>
+                      {data.dailySummaries.slice(0, 14).map((day) => (
+                        <View key={day.date} style={styles.recentDayRow}>
+                          <View
+                            style={[
+                              styles.recentDayDot,
+                              {
+                                backgroundColor:
+                                  day.status?.toLowerCase().includes("absent")
+                                    ? C.danger
+                                    : day.status?.toLowerCase().includes("late")
+                                      ? C.warning
+                                      : C.success,
+                              },
+                            ]}
+                          />
+                          <Text style={styles.lineLabel} numberOfLines={1}>
+                            {formatDateShort(day.date)}
+                          </Text>
+                          <Text style={styles.recentDayStatus}>
+                            {t(ATTD_STATUS_KEY[day.status] ?? "portal.present")}
+                          </Text>
+                          <Text style={styles.recentDayMeta}>
+                            {day.present}P{day.absent ? ` · ${day.absent}A` : ""}
+                            {day.late ? ` · ${day.late}L` : ""}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+                </>
               )
             )}
 
-            {/* ── News ── */}
+            {/* ── Messages ── */}
             {tab === "messages" && (
               <>
                 <TouchableOpacity
@@ -556,15 +791,20 @@ export default function ParentPortalScreen() {
                     >
                       <View style={{ flex: 1 }}>
                         <Text style={styles.convoTitle} numberOfLines={1}>
+                          {/* otherParticipants excludes this guardian, which
+                              is why the server sends it — joining every
+                              participant showed a parent their own name over
+                              a message from the school. participants is the
+                              fallback for an older server. */}
                           {c.title ||
-                            (c.participants || [])
+                            (c.otherParticipants || c.participants || [])
                               .map((p) => p.name)
                               .filter(Boolean)
                               .join(", ") ||
-                            "Conversation"}
+                            t("msgMobile.conversation")}
                         </Text>
                         <Text style={styles.convoPreview} numberOfLines={1}>
-                          {c.lastMessagePreview || "No messages yet"}
+                          {c.lastMessagePreview || t("portal.noMessages")}
                         </Text>
                       </View>
                       {c.unread > 0 && (
@@ -576,6 +816,56 @@ export default function ParentPortalScreen() {
                   ))
                 )}
               </>
+            )}
+
+            {/* ── Notices ─────────────────────────────────────────────────
+                Everything the school has already sent this parent by email or
+                SMS: gate arrivals and departures, absences, fee reminders,
+                published results. The records existed from the moment each
+                message went out — nothing in the portal had ever read them, so
+                a parent whose phone lost the SMS had no second place to look. */}
+            {tab === "notices" && (
+              (data?.length ?? 0) === 0 ? (
+                <View style={styles.card}>
+                  <Text style={styles.empty}>{t("portal.noNotices")}</Text>
+                </View>
+              ) : (
+                data.map((n) => {
+                  const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
+                  return (
+                    <View key={n._id} style={styles.card}>
+                      <View style={styles.noticeHead}>
+                        <View style={[styles.noticeIcon, { backgroundColor: meta.bg }]}>
+                          <Ionicons name={meta.icon} size={14} color={meta.fg} />
+                        </View>
+                        <Text style={styles.noticeKind} numberOfLines={1}>
+                          {t(meta.labelKey)}
+                        </Text>
+                        <Text style={styles.lineMeta}>
+                          {formatDateShort(n.sentAt || n.createdAt)}
+                        </Text>
+                      </View>
+
+                      {n.subject ? (
+                        <Text style={styles.cardTitle}>{n.subject}</Text>
+                      ) : null}
+                      {n.body ? (
+                        <Text style={styles.newsBody}>{n.body}</Text>
+                      ) : null}
+
+                      {/* A queued notice has not left the school yet, and a
+                          failed one never will — saying so is kinder than a
+                          silent absence when a parent is asking why they were
+                          not told. */}
+                      {n.status && n.status !== "sent" ? (
+                        <Text style={styles.noticePending}>
+                          {t(`portal.noticeStatus_${n.status}`)}
+                        </Text>
+                      ) : null}
+                    </View>
+                  );
+                })
+              )
             )}
 
             {tab === "news" && (
@@ -699,10 +989,81 @@ const styles = StyleSheet.create({
   grade:      { fontSize: 12, fontWeight: "700", width: 28, textAlign: "right" },
 
   resultHead: { flexDirection: "row", alignItems: "flex-start", gap: 10, marginBottom: 6 },
+  noticeHead: { flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 },
+  noticeIcon: {
+    width: 24, height: 24, borderRadius: 8,
+    alignItems: "center", justifyContent: "center",
+  },
+  noticeKind: { flex: 1, fontSize: 12, fontWeight: "700", color: C.inkBody },
+  noticePending: { marginTop: 6, fontSize: 11, fontWeight: "600", color: C.warning },
+
+  averageLabel: {
+    fontSize:      10,
+    fontWeight:    "600",
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    color:         C.inkFaint ?? "#9CA3AF",
+    marginBottom:  1,
+  },
   average:    { fontSize: 18, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  // The denominator rides inside the figure so it wraps with it and stays
+  // visually subordinate — the mark is what a parent reads first.
+  averageOutOf: { fontSize: 11, fontWeight: "600", color: C.inkFaint ?? "#9CA3AF" },
 
   newsBody: { marginTop: 8, fontSize: 13, color: C.inkBody, lineHeight: 19 },
   empty:    { fontSize: 12, color: C.inkFaint, paddingVertical: 8 },
+
+  // ── Results — report-card mirror ──────────────────────────────────────────
+  yearHeader: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingHorizontal: 10, paddingVertical: 8, marginBottom: 10,
+    backgroundColor: C.primaryBg, borderRadius: 10,
+  },
+  yearHeaderText:  { flex: 1, fontSize: 14, fontWeight: "700", color: C.ink },
+  yearHeaderCount: { fontSize: 11, fontWeight: "600", color: C.inkMuted },
+
+  gradeChip: {
+    alignSelf: "flex-start", marginBottom: 6,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: 10,
+  },
+  gradeChipText: { fontSize: 11, fontWeight: "700" },
+
+  subjectRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  subjectMeta:      { fontSize: 10, color: C.inkFaint, marginTop: 2, lineHeight: 14 },
+  subjectMark:      { fontSize: 14, fontWeight: "700", color: C.ink, fontVariant: ["tabular-nums"] },
+  subjectMarkScale: { fontSize: 9, color: C.inkFaint },
+  subjectGrade: {
+    minWidth: 30, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 11,
+    fontSize: 11, fontWeight: "700", textAlign: "center", overflow: "hidden",
+  },
+  resultFooter:  { marginTop: 6 },
+  remarkText:    { fontSize: 11, color: C.inkMuted, fontStyle: "italic", marginTop: 2, lineHeight: 15 },
+  reportCardBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 8,
+    marginTop: 8, paddingVertical: 9, borderRadius: 9,
+    borderWidth: 1, borderColor: C.primary, backgroundColor: C.primaryBg,
+  },
+  reportCardBtnText: { fontSize: 12, fontWeight: "700", color: C.primary },
+
+  // ── Attendance breakdown ──────────────────────────────────────────────────
+  attdCounts: { flexDirection: "row", gap: 8, marginTop: 12 },
+  attdCell: {
+    flex: 1, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
+    borderRadius: 9, paddingVertical: 8, alignItems: "center",
+  },
+  attdCellValue: { fontSize: 16, fontWeight: "700", fontVariant: ["tabular-nums"] },
+  attdCellLabel: { fontSize: 10, color: C.inkFaint, marginTop: 2 },
+
+  recentDayRow: {
+    flexDirection: "row", alignItems: "center", gap: 8,
+    paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  recentDayDot:    { width: 8, height: 8, borderRadius: 4 },
+  recentDayMeta:   { fontSize: 10, color: C.inkFaint, fontVariant: ["tabular-nums"] },
+  recentDayStatus: { fontSize: 11, fontWeight: "600" },
 
   // ── Messages ──────────────────────────────────────────────────────────────
   newMsgBtn: {

@@ -69,9 +69,26 @@ export default function GuardianCodesPage() {
     mutationFn: (payload: { studentIds?: string[]; accessId?: string; label?: string | null }) =>
       issueGuardianCode(schoolId, payload),
     onSuccess: (res, payload) => {
-      const who = payload.accessId
-        ? (accessQ.data?.find((a) => a._id === payload.accessId)?.label ?? "")
-        : label;
+      // A code is shown exactly once, so this line is the only chance the office
+      // has to know whose it is — and the label is free text that is usually
+      // left blank, which left a bare code identifying nobody. The children are
+      // the identity that is always there: a guardian code exists because of
+      // them, and "Ateba Marie, Ateba Paul" is what the person handing it over
+      // actually recognises.
+      const access = payload.accessId
+        ? accessQ.data?.find((a) => a._id === payload.accessId)
+        : null;
+
+      const childNames = access
+        ? access.children.map((c) => c.name || c.enrollmentNo).filter(Boolean)
+        : (studentsQ.data?.students ?? [])
+            .filter((s) => (payload.studentIds ?? []).includes(s._id))
+            .map((s) => s.name || s.enrollmentNo || s._id);
+
+      const who = [access?.label || label.trim(), childNames.join(", ")]
+        .filter(Boolean)
+        .join(" · ");
+
       setIssued({ code: res.code, who });
       setCopied(false);
       setOpen(false);

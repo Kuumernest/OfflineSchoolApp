@@ -183,9 +183,20 @@ export const fetchReceiptHtml = async (paymentId, lang = "en") => {
   return typeof data === "string" ? data : String(data ?? "");
 };
 
+/**
+ * The frozen report card a published result was issued with, as HTML.
+ * Returns { html, term, academicYear, issuedAt } — the exact card the school
+ * printed, never a re-render. A 404 with code NOT_ISSUED means the marks were
+ * published but the school has not issued a card yet.
+ */
+export const fetchReportCardHtml = async (summaryId) => {
+  const { data } = await client.get(`/results/${summaryId}/report-card`);
+  return data?.data ?? null;
+};
+
 export default {
   login, signOut, getToken, clearToken,
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
   fetchResults, fetchAttendance, fetchAnnouncements,
-  fetchReceiptHtml,
+  fetchReceiptHtml, fetchReportCardHtml,
 };
