@@ -841,7 +841,8 @@
     "tileGoPublished": "Show published exams",
     "tileGoPending": "Go to the results waiting to be published",
     "tileGoMissing": "Go to the marks that are missing",
-    "tileGoAnalytics": "Open the results analytics"
+    "tileGoAnalytics": "Open the results analytics",
+    "unknownClass": "Unassigned class"
   },
   "examCreate": {
     "title": "Create exam",

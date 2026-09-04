@@ -13,6 +13,10 @@ import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../../src/store/auth.store";
 import { ExamService }  from "../../../../src/services/exam.service";
+// The class NAME is not on an exam subject. /exams/:id/submissions returns raw
+// ExamSubject rows, which carry classId and nothing readable, so the names come
+// from the synced classes table instead.
+import { getClassesList } from "../../../../src/services/assignment.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
 import { errorText } from "../../../../src/utils/appError";
 
@@ -159,6 +163,77 @@ const deriveClasses = (subjects, exam, t) => {
   }
 
   return Object.values(map);
+};
+
+/**
+ * Group subjects or results into per-class sections, so an exam that spans
+ * several classes reads class by class instead of as one flat list.
+ *
+ * ── Where the class NAME comes from, and why the order matters ─────────────
+ *
+ * Grouping by id is the easy half: /exams/:id/submissions returns raw
+ * ExamSubject rows and every one carries classId. Naming the group is the part
+ * that fails quietly.
+ *
+ * An ExamSubject has no readable class field at all, so resolveClassName(item)
+ * returns null for every subject. `classNameById` — read from the synced
+ * classes table — is therefore the real source, and it is consulted FIRST.
+ *
+ * exam.classNames is only a fallback because it cannot be trusted for this: it
+ * is a single comma-joined string paired positionally with classIds, it
+ * defaults to null, and when it is null every group would otherwise inherit
+ * exam.className, which on a multi-class exam is one class's name printed over
+ * all of them. That is the failure this ordering exists to avoid — headers that
+ * look right and name the wrong class.
+ *
+ * First-seen order is preserved, so subjects follow the exam's own class order
+ * and results stay in ranking order.
+ */
+const groupByClass = (items, exam, t, classNameById = {}) => {
+  const groups = [];
+  const index  = {};
+
+  const examClassNameById = (() => {
+    if (!Array.isArray(exam?.classIds) || exam.classIds.length === 0) return {};
+    const namesList = exam.classNames
+      ? exam.classNames.split(",").map((n) => n.trim())
+      : [];
+    const map = {};
+    exam.classIds.forEach((cid, i) => {
+      // Only positional names. exam.className is deliberately NOT used as a
+      // per-class default here — see the note above.
+      map[String(cid)] = namesList[i] || null;
+    });
+    return map;
+  })();
+
+  // A single-class exam has one group, and then the exam's own name is right.
+  const singleClass = !Array.isArray(exam?.classIds) || exam.classIds.length <= 1;
+
+  const nameFor = (cid, itemClass) =>
+    classNameById[String(cid)] ||
+    itemClass ||
+    (cid && examClassNameById[String(cid)]) ||
+    (singleClass ? resolveClassName(exam) || exam?.className : null) ||
+    t("examDetail.unknownClass");
+
+  for (const item of items) {
+    const cid       = resolveClassId(item) || item?.classId || null;
+    const itemClass = resolveClassName(item);
+    const key       = cid || "__no_class__";
+
+    if (!index[key]) {
+      index[key] = { classId: cid, className: nameFor(cid, itemClass), items: [] };
+      groups.push(index[key]);
+    } else if (itemClass && index[key].className === t("examDetail.unknownClass")) {
+      // A later item carrying a real name upgrades a header that fell back.
+      index[key].className = itemClass;
+    }
+
+    index[key].items.push(item);
+  }
+
+  return groups;
 };
 
 // ─────────────────────────────────────────────────────────
@@ -928,6 +1003,10 @@ export default function ExamDetailScreen() {
   const [activeTab,  setActiveTab]  = useState("overview");
   const [processing, setProcessing] = useState(false);
 
+  // classId → class name, from the synced classes table. An exam subject knows
+  // only its classId, so without this every per-class header reads the same.
+  const [classNameById, setClassNameById] = useState({});
+
   // ── Class picker ──────────────────────────────────────────
   const [classPickerVisible, setClassPickerVisible] = useState(false);
   // ✅ Store callback in ref — not state — to avoid React calling it as lazy init
@@ -959,15 +1038,26 @@ export default function ExamDetailScreen() {
       if (isRefresh) setRefreshing(true);
       else           setLoading(true);
 
-      const [examRes, subRes, resultRes] = await Promise.all([
+      // Classes come from the local table, so the per-class headers are right
+      // offline too — which is the normal state at a school.
+      const [examRes, subRes, resultRes, classList] = await Promise.all([
         ExamService.getExamById(id, schoolId),
         ExamService.getSubmissions({ examId: id, schoolId }),
         ExamService.getResults({ examId: id, schoolId }),
+        getClassesList().catch(() => []),
       ]);
 
       setExam(examRes?.exam           || null);
       setSubjects(subRes?.submissions || []);
       setResults(resultRes?.results   || []);
+
+      setClassNameById(
+        Object.fromEntries(
+          (classList || [])
+            .map((c) => [String(c.id || c._id), c.name || c.className])
+            .filter(([cid, name]) => cid && name)
+        )
+      );
     } catch (err) {
       console.error("ExamDetail load failed:", err.message);
       Alert.alert(t("examDetail.errorTitle"), t("examDetail.loadFailed"));
@@ -1004,6 +1094,19 @@ export default function ExamDetailScreen() {
       : 0;
     return { total, passing, failing: total - passing, avg };
   }, [results]);
+
+  // ── Per-class sections ────────────────────────────────────
+  // When the exam spans several classes the submissions and results are
+  // rendered under one header per class instead of one flat list.
+  const subjectGroups = useMemo(
+    () => groupByClass(subjects, exam, t, classNameById),
+    [subjects, exam, t, classNameById]
+  );
+
+  const resultGroups = useMemo(
+    () => groupByClass(results, exam, t, classNameById),
+    [results, exam, t, classNameById]
+  );
 
   // ── Mark entry navigation ─────────────────────────────────
 
@@ -1537,15 +1640,39 @@ export default function ExamDetailScreen() {
                 </Text>
               </View>
             ) : (
-              subjects.map((s) => (
-                <SubmissionCard
-                  key={`${s._id || s.id}-${s.classId}`}
-                  subject={s}
-                  onApprove={handleApprove}
-                  onReject={handleReject}
-                  onEnterMarks={openMarkEntry}
-                  onEditCoeff={handleEditCoeff}
-                />
+              subjectGroups.map((group) => (
+                <View
+                  key={group.classId || "no-class"}
+                  style={styles.classSection}
+                >
+                  {subjectGroups.length > 1 && (
+                    <View style={styles.classSectionHeader}>
+                      <View style={styles.classSectionIcon}>
+                        <Ionicons
+                          name="school-outline"
+                          size={13}
+                          color="#4F46E5"
+                        />
+                      </View>
+                      <Text style={styles.classSectionTitle} numberOfLines={1}>
+                        {group.className}
+                      </Text>
+                      <Text style={styles.classSectionCount}>
+                        {group.items.length}
+                      </Text>
+                    </View>
+                  )}
+                  {group.items.map((s) => (
+                    <SubmissionCard
+                      key={`${s._id || s.id}-${s.classId}`}
+                      subject={s}
+                      onApprove={handleApprove}
+                      onReject={handleReject}
+                      onEnterMarks={openMarkEntry}
+                      onEditCoeff={handleEditCoeff}
+                    />
+                  ))}
+                </View>
               ))
             )}
           </>
@@ -1631,11 +1758,35 @@ export default function ExamDetailScreen() {
                 </Text>
               </View>
             ) : (
-              results.map((r) => (
-                <ResultCard
-                  key={r._id || r.id || r.studentId}
-                  result={r}
-                />
+              resultGroups.map((group) => (
+                <View
+                  key={group.classId || "no-class"}
+                  style={styles.classSection}
+                >
+                  {resultGroups.length > 1 && (
+                    <View style={styles.classSectionHeader}>
+                      <View style={styles.classSectionIcon}>
+                        <Ionicons
+                          name="school-outline"
+                          size={13}
+                          color="#4F46E5"
+                        />
+                      </View>
+                      <Text style={styles.classSectionTitle} numberOfLines={1}>
+                        {group.className}
+                      </Text>
+                      <Text style={styles.classSectionCount}>
+                        {group.items.length}
+                      </Text>
+                    </View>
+                  )}
+                  {group.items.map((r) => (
+                    <ResultCard
+                      key={r._id || r.id || r.studentId}
+                      result={r}
+                    />
+                  ))}
+                </View>
               ))
             )}
           </>
@@ -1776,6 +1927,40 @@ const styles = StyleSheet.create({
     marginBottom:    12,
   },
   enterMarksBtnText: { color: "#FFF", fontWeight: "700", fontSize: 15 },
+
+  // Per-class sections (multi-class exam — subjects & results grouped)
+  classSection: { marginBottom: 14 },
+  classSectionHeader: {
+    flexDirection: "row",
+    alignItems:    "center",
+    gap:           8,
+    marginBottom:  10,
+    paddingVertical: 6,
+    backgroundColor: "#EEF2FF",
+    borderRadius:  10,
+  },
+  classSectionIcon: {
+    width:           24,
+    height:          24,
+    borderRadius:    8,
+    backgroundColor: "#FFFFFF",
+    alignItems:      "center",
+    justifyContent:  "center",
+  },
+  classSectionTitle: {
+    flex:        1,
+    fontSize:    14,
+    fontWeight:  "700",
+    color:       "#3730A3",
+  },
+  classSectionCount: {
+    backgroundColor:   "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical:   3,
+    borderRadius:      10,
+    minWidth:          22,
+    textAlign:         "center",
+  },
 
   empty: {
     alignItems:      "center",

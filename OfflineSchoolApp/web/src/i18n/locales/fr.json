@@ -841,7 +841,8 @@
     "tileGoPublished": "Afficher les examens publiés",
     "tileGoPending": "Aller aux résultats en attente de publication",
     "tileGoMissing": "Aller aux notes manquantes",
-    "tileGoAnalytics": "Ouvrir l’analyse des résultats"
+    "tileGoAnalytics": "Ouvrir l’analyse des résultats",
+    "unknownClass": "Classe non attribuée"
   },
   "examCreate": {
     "title": "Créer une évaluation",

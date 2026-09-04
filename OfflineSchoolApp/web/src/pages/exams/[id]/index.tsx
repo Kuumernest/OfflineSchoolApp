@@ -1,7 +1,9 @@
 // web/src/pages/exams/[id]/index.tsx
-import { useState, useEffect, useCallback }  from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useQuery }                          from "@tanstack/react-query";
 import { useParams, useNavigate,
          useSearchParams, Link }             from "react-router-dom";
+import { fetchClasses }                      from "@/services/class.service";
 import { useAuthStore }                      from "@/store/auth.store";
 import { useExamDetail, useSubmissions,
          useApproveSubmission,
@@ -39,6 +41,59 @@ type Tab = "details" | "marks" | "results";
 
 type ExamSubjectWithTotals = ExamSubject & {
   totalStudents?: number;
+};
+
+/** One class's worth of subjects, for the per-class sections in MarksTab. */
+interface ClassGroup {
+  classId:   string | null;
+  className: string;
+  items:     ExamSubjectWithTotals[];
+}
+
+/**
+ * Group an exam's subjects by the class they belong to.
+ *
+ * ── Why the class name has to come from outside the subject ────────────────
+ *
+ * GET /exams/:examId/submissions returns raw ExamSubject documents, and the
+ * type says what the server sends: classId, and no readable class field at all.
+ * So grouping by id is straightforward and NAMING the group cannot be done from
+ * the row — which is why `classNames` is passed in, resolved from
+ * /admin/classes.
+ *
+ * exam.classNames is not usable for this. It is a single comma-joined string
+ * paired positionally with exam.classIds and it defaults to null, so on a
+ * multi-class exam it either names the wrong class or names none.
+ *
+ * First-seen order is kept, so the sections follow the order the server
+ * returned the subjects in rather than being re-sorted underneath the user.
+ */
+const groupSubjectsByClass = (
+  submissions: ExamSubjectWithTotals[],
+  classNames:  Record<string, string>,
+  unknownLabel: string,
+): ClassGroup[] => {
+  const groups: ClassGroup[] = [];
+  const index = new Map<string, ClassGroup>();
+
+  for (const sub of submissions) {
+    const cid = sub.classId ? String(sub.classId) : null;
+    const key = cid ?? "__no_class__";
+
+    let group = index.get(key);
+    if (!group) {
+      group = {
+        classId:   cid,
+        className: (cid && classNames[cid]) || unknownLabel,
+        items:     [],
+      };
+      index.set(key, group);
+      groups.push(group);
+    }
+    group.items.push(sub);
+  }
+
+  return groups;
 };
 
 interface ScoreEntry {
@@ -989,6 +1044,33 @@ const MarksTab = ({
   const [rejectTarget,  setRejectTarget]  = useState<ExamSubject | null>(null);
   const [rejectReason,  setRejectReason]  = useState("");
 
+  // An ExamSubject carries classId and no class name, so the names for the
+  // per-class headers are resolved here. Long staleTime: a class list changes
+  // once a term, and this is a lookup table, not a view of it.
+  const classesQ = useQuery({
+    queryKey: ["classes", "for-exam-grouping", schoolId],
+    queryFn:  () => fetchClasses(schoolId),
+    enabled:  Boolean(schoolId),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  const classNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of classesQ.data ?? []) {
+      const id = String(c._id ?? c.id ?? "");
+      if (id && c.name) map[id] = c.name;
+    }
+    return map;
+  }, [classesQ.data]);
+
+  const groups = useMemo(
+    () => groupSubjectsByClass(submissions, classNames, t("exams.unknownClass")),
+    [submissions, classNames, t]
+  );
+
+  // One class means one section, and a header saying so is just noise.
+  const showClassHeaders = groups.length > 1;
+
   // Coefficient editing. Admin-only, matching the API: a coefficient rescales
   // every student's average, which is a head's decision, not a marker's.
   const role = useAuthStore((s) => s.user?.role ?? "");
@@ -1096,7 +1178,22 @@ const MarksTab = ({
           {t("exams.marksHint")}
         </p>
 
-        {submissions.map((sub) => {
+        {groups.map((group) => (
+          <div key={group.classId ?? "no-class"} className="space-y-2">
+            {showClassHeaders && (
+              <div className="flex items-center gap-2 pt-3 first:pt-0">
+                <h3 className="text-xs font-semibold uppercase tracking-wide
+                               text-indigo-700 shrink-0">
+                  {group.className}
+                </h3>
+                <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                  {group.items.length}
+                </span>
+                <span className="flex-1 border-t border-gray-100" />
+              </div>
+            )}
+
+            {group.items.map((sub) => {
           const meta    = SUBMISSION_META[sub.submissionStatus] ?? SUBMISSION_META.pending;
           const isOpen  = openSubjectId === sub._id;
           const entered = sub.totalScoresEntered ?? 0;
@@ -1264,7 +1361,9 @@ const MarksTab = ({
               )}
             </div>
           );
-        })}
+            })}
+          </div>
+        ))}
       </div>
     </>
   );
