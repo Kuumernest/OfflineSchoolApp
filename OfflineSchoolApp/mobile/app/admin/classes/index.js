@@ -68,6 +68,17 @@ const ClassCard = React.memo(function ClassCard({
             </Text>
           </View>
         </View>
+
+        {/* Only when the school has named one — an empty row reads as a
+            missing value rather than a class without a form teacher. */}
+        {classItem.classTeacherName ? (
+          <View style={styles.metaItem}>
+            <Ionicons name="person-outline" size={13} color="#6B7280" />
+            <Text style={styles.metaText} numberOfLines={1}>
+              {classItem.classTeacherName}
+            </Text>
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.classActions}>

@@ -14,6 +14,7 @@ import {
   NOT_DELETED,
   IS_DELETED,
 }                                       from "../db/dbHelpers";
+import { ensureSchemaColumns }          from "../db/schema";
 import { generateUUID }                 from "../utils/idHelpers";
 import {
   isAuthenticated,
@@ -822,20 +823,17 @@ class SyncManagerClass {
     }
   }
 
+  /**
+   * Bring an existing classes table up to SCHEMAS.classes.
+   *
+   * This used to be a hand-written list of safeAddColumn calls, which is a
+   * copy of the schema that has to be remembered separately every time a
+   * field is added. The class teacher is what happens when it is not.
+   */
   async migrateClassesTable() {
     const db = await getDatabase();
     try {
-      const info = await db.getAllAsync("PRAGMA table_info(classes)");
-      if (!info.length) return;
-      await safeAddColumn(db, "classes", "_synced",    "INTEGER DEFAULT 0");
-      await safeAddColumn(db, "classes", "_synced_at", "TEXT");
-      await safeAddColumn(db, "classes", "deleted_at", "TEXT");
-      await safeAddColumn(db, "classes", "schoolId",   "TEXT");
-      await safeAddColumn(db, "classes", "school_id",  "TEXT");
-      await safeAddColumn(db, "classes", "level",      "TEXT");
-      await safeAddColumn(db, "classes", "is_active",  "INTEGER DEFAULT 1");
-      await safeAddColumn(db, "classes", "created_at", "TEXT DEFAULT NULL");
-      await safeAddColumn(db, "classes", "updated_at", "TEXT");
+      await ensureSchemaColumns(db, "classes");
     } catch (err) {
       console.log("[SyncManager] classes migration skipped:", err.message);
     }
@@ -1842,15 +1840,24 @@ class SyncManagerClass {
 
           await db.runAsync(
             `INSERT INTO classes
-               (id, schoolId, school_id, name, level, section, is_active, _synced, deleted_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
+               (id, schoolId, school_id, name, level, section,
+                classTeacherId, classTeacherName,
+                is_active, _synced, deleted_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
              ON CONFLICT(id) DO UPDATE SET
                name = excluded.name, level = excluded.level, section = excluded.section,
+               classTeacherId   = excluded.classTeacherId,
+               classTeacherName = excluded.classTeacherName,
                is_active = excluded.is_active, _synced = 1, deleted_at = NULL,
                updated_at = excluded.updated_at`,
             [
               String(id), c.schoolId, c.schoolId,
               c.name, c.level || null, c.section || "",
+              // Both spellings, because /admin/classes answers with the
+              // Mongoose document and /sync/pull answers with the mirrored
+              // row, and the two have differed before.
+              c.classTeacherId   ?? c.class_teacher_id   ?? null,
+              c.classTeacherName ?? c.class_teacher_name ?? null,
               c.isActive !== false ? 1 : 0, c.updatedAt || ts,
             ]
           );

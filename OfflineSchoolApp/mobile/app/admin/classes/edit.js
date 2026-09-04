@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  StatusBar, Alert, ActivityIndicator,
+  StatusBar, Alert, ActivityIndicator, Modal, FlatList,
   KeyboardAvoidingView, ScrollView, Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { ClassService } from "../../../src/services/class.service";
+import { getTeachersList } from "../../../src/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 
@@ -26,6 +27,16 @@ export default function EditClass() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fieldError, setFieldError] = useState("");
+
+  // The class teacher. `originalTeacherId` is kept so a rename with the
+  // picker untouched sends nothing for it — the server reads an absent field
+  // as "leave alone" and an empty one as "clear", and this screen used to
+  // send neither because it only ever edited the name.
+  const [teachers,           setTeachers]           = useState([]);
+  const [teacherId,          setTeacherId]          = useState(null);
+  const [teacherName,        setTeacherName]        = useState(null);
+  const [originalTeacherId,  setOriginalTeacherId]  = useState(null);
+  const [pickerOpen,         setPickerOpen]         = useState(false);
 
   useEffect(() => {
     isMountedRef.current = true;
@@ -48,6 +59,9 @@ export default function EditClass() {
         if (data?.name) {
           setClassName(data.name);
           setOriginalName(data.name);
+          setTeacherId(data.classTeacherId ?? null);
+          setTeacherName(data.classTeacherName ?? null);
+          setOriginalTeacherId(data.classTeacherId ?? null);
         } else {
           Alert.alert(t("classesAdmin.notFoundTitle"), t("classesAdmin.notFoundBody"), [
             { text: "OK", onPress: () => router.back() },
@@ -65,6 +79,11 @@ export default function EditClass() {
     };
 
     loadClass();
+
+    // From the local users table, so the picker works with no connection.
+    getTeachersList()
+      .then((rows) => { if (active && isMountedRef.current) setTeachers(rows ?? []); })
+      .catch(() => {});
 
     return () => { active = false; };
   }, [classId]);
@@ -86,8 +105,11 @@ export default function EditClass() {
   }, [fieldError]);
 
   const trimmed = className.trim();
-  const hasChanges = trimmed !== originalName && trimmed.length > 0;
-  const isNoChange = trimmed === originalName && trimmed.length > 0;
+  const teacherChanged = (teacherId ?? null) !== (originalTeacherId ?? null);
+  const hasChanges =
+    (trimmed !== originalName || teacherChanged) && trimmed.length > 0;
+  const isNoChange =
+    trimmed === originalName && !teacherChanged && trimmed.length > 0;
   const isDisabled = saving || !hasChanges;
   const charCount = trimmed.length;
   const isNearLimit = charCount > MAX_CLASS_NAME_LENGTH - 10;
@@ -108,7 +130,15 @@ export default function EditClass() {
     setSaving(true);
 
     try {
-      await ClassService.update(classId, trimmedValue);
+      await ClassService.update(
+        classId,
+        trimmedValue,
+        null,
+        // undefined leaves the teacher alone; anything else changes it.
+        teacherChanged
+          ? (teacherId ? { id: teacherId, name: teacherName } : null)
+          : undefined
+      );
       if (!isMountedRef.current) return;
 
       Alert.alert(t("classesAdmin.updatedTitle"), t("classesAdmin.savedBody", { name: trimmedValue }), [
@@ -121,7 +151,8 @@ export default function EditClass() {
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [className, validate, hasChanges, classId, t, router]);
+  }, [className, validate, hasChanges, classId, t, router,
+      teacherChanged, teacherId, teacherName]);
 
   const handleDiscard = useCallback(() => {
     if (hasChanges) {
@@ -258,6 +289,41 @@ export default function EditClass() {
               </Text>
             </View>
           </View>
+
+          {/* ── Class teacher ──────────────────────────────────────────── */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t("classesAdmin.teacherLabel")}</Text>
+
+            <TouchableOpacity
+              style={[
+                styles.inputWrapper,
+                teacherChanged ? styles.inputWrapperChanged : null,
+              ]}
+              onPress={() => setPickerOpen(true)}
+              disabled={saving}
+              activeOpacity={0.7}
+              accessibilityRole="button"
+              accessibilityLabel={t("classesAdmin.teacherPick")}
+            >
+              <Ionicons
+                name="person-outline"
+                size={18}
+                color={teacherChanged ? "#4F46E5" : "#9CA3AF"}
+                style={styles.inputIcon}
+              />
+              <Text
+                style={[styles.input, !teacherName && styles.inputPlaceholder]}
+                numberOfLines={1}
+              >
+                {teacherName || t("classesAdmin.teacherNone")}
+              </Text>
+              <Ionicons name="chevron-down" size={18} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            <View style={styles.fieldFooter}>
+              <Text style={styles.hint}>{t("classesAdmin.teacherHint")}</Text>
+            </View>
+          </View>
         </View>
 
         <TouchableOpacity
@@ -287,11 +353,124 @@ export default function EditClass() {
           </Text>
         </TouchableOpacity>
       </ScrollView>
+
+      {/* ── Class teacher picker ─────────────────────────────────────────── */}
+      <Modal
+        visible={pickerOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <TouchableOpacity
+          style={styles.pickerBackdrop}
+          activeOpacity={1}
+          onPress={() => setPickerOpen(false)}
+        >
+          <TouchableOpacity style={styles.pickerSheet} activeOpacity={1}>
+            <View style={styles.pickerHeader}>
+              <Text style={styles.pickerTitle}>
+                {t("classesAdmin.teacherPick")}
+              </Text>
+              <TouchableOpacity
+                onPress={() => setPickerOpen(false)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons name="close" size={22} color="#6B7280" />
+              </TouchableOpacity>
+            </View>
+
+            {/* "Not assigned" first, so clearing is as easy as choosing. */}
+            <FlatList
+              data={[{ id: null, name: t("classesAdmin.teacherNone") }, ...teachers]}
+              keyExtractor={(item) => String(item.id ?? "__none__")}
+              ListEmptyComponent={
+                <Text style={styles.pickerEmpty}>
+                  {t("classesAdmin.teacherEmpty")}
+                </Text>
+              }
+              renderItem={({ item }) => {
+                const selected = (item.id ?? null) === (teacherId ?? null);
+                return (
+                  <TouchableOpacity
+                    style={styles.pickerRow}
+                    onPress={() => {
+                      setTeacherId(item.id ?? null);
+                      setTeacherName(item.id ? item.name : null);
+                      setPickerOpen(false);
+                    }}
+                    activeOpacity={0.7}
+                  >
+                    <Ionicons
+                      name={item.id ? "person-circle-outline" : "remove-circle-outline"}
+                      size={20}
+                      color={selected ? "#4F46E5" : "#9CA3AF"}
+                    />
+                    <Text
+                      style={[styles.pickerRowText, selected && styles.pickerRowTextOn]}
+                      numberOfLines={1}
+                    >
+                      {item.name}
+                    </Text>
+                    {selected && (
+                      <Ionicons name="checkmark" size={18} color="#4F46E5" />
+                    )}
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
+  // The class-teacher field renders a chosen value where the name field
+  // renders an input, so it borrows inputWrapper and needs a muted variant
+  // for the empty state.
+  inputPlaceholder: { color: "#9CA3AF" },
+
+  pickerBackdrop: {
+    flex:            1,
+    backgroundColor: "rgba(17, 24, 39, 0.45)",
+    justifyContent:  "flex-end",
+  },
+  pickerSheet: {
+    backgroundColor:     "#FFFFFF",
+    borderTopLeftRadius:  20,
+    borderTopRightRadius: 20,
+    paddingBottom:        28,
+    maxHeight:            "70%",
+  },
+  pickerHeader: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    justifyContent:    "space-between",
+    paddingHorizontal: 20,
+    paddingVertical:   16,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+  },
+  pickerTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  pickerRow: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    gap:               12,
+    paddingHorizontal: 20,
+    paddingVertical:   14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F9FAFB",
+  },
+  pickerRowText:   { flex: 1, fontSize: 15, color: "#374151" },
+  pickerRowTextOn: { color: "#4F46E5", fontWeight: "700" },
+  pickerEmpty: {
+    padding:   24,
+    textAlign: "center",
+    color:     "#9CA3AF",
+    fontSize:  14,
+  },
+
   container: { flex: 1, backgroundColor: "#F9FAFB" },
   centered: {
     flex: 1, justifyContent: "center", alignItems: "center",

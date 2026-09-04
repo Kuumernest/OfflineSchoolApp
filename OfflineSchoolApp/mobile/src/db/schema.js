@@ -56,24 +56,43 @@ export const SCHEMAS = {
     ],
   },
 
+  /**
+   * ── Why this entry lists BOTH schoolId and school_id ──────────────────
+   *
+   * It is not indecision. Every query against this table filters on the
+   * camelCase `schoolId` — that is the column the class service, the sync
+   * upserts and the admin stats all name — while `school_id` is carried for
+   * the rows written by older builds and by the snake_case index below.
+   * Listing only one of them, which this entry did, is why nothing used it:
+   * creating the table from here produced a table the app could not query.
+   *
+   * The class teacher is the field that exposed all of this. It was added
+   * server-side and had to be added again in four separate places on the
+   * device before it appeared on a screen. This is now the only place.
+   */
   classes: {
     table: "classes",
     pk:    "id",
     columns: {
-      id:         "TEXT PRIMARY KEY NOT NULL",
-      school_id:  "TEXT",
-      name:       "TEXT NOT NULL",
-      level:      "TEXT",
-      section:    "TEXT",
-      is_active:  "INTEGER DEFAULT 1",
-      _synced:    "INTEGER DEFAULT 0",
-      _synced_at: "TEXT",
-      deleted_at: "TEXT",
-      created_at: "TEXT",
-      updated_at: "TEXT",
+      id:               "TEXT PRIMARY KEY NOT NULL",
+      name:             "TEXT NOT NULL",
+      level:            "TEXT",
+      section:          "TEXT",
+      schoolId:         "TEXT",
+      school_id:        "TEXT",
+      classTeacherId:   "TEXT",
+      classTeacherName: "TEXT",
+      studentCount:     "INTEGER DEFAULT 0",
+      is_active:        "INTEGER DEFAULT 1",
+      _synced:          "INTEGER DEFAULT 0",
+      _synced_at:       "TEXT",
+      deleted_at:       "TEXT",
+      created_at:       "TEXT",
+      updated_at:       "TEXT",
     },
     indexes: [
-      "CREATE INDEX IF NOT EXISTS idx_classes_school ON classes(school_id)",
+      "CREATE INDEX IF NOT EXISTS idx_classes_school ON classes(schoolId)",
+      "CREATE INDEX IF NOT EXISTS idx_classes_school_snake ON classes(school_id)",
     ],
   },
 
@@ -243,6 +262,66 @@ export const createTableFromSchema = async (db, schemaKey) => {
   }
 
   console.log(`[schema] Table "${schema.table}" ready`);
+};
+
+/**
+ * Add any column the registry declares and the live table lacks.
+ *
+ * createTableFromSchema only ever runs CREATE TABLE IF NOT EXISTS, so on a
+ * device that has been in use since before a column was added it does
+ * nothing at all — the table exists, and it exists without the column. That
+ * gap is why each new field ended up hand-written into a migration beside
+ * every other definition of the same table.
+ *
+ * PRIMARY KEY and NOT NULL are stripped from the definition before the
+ * ALTER: SQLite cannot add either to a table that already holds rows, and a
+ * column being added late is by definition one the existing rows have no
+ * value for.
+ *
+ * @returns {Promise<number>} how many columns were added
+ */
+export const ensureSchemaColumns = async (db, schemaKey) => {
+  const schema = SCHEMAS[schemaKey];
+  if (!schema) throw new Error(`[schema] Unknown schema key: "${schemaKey}"`);
+
+  const info = await db
+    .getAllAsync(`PRAGMA table_info(${schema.table})`)
+    .catch(() => []);
+
+  // No table yet: createTableFromSchema is the right call, not this.
+  if (!info?.length) return 0;
+
+  const present = new Set(info.map((c) => c.name));
+  let added = 0;
+
+  for (const [name, def] of Object.entries(schema.columns)) {
+    if (present.has(name)) continue;
+
+    const alterable = def
+      .replace(/PRIMARY KEY/i, "")
+      .replace(/NOT NULL/i, "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    try {
+      await db.execAsync(
+        `ALTER TABLE ${schema.table} ADD COLUMN ${name} ${alterable}`
+      );
+      added++;
+      console.log(`[schema] ${schema.table}.${name} added`);
+    } catch (err) {
+      // A duplicate is the expected race when two callers migrate at once.
+      if (!/duplicate column/i.test(err?.message ?? "")) {
+        console.warn(`[schema] ${schema.table}.${name}:`, err?.message);
+      }
+    }
+  }
+
+  for (const indexSQL of schema.indexes) {
+    await db.execAsync(indexSQL).catch(() => {});
+  }
+
+  return added;
 };
 
 /**

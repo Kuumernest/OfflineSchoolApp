@@ -2,6 +2,7 @@
 "use strict";
 
 import * as SQLite from "expo-sqlite";
+import { createTableFromSchema, ensureSchemaColumns } from "./schema";
 
 const DB_NAME = "schoolapp.db";
 
@@ -159,21 +160,18 @@ const _openDatabase = async () => {
       )
     `).catch((err) => console.warn("[database] result_summaries:", err.message));
 
-    await db.execAsync(`
-      CREATE TABLE IF NOT EXISTS classes (
-        id           TEXT PRIMARY KEY,
-        schoolId     TEXT,
-        school_id    TEXT,
-        name         TEXT,
-        level        TEXT,
-        section      TEXT,
-        studentCount INTEGER DEFAULT 0,
-        is_active    INTEGER DEFAULT 1,
-        deleted_at   TEXT,
-        created_at   TEXT,
-        updated_at   TEXT
-      )
-    `).catch((err) => console.warn("[database] classes:", err.message));
+    // classes is defined once, in SCHEMAS.classes (db/schema.js). It used to
+    // be spelled out here as well, in class.service.ensureSchema, and again
+    // as a column list in syncManager.migrateClassesTable — so a field added
+    // server-side had to be added to the device four times before it showed
+    // up on a screen, and the class teacher only made it into one of them.
+    //
+    // ensureSchemaColumns is what covers a phone already in use: CREATE TABLE
+    // IF NOT EXISTS does nothing to a table that exists, including one
+    // missing a column added since.
+    await createTableFromSchema(db, "classes")
+      .then(() => ensureSchemaColumns(db, "classes"))
+      .catch((err) => console.warn("[database] classes:", err.message));
 
     await db.execAsync(`
       CREATE TABLE IF NOT EXISTS students (

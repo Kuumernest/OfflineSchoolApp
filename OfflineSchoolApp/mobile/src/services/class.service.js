@@ -3,7 +3,10 @@
 import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import {
-  safeAddColumn,
+  createTableFromSchema,
+  ensureSchemaColumns,
+} from "../db/schema";
+import {
   tableExists,
   getTableColumns,
   NOT_DELETED,
@@ -21,47 +24,16 @@ const TABLE = "classes";
 const NOT_DELETED_C =
   "(c.deleted_at IS NULL OR c.deleted_at = '' OR c.deleted_at NOT LIKE '20%')";
 
+// One definition, in SCHEMAS.classes. This function used to carry its own
+// CREATE TABLE and its own column list, which is how the class teacher came
+// to exist on the server and in two of the four places the device defines
+// this table — and therefore nowhere the screens could read it.
 const ensureSchema = (db) =>
   ensureTableSchema(
     TABLE,
     async (db) => {
-      await db.execAsync(`
-        CREATE TABLE IF NOT EXISTS ${TABLE} (
-          id         TEXT PRIMARY KEY NOT NULL,
-          name       TEXT NOT NULL,
-          level      TEXT,
-          section    TEXT,
-          is_active  INTEGER DEFAULT 1,
-          created_at TEXT,
-          updated_at TEXT,
-          deleted_at TEXT,
-          schoolId   TEXT,
-          school_id  TEXT,
-          _synced    INTEGER DEFAULT 0,
-          _synced_at TEXT
-        )
-      `);
-
-      const COLS = [
-        ["is_active",  "INTEGER DEFAULT 1"],
-        ["created_at", "TEXT"],
-        ["updated_at", "TEXT"],
-        ["deleted_at", "TEXT"],
-        ["schoolId",   "TEXT"],
-        ["school_id",  "TEXT"],
-        ["level",      "TEXT"],
-        ["section",    "TEXT"],
-        ["_synced",    "INTEGER DEFAULT 0"],
-        ["_synced_at", "TEXT"],
-      ];
-
-      for (const [col, def] of COLS) {
-        await safeAddColumn(db, TABLE, col, def);
-      }
-
-      await db.execAsync(
-        `CREATE INDEX IF NOT EXISTS idx_classes_school ON ${TABLE}(schoolId)`
-      ).catch(() => {});
+      await createTableFromSchema(db, "classes");
+      await ensureSchemaColumns(db, "classes");
     },
     db
   );
@@ -253,6 +225,19 @@ const syncServerClassesToLocal = async (db, schoolId, includeInactive = false) =
            _synced_at = excluded._synced_at`,
         [serverId, name, sc.level || null, sc.section || "", schoolIdVal, schoolIdVal, activeValue, deletedAt, createdAt, updatedAt, ts]
       );
+
+      // The class teacher. /admin/classes answers with the Mongoose
+      // document, so both spellings are read — the mirrored row and the
+      // document have differed before.
+      await db.runAsync(
+        `UPDATE ${TABLE} SET classTeacherId = ?, classTeacherName = ? WHERE id = ?`,
+        [
+          sc.classTeacherId   ?? sc.class_teacher_id   ?? null,
+          sc.classTeacherName ?? sc.class_teacher_name ?? null,
+          serverId,
+        ]
+      ).catch(() => {});
+
       synced++;
     } catch (err) {
       console.warn(`[ClassService] Failed to cache "${name}":`, err.message);
@@ -271,6 +256,8 @@ function normaliseRow(row) {
     isActive:     row.isActive == null ? true : Boolean(Number(row.isActive)),
     subjectCount: Number(row.subjectCount ?? 0),
     studentCount: Number(row.studentCount ?? 0),
+    classTeacherId:   row.classTeacherId   ?? null,
+    classTeacherName: row.classTeacherName ?? null,
   };
 }
 
@@ -293,6 +280,15 @@ export const ClassService = {
 
       const subjectCols = hasSubjects ? await getTableColumns(db, "subjects") : [];
       const studentCols = hasStudents ? await getTableColumns(db, "students") : [];
+
+      // The class teacher arrived after this table shipped. Selecting a column
+      // that does not exist throws, and the catch below turns that into an
+      // empty class list — so it is probed rather than assumed. Once the
+      // migration in syncManager has run on a device this is always true.
+      const classCols = await getTableColumns(db, "classes");
+      const teacherExpr = classCols.includes("classTeacherName")
+        ? "c.classTeacherId, c.classTeacherName,"
+        : "NULL AS classTeacherId, NULL AS classTeacherName,";
 
       const subjectClassCol =
         subjectCols.includes("class_id") ? "class_id" :
@@ -336,6 +332,7 @@ export const ClassService = {
            c.is_active AS isActive,
            c.created_at AS createdAt,
            c.updated_at AS updatedAt,
+           ${teacherExpr}
            ${subjectCountExpr},
            ${studentCountExpr}
          FROM ${TABLE} c
@@ -366,6 +363,7 @@ export const ClassService = {
 
       const row = await db.getFirstAsync(
         `SELECT id, name, level, section, schoolId, is_active AS isActive,
+                classTeacherId, classTeacherName,
                 created_at AS createdAt, updated_at AS updatedAt
          FROM ${TABLE}
          ${where}
@@ -460,7 +458,17 @@ export const ClassService = {
     return localId;
   },
 
-  async update(id, name, level = null) {
+  /**
+   * @param {object} [classTeacher]  Omit to leave the class teacher exactly
+   *   as it is; pass `{ id, name }` to set one, or `null` to clear it.
+   *
+   *   The distinction matters and mirrors the server: PUT /admin/classes/:id
+   *   treats an absent classTeacherId as "no change" and an empty one as
+   *   "clear it". Sending the field unconditionally would mean every rename
+   *   from this screen — which is all this screen used to do — silently
+   *   removed the form teacher.
+   */
+  async update(id, name, level = null, classTeacher) {
     const db           = await getDatabase();
     const { schoolId } = getCurrentAuth();
     await ensureSchema(db);
@@ -500,11 +508,27 @@ export const ClassService = {
       [trimmed, level, now, id]
     );
 
+    const touchesTeacher = classTeacher !== undefined;
+    if (touchesTeacher) {
+      await db.runAsync(
+        `UPDATE ${TABLE} SET classTeacherId = ?, classTeacherName = ? WHERE id = ?`,
+        [classTeacher?.id ?? null, classTeacher?.name ?? null, id]
+      ).catch(() => {});
+    }
+
     const net = await NetInfo.fetch();
     if (!net.isConnected) return true;
 
     try {
-      await api.put(API.admin.classes.detail(id), { name: trimmed, level });
+      await api.put(API.admin.classes.detail(id), {
+        name: trimmed,
+        level,
+        // Present only when the caller meant to change it. The server reads
+        // an empty string as "clear" and an absent field as "leave alone".
+        ...(touchesTeacher
+          ? { classTeacherId: classTeacher?.id ?? "" }
+          : {}),
+      });
       await db.runAsync(
         `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
         [now, id]
