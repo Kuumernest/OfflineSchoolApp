@@ -257,8 +257,10 @@
     "title": "Dashboard",
     "attendanceToday": "Today's attendance",
     "presentShort": "present",
-    "recordsToday": "{{count}} record taken today",
-    "recordsToday_other": "{{count}} records taken today",
+    "recordsToday": {
+      "one": "{{count}} record taken today",
+      "other": "{{count}} records taken today"
+    },
     "noAttendanceYet": "No attendance taken yet today",
     "recentExams": "Recent exams",
     "noExams": "No exams yet.",
@@ -1063,8 +1065,10 @@
     "deactivate": "Deactivate",
     "inactive": "Inactive",
     "structureExists": "An active structure already exists for that year, class and term.",
-    "pendingSync": "{{count}} payment waiting to sync",
-    "pendingSync_other": "{{count}} payments waiting to sync",
+    "pendingSync": {
+      "one": "{{count}} payment waiting to sync",
+      "other": "{{count}} payments waiting to sync"
+    },
     "pendingReceipt": "Receipt pending",
     "recordedOffline": "Saved on this device. It will reach the server on the next sync, and the receipt number arrives with it.",
     "classesLoading": "Loading classes…",
@@ -1223,12 +1227,16 @@
     "repeated": "Repeating",
     "graduated": "Leaving",
     "unassigned": "Needs a decision",
-    "students": "{{count}} student",
-    "students_other": "{{count}} students",
+    "students": {
+      "one": "{{count}} student",
+      "other": "{{count}} students"
+    },
     "review": "Review",
     "draftNotice": "This is a proposal. No student has been moved.",
-    "blockedNotice": "{{count}} student has no destination. Decide those before committing.",
-    "blockedNotice_other": "{{count}} students have no destination. Decide those before committing.",
+    "blockedNotice": {
+      "one": "{{count}} student has no destination. Decide those before committing.",
+      "other": "{{count}} students have no destination. Decide those before committing."
+    },
     "commit": "Commit rollover",
     "commitTitle": "Commit this rollover?",
     "commitBody": "Every student on this list moves. Leavers come off the register. This can be reversed, but it touches the whole school at once.",
@@ -1362,8 +1370,10 @@
     "noAttendance": "No attendance recorded yet",
     "noNews": "Nothing from the school yet",
     "attendanceRate": "Attendance",
-    "daysRecorded": "{{count}} day recorded",
-    "daysRecorded_other": "{{count}} days recorded",
+    "daysRecorded": {
+      "one": "{{count}} day recorded",
+      "other": "{{count}} days recorded"
+    },
     "position": "Position",
     "reversalNote": "Reversed",
     "children": "Children",
@@ -1400,8 +1410,10 @@
     "viewReportCard": "View report card",
     "reportCardView": "Report card",
     "reportCardNotIssued": "No report card has been issued for this result yet.",
-    "resultsCount": "{{count}} result",
-    "resultsCount_other": "{{count}} results",
+    "resultsCount": {
+      "one": "{{count}} result",
+      "other": "{{count}} results"
+    },
     "notices": "Notices",
     "noNotices": "Nothing from the school yet.",
     "noticeArrival": "Arrived at school",
@@ -1484,10 +1496,14 @@
     "noScans": "No scans yet today",
     "in": "In",
     "out": "Out",
-    "onSite": "{{count}} on site",
-    "onSite_other": "{{count}} on site",
-    "pending": "{{count}} waiting to sync",
-    "pending_other": "{{count}} waiting to sync",
+    "onSite": {
+      "one": "{{count}} on site",
+      "other": "{{count}} on site"
+    },
+    "pending": {
+      "one": "{{count}} waiting to sync",
+      "other": "{{count}} waiting to sync"
+    },
     "cameraNeeded": "Camera access needed",
     "cameraWhy": "The scanner reads the QR code on each student's ID card.",
     "allowCamera": "Allow camera",

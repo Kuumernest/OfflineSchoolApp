@@ -257,8 +257,10 @@
     "title": "Tableau de bord",
     "attendanceToday": "Assiduité du jour",
     "presentShort": "de présence",
-    "recordsToday": "{{count}} appel enregistré aujourd'hui",
-    "recordsToday_other": "{{count}} appels enregistrés aujourd'hui",
+    "recordsToday": {
+      "one": "{{count}} appel enregistré aujourd'hui",
+      "other": "{{count}} appels enregistrés aujourd'hui"
+    },
     "noAttendanceYet": "Aucun appel enregistré aujourd'hui",
     "recentExams": "Évaluations récentes",
     "noExams": "Aucune évaluation.",
@@ -1063,8 +1065,10 @@
     "deactivate": "Désactiver",
     "inactive": "Inactive",
     "structureExists": "Une grille active existe déjà pour cette année, cette classe et ce trimestre.",
-    "pendingSync": "{{count}} paiement en attente de synchronisation",
-    "pendingSync_other": "{{count}} paiements en attente de synchronisation",
+    "pendingSync": {
+      "one": "{{count}} paiement en attente de synchronisation",
+      "other": "{{count}} paiements en attente de synchronisation"
+    },
     "pendingReceipt": "Reçu en attente",
     "recordedOffline": "Enregistré sur cet appareil. Il sera transmis au serveur lors de la prochaine synchronisation, avec le numéro de reçu.",
     "classesLoading": "Chargement des classes…",
@@ -1223,12 +1227,16 @@
     "repeated": "Redouble",
     "graduated": "Sort",
     "unassigned": "Décision requise",
-    "students": "{{count}} élève",
-    "students_other": "{{count}} élèves",
+    "students": {
+      "one": "{{count}} élève",
+      "other": "{{count}} élèves"
+    },
     "review": "Vérifier",
     "draftNotice": "Ceci est une proposition. Aucun élève n'a été déplacé.",
-    "blockedNotice": "{{count}} élève sans destination. Décidez avant de valider.",
-    "blockedNotice_other": "{{count}} élèves sans destination. Décidez avant de valider.",
+    "blockedNotice": {
+      "one": "{{count}} élève sans destination. Décidez avant de valider.",
+      "other": "{{count}} élèves sans destination. Décidez avant de valider."
+    },
     "commit": "Valider le passage",
     "commitTitle": "Valider ce passage ?",
     "commitBody": "Chaque élève de cette liste change de classe. Les sortants quittent le registre. C'est réversible, mais cela concerne toute l'école d'un coup.",
@@ -1362,8 +1370,10 @@
     "noAttendance": "Aucune présence enregistrée",
     "noNews": "Aucune information pour le moment",
     "attendanceRate": "Taux de présence",
-    "daysRecorded": "{{count}} jour enregistré",
-    "daysRecorded_other": "{{count}} jours enregistrés",
+    "daysRecorded": {
+      "one": "{{count}} jour enregistré",
+      "other": "{{count}} jours enregistrés"
+    },
     "position": "Rang",
     "reversalNote": "Annulé",
     "children": "Enfants",
@@ -1400,8 +1410,10 @@
     "viewReportCard": "Voir le bulletin",
     "reportCardView": "Bulletin",
     "reportCardNotIssued": "Aucun bulletin n'a encore été édité pour ce résultat.",
-    "resultsCount": "{{count}} résultat",
-    "resultsCount_other": "{{count}} résultats",
+    "resultsCount": {
+      "one": "{{count}} résultat",
+      "other": "{{count}} résultats"
+    },
     "notices": "Avis",
     "noNotices": "Rien de l'école pour le moment.",
     "noticeArrival": "Arrivé à l'école",
@@ -1484,10 +1496,14 @@
     "noScans": "Aucun scan aujourd'hui",
     "in": "Entrée",
     "out": "Sortie",
-    "onSite": "{{count}} présent",
-    "onSite_other": "{{count}} présents",
-    "pending": "{{count}} en attente de synchronisation",
-    "pending_other": "{{count}} en attente de synchronisation",
+    "onSite": {
+      "one": "{{count}} présent",
+      "other": "{{count}} présents"
+    },
+    "pending": {
+      "one": "{{count}} en attente de synchronisation",
+      "other": "{{count}} en attente de synchronisation"
+    },
     "cameraNeeded": "Accès à la caméra requis",
     "cameraWhy": "Le scanner lit le QR code de la carte de chaque élève.",
     "allowCamera": "Autoriser la caméra",
