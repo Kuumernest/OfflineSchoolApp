@@ -60,9 +60,11 @@ export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
     // steps below are staff work and counting them would park their bar.
     return [
       "prepare", "upload", "timetable", "messages",
-      // A pupil sees their own register and their own exams; the endpoints
-      // scope to self, so the same two steps serve both roles.
-      "attendance", "examsStep",
+      // The register only. /attendance/students carries scopeToSelfForStudents
+      // and answers with a pupil's own rows; /exams carries exams.view and
+      // answers a pupil with 403, so counting an exams step here would both
+      // mis-scale their progress bar and promise work that cannot run.
+      "attendance",
       "announcements", "school", "quizzes",
     ];
   }

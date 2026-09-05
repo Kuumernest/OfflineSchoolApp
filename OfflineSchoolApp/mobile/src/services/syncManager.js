@@ -1851,6 +1851,12 @@ class SyncManagerClass {
    */
   async pullExams() {
     if (this._isUnauthenticated()) return;
+    // GET /exams is gated on exams.view, which a pupil does not have. Without
+    // this line every student sync ended in a 403 in the log — the endpoint
+    // does NOT scope to self, whatever the plan below used to claim. A pupil
+    // reaches their exams through /results/my-results, which carries the exam
+    // name with each result.
+    if (this.isStudent()) return;
     try {
       const schoolId = await this.getSchoolId();
       if (!schoolId) return;

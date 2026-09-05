@@ -548,11 +548,92 @@ const checkServerWinsUpserts = () => {
     ok("no upsert overwrites a row this device has not sent");
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// WHAT A PUPIL'S SYNC IS ALLOWED TO DO
+//
+// The sync plan says which steps a role runs; the pull methods say which
+// roles they turn away. Those are two lists that must agree, kept in two
+// files, and when they disagreed every student sync ended in a 403:
+// pullExams calls GET /exams, which is gated on exams.view, while the plan
+// listed an exams step for pupils on the belief that it scoped to self.
+//
+// The rule, in both directions:
+//
+//   a step in the pupil plan  -> its method must NOT turn students away
+//   a step not in that plan   -> its method MUST turn students away
+//
+// The second half is what stops a staff-only pull being added without a
+// guard and only failing on somebody else's phone.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const checkStudentSyncPlan = () => {
+  console.log("");
+  console.log("PUPIL SYNC PLAN");
+
+  const progress = fs.readFileSync(path.join(ROOT, "src/services/syncProgress.js"), "utf8");
+  const manager  = fs.readFileSync(path.join(ROOT, "src/services/syncManager.js"), "utf8");
+
+  // The pupil branch of planFor.
+  const branch = progress.match(/if \(isStudent\)\s*\{([\s\S]*?)\}/);
+  if (!branch) { bad("the pupil plan can be read"); return; }
+  const pupilSteps = new Set([...branch[1].matchAll(/"([a-zA-Z]+)"/g)].map((m) => m[1]));
+  ok(`the pupil plan is readable (${[...pupilSteps].join(", ")})`);
+
+  // Which step each pull method serves, from the syncAll body: a
+  // SyncProgress.step("x") followed by an await this.pullY().
+  const pairs = [...manager.matchAll(
+    /SyncProgress\.step\("([a-zA-Z]+)"\)[\s\S]{0,120}?await this\.(pull[A-Za-z]+)\(/g
+  )].map((m) => ({
+    step:   m[1],
+    method: m[2],
+    // A step can also be excluded at the CALL site — pullFinance and
+    // pullStudentApplications both sit inside `if (this.isAdmin())` rather
+    // than turning students away themselves. Equally safe, so the check has
+    // to see it.
+    adminOnlyCall: /isAdmin\(\)\s*\)?\s*\{[\s\S]{0,160}$/.test(
+      manager.slice(Math.max(0, m.index - 160), m.index)
+    ),
+  }));
+
+  if (!pairs.length) { bad("no step/pull pairs found in syncAll"); return; }
+
+  /** Does this method turn a student away before doing any work? */
+  const turnsStudentsAway = (name) => {
+    const i = manager.indexOf(`async ${name}(`);
+    if (i === -1) return null;
+    const body = manager.slice(i, i + 700);
+    // Either spelling counts: turning students away, or admitting only
+    // admins — !isAdmin() excludes a pupil by a wider door.
+    return /isStudent\(\)\s*\)?\s*return|!\s*this\.isAdmin\(\)\s*\)?\s*return/.test(body);
+  };
+
+  const wrong = [];
+  for (const pair of pairs) {
+    const { step, method } = pair;
+    const guarded = turnsStudentsAway(method);
+    if (guarded === null) continue;   // not a method on the class
+    const inPupilPlan = pupilSteps.has(step);
+
+    if (inPupilPlan && guarded) {
+      wrong.push(`${step}: in the pupil plan, but ${method}() returns early for students`);
+    }
+    if (!inPupilPlan && !guarded && !pair.adminOnlyCall) {
+      wrong.push(`${step}: not in the pupil plan, and ${method}() does not turn students away`);
+    }
+  }
+
+  if (wrong.length) {
+    bad(`${wrong.length} step(s) disagree with their pull method`, wrong.join(String.fromCharCode(10)));
+  } else {
+    ok(`every step agrees with its pull method (${pairs.length} checked)`);
+  }
+};
 checkParse();
 checkLocales();
 checkLinkQuality();
 checkSyncPolicy();
 checkServerWinsUpserts();
+checkStudentSyncPlan();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);
