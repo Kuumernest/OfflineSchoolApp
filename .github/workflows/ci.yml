@@ -54,6 +54,20 @@ jobs:
       # exhaustive-deps stays a warning and does not.
       - run: npm run check
 
+      # The two cross-package checks in OfflineSchoolApp/scripts/. They live
+      # outside any package because they span three of them, which is exactly
+      # why they were running nowhere: no package.json owns them, so no
+      # `npm run check` picks them up, and a check nothing runs rots into a
+      # check that lies.
+      #
+      # They belong to this job because the only dependency either has is
+      # mobile's @babel/parser, installed by the npm ci above. The desktop
+      # handler they exercise requires nothing at all.
+      - name: Cross-package checks (class form, desktop class mirror)
+        run: |
+          node ../scripts/check-class-form-syntax.js
+          node ../scripts/check-desktop-class-create.js
+
   web:
     runs-on: ubuntu-latest
     defaults:
