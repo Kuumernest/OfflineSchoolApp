@@ -1197,7 +1197,18 @@ export default function ExamDetailScreen() {
               setProcessing(true);
               const res = await ExamService.processResults({
                 examId:   id,
-                classId:  exam?.classId || undefined,
+                // No classId, deliberately.
+                //
+                // It is a NARROWING parameter — process only this class — and the
+                // exam's own classId is not that. An exam's class is the one it was
+                // created for; its marks are wherever the pupils actually are. On
+                // this school's data one exam holds all seven of its marks under a
+                // different class, so this filter matched nothing and the phone
+                // answered "Results processed for 0 student(s)". Another spans two
+                // classes and would have processed four marks of ten, silently.
+                //
+                // The web has always sent examId alone. That is why the same button
+                // worked there and not here.
                 schoolId,
               });
               Alert.alert(
@@ -1223,7 +1234,7 @@ export default function ExamDetailScreen() {
         },
       ]
     );
-  }, [t, id, exam?.classId, schoolId, loadData]);
+  }, [t, id, schoolId, loadData]);
 
   // ── Publish ───────────────────────────────────────────────
 
