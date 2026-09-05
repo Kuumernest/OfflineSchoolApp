@@ -95,7 +95,7 @@ export default function FeesIndexScreen() {
     if (!q) return students;
     return students.filter((s) =>
       (s.name || "").toLowerCase().includes(q) ||
-      (s.enrollmentNo || "").toLowerCase().includes(q)
+      (s.admissionNo || s.enrollmentNo || "").toLowerCase().includes(q)
     );
   }, [students, query]);
 
@@ -186,7 +186,7 @@ export default function FeesIndexScreen() {
                   {item.name || t("academic.student")}
                 </Text>
                 <Text style={styles.rowMeta} numberOfLines={1}>
-                  {item.enrollmentNo || "—"}
+                  {item.admissionNo || item.enrollmentNo || "—"}
                 </Text>
               </View>
 

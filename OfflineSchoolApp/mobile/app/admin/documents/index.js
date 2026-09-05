@@ -69,7 +69,19 @@ export default function DocumentsScreen() {
           StudentService.getApprovedStudentsLocal(),
         ]);
         setClasses(Array.isArray(cls) ? cls : (cls?.classes ?? []));
-        setStudents(Array.isArray(stu) ? stu : (stu?.students ?? []));
+        const rows = Array.isArray(stu) ? stu : (stu?.students ?? []);
+        // normaliseStudent keys a row `id`, older server rows `_id` — accept
+        // both, and drop anything without one: a row with no id would render
+        // key={undefined} for every row and blank out the whole picker.
+        const seen = new Set();
+        setStudents(
+          rows.filter((s) => {
+            const k = s?._id ?? s?.id;
+            if (!k || seen.has(k)) return false;
+            seen.add(k);
+            return true;
+          })
+        );
       } catch {
         // An empty picker is handled below; a crash is not.
       } finally {
@@ -78,11 +90,18 @@ export default function DocumentsScreen() {
     })();
   }, []);
 
+  /** The row's id, whichever shape the source used. */
+  const studentKey = (s) => s?._id ?? s?.id ?? null;
+  /** The number under the name — "admissionNo" locally, "enrollmentNo" server-side. */
+  const studentNo = (s) => s?.admissionNo ?? s?.enrollmentNo ?? null;
+
   const filteredStudents = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return students;
     return students.filter((s) =>
-      `${s.name ?? ""} ${s.enrollmentNo ?? ""}`.toLowerCase().includes(q)
+      `${s.name ?? ""} ${s.studentName ?? ""} ${studentNo(s) ?? ""}`
+        .toLowerCase()
+        .includes(q)
     );
   }, [students, query]);
 
@@ -107,7 +126,7 @@ export default function DocumentsScreen() {
       else {
         const name = BY_CLASS.has(tab)
           ? (classes.find((c) => c._id === classId)?.name ?? tab)
-          : (students.find((s) => s._id === studentId)?.name ?? "transcript");
+          : (students.find((s) => studentKey(s) === studentId)?.name ?? "transcript");
         await DocumentService.shareDocument(html, name);
       }
 
@@ -227,18 +246,18 @@ export default function DocumentsScreen() {
             ) : (
               filteredStudents.slice(0, 60).map((s) => (
                 <TouchableOpacity
-                  key={s._id}
-                  style={[styles.option, studentId === s._id && styles.optionOn]}
-                  onPress={() => setStudentId(s._id)}
+                  key={studentKey(s)}
+                  style={[styles.option, studentId === studentKey(s) && styles.optionOn]}
+                  onPress={() => setStudentId(studentKey(s))}
                   activeOpacity={0.8}
                 >
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={styles.optionTitle} numberOfLines={1}>
-                      {s.name || s.enrollmentNo || s._id}
+                      {s.name || s.studentName || studentNo(s) || studentKey(s)}
                     </Text>
-                    <Text style={styles.optionHint}>{s.enrollmentNo || "—"}</Text>
+                    <Text style={styles.optionHint}>{studentNo(s) || "—"}</Text>
                   </View>
-                  {studentId === s._id && (
+                  {studentId === studentKey(s) && (
                     <Ionicons name="checkmark-circle" size={18} color={C.primary} />
                   )}
                 </TouchableOpacity>
