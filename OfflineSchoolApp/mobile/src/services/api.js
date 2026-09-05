@@ -30,6 +30,7 @@
 import axios            from "axios";
 import NetInfo          from "@react-native-community/netinfo";
 import * as SecureStore from "expo-secure-store";
+import * as LinkQuality from "./linkQuality";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — BASE URL
@@ -68,6 +69,9 @@ export const API_URL = getBaseURL();
 // SECTION 2 — AXIOS INSTANCE
 // ═════════════════════════════════════════════════════════════════════════════
 
+// The default BUDGET, not the timeout. Every request is scaled to the link
+// actually in use before it goes out — see linkQuality, and the request
+// interceptor below.
 const api = axios.create({
   baseURL: API_URL,
   timeout: 30_000,
@@ -516,6 +520,29 @@ async function _prepareRequest(config) {
       );
     }
 
+    // 8. Scale the timeout to this link.
+    //
+    // Stamped here rather than at the top of the interceptor because the
+    // concurrency slot above can hold a request for seconds during a full
+    // sync. Timing from before that would measure this app's own queue and
+    // report a healthy connection as a slow one, inflating every budget.
+    //
+    // The caller's own number is the input: a pull asks for 60s and a message
+    // fetch for 10s, and that relationship is intent worth keeping. What
+    // changes is the scale, so both follow the connection together.
+    // The ORIGINAL budget, remembered, not whatever is on the config now.
+    //
+    // The 401 path retries by calling api(originalConfig) with the very same
+    // object, so it re-enters this interceptor with config.timeout already
+    // scaled once. Reading it back would scale the scaled value — factor
+    // squared on the second attempt, cubed on the third — and a slow link
+    // would walk its own budgets up to the ceiling in three requests.
+    const prior  = Number(config.metadata?.budget);
+    const budget = prior > 0 ? prior : (Number(config.timeout) || 30_000);
+
+    config.timeout  = LinkQuality.scaleTimeout(budget);
+    config.metadata = { ...(config.metadata ?? {}), budget, startedAt: Date.now() };
+
     return config;
 }
 
@@ -527,6 +554,12 @@ api.interceptors.response.use(
 
   (response) => {
     _releaseSlot();
+
+    const meta = response.config?.metadata;
+    if (meta?.startedAt) {
+      LinkQuality.recordSuccess(Date.now() - meta.startedAt, meta.budget);
+    }
+
     if (__DEV__) {
       console.log(`[api] ✅ ${response.status} ← ${response.config?.url}`);
     }
@@ -535,6 +568,15 @@ api.interceptors.response.use(
 
   async (error) => {
     _releaseSlot();
+
+    // ECONNABORTED is how axios reports its own timeout firing. Only that
+    // counts: a 500, a 404 or a dropped radio say nothing about how fast the
+    // link is, and feeding them in would push budgets up for a server fault.
+    if (error?.code === "ECONNABORTED") {
+      LinkQuality.recordTimeout();
+    } else {
+      LinkQuality.recordFailure();
+    }
 
     const status  = error?.response?.status;
     const url     = error?.config?.url    ?? "unknown";

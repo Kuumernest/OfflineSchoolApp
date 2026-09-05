@@ -153,9 +153,126 @@ const checkLocales = () => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// LINK QUALITY
+//
+// The one piece of logic here that decides whether a request is abandoned,
+// so it is the one piece worth asserting on. Pure arithmetic over a rolling
+// window — no device, no network, no clock.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const checkLinkQuality = () => {
+  console.log("");
+  console.log("LINK QUALITY");
+
+  // The module is ESM and this file is CommonJS. supportsStaticESM: false is
+  // what tells preset-expo to hand back require/exports instead.
+  const srcPath = path.join(ROOT, "src/services/linkQuality.js");
+  let LQ;
+  try {
+    const { code } = babel.transformFileSync(srcPath, {
+      presets: [require.resolve("babel-preset-expo")],
+      caller:  { name: "check", supportsStaticESM: false },
+      babelrc: false,
+      configFile: false,
+    });
+    const mod = { exports: {} };
+    // eslint-disable-next-line no-new-func
+    new Function("module", "exports", "require", code)(mod, mod.exports, require);
+    LQ = mod.exports;
+  } catch (err) {
+    bad("linkQuality loads", err.message);
+    return;
+  }
+  ok("linkQuality loads");
+
+  const near = (a, b, tol = 0.001) => Math.abs(a - b) <= tol;
+
+  // A cold start must not scale anything. Below MIN_SAMPLES the factor is 1,
+  // so the first requests of a session go out on the budgets their callers
+  // asked for rather than on a guess formed from one sample.
+  LQ._reset();
+  LQ.recordSuccess(100, 30_000);
+  if (near(LQ.currentFactor(), 1)) ok("one sample does not move the factor");
+  else bad("one sample does not move the factor", `factor ${LQ.currentFactor()}`);
+
+  // A fast link: every request uses 5% of its budget against a target of 25%,
+  // so budgets should come DOWN — a dead link on fibre should not take thirty
+  // seconds to say so.
+  LQ._reset();
+  for (let i = 0; i < 10; i++) LQ.recordSuccess(1_500, 30_000);
+  const fast = LQ.currentFactor();
+  if (fast < 1) ok(`a fast link shrinks budgets (factor ${fast.toFixed(2)})`);
+  else bad("a fast link shrinks budgets", `factor ${fast}`);
+
+  // ...but never below the floor, or a burst of cached responses would cut
+  // the next real request off at the knees.
+  LQ._reset();
+  for (let i = 0; i < 30; i++) LQ.recordSuccess(1, 60_000);
+  if (LQ.currentFactor() >= 0.5) ok("the factor has a floor");
+  else bad("the factor has a floor", `factor ${LQ.currentFactor()}`);
+
+  // A slow link: requests using 80% of their budget are one hiccup from
+  // failing, so budgets must grow.
+  LQ._reset();
+  for (let i = 0; i < 10; i++) LQ.recordSuccess(24_000, 30_000);
+  const slow = LQ.currentFactor();
+  if (slow > 2) ok(`a slow link grows budgets (factor ${slow.toFixed(2)})`);
+  else bad("a slow link grows budgets", `factor ${slow}`);
+
+  // Timeouts count as a full budget. Without this the median is formed only
+  // from the requests that happened to survive, and a link that has genuinely
+  // slowed keeps timing out at a budget the survivors say is fine.
+  LQ._reset();
+  for (let i = 0; i < 10; i++) LQ.recordTimeout();
+  if (LQ.currentFactor() > 2) ok("timeouts push budgets up");
+  else bad("timeouts push budgets up", `factor ${LQ.currentFactor()}`);
+
+  // A 500 is not slowness. Feeding server faults in would raise every budget
+  // on this device because of a bug on the server.
+  LQ._reset();
+  for (let i = 0; i < 10; i++) LQ.recordSuccess(1_500, 30_000);
+  const before = LQ.currentFactor();
+  for (let i = 0; i < 10; i++) LQ.recordFailure();
+  if (near(LQ.currentFactor(), before)) ok("non-timeout failures are ignored");
+  else bad("non-timeout failures are ignored", `${before} -> ${LQ.currentFactor()}`);
+
+  // The window rolls, so a link that recovers is believed again rather than
+  // being punished for the tunnel it drove through ten minutes ago.
+  LQ._reset();
+  for (let i = 0; i < 30; i++) LQ.recordTimeout();
+  for (let i = 0; i < 30; i++) LQ.recordSuccess(1_500, 30_000);
+  if (LQ.currentFactor() < 1) ok("recovery is believed once the window rolls");
+  else bad("recovery is believed once the window rolls", `factor ${LQ.currentFactor()}`);
+
+  // Absolute bounds hold whatever the factor is.
+  LQ._reset();
+  for (let i = 0; i < 30; i++) LQ.recordTimeout();
+  const huge = LQ.scaleTimeout(60_000);
+  LQ._reset();
+  for (let i = 0; i < 30; i++) LQ.recordSuccess(1, 60_000);
+  const tiny = LQ.scaleTimeout(10_000);
+  if (huge <= 180_000 && tiny >= 8_000) ok(`timeouts stay within 8s..180s (${tiny}, ${huge})`);
+  else bad("timeouts stay within 8s..180s", `${tiny}, ${huge}`);
+
+  // The caller's intent survives scaling: a pull is still allowed longer than
+  // a message fetch, whatever the link is doing.
+  LQ._reset();
+  for (let i = 0; i < 10; i++) LQ.recordSuccess(20_000, 30_000);
+  if (LQ.scaleTimeout(60_000) > LQ.scaleTimeout(10_000)) ok("relative budgets are preserved");
+  else bad("relative budgets are preserved", "a pull lost its head start");
+
+  // A missing or nonsense budget must not produce NaN as a timeout, which
+  // axios treats as no timeout at all — a request that hangs forever.
+  const bogus = [LQ.scaleTimeout(undefined), LQ.scaleTimeout(0), LQ.scaleTimeout(-5)];
+  if (bogus.every((v) => !Number.isFinite(v) || v <= 0)) ok("a bad budget is passed through, never NaN-scaled");
+  else bad("a bad budget is passed through, never NaN-scaled", JSON.stringify(bogus));
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 checkParse();
 checkLocales();
+checkLinkQuality();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);
