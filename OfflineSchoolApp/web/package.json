@@ -8,7 +8,8 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "i18n:check": "node scripts/check-i18n.mjs"
+    "i18n:check": "node scripts/check-i18n.mjs",
+    "check:normalisers": "node scripts/check-normalisers.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

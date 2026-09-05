@@ -91,6 +91,12 @@ jobs:
       # Both locale files parse, cover the same keys, and every t() reference
       # in the source resolves to one of them.
       - run: npm run i18n:check
+      # Every field a normalised type declares is actually assigned by the
+      # normaliser that builds it. tsc cannot see this: an optional field left
+      # unassigned still satisfies the type. normaliseClass dropped the class
+      # teacher that way, and the Edit Class dialog then showed every form
+      # master as unassigned and cleared the real one on save.
+      - run: npm run check:normalisers
       #
       # `npm run lint` is deliberately NOT wired in yet: it currently reports
       # 35 pre-existing errors (20 react-hooks/set-state-in-effect, 10 unused

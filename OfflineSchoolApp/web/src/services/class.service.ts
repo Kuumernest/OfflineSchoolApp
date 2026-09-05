@@ -37,6 +37,10 @@ interface RawClass {
   section?:       string;
   schoolId?:      string;
   school_id?:     string;
+  classTeacherId?:     string | null;
+  class_teacher_id?:   string | null;
+  classTeacherName?:   string | null;
+  class_teacher_name?: string | null;
   isActive?:      boolean;
   deletedAt?:     string | null;
   deleted_at?:    string | null;
@@ -83,6 +87,25 @@ function normaliseClass(raw: RawClass): Class {
     level:    raw.level   || "",
     section:  raw.section || "",
     schoolId: raw.schoolId || raw.school_id || "",
+
+    // The form master, carried through.
+    //
+    // This was the one field on the Class type the normaliser did not fill,
+    // and because it is optional nothing complained. Two things followed. The
+    // Edit Class dialog reset classTeacherId to "" every time it opened, so a
+    // class with a form master showed "No teacher assigned"; and the form then
+    // submitted that "" back, which the server reads — correctly — as an
+    // instruction to clear the assignment. Opening the dialog to rename a
+    // class and pressing Save unassigned its teacher, silently.
+    //
+    // The name comes across too. It is stored on the class rather than looked
+    // up, because a report card prints whoever held the class when it was
+    // issued and a teacher who leaves has their account deactivated.
+    classTeacherId:
+      raw.classTeacherId ?? raw.class_teacher_id ?? null,
+    classTeacherName:
+      raw.classTeacherName ?? raw.class_teacher_name ?? null,
+
     isActive:
       raw.isActive !== false &&
       !raw.deletedAt         &&

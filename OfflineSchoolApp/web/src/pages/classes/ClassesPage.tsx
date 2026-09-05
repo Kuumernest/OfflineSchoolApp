@@ -292,6 +292,25 @@ export default function ClassesPage() {
     })),
   ];
 
+  // A form master who has left keeps their name on the class — that is what
+  // their pupils' report cards print — but their account is deactivated and
+  // /admin/teachers does not list them. A <select> given a value no option
+  // carries falls back to its first option, so the dialog would show them as
+  // unassigned and Save would then clear the name those cards depend on. The
+  // class being edited therefore always carries an option for whoever holds
+  // it, listed or not.
+  if (
+    editingClass?.classTeacherId &&
+    !teacherOptions.some((o) => o.value === editingClass.classTeacherId)
+  ) {
+    teacherOptions.splice(1, 0, {
+      value: String(editingClass.classTeacherId),
+      label: editingClass.classTeacherName
+        ? `${editingClass.classTeacherName} (no longer on staff)`
+        : "Current form master",
+    });
+  }
+
   const filterClassOptions: SelectOption[] = [
     { value: "", label: "All Classes" },
     ...classOptions,
