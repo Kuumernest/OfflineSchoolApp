@@ -8,13 +8,14 @@ import {
   deriveAlerts,
   type DashAlert,
 }                                from "@/components/dashboard/AlertsPanel";
+import { fetchConversations } from "./message.service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 export interface Notification {
   _id:         string;
   title:       string;
   body:        string;
-  type:        "announcement" | "attendance" | "grade" | "system" | "alert" | "general";
+  type:        "announcement" | "attendance" | "grade" | "system" | "alert" | "message" | "general";
   priority:    "low" | "normal" | "high" | "urgent";
   isRead:      boolean;
   authorName?: string;
@@ -124,6 +125,63 @@ async function fetchAnnouncementNotifications(
   }
 }
 
+/**
+ * Unread conversations, as notifications.
+ *
+ * Sending a message notified nobody. Not by a missing template — the school
+ * never had a way to say it: there is no message kind in the Notification
+ * queue, no push, and the unread count the server already returns was
+ * rendered only inside the message list itself. You found out you had a
+ * message by opening Messages and looking.
+ *
+ * Derived, not queued, and deliberately. The Notification collection is a
+ * DELIVERY queue — `to`, `channel`, attempts, backoff — so a row added there
+ * is an email or an SMS actually going out, one per message, which on a
+ * live thread is unbearable. The bell is already assembled client-side from
+ * announcements and derived alerts; this is a third source of the same kind,
+ * and it costs one request that the messages page makes anyway.
+ *
+ * One entry per conversation rather than per message: a thread with nine
+ * unread is one thing to go and read, not nine things.
+ */
+async function fetchMessageNotifications(limit = 20): Promise<Notification[]> {
+  try {
+    const conversations = await fetchConversations();
+
+    return conversations
+      .filter((c) => (c.unread ?? 0) > 0)
+      .slice(0, limit)
+      .map((c) => {
+        // The thread is named for whoever is on the other end of it, the
+        // same convention the list itself uses; a direct thread carries no
+        // title of its own.
+        const who =
+          c.title ||
+          (c.participants ?? [])
+            .map((p) => p.name)
+            .filter(Boolean)
+            .join(", ");
+
+        return {
+          // Stable across polls, so the panel does not treat a re-fetch as
+          // a new notification each time.
+          _id:       `message-${c._id}`,
+          title:     who || "",
+          body:      c.lastMessagePreview ?? "",
+          type:      "message" as const,
+          priority:  "normal" as const,
+          // Unread is the whole reason it is in this list.
+          isRead:    false,
+          createdAt: c.lastMessageAt ?? new Date().toISOString(),
+          link:      `/messages?conversation=${encodeURIComponent(String(c._id))}`,
+        };
+      });
+  } catch (err) {
+    console.warn("[Notifications] Messages fetch failed:", err);
+    return [];
+  }
+}
+
 // ─── Priority sort weight ─────────────────────────────────────────────────────
 const PRIORITY_WEIGHT: Record<Notification["priority"], number> = {
   urgent: 4,
@@ -140,13 +198,17 @@ export async function fetchNotifications(
   t: (key: string, params?: Record<string, unknown>) => string = (k) => k,
 ): Promise<NotificationListResponse> {
   // Fetch all sources in parallel
-  const [announcementNotifs, alertNotifs] = await Promise.all([
+  const [announcementNotifs, alertNotifs, messageNotifs] = await Promise.all([
     fetchAnnouncementNotifications(schoolId, limit),
     fetchSystemAlerts(schoolId, t),
+    fetchMessageNotifications(limit),
   ]);
 
-  // Merge: alerts first, then announcements
-  const allNotifications = [...alertNotifs, ...announcementNotifs].sort(
+  // Merge: alerts first, then messages, then announcements. Messages sit
+  // above announcements because one is addressed to you by a person and the
+  // other is addressed to everybody; the sort below reorders by unread and
+  // priority anyway, and this only settles ties.
+  const allNotifications = [...alertNotifs, ...messageNotifs, ...announcementNotifs].sort(
     (a, b) => {
       // Unread first
       if (a.isRead !== b.isRead) return a.isRead ? 1 : -1;
@@ -183,6 +245,13 @@ export async function fetchNotifications(
 export async function markAsRead(notificationId: string): Promise<boolean> {
   // Alert notifications are derived/live — not stored in DB
   if (notificationId.startsWith("alert-")) return true;
+
+  // Nor are message notifications, and this one is not merely a short-circuit:
+  // a thread stops being unread when somebody opens and reads it, which is
+  // what the panel's link does. Marking it read from the bell would clear the
+  // badge on a message nobody has looked at. Without this guard the id would
+  // be posted to /announcements/message-<id>/read, which is a 404.
+  if (notificationId.startsWith("message-")) return true;
 
   try {
     // POST, not PATCH, and /announcements rather than /admin/announcements.

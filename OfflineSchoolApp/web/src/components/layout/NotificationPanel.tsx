@@ -5,7 +5,7 @@ import {
   Bell, X, CheckCheck,
   AlertTriangle, Megaphone, GraduationCap,
   ClipboardCheck, Settings, Clock,
-  AlertCircle, ShieldAlert,
+  AlertCircle, ShieldAlert, MessageSquare,
 }                                                   from "lucide-react";
 import { cn }                                       from "@/utils/cn";
 import { useAuthStore }                             from "@/store/auth.store";
@@ -39,6 +39,10 @@ const TYPE_CONFIG: Record<
   system: {
     icon:  <Settings       className="w-4 h-4" />,
     color: "bg-gray-100   text-gray-600",
+  },
+  message: {
+    icon:  <MessageSquare  className="w-4 h-4" />,
+    color: "bg-indigo-100 text-indigo-600",
   },
   alert: {
     icon:  <ShieldAlert    className="w-4 h-4" />,

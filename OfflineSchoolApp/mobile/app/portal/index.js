@@ -85,6 +85,10 @@ const NOTICE_META = {
   "fee.payment":      { icon: "receipt-outline",       fg: "#12683A", bg: "#EEF7F1", labelKey: "portal.noticePayment" },
   "result.published": { icon: "school-outline",        fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeResults" },
   "announcement":     { icon: "megaphone-outline",     fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeAnnouncement" },
+  // Not a row in the Notification queue — see the notices fetcher. That
+  // collection is a delivery queue for email and SMS, and a row per message
+  // would be a message per message.
+  "message":          { icon: "chatbubble-outline",    fg: "#3B4996", bg: "#F0F4FF", labelKey: "portal.noticeMessage" },
   default:            { icon: "notifications-outline", fg: "#4F5A70", bg: "#F4F5F8", labelKey: "portal.noticeOther" },
 };
 
@@ -165,7 +169,52 @@ export default function ParentPortalScreen() {
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
         attendance: PortalService.fetchAttendance,
-        notices:    PortalService.fetchNotifications,
+        // Notices, plus the threads with something unread in them.
+        //
+        // Sending a message notified nobody: there is no message kind in the
+        // Notification collection, and there should not be — that collection
+        // is a delivery queue with a channel and a retry backoff, so a row
+        // in it is an email or an SMS actually going out. One per message on
+        // a live thread is not a notification, it is a nuisance.
+        //
+        // So the unread count the server already returns is merged in here
+        // instead: one entry per thread, not per message, because a thread
+        // with nine unread is one thing to go and read.
+        notices: async (sid) => {
+          const [notices, convos] = await Promise.all([
+            PortalService.fetchNotifications(sid),
+            // A failure here must not empty the notices the school did send.
+            PortalService.fetchConversations(sid).catch(() => ({ data: [] })),
+          ]);
+
+          const unread = (convos?.data ?? [])
+            .filter((c) => (c.unread ?? 0) > 0)
+            .map((c) => ({
+              _id:            `message-${c._id}`,
+              kind:           "message",
+              subject:        c.title ||
+                              (c.otherParticipants || c.participants || [])
+                                .map((p) => p.name)
+                                .filter(Boolean)
+                                .join(", ") ||
+                              t("msgMobile.conversation"),
+              body:           c.lastMessagePreview || "",
+              sentAt:         c.lastMessageAt,
+              // Nothing was queued, so nothing can be pending or failed —
+              // without this the card would print a delivery status for a
+              // delivery that never happened.
+              status:         "sent",
+              conversationId: c._id,
+            }));
+
+          const rows = [...unread, ...(notices?.data ?? [])].sort((a, b) =>
+            String(b.sentAt || b.createdAt || "").localeCompare(
+              String(a.sentAt || a.createdAt || "")
+            )
+          );
+
+          return { ...notices, data: rows };
+        },
         news:       PortalService.fetchAnnouncements,
         messages:   PortalService.fetchConversations,
       }[tab];
@@ -186,7 +235,10 @@ export default function ParentPortalScreen() {
     } finally {
       setLoading(false);
     }
-  }, [tab, childId, handle401]);
+  // t is a dependency because the notices fetcher names an untitled thread
+  // with it; without it a language switch would leave that one label in
+  // the previous language until something else forced a refetch.
+  }, [tab, childId, handle401, t]);
 
   useEffect(() => {
     if (signedIn) loadAll();
@@ -832,8 +884,14 @@ export default function ParentPortalScreen() {
               ) : (
                 data.map((n) => {
                   const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
+                  // A notice about a message that cannot be opened from the
+                  // notice is a dead end; the rest have nowhere to go.
+                  const Card = n.conversationId ? TouchableOpacity : View;
+                  const press = n.conversationId
+                    ? { onPress: () => setTab("messages"), activeOpacity: 0.7 }
+                    : {};
                   return (
-                    <View key={n._id} style={styles.card}>
+                    <Card key={n._id} style={styles.card} {...press}>
                       <View style={styles.noticeHead}>
                         <View style={[styles.noticeIcon, { backgroundColor: meta.bg }]}>
                           <Ionicons name={meta.icon} size={14} color={meta.fg} />
@@ -862,7 +920,7 @@ export default function ParentPortalScreen() {
                           {t(`portal.noticeStatus_${n.status}`)}
                         </Text>
                       ) : null}
-                    </View>
+                    </Card>
                   );
                 })
               )

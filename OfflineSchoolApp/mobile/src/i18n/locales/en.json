@@ -1412,7 +1412,8 @@
     "noticeAnnouncement": "School notice",
     "noticeOther": "Notice",
     "noticeStatus_pending": "Queued — not sent yet",
-    "noticeStatus_failed": "Could not be delivered"
+    "noticeStatus_failed": "Could not be delivered",
+    "noticeMessage": "Message"
   },
   "codes": {
     "title": "Portal access",
