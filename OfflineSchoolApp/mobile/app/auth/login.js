@@ -22,13 +22,38 @@ import { useRouter }    from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 
-// The scrim, as three stops across the screen. Alpha never drops below 0.68,
-// so no part of the photograph is ever bright enough to fight the form.
+// The scrim across the screen — the same shape as before at about half the
+// weight, so the building and the sign read as a photograph rather than as a
+// dark blue texture.
 const SCRIM_STOPS = [
-  { at: 0,   rgb: [24, 20, 70],  alpha: 0.88 },
-  { at: 0.5, rgb: [36, 30, 100], alpha: 0.76 },
-  { at: 1,   rgb: [24, 20, 70],  alpha: 0.68 },
+  { at: 0,   rgb: [24, 20, 70],  alpha: 0.40 },
+  { at: 0.5, rgb: [36, 30, 100], alpha: 0.32 },
+  { at: 1,   rgb: [24, 20, 70],  alpha: 0.26 },
 ];
+
+/**
+ * A second scrim down the screen, and the reason the first one can be light.
+ *
+ * The header and the portal link are the only text not sitting on a card, so
+ * they are the only text the photograph can defeat — and it nearly does at
+ * this weight. Measured against the bright sky in the top of the frame, the
+ * #E5E7EB subtitle falls to about 3.0:1 under the horizontal ramp alone,
+ * where 15px text wants 4.5:1.
+ *
+ * Darkening everything to fix that is what the old flat 62% wash did, and it
+ * costs the whole picture. Darkening the top and the foot instead costs the
+ * sky and the paving, which is where nothing is happening. The two layers
+ * compose to about 0.63 behind the header — comfortably legible — while the
+ * middle of the screen keeps the 0.32 above.
+ */
+const EDGE_RGB = [24, 20, 70];
+const edgeAlphaAt = (t) => {
+  // Top: strongest at the very top, gone by 30% down.
+  if (t < 0.30) return 0.38 * (1 - t / 0.30) ** 1.4;
+  // Foot: a lighter lift behind the parent-portal link.
+  if (t > 0.78) return 0.52 * ((t - 0.78) / 0.22) ** 1.4;
+  return 0;
+};
 
 /** The colour of the scrim at 0..1 across the screen. */
 const scrimAt = (t) => {
@@ -55,17 +80,40 @@ const scrimAt = (t) => {
  * what makes this technique look cheap, and there is none at these deltas.
  */
 const SCRIM_BANDS = 24;
+const EDGE_BANDS  = 20;
+
 const Scrim = () => (
-  <View style={styles.scrim} pointerEvents="none">
-    {Array.from({ length: SCRIM_BANDS }, (_, i) => (
-      // Sampled at the middle of each column, so the ramp is centred on the
-      // band rather than starting one band late.
-      <View
-        key={i}
-        style={{ flex: 1, backgroundColor: scrimAt((i + 0.5) / SCRIM_BANDS) }}
-      />
-    ))}
-  </View>
+  <>
+    {/* Left to right: the brand ramp. */}
+    <View style={styles.scrim} pointerEvents="none">
+      {Array.from({ length: SCRIM_BANDS }, (_, i) => (
+        // Sampled at the middle of each column, so the ramp is centred on the
+        // band rather than starting one band late.
+        <View
+          key={i}
+          style={{ flex: 1, backgroundColor: scrimAt((i + 0.5) / SCRIM_BANDS) }}
+        />
+      ))}
+    </View>
+
+    {/* Top to bottom: legibility for the two pieces of text that have no
+        card under them. Fully transparent through the middle, so it takes
+        nothing from the part of the picture anybody looks at. */}
+    <View style={styles.scrimEdges} pointerEvents="none">
+      {Array.from({ length: EDGE_BANDS }, (_, i) => {
+        const a = edgeAlphaAt((i + 0.5) / EDGE_BANDS);
+        return (
+          <View
+            key={i}
+            style={{
+              flex: 1,
+              backgroundColor: `rgba(${EDGE_RGB[0]}, ${EDGE_RGB[1]}, ${EDGE_RGB[2]}, ${a.toFixed(3)})`,
+            }}
+          />
+        );
+      })}
+    </View>
+  </>
 );
 export default function LoginScreen() {
   const router    = useRouter();
@@ -232,15 +280,37 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
 
+  // A column, over the top of it.
+  scrimEdges: StyleSheet.absoluteFillObject,
+
   scroll:    { padding: 24, paddingTop: 60 },
 
   portalLink:     { marginTop: 18, alignItems: "center", paddingVertical: 10 },
-  portalLinkText: { color: "#C7D2FE", fontSize: 14, fontWeight: "600" },
+  portalLinkText: {
+    color: "#DDE3FF", fontSize: 14, fontWeight: "600",
+    textShadowColor:  "rgba(12, 10, 40, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
 
   header:    { alignItems: "center", marginBottom: 32 },
   emoji:     { fontSize: 48, marginBottom: 8 },
-  title:     { fontSize: 28, fontWeight: "800", color: "#FFFFFF" },
-  subtitle:  { fontSize: 15, color: "#E5E7EB", marginTop: 4 },
+
+  // The shadow is not decoration. These two lines sit on the photograph, and
+  // a shadow keeps them readable against whatever image is dropped in next —
+  // which a contrast figure measured against today's sky does not.
+  title: {
+    fontSize: 28, fontWeight: "800", color: "#FFFFFF",
+    textShadowColor:  "rgba(12, 10, 40, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 6,
+  },
+  subtitle: {
+    fontSize: 15, color: "#EEF0F4", marginTop: 4,
+    textShadowColor:  "rgba(12, 10, 40, 0.55)",
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 5,
+  },
 
   card: {
     backgroundColor: "#FFF",
@@ -303,7 +373,23 @@ const styles = StyleSheet.create({
 
   dividerRow:  { flexDirection: "row", alignItems: "center", marginBottom: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "#E5E7EB" },
-  dividerText: { marginHorizontal: 12, color: "#9CA3AF", fontSize: 13 },
+  dividerText: {
+    // Was #9CA3AF, chosen for a dark wash. On a light photograph mid-grey is
+    // the one colour guaranteed to disappear, whichever way the image goes.
+    //
+    // It carries its own backing rather than leaning on the scrim, because it
+    // sits halfway down the screen — the one place the scrim is deliberately
+    // at its lightest. A chip fixes the contrast locally and costs the picture
+    // the width of one word.
+    marginHorizontal: 12,
+    color:            "#EEF0F4",
+    fontSize:         13,
+    overflow:         "hidden",
+    borderRadius:     10,
+    paddingHorizontal: 10,
+    paddingVertical:   2,
+    backgroundColor:  "rgba(24, 20, 70, 0.55)",
+  },
 
   applyCard: {
     backgroundColor: "#EEF2FF",
