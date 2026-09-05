@@ -1719,6 +1719,66 @@ router.delete("/subjects/:id", requirePermission("subjects.manage"), asyncHandle
  * Old behaviour: fetchAllStudents() returned Student results early and
  * never reached StudentApplication — Ken (the applicant) was invisible.
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// CLASS NAMES COME FROM THE CLASS, NOT FROM A COPY ON THE STUDENT
+//
+// normaliseStudentDoc carries className across from the record and no
+// further. A student holding a classId but no className string therefore
+// read as "Unassigned" wherever a screen trusted that field, while every page
+// that resolves the id itself — the class pages, the approved roster — showed
+// the same student in the right form. Three of this school's seventy-one have
+// been in that state since the day they were enrolled; nothing had detached
+// them from a class, and no amount of re-assigning one would have fixed it.
+//
+// The id is the fact; the name is a convenience copy that can be stale or
+// absent. So the name is looked up whenever there is an id to look it up by,
+// and the stored string only stands in when there is not.
+//
+// A failed lookup falls back to the stored strings rather than failing the
+// request — but it says so. A silent fallback here is what let a roster go
+// three students short of the truth with nothing anywhere to read about it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const withClassNames = async (docs) => {
+  const many = Array.isArray(docs);
+  const list = (many ? docs : [docs]).filter(Boolean);
+
+  const ids = [...new Set(
+    list.map((d) => d.classId || d.class_id).filter(Boolean).map(String)
+  )];
+  if (!ids.length) return docs;
+
+  let names;
+  try {
+    const classes = await Class.find({ _id: { $in: ids } })
+      .select("_id name section")
+      .lean();
+    names = new Map(classes.map((c) => [
+      String(c._id),
+      [c.name, c.section].filter(Boolean).join(" "),
+    ]));
+  } catch (err) {
+    console.warn(
+      `[students] class name lookup failed, falling back to stored names: ${err.message}`
+    );
+    return docs;
+  }
+
+  const fill = (d) => {
+    if (!d) return d;
+    const raw = d.classId || d.class_id || null;
+    const cid = raw ? String(raw) : null;
+    return {
+      ...d,
+      classId:   cid,
+      class_id:  cid,
+      className: (cid && names.get(cid)) || d.className || d.class_name || null,
+    };
+  };
+
+  return many ? docs.map(fill) : fill(docs);
+};
+
 router.get("/students/pending", requirePermission("students.admit"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
@@ -1734,7 +1794,9 @@ router.get("/students/pending", requirePermission("students.admit"), asyncHandle
     (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
   );
 
-  const normalised = sorted.map(normaliseStudentDoc).filter(Boolean);
+  const normalised = await withClassNames(
+    sorted.map(normaliseStudentDoc).filter(Boolean)
+  );
 
   console.log(
     `[/students/pending] Returning ${normalised.length} pending ` +
@@ -1769,37 +1831,12 @@ router.get("/students/approved", requirePermission("students.view"), asyncHandle
     return nameA.localeCompare(nameB);
   });
 
-  const classIds = [
-    ...new Set(
-      sorted
-        .map((s) => s.classId || s.class_id)
-        .filter(Boolean)
-        .map(String)
-    ),
-  ];
-  const classMap = {};
-  if (classIds.length > 0) {
-    const classes = await Class.find({ _id: { $in: classIds } })
-      .select("_id name section")
-      .lean();
-    for (const c of classes) {
-      classMap[String(c._id)] = [c.name, c.section].filter(Boolean).join(" ");
-    }
-  }
-
-  const normalised = sorted
-    .map((s) => {
-      const doc = normaliseStudentDoc(s);
-      if (!doc) return null;
-      const cid = s.classId || s.class_id || null;
-      return {
-        ...doc,
-        classId:   cid,
-        class_id:  cid,
-        className: classMap[String(cid)] || s.className || s.class_name || null,
-      };
-    })
-    .filter(Boolean);
+  // This roster already resolved the id, and so was never the page reading
+  // "Unassigned". It now shares the one implementation, so the two cannot
+  // drift apart again.
+  const normalised = await withClassNames(
+    sorted.map(normaliseStudentDoc).filter(Boolean)
+  );
 
   return sendSuccess(res, {
     count:    normalised.length,
@@ -1869,9 +1906,11 @@ router.get("/students", requirePermission("students.view"), asyncHandler(async (
   const limit  = Math.min(Math.max(rawLim, 0), 200);   // cap: no unbounded pages
   const total  = normalised.length;
   const pages  = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
-  const slice  = limit > 0
+  // Resolved after the slice, so a paged roster looks up only the classes on
+  // the page it is answering with.
+  const slice  = await withClassNames(limit > 0
     ? normalised.slice((page - 1) * limit, (page - 1) * limit + limit)
-    : normalised;
+    : normalised);
 
   return sendSuccess(res, {
     count:    slice.length,
@@ -2391,7 +2430,7 @@ router.patch("/students/:id/suspend", requirePermission("students.manage"), asyn
 
   return sendSuccess(res, {
     message: "Student suspended",
-    data:    normaliseStudentDoc(student.toObject()),
+    data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));
 
@@ -2408,7 +2447,7 @@ router.patch("/students/:id/restore", requirePermission("students.manage"), asyn
 
   return sendSuccess(res, {
     message: "Student restored",
-    data:    normaliseStudentDoc(student.toObject()),
+    data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));
 
@@ -2476,9 +2515,11 @@ router.patch("/students/:id/move", requirePermission("students.manage"), asyncHa
   }
 
   return sendSuccess(res, {
+    // A move changes the classId, so the copy on the record is stale here by
+    // definition and the reply has to carry the new class's name.
     message: "Student moved to new class",
     feesRaised: billing.raised,
-    data:    normaliseStudentDoc(student.toObject()),
+    data:    await withClassNames(normaliseStudentDoc(student.toObject())),
   });
 }));
 
@@ -2606,7 +2647,8 @@ router.get("/students/:id", requirePermission("students.viewFull"), asyncHandler
 
   if (!student) return sendError(res, 404, "Student not found");
 
-  return sendSuccess(res, { student: normaliseStudentDoc(student) });
+  const doc = await withClassNames(normaliseStudentDoc(student));
+  return sendSuccess(res, { student: doc });
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════

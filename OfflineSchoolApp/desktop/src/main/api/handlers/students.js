@@ -262,9 +262,10 @@ module.exports = [
      * a class id belonging to another school still resolves to its name. The
      * mirror holds one school so that cannot be reached from here; the join is
      * `[name, section]` joined by a space, which is a DIFFERENT string from the
-     * bare `name` that the pupil record stores — so a screen reading className
-     * from this endpoint and from GET /api/admin/students gets "Form 1 A" from
-     * one and "Form 1" from the other.
+     * bare `name` that a pupil record stores. The server joins the same way on
+     * every route that names a class, so the two agree; a screen that falls
+     * back to the stored string — which happens only when the class itself is
+     * missing from the mirror — is the one place "Form 1 A" can read "Form 1".
      */
     handler: ({ query }, { docs, session }) => {
       const schoolId = adminSchoolId(session, query);
@@ -420,7 +421,22 @@ module.exports = [
       const row = pick("student") || pick("studentApplication");
       if (!row) return null;
 
-      return ok({ student: normaliseStudentDoc(row) });
+      // The class name is looked up here for the same reason the list looks it
+      // up: normaliseStudentDoc only copies className across, and a pupil
+      // enrolled without that string then reads as unassigned on the one screen
+      // that shows them in full. Same join as the list and as the server, so a
+      // detail page and the roster behind it agree on what the class is called.
+      const doc = normaliseStudentDoc(row);
+      const cid = row.classId || row.class_id || null;
+      const cls = cid ? docs.get("class", String(cid)) : null;
+
+      return ok({
+        student: {
+          ...doc,
+          className: (cls && [cls.name, cls.section].filter(Boolean).join(" ")) ||
+                     doc.className || row.class_name || null,
+        },
+      });
     },
   },
 
