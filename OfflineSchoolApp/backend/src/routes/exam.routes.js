@@ -1142,9 +1142,14 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   }
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
-  const saved         = [];
+  // A count, not a collection: the documents this accumulated were never
+  // read — the response and the log both asked only how many. The history
+  // diff below works off priorByStudent, which is fetched up front.
+  let savedCount      = 0;
   const failed        = [];
   const changes       = [];
+  const ops           = [];
+  const opRows        = [];
   const now           = new Date();
 
   // One read of the whole sheet's prior state. The alternative — a findOne per
@@ -1177,36 +1182,41 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
           }
         : computeGrade(score, maxScore, gradingConfig);
 
-      const doc = await StudentScore.findOneAndUpdate(
-        { examId, studentId, subjectId, schoolId },
-        {
-          $set: {
-            examSubjectId: examSubject?._id || null,
-            classId,
-            score:         score         ?? null,
-            maxScore,
-            percentage:    computed.percentage,
-            grade:         computed.grade,
-            remark:        computed.remark,
-            gpaPoints:     computed.gpaPoints,
-            isPassing:     computed.isPassing,
-            teacherRemark: teacherRemark || null,
-            isAbsent:      isAbsent      ?? false,
-            isExempt:      isExempt      ?? false,
-            enteredBy:     req.user?._id || null,
-            enteredAt:     now,
-            updatedBy:     req.user?._id || null,
-            syncStatus:    "synced",
-            lastSyncedAt:  now,
+      // Collected and sent as one write after the loop. This is the save at
+      // the end of entering a mark sheet, and it awaited an upsert per
+      // pupil: a class of forty paid forty sequential round trips, on the
+      // screen where somebody has just typed for twenty minutes.
+      ops.push({
+        updateOne: {
+          filter: { examId, studentId, subjectId, schoolId },
+          update: {
+            $set: {
+              examSubjectId: examSubject?._id || null,
+              classId,
+              score:         score         ?? null,
+              maxScore,
+              percentage:    computed.percentage,
+              grade:         computed.grade,
+              remark:        computed.remark,
+              gpaPoints:     computed.gpaPoints,
+              isPassing:     computed.isPassing,
+              teacherRemark: teacherRemark || null,
+              isAbsent:      isAbsent      ?? false,
+              isExempt:      isExempt      ?? false,
+              enteredBy:     req.user?._id || null,
+              enteredAt:     now,
+              updatedBy:     req.user?._id || null,
+              syncStatus:    "synced",
+              lastSyncedAt:  now,
+            },
+            $setOnInsert: {
+              _id: uuidv4(), examId, studentId, subjectId, schoolId,
+            },
           },
-          $setOnInsert: {
-            _id: uuidv4(), examId, studentId, subjectId, schoolId,
-          },
+          upsert: true,
         },
-        { upsert: true, returnDocument: 'after' }
-      ).lean();
-
-      saved.push(doc);
+      });
+      opRows.push(row);
 
       // Record only what moved. Re-saving an unchanged sheet is common and
       // must not fill the history with noise.
@@ -1235,6 +1245,30 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
     }
   }
 
+  // One write for the sheet. Unordered, so a single rejected row does not
+  // discard the other thirty-nine, and the rows that did fail are still
+  // named individually: writeErrors carry the index of the op that raised
+  // them, and opRows maps that index back to the pupil.
+  let writeErrors = [];
+  if (ops.length) {
+    try {
+      await StudentScore.bulkWrite(ops, { ordered: false });
+    } catch (e) {
+      writeErrors = e?.writeErrors ?? e?.result?.writeErrors ?? [];
+      if (!writeErrors.length) throw e;
+    }
+  }
+
+  for (const we of writeErrors) {
+    const idx = we.index ?? we.err?.index;
+    const row = opRows[idx];
+    failed.push({
+      ...(row ?? {}),
+      reason: we.errmsg || we.err?.errmsg || "Write failed",
+    });
+  }
+  savedCount = ops.length - writeErrors.length;
+
   await logResultChange(audit, changes);
 
   if (examSubject) {
@@ -1257,10 +1291,10 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
     }
   }
 
-  console.log(`📝 Scores saved: ${saved.length} | failed: ${failed.length}`);
+  console.log(`📝 Scores saved: ${savedCount} | failed: ${failed.length}`);
   return res.status(201).json({
     success:       true,
-    saved:         saved.length,
+    saved:         savedCount,
     failed:        failed.length,
     failedRecords: failed,
   });

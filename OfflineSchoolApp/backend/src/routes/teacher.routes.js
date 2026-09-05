@@ -1344,17 +1344,62 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
   const dateStr    = String(date).split("T")[0];
   const saved      = [], failed = [];
 
+  // One write for the register, then one read to answer with the ids.
+  //
+  // This awaited an upsert per pupil, which on a class of forty is forty
+  // sequential round trips while the teacher waits at the end of a lesson.
+  // The read afterwards is needed because an upsert reports ids only for the
+  // rows it inserted, and the response has always returned every id —
+  // re-marking a register updates rather than inserts, so upsertedIds alone
+  // would answer with a shrinking list as the day went on.
+  const ops        = [];
+  const studentIds = [];
+
   for (const r of records) {
+    const sid = String(r.studentId);
+    studentIds.push(sid);
+    ops.push({
+      updateOne: {
+        filter: {
+          teacherId: String(teacherId), classId: classIdStr,
+          studentId: sid, date: dateStr,
+        },
+        update: {
+          $set: {
+            teacherId: String(teacherId), classId: classIdStr,
+            studentId: sid, date: dateStr,
+            status: r.status || "present", schoolId,
+          },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  let writeErrors = [];
+  if (ops.length) {
     try {
-      const doc = await Att.findOneAndUpdate(
-        { teacherId: String(teacherId), classId: classIdStr, studentId: String(r.studentId), date: dateStr },
-        { teacherId: String(teacherId), classId: classIdStr, studentId: String(r.studentId), date: dateStr, status: r.status || "present", schoolId },
-        { upsert: true, returnDocument: 'after' }
-      );
-      saved.push(doc._id);
+      await Att.bulkWrite(ops, { ordered: false });
     } catch (e) {
-      failed.push({ studentId: r.studentId, reason: e.message });
+      writeErrors = e?.writeErrors ?? e?.result?.writeErrors ?? [];
+      if (!writeErrors.length) throw e;
     }
+  }
+
+  for (const we of writeErrors) {
+    const idx = we.index ?? we.err?.index;
+    failed.push({
+      studentId: studentIds[idx],
+      reason:    we.errmsg || we.err?.errmsg || "Write failed",
+    });
+  }
+
+  if (studentIds.length) {
+    const rows = await Att.find({
+      teacherId: String(teacherId), classId: classIdStr, date: dateStr,
+      studentId: { $in: studentIds },
+    }).select("_id").lean();
+    for (const row of rows) saved.push(row._id);
   }
 
   return res.json({ success: true, message: `Attendance saved: ${saved.length}, failed: ${failed.length}`, saved, failed });

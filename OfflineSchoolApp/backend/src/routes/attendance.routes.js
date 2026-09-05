@@ -185,7 +185,10 @@ router.get("/students/me", async (req, res) => {
     if (status) query.status = status;
 
     const records = await StudentAttendance.find(query)
-      .sort({ date: -1, markedAt: -1 })
+      // _id last, as a tiebreaker: a register written in one batch shares
+      // a markedAt across all its rows, and without a unique final key the
+      // order of a day's marks is whatever the server happens to return.
+      .sort({ date: -1, markedAt: -1, _id: 1 })
       .lean();
 
     console.log(
@@ -354,7 +357,10 @@ router.get("/students", scopeToSelfForStudents, async (req, res) => {
     }
 
     const records = await StudentAttendance.find(query)
-      .sort({ date: -1, markedAt: -1 })
+      // _id last, as a tiebreaker: a register written in one batch shares
+      // a markedAt across all its rows, and without a unique final key the
+      // order of a day's marks is whatever the server happens to return.
+      .sort({ date: -1, markedAt: -1, _id: 1 })
       .lean();
 
     console.log(
@@ -419,8 +425,12 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
 
     const knownIds = new Set(knownStudents.map((s) => String(s._id)));
 
-    const saved  = [];
+    // A count, not a collection: the documents this used to accumulate were
+    // never read — the response and the log both asked only how many.
+    let savedCount = 0;
     const failed = [];
+    const ops    = [];
+    const opRows = [];
 
     for (const row of records) {
       if (!row.studentId || !validStatuses.includes(row.status)) {
@@ -435,9 +445,15 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
         continue;
       }
 
-      try {
-        const record = await StudentAttendance.findOneAndUpdate(
-          {
+      // Collected, not sent. Taking a register is the most frequent write
+      // in the app and this loop awaited one upsert per pupil, so a class
+      // of forty cost forty sequential round trips — forty times the link
+      // latency before the teacher gets an answer. They go as one write
+      // below. Each upsert is keyed on its natural identity and carries a
+      // derived _id, so batching changes nothing about what is stored.
+      ops.push({
+        updateOne: {
+          filter: {
             schoolId:  resolvedSchoolId,
             classId,
             subjectId: subjectId || null,
@@ -445,7 +461,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
             studentId: row.studentId,
             date:      resolvedDate,
           },
-          {
+          update: {
             $set: {
               periodId: resolvedPeriodId,
               markedBy: req.user?._id,
@@ -469,22 +485,46 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
               date:      resolvedDate,
             },
           },
-          { upsert: true, returnDocument: 'after' }
-        );
-        saved.push(record);
+          upsert: true,
+        },
+      });
+      opRows.push(row);
+    }
+
+    // One write for the register.
+    //
+    // Unordered, so a single bad row does not discard the rest of the
+    // class — and the rows that did fail are still reported individually,
+    // because writeErrors carry the index of the op that raised them and
+    // opRows maps that index back to the pupil.
+    let writeErrors = [];
+    if (ops.length) {
+      try {
+        await StudentAttendance.bulkWrite(ops, { ordered: false });
       } catch (e) {
-        failed.push({ ...row, reason: e.message });
+        writeErrors = e?.writeErrors ?? e?.result?.writeErrors ?? [];
+        if (!writeErrors.length) throw e;
       }
     }
 
+    for (const we of writeErrors) {
+      const idx = we.index ?? we.err?.index;
+      const row = opRows[idx];
+      failed.push({
+        ...(row ?? {}),
+        reason: we.errmsg || we.err?.errmsg || "Write failed",
+      });
+    }
+    savedCount = ops.length - writeErrors.length;
+
     console.log(
-      `📋 Bulk student attendance: saved=${saved.length} failed=${failed.length}` +
+      `📋 Bulk student attendance: saved=${savedCount} failed=${failed.length}` +
       ` [class=${classId}, period=${resolvedPeriodId || "day"}, date=${resolvedDate}]`
     );
 
     return res.status(201).json({
       success:       true,
-      saved:         saved.length,
+      saved:         savedCount,
       failed:        failed.length,
       failedRecords: failed,
     });
@@ -744,7 +784,10 @@ router.get("/teachers", staffRead, async (req, res) => {
     }
 
     const records = await TeacherAttendance.find(query)
-      .sort({ date: -1, markedAt: -1 })
+      // _id last, as a tiebreaker: a register written in one batch shares
+      // a markedAt across all its rows, and without a unique final key the
+      // order of a day's marks is whatever the server happens to return.
+      .sort({ date: -1, markedAt: -1, _id: 1 })
       .lean();
 
     console.log(
@@ -792,8 +835,10 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
 
     const knownIds = new Set(knownTeachers.map((t) => String(t._id)));
 
-    const saved  = [];
+    let savedCount = 0;
     const failed = [];
+    const ops    = [];
+    const opRows = [];
 
     for (const row of records) {
       if (!row.teacherId || !validStatuses.includes(row.status)) {
@@ -805,14 +850,17 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
         continue;
       }
 
-      try {
-        const record = await TeacherAttendance.findOneAndUpdate(
-          {
+      // As on the student register above: collected here, sent as one
+      // write below, so the cost is one round trip rather than one per
+      // member of staff.
+      ops.push({
+        updateOne: {
+          filter: {
             schoolId:  resolvedSchoolId,
             teacherId: row.teacherId,
             date:      resolvedDate,
           },
-          {
+          update: {
             $set: {
               markedBy:     req.user?._id,
               markedAt:     new Date(),
@@ -833,22 +881,40 @@ router.post("/teachers/bulk", adminOnly, async (req, res) => {
               date:      resolvedDate,
             },
           },
-          { upsert: true, returnDocument: 'after' }
-        );
-        saved.push(record);
+          upsert: true,
+        },
+      });
+      opRows.push(row);
+    }
+
+    let writeErrors = [];
+    if (ops.length) {
+      try {
+        await TeacherAttendance.bulkWrite(ops, { ordered: false });
       } catch (e) {
-        failed.push({ ...row, reason: e.message });
+        writeErrors = e?.writeErrors ?? e?.result?.writeErrors ?? [];
+        if (!writeErrors.length) throw e;
       }
     }
 
+    for (const we of writeErrors) {
+      const idx = we.index ?? we.err?.index;
+      const row = opRows[idx];
+      failed.push({
+        ...(row ?? {}),
+        reason: we.errmsg || we.err?.errmsg || "Write failed",
+      });
+    }
+    savedCount = ops.length - writeErrors.length;
+
     console.log(
-      `📋 Bulk teacher attendance: saved=${saved.length} failed=${failed.length}` +
+      `📋 Bulk teacher attendance: saved=${savedCount} failed=${failed.length}` +
       ` [date=${resolvedDate}]`
     );
 
     return res.status(201).json({
       success:       true,
-      saved:         saved.length,
+      saved:         savedCount,
       failed:        failed.length,
       failedRecords: failed,
     });

@@ -513,7 +513,10 @@ module.exports = [
       rows = rows.slice().sort((a, b) => {
         const byDate = String(b.date ?? "").localeCompare(String(a.date ?? ""));
         if (byDate !== 0) return byDate;
-        return String(b.markedAt ?? "").localeCompare(String(a.markedAt ?? ""));
+        const byMark = String(b.markedAt ?? "").localeCompare(String(a.markedAt ?? ""));
+        // Ties broken by _id, matching the server — see the note there.
+        if (byMark !== 0) return byMark;
+        return String(a._id ?? "").localeCompare(String(b._id ?? ""));
       });
 
       // `records` and `count` — this endpoint does not use the `data` key that

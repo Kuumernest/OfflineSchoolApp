@@ -1,6 +1,7 @@
 // backend/src/services/payroll.service.js
 "use strict";
 
+const { v4: uuidv4 }  = require("uuid");
 const Counter         = require("../db/models/Counter");
 const SalaryStructure = require("../db/models/SalaryStructure");
 const SalaryPayment   = require("../db/models/SalaryPayment");
@@ -35,14 +36,34 @@ const endOfMonth = (periodMonth) => {
  * a payslip — numbering one that is later discarded leaves a hole an auditor
  * will ask about.
  */
-const nextPayslipNo = async (schoolId, periodMonth) => {
+/**
+ * Reserve a contiguous block of payslip numbers in one round trip.
+ *
+ * Bumping the counter once per payslip meant confirming a run of sixty paid
+ * sixty round trips before a single row was written, and reversing one paid
+ * them again. A single $inc of the whole count yields the same numbers in
+ * the same order: the counter still only ever moves forward, and two runs
+ * confirming at once cannot be handed overlapping blocks — which is the
+ * property that mattered, and the reason this is a counter and not a
+ * COUNT(*) + 1.
+ */
+const reservePayslipNos = async (schoolId, periodMonth, count) => {
+  if (!count || count < 1) return [];
   const counter = await Counter.findOneAndUpdate(
     { _id: `payslipNo:${schoolId}:${periodMonth}` },
-    { $inc: { seq: 1 }, $setOnInsert: { schoolId } },
+    { $inc: { seq: count }, $setOnInsert: { schoolId } },
     { upsert: true, returnDocument: 'after' }
   );
-  return `PSL-${periodMonth}-${String(counter.seq).padStart(4, "0")}`;
+  // After the increment seq is the LAST number of the block.
+  const first = counter.seq - count + 1;
+  return Array.from(
+    { length: count },
+    (_, i) => `PSL-${periodMonth}-${String(first + i).padStart(4, "0")}`
+  );
 };
+
+const nextPayslipNo = async (schoolId, periodMonth) =>
+  (await reservePayslipNos(schoolId, periodMonth, 1))[0];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPUTING A PAYSLIP
@@ -201,15 +222,26 @@ const confirmRun = async ({ schoolId, runId, method, confirmedBy }) => {
     schoolId, runId, status: "draft", deletedAt: null,
   });
 
-  const now = new Date();
-  for (const p of drafts) {
-    p.payslipNo = await nextPayslipNo(schoolId, run.periodMonth);
-    p.status    = "paid";
-    p.method    = method ?? p.method;
-    p.paidAt    = now;
-    p.paidBy    = confirmedBy ?? null;
-    await p.save();
-  }
+  const now     = new Date();
+  const numbers = await reservePayslipNos(schoolId, run.periodMonth, drafts.length);
+
+  // Two round trips for the run, whatever its size: the block above, and
+  // this. It used to be two per payslip.
+  const ops = drafts.map((p, i) => ({
+    updateOne: {
+      filter: { _id: p._id },
+      update: {
+        $set: {
+          payslipNo: numbers[i],
+          status:    "paid",
+          method:    method ?? p.method,
+          paidAt:    now,
+          paidBy:    confirmedBy ?? null,
+        },
+      },
+    },
+  }));
+  if (ops.length) await SalaryPayment.bulkWrite(ops, { ordered: true });
 
   run.status      = "confirmed";
   run.confirmedBy = confirmedBy ?? null;
@@ -246,9 +278,18 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
     schoolId, runId, status: "paid", reversesId: null, deletedAt: null,
   });
 
-  const now = new Date();
-  for (const original of paid) {
-    const reversal = await SalaryPayment.create({
+  const now      = new Date();
+  const revNos   = await reservePayslipNos(schoolId, run.periodMonth, paid.length);
+  // The reversal ids are settled here rather than by the schema default,
+  // because each original has to be pointed at its reversal in the same
+  // batch that creates them.
+  const revIds   = paid.map(() => uuidv4());
+  const reversals = [];
+  const originalOps = [];
+
+  paid.forEach((original, i) => {
+    reversals.push({
+      _id:             revIds[i],
       schoolId,
       userId:          original.userId,
       // Deliberately not attached to the run: the run is being closed out, and
@@ -265,18 +306,32 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
       net:             -original.net,
       status:          "paid",
       method:          original.method,
-      payslipNo:       await nextPayslipNo(schoolId, original.periodMonth),
+      payslipNo:       revNos[i],
       paidAt:          now,
       paidBy:          reversedBy ?? null,
       reversesId:      String(original._id),
       reversalReason:  reason,
     });
 
-    original.reversedById   = String(reversal._id);
-    original.status         = "reversed";
-    original.reversalReason = reason;
-    await original.save();
-  }
+    originalOps.push({
+      updateOne: {
+        filter: { _id: original._id },
+        update: {
+          $set: {
+            reversedById:   revIds[i],
+            status:         "reversed",
+            reversalReason: reason,
+          },
+        },
+      },
+    });
+  });
+
+  // The reversals first: an original pointing at a row that does not exist
+  // yet is the one ordering that would be wrong to leave behind if the
+  // second write failed.
+  if (reversals.length)   await SalaryPayment.insertMany(reversals, { ordered: true });
+  if (originalOps.length) await SalaryPayment.bulkWrite(originalOps, { ordered: false });
 
   run.status         = "reversed";
   run.reversedBy     = reversedBy ?? null;
