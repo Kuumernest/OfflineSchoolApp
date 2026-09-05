@@ -125,6 +125,34 @@ export async function createSalaryStructure(payload: {
 }
 
 /**
+ * Correct the salary currently in force.
+ *
+ * For a raise, or an allowance that starts next month, POST a new structure —
+ * that is what effective dating is for, and it is what keeps an old payslip
+ * reproducible. This is for the figure entered wrong this morning, or the
+ * deduction somebody forgot, before any payroll has run against it. The server
+ * refuses anything a payslip already references (409 STRUCTURE_IN_USE) or that
+ * has been superseded (409 STRUCTURE_SUPERSEDED).
+ *
+ * Every field is optional: whatever is left out keeps the value already stored,
+ * so adding one deduction cannot silently blank the allowances.
+ */
+export async function updateSalaryStructure(
+  id: string,
+  payload: {
+    schoolId:       string;
+    payType?:       PayType;
+    baseAmount?:    number;
+    allowances?:    SalaryComponent[];
+    deductions?:    SalaryComponent[];
+    effectiveFrom?: string;
+  },
+): Promise<SalaryStructure> {
+  const { data } = await api.patch(`${BASE}/salary-structures/${id}`, payload);
+  return unwrap<SalaryStructure>(data);
+}
+
+/**
  * The hours each hourly teacher actually worked in a month, as payroll will
  * read them — shown before a run is generated so a mis-marked register can be
  * fixed before it becomes a payslip.

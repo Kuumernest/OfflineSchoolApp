@@ -10,7 +10,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import { Plus, Trash2, Wallet } from "lucide-react";
+import { Plus, Trash2, Wallet, Pencil } from "lucide-react";
 
 import { useUser }          from "@/store/auth.store";
 import { PageHeader }       from "@/components/ui/PageHeader";
@@ -27,9 +27,9 @@ import { useFormat }        from "@/i18n/format";
 import { getErrorMessage }  from "@/lib/axios";
 import { usePermission }    from "@/lib/permissions";
 import {
-  fetchStaff, fetchSalaryStructures, createSalaryStructure,
+  fetchStaff, fetchSalaryStructures, createSalaryStructure, updateSalaryStructure,
 } from "@/services/finance.service";
-import type { SalaryComponent, PayType } from "@/types/finance.types";
+import type { SalaryComponent, PayType, SalaryStructure } from "@/types/finance.types";
 
 const emptyComponent = (): SalaryComponent => ({ code: "", label: "", amount: 0 });
 
@@ -45,6 +45,10 @@ export default function SalariesPage() {
   const schoolId = useUser()?.schoolId ?? "";
 
   const [open, setOpen] = useState(false);
+  // The structure being corrected, or null when setting a new one. The
+  // difference is not cosmetic: an edit rewrites the row in force, a new one
+  // closes it and opens the next, and only the second is a raise.
+  const [editing, setEditing] = useState<SalaryStructure | null>(null);
   const [form, setForm] = useState({
     userId:        "",
     payType:       "monthly" as PayType,
@@ -66,30 +70,81 @@ export default function SalariesPage() {
     enabled:  !!schoolId,
   });
 
+  const blankForm = () => ({
+    userId: "", payType: "monthly" as PayType, baseAmount: "",
+    allowances: [] as SalaryComponent[], deductions: [] as SalaryComponent[],
+    effectiveFrom: todayISO(),
+  });
+
+  const openNew = () => {
+    setEditing(null);
+    setForm(blankForm());
+    setOpen(true);
+  };
+
+  /**
+   * Open the dialog on an existing salary, filled in.
+   *
+   * Filled in, because the request this becomes only carries what is on the
+   * form — so an empty dialog would turn "add one deduction" into "replace the
+   * whole salary with one deduction and nothing else".
+   */
+  const openEdit = (s: SalaryStructure) => {
+    setEditing(s);
+    setForm({
+      userId:        s.userId,
+      payType:       (s.payType ?? "monthly") as PayType,
+      baseAmount:    String(s.baseAmount),
+      allowances:    s.allowances.map((c) => ({ ...c })),
+      deductions:    s.deductions.map((c) => ({ ...c })),
+      effectiveFrom: String(s.effectiveFrom).slice(0, 10),
+    });
+    setOpen(true);
+  };
+
   const saveMutation = useMutation({
-    mutationFn: () =>
-      createSalaryStructure({
+    mutationFn: () => {
+      // Blank rows are the natural residue of an "add row" button; drop them
+      // rather than making the server reject the whole submission.
+      const allowances = form.allowances.filter((c) => c.code.trim() && c.label.trim());
+      const deductions = form.deductions.filter((c) => c.code.trim() && c.label.trim());
+
+      if (editing) {
+        return updateSalaryStructure(editing._id, {
+          schoolId,
+          payType:       form.payType,
+          baseAmount:    Number(form.baseAmount),
+          allowances,
+          deductions,
+          effectiveFrom: form.effectiveFrom,
+        });
+      }
+
+      return createSalaryStructure({
         schoolId,
         userId:     form.userId,
         payType:    form.payType,
         baseAmount: Number(form.baseAmount),
-        // Blank rows are the natural residue of an "add row" button; drop them
-        // rather than making the server reject the whole submission.
-        allowances: form.allowances.filter((c) => c.code.trim() && c.label.trim()),
-        deductions: form.deductions.filter((c) => c.code.trim() && c.label.trim()),
+        allowances,
+        deductions,
         effectiveFrom: form.effectiveFrom,
-      }),
+      });
+    },
     onSuccess: () => {
       setOpen(false);
-      setForm({
-        userId: "", payType: "monthly", baseAmount: "",
-        allowances: [], deductions: [],
-        effectiveFrom: todayISO(),
-      });
+      setEditing(null);
+      setForm(blankForm());
       void qc.invalidateQueries({ queryKey: ["finance"] });
     },
     onError: (err) =>
-      toast({ kind: "error", title: t("salaries.setSalary"), message: getErrorMessage(err) }),
+      toast({
+        kind: "error",
+        title: editing ? t("salaries.editSalary") : t("salaries.setSalary"),
+        // The server explains the two refusals it can give — already paid, or
+        // superseded — and both name the thing to do instead. Passing that
+        // through beats a generic failure the bursar cannot act on.
+        message: getErrorMessage(err),
+      }),
   });
 
   if (structuresQ.isLoading) return <PageSpinner />;
@@ -190,7 +245,7 @@ export default function SalariesPage() {
         actions={
           <Button
             icon={<Wallet className="h-4 w-4" />}
-            onClick={() => setOpen(true)}
+            onClick={openNew}
             disabled={staff.length === 0 || !canSetSalary}
           >
             {t("salaries.setSalary")}
@@ -211,6 +266,7 @@ export default function SalariesPage() {
                 <Th numeric>{t("salaries.deductions")}</Th>
                 <Th numeric>{t("salaries.net")}</Th>
                 <Th>{t("salaries.effectiveFrom")}</Th>
+                <Th />
               </Tr>
             </THead>
             <TBody>
@@ -236,6 +292,21 @@ export default function SalariesPage() {
                       {fmt.money(s.baseAmount + a - d)}
                     </Td>
                     <Td className="text-ink-muted">{fmt.dateShort(s.effectiveFrom)}</Td>
+                    <Td numeric>
+                      {/* Only on the row in force. A superseded structure is
+                          closed history and the server refuses to edit it, so
+                          offering the button would be offering a 409. */}
+                      {canSetSalary && !s.effectiveTo && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          icon={<Pencil className="h-3.5 w-3.5" />}
+                          onClick={() => openEdit(s)}
+                        >
+                          {t("common.edit")}
+                        </Button>
+                      )}
+                    </Td>
                   </Tr>
                 );
               })}
@@ -244,7 +315,12 @@ export default function SalariesPage() {
         )}
       </Card>
 
-      <Modal open={open} onClose={() => setOpen(false)} title={t("salaries.setSalary")} size="lg">
+      <Modal
+        open={open}
+        onClose={() => { setOpen(false); setEditing(null); }}
+        title={editing ? t("salaries.editSalary") : t("salaries.setSalary")}
+        size="lg"
+      >
         <form
           className="space-y-5"
           onSubmit={(e) => {
@@ -259,12 +335,16 @@ export default function SalariesPage() {
                 onChange={(e) => setForm((f) => ({ ...f, userId: e.target.value }))}
                 placeholder={t("salaries.staff")}
                 options={staff.map((s) => ({ value: s._id, label: s.name }))}
+                /* Locked while correcting: the endpoint takes no userId, so
+                   changing it here would move nothing and say it had. Moving a
+                   salary to somebody else is a new salary for them. */
+                disabled={Boolean(editing)}
               />
             </FormField>
             <FormField
               label={t("salaries.effectiveFrom")}
               required
-              hint={t("salaries.replaceWarning")}
+              hint={editing ? t("salaries.editHint") : t("salaries.replaceWarning")}
             >
               <Input
                 type="date"

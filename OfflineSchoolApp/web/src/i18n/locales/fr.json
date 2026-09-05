@@ -1941,7 +1941,9 @@
     "baseHourly": "Taux horaire",
     "hourlyHint": "XAF entiers par heure. La paie de chaque mois est calculée à partir des heures de présence réelles de l'enseignant (pointage d'arrivée/départ du personnel).",
     "hourlyPreviewNote": "Paie horaire : ces totaux dépendent des heures travaillées. La base du bulletin est le taux × les heures enregistrées dans les pointages du mois.",
-    "perHour": "/h"
+    "perHour": "/h",
+    "editSalary": "Corriger ce salaire",
+    "editHint": "Corrige le salaire en vigueur au lieu de le remplacer. Possible uniquement tant qu'aucun bulletin n'a été payé sur cette base."
   },
   "payroll": {
     "title": "Paie",

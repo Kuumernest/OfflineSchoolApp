@@ -385,6 +385,48 @@ router.get("/salary-structures", canReadPayroll, asyncHandler(async (req, res) =
 // adminOnly: what a member of staff is owed is the school's decision. The
 // bursar reads the structure, calculates against it, and pays it — the three
 // steps below in this router — but does not get to set the figure.
+/**
+ * The parts of a salary structure a client may state, validated.
+ *
+ * Shared by POST and PATCH deliberately. Two copies of "an hourly rate may
+ * not be zero" is one copy away from a structure that can be created legally
+ * and then edited into a state the creator would have refused.
+ *
+ * @returns {{ error?: string, code?: string, fields?: object }}
+ */
+const readStructureFields = (body) => {
+  // Absent means monthly: every client that predates hourly pay, and every
+  // structure written before the field existed, must keep their meaning.
+  const payType = body.payType ?? "monthly";
+  if (!["monthly", "hourly"].includes(payType)) {
+    return { error: "payType must be \"monthly\" or \"hourly\"", code: "INVALID_PAY_TYPE" };
+  }
+
+  const baseAmount = asWholeAmount(body.baseAmount);
+  if (baseAmount === null || baseAmount < 0) {
+    return { error: "baseAmount must be a whole number of XAF", code: "INVALID_AMOUNT" };
+  }
+  // An hourly rate of zero would silently pay nobody; the same figure on a
+  // monthly structure is legal (a volunteer on allowances only).
+  if (payType === "hourly" && baseAmount <= 0) {
+    return { error: "An hourly rate must be a positive whole number of XAF", code: "INVALID_AMOUNT" };
+  }
+
+  const allow = cleanComponents(body.allowances);
+  if (allow.error) return { error: allow.error, code: "INVALID_AMOUNT" };
+  const deduct = cleanComponents(body.deductions);
+  if (deduct.error) return { error: deduct.error, code: "INVALID_AMOUNT" };
+
+  return {
+    fields: {
+      payType,
+      baseAmount,
+      allowances: allow.rows,
+      deductions: deduct.rows,
+    },
+  };
+};
+
 router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   if (!schoolId) return bad(res, "schoolId is required");
@@ -393,27 +435,9 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
   if (!userId)        return bad(res, "userId is required");
   if (!effectiveFrom) return bad(res, "effectiveFrom is required");
 
-  // Absent means monthly: every client that predates hourly pay, and every
-  // structure written before the field existed, must keep their meaning.
-  const payType = req.body.payType ?? "monthly";
-  if (!["monthly", "hourly"].includes(payType)) {
-    return bad(res, "payType must be \"monthly\" or \"hourly\"", "INVALID_PAY_TYPE");
-  }
-
-  const baseAmount = asWholeAmount(req.body.baseAmount);
-  if (baseAmount === null || baseAmount < 0) {
-    return bad(res, "baseAmount must be a whole number of XAF", "INVALID_AMOUNT");
-  }
-  // An hourly rate of zero would silently pay nobody; the same figure on a
-  // monthly structure is legal (a volunteer on allowances only).
-  if (payType === "hourly" && baseAmount <= 0) {
-    return bad(res, "An hourly rate must be a positive whole number of XAF", "INVALID_AMOUNT");
-  }
-
-  const allow = cleanComponents(req.body.allowances);
-  if (allow.error) return bad(res, allow.error, "INVALID_AMOUNT");
-  const deduct = cleanComponents(req.body.deductions);
-  if (deduct.error) return bad(res, deduct.error, "INVALID_AMOUNT");
+  const parsed = readStructureFields(req.body);
+  if (parsed.error) return bad(res, parsed.error, parsed.code);
+  const { payType, baseAmount, allowances, deductions } = parsed.fields;
 
   const staff = await User.findOne({ _id: userId, schoolId }).select("_id").lean();
   if (!staff) {
@@ -470,13 +494,111 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
     schoolId, userId,
     payType,
     baseAmount,
-    allowances:    allow.rows,
-    deductions:    deduct.rows,
+    allowances,
+    deductions,
     effectiveFrom: from,
     createdBy:     req.user?._id ? String(req.user._id) : null,
   });
 
   return res.status(201).json({ success: true, data: row });
+}));
+
+// PATCH /finance/salary-structures/:id
+//
+// Correct the salary that is in force. For adding an allowance NEXT month,
+// POST a new one — that is what effective dating is for.
+//
+// ── Why this is not simply an update ────────────────────────────────────────
+//
+// A salary structure is effective-dated history, not a record of the current
+// figure. A raise closes the old row and opens a new one precisely so that a
+// payslip issued in March still reproduces March's numbers in December. Any
+// edit that can reach a row a payslip was computed from would rewrite what
+// somebody was paid, after they were paid it.
+//
+// So two guards, and they are the whole point of this endpoint:
+//
+//   • the row must still be in force (effectiveTo null). A superseded version
+//     is closed history and is never editable.
+//   • no payslip may reference it. A structure that has produced a payslip is
+//     evidence, and the answer is a new version from a new date.
+//
+// What is left is the case this exists for: a structure entered today with the
+// wrong figure, or one that needs the allowance somebody forgot, before any
+// payroll has run against it.
+router.patch("/salary-structures/:id", canSetSalary, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const row = await SalaryStructure.findOne({
+    _id: String(req.params.id), schoolId, deletedAt: null,
+  });
+  if (!row) {
+    return res.status(404).json({
+      success: false, code: "STRUCTURE_NOT_FOUND",
+      message: "No salary structure with that id in this school",
+    });
+  }
+
+  if (row.effectiveTo) {
+    return res.status(409).json({
+      success: false, code: "STRUCTURE_SUPERSEDED",
+      message: "That salary structure has already been replaced. Set a new one instead.",
+    });
+  }
+
+  // deletedAt: null on the payslip too — a reversed or voided run must not
+  // freeze a structure for ever.
+  const usedBy = await SalaryPayment.countDocuments({
+    schoolId, structureId: String(row._id), deletedAt: null,
+  });
+  if (usedBy > 0) {
+    return res.status(409).json({
+      success: false, code: "STRUCTURE_IN_USE",
+      message:
+        `This salary has already been paid on ${usedBy} payslip(s). ` +
+        "Set a new salary from a new date instead, so the earlier payslips keep their figures.",
+      payslips: usedBy,
+    });
+  }
+
+  const parsed = readStructureFields({
+    // Absent fields keep what is stored, so a client that only wants to add a
+    // deduction need not resend the base amount and risk mistyping it.
+    payType:    req.body.payType    ?? row.payType,
+    baseAmount: req.body.baseAmount ?? row.baseAmount,
+    allowances: req.body.allowances ?? row.allowances,
+    deductions: req.body.deductions ?? row.deductions,
+  });
+  if (parsed.error) return bad(res, parsed.error, parsed.code);
+
+  Object.assign(row, parsed.fields);
+
+  // The start date may move while nothing has been paid against it, but it
+  // may not cross the row that precedes it — two structures in force at once
+  // is a figure payroll would have to choose between.
+  if (req.body.effectiveFrom) {
+    const from = new Date(req.body.effectiveFrom);
+    if (Number.isNaN(from.getTime())) {
+      return bad(res, "effectiveFrom is not a date", "INVALID_DATE");
+    }
+    const previous = await SalaryStructure.findOne({
+      schoolId, userId: row.userId, deletedAt: null,
+      _id: { $ne: String(row._id) },
+      effectiveFrom: { $lt: from },
+    }).sort({ effectiveFrom: -1 }).select("effectiveTo").lean();
+
+    if (previous && previous.effectiveTo && new Date(previous.effectiveTo) >= from) {
+      return res.status(409).json({
+        success: false, code: "OVERLAPPING_STRUCTURE",
+        message: "That date overlaps the salary before it.",
+      });
+    }
+    row.effectiveFrom = from;
+  }
+
+  await row.save();
+  return res.json({ success: true, data: row.toObject() });
 }));
 
 // GET /finance/payroll/hours-preview?periodMonth=YYYY-MM

@@ -1941,7 +1941,9 @@
     "baseHourly": "Hourly rate",
     "hourlyHint": "Whole XAF per hour. Payroll computes each month's pay from the hours the teacher was actually present (staff attendance check-in/check-out).",
     "hourlyPreviewNote": "Hourly pay: these totals depend on the hours worked. The payslip's base is the rate × the hours recorded in staff attendance for that month.",
-    "perHour": "/h"
+    "perHour": "/h",
+    "editSalary": "Correct this salary",
+    "editHint": "Corrects the salary in force rather than replacing it. Only possible until a payslip has been paid against it."
   },
   "payroll": {
     "title": "Payroll",
