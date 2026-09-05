@@ -152,6 +152,30 @@ const checkLocales = () => {
   console.log(`       ${enKeys.size} keys, 2 languages`);
 };
 
+/**
+ * Load an ESM module from src/ into this CommonJS script.
+ *
+ * supportsStaticESM: false is what tells preset-expo to emit require/exports
+ * instead of import/export. Without it these modules cannot be checked at all,
+ * which is how they came to be unchecked in the first place.
+ */
+const loadModule = (relPath) => {
+  try {
+    const { code } = babel.transformFileSync(path.join(ROOT, relPath), {
+      presets: [require.resolve("babel-preset-expo")],
+      caller:  { name: "check", supportsStaticESM: false },
+      babelrc: false,
+      configFile: false,
+    });
+    const mod = { exports: {} };
+    // eslint-disable-next-line no-new-func
+    new Function("module", "exports", "require", code)(mod, mod.exports, require);
+    return mod.exports;
+  } catch (err) {
+    bad(`${relPath} loads`, err.message);
+    return null;
+  }
+};
 // ─────────────────────────────────────────────────────────────────────────────
 // LINK QUALITY
 //
@@ -164,25 +188,8 @@ const checkLinkQuality = () => {
   console.log("");
   console.log("LINK QUALITY");
 
-  // The module is ESM and this file is CommonJS. supportsStaticESM: false is
-  // what tells preset-expo to hand back require/exports instead.
-  const srcPath = path.join(ROOT, "src/services/linkQuality.js");
-  let LQ;
-  try {
-    const { code } = babel.transformFileSync(srcPath, {
-      presets: [require.resolve("babel-preset-expo")],
-      caller:  { name: "check", supportsStaticESM: false },
-      babelrc: false,
-      configFile: false,
-    });
-    const mod = { exports: {} };
-    // eslint-disable-next-line no-new-func
-    new Function("module", "exports", "require", code)(mod, mod.exports, require);
-    LQ = mod.exports;
-  } catch (err) {
-    bad("linkQuality loads", err.message);
-    return;
-  }
+  const LQ = loadModule("src/services/linkQuality.js");
+  if (!LQ) return;
   ok("linkQuality loads");
 
   const near = (a, b, tol = 0.001) => Math.abs(a - b) <= tol;
@@ -333,9 +340,130 @@ const checkLinkQuality = () => {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SYNC POLICY
+//
+// When the periodic sync runs and how hard one request tries. These are the
+// two dials that can lose or duplicate work rather than merely waste time,
+// and SyncManager itself cannot be constructed off a device — it wants
+// NetInfo, SQLite and AppState first. So the arithmetic lives apart from it
+// and is asserted on here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const checkSyncPolicy = () => {
+  console.log("");
+  console.log("SYNC POLICY");
+
+  const P = loadModule("src/services/syncPolicy.js");
+  if (!P) return;
+  ok("syncPolicy loads");
+
+  const BASE = P.BASE_INTERVAL_MS;
+
+  // A healthy link ticks at the interval it always did. If this moved, every
+  // school's data and battery use changed the day this landed.
+  if (P.nextInterval({ consecutiveFailures: 0 }) === BASE) ok("a healthy link keeps the base interval");
+  else bad("a healthy link keeps the base interval", String(P.nextInterval({ consecutiveFailures: 0 })));
+
+  // Never faster than base, whatever is passed. Ticking more often wins
+  // nothing — the reconnect and foreground triggers are what make the app
+  // feel live — and risks a cycle starting before the last one ended.
+  const faster = [0, -1, -99].map((f) => P.nextInterval({ consecutiveFailures: f }));
+  if (faster.every((v) => v >= BASE)) ok("the interval never goes below base");
+  else bad("the interval never goes below base", JSON.stringify(faster));
+
+  // Failures back it off, monotonically. This is the death-spiral guard: a
+  // link that is down must be tried LESS often, not the same amount.
+  const ramp = [0, 1, 2, 3, 4, 5].map((f) => P.nextInterval({ consecutiveFailures: f }));
+  const rising = ramp.every((v, i) => i === 0 || v >= ramp[i - 1]);
+  if (rising && ramp[3] > ramp[0]) ok(`failures back the interval off (${ramp.map((v) => v / 1000 + "s").join(" → ")})`);
+  else bad("failures back the interval off", JSON.stringify(ramp));
+
+  // But it is capped, or a device that was offline overnight would not look
+  // again for days.
+  const capped = P.nextInterval({ consecutiveFailures: 999 });
+  if (capped === P.MAX_INTERVAL_MS) ok(`the backoff is capped (${capped / 60000} min)`);
+  else bad("the backoff is capped", String(capped));
+
+  // Recovery is immediate, not a slow climb back down. SyncManager zeroes the
+  // counter on a completed cycle, so the assertion here is that going from
+  // "several failures" to "none" lands straight back on base rather than
+  // stepping — a teacher waiting for a register to upload after an outage is
+  // the exact moment a gradual recovery would be felt.
+  const backedOff = P.nextInterval({ consecutiveFailures: 4, linkFactor: 1 });
+  const recovered = P.nextInterval({ consecutiveFailures: 0, linkFactor: 1 });
+  if (backedOff > BASE && recovered === BASE) {
+    ok(`recovery is one step, not a climb (${backedOff / 1000}s → ${recovered / 1000}s)`);
+  } else {
+    bad("recovery is one step, not a climb", `${backedOff} → ${recovered}`);
+  }
+
+  // ── Retries ───────────────────────────────────────────────────────────────
+
+  // Never zero. Zero attempts is not a cautious sync, it is no sync, and the
+  // outbox would never drain again.
+  const budgets = [
+    P.retryBudget({ consecutiveFailures: 0,   linkFactor: 1 }),
+    P.retryBudget({ consecutiveFailures: 9,   linkFactor: 6 }),
+    P.retryBudget({ consecutiveFailures: -1,  linkFactor: 0 }),
+    P.retryBudget({}),
+  ];
+  if (budgets.every((b) => b >= 1)) ok("there is always at least one attempt");
+  else bad("there is always at least one attempt", JSON.stringify(budgets));
+
+  // A link that has failed twice running is down, not flaky. A second attempt
+  // buys nothing and holds the sync lock for twice as long; the reconnect
+  // trigger is what handles a link that comes back.
+  const healthy = P.retryBudget({ consecutiveFailures: 0, linkFactor: 1 });
+  const down    = P.retryBudget({ consecutiveFailures: 2, linkFactor: 1 });
+  if (down < healthy && down === 1) ok(`a down link stops retrying inside the cycle (${healthy} → ${down})`);
+  else bad("a down link stops retrying inside the cycle", `${healthy} → ${down}`);
+
+  // A measurably slow link tries less hard than a fast one, because each
+  // attempt now costs a longer timeout.
+  const struggling = P.retryBudget({ consecutiveFailures: 0, linkFactor: 4 });
+  if (struggling < healthy) ok(`a struggling link tries less hard (${healthy} → ${struggling})`);
+  else bad("a struggling link tries less hard", `${healthy} → ${struggling}`);
+
+  // Retry delay doubles and is capped inside the interval.
+  const delays = [1, 2, 3, 9].map((a) => P.retryDelay({ attempt: a }));
+  const growing = delays.every((v, i) => i === 0 || v >= delays[i - 1]);
+  if (growing && delays[3] <= 30_000) ok(`retry delay doubles and caps (${delays.join(", ")} ms)`);
+  else bad("retry delay doubles and caps", JSON.stringify(delays));
+
+  // ── The two dials together ────────────────────────────────────────────────
+
+  // The property that matters: a cycle must not outlive the tick that starts
+  // the next one. When it does, cycles overlap and the sync lock is left to
+  // paper over it — which is exactly the state the cursor spiral lived in.
+  //
+  // Checked at the worst case the timeout ceiling allows, for each health.
+  const cases = [
+    { name: "healthy",    failures: 0, factor: 1 },
+    { name: "struggling", failures: 0, factor: 4 },
+    { name: "at the ceiling", failures: 0, factor: 6 },
+    { name: "down",       failures: 2, factor: 6 },
+    { name: "long outage", failures: 9, factor: 6 },
+  ];
+  const overlaps = [];
+  const shown    = [];
+  for (const c of cases) {
+    const attempts = P.retryBudget({ consecutiveFailures: c.failures, linkFactor: c.factor });
+    const worst    = P.worstCaseCycleMs({
+      attempts,
+      timeoutCeilingMs: P.effectiveTimeoutMs(c.factor),
+    });
+    const interval = P.nextInterval({ consecutiveFailures: c.failures, linkFactor: c.factor });
+    shown.push(`${c.name} ${Math.round(worst / 1000)}s/${Math.round(interval / 1000)}s`);
+    if (worst > interval) overlaps.push(`${c.name}: ${Math.round(worst / 1000)}s of work vs a ${Math.round(interval / 1000)}s tick`);
+  }
+  if (!overlaps.length) ok(`no state schedules a cycle past its own tick (${shown.join(", ")})`);
+  else bad("no health state schedules a cycle longer than its own interval", overlaps.join("\n"));
+};
 checkParse();
 checkLocales();
 checkLinkQuality();
+checkSyncPolicy();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);

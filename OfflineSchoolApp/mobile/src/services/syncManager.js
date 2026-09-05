@@ -17,6 +17,7 @@ import {
 import { ensureSchemaColumns }          from "../db/schema";
 import * as SyncProgress               from "./syncProgress";
 import * as LinkQuality                from "./linkQuality";
+import * as SyncPolicy                 from "./syncPolicy";
 import { generateUUID }                 from "../utils/idHelpers";
 import {
   isAuthenticated,
@@ -307,7 +308,11 @@ class SyncManagerClass {
     // gave up — longer than the old interval, so cycles overlapped and the
     // lock rejected the next one. A link that fails twice in a row is
     // reliably down; the reconnect trigger will fire the moment it is not.
-    this.MAX_RETRIES           = 2;
+    // Syncs that have THROWN in a row. Not skips: offline, signed out and
+    // lock-held all return early without learning anything about the link,
+    // and counting them would back the interval off for a device that simply
+    // has not been used.
+    this._consecutiveFailures  = 0;
     this.RETRY_DELAY_MS        = 1_000;
     // School details barely change; re-reading them every sync cycle meant
     // re-downloading a ~160 KB base64 logo every 30 seconds.
@@ -319,8 +324,22 @@ class SyncManagerClass {
   // SECTION 1 — RETRY HELPER
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * How many attempts one request gets, for the link in front of us now.
+   *
+   * Read per call rather than fixed at construction: a device that was on
+   * wifi when the app launched can be on a village tower by the afternoon,
+   * and two attempts was a number chosen for neither.
+   */
+  _maxAttempts() {
+    return SyncPolicy.retryBudget({
+      consecutiveFailures: this._consecutiveFailures,
+      linkFactor:          LinkQuality.currentFactor(),
+    });
+  }
+
   async _withRetry(label, fn, attempt = 1) {
-    setRetryContext(attempt, this.MAX_RETRIES);
+    setRetryContext(attempt, this._maxAttempts());
     try {
       const result = await fn();
       clearRetryContext();
@@ -350,10 +369,10 @@ class SyncManagerClass {
       }
 
       const shouldRetry =
-        (isNetErr || isServerErr || isTimeout) && attempt < this.MAX_RETRIES;
+        (isNetErr || isServerErr || isTimeout) && attempt < this._maxAttempts();
 
       if (shouldRetry) {
-        const base   = this.RETRY_DELAY_MS * Math.pow(2, attempt - 1);
+        const base   = SyncPolicy.retryDelay({ attempt, base: this.RETRY_DELAY_MS });
         const jitter = Math.random() * 300;
         const delay  = Math.min(base + jitter, 8_000);
         console.warn(
@@ -465,7 +484,7 @@ class SyncManagerClass {
 
   async initialize() {
     if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
-    if (this.syncInterval)  { clearInterval(this.syncInterval); this.syncInterval  = null; }
+    if (this.syncInterval)  { clearTimeout(this.syncInterval);  this.syncInterval  = null; }
 
     this._destroyed            = false;
     this.isSyncing             = false;
@@ -522,7 +541,7 @@ class SyncManagerClass {
   destroy() {
     if (this._destroyed) return;
     if (this._initTimeout) { clearTimeout(this._initTimeout);  this._initTimeout = null; }
-    if (this.syncInterval)  { clearInterval(this.syncInterval); this.syncInterval  = null; }
+    if (this.syncInterval)  { clearTimeout(this.syncInterval);  this.syncInterval  = null; }
     this._netUnsubscribe?.();
     this._netUnsubscribe = null;
     this._appStateSub?.remove?.();
@@ -538,14 +557,47 @@ class SyncManagerClass {
   startAutoSync() {
     if (this._destroyed) return;
     if (this._initTimeout) clearTimeout(this._initTimeout);
-    if (this.syncInterval) clearInterval(this.syncInterval);
+    if (this.syncInterval) clearTimeout(this.syncInterval);
 
     this._initTimeout = setTimeout(() => {
       if (!this._destroyed) this.syncAll({ force: true }).catch(console.warn);
     }, 2_000);
-    this.syncInterval = setInterval(() => {
-      if (!this._destroyed) this.syncAll().catch(console.warn);
-    }, this.SYNC_INTERVAL_MS);
+
+    this._scheduleTick();
+  }
+
+  /**
+   * Arm the next periodic tick.
+   *
+   * A self-rescheduling timeout rather than setInterval, because the delay is
+   * no longer a constant — it stretches when the link is failing or slow, so
+   * that a cycle is never started while the last one is still working.
+   *
+   * The reschedule is in a finally. That is the whole risk of this shape: an
+   * interval keeps firing whatever happens inside it, while a chain of
+   * timeouts stops forever at the first throw that escapes. syncAll already
+   * catches its own errors, and this catches them again — belt and braces,
+   * because the failure mode is an app that quietly never syncs again.
+   */
+  _scheduleTick() {
+    if (this._destroyed) return;
+    if (this.syncInterval) { clearTimeout(this.syncInterval); this.syncInterval = null; }
+
+    const delay = SyncPolicy.nextInterval({
+      base:                this.SYNC_INTERVAL_MS,
+      consecutiveFailures: this._consecutiveFailures,
+      linkFactor:          LinkQuality.currentFactor(),
+    });
+
+    this.syncInterval = setTimeout(async () => {
+      try {
+        if (!this._destroyed) await this.syncAll();
+      } catch (err) {
+        console.warn("[SyncManager] tick failed:", err?.message);
+      } finally {
+        this._scheduleTick();
+      }
+    }, delay);
   }
 
   /**
@@ -1131,8 +1183,13 @@ class SyncManagerClass {
       await this.syncQuizData();
 
       console.log("[SyncManager] Sync completed at", this.lastSync);
+      // A completed cycle clears the backoff outright. No slow climb back
+      // down: the first good sync after an outage is exactly when somebody is
+      // waiting for a register to leave the device.
+      this._consecutiveFailures = 0;
     } catch (err) {
       console.warn("[SyncManager] Sync incomplete:", err.message);
+      this._consecutiveFailures += 1;
     } finally {
       this.isSyncing = false;
       // In the finally, so an aborted or failed sync clears the bar too.
