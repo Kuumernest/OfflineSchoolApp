@@ -5,6 +5,7 @@ import type {
   Expense,
   SalaryStructure,
   SalaryComponent,
+  PayType,
   PayrollRun,
   PayrollDetail,
   StaffRef,
@@ -113,6 +114,7 @@ export async function fetchSalaryStructures(
 export async function createSalaryStructure(payload: {
   schoolId:      string;
   userId:        string;
+  payType:       PayType;
   baseAmount:    number;
   allowances:    SalaryComponent[];
   deductions:    SalaryComponent[];
@@ -120,6 +122,29 @@ export async function createSalaryStructure(payload: {
 }): Promise<SalaryStructure> {
   const { data } = await api.post(`${BASE}/salary-structures`, payload);
   return unwrap<SalaryStructure>(data);
+}
+
+/**
+ * The hours each hourly teacher actually worked in a month, as payroll will
+ * read them — shown before a run is generated so a mis-marked register can be
+ * fixed before it becomes a payslip.
+ */
+export interface HoursPreviewRow {
+  userId:       string;
+  hourlyRate:   number;
+  hours:        number;
+  daysWorked:   number;
+  estimatedPay: number;
+}
+
+export async function fetchHoursPreview(
+  schoolId: string,
+  periodMonth: string
+): Promise<HoursPreviewRow[]> {
+  const { data } = await api.get(
+    `${BASE}/payroll/hours-preview${qs({ schoolId, periodMonth })}`
+  );
+  return unwrap<HoursPreviewRow[]>(data) ?? [];
 }
 
 // ─── Payroll ──────────────────────────────────────────────────────────────────

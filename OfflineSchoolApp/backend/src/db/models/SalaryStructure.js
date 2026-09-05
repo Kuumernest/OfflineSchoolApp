@@ -40,6 +40,23 @@ const salaryStructureSchema = new mongoose.Schema(
     /** The staff User this pays. */
     userId:   { type: String, required: true, index: true },
 
+    /**
+     * How baseAmount is read.
+     *
+     *   "monthly" — baseAmount is the fixed amount owed for a month. This is
+     *               every row written before the field existed, hence the
+     *               default.
+     *   "hourly"  — baseAmount is a RATE per hour. The month's pay is computed
+     *               at generation time from the hours the teacher was actually
+     *               present (TeacherAttendance check-in/check-out), so the
+     *               figure a payslip carries belongs to that month alone.
+     */
+    payType: {
+      type:    String,
+      enum:    ["monthly", "hourly"],
+      default: "monthly",
+    },
+
     baseAmount: {
       type:     Number,
       required: true,

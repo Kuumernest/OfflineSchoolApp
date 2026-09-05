@@ -52,10 +52,15 @@ export interface StaffRef {
   role?: string;
 }
 
+/** How a structure's baseAmount is read. */
+export type PayType = "monthly" | "hourly";
+
 export interface SalaryStructure {
   _id:           string;
   schoolId:      string;
   userId:        string;
+  /** "hourly" rows keep a per-hour rate in baseAmount. */
+  payType:       PayType;
   baseAmount:    number;
   allowances:    SalaryComponent[];
   deductions:    SalaryComponent[];
@@ -96,7 +101,11 @@ export interface Payslip {
   userId:          string;
   runId:           string | null;
   periodMonth:     string;
+  payType?:        PayType;
   baseAmount:      number;
+  /** Hourly payslips only: the attendance the base was computed from. */
+  hoursWorked?:    number | null;
+  hourlyRate?:     number | null;
   allowances:      PayslipLine[];
   deductions:      PayslipLine[];
   gross:           number;

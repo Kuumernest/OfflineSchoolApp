@@ -322,6 +322,16 @@ module.exports = [
       const baseAmount = whole(body.baseAmount);
       if (baseAmount === null || baseAmount < 0) return null;
 
+      // Absent means monthly, exactly as the endpoint reads it. Any other
+      // value — the endpoint would answer a mongoose enum-cast error — is
+      // declined so the request goes to the network and picks up the real
+      // 400/500 rather than a mirror row that guesses.
+      const payType = body.payType ?? "monthly";
+      if (payType !== "monthly" && payType !== "hourly") return null;
+      // The endpoint lets a monthly base be 0 (allowances only); a rate of
+      // zero per hour would silently pay nobody, so it refuses it.
+      if (payType === "hourly" && baseAmount <= 0) return null;
+
       const allowances = components(body.allowances);
       const deductions = components(body.deductions);
       if (allowances === null || deductions === null) return null;
@@ -340,6 +350,7 @@ module.exports = [
         _id: id,
         schoolId,
         userId,
+        payType,
         baseAmount,
         allowances,
         deductions,

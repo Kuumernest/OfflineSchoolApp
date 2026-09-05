@@ -1933,7 +1933,15 @@
     "addDeduction": "Add deduction",
     "replaceWarning": "This replaces the current salary from that date. The old figure is kept for past payslips.",
     "offline": "Salaries need a connection.",
-    "readOnlyNote": "You can see salaries in order to prepare the payroll. Setting what somebody is paid is an administrator's decision."
+    "readOnlyNote": "You can see salaries in order to prepare the payroll. Setting what somebody is paid is an administrator's decision.",
+    "payType": "Pay type",
+    "payTypeMonthly": "Fixed monthly salary",
+    "payTypeHourly": "Paid by the hour",
+    "baseMonthly": "Monthly base pay",
+    "baseHourly": "Hourly rate",
+    "hourlyHint": "Whole XAF per hour. Payroll computes each month's pay from the hours the teacher was actually present (staff attendance check-in/check-out).",
+    "hourlyPreviewNote": "Hourly pay: these totals depend on the hours worked. The payslip's base is the rate × the hours recorded in staff attendance for that month.",
+    "perHour": "/h"
   },
   "payroll": {
     "title": "Payroll",
@@ -1957,6 +1965,7 @@
     "reverseReason": "Why is this being reversed?",
     "payslipNo": "Payslip no.",
     "pendingNumber": "Assigned on confirmation",
+    "hoursLine": "{{hours}} h × {{rate}}/h",
     "generated": "Draft payslips generated",
     "confirmedToast": "Payroll confirmed",
     "reversedToast": "Payroll reversed",

@@ -196,6 +196,16 @@ export default function PayrollScreen() {
                             {/* No number yet means the run is still a draft. */}
                             {p.payslipNo || t("payroll.pendingNumber")}
                           </Text>
+                          {p.payType === "hourly" &&
+                            p.hoursWorked != null &&
+                            p.hourlyRate != null && (
+                              <Text style={styles.lineMeta} numberOfLines={1}>
+                                {t("payroll.hoursLine", {
+                                  hours: p.hoursWorked,
+                                  rate:  formatMoney(p.hourlyRate),
+                                })}
+                              </Text>
+                            )}
                         </View>
                         <Text style={styles.lineAmount}>{formatMoney(p.net)}</Text>
                       </View>

@@ -193,7 +193,17 @@ export default function PayrollPage() {
                           <span className="text-ink-faint">{t("payroll.pendingNumber")}</span>
                         )}
                       </Td>
-                      <Td numeric className="text-ink-muted">{fmt.money(p.baseAmount)}</Td>
+                      <Td numeric className="text-ink-muted">
+                        {fmt.money(p.baseAmount)}
+                        {p.payType === "hourly" && p.hoursWorked != null && p.hourlyRate != null && (
+                          <span className="block text-[11px] text-ink-faint tabular">
+                            {t("payroll.hoursLine", {
+                              hours: p.hoursWorked,
+                              rate:  fmt.money(p.hourlyRate),
+                            })}
+                          </span>
+                        )}
+                      </Td>
                       <Td numeric className="text-ink-muted">
                         {fmt.money(p.allowances.reduce((s, a) => s + a.amount, 0))}
                       </Td>

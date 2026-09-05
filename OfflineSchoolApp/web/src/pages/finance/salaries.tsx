@@ -29,7 +29,7 @@ import { usePermission }    from "@/lib/permissions";
 import {
   fetchStaff, fetchSalaryStructures, createSalaryStructure,
 } from "@/services/finance.service";
-import type { SalaryComponent } from "@/types/finance.types";
+import type { SalaryComponent, PayType } from "@/types/finance.types";
 
 const emptyComponent = (): SalaryComponent => ({ code: "", label: "", amount: 0 });
 
@@ -47,6 +47,7 @@ export default function SalariesPage() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({
     userId:        "",
+    payType:       "monthly" as PayType,
     baseAmount:    "",
     allowances:    [] as SalaryComponent[],
     deductions:    [] as SalaryComponent[],
@@ -70,6 +71,7 @@ export default function SalariesPage() {
       createSalaryStructure({
         schoolId,
         userId:     form.userId,
+        payType:    form.payType,
         baseAmount: Number(form.baseAmount),
         // Blank rows are the natural residue of an "add row" button; drop them
         // rather than making the server reject the whole submission.
@@ -80,7 +82,8 @@ export default function SalariesPage() {
     onSuccess: () => {
       setOpen(false);
       setForm({
-        userId: "", baseAmount: "", allowances: [], deductions: [],
+        userId: "", payType: "monthly", baseAmount: "",
+        allowances: [], deductions: [],
         effectiveFrom: todayISO(),
       });
       void qc.invalidateQueries({ queryKey: ["finance"] });
@@ -219,7 +222,14 @@ export default function SalariesPage() {
                     <Td className="font-medium text-ink">
                       {s.staff?.name ?? staffById.get(s.userId)?.name ?? s.userId}
                     </Td>
-                    <Td numeric className="text-ink-muted">{fmt.money(s.baseAmount)}</Td>
+                    <Td numeric className="text-ink-muted">
+                      {fmt.money(s.baseAmount)}
+                      {(s.payType ?? "monthly") === "hourly" && (
+                        <span className="ml-1 text-[11px] uppercase tracking-wide text-ink-faint">
+                          {t("salaries.perHour")}
+                        </span>
+                      )}
+                    </Td>
                     <Td numeric className="text-ink-muted">{a ? fmt.money(a) : "—"}</Td>
                     <Td numeric className="text-ink-muted">{d ? fmt.money(d) : "—"}</Td>
                     <Td numeric className="font-semibold text-ink">
@@ -264,7 +274,26 @@ export default function SalariesPage() {
             </FormField>
           </div>
 
-          <FormField label={t("salaries.base")} required hint={t("fees.amountHint")}>
+          <FormField label={t("salaries.payType")} required>
+            <SelectField
+              value={form.payType}
+              onChange={(e) => setForm((f) => ({ ...f, payType: e.target.value as PayType }))}
+              options={[
+                { value: "monthly", label: t("salaries.payTypeMonthly") },
+                { value: "hourly",  label: t("salaries.payTypeHourly") },
+              ]}
+            />
+          </FormField>
+
+          <FormField
+            label={form.payType === "hourly" ? t("salaries.baseHourly") : t("salaries.baseMonthly")}
+            required
+            hint={
+              form.payType === "hourly"
+                ? t("salaries.hourlyHint")
+                : t("fees.amountHint")
+            }
+          >
             <Input
               type="number" step="1" min="1" inputMode="numeric"
               value={form.baseAmount}
@@ -308,6 +337,9 @@ export default function SalariesPage() {
               <p className="mt-1 text-lg font-semibold text-primary tabular">{fmt.money(net)}</p>
             </div>
           </div>
+          {form.payType === "hourly" && (
+            <p className="-mt-2 text-xs text-ink-faint">{t("salaries.hourlyPreviewNote")}</p>
+          )}
 
           <div className="flex justify-end gap-2 border-t border-line pt-4">
             <Button type="button" variant="secondary" onClick={() => setOpen(false)}>

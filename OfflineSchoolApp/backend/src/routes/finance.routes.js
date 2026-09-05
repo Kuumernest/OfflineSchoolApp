@@ -21,6 +21,8 @@ const {
   generateRun,
   confirmRun,
   reverseRun,
+  endOfMonth,
+  hoursWorkedInMonth,
 } = require("../services/payroll.service");
 
 const financeReports = require("../services/financeReports.service");
@@ -391,9 +393,21 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
   if (!userId)        return bad(res, "userId is required");
   if (!effectiveFrom) return bad(res, "effectiveFrom is required");
 
+  // Absent means monthly: every client that predates hourly pay, and every
+  // structure written before the field existed, must keep their meaning.
+  const payType = req.body.payType ?? "monthly";
+  if (!["monthly", "hourly"].includes(payType)) {
+    return bad(res, "payType must be \"monthly\" or \"hourly\"", "INVALID_PAY_TYPE");
+  }
+
   const baseAmount = asWholeAmount(req.body.baseAmount);
   if (baseAmount === null || baseAmount < 0) {
     return bad(res, "baseAmount must be a whole number of XAF", "INVALID_AMOUNT");
+  }
+  // An hourly rate of zero would silently pay nobody; the same figure on a
+  // monthly structure is legal (a volunteer on allowances only).
+  if (payType === "hourly" && baseAmount <= 0) {
+    return bad(res, "An hourly rate must be a positive whole number of XAF", "INVALID_AMOUNT");
   }
 
   const allow = cleanComponents(req.body.allowances);
@@ -454,6 +468,7 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
   const row = await SalaryStructure.create({
     _id: claimedId || uuidv4(),
     schoolId, userId,
+    payType,
     baseAmount,
     allowances:    allow.rows,
     deductions:    deduct.rows,
@@ -462,6 +477,54 @@ router.post("/salary-structures", canSetSalary, asyncHandler(async (req, res) =>
   });
 
   return res.status(201).json({ success: true, data: row });
+}));
+
+// GET /finance/payroll/hours-preview?periodMonth=YYYY-MM
+//
+// The hours each hourly teacher actually worked in a month, as payroll will
+// read them when it generates that month's run. Shown before generation so a
+// bursar can see that "162.5 h" is attendance and not arithmetic — and fix a
+// mis-marked register BEFORE it becomes a payslip.
+router.get("/payroll/hours-preview", canReadPayroll, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return bad(res, "schoolId is required");
+
+  const periodMonth = (req.query.periodMonth || "").trim();
+  if (!/^\d{4}-\d{2}$/.test(periodMonth)) {
+    return bad(res, "periodMonth must be \"YYYY-MM\"", "INVALID_PERIOD");
+  }
+
+  const structures = await SalaryStructure.find({
+    schoolId,
+    deletedAt: null,
+    payType:   "hourly",
+    // Who is hourly as of the END of the month — the same question the
+    // generator asks, so the preview cannot disagree with the run.
+    effectiveFrom: { $lte: endOfMonth(periodMonth) },
+    $or: [{ effectiveTo: null }, { effectiveTo: { $gte: endOfMonth(periodMonth) } }],
+  }).select("userId baseAmount").lean();
+
+  const hoursByTeacher = await hoursWorkedInMonth(
+    schoolId,
+    structures.map((s) => String(s.userId)),
+    periodMonth
+  );
+
+  return res.json({
+    success: true,
+    count:   structures.length,
+    data:    structures.map((s) => {
+      const slot  = hoursByTeacher.get(String(s.userId));
+      const hours = slot ? Math.round((slot.minutes / 60) * 100) / 100 : 0;
+      return {
+        userId:       String(s.userId),
+        hourlyRate:   s.baseAmount,
+        hours,
+        daysWorked:   slot?.days ?? 0,
+        estimatedPay: Math.round(s.baseAmount * hours),
+      };
+    }),
+  });
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════

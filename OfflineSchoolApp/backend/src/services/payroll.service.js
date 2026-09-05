@@ -6,6 +6,7 @@ const Counter         = require("../db/models/Counter");
 const SalaryStructure = require("../db/models/SalaryStructure");
 const SalaryPayment   = require("../db/models/SalaryPayment");
 const PayrollRun      = require("../db/models/PayrollRun");
+const TeacherAttendance = require("../db/models/Attendance").TeacherAttendance;
 
 /**
  * Payroll arithmetic, in one place — the same reason fees.service exists.
@@ -66,6 +67,88 @@ const nextPayslipNo = async (schoolId, periodMonth) =>
   (await reservePayslipNos(schoolId, periodMonth, 1))[0];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// HOURS FROM ATTENDANCE
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * "HH:MM" or "HH:MM:SS" → minutes since midnight, or null when unparseable.
+ *
+ * Attendance times are free strings from the marking screen; a blank or a
+ * malformed value means that day simply cannot be counted, not that it counts
+ * as zero-length — the caller drops the day either way, but null keeps
+ * "absent" and "present without a readable time" distinguishable in tests.
+ */
+const timeToMinutes = (value) => {
+  if (typeof value !== "string") return null;
+  const m = value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  if (h > 23 || min > 59) return null;
+  return h * 60 + min;
+};
+
+/**
+ * Minutes a teacher was present on one attendance record, or null.
+ *
+ * Both ends of the day must be readable, and check-out must be after check-in
+ * (a swapped or equal pair is a marking mistake, not a 24-hour shift — schools
+ * do not run past midnight, so no overnight wrap). Absent and on_leave days
+ * never reach this function; the caller filters on status first.
+ */
+const dayMinutes = (record) => {
+  const inMin  = timeToMinutes(record.checkInTime);
+  const outMin = timeToMinutes(record.checkOutTime);
+  if (inMin === null || outMin === null || outMin <= inMin) return null;
+  return outMin - inMin;
+};
+
+/**
+ * Hours each teacher was actually present during a month.
+ *
+ * Reads TeacherAttendance directly — the same register the school already
+ * keeps — rather than inventing an hours log nobody fills in. A day counts
+ * when its status is present or late (late still means they came) and both
+ * times are readable. Days that fail that contribute nothing but do not
+ * poison the rest of the month.
+ *
+ * @returns {Promise<Map<string, { minutes: number, days: number }>>} keyed by
+ *   teacherId. `days` counts only the days that contributed minutes, so the
+ *   payslip can show "22 days, 162.5 h" honestly.
+ */
+const hoursWorkedInMonth = async (schoolId, teacherIds, periodMonth) => {
+  const result = new Map();
+  if (!teacherIds.length) return result;
+
+  // Date is a "YYYY-MM-DD" string, so a prefix match is the whole month and
+  // cannot leak into the neighbours the way a $gte/$lte on day ranges can.
+  // periodMonth arrives from a request body, so it is escaped before it meets
+  // the regex engine — a period of "2026-0(.*" would otherwise match far more
+  // than its own month.
+  const monthPrefix = String(periodMonth).replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+  const records = await TeacherAttendance.find({
+    schoolId,
+    teacherId: { $in: teacherIds },
+    date:      { $regex: `^${monthPrefix}-` },
+    status:    { $in: ["present", "late"] },
+  }).select("teacherId checkInTime checkOutTime").lean();
+
+  for (const rec of records) {
+    const minutes = dayMinutes(rec);
+    if (minutes === null) continue;
+    const key  = String(rec.teacherId);
+    const slot = result.get(key) ?? { minutes: 0, days: 0 };
+    slot.minutes += minutes;
+    slot.days    += 1;
+    result.set(key, slot);
+  }
+  return result;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // COMPUTING A PAYSLIP
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -74,8 +157,15 @@ const nextPayslipNo = async (schoolId, periodMonth) =>
  *
  * Pure — no database, no clock. That is what makes payroll testable and what
  * lets the same function serve both the preview and the saved snapshot.
+ *
+ * `hoursWorked` only matters for an hourly structure: base becomes rate ×
+ * hours, rounded to whole XAF. It is the caller's job (generateRun) to have
+ * looked the hours up; a null here means "no attendance found", and an hourly
+ * teacher with no readable attendance is owed nothing for the month rather
+ * than their full rate — a fixed monthly salary is the structure that means
+ * "paid regardless".
  */
-const computeFromStructure = (structure) => {
+const computeFromStructure = (structure, hoursWorked = null) => {
   const allowances = (structure.allowances ?? []).map((a) => ({
     code: a.code, label: a.label, amount: a.amount ?? 0,
   }));
@@ -83,11 +173,18 @@ const computeFromStructure = (structure) => {
     code: d.code, label: d.label, amount: d.amount ?? 0,
   }));
 
-  const base            = structure.baseAmount ?? 0;
+  const hourly = (structure.payType ?? "monthly") === "hourly";
+  const base = hourly
+    ? Math.round((structure.baseAmount ?? 0) * (hoursWorked ?? 0))
+    : structure.baseAmount ?? 0;
+
   const gross           = base + allowances.reduce((s, a) => s + a.amount, 0);
   const totalDeductions = deductions.reduce((s, d) => s + d.amount, 0);
 
   return {
+    payType:     hourly ? "hourly" : "monthly",
+    hoursWorked: hourly ? hoursWorked : null,
+    hourlyRate:  hourly ? (structure.baseAmount ?? 0) : null,
     baseAmount: base,
     allowances,
     deductions,
@@ -134,6 +231,17 @@ const generateRun = async ({ schoolId, periodMonth, generatedBy }) => {
     throw err;
   }
 
+  // One round trip for every hourly teacher, whatever their number. Monthly
+  // structures keep the hours question entirely out of their payslip.
+  const hourlyIds = structures
+    .filter((s) => (s.payType ?? "monthly") === "hourly")
+    .map((s) => String(s.userId));
+  const hoursByTeacher = await hoursWorkedInMonth(
+    schoolId,
+    hourlyIds,
+    periodMonth
+  );
+
   const run = await PayrollRun.create({
     schoolId,
     periodMonth,
@@ -143,7 +251,14 @@ const generateRun = async ({ schoolId, periodMonth, generatedBy }) => {
   });
 
   const rows = structures.map((s) => {
-    const figures = computeFromStructure(s);
+    const hourly = (s.payType ?? "monthly") === "hourly";
+    // 60 minutes to the hour, kept fractional to two decimals — half hours are
+    // real working time, and rounding them off would quietly underpay.
+    const slot = hourly ? hoursByTeacher.get(String(s.userId)) : undefined;
+    const hoursWorked = slot
+      ? Math.round((slot.minutes / 60) * 100) / 100
+      : null;
+    const figures = computeFromStructure(s, hoursWorked);
     return {
       schoolId,
       userId:      String(s.userId),
@@ -298,6 +413,11 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
       runId:           null,
       periodMonth:     original.periodMonth,
       structureId:     original.structureId,
+      payType:         original.payType,
+      // Snapshotted as they were, so the reversal reads as the mirror of the
+      // same month's facts rather than a second computation of them.
+      hoursWorked:     original.hoursWorked ?? null,
+      hourlyRate:      original.hourlyRate  ?? null,
       baseAmount:      -original.baseAmount,
       allowances:      original.allowances.map((a) => ({ ...a.toObject?.() ?? a, amount: -a.amount })),
       deductions:      original.deductions.map((d) => ({ ...d.toObject?.() ?? d, amount: -d.amount })),
@@ -345,6 +465,9 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
 module.exports = {
   endOfMonth,
   nextPayslipNo,
+  timeToMinutes,
+  dayMinutes,
+  hoursWorkedInMonth,
   computeFromStructure,
   structuresInForce,
   generateRun,

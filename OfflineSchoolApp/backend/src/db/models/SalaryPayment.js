@@ -39,11 +39,25 @@ const salaryPaymentSchema = new mongoose.Schema(
     structureId: { type: String, default: null },
 
     // ── Snapshot ─────────────────────────────────────────────────────────────
+    payType: {
+      type:    String,
+      enum:    ["monthly", "hourly"],
+      default: "monthly",
+    },
     baseAmount:      { type: Number, default: 0 },
     allowances:      { type: [lineSchema], default: [] },
     deductions:      { type: [lineSchema], default: [] },
     gross:           { type: Number, default: 0 },
     totalDeductions: { type: Number, default: 0 },
+
+    /**
+     * Hourly pay only — null on a monthly payslip. Both are snapshotted with
+     * the amounts: the rate answers "what were they paid per hour", and the
+     * hours answer "where did 162.5 come from" without re-reading attendance,
+     * which could have been edited since.
+     */
+    hoursWorked: { type: Number, default: null },
+    hourlyRate:  { type: Number, default: null },
 
     /**
      * What was actually paid. Negative on a reversal, so summing the column
