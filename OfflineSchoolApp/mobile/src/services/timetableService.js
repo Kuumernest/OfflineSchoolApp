@@ -72,7 +72,7 @@ const getTimetableEndpoint = () => {
 // SECTION 3 — SCHEMA SETUP
 // ═════════════════════════════════════════════════════════════════════════════
 
-export const ensureSchema = (db) =>
+const ensureSchema = (db) =>
   ensureTableSchema(
     TABLE,
     async (db) => {
@@ -302,7 +302,7 @@ const resolveRef = (field, ...fallbacks) => {
   return null;
 };
 
-export const normaliseServerSlot = (raw, fallbackSchoolId) => {
+const normaliseServerSlot = (raw, fallbackSchoolId) => {
   if (!raw) return null;
 
   const id = String(raw._id || raw.id || "").trim();
@@ -347,7 +347,7 @@ const normaliseLocalSlot = (row) => ({
 // SECTION 7 — LOCAL PERSISTENCE
 // ═════════════════════════════════════════════════════════════════════════════
 
-export const persistSlotsLocally = async (db, slots, timestamp) => {
+const persistSlotsLocally = async (db, slots, timestamp) => {
   if (!slots?.length) return 0;
   const ts = timestamp ?? new Date().toISOString();
   let count = 0;
@@ -380,8 +380,7 @@ export const persistSlotsLocally = async (db, slots, timestamp) => {
                deleted_at  = excluded.deleted_at,
                _synced     = 1,
                _synced_at  = excluded._synced_at,
-               updated_at  = excluded.updated_at
-               WHERE timetable._synced = 1`,
+               updated_at  = excluded.updated_at`,
             [
               slot.id,
               slot.school_id,

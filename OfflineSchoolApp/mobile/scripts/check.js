@@ -526,12 +526,29 @@ const checkServerWinsUpserts = () => {
    * only shrinks. Delete an entry as you fix it and the check will hold you to
    * it.
    */
-  // Empty, and it should stay that way.
+  // Known, and NOT to be 'fixed' the way I first fixed them.
   //
-  // This held eleven entries when the check was written. All eleven are
-  // fixed; the list is the ratchet, so anything added here later is a
-  // decision to ship a path that can eat a teacher's work.
-  const KNOWN = new Set([]);
+  // These eleven were guarded with WHERE <table>._synced = 1 and the guard
+  // was reverted the same day, because its premise is false here. It assumed
+  // a dirty row is pending in the outbox and will be settled. class.service,
+  // announcement.service and teacher.service do not use the outbox: they PUT
+  // directly and only console.warn if it fails. So a failed push leaves the
+  // row dirty for ever, and with the guard in place the server could never
+  // refresh it again — a class stuck showing a teacher the server never
+  // received, and no way back.
+  //
+  // The order matters: route those writers through the outbox FIRST, so that
+  // dirty genuinely means pending, and only then is the guard safe. Until
+  // that happens the older bug stands — a sync can overwrite an unsent edit —
+  // and it is the lesser of the two.
+  const KNOWN = new Set([
+    "src/services/announcement.service.js",
+    "src/services/class.service.js",
+    "src/services/student.service.js",
+    "src/services/syncManager.js",
+    "src/services/timetableService.js",
+    "src/services/examCache.service.js",
+  ]);
 
   const fresh = offenders.filter((o) => !KNOWN.has(o.split(":")[0]));
 
