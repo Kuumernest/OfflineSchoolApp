@@ -1,14 +1,72 @@
 // app/auth/login.js
+//
+// The photograph is a full-bleed background under a horizontal indigo scrim.
+//
+// The image is 3:2 landscape and a phone is about 0.45, so cover fills the
+// HEIGHT and only the middle ~30% of the width survives: façade, with the
+// OFFLINESCHOOL sign, the flag and the books all cropped away. Under a scrim
+// this heavy that is the intent rather than a fault — the photograph is
+// texture and brand colour here, not something to be read. What it must not
+// do is make the form hard to read, which is what the scrim is for.
+//
+// The flat 62% wash it replaces dimmed everything by the same amount and
+// left the picture grey. A tinted ramp keeps it indigo, and the form card
+// sits on the darkest end of it.
 import React, { useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity,
   StyleSheet, KeyboardAvoidingView, Platform,
-  ScrollView, ActivityIndicator,
+  ScrollView, ActivityIndicator, ImageBackground,
 } from "react-native";
 import { useRouter }    from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
 
+// The scrim, as three stops across the screen. Alpha never drops below 0.68,
+// so no part of the photograph is ever bright enough to fight the form.
+const SCRIM_STOPS = [
+  { at: 0,   rgb: [24, 20, 70],  alpha: 0.88 },
+  { at: 0.5, rgb: [36, 30, 100], alpha: 0.76 },
+  { at: 1,   rgb: [24, 20, 70],  alpha: 0.68 },
+];
+
+/** The colour of the scrim at 0..1 across the screen. */
+const scrimAt = (t) => {
+  let i = 0;
+  while (i < SCRIM_STOPS.length - 2 && t > SCRIM_STOPS[i + 1].at) i++;
+
+  const from = SCRIM_STOPS[i];
+  const to   = SCRIM_STOPS[i + 1];
+  const span = to.at - from.at;
+  const u    = span === 0 ? 0 : (t - from.at) / span;
+
+  const [r, g, b] = from.rgb.map((c, k) => Math.round(c + (to.rgb[k] - c) * u));
+  const alpha = (from.alpha + (to.alpha - from.alpha) * u).toFixed(3);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+};
+
+/**
+ * A left-to-right gradient, drawn as columns.
+ *
+ * React Native has no CSS gradients, and expo-linear-gradient is a native
+ * module — a dependency and a rebuild for one screen. Columns cost neither,
+ * and at this width the step between them is about 0.008 of alpha and a
+ * single unit of colour, which is below anything an eye resolves. Banding is
+ * what makes this technique look cheap, and there is none at these deltas.
+ */
+const SCRIM_BANDS = 24;
+const Scrim = () => (
+  <View style={styles.scrim} pointerEvents="none">
+    {Array.from({ length: SCRIM_BANDS }, (_, i) => (
+      // Sampled at the middle of each column, so the ramp is centred on the
+      // band rather than starting one band late.
+      <View
+        key={i}
+        style={{ flex: 1, backgroundColor: scrimAt((i + 0.5) / SCRIM_BANDS) }}
+      />
+    ))}
+  </View>
+);
 export default function LoginScreen() {
   const router    = useRouter();
   const login     = useAuthStore((s) => s.login);
@@ -42,10 +100,16 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        keyboardShouldPersistTaps="handled"
+      <ImageBackground
+        source={require("../../assets/login-bg.png")}
+        resizeMode="cover"
+        style={styles.background}
       >
+        <Scrim />
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
         {/* ── Header ── */}
         <View style={styles.header}>
           <Text style={styles.emoji}>🏫</Text>
@@ -150,20 +214,33 @@ export default function LoginScreen() {
         >
           <Text style={styles.portalLinkText}>{t("login.parentPortal")}</Text>
         </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </ImageBackground>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F9FAFB" },
-  portalLink:     { marginTop: 18, alignItems: "center", paddingVertical: 10 },
-  portalLinkText: { color: "#4F46E5", fontSize: 14, fontWeight: "600" },
+  // The deepest stop of the scrim, so the gap a short page leaves below the
+  // image is the same colour as the screen rather than a black strip.
+  container: { flex: 1, backgroundColor: "#181446" },
+  background: { flex: 1 },
+
+  // A row, because the ramp runs left to right.
+  scrim: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: "row",
+  },
+
   scroll:    { padding: 24, paddingTop: 60 },
+
+  portalLink:     { marginTop: 18, alignItems: "center", paddingVertical: 10 },
+  portalLinkText: { color: "#C7D2FE", fontSize: 14, fontWeight: "600" },
+
   header:    { alignItems: "center", marginBottom: 32 },
   emoji:     { fontSize: 48, marginBottom: 8 },
-  title:     { fontSize: 28, fontWeight: "800", color: "#111827" },
-  subtitle:  { fontSize: 15, color: "#6B7280", marginTop: 4 },
+  title:     { fontSize: 28, fontWeight: "800", color: "#FFFFFF" },
+  subtitle:  { fontSize: 15, color: "#E5E7EB", marginTop: 4 },
 
   card: {
     backgroundColor: "#FFF",
