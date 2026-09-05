@@ -17,7 +17,6 @@ import {
   Alert,
   StatusBar,
   KeyboardAvoidingView,
-  Platform,
   ActivityIndicator,
 } from "react-native";
 import { useRouter }        from "expo-router";
@@ -266,7 +265,7 @@ export default function CreateAnnouncementScreen() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
       >
         <ScrollView
           showsVerticalScrollIndicator={false}

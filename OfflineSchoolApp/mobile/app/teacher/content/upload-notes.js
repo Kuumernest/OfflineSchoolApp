@@ -14,7 +14,6 @@ import {
   StatusBar,
   ActivityIndicator,
   Alert,
-  Platform,
   Animated,
   KeyboardAvoidingView,
 } from "react-native";
@@ -628,7 +627,7 @@ function UploadNotesPage() {
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
         keyboardVerticalOffset={80}
       >
         <ScrollView

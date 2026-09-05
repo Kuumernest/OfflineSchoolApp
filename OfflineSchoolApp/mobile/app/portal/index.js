@@ -22,6 +22,7 @@ import * as Print from "expo-print";
 
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatMoney, formatDateShort } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
 
@@ -104,6 +105,7 @@ const ATTD_STATUS_KEY = {
 export default function ParentPortalScreen() {
   const router          = useRouter();
   const { t, language } = useTranslation();
+  const screenPad       = useScreenInsets({ top: 24, bottom: 28 });
 
   const [checking, setChecking] = useState(true);
   const [signedIn, setSignedIn] = useState(false);
@@ -313,10 +315,13 @@ export default function ParentPortalScreen() {
     return (
       <KeyboardAvoidingView
         style={styles.screen}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        // "padding" on Android too. Edge-to-edge stopped the window resizing
+      // for the keyboard, so an undefined behaviour left this doing nothing
+      // and the field being typed into sat underneath the keys.
+      behavior="padding"
       >
         <StatusBar barStyle="dark-content" />
-        <ScrollView contentContainerStyle={styles.loginBody} keyboardShouldPersistTaps="handled">
+        <ScrollView contentContainerStyle={[styles.loginBody, screenPad]} keyboardShouldPersistTaps="handled">
           <TouchableOpacity onPress={() => router.back()} hitSlop={10} style={{ alignSelf: "flex-start" }}>
             <Ionicons name="chevron-back" size={24} color={C.inkBody} />
           </TouchableOpacity>
@@ -444,7 +449,7 @@ export default function ParentPortalScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.body}
+        contentContainerStyle={[styles.body, { paddingBottom: screenPad.paddingBottom }]}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.primary} />
         }
@@ -952,7 +957,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: C.canvas },
   centre: { flex: 1, alignItems: "center", justifyContent: "center" },
 
-  loginBody:  { padding: 20, gap: 10, paddingTop: 40 },
+  loginBody:  { paddingHorizontal: 20, gap: 10 },
   loginTitle: { fontSize: 24, fontWeight: "700", color: C.ink, marginTop: 12 },
   loginIntro: { fontSize: 13, color: C.inkMuted, marginBottom: 10 },
 

@@ -15,8 +15,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
-  ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView,
-  Platform, StatusBar,
+  ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView, StatusBar,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -194,7 +193,7 @@ export default function ExpensesScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" />
 

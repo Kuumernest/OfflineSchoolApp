@@ -645,12 +645,124 @@ const checkStudentSyncPlan = () => {
     ok(`every step agrees with its pull method (${pairs.length} checked)`);
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// THE EDGES OF THE SCREEN, AND THE KEYBOARD
+//
+// Android has drawn edge-to-edge since Expo SDK 54, and it cannot be turned
+// off. Two things follow, and both of them reached a user before this check
+// existed.
+//
+// The window no longer resizes when the keyboard opens. KeyboardAvoidingView
+// with `behavior={Platform.OS === "ios" ? "padding" : undefined}` — the shape
+// every form screen in this app was written with — therefore does nothing at
+// all on Android. Nothing moves, the scroll view keeps its full height, and
+// Android never scrolls the focused field into view because as far as it is
+// concerned that field is already on screen. It is behind the keys.
+//
+// And the app paints behind the status bar and the navigation bar, so a
+// screen that pads with a guessed constant hides its first line under the
+// clock, or its last control under the navigation bar. The parent portal
+// link on the login screen sat under the navigation bar for exactly this
+// reason.
+//
+// Both rules apply to the signed-out flow without exception, because it is
+// the first thing anybody sees. The keyboard rule applies everywhere.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// The screens a person meets before they have an account.
+const SIGNED_OUT = [
+  "app/auth/login.js",
+  "app/auth/set-password.js",
+  "app/auth/apply.js",
+  "app/auth/select-school.js",
+  "app/portal/index.js",
+];
+
+// Signed-in screens still pad with constants. Fixing that is a layout pass
+// over every screen in the app, not a search and replace, so they are listed
+// rather than pretended about — and the list may only shrink.
+const PADS_BY_HAND = 93;
+
+const checkScreenEdges = () => {
+  console.log("");
+  console.log("SCREEN EDGES AND THE KEYBOARD");
+
+  const screens = walk(path.join(ROOT, "app")).filter((f) => f.endsWith(".js"));
+
+  // ── 1. No screen may leave Android without a keyboard behaviour ─────────
+  const noop = [];
+  for (const f of screens) {
+    const text = fs.readFileSync(f, "utf8");
+    if (!text.includes("KeyboardAvoidingView")) continue;
+    if (/behavior=\{[^}]*undefined[^}]*\}/.test(text)) {
+      noop.push(path.relative(ROOT, f).replace(/\\/g, "/"));
+    }
+  }
+
+  if (noop.length) {
+    bad(
+      "every KeyboardAvoidingView does something on Android",
+      noop.map((f) => `${f}: behavior resolves to undefined, so the keyboard covers the field`)
+        .join(String.fromCharCode(10))
+    );
+  } else {
+    ok("every KeyboardAvoidingView does something on Android");
+  }
+
+  // ── 2. The signed-out flow measures the bars instead of guessing ────────
+  const guessing = [];
+  for (const rel of SIGNED_OUT) {
+    const full = path.join(ROOT, rel);
+    if (!fs.existsSync(full)) { guessing.push(`${rel}: missing`); continue; }
+    const text = fs.readFileSync(full, "utf8");
+
+    if (!text.includes("useScreenInsets")) {
+      guessing.push(`${rel}: does not use useScreenInsets`);
+      continue;
+    }
+    // A constant top padding left behind next to the hook is the bug coming
+    // back one screen at a time.
+    const stray = [...text.matchAll(/paddingTop:\s*(\d+)/g)].map((m) => Number(m[1]));
+    const tooBig = stray.filter((n) => n >= 24);
+    if (tooBig.length) {
+      guessing.push(`${rel}: still has a hardcoded paddingTop of ${tooBig.join(", ")}`);
+    }
+  }
+
+  if (guessing.length) {
+    bad("the signed-out flow measures the system bars", guessing.join(String.fromCharCode(10)));
+  } else {
+    ok(`the signed-out flow measures the system bars (${SIGNED_OUT.length} screens)`);
+  }
+
+  // ── 3. The rest of the app: a count that may only go down ───────────────
+  let byHand = 0;
+  for (const f of screens) {
+    const rel = path.relative(ROOT, f).replace(/\\/g, "/");
+    if (SIGNED_OUT.includes(rel)) continue;
+    const text = fs.readFileSync(f, "utf8");
+    if (/paddingTop:\s*(?:Platform[^,\n]*|\d{2,})/.test(text)) byHand++;
+  }
+
+  if (byHand > PADS_BY_HAND) {
+    bad(
+      `signed-in screens padding by hand: ${byHand}`,
+      `was ${PADS_BY_HAND}. A new screen guessed past the status bar instead of ` +
+      "asking useScreenInsets for the measurement."
+    );
+  } else if (byHand < PADS_BY_HAND) {
+    ok(`signed-in screens padding by hand: ${byHand}, down from ${PADS_BY_HAND} — lower PADS_BY_HAND`);
+  } else {
+    ok(`signed-in screens padding by hand: ${byHand}, unchanged`);
+  }
+};
 checkParse();
 checkLocales();
 checkLinkQuality();
 checkSyncPolicy();
 checkServerWinsUpserts();
 checkStudentSyncPlan();
+checkScreenEdges();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);

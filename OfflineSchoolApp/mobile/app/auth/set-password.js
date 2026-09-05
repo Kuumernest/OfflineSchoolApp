@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ActivityIndicator,
   Alert,
@@ -20,6 +19,7 @@ import * as SecureStore from "expo-secure-store";
 import { useAuthStore } from "../../src/store/auth.store";
 import api from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -88,6 +88,7 @@ const reqStyles = StyleSheet.create({
 export default function SetPasswordScreen() {
   const router = useRouter();
   const { t }  = useTranslation();
+  const screenPad = useScreenInsets({ top: 24, bottom: 32 });
 
   const user = useAuthStore((s) => s.user);
   const setUser = useAuthStore((s) => s.setUser);
@@ -252,10 +253,13 @@ export default function SetPasswordScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // "padding" on Android too. Edge-to-edge stopped the window resizing
+      // for the keyboard, so an undefined behaviour left this doing nothing
+      // and the field being typed into sat underneath the keys.
+      behavior="padding"
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, screenPad]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -499,7 +503,7 @@ export default function SetPasswordScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB" },
-  scroll: { padding: 24, paddingTop: 60, paddingBottom: 40 },
+  scroll: { paddingHorizontal: 24 },
 
   // Header
   header: { alignItems: "center", marginBottom: 32 },

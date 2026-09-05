@@ -17,7 +17,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   View, Text, TextInput, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, StatusBar, Switch, Alert, KeyboardAvoidingView, Platform,
+  ActivityIndicator, StatusBar, Switch, Alert, KeyboardAvoidingView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -99,7 +99,7 @@ export default function NewFeeStructureScreen() {
   return (
     <KeyboardAvoidingView
       style={st.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" translucent={false} />
 

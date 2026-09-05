@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   KeyboardAvoidingView,
-  Platform,
   ScrollView,
   ActivityIndicator,
   Alert,
@@ -25,6 +24,7 @@ import * as FileSystem     from "expo-file-system/legacy";
 import { Ionicons }        from "@expo/vector-icons";
 import { API_URL }         from "../../src/services/api";
 import { useTranslation }  from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -223,6 +223,7 @@ const docStyles = StyleSheet.create({
 export default function ApplyScreen() {
   const router  = useRouter();
   const { t }   = useTranslation();
+  const screenPad = useScreenInsets({ top: 24, bottom: 32 });
 
   const {
     schoolId,
@@ -578,10 +579,13 @@ export default function ApplyScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // "padding" on Android too. Edge-to-edge stopped the window resizing
+      // for the keyboard, so an undefined behaviour left this doing nothing
+      // and the field being typed into sat underneath the keys.
+      behavior="padding"
     >
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={[styles.scroll, screenPad]}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
@@ -848,7 +852,7 @@ export default function ApplyScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F9FAFB" },
-  scroll:    { padding: 24, paddingTop: 48, paddingBottom: 40 },
+  scroll:    { paddingHorizontal: 24 },
 
   backArrow:     { marginBottom: 16 },
   backArrowText: { color: "#4F46E5", fontSize: 15, fontWeight: "600" },

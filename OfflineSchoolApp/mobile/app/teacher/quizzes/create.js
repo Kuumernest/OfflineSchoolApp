@@ -19,7 +19,6 @@ import {
   Alert,
   Switch,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
@@ -1508,7 +1507,7 @@ export default function CreateQuizScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" backgroundColor="#F3F4F6" />
 

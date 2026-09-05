@@ -11,7 +11,7 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import {
   View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet,
-  ActivityIndicator, KeyboardAvoidingView, Platform, StatusBar,
+  ActivityIndicator, KeyboardAvoidingView, StatusBar,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -137,7 +137,7 @@ export default function PortalThreadScreen() {
   return (
     <KeyboardAvoidingView
       style={s.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" backgroundColor={C.surface} />
 

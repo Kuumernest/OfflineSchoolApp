@@ -17,6 +17,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { API_URL } from "../../src/services/api";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { errorText } from "../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -204,6 +205,7 @@ const SchoolCard = ({ school, onSelect }) => {
 export default function SelectSchoolScreen() {
   const router = useRouter();
   const { t }  = useTranslation();
+  const screenPad = useScreenInsets({ top: 16, bottom: 40 });
 
   // ── Data state ─────────────────────────────────────────────────────────────
   const [schools,     setSchools]     = useState([]);
@@ -416,7 +418,7 @@ export default function SelectSchoolScreen() {
     <View style={styles.container}>
 
       {/* ── Header ── */}
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: screenPad.paddingTop }]}>
         <TouchableOpacity
           style={styles.backArrow}
           onPress={() => router.back()}
@@ -474,6 +476,7 @@ export default function SelectSchoolScreen() {
           renderItem={renderItem}
           contentContainerStyle={[
             styles.listContent,
+            { paddingBottom: screenPad.paddingBottom },
             schools.length === 0 && styles.listContentEmpty,
           ]}
           ListEmptyComponent={renderEmpty}
@@ -511,7 +514,8 @@ const styles = StyleSheet.create({
   // ── Header ──
   header: {
     backgroundColor:   "#FFF",
-    paddingTop:        Platform.OS === "ios" ? 56 : 36,
+    // paddingTop comes from the insets at render; 56-on-iOS/36-on-Android
+    // was a guess from before Android drew behind the status bar.
     paddingBottom:     16,
     paddingHorizontal: 20,
     borderBottomWidth: 1,
@@ -552,7 +556,7 @@ const styles = StyleSheet.create({
   },
 
   // ── List ──
-  listContent:      { padding: 16, paddingBottom: 40 },
+  listContent:      { padding: 16 },
   listContentEmpty: { flexGrow: 1 },
 
   // ── School card ──

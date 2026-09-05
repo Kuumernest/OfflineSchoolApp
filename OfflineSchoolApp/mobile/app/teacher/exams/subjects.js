@@ -7,7 +7,7 @@ import React, {
 import {
   View, Text, StyleSheet, FlatList, SectionList, TouchableOpacity,
   ActivityIndicator, RefreshControl, TextInput, Alert,
-  KeyboardAvoidingView, Platform, ScrollView,
+  KeyboardAvoidingView, ScrollView,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
@@ -711,7 +711,7 @@ function ScoreEntry({
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <View style={se.container}>
 

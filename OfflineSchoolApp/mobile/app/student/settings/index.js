@@ -15,7 +15,6 @@ import {
   Modal,
   TextInput,
   KeyboardAvoidingView,
-  Platform,
 } from "react-native";
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
@@ -324,7 +323,7 @@ function ChangePasswordModal({ visible, onClose, mustReset }) {
     >
       <KeyboardAvoidingView
         style={cp.overlay}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        behavior="padding"
       >
         <View style={cp.sheet}>
           {/* Handle */}

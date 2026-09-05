@@ -7,7 +7,7 @@ import React, {
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Alert, StatusBar, Share, TextInput,
-  KeyboardAvoidingView, Platform,
+  KeyboardAvoidingView,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
 import { Ionicons }                     from "@expo/vector-icons";
@@ -613,7 +613,7 @@ export default function StudentReportCardScreen() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <View style={s.container}>
         <StatusBar barStyle="dark-content" backgroundColor={C.white} />

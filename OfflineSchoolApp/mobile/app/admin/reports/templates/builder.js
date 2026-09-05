@@ -401,7 +401,7 @@ export default function TemplateBuilderScreen() {
   return (
     <KeyboardAvoidingView
       style={s.screen}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <BuilderHeader
         isEditing={isEditing}

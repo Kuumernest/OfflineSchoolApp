@@ -18,7 +18,6 @@ import {
   ActivityIndicator,
   Alert,
   KeyboardAvoidingView,
-  Platform,
   StatusBar,
   Modal,
 } from "react-native";
@@ -1033,7 +1032,7 @@ export default function StudentProfileSetup() {
   return (
     <KeyboardAvoidingView
       style={{ flex: 1 }}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      behavior="padding"
     >
       <StatusBar barStyle="dark-content" backgroundColor={C.white} />
       <View style={ss.screen}>

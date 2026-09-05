@@ -15,12 +15,13 @@
 import React, { useState } from "react";
 import {
   View, Text, TextInput, TouchableOpacity,
-  StyleSheet, KeyboardAvoidingView, Platform,
+  StyleSheet, KeyboardAvoidingView,
   ScrollView, ActivityIndicator, ImageBackground,
 } from "react-native";
 import { useRouter }    from "expo-router";
 import { useAuthStore } from "../../src/store/auth.store";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 
 // The scrim across the screen — the same shape as before at about half the
 // weight, so the building and the sign read as a photograph rather than as a
@@ -127,6 +128,7 @@ export default function LoginScreen() {
   const error     = useAuthStore((s) => s.error);
   const isLoading = useAuthStore((s) => s.isLoading);
   const { t }     = useTranslation();
+  const screenPad = useScreenInsets({ top: 28, bottom: 24 });
 
   const [identifier, setIdentifier] = useState("");
   const [password,   setPassword]   = useState("");
@@ -152,7 +154,10 @@ export default function LoginScreen() {
   return (
     <KeyboardAvoidingView
       style={styles.container}
-      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      // "padding" on Android too. Edge-to-edge stopped the window resizing
+      // for the keyboard, so an undefined behaviour left this doing nothing
+      // and the field being typed into sat underneath the keys.
+      behavior="padding"
     >
       <ImageBackground
         source={require("../../assets/login-bg.jpg")}
@@ -161,7 +166,7 @@ export default function LoginScreen() {
       >
         <Scrim />
         <ScrollView
-          contentContainerStyle={styles.scroll}
+          contentContainerStyle={[styles.scroll, screenPad]}
           keyboardShouldPersistTaps="handled"
         >
         {/* ── Header ── */}
@@ -289,11 +294,33 @@ const styles = StyleSheet.create({
   // A column, over the top of it.
   scrimEdges: StyleSheet.absoluteFillObject,
 
-  scroll:    { padding: 24, paddingTop: 60 },
+  // Vertical padding comes from useScreenInsets, which measures the bars
+  // rather than guessing past them.
+  scroll:    { paddingHorizontal: 24 },
 
-  portalLink:     { marginTop: 18, alignItems: "center", paddingVertical: 10 },
+  // A separate door, and it has to look like one.
+  //
+  // This was pale text on the photograph, last on the screen, under the
+  // navigation bar on Android. The divider above it had already been given
+  // a solid pill for exactly this reason — mid-tones are the one thing
+  // guaranteed to vanish on a photograph, whichever way the image goes —
+  // and a guardian arriving here is the person least likely to hunt for a
+  // link. So it takes the same treatment the divider took, at the size of
+  // something meant to be pressed.
+  portalLink: {
+    marginTop:        20,
+    alignItems:       "center",
+    justifyContent:   "center",
+    minHeight:        48,
+    paddingVertical:  14,
+    paddingHorizontal: 20,
+    borderRadius:     12,
+    borderWidth:      1,
+    borderColor:      "rgba(255, 255, 255, 0.38)",
+    backgroundColor:  "rgba(24, 20, 70, 0.62)",
+  },
   portalLinkText: {
-    color: "#DDE3FF", fontSize: 14, fontWeight: "600",
+    color: "#FFFFFF", fontSize: 15, fontWeight: "700", letterSpacing: 0.2,
     textShadowColor:  "rgba(12, 10, 40, 0.55)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 5,
