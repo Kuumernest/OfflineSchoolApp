@@ -1673,6 +1673,10 @@ class SyncManagerClass {
       await this.pullMessages();
       SyncProgress.step("gate");
       await this.pullGateRoster();
+      SyncProgress.step("attendance");
+      await this.pullAttendance();
+      SyncProgress.step("examsStep");
+      await this.pullExams();
       if (this.isAdmin()) {
         SyncProgress.step("finance");
         await this.pullFinance();
@@ -1800,6 +1804,52 @@ class SyncManagerClass {
       await syncRoster({ schoolId });
     } catch (err) {
       console.warn("[SyncManager] pullGateRoster failed:", err.message);
+    }
+  }
+
+  /**
+   * The register, for a window of recent days.
+   *
+   * Merged on the natural key rather than the id, and refusing to touch a row
+   * this device has not pushed — see attendance.pullRecent, where both rules
+   * are explained. This is the step that had to be written rather than wired:
+   * attendance is one of the two things on this list the phone WRITES, so a
+   * plain server-wins mirror would undo a register somebody took an hour ago.
+   */
+  async pullAttendance() {
+    if (this._isUnauthenticated()) return;
+    try {
+      const schoolId = await this.getSchoolId();
+      if (!schoolId) return;
+      const { pullRecent } = require("./attendance.service");
+      await pullRecent({ schoolId });
+    } catch (err) {
+      console.warn("[SyncManager] pullAttendance failed:", err.message);
+    }
+  }
+
+  /**
+   * The exam list.
+   *
+   * The list only. Subjects, marks and results stay demand-loaded per exam:
+   * they are large, they are read one exam at a time, and cacheScores already
+   * refuses to overwrite marks this device has not sent.
+   */
+  async pullExams() {
+    if (this._isUnauthenticated()) return;
+    try {
+      const schoolId = await this.getSchoolId();
+      if (!schoolId) return;
+
+      const { data } = await api.get("/exams", { params: { schoolId } });
+      const list = data?.data ?? data?.exams ?? [];
+      if (!Array.isArray(list) || !list.length) return;
+
+      const { cacheExams } = require("./examCache.service");
+      await cacheExams(list);
+      console.log(`[SyncManager] Cached ${list.length} exam(s)`);
+    } catch (err) {
+      console.warn("[SyncManager] pullExams failed:", err.message);
     }
   }
 

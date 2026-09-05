@@ -41,6 +41,8 @@ export const SYNC_STEPS = {
   messages:     "syncStep.messages",
   gate:         "syncStep.gate",
   finance:      "syncStep.finance",
+  attendance:   "syncStep.attendance",
+  examsStep:    "syncStep.exams",
   school:       "syncStep.school",
   quizzes:      "syncStep.quizzes",
 };
@@ -58,6 +60,9 @@ export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
     // steps below are staff work and counting them would park their bar.
     return [
       "prepare", "upload", "timetable", "messages",
+      // A pupil sees their own register and their own exams; the endpoints
+      // scope to self, so the same two steps serve both roles.
+      "attendance", "examsStep",
       "announcements", "school", "quizzes",
     ];
   }
@@ -68,6 +73,7 @@ export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
     // Fees are staff work, not a pupil's: a student's plan has no step here
     // and their own charges arrive through the portal instead.
     "announcements", "fees", "timetable", "messages", "gate",
+    "attendance", "examsStep",
     ...(isAdmin ? ["finance"] : []),
     "school", "quizzes",
   ];

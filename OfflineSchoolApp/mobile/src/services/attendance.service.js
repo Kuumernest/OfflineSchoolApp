@@ -18,6 +18,7 @@
  */
 
 import api                   from "./api";
+import { withTransaction }   from "../db/dbHelpers";
 import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import {
@@ -319,6 +320,126 @@ const upsertTeacherAttendance = async (db, {
  * the backend had no way to recognise the duplicate. Now there is one
  * sender; this only produces work for it.
  */
+
+/**
+ * Mirror the register for a window of recent days.
+ *
+ * ── Why this is a merge and not an upsert ────────────────────────────────────
+ *
+ * The obvious version — insert every server row by its _id — would double every
+ * register on the device. A row taken on this phone is written with a local
+ * generateUUID(); the server's bulk endpoint derives its own id from
+ * (school, class, subject, period, student, date) and ignores whatever the
+ * client called it. So the same lesson's register comes back under a different
+ * id and sits beside the one already there.
+ *
+ * The natural key is therefore what identifies a row here, not the id. Server
+ * rows are matched against local ones on those six fields, and where a match
+ * exists the local id is kept — anything already pointing at it stays pointing
+ * at it.
+ *
+ * ── What must never be overwritten ───────────────────────────────────────────
+ *
+ * A row with _synced = 0 is a register somebody took on this device that has
+ * not reached the server yet. The server's copy of that lesson is the OLD one,
+ * by definition, so writing it over the local row would silently undo a
+ * teacher's correction and there would be no trace of it. Those rows are left
+ * exactly alone; the outbox pushes them, and the next mirror after that sees
+ * them agree.
+ *
+ * ── Why a window ─────────────────────────────────────────────────────────────
+ *
+ * A school year of registers is tens of thousands of rows and nobody scrolls
+ * back that far on a phone. Thirty days covers the month's reports and the
+ * corrections anybody actually makes; older days are still reachable through
+ * the report screens, which fetch on demand as they always did.
+ */
+export const pullRecent = async ({ schoolId, days = 30 } = {}) => {
+  const db = await getDatabase();
+  await ensureSchema(db);
+
+  const end   = new Date();
+  const start = new Date(end.getTime() - days * 86400000);
+  const iso   = (d) => d.toISOString().slice(0, 10);
+
+  const { data } = await api.get("/attendance/students", {
+    params: { schoolId, startDate: iso(start), endDate: iso(end) },
+  });
+  const records = data?.records ?? data?.data ?? [];
+  if (!Array.isArray(records) || !records.length) return { count: 0 };
+
+  // The natural key, spelled the same way on both sides of the comparison.
+  const keyOf = (r) => [
+    String(r.classId  ?? r.class_id  ?? ""),
+    String(r.subjectId ?? r.subject_id ?? ""),
+    String(r.periodId ?? r.period_id ?? ""),
+    String(r.studentId ?? r.student_id ?? ""),
+    String(r.date ?? "").slice(0, 10),
+  ].join("|");
+
+  // One read for the window rather than a lookup per row: a class of forty over
+  // thirty days is twelve hundred rows, and twelve hundred SELECTs is the shape
+  // of slowness this app has been carrying elsewhere.
+  const localRows = await db.getAllAsync(
+    `SELECT id, class_id, subjectId, periodId, student_id, date, _synced
+       FROM attendance WHERE date >= ? AND date <= ?`,
+    [iso(start), iso(end)]
+  ).catch(() => []);
+
+  const localByKey = new Map(localRows.map((r) => [keyOf(r), r]));
+
+  const now = new Date().toISOString();
+  let written = 0;
+  let kept    = 0;
+
+  await withTransaction(db, async () => {
+    for (const r of records) {
+      const key   = keyOf(r);
+      const local = localByKey.get(key);
+
+      // Not ours to overwrite: this device holds a newer register that has not
+      // been sent. Leave it, and let the outbox settle the argument.
+      if (local && local._synced === 0) { kept++; continue; }
+
+      if (local) {
+        await db.runAsync(
+          `UPDATE attendance
+              SET status = ?, note = ?, _synced = 1, _synced_at = ?, updated_at = ?
+            WHERE id = ?`,
+          [r.status ?? null, r.note ?? null, now, r.updatedAt ?? now, local.id]
+        );
+      } else {
+        await db.runAsync(
+          `INSERT OR IGNORE INTO attendance
+             (id, schoolId, class_id, subjectId, periodId, student_id, date,
+              status, note, _synced, _synced_at, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)`,
+          [
+            String(r._id ?? r.id),
+            String(r.schoolId ?? schoolId ?? ""),
+            r.classId ?? null,
+            r.subjectId ?? null,
+            r.periodId ?? null,
+            String(r.studentId ?? ""),
+            String(r.date ?? "").slice(0, 10),
+            r.status ?? null,
+            r.note ?? null,
+            now,
+            r.createdAt ?? now,
+            r.updatedAt ?? now,
+          ]
+        );
+      }
+      written++;
+    }
+  });
+
+  if (kept) {
+    console.log(`[attendance] mirror: ${written} written, ${kept} local row(s) left alone`);
+  }
+  return { count: written, keptLocal: kept };
+};
+
 export const pushUnsyncedAttendance = async () => {
   const db = await getDatabase();
   await ensureSchema(db);

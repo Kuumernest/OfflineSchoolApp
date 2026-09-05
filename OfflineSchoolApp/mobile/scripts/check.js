@@ -460,10 +460,95 @@ const checkSyncPolicy = () => {
   if (!overlaps.length) ok(`no state schedules a cycle past its own tick (${shown.join(", ")})`);
   else bad("no health state schedules a cycle longer than its own interval", overlaps.join("\n"));
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// SERVER-WINS UPSERTS
+//
+// A row with _synced = 0 is work this device has done and not yet sent. An
+// upsert that overwrites one throws away a register a teacher took, or marks
+// somebody entered, with no error and no trace — and sets _synced = 1 on the
+// way past, so the outbox stops believing there is anything to send.
+//
+// This is a source check rather than a behavioural one, because the code it
+// guards needs SQLite and a device. It is looking for exactly one thing: an
+// ON CONFLICT ... DO UPDATE that assigns _synced = 1 without either a WHERE
+// on the existing row, or a documented skip of dirty rows before it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const checkServerWinsUpserts = () => {
+  console.log("");
+  console.log("SERVER-WINS UPSERTS");
+
+  const files = walk(path.join(ROOT, "src"))
+    .concat(walk(path.join(ROOT, "app")))
+    .filter((f) => f.endsWith(".js"));
+
+  const offenders = [];
+
+  for (const file of files) {
+    const text = fs.readFileSync(file, "utf8");
+    if (!text.includes("DO UPDATE")) continue;
+
+    // Each upsert, from ON CONFLICT to the end of its template literal.
+    const re = /ON CONFLICT[\s\S]{0,2400}?`/g;
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      const block = m[0];
+      if (!/DO UPDATE/.test(block)) continue;
+      // Only upserts that CLAIM the row is now in step with the server.
+      if (!/_synced\s*=\s*1/.test(block)) continue;
+      // Guarded in the statement itself.
+      if (/WHERE[\s\S]{0,120}_synced\s*=\s*1/.test(block)) continue;
+
+      // Or guarded before it: a skip of locally-dirty rows in the 1200
+      // characters preceding, which is how cacheScores does it.
+      const before = text.slice(Math.max(0, m.index - 1200), m.index);
+      if (/_synced\s*===?\s*0[\s\S]{0,80}(continue|return)/.test(before)) continue;
+
+      const line = text.slice(0, m.index).split("\n").length;
+      offenders.push(`${path.relative(ROOT, file).replace(/\\/g, "/")}:${line}`);
+    }
+  }
+
+  /**
+   * Known, and not yet fixed.
+   *
+   * Eleven of these already existed when the check was written. Every one is
+   * real — each writes a table the phone also writes — but they sit in the
+   * middle of the sync engine, and changing eleven conflict resolutions at
+   * once, with no device to run them on, is how a working app stops working.
+   *
+   * So this is a ratchet rather than a pass. Nothing new may be added; the list
+   * only shrinks. Delete an entry as you fix it and the check will hold you to
+   * it.
+   */
+  const KNOWN = new Set([
+    "src/services/announcement.service.js",
+    "src/services/class.service.js",
+    "src/services/student.service.js",
+    "src/services/syncManager.js",
+    "src/services/timetableService.js",
+  ]);
+
+  const fresh = offenders.filter((o) => !KNOWN.has(o.split(":")[0]));
+
+  if (fresh.length) {
+    bad(
+      `${fresh.length} NEW upsert(s) can overwrite unsent local work`,
+      fresh.join("\n") +
+        "\n\nAdd `WHERE <table>._synced = 1` to the DO UPDATE, or skip" +
+        "\nrows whose _synced is 0 before reaching it."
+    );
+  } else if (offenders.length) {
+    ok(`no new server-wins upserts (${offenders.length} known - see KNOWN)`);
+  } else {
+    ok("no upsert overwrites a row this device has not sent");
+  }
+};
 checkParse();
 checkLocales();
 checkLinkQuality();
 checkSyncPolicy();
+checkServerWinsUpserts();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);

@@ -224,7 +224,14 @@ export const cacheExams = async (exams = []) => {
            resultsPublished = excluded.resultsPublished,
            extra_json = excluded.extra_json,
            deleted_at = NULL, _synced = 1, _synced_at = excluded._synced_at,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at
+           // Only rows this device has no unsent change to.
+           //
+           // Without it the server's copy overwrites an exam renamed or re-dated offline,
+           // and sets _synced = 1 on the way past, so the outbox stops
+           // believing there is anything to send. cacheScores has refused
+           // dirty rows all along; these two never did.
+           WHERE exams._synced = 1`,
         [
           id, e.schoolId || null,
           e.classId || null, e.className || null,
@@ -323,7 +330,14 @@ export const cacheExamSubjects = async (submissions = [], examId = null) => {
            submissionStatus = excluded.submissionStatus,
            submittedAt = excluded.submittedAt, rejectReason = excluded.rejectReason,
            deleted_at = NULL, _synced = 1, _synced_at = excluded._synced_at,
-           updated_at = excluded.updated_at`,
+           updated_at = excluded.updated_at
+           // Only rows this device has no unsent change to.
+           //
+           // Without it the server's copy overwrites a subject's submission state changed offline,
+           // and sets _synced = 1 on the way past, so the outbox stops
+           // believing there is anything to send. cacheScores has refused
+           // dirty rows all along; these two never did.
+           WHERE exam_subjects._synced = 1`,
         [
           id, String(s.examId || examId || ""), s.subjectId || null,
           s.classId || null, s.schoolId || null, s.teacherId || null,

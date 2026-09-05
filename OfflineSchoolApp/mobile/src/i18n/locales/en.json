@@ -5494,7 +5494,9 @@
     "timetable": "Timetable",
     "messages": "Messages",
     "gate": "Gate roster",
-    "finance": "Finance"
+    "finance": "Finance",
+    "attendance": "Attendance",
+    "exams": "Exams"
   },
   "feeStructures": {
     "short": "Fee schedule",

@@ -5494,7 +5494,9 @@
     "timetable": "Emploi du temps",
     "messages": "Messages",
     "gate": "Liste du portail",
-    "finance": "Finances"
+    "finance": "Finances",
+    "attendance": "Présences",
+    "exams": "Examens"
   },
   "feeStructures": {
     "short": "Grille des frais",
