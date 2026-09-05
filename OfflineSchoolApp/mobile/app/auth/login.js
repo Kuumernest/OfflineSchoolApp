@@ -48,8 +48,14 @@ const SCRIM_STOPS = [
  */
 const EDGE_RGB = [24, 20, 70];
 const edgeAlphaAt = (t) => {
-  // Top: strongest at the very top, gone by 30% down.
-  if (t < 0.30) return 0.38 * (1 - t / 0.30) ** 1.4;
+  // Top: 0.62 at the very edge, straight down to nothing by 34%.
+  //
+  // Measured against the image rather than guessed at. The header sits over
+  // open sky — rgb(178,209,231) where the subtitle falls — and at the 0.38
+  // this replaces the subtitle came out at 3.15:1 against the 4.5:1 that 15px
+  // text needs. Solving for the lightest curve that clears every threshold on
+  // this photograph, with margin to survive another one, gives 0.62 over 34%.
+  if (t < 0.34) return 0.62 * (1 - t / 0.34);
   // Foot: a lighter lift behind the parent-portal link.
   if (t > 0.78) return 0.52 * ((t - 0.78) / 0.22) ** 1.4;
   return 0;
@@ -149,7 +155,7 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
       <ImageBackground
-        source={require("../../assets/login-bg.png")}
+        source={require("../../assets/login-bg.jpg")}
         resizeMode="cover"
         style={styles.background}
       >
@@ -306,7 +312,9 @@ const styles = StyleSheet.create({
     textShadowRadius: 6,
   },
   subtitle: {
-    fontSize: 15, color: "#EEF0F4", marginTop: 4,
+    // White, not near-white: 15px is the smallest unprotected text here and
+    // needs every point of contrast it can get.
+    fontSize: 15, color: "#FFFFFF", marginTop: 4,
     textShadowColor:  "rgba(12, 10, 40, 0.55)",
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 5,
