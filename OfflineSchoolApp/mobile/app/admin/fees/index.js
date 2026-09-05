@@ -112,8 +112,21 @@ export default function FeesIndexScreen() {
       <StatusBar barStyle="dark-content" />
 
       <View style={styles.header}>
-        <Text style={styles.title}>{t("fees.title")}</Text>
-        <Text style={styles.subtitle}>{year}</Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.title}>{t("fees.title")}</Text>
+          <Text style={styles.subtitle}>{year}</Text>
+        </View>
+
+        {/* The fee schedule itself. There was no way to it from the phone —
+            structures were only ever visible on the desktop. */}
+        <TouchableOpacity
+          style={styles.structuresBtn}
+          onPress={() => router.push("/admin/fees/structures")}
+          activeOpacity={0.8}
+        >
+          <Ionicons name="document-text-outline" size={16} color="#4F46E5" />
+          <Text style={styles.structuresText}>{t("feeStructures.short")}</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Anything this device is still holding. Shown before the list so a
@@ -205,7 +218,16 @@ const styles = StyleSheet.create({
   centre:   { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
   emptyText:{ marginTop: 8, color: C.inkMuted, fontSize: 13 },
 
-  header:   { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  header: {
+    flexDirection: "row", alignItems: "center", gap: 12,
+    paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8,
+  },
+  structuresBtn: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    borderWidth: 1, borderColor: "#C7D2FE", borderRadius: 999,
+    paddingHorizontal: 12, paddingVertical: 7, backgroundColor: "#EEF2FF",
+  },
+  structuresText: { color: "#4F46E5", fontWeight: "700", fontSize: 12.5 },
   title:    { fontSize: 22, fontWeight: "700", color: C.ink },
   subtitle: { marginTop: 2, fontSize: 12, color: C.inkMuted },
 

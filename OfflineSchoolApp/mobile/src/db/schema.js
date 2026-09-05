@@ -96,6 +96,49 @@ export const SCHEMAS = {
     ],
   },
 
+  /**
+   * What the school charges, mirrored from the server.
+   *
+   * The phone had no such table and no way to see a fee structure at all. It
+   * pulls from /sync/pull, which returns six collections; the desktop pulls
+   * from /sync/changes, which returns thirty-six including this one. So a
+   * structure defined in the office reached the desktop and never the bursar's
+   * phone.
+   *
+   * items, classIds and penalty are JSON columns. They are documents on the
+   * server and nothing here queries inside them — a structure is read whole,
+   * shown whole and sent back whole — so a column each is honest storage
+   * rather than a join waiting to be written.
+   */
+  feeStructures: {
+    table: "fee_structures",
+    pk:    "id",
+    columns: {
+      id:           "TEXT PRIMARY KEY NOT NULL",
+      schoolId:     "TEXT",
+      school_id:    "TEXT",
+      academicYear: "TEXT",
+      term:         "TEXT",
+      // JSON: [{ code, label, amount, isOptional }]
+      items:        "TEXT",
+      // JSON: string[]. Empty means the whole school.
+      classIds:     "TEXT",
+      dueDate:      "TEXT",
+      // JSON: { mode, amount, graceDays }
+      penalty:      "TEXT",
+      isActive:     "INTEGER DEFAULT 1",
+      _synced:      "INTEGER DEFAULT 1",
+      _synced_at:   "TEXT",
+      deleted_at:   "TEXT",
+      created_at:   "TEXT",
+      updated_at:   "TEXT",
+    },
+    indexes: [
+      "CREATE INDEX IF NOT EXISTS idx_fee_structures_school ON fee_structures(schoolId)",
+      "CREATE INDEX IF NOT EXISTS idx_fee_structures_year ON fee_structures(schoolId, academicYear)",
+    ],
+  },
+
   subjects: {
     table: "subjects",
     pk:    "id",

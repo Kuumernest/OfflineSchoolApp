@@ -1665,6 +1665,8 @@ class SyncManagerClass {
 
       SyncProgress.step("announcements");
       await this.pullAnnouncements(lastSyncTime);
+      SyncProgress.step("fees");
+      await this.pullFeeStructures();
       if (this.isAdmin()) {
         SyncProgress.step("applications");
         await this.pullStudentApplications(lastSyncTime);
@@ -1692,6 +1694,37 @@ class SyncManagerClass {
       if (count > 0) console.log(`[SyncManager] Pulled ${count} announcement(s)`);
     } catch (err) {
       console.warn("[SyncManager] pullAnnouncements failed:", err.message);
+    }
+  }
+
+  /**
+   * Mirror what the school charges.
+   *
+   * The phone had no fee structures at all — /sync/pull answers with six
+   * collections and this is not one of them, while the desktop reads
+   * /sync/changes and gets thirty-six. A structure written in the office
+   * reached one surface and not the other.
+   *
+   * Its own request rather than a new key on the pull, because a school has a
+   * handful of structures and a whole-list replace is self-healing: a row
+   * deleted on the server disappears from the mirror without needing a
+   * tombstone to have been sent.
+   */
+  async pullFeeStructures() {
+    if (this._isUnauthenticated()) return;
+    if (this.isStudent()) return;
+
+    try {
+      const schoolId = await this.getSchoolId();
+      if (!schoolId) return;
+
+      const svc = require("./feeStructure.service");
+      const { count } = await svc.syncFromServer(schoolId);
+      if (count > 0) console.log(`[SyncManager] Pulled ${count} fee structure(s)`);
+    } catch (err) {
+      // A bursar without fees.view gets a 403 here, which is a permission
+      // rather than a fault; the rest of the sync must not fail for it.
+      console.warn("[SyncManager] pullFeeStructures failed:", err.message);
     }
   }
 

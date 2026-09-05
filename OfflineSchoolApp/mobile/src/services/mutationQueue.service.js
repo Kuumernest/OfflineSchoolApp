@@ -123,6 +123,7 @@ const SYNCABLE_LOCAL_TABLES = new Set([
   "classes", "subjects", "users", "teacher_assignments",
   "timetable", "students", "announcements",
   "questions", "quizzes", "quiz_attempts",
+  "fee_structures",
 ]);
 
 /** Cache of "does this table have a _synced_at column?" — probed once each. */

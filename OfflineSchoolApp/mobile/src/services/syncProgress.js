@@ -36,6 +36,7 @@ export const SYNC_STEPS = {
   students:     "syncStep.students",
   announcements:"syncStep.announcements",
   applications: "syncStep.applications",
+  fees:         "syncStep.fees",
   school:       "syncStep.school",
   quizzes:      "syncStep.quizzes",
 };
@@ -55,7 +56,9 @@ export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
     "prepare", "upload", "download",
     "classes", "subjects", "teachers", "periods", "assignments", "students",
     ...(isAdmin ? ["applications"] : []),
-    "announcements", "school", "quizzes",
+    // Fees are staff work, not a pupil's: a student's plan has no step here
+    // and their own charges arrive through the portal instead.
+    "announcements", "fees", "school", "quizzes",
   ];
 };
 
