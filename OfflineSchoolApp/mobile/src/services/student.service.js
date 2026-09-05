@@ -670,7 +670,8 @@ const cacheStudentsLocally = async (
              status          = excluded.status,
              is_active       = excluded.is_active,
              _synced         = 1,
-             updated_at      = excluded.updated_at`,
+             updated_at      = excluded.updated_at
+             WHERE students._synced = 1`,
           [
             String(s.id),
             userId,

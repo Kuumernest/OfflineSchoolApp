@@ -222,7 +222,8 @@ const syncServerClassesToLocal = async (db, schoolId, includeInactive = false) =
            deleted_at = excluded.deleted_at,
            updated_at = excluded.updated_at,
            _synced    = 1,
-           _synced_at = excluded._synced_at`,
+           _synced_at = excluded._synced_at
+           WHERE classes._synced = 1`,
         [serverId, name, sc.level || null, sc.section || "", schoolIdVal, schoolIdVal, activeValue, deletedAt, createdAt, updatedAt, ts]
       );
 

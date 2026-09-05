@@ -1359,7 +1359,8 @@ export const pullAnnouncements = async (lastSync) => {
            _ack_pending    = excluded._ack_pending,
            _synced         = 1,
            _synced_at      = excluded._synced_at,
-           updated_at      = excluded.updated_at`,
+           updated_at      = excluded.updated_at
+           WHERE announcements._synced = 1`,
         [
           String(id),
           a.title       || "",

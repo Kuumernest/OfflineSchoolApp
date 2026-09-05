@@ -494,6 +494,11 @@ const checkServerWinsUpserts = () => {
     while ((m = re.exec(text)) !== null) {
       const block = m[0];
       if (!/DO UPDATE/.test(block)) continue;
+      // Real SQL, not prose. syncManager explains this very pattern in a
+      // comment — "Try INSERT with ON CONFLICT(id) DO UPDATE" — and the scan
+      // was matching the sentence, then reading 2400 characters of unrelated
+      // code after it. Every genuine DO UPDATE assigns from excluded.
+      if (!/excluded\./.test(block)) continue;
       // Only upserts that CLAIM the row is now in step with the server.
       if (!/_synced\s*=\s*1/.test(block)) continue;
       // Guarded in the statement itself.
@@ -521,13 +526,12 @@ const checkServerWinsUpserts = () => {
    * only shrinks. Delete an entry as you fix it and the check will hold you to
    * it.
    */
-  const KNOWN = new Set([
-    "src/services/announcement.service.js",
-    "src/services/class.service.js",
-    "src/services/student.service.js",
-    "src/services/syncManager.js",
-    "src/services/timetableService.js",
-  ]);
+  // Empty, and it should stay that way.
+  //
+  // This held eleven entries when the check was written. All eleven are
+  // fixed; the list is the ratchet, so anything added here later is a
+  // decision to ship a path that can eat a teacher's work.
+  const KNOWN = new Set([]);
 
   const fresh = offenders.filter((o) => !KNOWN.has(o.split(":")[0]));
 

@@ -136,7 +136,15 @@ async function upsertAssignmentRow(db, {
            role         = COALESCE(?, role),
            is_primary   = COALESCE(?, is_primary),
            deleted_at   = ?,
-           _synced      = ?,
+           -- Never downgrade a dirty row to clean.
+           --
+           -- This path exists so a row created on this device adopts the id
+           -- the server gave it, and that must happen whether or not the row
+           -- has been pushed. But the caller passes _synced = 1 by default,
+           -- and writing that over an unsent row tells the outbox there is
+           -- nothing left to send. The row keeps its own flag; only the id
+           -- and the name blobs are adopted.
+           _synced      = CASE WHEN _synced = 0 THEN 0 ELSE ? END,
            _synced_at   = ?,
            updated_at   = ?
        WHERE id = ?`,
@@ -229,7 +237,13 @@ async function upsertAssignmentRow(db, {
        deleted_at   = excluded.deleted_at,
        _synced      = excluded._synced,
        _synced_at   = excluded._synced_at,
-       updated_at   = excluded.updated_at`,
+       updated_at   = excluded.updated_at
+       -- Only where this device has nothing unsent for this row.
+       --
+       -- Same id, so the server's copy is simply older than an edit made
+       -- here and not yet pushed. The outbox settles it; until then the
+       -- local values stand.
+       WHERE teacher_assignments._synced = 1`,
     [
       targetId,
       teacherId, teacherId,
@@ -2143,7 +2157,8 @@ class SyncManagerClass {
                classTeacherId   = excluded.classTeacherId,
                classTeacherName = excluded.classTeacherName,
                is_active = excluded.is_active, _synced = 1, deleted_at = NULL,
-               updated_at = excluded.updated_at`,
+               updated_at = excluded.updated_at
+               WHERE classes._synced = 1`,
             [
               String(id), c.schoolId, c.schoolId,
               c.name, c.level || null, c.section || "",
@@ -2200,7 +2215,8 @@ class SyncManagerClass {
                is_active = excluded.is_active,
                must_reset_password = excluded.must_reset_password,
                _synced = 1, _synced_at = excluded._synced_at,
-               deleted_at = NULL, updated_at = excluded.updated_at`,
+               deleted_at = NULL, updated_at = excluded.updated_at
+               WHERE users._synced = 1`,
             [
               String(id), t.schoolId, t.schoolId,
               t.name || "Unknown", t.email.toLowerCase().trim(),
@@ -2263,7 +2279,8 @@ class SyncManagerClass {
                classId = excluded.classId, class_id = excluded.class_id,
                name = excluded.name, code = excluded.code,
                teacher_id = excluded.teacher_id, teacher_name = excluded.teacher_name,
-               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at`,
+               _synced = 1, deleted_at = NULL, updated_at = excluded.updated_at
+               WHERE subjects._synced = 1`,
             [
               String(id), s.schoolId, s.schoolId,
               String(classId), String(classId),
@@ -2748,7 +2765,8 @@ class SyncManagerClass {
                question_type = excluded.question_type, media_url = excluded.media_url,
                difficulty = excluded.difficulty, points = excluded.points,
                explanation = excluded.explanation, is_active = excluded.is_active,
-               _synced = 1, updated_at = excluded.updated_at`,
+               _synced = 1, updated_at = excluded.updated_at
+               WHERE questions._synced = 1`,
             [
               String(id), q.schoolId, categoryId,
               q.question_text || q.questionText,
@@ -2864,7 +2882,8 @@ class SyncManagerClass {
                show_explanation   = excluded.show_explanation,
                is_published       = excluded.is_published,
                updated_at         = excluded.updated_at,
-               deleted_at         = NULL, _synced = 1`,
+               deleted_at         = NULL, _synced = 1
+               WHERE quizzes._synced = 1`,
             [
               id, schoolId_, q.title,
               q.description || null, q.instructions || null,
@@ -2946,7 +2965,8 @@ class SyncManagerClass {
                status = excluded.status, raw_score = excluded.raw_score,
                max_score = excluded.max_score, percentage = excluded.percentage,
                is_passed = excluded.is_passed, submitted_at = excluded.submitted_at,
-               time_taken_secs = excluded.time_taken_secs, _synced = 1, _synced_at = excluded._synced_at`,
+               time_taken_secs = excluded.time_taken_secs, _synced = 1, _synced_at = excluded._synced_at
+               WHERE quiz_attempts._synced = 1`,
             [
               String(id), a.quiz_id || a.quizId, a.user_id || a.userId,
               a.attempt_number || a.attemptNumber || 1,
