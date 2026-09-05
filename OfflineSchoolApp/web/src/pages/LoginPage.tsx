@@ -8,6 +8,13 @@ import { Eye, EyeOff, GraduationCap, Loader2 } from "lucide-react";
 
 import { useAuthStore, useMustResetPassword } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+// The 0.22 MB JPEG the phone uses, not the 2.61 MB PNG this pointed at.
+// A login page is the one screen every user loads before anything is
+// cached, over the same school connection the rest of the app now
+// measures and adapts to — and a photograph stored as PNG was twelve
+// times the size it needed to be. Same picture, and the lighter render
+// the phone was changed to, so the two surfaces match.
+import loginBg from "@/assets/login-bg.jpg";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SCHEMA
@@ -74,8 +81,13 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-primary-900 via-primary-800 to-primary-700 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div
+      className="relative min-h-screen bg-primary-900 bg-cover bg-center flex items-center justify-center p-4"
+      style={{ backgroundImage: `url(${loginBg})` }}
+    >
+      {/* Dark overlay so the white text and logo stay readable on the photo */}
+      <div className="absolute inset-0 bg-primary-900/70 pointer-events-none" aria-hidden="true" />
+      <div className="relative w-full max-w-md">
 
         {/* Logo */}
         <div className="text-center mb-8">
