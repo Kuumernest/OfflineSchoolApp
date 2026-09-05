@@ -1,22 +1,22 @@
 // app/student/results/[examId].js
 // Student's own report card view for a specific exam
 
-import React, { useEffect, useCallback } from "react";
+import React, { useEffect, useCallback, useState } from "react";
 import {
   View, Text, StyleSheet, TouchableOpacity,
   ActivityIndicator, Alert, StatusBar, Share,
 } from "react-native";
 import { useLocalSearchParams, router } from "expo-router";
-import { useDispatch, useSelector }     from "react-redux";
+// No react-redux. This was the only file in the app importing it, and no
+// <Provider> is mounted anywhere — so the screen threw the moment it
+// rendered. It could not have worked with one either: the three thunks it
+// imported below do not exist. resultsSlice exports processResults,
+// publishResults and unpublishResults, and none of them.
 import { Ionicons }                     from "@expo/vector-icons";
 import { useAuthStore }                 from "../../../src/store/auth.store";
 import { useTranslation }               from "../../../src/i18n/useTranslation";
 import ReportCard                       from "../../admin/components/ReportCard";
-import {
-  fetchMyExamResult,
-  fetchExamById,
-  clearMyExamResult,
-} from "../../../src/store/slices/resultsSlice";
+import ExamService                      from "../../../src/services/exam.service";
 import { errorText } from "../../../src/utils/appError";
 
 // ─────────────────────────────────────────────────────────
@@ -44,33 +44,50 @@ const COLORS = {
 
 export default function StudentReportCardScreen() {
   const { examId }  = useLocalSearchParams();
-  const dispatch    = useDispatch();
   const user        = useAuthStore((s) => s.user);
   const studentId   = user?._id || user?.id;
   const schoolId    = user?.schoolId;
   const { t }       = useTranslation();
 
-  const {
-    myExamResult,
-    myExamResultLoading,
-    currentExam,
-    error,
-  } = useSelector((s) => s.results);
+  const [myExamResult,        setResult]  = useState(null);
+  const [myExamResultLoading, setLoading] = useState(true);
+  const [error,               setError]   = useState(null);
+
+  // The exam's own row is not fetched separately. GET /exams is gated on
+  // exams.view, which a pupil does not have, and /results/:examId/student/:id
+  // on results.view, which they do not have either — the two calls this screen
+  // used to want were both 403s waiting to happen. /results/my-results carries
+  // the exam name, year and term alongside each result, so the header reads
+  // them off the same row as the marks.
+  const currentExam = myExamResult
+    ? {
+        name:         myExamResult.examName,
+        academicYear: myExamResult.academicYear,
+        term:         myExamResult.term,
+      }
+    : null;
 
   // ── Load data ─────────────────────────────────────────────
 
-  const load = useCallback(() => {
-    if (!examId || !studentId) return;
+  const load = useCallback(async () => {
+    if (!examId) return;
+    setLoading(true);
+    setError(null);
+    try {
+      // One call for everything this pupil may see, then the row for this
+      // exam. The list screen has already cached it, so arriving here with no
+      // signal still finds it.
+      const { results } = await ExamService.getMyResults(schoolId);
+      const row = (results ?? []).find((r) => String(r.examId) === String(examId));
+      setResult(row ?? null);
+    } catch (err) {
+      setError(errorText(t, err));
+    } finally {
+      setLoading(false);
+    }
+  }, [examId, schoolId, t]);
 
-    dispatch(fetchMyExamResult({ examId, studentId, schoolId }));
-    dispatch(fetchExamById({ examId, schoolId }));
-  }, [examId, studentId, schoolId, dispatch]);
-
-  useEffect(() => {
-    load();
-    // Clean up when leaving the screen
-    return () => { dispatch(clearMyExamResult()); };
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   // ── Share ─────────────────────────────────────────────────
 
