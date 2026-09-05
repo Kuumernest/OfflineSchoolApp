@@ -27,7 +27,7 @@
     "check:enrollindex": "node scripts/check-enrollment-index.js",
     "check:orphans": "node scripts/check-orphans.js",
     "check": "npm run check:roles && npm run check:policy && npm run check:mail && npm run check:reportcard && npm run check:tplrepair",
-    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login && npm run check:feed && npm run check:tenancy && npm run check:idem && npm run check:desktop && npm run check:cards && npm run check:coeff && npm run check:term && npm run check:homework && npm run check:attendance && npm run check:messaging && npm run check:enrollindex && npm run check:orphans && npm run check:hourly && npm run check:salaryedit && npm run check:smoke",
+    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login && npm run check:feed && npm run check:tenancy && npm run check:idem && npm run check:desktop && npm run check:cards && npm run check:coeff && npm run check:term && npm run check:homework && npm run check:attendance && npm run check:messaging && npm run check:enrollindex && npm run check:orphans && npm run check:hourly && npm run check:salaryedit && npm run check:myresults && npm run check:smoke",
     "test": "echo \"Error: no test specified\" && exit 1",
     "check:tenancy": "node scripts/check-announcement-tenancy.js && node scripts/check-student-tenancy.js",
     "check:term": "node scripts/check-term-compute.js",
@@ -36,7 +36,8 @@
     "check:tplrepair": "node scripts/check-template-repair.js",
     "repair:templates": "node scripts/repair-report-templates.js",
     "check:hourly": "node scripts/check-hourly-payroll.js",
-    "check:salaryedit": "node scripts/check-salary-edit.js"
+    "check:salaryedit": "node scripts/check-salary-edit.js",
+    "check:myresults": "node scripts/check-student-results.js"
   },
   "keywords": [],
   "author": "",

@@ -38,41 +38,6 @@ const COLORS = {
  * Resolve all student IDs from local SQLite.
  * Your attendance records use Student._id, not User._id.
  */
-const resolveAllStudentIds = async (userId) => {
-  const ids = new Set([String(userId)]);
-  try {
-    const db     = await getDatabase();
-    const tables = await db
-      .getAllAsync(`SELECT name FROM sqlite_master WHERE type='table'`)
-      .catch(() => []);
-    const tableSet = new Set(tables.map((t) => t.name));
-    const tbl      = ["students", "student"].find((t) => tableSet.has(t));
-    if (!tbl) return ids;
-
-    const cols   = await db.getAllAsync(`PRAGMA table_info(${tbl})`).catch(() => []);
-    const colSet = new Set(cols.map((c) => c.name));
-    const userCol =
-      colSet.has("user_id") ? "user_id" :
-      colSet.has("userId")  ? "userId"  : null;
-    if (!userCol) return ids;
-
-    const rows = await db
-      .getAllAsync(
-        `SELECT * FROM ${tbl} WHERE ${userCol} = ? OR ${userCol} = ?`,
-        [userId, String(userId)]
-      )
-      .catch(() => []);
-
-    for (const row of rows) {
-      ["id", "_id", "studentId", "student_id"].forEach((k) => {
-        if (row[k]) ids.add(String(row[k]));
-      });
-    }
-  } catch (e) {
-    console.warn("[resolveAllStudentIds]", e.message);
-  }
-  return ids;
-};
 
 /**
  * Fetch all published exams for this school, then for each exam
@@ -82,110 +47,21 @@ const resolveAllStudentIds = async (userId) => {
  * This matches your results.service.js → getStudentResult()
  */
 const fetchMyResults = async (userId, schoolId) => {
-  const studentIds = await resolveAllStudentIds(userId);
-  const idList     = [...studentIds];
-
-  console.log(`[fetchMyResults] trying ids: [${idList.join(", ")}]`);
-
-  // ── Step 1: Get list of published exams for this school ──────────────────
+  // One request, server-scoped to this pupil.
   //
-  // ExamService is network-first with a SQLite fallback, so a result the
-  // student has already opened stays readable with no signal.
-  let exams   = [];
-  let isStale = false;
-  try {
-    const res = await ExamService.getExams({ schoolId, status: "published" });
-    exams   = res.exams   || [];
-    isStale = res.isStale || false;
-    console.log(
-      `[fetchMyResults] found ${exams.length} published exam(s)` +
-      (isStale ? " (from cache)" : "")
-    );
-  } catch (err) {
-    console.warn("[fetchMyResults] exam list failed:", err.message);
-  }
+  // What was here walked every published exam and, for each, tried every id
+  // this account might answer to — a request per exam per candidate. All of
+  // them 403'd, because a student holds neither exams.view nor results.view,
+  // and the loop treated 403 as "not this one" and carried on. So the screen
+  // reported no results rather than no permission, which is the hardest kind
+  // of bug to be told about.
+  const { results, isStale } = await ExamService.getMyResults(schoolId);
 
-  if (exams.length === 0) {
-    return { results: [], source: "no-exams", isStale };
-  }
-
-  // ── Step 2: For each exam, try each student ID ────────────────────────────
-  const results = [];
-
-  for (const exam of exams) {
-    const examId = exam._id || exam.id;
-    if (!examId) continue;
-
-    let found = false;
-
-    for (const studentId of idList) {
-      if (found) break;
-      try {
-        // Network-first, SQLite fallback (ExamService.getStudentResult).
-        const data = await ExamService.getStudentResult(examId, studentId, schoolId);
-
-        // Backend returns { success, data: { summary, scores } }; the cached
-        // copy is already the unwrapped result object.
-        const resultData = data?.data || data?.result || data;
-        if (data?.isStale) isStale = true;
-
-        if (resultData && (resultData.summary || resultData.percentage != null)) {
-          // Normalise into a flat shape for the UI
-          const summary = resultData.summary || resultData;
-          results.push({
-            // IDs
-            _id:          summary._id        || `${examId}_${studentId}`,
-            examId,
-            studentId,
-
-            // Exam info
-            examName:     exam.name          || exam.title       || "Examination",
-            academicYear: exam.academicYear  || exam.academic_year || null,
-            term:         exam.term          || exam.semester    || null,
-            className:    summary.className  || exam.className   || null,
-
-            // Scores
-            percentage:   summary.percentage ?? summary.totalPercentage ?? 0,
-            overallGrade: summary.overallGrade || summary.grade || "—",
-            average:      summary.average      || 0,
-            totalScore:   summary.totalScore   || summary.total  || 0,
-            maxTotalScore:summary.maxTotalScore || exam.totalMarks || 0,
-
-            // Rankings
-            classPosition:  summary.classPosition  || summary.position || null,
-            totalInClass:   summary.totalInClass   || null,
-
-            // Status
-            isPassing:       summary.isPassing ?? (summary.percentage >= 50),
-            promotionStatus: summary.promotionStatus || null,
-            overallRemark:   summary.overallRemark  || summary.remark || null,
-
-            // Subject breakdown (for detail screen)
-            subjectBreakdown: resultData.scores || summary.subjectBreakdown || [],
-
-            // Raw data (for detail screen)
-            _raw: resultData,
-          });
-          found = true;
-        }
-      } catch (err) {
-        const status = err.response?.status;
-        if (status === 404) continue; // No result for this studentId, try next
-        if (status === 403) continue; // Unauthorized for this ID
-        if (err.code === "OFFLINE_NO_CACHE") {
-          isStale = true;
-          continue; // Offline and this one was never cached — skip quietly
-        }
-        console.warn(
-          `[fetchMyResults] result ${examId}/${studentId}:`,
-          err.message
-        );
-      }
-    }
-  }
-
-  console.log(`[fetchMyResults] → ${results.length} result(s) found`);
-  return { results, source: isStale ? "cache" : "api", isStale };
+  return {
+    results,
+    source: isStale ? "cache" : "api",
+    isStale,
+  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

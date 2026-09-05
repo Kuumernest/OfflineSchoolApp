@@ -605,6 +605,23 @@ const hydrateResult = (r) => ({
   isPublished: r.isPublished === 1,
 });
 
+/**
+ * Every cached result on this device.
+ *
+ * For the pupil's own results screen when there is no connection. It needs no
+ * examId — the caller does not know which exams exist offline, which is the
+ * whole problem — and on a pupil's device the cache holds only their own
+ * results, because their own is all the server will ever hand them.
+ */
+export const getAllResultsLocal = async () => {
+  await ensureExamTables();
+  const db = await getDatabase();
+  const rows = await db.getAllAsync(
+    `SELECT * FROM exam_results ORDER BY average DESC`
+  ).catch(() => []);
+  return (rows ?? []).map(hydrateResult);
+};
+
 export const getResultsLocal = async ({ examId, classId } = {}) => {
   await ensureExamTables();
   const db = await getDatabase();
@@ -671,7 +688,7 @@ export default {
   cacheExams, getExamsLocal, getExamByIdLocal,
   cacheExamSubjects, getExamSubjectsLocal, setExamSubjectStatusLocal,
   cacheScores, getScoresLocal, saveScoresLocal, countUnsyncedScores,
-  cacheResults, getResultsLocal, getStudentResultLocal, getResultsCachedAt,
+  cacheResults, getResultsLocal, getAllResultsLocal, getStudentResultLocal, getResultsCachedAt,
   putBlob, getBlob,
   computePercentage,
 };

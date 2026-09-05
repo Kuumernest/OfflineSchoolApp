@@ -694,6 +694,39 @@ const getRankings = async (examId, schoolId, scope = "class", classId) => {
 /**
  * Get a single student's result for an exam.
  */
+/**
+ * Every published result belonging to whoever is signed in.
+ *
+ * One request. The screen used to fetch the exam list and then one result
+ * per exam per candidate id, and every one of those answered 403: a student
+ * holds neither exams.view nor results.view, and was never going to. The
+ * loop swallowed the 403 and moved on, so the screen showed an empty list
+ * rather than an error — which is why this looked like "no results" instead
+ * of "not allowed".
+ *
+ * /results/my-results is scoped to the caller on the server and needs no
+ * permission, because there is nothing to be permitted to: it can only
+ * describe the person asking.
+ */
+const getMyResults = async (schoolId) => {
+  try {
+    const res = await api.get("/results/my-results", { params: { schoolId } });
+    const rows = res.data?.data ?? [];
+
+    // Cached against the exam so the detail screen and a later offline visit
+    // both find it where they already look.
+    for (const r of rows) {
+      await ExamCache.cacheResults([{ ...r, examId: r.examId, studentId: r.studentId }], r.examId)
+        .catch(() => {});
+    }
+    return { results: rows, isStale: false };
+  } catch (err) {
+    if (!isOfflineError(err)) throw err;
+    const cached = await ExamCache.getAllResultsLocal().catch(() => []);
+    return { results: cached ?? [], isStale: true };
+  }
+};
+
 const getStudentResult = async (examId, studentId, schoolId) => {
   if (!examId || !studentId) {
     throw new Error("examId and studentId are required");
@@ -901,6 +934,7 @@ export const ExamService = {
   processResults,
   getExamStats,
   getRankings,
+  getMyResults,
   getStudentResult,
   getStudentReportCard,
   getAllResults,
