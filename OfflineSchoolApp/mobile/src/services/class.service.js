@@ -15,6 +15,7 @@ import {
 import { generateLocalId } from "../utils/idHelpers";
 import { getCurrentAuth }  from "../utils/authHelpers";
 import { API }             from "./apiEndpoints";
+import { MutationQueue }   from "./mutationQueue.service";
 import api                 from "./api";
 import NetInfo             from "@react-native-community/netinfo";
 import { appError }        from "../utils/appError";
@@ -546,11 +547,26 @@ export const ClassService = {
       ).catch(() => {});
     }
 
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return true;
-
-    try {
-      await api.put(API.admin.classes.detail(id), {
+    // Queued, not sent.
+    //
+    // This used to PUT directly: nothing at all when offline, and on failure a
+    // console.warn and a return. So an edit made with no signal, or one whose
+    // request lost a socket, was written to this device, marked unsent, and
+    // then never retried by anything. A class teacher assigned on the phone
+    // could simply never reach the server, and the screen had no way to say so
+    // — it had already shown the new name.
+    //
+    // The outbox retries with backoff, survives a restart, and puts a row that
+    // keeps failing on the pending-changes screen where somebody can see it.
+    // __local is what clears _synced once the server has taken it, so the flag
+    // means what the rest of the app assumes it means.
+    await MutationQueue.enqueue({
+      // Coalesced per class: editing the same one twice before a sync sends the
+      // final state once rather than both states in order.
+      entityKey: `class-update:${id}`,
+      method:    "PUT",
+      endpoint:  API.admin.classes.detail(id),
+      payload:   {
         name: trimmed,
         // Each field present only when the caller meant to change it. The
         // server reads an absent level/section as "leave alone", an empty
@@ -561,14 +577,9 @@ export const ClassService = {
         ...(touchesTeacher
           ? { classTeacherId: classTeacher?.id ?? "" }
           : {}),
-      });
-      await db.runAsync(
-        `UPDATE ${TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
-        [now, id]
-      );
-    } catch (err) {
-      console.warn(`[ClassService] Update push failed: ${err.message}`);
-    }
+        __local: { table: TABLE, id },
+      },
+    });
 
     return true;
   },

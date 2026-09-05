@@ -30,6 +30,7 @@ import NetInfo                                        from "@react-native-commun
 import { getDatabase }                                from "../db/database";
 import { ensureTableSchema }                          from "../db/schemaManager";
 import { createTableFromSchema }                      from "../db/schema";
+import { MutationQueue }                              from "./mutationQueue.service";
 import {
   tableExists,
   getTableColumns,
@@ -1206,21 +1207,22 @@ export const TeacherService = {
 
     if (!isAuthenticated()) return true;
 
-    const net = await NetInfo.fetch();
-    if (!net.isConnected) return true;
-
-    try {
-      await api.put(API.admin.teachers.detail(id), {
-        name: cleanName, email: cleanEmail,
-      });
-      await db.runAsync(
-        `UPDATE ${USERS_TABLE} SET _synced = 1, _synced_at = ? WHERE id = ?`,
-        [now, id]
-      );
-      console.log(`[teachers] Update synced: ${cleanName}`);
-    } catch (err) {
-      console.warn(`[teachers] Update server push failed: ${err.message}`);
-    }
+    // Queued, like every other write on this device.
+    //
+    // It used to PUT directly and give up quietly: nothing when offline, a
+    // console.warn on failure, and a row left marked unsent with nothing to
+    // retry it. A teacher renamed on the phone could stay renamed only on that
+    // phone, indefinitely, with no sign anything had gone wrong.
+    await MutationQueue.enqueue({
+      entityKey: `teacher-update:${id}`,
+      method:    "PUT",
+      endpoint:  API.admin.teachers.detail(id),
+      payload:   {
+        name: cleanName,
+        email: cleanEmail,
+        __local: { table: USERS_TABLE, id },
+      },
+    });
 
     return true;
   },
