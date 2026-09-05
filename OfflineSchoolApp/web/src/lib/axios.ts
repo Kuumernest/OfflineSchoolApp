@@ -10,6 +10,20 @@ import { offlineAdapter } from "@/lib/offline/adapter";
 // (nginx / caddy) forward /api → backend.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import {
+  scaleTimeout, recordSuccess, recordTimeout, recordFailure,
+} from "./linkQuality";
+
+// axios has no `metadata` on its config; this is the conventional way to
+// carry per-request state from the request interceptor to the response one.
+declare module "axios" {
+  export interface InternalAxiosRequestConfig {
+    metadata?: { budget: number; startedAt: number; servedLocally?: boolean };
+  }
+  export interface AxiosRequestConfig {
+    metadata?: { budget: number; startedAt: number; servedLocally?: boolean };
+  }
+}
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? "/api",
   // 30s, not 15s. The schools run over the public internet, and 15s was
@@ -92,6 +106,19 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // 3️⃣  Scale the timeout to the link actually in use.
+    //
+    // The ORIGINAL budget, remembered, not whatever is on the config now:
+    // the 401 path below replays originalRequest — the same object — so it
+    // re-enters this interceptor with config.timeout already scaled once.
+    // Reading it back would scale the scaled value, and on a slow link a
+    // 30s budget would reach the 180s ceiling by its second attempt.
+    const prior  = Number(config.metadata?.budget);
+    const budget = prior > 0 ? prior : (Number(config.timeout) || 30_000);
+
+    config.timeout  = scaleTimeout(budget);
+    config.metadata = { budget, startedAt: Date.now() };
+
     return config;
   },
   (error) => Promise.reject(error),
@@ -108,8 +135,20 @@ api.interceptors.request.use(
 // ─────────────────────────────────────────────────────────────────────────────
 
 api.interceptors.response.use(
-  (res) => res,
+  (res) => {
+    const meta = res.config?.metadata;
+    if (meta?.startedAt && !meta.servedLocally) {
+      recordSuccess(Date.now() - meta.startedAt, meta.budget);
+    }
+    return res;
+  },
   async (err) => {
+    // ECONNABORTED is how axios reports its own timeout firing. Only that
+    // counts: a 500 or a 404 says nothing about how fast the link is, and
+    // feeding those in would raise every budget because of a server fault.
+    if (err?.code === "ECONNABORTED") recordTimeout();
+    else recordFailure();
+
     const originalRequest = err?.config as (typeof err)["config"] & { _retry?: boolean };
     const status          = err?.response?.status as number | undefined;
     const url             = (originalRequest?.url as string) ?? "";

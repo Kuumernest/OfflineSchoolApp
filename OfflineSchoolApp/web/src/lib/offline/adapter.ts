@@ -66,14 +66,25 @@ const splitUrl = (config: InternalAxiosRequestConfig): { path: string; query: Re
 const asAxiosResponse = (
   config: InternalAxiosRequestConfig,
   local: { status: number; data: unknown }
-): AxiosResponse => ({
-  data:       local.data,
-  status:     local.status,
-  statusText: local.status === 200 ? "OK" : String(local.status),
-  headers:    {},
-  config,
-  request:    null,
-});
+): AxiosResponse => {
+  // Tell the link measurement in lib/axios.ts to ignore this one.
+  //
+  // On the desktop a local answer returns in about a millisecond. Fed into that
+  // measurement it reads as an extraordinarily fast network, and after five of
+  // them the multiplier floors — so the next request that really does go out
+  // gets half the budget it asked for, on a connection nothing has measured.
+  // A local answer says nothing about the link.
+  if (config.metadata) config.metadata.servedLocally = true;
+
+  return {
+    data:       local.data,
+    status:     local.status,
+    statusText: local.status === 200 ? "OK" : String(local.status),
+    headers:    {},
+    config,
+    request:    null,
+  };
+};
 
 /**
  * Install the local-first adapter in front of whatever axios was using.
