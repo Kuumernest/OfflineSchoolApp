@@ -266,6 +266,69 @@ const checkLinkQuality = () => {
   const bogus = [LQ.scaleTimeout(undefined), LQ.scaleTimeout(0), LQ.scaleTimeout(-5)];
   if (bogus.every((v) => !Number.isFinite(v) || v <= 0)) ok("a bad budget is passed through, never NaN-scaled");
   else bad("a bad budget is passed through, never NaN-scaled", JSON.stringify(bogus));
+
+  // ── Batch size ────────────────────────────────────────────────────────────
+
+  // A healthy link gets the size the caller asked for. Anything else and
+  // every batch in the app silently changes the day this module lands.
+  LQ._reset();
+  if (LQ.batchSize(50) === 50 && LQ.batchSize(25) === 25) ok("an unmeasured link uses the caller's size");
+  else bad("an unmeasured link uses the caller's size", `${LQ.batchSize(50)}, ${LQ.batchSize(25)}`);
+
+  // A timeout halves it immediately. Waiting for confirmation would mean
+  // several more failures at a size already known to be too big.
+  LQ._reset();
+  LQ.recordTimeout();
+  if (LQ.batchSize(50) === 25) ok("a timeout halves the batch at once");
+  else bad("a timeout halves the batch at once", `${LQ.batchSize(50)}`);
+
+  // And keeps halving, down to a floor. Zero would be an infinite loop in
+  // every caller that walks a list in slices.
+  LQ._reset();
+  for (let i = 0; i < 20; i++) LQ.recordTimeout();
+  const floorBatch = LQ.batchSize(50);
+  if (floorBatch >= 10 && floorBatch <= 12) ok(`the batch has a floor (${floorBatch} of 50)`);
+  else bad("the batch has a floor", `${floorBatch}`);
+  if (LQ.batchSize(1) >= 1) ok("the batch never reaches zero");
+  else bad("the batch never reaches zero", `${LQ.batchSize(1)}`);
+
+  // Recovery is additive and slow: one clean request must not undo a halving.
+  LQ._reset();
+  LQ.recordTimeout();
+  const halved = LQ.currentBatchScale();
+  LQ.recordSuccess(500, 30_000);
+  if (LQ.currentBatchScale() === halved) ok("one success does not undo a halving");
+  else bad("one success does not undo a halving", `${halved} -> ${LQ.currentBatchScale()}`);
+
+  LQ._reset();
+  LQ.recordTimeout();
+  for (let i = 0; i < 8; i++) LQ.recordSuccess(500, 30_000);
+  if (LQ.currentBatchScale() > halved) ok("a clean run grows the batch back");
+  else bad("a clean run grows the batch back", `${LQ.currentBatchScale()}`);
+
+  // The ceiling holds, so a fast link cannot build a request so large that
+  // the server rejects the body outright.
+  LQ._reset();
+  for (let i = 0; i < 200; i++) LQ.recordSuccess(500, 30_000);
+  if (LQ.batchSize(50) <= 100) ok(`the batch has a ceiling (${LQ.batchSize(50)} of 50)`);
+  else bad("the batch has a ceiling", `${LQ.batchSize(50)}`);
+
+  // The two controls must not be the same knob. A slow-but-succeeding link
+  // should lengthen timeouts while leaving the batch alone — if the batch
+  // shrank here too, the pair would oscillate: smaller batch, faster
+  // request, lower ratio, bigger batch, timeout, and round again.
+  LQ._reset();
+  for (let i = 0; i < 12; i++) LQ.recordSuccess(24_000, 30_000);
+  const slowFactor = LQ.currentFactor();
+  const slowBatch  = LQ.batchSize(50);
+  if (slowFactor > 2 && slowBatch === 50) ok("slow but succeeding: longer timeouts, same batch");
+  else bad("slow but succeeding: longer timeouts, same batch", `factor ${slowFactor}, batch ${slowBatch}`);
+
+  // Timing out is the only thing that shrinks it.
+  LQ._reset();
+  for (let i = 0; i < 12; i++) LQ.recordFailure();
+  if (LQ.batchSize(50) === 50) ok("server faults leave the batch alone");
+  else bad("server faults leave the batch alone", `${LQ.batchSize(50)}`);
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

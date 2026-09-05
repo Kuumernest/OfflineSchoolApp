@@ -95,6 +95,16 @@ export const recordSuccess = (durationMs, budgetMs) => {
   ratios.push(Math.min(1, durationMs / budgetMs));
   if (ratios.length > WINDOW) ratios.shift();
   recompute();
+
+  // Additive increase, once a run of COMFORTABLE requests has earned it. A
+  // success that only just made it resets the run rather than advancing it.
+  const ratio = durationMs / budgetMs;
+  if (ratio > BATCH_COMFORT) {
+    cleanRun = 0;
+  } else if (++cleanRun >= BATCH_RECOVERY) {
+    cleanRun = 0;
+    batchScale = Math.min(BATCH_MAX_SCALE, batchScale + BATCH_INCREASE);
+  }
 };
 
 /**
@@ -109,6 +119,10 @@ export const recordTimeout = () => {
   ratios.push(1);
   if (ratios.length > WINDOW) ratios.shift();
   recompute();
+
+  // Multiplicative decrease, and the recovery run starts again.
+  cleanRun = 0;
+  batchScale = Math.max(BATCH_MIN_SCALE, batchScale * BATCH_DECREASE);
 };
 
 /** Non-timeout failures say nothing about speed, so they are dropped. */
@@ -136,9 +150,74 @@ export const scaleTimeout = (baseMs) => {
 };
 
 /** Testing only. */
-export const _reset = () => { ratios.length = 0; factor = 1; };
+export const _reset = () => { ratios.length = 0; factor = 1; batchScale = 1; cleanRun = 0; };
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// HOW MUCH ONE REQUEST SHOULD CARRY
+//
+// A separate control law from the timeout above, deliberately.
+//
+// The multiplier is a ratio of time to budget, and batch size CHANGES that
+// time — so driving the batch from the multiplier closes a loop on itself:
+// smaller batches finish sooner, which lowers the ratio, which grows the
+// batch, which raises the ratio. It oscillates, and the oscillation is
+// visible to the user as a save that is fast, then times out, then is fast.
+//
+// So this uses additive-increase / multiplicative-decrease instead — the
+// rule TCP uses for the same problem, and stable for the same reason. Halve
+// on a timeout, because a timeout means the last size was too big and the
+// only safe move is a large one. Creep back up after a run of clean
+// successes, because the link recovering is a guess until proven.
+// ═════════════════════════════════════════════════════════════════════════
+
+/** Fractions of the caller's preferred size. */
+const BATCH_MIN_SCALE = 0.2;
+const BATCH_MAX_SCALE = 2;
+
+/** Halve on failure; creep up in quarters. */
+const BATCH_DECREASE  = 0.5;
+const BATCH_INCREASE  = 0.25;
+
+/** Clean requests needed before growing. Slow on purpose. */
+const BATCH_RECOVERY  = 8;
+
+/**
+ * How much of its budget a request may use and still count as evidence that
+ * there is room for a bigger one.
+ *
+ * "It succeeded" is not that evidence. A link where every request finishes at
+ * 80% of its budget is one hiccup from failing, and growing the batch is the
+ * hiccup — the extra rows are exactly what pushes the next one over. Only a
+ * request with real headroom argues for more.
+ */
+const BATCH_COMFORT   = 0.5;
+
+let batchScale = 1;
+let cleanRun   = 0;
+
+/**
+ * How many items the next request of this kind should carry.
+ *
+ * @param base the size the caller would use on a healthy link
+ */
+export const batchSize = (base) => {
+  const n = Number(base);
+  if (!(n > 0)) return base;
+  // Never zero: a batch of nothing is an infinite loop in every caller that
+  // walks a list in slices.
+  return Math.max(1, Math.round(n * batchScale));
+};
+
+/** The current fraction. Exposed for diagnostics and the checks. */
+export const currentBatchScale = () => batchScale;
+
+/** Testing only. */
+export const _resetBatch = () => { batchScale = 1; cleanRun = 0; };
 
 export default {
   recordSuccess, recordTimeout, recordFailure,
-  currentFactor, sampleCount, scaleTimeout, _reset,
+  currentFactor, sampleCount, scaleTimeout,
+  batchSize, currentBatchScale,
+  _reset, _resetBatch,
 };

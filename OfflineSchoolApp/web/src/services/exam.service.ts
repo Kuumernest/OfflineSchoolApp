@@ -1,5 +1,6 @@
 // web/src/services/exam.service.ts
 import api, { TIMEOUTS } from "@/lib/axios";
+import { batchSize } from "@/lib/linkQuality";
 import type {
 ExamsListResponse,
 ExamDetailResponse,
@@ -239,7 +240,11 @@ schoolId: string;
   // And a chunk boundary is the only honest source of a percentage. A single
   // request can report that it is in flight, and nothing beyond that.
   const rows  = payload.scores;
-  const size  = opts.chunkSize ?? 25;
+  // 25 is the size for a link that is behaving. What actually goes out follows
+  // the connection: halved after a timeout, crept back up after a clean run.
+  // A chunk that keeps timing out is not fixed by a longer timeout — it is
+  // fixed by being smaller.
+  const size  = opts.chunkSize ?? batchSize(25);
   const total = rows.length;
 
   if (size <= 0 || total <= size) {

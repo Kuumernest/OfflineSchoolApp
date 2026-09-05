@@ -16,6 +16,7 @@ import {
 }                                       from "../db/dbHelpers";
 import { ensureSchemaColumns }          from "../db/schema";
 import * as SyncProgress               from "./syncProgress";
+import * as LinkQuality                from "./linkQuality";
 import { generateUUID }                 from "../utils/idHelpers";
 import {
   isAuthenticated,
@@ -1168,6 +1169,11 @@ class SyncManagerClass {
    */
   async drainOutbox() {
     const result = await MutationQueue.drain({
+      // 50 on a link that is behaving, fewer on one that is not. A drain that
+      // times out mid-flight leaves the rest of the queue for the next tick,
+      // so on a bad link a smaller batch is the difference between some of a
+      // teacher's work leaving the device and none of it.
+      limit: LinkQuality.batchSize(50),
       // The queue knows how many mutations it is holding, so this step is
       // the one place in the sync with a true item count rather than a
       // step count.
