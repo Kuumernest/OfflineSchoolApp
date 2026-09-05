@@ -609,6 +609,13 @@ router.get("/messages/conversations/:id", asyncHandler(async (req, res) => {
       conversation,
       messages: docs.map((m) => m.toClientJSON()),
       participantReads,
+
+      // Who is asking. The portal has no other way to know: a guardian is
+      // identified by their GuardianAccess row and /portal/me does not carry
+      // it, so the thread screen could not tell the parent's own messages from
+      // the school's — every bubble looked the same, and a read receipt has
+      // nothing to attach itself to without this.
+      me: { kind: me.kind, id: String(me.id) },
     },
   });
 }));

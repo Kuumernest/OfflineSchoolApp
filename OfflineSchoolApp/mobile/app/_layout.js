@@ -194,7 +194,15 @@ export default function RootLayout() {
     // Sections every signed-in role may open, regardless of their home
     // section. Without this the guard would bounce a user straight back out
     // of /sync/pending the moment they tapped the offline banner.
-    const SHARED_SECTIONS = new Set(["sync", "portal"]);
+    //
+    // "messages" belongs here for the same reason, and its absence is why
+    // the messaging module appeared not to exist. Every role's home is a
+    // section of its own — /admin, /teacher, /student — so /messages never
+    // matched anybody's target section, and the guard replaced the route
+    // the instant it was pushed. Tapping Messages took you home. The screen
+    // was fine, the service was fine, the endpoints answered 200 to every
+    // role: nothing was reachable to find that out.
+    const SHARED_SECTIONS = new Set(["sync", "portal", "messages"]);
 
     if (
       currentSection &&

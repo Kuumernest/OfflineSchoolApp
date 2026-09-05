@@ -23,7 +23,52 @@ const C = {
   ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
   line: "#E9EBF0", canvas: "#F7F8FA", surface: "#FFFFFF",
   danger: "#DC2626",
+
+  // The parent's own messages, and the receipts that sit on them. Measured
+  // against mine (#3B4996), which is the portal's primary:
+  //
+  //   onMine      #FFFFFF  8.14:1   body text
+  //   tickPlain   #C7D2FE  5.46:1   sent, delivered
+  //   tickRead    #FFFFFF  8.14:1   read
+  //   tickFailed  #FECACA  5.63:1   failed to send
+  //
+  // The same reasoning as the staff thread: one tick against two separates
+  // sent from delivered, so colour only has to separate delivered from read,
+  // and it does that by brightness.
+  mine:       "#3B4996",
+  onMine:     "#FFFFFF",
+  onMineFaint:"#C7D2FE",
+  tickRead:   "#FFFFFF",
+  tickFailed: "#FECACA",
 };
+
+/**
+ * Whether the school has read this parent's message.
+ *
+ * The portal had no receipts at all: a parent pressed send and the screen
+ * told them nothing afterwards, which on a slow connection is indistinguishable
+ * from the message not having gone. The server was already sending
+ * participantReads on every thread; nothing read it.
+ */
+function StateMark({ seq, reads }) {
+  if (seq == null) {
+    return <Ionicons name="time-outline" size={12} color={C.onMineFaint} />;
+  }
+
+  // Everyone on the other side of the thread. A parent wants to know the
+  // school has seen it, so the school is whoever is not this guardian.
+  const others = (reads ?? []).filter((p) => p.kind !== "guardian");
+  if (!others.length) {
+    return <Ionicons name="checkmark" size={12} color={C.onMineFaint} />;
+  }
+
+  const read      = others.every((p) => (p.lastReadSeq      ?? 0) >= seq);
+  const delivered = others.every((p) => (p.lastDeliveredSeq ?? 0) >= seq);
+
+  if (read)      return <Ionicons name="checkmark-done" size={15} color={C.tickRead} />;
+  if (delivered) return <Ionicons name="checkmark-done" size={14} color={C.onMineFaint} />;
+  return <Ionicons name="checkmark" size={12} color={C.onMineFaint} />;
+}
 
 const timeLabel = (iso) => {
   if (!iso) return "";
@@ -45,6 +90,8 @@ export default function PortalThreadScreen() {
   const [sending,  setSending]  = useState(false);
   const [stale,    setStale]    = useState(false);
   const [error,    setError]    = useState(null);
+  const [me,       setMe]       = useState(null);
+  const [reads,    setReads]    = useState([]);
 
   const listRef = useRef(null);
 
@@ -54,6 +101,8 @@ export default function PortalThreadScreen() {
       const payload = res?.data ?? {};
       setMessages(payload.messages ?? []);
       setStale(Boolean(res?.stale));
+      setMe(payload.me ?? null);
+      setReads(payload.participantReads ?? []);
 
       const c = payload.conversation;
       setTitle(
@@ -114,10 +163,20 @@ export default function PortalThreadScreen() {
   const ordered = [...messages].sort((a, b) => a.seq - b.seq);
 
   const renderItem = ({ item }) => {
+    // Every bubble used to look the same, so a parent could not tell their
+    // own message from the school's reply. The thread now says who is asking
+    // and the sender is matched against it.
+    const mine =
+      me != null &&
+      item.sender?.kind === me.kind &&
+      String(item.sender?.id) === String(me.id);
+
                        return (
-    <View style={s.bubble}>
-      <Text style={s.sender}>{item.sender?.name || t("msgMobile.schoolSender")}</Text>
-      <Text style={s.body}>
+    <View style={[s.bubble, mine && s.bubbleMine]}>
+      {!mine && (
+        <Text style={s.sender}>{item.sender?.name || t("msgMobile.schoolSender")}</Text>
+      )}
+      <Text style={[s.body, mine && s.bodyMine]}>
         {item.isDeleted ? t("msgMobile.deletedMessage") : item.body}
       </Text>
       {(item.attachments?.length ?? 0) > 0 && (
@@ -129,7 +188,10 @@ export default function PortalThreadScreen() {
           ))}
         </View>
       )}
-      <Text style={s.time}>{timeLabel(item.createdAt)}</Text>
+      <View style={s.metaRow}>
+        <Text style={[s.time, mine && s.timeMine]}>{timeLabel(item.createdAt)}</Text>
+        {mine && <StateMark seq={item.seq} reads={reads} />}
+      </View>
     </View>
   );
                      };
@@ -223,11 +285,23 @@ const s = StyleSheet.create({
   bubble: {
     backgroundColor: C.surface, borderRadius: 12, padding: 10,
     borderWidth: 1, borderColor: C.line,
+    maxWidth: "88%", alignSelf: "flex-start",
+  },
+  bubbleMine: {
+    backgroundColor: C.mine, borderColor: C.mine,
+    alignSelf: "flex-end", borderBottomRightRadius: 4,
   },
   sender:     { fontSize: 11, fontWeight: "700", color: C.inkMuted, marginBottom: 2 },
   body:       { fontSize: 14, color: C.inkBody, lineHeight: 20 },
+  bodyMine:   { color: C.onMine },
   attachment: { fontSize: 12, color: C.ink, textDecorationLine: "underline" },
-  time:       { fontSize: 10, color: C.inkFaint, textAlign: "right", marginTop: 3 },
+
+  metaRow: {
+    flexDirection: "row", alignItems: "center", justifyContent: "flex-end",
+    gap: 4, marginTop: 3,
+  },
+  time:       { fontSize: 10, color: C.inkFaint, textAlign: "right" },
+  timeMine:   { color: C.onMineFaint },
 
   error: {
     fontSize: 12, color: C.danger, backgroundColor: "#FEF2F2",

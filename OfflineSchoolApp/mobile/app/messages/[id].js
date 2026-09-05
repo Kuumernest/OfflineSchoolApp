@@ -44,18 +44,40 @@ const timeLabel = (iso) => {
 };
 
 /**
- * WhatsApp-style read receipt checkmarks on an outgoing bubble.
+ * Read receipts on an outgoing bubble.
  *
  *   ✓       sent (server has it)
  *   ✓✓      delivered (recipient's device confirmed receiving)
- *   ✓✓ blue  read (recipient has seen it)
+ *   ✓✓ white read (recipient has seen it)
  *
- * The "queued" and "failed" states still use their own icons — those are
- * about the sender's device, not the recipient's.
+ * The "queued" and "failed" states use their own icons — those are about
+ * the sender's device, not the recipient's.
+ *
+ * ── Why read is white and not blue ──────────────────────────────────────
+ *
+ * Every one of these sits on the outgoing bubble, which is C.primary,
+ * #2563EB. A blue tick on a blue bubble measured 1.41:1 — WCAG asks 3:1 of
+ * a graphical indicator, and 1.41 is not dim, it is invisible. The state
+ * that matters most was the one nobody could see. The failed marker was
+ * scarcely better at 2.72:1, on the one message a sender must notice.
+ *
+ * The tick shape already separates sent from delivered — one mark against
+ * two — so colour only has to separate delivered from read. It does that
+ * by brightness now, because on a blue ground brightness is the axis that
+ * is left: pale blue for delivered, full white for read.
+ *
+ *   queued    #BFDBFE  3.64:1
+ *   failed    #FECACA  3.57:1
+ *   sent      #BFDBFE  3.64:1
+ *   delivered #BFDBFE  3.64:1
+ *   read      #FFFFFF  5.17:1
+ *
+ * checkScreenEdges re-measures these against the bubble, so a colour that
+ * looked right in a swatch cannot quietly drop below the floor again.
  */
 function StateMark({ state, seq, participantRead }) {
   if (state === "queued")  return <Ionicons name="time-outline"    size={12} color="#BFDBFE" />;
-  if (state === "failed")  return <Ionicons name="alert-circle"    size={12} color="#FCA5A5" />;
+  if (state === "failed")  return <Ionicons name="alert-circle"    size={14} color="#FECACA" />;
 
   // No seq yet — treat as sent.
   if (seq == null) return <Ionicons name="checkmark" size={12} color="#BFDBFE" />;
@@ -64,10 +86,11 @@ function StateMark({ state, seq, participantRead }) {
   const isDelivered = (participantRead?.lastDeliveredSeq || 0) >= seq;
 
   if (isRead) {
-    // Blue double check.
+    // Full white, and a shade larger than the delivered pair: the two
+    // states share a shape, so this is the only thing telling them apart.
     return (
       <View style={{ flexDirection: "row", marginLeft: 2 }}>
-        <Ionicons name="checkmark-done" size={14} color="#3B82F6" />
+        <Ionicons name="checkmark-done" size={15} color="#FFFFFF" />
       </View>
     );
   }

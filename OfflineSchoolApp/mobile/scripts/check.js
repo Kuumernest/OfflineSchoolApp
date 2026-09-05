@@ -756,6 +756,122 @@ const checkScreenEdges = () => {
     ok(`signed-in screens padding by hand: ${byHand}, unchanged`);
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// EVERY SECTION CAN BE REACHED, AND EVERY RECEIPT CAN BE SEEN
+//
+// The navigation guard in app/_layout.js sends a signed-in user back to their
+// role home whenever the section they are in is not their home section and is
+// not on a shared list. app/messages was never on that list. Every role has a
+// home of its own — /admin, /teacher, /student — so /messages matched nobody,
+// and the guard replaced the route the instant the screen pushed it. Tapping
+// Messages took you home.
+//
+// Nothing else was wrong: the screens rendered, the service read and wrote,
+// and /messages/conversations answered 200 to a student, a teacher and an
+// administrator alike. The whole module was simply unreachable, and being
+// unreachable is exactly what stops anyone discovering the rest works.
+//
+// So: a section of the app that no role can open is a bug, and this counts
+// them. It needs no baseline, because the answer must always be none.
+//
+// The second half is the read receipts. They sit on the outgoing bubble,
+// which is a saturated blue, and the blue "read" tick measured 1.41:1 against
+// it — invisible, on the state that matters most. The failed marker was
+// 2.72:1, on the one message a sender has to notice. WCAG 1.4.11 asks 3:1 of
+// a graphical indicator, so that is the floor here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const checkNavigationReach = () => {
+  console.log("");
+  console.log("EVERY SECTION IS REACHABLE");
+
+  const layout = fs.readFileSync(path.join(ROOT, "app/_layout.js"), "utf8");
+  const routes = fs.readFileSync(path.join(ROOT, "src/services/routes.js"), "utf8");
+
+  const sharedLine = layout.match(/SHARED_SECTIONS\s*=\s*new Set\(\[([^\]]*)\]/);
+  if (!sharedLine) { bad("the shared-section list can be read"); return; }
+  const shared = new Set([...sharedLine[1].matchAll(/"([a-z-]+)"/g)].map((m) => m[1]));
+
+  // Where each role lands. The first path segment is the section it owns.
+  const homes = new Set(
+    [...routes.matchAll(/return\s+"\/([a-z-]+)/g)].map((m) => m[1])
+  );
+
+  const sections = fs.readdirSync(path.join(ROOT, "app"), { withFileTypes: true })
+    .filter((d) => d.isDirectory() && !d.name.startsWith("(") && !d.name.startsWith("_"))
+    .map((d) => d.name);
+
+  const stranded = sections.filter((s) => !homes.has(s) && !shared.has(s));
+
+  if (stranded.length) {
+    bad(
+      "no section is stranded outside the navigation guard",
+      stranded.map((s) =>
+        `app/${s} is nobody\u2019s home section and is not shared \u2014 the guard ` +
+        "redirects away from it the moment it is opened"
+      ).join(String.fromCharCode(10))
+    );
+  } else {
+    ok(`every section is reachable (${sections.length} checked, ${shared.size} shared)`);
+  }
+};
+
+// ── Read receipts must clear 3:1 on the bubble they sit on ──────────────────
+
+const checkReceiptContrast = () => {
+  console.log("");
+  console.log("READ RECEIPTS ARE VISIBLE");
+
+  const thread = fs.readFileSync(path.join(ROOT, "app/messages/[id].js"), "utf8");
+
+  // The outgoing bubble's fill, read from the palette the screen defines.
+  const primary = thread.match(/primary:\s*"(#[0-9A-Fa-f]{6})"/);
+  if (!primary) { bad("the outgoing bubble colour can be read"); return; }
+  const bg = primary[1];
+
+  // Every colour StateMark hands to an icon.
+  const body = thread.slice(thread.indexOf("function StateMark"));
+  const end  = body.indexOf(String.fromCharCode(10) + "}");
+  const marks = [...body.slice(0, end).matchAll(/color="(#[0-9A-Fa-f]{6})"/g)]
+    .map((m) => m[1]);
+
+  if (!marks.length) { bad("StateMark's colours can be read"); return; }
+
+  const lin = (c) => { c /= 255; return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); };
+  const lum = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  };
+  const ratio = (a, b) => {
+    const x = lum(a), y = lum(b);
+    return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05);
+  };
+
+  const FLOOR = 3;   // WCAG 1.4.11, non-text contrast
+  const dim = [...new Set(marks)]
+    .map((c) => ({ c, r: ratio(c, bg) }))
+    .filter(({ r }) => r < FLOOR);
+
+  if (dim.length) {
+    bad(
+      `every receipt clears ${FLOOR}:1 on the bubble`,
+      dim.map(({ c, r }) => `${c} on ${bg} is ${r.toFixed(2)}:1`).join(String.fromCharCode(10))
+    );
+  } else {
+    const worst = Math.min(...[...new Set(marks)].map((c) => ratio(c, bg)));
+    ok(`every receipt clears ${FLOOR}:1 on the bubble (worst ${worst.toFixed(2)}:1)`);
+  }
+
+  // Delivered and read share a shape, so colour is all that separates them.
+  const readMark = body.match(/isRead[\s\S]{0,400}?color="(#[0-9A-Fa-f]{6})"/);
+  if (readMark && ratio(readMark[1], bg) >= 4.5) {
+    ok(`the read receipt is the brightest of them (${ratio(readMark[1], bg).toFixed(2)}:1)`);
+  } else {
+    bad("the read receipt is the brightest of them",
+      "delivered and read are both a double tick — if the read one is not " +
+      "clearly brighter there is nothing left to tell them apart");
+  }
+};
 checkParse();
 checkLocales();
 checkLinkQuality();
@@ -763,6 +879,8 @@ checkSyncPolicy();
 checkServerWinsUpserts();
 checkStudentSyncPlan();
 checkScreenEdges();
+checkNavigationReach();
+checkReceiptContrast();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);
