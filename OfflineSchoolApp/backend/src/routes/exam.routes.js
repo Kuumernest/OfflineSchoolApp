@@ -1306,6 +1306,25 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
     .lean();
   const studentMap = new Map(students.map((s) => [String(s._id), s]));
 
+  // Every summary this run might update, in one query.
+  //
+  // The loop below used to run ResultSummary.findOne per pupil and then a
+  // findByIdAndUpdate or create per pupil, and the positions pass after it
+  // a third write per pupil — three sequential round trips each, awaited
+  // one at a time. On an in-memory mongod with no network at all that was
+  // 10.5s for 1,200 pupils; against Atlas, where every one of those trips
+  // pays real latency, it is minutes. This is the whole reason processing
+  // an exam felt like it hung.
+  const existingSummaries = await ResultSummary.find({
+    examId, schoolId, studentId: { $in: studentIds },
+  }).select("_id studentId").lean();
+  const existingByStudent = new Map(
+    existingSummaries.map((s) => [String(s.studentId), s])
+  );
+
+  // Collected here and sent as one bulkWrite after the loop.
+  const summaryOps = [];
+
   // Fetch class names for all classes represented
   const classIds = [...new Set(students.map((s) => s.classId).filter(Boolean))];
   const classes = classIds.length > 0
@@ -1385,69 +1404,38 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
       ? Math.round(totalScore / scores.length) : 0;
     const computed   = computeGrade(totalScore, maxTotalScore, gradingConfig);
 
-    const existing = await ResultSummary.findOne({ examId, studentId, schoolId });
+    const existing = existingByStudent.get(String(studentId));
     const stu = studentMap.get(studentId);
     const studentName = stu?.studentName || [stu?.firstName, stu?.lastName].filter(Boolean).join(" ") || null;
     const admissionNo = stu?.enrollmentNo || null;
     const className   = stu?.className || classNamesById.get(String(stu?.classId)) || null;
 
-    let summary;
-    if (existing) {
-      summary = await ResultSummary.findByIdAndUpdate(
-        existing._id,
-        {
-          $set: {
-            classId:        classId || exam.classId,
-            className,
-            studentName,
-            admissionNo,
-            totalScore,
-            maxTotalScore,
-            percentage,
-            average,
-            overallGrade:   computed.grade,
-            overallRemark:  computed.remark,
-            gpa:            computed.gpaPoints,
-            subjectsPassed: passed,
-            subjectsFailed: failedCount,
-            subjectsTotal:  scores.length,
-            isPassing:      computed.isPassing,
-            subjectBreakdown,
-            syncStatus:     "synced",
-            lastSyncedAt:   new Date(),
-          },
-        },
-        { returnDocument: 'after' }
-      ).lean();
-    } else {
-      summary = await ResultSummary.create({
-        _id:            uuidv4(),
-        examId,
-        studentId,
-        schoolId,
-        classId:        classId || exam.classId,
-        className,
-        studentName,
-        admissionNo,
-        totalScore,
-        maxTotalScore,
-        percentage,
-        average,
-        overallGrade:   computed.grade,
-        overallRemark:  computed.remark,
-        gpa:            computed.gpaPoints,
-        subjectsPassed: passed,
-        subjectsFailed: failedCount,
-        subjectsTotal:  scores.length,
-        isPassing:      computed.isPassing,
-        subjectBreakdown,
-        syncStatus:     "synced",
-        lastSyncedAt:   new Date(),
-      });
-      summary = summary.toObject ? summary.toObject() : summary;
-    }
+    // The id is settled here rather than by the database, so the positions
+    // pass below can address a row this run has not written yet.
+    const summaryId = existing?._id || uuidv4();
 
-    summaries.push(summary);
+    const fields = {
+      classId:        classId || exam.classId,
+      className,
+      studentName,
+      admissionNo,
+      totalScore,
+      maxTotalScore,
+      percentage,
+      average,
+      overallGrade:   computed.grade,
+      overallRemark:  computed.remark,
+      gpa:            computed.gpaPoints,
+      subjectsPassed: passed,
+      subjectsFailed: failedCount,
+      subjectsTotal:  scores.length,
+      isPassing:      computed.isPassing,
+      subjectBreakdown,
+      syncStatus:     "synced",
+      lastSyncedAt:   new Date(),
+    };
+
+    summaries.push({ _id: summaryId, ...fields, examId, studentId, schoolId });
   }
 
   // ── Class positions ──────────────────────────────────────
@@ -1468,11 +1456,33 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
       ) {
         pos = i + 1;
       }
-      await ResultSummary.findByIdAndUpdate(classSummaries[i]._id, {
-        classPosition: pos,
-        totalInClass:  classSummaries.length,
-      });
+      // Onto the in-memory row. Ranking is the last thing computed and the
+      // only field that needs the whole cohort, so folding it in here is
+      // what lets the summaries go out in a single write instead of a
+      // second full pass over the collection to add two integers.
+      classSummaries[i].classPosition = pos;
+      classSummaries[i].totalInClass  = classSummaries.length;
     }
+  }
+
+  for (const s of summaries) {
+    const { _id, examId: eId, studentId: sId, schoolId: schId, ...fields } = s;
+    summaryOps.push({
+      updateOne: {
+        // Keyed on the natural identity rather than the generated _id, so
+        // a concurrent run cannot insert a second summary for one pupil.
+        filter: { examId: eId, studentId: sId, schoolId: schId },
+        update: {
+          $set: fields,
+          $setOnInsert: { _id, examId: eId, studentId: sId, schoolId: schId },
+        },
+        upsert: true,
+      },
+    });
+  }
+
+  if (summaryOps.length) {
+    await ResultSummary.bulkWrite(summaryOps, { ordered: false });
   }
 
   await Exam.findByIdAndUpdate(examId, { status: "completed" });
