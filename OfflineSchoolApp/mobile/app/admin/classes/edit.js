@@ -11,7 +11,9 @@ import { getTeachersList } from "../../../src/services/assignment.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
 
-const MAX_CLASS_NAME_LENGTH = 50;
+// Matches Class.js maxlength (100) on the server. Was 50, which rejected
+// names the web/desktop console and the server both accept.
+const MAX_CLASS_NAME_LENGTH = 100;
 
 export default function EditClass() {
   const { t } = useTranslation();
@@ -24,6 +26,13 @@ export default function EditClass() {
 
   const [className, setClassName] = useState("");
   const [originalName, setOriginalName] = useState("");
+  // Level and section, editable like the web/desktop console. The originals
+  // are kept so a save that leaves a field untouched sends nothing for it —
+  // the server reads an absent level/section as "leave alone".
+  const [level,           setLevel]           = useState("");
+  const [section,         setSection]         = useState("");
+  const [originalLevel,   setOriginalLevel]   = useState(null);
+  const [originalSection, setOriginalSection] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [fieldError, setFieldError] = useState("");
@@ -59,6 +68,10 @@ export default function EditClass() {
         if (data?.name) {
           setClassName(data.name);
           setOriginalName(data.name);
+          setLevel(data.level ?? "");
+          setOriginalLevel(data.level ?? null);
+          setSection(data.section ?? "");
+          setOriginalSection(data.section ?? "");
           setTeacherId(data.classTeacherId ?? null);
           setTeacherName(data.classTeacherName ?? null);
           setOriginalTeacherId(data.classTeacherId ?? null);
@@ -105,11 +118,17 @@ export default function EditClass() {
   }, [fieldError]);
 
   const trimmed = className.trim();
-  const teacherChanged = (teacherId ?? null) !== (originalTeacherId ?? null);
+  const trimmedLevel   = level.trim();
+  const trimmedSection = section.trim();
+  const teacherChanged  = (teacherId ?? null) !== (originalTeacherId ?? null);
+  const levelChanged    = trimmedLevel !== (originalLevel ?? "");
+  const sectionChanged  = trimmedSection !== originalSection;
   const hasChanges =
-    (trimmed !== originalName || teacherChanged) && trimmed.length > 0;
+    (trimmed !== originalName || teacherChanged || levelChanged || sectionChanged)
+    && trimmed.length > 0;
   const isNoChange =
-    trimmed === originalName && !teacherChanged && trimmed.length > 0;
+    trimmed === originalName && !teacherChanged && !levelChanged && !sectionChanged
+    && trimmed.length > 0;
   const isDisabled = saving || !hasChanges;
   const charCount = trimmed.length;
   const isNearLimit = charCount > MAX_CLASS_NAME_LENGTH - 10;
@@ -130,15 +149,16 @@ export default function EditClass() {
     setSaving(true);
 
     try {
-      await ClassService.update(
-        classId,
-        trimmedValue,
-        null,
+      await ClassService.update(classId, trimmedValue, {
+        // Each field present only when it changed — the service omits the
+        // rest from the request, and the server leaves them alone.
+        ...(levelChanged   ? { level: trimmedLevel || null } : {}),
+        ...(sectionChanged ? { section: trimmedSection } : {}),
         // undefined leaves the teacher alone; anything else changes it.
-        teacherChanged
+        classTeacher: teacherChanged
           ? (teacherId ? { id: teacherId, name: teacherName } : null)
-          : undefined
-      );
+          : undefined,
+      });
       if (!isMountedRef.current) return;
 
       Alert.alert(t("classesAdmin.updatedTitle"), t("classesAdmin.savedBody", { name: trimmedValue }), [
@@ -151,8 +171,9 @@ export default function EditClass() {
     } finally {
       if (isMountedRef.current) setSaving(false);
     }
-  }, [className, validate, hasChanges, classId, t, router,
-      teacherChanged, teacherId, teacherName]);
+  }, [className, validate, hasChanges, classId, t, router, teacherChanged,
+      teacherId, teacherName, levelChanged, sectionChanged,
+      trimmedLevel, trimmedSection]);
 
   const handleDiscard = useCallback(() => {
     if (hasChanges) {
@@ -287,6 +308,64 @@ export default function EditClass() {
               ]}>
                 {charCount}/{MAX_CLASS_NAME_LENGTH}
               </Text>
+            </View>
+          </View>
+
+          {/* ── Level ─────────────────────────────────────────────────── */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t("classesAdmin.levelLabel")}</Text>
+
+            <View style={[
+              styles.inputWrapper,
+              levelChanged ? styles.inputWrapperChanged : null,
+            ]}>
+              <Ionicons
+                name="layers-outline"
+                size={18}
+                color={levelChanged ? "#4F46E5" : "#9CA3AF"}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder={t("classesAdmin.levelPh")}
+                placeholderTextColor="#9CA3AF"
+                value={level}
+                onChangeText={setLevel}
+                autoCapitalize="words"
+                autoCorrect={false}
+                returnKeyType="done"
+                maxLength={100}
+                editable={!saving}
+              />
+            </View>
+          </View>
+
+          {/* ── Section ───────────────────────────────────────────────── */}
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t("classesAdmin.sectionLabel")}</Text>
+
+            <View style={[
+              styles.inputWrapper,
+              sectionChanged ? styles.inputWrapperChanged : null,
+            ]}>
+              <Ionicons
+                name="grid-outline"
+                size={18}
+                color={sectionChanged ? "#4F46E5" : "#9CA3AF"}
+                style={styles.inputIcon}
+              />
+              <TextInput
+                style={styles.input}
+                placeholder={t("classesAdmin.sectionPh")}
+                placeholderTextColor="#9CA3AF"
+                value={section}
+                onChangeText={setSection}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                returnKeyType="done"
+                maxLength={100}
+                editable={!saving}
+              />
             </View>
           </View>
 

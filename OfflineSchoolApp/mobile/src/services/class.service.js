@@ -378,13 +378,15 @@ export const ClassService = {
     }
   },
 
-  async create(name, level = null) {
+  async create(name, level = null, section = "", classTeacher) {
     const db           = await getDatabase();
     const { schoolId } = getCurrentAuth();
     await ensureSchema(db);
 
-    const trimmed = name?.trim();
+    const trimmed       = name?.trim();
     if (!trimmed) throw appError("svcErr.classNameRequired", "Class name is required");
+    const trimmedLevel   = level || null;          // the server stores level || null
+    const trimmedSection = section?.trim() ?? "";  // the server stores section?.trim() || ""
 
     const dupParams = [trimmed];
     let dupWhere = `WHERE LOWER(name) = LOWER(?) AND ${NOT_DELETED}`;
@@ -404,17 +406,32 @@ export const ClassService = {
 
     await db.runAsync(
       `INSERT INTO ${TABLE}
-         (id, name, level, is_active, schoolId, school_id, created_at, updated_at, _synced)
-       VALUES (?, ?, ?, 1, ?, ?, ?, ?, 0)`,
-      [localId, trimmed, level, schoolId, schoolId, now, now]
+         (id, name, level, section, is_active, schoolId, school_id, created_at, updated_at, _synced)
+       VALUES (?, ?, ?, ?, 1, ?, ?, ?, ?, 0)`,
+      [localId, trimmed, trimmedLevel, trimmedSection, schoolId, schoolId, now, now]
     );
+
+    // The form teacher, guarded the same way update() guards it — these
+    // columns post-date the table on devices that have not run the migration.
+    if (classTeacher) {
+      await db.runAsync(
+        `UPDATE ${TABLE} SET classTeacherId = ?, classTeacherName = ? WHERE id = ?`,
+        [classTeacher.id ?? null, classTeacher.name ?? null, localId]
+      ).catch(() => {});
+    }
 
     const net = await NetInfo.fetch();
     if (!net.isConnected) return localId;
 
     try {
       const response = await api.post(API.admin.classes.list, {
-        id: localId, name: trimmed, level, schoolId,
+        id: localId, name: trimmed,
+        level:   trimmedLevel,
+        section: trimmedSection,
+        schoolId,
+        // Only sent when set: the server resolves the teacher's name from
+        // their User row, and an absent field creates a teacherless class.
+        ...(classTeacher?.id ? { classTeacherId: classTeacher.id } : {}),
       });
 
       const raw =
@@ -459,16 +476,20 @@ export const ClassService = {
   },
 
   /**
-   * @param {object} [classTeacher]  Omit to leave the class teacher exactly
-   *   as it is; pass `{ id, name }` to set one, or `null` to clear it.
+   * @param {object} [changes]  Only what the caller meant to change — every
+   *   field the caller OMITS is left exactly as it is, locally and on the
+   *   server. This mirrors PUT /admin/classes/:id, which treats an ABSENT
+   *   level / section / classTeacherId as "no change" and a present one as
+   *   the new value. Sending a field unconditionally would mean every rename
+   *   from this screen silently wiped what the web or desktop console set.
    *
-   *   The distinction matters and mirrors the server: PUT /admin/classes/:id
-   *   treats an absent classTeacherId as "no change" and an empty one as
-   *   "clear it". Sending the field unconditionally would mean every rename
-   *   from this screen — which is all this screen used to do — silently
-   *   removed the form teacher.
+   *   - `level`   — a string or null to set it; omit to leave alone.
+   *   - `section` — a string ("" clears it); omit to leave alone.
+   *   - `classTeacher` — `{ id, name }` to set one, null to clear; omit to
+   *     leave alone.
    */
-  async update(id, name, level = null, classTeacher) {
+  async update(id, name, changes = {}) {
+    const { level, section, classTeacher } = changes;
     const db           = await getDatabase();
     const { schoolId } = getCurrentAuth();
     await ensureSchema(db);
@@ -502,10 +523,19 @@ export const ClassService = {
     );
     if (duplicate) throw appError("svcErr.classNameExists", "A class with this name already exists");
 
+    const touchesLevel   = level   !== undefined;
+    const touchesSection = section !== undefined;
+
     const now = new Date().toISOString();
+    const setClauses = ["name = ?", "updated_at = ?", "_synced = 0"];
+    const setValues  = [trimmed, now];
+    if (touchesLevel)   { setClauses.push("level = ?");   setValues.push(level); }
+    if (touchesSection) { setClauses.push("section = ?"); setValues.push(section); }
+    setValues.push(id);
+
     await db.runAsync(
-      `UPDATE ${TABLE} SET name = ?, level = ?, updated_at = ?, _synced = 0 WHERE id = ?`,
-      [trimmed, level, now, id]
+      `UPDATE ${TABLE} SET ${setClauses.join(", ")} WHERE id = ?`,
+      setValues
     );
 
     const touchesTeacher = classTeacher !== undefined;
@@ -522,9 +552,12 @@ export const ClassService = {
     try {
       await api.put(API.admin.classes.detail(id), {
         name: trimmed,
-        level,
-        // Present only when the caller meant to change it. The server reads
-        // an empty string as "clear" and an absent field as "leave alone".
+        // Each field present only when the caller meant to change it. The
+        // server reads an absent level/section as "leave alone", an empty
+        // section as "clear", and an absent classTeacherId as "leave alone"
+        // with an empty one as "clear".
+        ...(touchesLevel   ? { level } : {}),
+        ...(touchesSection ? { section } : {}),
         ...(touchesTeacher
           ? { classTeacherId: classTeacher?.id ?? "" }
           : {}),

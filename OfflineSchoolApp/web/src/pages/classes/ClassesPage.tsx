@@ -38,7 +38,10 @@ import { useTranslation } from "react-i18next";
 // ─────────────────────────────────────────────────────────
 
 const classSchema = z.object({
-  name:    z.string().min(1, "Class name is required"),
+  // max(100) matches Class.js maxlength on the server, so the console refuses
+  // up front what the server would reject as a 500-shaped ValidationError.
+  name:    z.string().min(1, "Class name is required")
+                  .max(100, "Class name must not exceed 100 characters"),
   level:   z.string().optional(),
   section: z.string().optional(),
   // The form master. Optional: a class may genuinely not have one assigned

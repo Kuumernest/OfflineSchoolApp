@@ -41,6 +41,41 @@ const schoolOf = (body, session) => {
   return fromSession || fromBody || null;
 };
 
+/**
+ * classTeacherFields(), reproduced — the form master on a create.
+ *
+ * On the server: an ABSENT classTeacherId contributes nothing at all, an
+ * EMPTY one means "no teacher", and a real id must name a user this school
+ * has — anything else is a 403 ("Selected teacher does not exist or access
+ * denied"), which is not this layer's to invent. So a teacher the mirror
+ * cannot see DECLINES the whole create and the request goes to the network
+ * where that check lives. Only a teacher this machine can find in its own
+ * mirror is answered offline, with the id AND the name the report card
+ * prints, exactly as the endpoint stores them.
+ *
+ * The school clause is reproduced from structure.js's tenant(): a row whose
+ * schoolId differs is invisible here. A super_admin reaching across schools
+ * therefore finds nothing on this machine — stricter than the server, which
+ * is the safe direction.
+ */
+const teacherFieldsFor = (docs, rawId, schoolId) => {
+  if (rawId === undefined) return { ok: true, fields: {} };
+
+  const id = String(rawId ?? "").trim();
+  if (!id) {
+    return { ok: true, fields: { classTeacherId: null, classTeacherName: null } };
+  }
+
+  const teacher = docs.get("user", id);
+  if (!teacher || String(teacher.schoolId ?? "") !== String(schoolId)) {
+    return { ok: false };
+  }
+  return {
+    ok: true,
+    fields: { classTeacherId: id, classTeacherName: teacher.name || null },
+  };
+};
+
 module.exports = [
   {
     route: "POST /api/admin/classes",
@@ -55,6 +90,13 @@ module.exports = [
       if (docs.get("class", id)) return null;
       const existing = docs.find("class", { name, schoolId, isActive: true })[0];
       if (existing) return null;
+
+      // The form master. A teacher this mirror cannot see declines the create
+      // (the server's 403 is its own to give); the other two shapes are
+      // answered offline exactly as the endpoint would.
+      const teacher = teacherFieldsFor(docs, body?.classTeacherId, schoolId);
+      if (!teacher.ok) return null;
+
       const now = nowISO();
       // Every field Class.js defaults, spelled out. The server answers with the
       // whole document, so a key missing here is a key the mirror reports as
@@ -72,6 +114,9 @@ module.exports = [
         promotionAverage: null,
         description:      null,
         capacity:         null,
+        classTeacherId:   null,
+        classTeacherName: null,
+        ...teacher.fields,
         isActive:         true,
         deletedAt:        null,
         createdAt:        now,
