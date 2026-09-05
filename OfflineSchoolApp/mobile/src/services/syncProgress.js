@@ -37,6 +37,10 @@ export const SYNC_STEPS = {
   announcements:"syncStep.announcements",
   applications: "syncStep.applications",
   fees:         "syncStep.fees",
+  timetable:    "syncStep.timetable",
+  messages:     "syncStep.messages",
+  gate:         "syncStep.gate",
+  finance:      "syncStep.finance",
   school:       "syncStep.school",
   quizzes:      "syncStep.quizzes",
 };
@@ -50,7 +54,12 @@ export const SYNC_STEPS = {
  */
 export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
   if (isStudent) {
-    return ["prepare", "upload", "announcements", "school", "quizzes"];
+    // A pupil has a timetable and messages of their own; the rest of the
+    // steps below are staff work and counting them would park their bar.
+    return [
+      "prepare", "upload", "timetable", "messages",
+      "announcements", "school", "quizzes",
+    ];
   }
   return [
     "prepare", "upload", "download",
@@ -58,7 +67,9 @@ export const planFor = ({ isStudent = false, isAdmin = false } = {}) => {
     ...(isAdmin ? ["applications"] : []),
     // Fees are staff work, not a pupil's: a student's plan has no step here
     // and their own charges arrive through the portal instead.
-    "announcements", "fees", "school", "quizzes",
+    "announcements", "fees", "timetable", "messages", "gate",
+    ...(isAdmin ? ["finance"] : []),
+    "school", "quizzes",
   ];
 };
 

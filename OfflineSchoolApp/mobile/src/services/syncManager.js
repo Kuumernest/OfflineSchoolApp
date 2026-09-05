@@ -1667,6 +1667,16 @@ class SyncManagerClass {
       await this.pullAnnouncements(lastSyncTime);
       SyncProgress.step("fees");
       await this.pullFeeStructures();
+      SyncProgress.step("timetable");
+      await this.pullTimetable();
+      SyncProgress.step("messages");
+      await this.pullMessages();
+      SyncProgress.step("gate");
+      await this.pullGateRoster();
+      if (this.isAdmin()) {
+        SyncProgress.step("finance");
+        await this.pullFinance();
+      }
       if (this.isAdmin()) {
         SyncProgress.step("applications");
         await this.pullStudentApplications(lastSyncTime);
@@ -1725,6 +1735,96 @@ class SyncManagerClass {
       // A bursar without fees.view gets a 403 here, which is a permission
       // rather than a fault; the rest of the sync must not fail for it.
       console.warn("[SyncManager] pullFeeStructures failed:", err.message);
+    }
+  }
+
+  /**
+   * ── The rest of what the phone was only fetching on demand ───────────────
+   *
+   * Every method below already existed in its own service and was called from
+   * one screen, when that screen opened. So the data was correct for whoever
+   * had opened it with a connection, and absent for everybody else — the same
+   * shape of gap as the fee structures, arrived at the same way: the phone
+   * pulls six collections from /sync/pull while the desktop pulls thirty-six
+   * from /sync/changes, and each screen quietly made up the difference for
+   * itself.
+   *
+   * Each catches its own error. A bursar without payroll.view gets a 403 from
+   * one of these, which is a permission rather than a fault, and the rest of
+   * the sync must not fail because of it.
+   */
+
+  /** The timetable, for whoever is signed in. Pupils have one too. */
+  async pullTimetable() {
+    if (this._isUnauthenticated()) return;
+    try {
+      const { syncTimetableFromServer } = require("./timetableService");
+      await syncTimetableFromServer();
+    } catch (err) {
+      console.warn("[SyncManager] pullTimetable failed:", err.message);
+    }
+  }
+
+  /**
+   * Conversations, so the message list is not empty on a device that has not
+   * opened it online. The threads themselves stay demand-loaded: a school year
+   * of messages is not something to mirror on every tick.
+   */
+  async pullMessages() {
+    if (this._isUnauthenticated()) return;
+    try {
+      const { user } = getCurrentAuth();
+      const myId = user?._id || user?.id;
+      if (!myId) return;
+      const { syncConversations } = require("./message.service");
+      await syncConversations({ myId });
+    } catch (err) {
+      console.warn("[SyncManager] pullMessages failed:", err.message);
+    }
+  }
+
+  /**
+   * The gate roster.
+   *
+   * The one on this list that is useless online-only: a gate is where the
+   * signal is worst and the queue is longest, and the scanner reads this table
+   * to decide whether a card is a pupil of this school.
+   */
+  async pullGateRoster() {
+    if (this._isUnauthenticated()) return;
+    if (this.isStudent()) return;
+    try {
+      const schoolId = await this.getSchoolId();
+      if (!schoolId) return;
+      const { syncRoster } = require("./gate.service");
+      await syncRoster({ schoolId });
+    } catch (err) {
+      console.warn("[SyncManager] pullGateRoster failed:", err.message);
+    }
+  }
+
+  /** Expenses and payroll runs. Admin only — everybody else would 403. */
+  async pullFinance() {
+    if (this._isUnauthenticated()) return;
+    if (!this.isAdmin()) return;
+
+    const schoolId = await this.getSchoolId();
+    if (!schoolId) return;
+
+    // Separately, so a school that has expenses but no payroll permission
+    // still gets its expenses.
+    try {
+      const { pullExpenses } = require("./expense.service");
+      await pullExpenses({ schoolId });
+    } catch (err) {
+      console.warn("[SyncManager] pullExpenses failed:", err.message);
+    }
+
+    try {
+      const { pullRuns } = require("./payroll.service");
+      await pullRuns({ schoolId });
+    } catch (err) {
+      console.warn("[SyncManager] pullRuns failed:", err.message);
     }
   }
 

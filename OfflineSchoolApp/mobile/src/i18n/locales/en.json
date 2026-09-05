@@ -5490,7 +5490,11 @@
     "applications": "Applications",
     "school": "School details",
     "quizzes": "Quizzes",
-    "fees": "Fee schedule"
+    "fees": "Fee schedule",
+    "timetable": "Timetable",
+    "messages": "Messages",
+    "gate": "Gate roster",
+    "finance": "Finance"
   },
   "feeStructures": {
     "short": "Fee schedule",

@@ -5490,7 +5490,11 @@
     "applications": "Candidatures",
     "school": "Détails de l'école",
     "quizzes": "Quiz",
-    "fees": "Grille des frais"
+    "fees": "Grille des frais",
+    "timetable": "Emploi du temps",
+    "messages": "Messages",
+    "gate": "Liste du portail",
+    "finance": "Finances"
   },
   "feeStructures": {
     "short": "Grille des frais",

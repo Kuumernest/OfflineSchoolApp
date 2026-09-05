@@ -162,11 +162,17 @@ export const retryDelay = ({ attempt = 1, base = 1_000 } = {}) => {
 };
 
 /**
- * The longest one sync cycle can take before the next tick is due.
+ * The longest a single REQUEST can take, retries and their delays included.
  *
- * Not used to decide anything — it exists so the checks can assert the two
- * dials cannot be set to values that overlap cycles, which is the condition
- * the sync lock then has to paper over.
+ * Named for the cycle when it was written, which overstated it: a cycle is
+ * many requests, and there are eighteen steps in a staff sync now. What this
+ * bounds is one step's retry chain, which is the part the two dials actually
+ * control — how long to wait, and how many times.
+ *
+ * A cycle of eighteen slow steps can still outlast its own tick. The lock
+ * rejects the overlapping run, so nothing breaks and nothing doubles; the
+ * interval floor below keeps the common case from getting there, and the
+ * checks assert that much rather than a guarantee this cannot give.
  */
 export const worstCaseCycleMs = ({ attempts, timeoutCeilingMs }) =>
   attempts * timeoutCeilingMs + retryDelay({ attempt: attempts });
