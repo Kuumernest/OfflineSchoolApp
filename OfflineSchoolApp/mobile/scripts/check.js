@@ -824,10 +824,21 @@ const checkReceiptContrast = () => {
 
   const thread = fs.readFileSync(path.join(ROOT, "app/messages/[id].js"), "utf8");
 
-  // The outgoing bubble's fill, read from the palette the screen defines.
-  const primary = thread.match(/primary:\s*"(#[0-9A-Fa-f]{6})"/);
-  if (!primary) { bad("the outgoing bubble colour can be read"); return; }
-  const bg = primary[1];
+  // The outgoing bubble's fill — followed from bubbleMine to the palette token
+  // it names, rather than assumed to be `primary`.
+  //
+  // It was `primary` once and is not any more: the bubble was deepened
+  // precisely so the receipts on it would have room, and a check that kept
+  // measuring against the old colour would have gone on reporting the old
+  // numbers about a screen that no longer looks like that.
+  const token = thread.match(/bubbleMine:\s*\{\s*backgroundColor:\s*C\.(\w+)/);
+  if (!token) { bad("the outgoing bubble's colour token can be found"); return; }
+
+  const declared = thread.match(
+    new RegExp(`\\b${token[1]}:\\s*"(#[0-9A-Fa-f]{6})"`)
+  );
+  if (!declared) { bad(`the palette declares C.${token[1]}`); return; }
+  const bg = declared[1];
 
   // Every colour StateMark hands to an icon.
   const body = thread.slice(thread.indexOf("function StateMark"));

@@ -51,6 +51,15 @@ const bad = (label, detail) => {
   const Class      = mongoose.model("Class");
   const FeePayment = mongoose.model("FeePayment");
 
+  // The middleware detects a replay by letting the unique index on
+  // key+userId raise E11000. Mongoose builds indexes in the background, so
+  // without waiting the second create can land before the index exists and
+  // simply succeed — the suite then reports that idempotency is broken when
+  // what is actually broken is the suite. It passed for days and failed once
+  // the run got fast enough, which is the worst way for a check to behave.
+  await mongoose.model("IdempotencyKey").init();
+  await mongoose.model("FeePayment").init();
+
   const S    = "school-a";
   const YEAR = "2026/2027";
 

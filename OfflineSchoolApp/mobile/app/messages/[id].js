@@ -29,6 +29,29 @@ import { errorText } from "../../src/utils/appError";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
+
+  // The outgoing bubble, and deliberately not `primary`.
+  //
+  // It was primary, #2563EB, and everything that has to be read ON it was
+  // fighting for room above it: the read tick could only be white, the
+  // delivered tick had to be so pale it was nearly white too, and the two
+  // states people most need to tell apart differed by almost nothing. The
+  // first fix here got the read tick from 1.41:1 to 5.17:1, which was a real
+  // improvement and still not enough to see at 14px.
+  //
+  // Taking the bubble two steps darker gives every mark on it room. Nothing
+  // else moves: primary still draws the avatars, the spinner and the reply
+  // rule, so the screen keeps its colour and only the bubble deepens.
+  //
+  //   body      #FFFFFF  10.36:1
+  //   read      #FFFFFF  10.36:1   full white, 15px
+  //   delivered #93C5FD   5.74:1   a real blue now, not a pale white
+  //   failed    #FECACA   7.16:1
+  //
+  // Delivered and read share a shape, so colour is all that separates them —
+  // and on the old bubble the only colours that cleared the floor were all
+  // within a shade of each other. This is the gap that was missing.
+  sent: "#1E3A8A",
   gray50: "#F9FAFB", gray100: "#F3F4F6", gray200: "#E5E7EB",
   gray300: "#D1D5DB", gray400: "#9CA3AF", gray500: "#6B7280",
   gray700: "#374151", gray900: "#111827",
@@ -62,25 +85,25 @@ const timeLabel = (iso) => {
  * scarcely better at 2.72:1, on the one message a sender must notice.
  *
  * The tick shape already separates sent from delivered — one mark against
- * two — so colour only has to separate delivered from read. It does that
- * by brightness now, because on a blue ground brightness is the axis that
- * is left: pale blue for delivered, full white for read.
+ * two — so colour only has to separate delivered from read: a real blue
+ * against full white, which is a difference you can see at 14px rather than
+ * one you can measure.
  *
- *   queued    #BFDBFE  3.64:1
- *   failed    #FECACA  3.57:1
- *   sent      #BFDBFE  3.64:1
- *   delivered #BFDBFE  3.64:1
- *   read      #FFFFFF  5.17:1
+ *   queued    #93C5FD   5.74:1
+ *   failed    #FECACA   7.16:1
+ *   sent      #93C5FD   5.74:1
+ *   delivered #93C5FD   5.74:1
+ *   read      #FFFFFF  10.36:1
  *
  * checkScreenEdges re-measures these against the bubble, so a colour that
  * looked right in a swatch cannot quietly drop below the floor again.
  */
 function StateMark({ state, seq, participantRead }) {
-  if (state === "queued")  return <Ionicons name="time-outline"    size={12} color="#BFDBFE" />;
+  if (state === "queued")  return <Ionicons name="time-outline"    size={13} color="#93C5FD" />;
   if (state === "failed")  return <Ionicons name="alert-circle"    size={14} color="#FECACA" />;
 
   // No seq yet — treat as sent.
-  if (seq == null) return <Ionicons name="checkmark" size={12} color="#BFDBFE" />;
+  if (seq == null) return <Ionicons name="checkmark" size={13} color="#93C5FD" />;
 
   const isRead      = (participantRead?.lastReadSeq      || 0) >= seq;
   const isDelivered = (participantRead?.lastDeliveredSeq || 0) >= seq;
@@ -98,14 +121,14 @@ function StateMark({ state, seq, participantRead }) {
     // Gray double check.
     return (
       <View style={{ flexDirection: "row", marginLeft: 2 }}>
-        <Ionicons name="checkmark-done" size={14} color="#BFDBFE" />
+        <Ionicons name="checkmark-done" size={14} color="#93C5FD" />
       </View>
     );
   }
   // Sent — single gray check.
   return (
     <View style={{ flexDirection: "row", marginLeft: 2 }}>
-      <Ionicons name="checkmark" size={12} color="#BFDBFE" />
+      <Ionicons name="checkmark" size={13} color="#93C5FD" />
     </View>
   );
 }
@@ -273,12 +296,12 @@ export default function ThreadScreen() {
                   <Ionicons
                     name={a.kind === "image" ? "image-outline" : "document-outline"}
                     size={13}
-                    color={mine ? "#BFDBFE" : C.primary}
+                    color={mine ? "#DBEAFE" : C.primary}
                   />
                   <Text
                     style={[
                       s.attachmentName,
-                      { color: mine ? "#BFDBFE" : C.primary },
+                      { color: mine ? "#DBEAFE" : C.primary },
                     ]}
                     numberOfLines={1}
                   >
@@ -433,7 +456,7 @@ const s = StyleSheet.create({
     maxWidth: "78%", borderRadius: 16,
     paddingHorizontal: 12, paddingVertical: 8,
   },
-  bubbleMine:    { backgroundColor: C.primary, borderBottomRightRadius: 4 },
+  bubbleMine:    { backgroundColor: C.sent, borderBottomRightRadius: 4 },
   bubbleTheirs:  { backgroundColor: C.white, borderBottomLeftRadius: 4,
                    borderWidth: 1, borderColor: C.gray200 },
   bubbleDeleted: { backgroundColor: C.gray100, borderColor: C.gray200 },

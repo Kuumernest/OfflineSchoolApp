@@ -23,7 +23,7 @@ import * as Print from "expo-print";
 import PortalService      from "../../src/services/portal.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
-import { formatMoney, formatDateShort } from "../../src/i18n/format";
+import { formatMoney, formatDateShort, formatTime } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
 
 const C = {
@@ -763,7 +763,10 @@ export default function ParentPortalScreen() {
 
             {/* ── Attendance — rate, status counts and recent days ── */}
             {tab === "attendance" && (
-              (data?.total ?? 0) === 0 ? (
+              // A school that scans at the gate but keeps no period register
+              // had nothing on this tab at all, because the empty test only
+              // asked about register rows.
+              (data?.total ?? 0) === 0 && (data?.gate?.length ?? 0) === 0 ? (
                 <View style={styles.card}>
                   <Text style={styles.empty}>{t("portal.noAttendance")}</Text>
                 </View>
@@ -787,6 +790,41 @@ export default function ParentPortalScreen() {
                       </View>
                     ))}
                   </View>
+
+                  {/* The gate.
+                      A parent could not see what time their child reached
+                      school. The scan does notify them, but only when the
+                      child was late or left early — which is the right rule
+                      for a push and the wrong one for a page somebody chose
+                      to open. */}
+                  {(data.gate?.length ?? 0) > 0 && (
+                    <View style={styles.card}>
+                      <Text style={styles.cardTitle}>{t("portal.gateTimes")}</Text>
+                      <Text style={styles.lineMeta}>{t("portal.gateBlurb")}</Text>
+
+                      {data.gate.slice(0, 14).map((day) => (
+                        <View key={day.date} style={styles.gateRow}>
+                          <Text style={styles.gateDate} numberOfLines={1}>
+                            {formatDateShort(day.date)}
+                          </Text>
+
+                          <View style={styles.gateTimes}>
+                            <Text style={styles.gateLabel}>{t("portal.arrived")}</Text>
+                            <Text style={styles.gateValue}>
+                              {day.arrivedAt ? formatTime(day.arrivedAt) : "—"}
+                            </Text>
+                          </View>
+
+                          <View style={styles.gateTimes}>
+                            <Text style={styles.gateLabel}>{t("portal.left")}</Text>
+                            <Text style={styles.gateValue}>
+                              {day.departedAt ? formatTime(day.departedAt) : "—"}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  )}
 
                   {(data.dailySummaries?.length ?? 0) > 0 && (
                     <View style={styles.card}>
@@ -1123,6 +1161,21 @@ const styles = StyleSheet.create({
   recentDayRow: {
     flexDirection: "row", alignItems: "center", gap: 8,
     paddingVertical: 9, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+
+  // The gate row: date, then arrival and departure as two labelled columns.
+  // Times are tabular so a fortnight of arrivals reads as a column rather than
+  // a ragged list — which is the whole point of looking at it.
+  gateRow: {
+    flexDirection: "row", alignItems: "center",
+    paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: C.line,
+  },
+  gateDate:  { flex: 1, fontSize: 13, color: C.ink, fontWeight: "600" },
+  gateTimes: { width: 78, alignItems: "flex-end" },
+  gateLabel: { fontSize: 10, color: C.inkFaint, textTransform: "uppercase", letterSpacing: 0.4 },
+  gateValue: {
+    fontSize: 14, color: C.ink, fontWeight: "600",
+    fontVariant: ["tabular-nums"],
   },
   recentDayDot:    { width: 8, height: 8, borderRadius: 4 },
   recentDayMeta:   { fontSize: 10, color: C.inkFaint, fontVariant: ["tabular-nums"] },

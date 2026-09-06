@@ -1426,7 +1426,12 @@
     "noticeOther": "Avis",
     "noticeStatus_pending": "En attente d'envoi",
     "noticeStatus_failed": "Envoi impossible",
-    "noticeMessage": "Message"
+    "noticeMessage": "Message",
+    "gateTimes": "Arrivée et départ",
+    "arrived": "Arrivé",
+    "left": "Parti",
+    "noGateScan": "Aucun passage au portail",
+    "gateBlurb": "Heures enregistrées au portail de l’école."
   },
   "codes": {
     "title": "Accès parents",

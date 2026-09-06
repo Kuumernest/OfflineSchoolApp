@@ -26,6 +26,7 @@ const portal = require("../services/portal.service");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const { displayName } = require("../utils/studentName");
+const GateEvent = require("../db/models/GateEvent");
 
 /**
  * The guardian portal.
@@ -693,6 +694,47 @@ router.get("/attendance", asyncHandler(async (req, res) => {
 
   const rows = await StudentAttendance.find(filter).sort({ date: -1, periodId: 1 }).limit(500).lean();
 
+  // ── The gate, over the same window ────────────────────────────────────
+  //
+  // A parent could not see what time their child reached school. The scan
+  // does notify them, but only through the exceptions policy — a late
+  // arrival or an early departure — and that policy is right: "arrived
+  // 07:42" pushed to a phone every morning is noise somebody stops opening,
+  // and then the message that mattered is buried in it.
+  //
+  // A portal is not a push. Nobody is interrupted by a page they chose to
+  // open, so the times belong here in full, and the notification policy is
+  // left exactly as it was. On-time arrivals now have somewhere to be seen
+  // without becoming something a parent has to be told.
+  const gateFilter = { schoolId, studentId, voidedAt: null, deletedAt: null };
+  if (filter.date) gateFilter.date = filter.date;
+
+  const gateRows = await GateEvent
+    .find(gateFilter)
+    .sort({ date: -1, at: 1 })
+    .limit(500)
+    .lean()
+    .catch(() => []);
+
+  // One row per day: first way in, last way out. A child signed out for a
+  // dentist and back again has two of each, and the day still reads as the
+  // morning they arrived and the afternoon they finally left.
+  const gateByDate = new Map();
+  for (const g of gateRows) {
+    if (!gateByDate.has(g.date)) {
+      gateByDate.set(g.date, { date: g.date, arrivedAt: null, departedAt: null, scans: 0 });
+    }
+    const day = gateByDate.get(g.date);
+    day.scans += 1;
+    const at = g.at ? new Date(g.at).toISOString() : null;
+    if (!at) continue;
+    if (g.direction === "in") {
+      if (!day.arrivedAt || at < day.arrivedAt) day.arrivedAt = at;
+    } else {
+      if (!day.departedAt || at > day.departedAt) day.departedAt = at;
+    }
+  }
+
   // Resolve names for periods and subjects referenced in the records
   const periodIds  = [...new Set(rows.map((r) => r.periodId).filter(Boolean))];
   const subjectIds = [...new Set(rows.map((r) => r.subjectId).filter(Boolean))];
@@ -738,9 +780,13 @@ router.get("/attendance", asyncHandler(async (req, res) => {
     else if (day.absent >= day.total / 2) dailyStatus = "Partial absence";
     else dailyStatus = "Present with partial absence";
 
+    const gate = gateByDate.get(day.date) ?? null;
+
     return {
       date:    day.date,
       status:  dailyStatus,
+      arrivedAt:  gate?.arrivedAt  ?? null,
+      departedAt: gate?.departedAt ?? null,
       present: day.present,
       absent:  day.absent,
       late:    day.late,
@@ -776,6 +822,14 @@ router.get("/attendance", asyncHandler(async (req, res) => {
       rate: total > 0 ? Math.round((present / total) * 100) : null,
       lateCount:    tally.late ?? 0,
       excusedCount: tally.excused ?? 0,
+  
+      // Newest first, matching `recent` above. A day the register never
+      // covered — a Saturday club, a public holiday the gate was open — still
+      // appears here, which is why this is its own list and not folded into
+      // the register days only.
+      gate: [...gateByDate.values()]
+        .sort((a, b) => String(b.date).localeCompare(String(a.date)))
+        .slice(0, 60),
       recent: rows.slice(0, 30).map((r) => ({
         date:        r.date,
         status:      r.status,

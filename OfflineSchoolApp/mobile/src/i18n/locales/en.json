@@ -1426,7 +1426,12 @@
     "noticeOther": "Notice",
     "noticeStatus_pending": "Queued — not sent yet",
     "noticeStatus_failed": "Could not be delivered",
-    "noticeMessage": "Message"
+    "noticeMessage": "Message",
+    "gateTimes": "Arrival and departure",
+    "arrived": "Arrived",
+    "left": "Left",
+    "noGateScan": "No gate scan",
+    "gateBlurb": "Times recorded at the school gate."
   },
   "codes": {
     "title": "Portal access",

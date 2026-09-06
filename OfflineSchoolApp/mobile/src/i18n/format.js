@@ -91,6 +91,25 @@ export const formatDateShort = (value, locale = currentLocale()) => {
 };
 
 /**
+ * A clock time, for a moment where only the time of day is the point.
+ *
+ * The gate records an instant; a parent reading it wants "07:42", not the date
+ * they already know they are looking at. Two digits on the hour so a column of
+ * arrivals lines up.
+ */
+export const formatTime = (value, locale = currentLocale()) => {
+  const d = toDate(value);
+  if (!d) return "—";
+  try {
+    return new Intl.DateTimeFormat(locale, {
+      hour: "2-digit", minute: "2-digit",
+    }).format(d);
+  } catch {
+    return d.toISOString().slice(11, 16);
+  }
+};
+
+/**
  * A payroll period ("2026-03") as a month a person reads.
  *
  * Built from Date.UTC rather than `new Date("2026-03")`, which is parsed as UTC
