@@ -234,11 +234,33 @@ const bad = (label, detail) => {
   const page = require("fs").readFileSync(
     path.join(ROOT, "..", "web", "src", "pages", "exams", "[id]", "index.tsx"), "utf8");
   if (/REASON_REQUIRED/.test(page) && /changeReason/.test(page)) {
-    ok("the marks screen recognises the refusal and can send a reason back");
+    ok("the web marks screen recognises the refusal and can send a reason back");
   } else {
-    bad("the marks screen can send a reason",
+    bad("the web marks screen can send a reason",
       "the server asks for a changeReason and the screen has nowhere to type one, " +
       "so the correction cannot be completed in the app at all.");
+  }
+
+  const mobileScreen = require("fs").readFileSync(
+    path.join(ROOT, "..", "mobile", "app", "admin", "exams", "marks.js"), "utf8");
+  if (/REASON_REQUIRED/.test(mobileScreen) && /changeReason/.test(mobileScreen)) {
+    ok("and so does the phone");
+  } else {
+    bad("the phone can send a reason too",
+      "an administrator correcting a mark on a handset still has no way through.");
+  }
+
+  // The phone writes marks locally before sending them. A refusal that leaves
+  // that write behind is worse than the web case: the sheet shows a mark the
+  // server rejected, flagged unsent, and nothing on the device retries it.
+  const mobileService = require("fs").readFileSync(
+    path.join(ROOT, "..", "mobile", "src", "services", "exam.service.js"), "utf8");
+  if (/snapshotScores/.test(mobileService) && /restoreScores\(before/.test(mobileService)) {
+    ok("and a refused save is rolled back on the device rather than left dirty");
+  } else {
+    bad("a refused save is rolled back on the device",
+      "saveBulkScores writes locally first and only queues on an OFFLINE error, " +
+      "so a 423 left the mark on the phone marked unsent with nothing to send it.");
   }
 
   await mongoose.model("ResultSummary").deleteOne({ _id: "sum-1" });

@@ -4644,7 +4644,13 @@
     "subject": "Subject",
     "exam": "Exam",
     "exams": "Exams",
-    "abs": "ABS"
+    "abs": "ABS",
+    "overrideLockTitle": "Override the lock",
+    "correctPublishedTitle": "Correct a published result",
+    "correctPublishedHint": "These results have already been published, so parents may have seen them. Record why you are changing them.",
+    "changeReasonPlaceholder": "e.g. Paper 2 remarked after appeal",
+    "changeReasonKept": "Kept with the change for as long as the result exists.",
+    "saveWithReason": "Save correction"
   },
   "examMonitor": {
     "title": "Submission Monitor",

@@ -7,7 +7,7 @@ import React, {
 import {
   View, Text, StyleSheet, FlatList, TouchableOpacity,
   ActivityIndicator, Alert, StatusBar, RefreshControl, BackHandler,
-  TextInput, ScrollView, KeyboardAvoidingView,
+  TextInput, ScrollView, KeyboardAvoidingView, Modal,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
@@ -871,6 +871,17 @@ const ScoreEntry = ({
   const [search,     setSearch]     = useState("");
   const [dirty,      setDirty]      = useState(false);
 
+  // Correcting a published or locked result. The server refuses the write and
+  // an administrator may override it, but only by recording why — and there
+  // was nowhere on this screen to say. The strings existed in both locale
+  // files and nothing rendered them.
+  const [reasonPrompt, setReasonPrompt] = useState(null);   // "locked" | "published"
+  const [reasonText,   setReasonText]   = useState("");
+
+  // doSave is rebuilt inside handleSave, so the dialog reaches the current one
+  // through a ref rather than closing over a stale copy.
+  const saveWithReasonRef = useRef(null);
+
   const loadData = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
@@ -994,12 +1005,13 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
 
     const unentered = records.filter((r) => !r.isAbsent && r.score === null);
 
-    const doSave = async () => {
+    const doSave = async (changeReason) => {
       try {
         setSaving(true);
         const saveRes = await ExamService.saveBulkScores({
           examId, classId, subjectId, examSubjectId,
           scores: records, schoolId,
+          ...(changeReason ? { changeReason } : {}),
         });
         setDirty(false);
         Alert.alert(
@@ -1013,12 +1025,31 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
             { text: t("common.done"), style: "cancel", onPress: () => onSaved("exit") },
           ]
         );
+        setReasonPrompt(null);
+        setReasonText("");
       } catch (err) {
-        Alert.alert(t("marksEntry.saveFailed"), errorText(t, err, "marksEntry.tryAgain"));
+        // 423 is the server asking for something the person can give, not a
+        // failure to report and stop at. The marks were rolled back in the
+        // service, so the sheet still shows what was typed and nothing on the
+        // device is left pretending it was saved.
+        const status = err?.response?.status;
+        const code   = err?.response?.data?.code;
+
+        if (status === 423 && code === "REASON_REQUIRED") {
+          setReasonPrompt("published");
+        } else if (status === 423 && code === "RESULTS_LOCKED") {
+          setReasonPrompt("locked");
+        } else {
+          // Including a 423 this account may not override at all, which no
+          // reason would get past.
+          Alert.alert(t("marksEntry.saveFailed"), errorText(t, err, "marksEntry.tryAgain"));
+        }
       } finally {
         setSaving(false);
       }
     };
+
+    saveWithReasonRef.current = doSave;
 
     if (unentered.length > 0) {
       const names = unentered
@@ -1219,11 +1250,93 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
           }
         />
       </View>
+
+      {/* Only an administrator ever sees this: a teacher hitting a published
+          result is refused with a different code and no reason would help. */}
+      <Modal
+        visible={Boolean(reasonPrompt)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => { setReasonPrompt(null); setReasonText(""); }}
+      >
+        <View style={se.reasonBackdrop}>
+          <View style={se.reasonCard}>
+            <Text style={se.reasonTitle}>
+              {reasonPrompt === "locked"
+                ? t("marksEntry.overrideLockTitle")
+                : t("marksEntry.correctPublishedTitle")}
+            </Text>
+            <Text style={se.reasonBody}>
+              {reasonPrompt === "locked"
+                ? t("results.changeReasonRequired")
+                : t("marksEntry.correctPublishedHint")}
+            </Text>
+
+            <TextInput
+              style={se.reasonInput}
+              value={reasonText}
+              onChangeText={setReasonText}
+              placeholder={t("marksEntry.changeReasonPlaceholder")}
+              placeholderTextColor="#9CA3AF"
+              multiline
+              autoFocus
+            />
+            <Text style={se.reasonNote}>{t("marksEntry.changeReasonKept")}</Text>
+
+            <View style={se.reasonRow}>
+              <TouchableOpacity
+                style={se.reasonCancel}
+                onPress={() => { setReasonPrompt(null); setReasonText(""); }}
+              >
+                <Text style={se.reasonCancelText}>{t("common.cancel")}</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[se.reasonSave, (saving || reasonText.trim().length < 4) && se.reasonSaveOff]}
+                disabled={saving || reasonText.trim().length < 4}
+                onPress={() => saveWithReasonRef.current?.(reasonText.trim())}
+              >
+                <Text style={se.reasonSaveText}>
+                  {saving ? t("common.saving") : t("marksEntry.saveWithReason")}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 };
 
 const se = StyleSheet.create({
+  reasonBackdrop: {
+    flex: 1, backgroundColor: "rgba(15, 18, 26, 0.55)",
+    alignItems: "center", justifyContent: "center", padding: 20,
+  },
+  reasonCard: {
+    width: "100%", maxWidth: 420, backgroundColor: "#FFFFFF",
+    borderRadius: 16, padding: 20,
+  },
+  reasonTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
+  reasonBody:  { fontSize: 13, color: "#6B7280", marginTop: 6, lineHeight: 19 },
+  reasonInput: {
+    marginTop: 14, minHeight: 78, borderWidth: 2, borderColor: "#E5E7EB",
+    borderRadius: 10, padding: 10, fontSize: 14, color: "#111827",
+    textAlignVertical: "top",
+  },
+  reasonNote:  { fontSize: 11, color: "#9CA3AF", marginTop: 8 },
+  reasonRow: {
+    flexDirection: "row", justifyContent: "flex-end", gap: 8, marginTop: 18,
+  },
+  reasonCancel:     { paddingVertical: 10, paddingHorizontal: 16, borderRadius: 10 },
+  reasonCancelText: { fontSize: 14, fontWeight: "600", color: "#6B7280" },
+  reasonSave: {
+    paddingVertical: 10, paddingHorizontal: 18, borderRadius: 10,
+    backgroundColor: "#4F46E5",
+  },
+  reasonSaveOff:  { opacity: 0.5 },
+  reasonSaveText: { fontSize: 14, fontWeight: "700", color: "#FFFFFF" },
+
   container:   { flex: 1 },
   centered:    { flex: 1, alignItems: "center", justifyContent: "center", gap: 12 },
   loadingText: { fontSize: 14, color: "#6B7280" },

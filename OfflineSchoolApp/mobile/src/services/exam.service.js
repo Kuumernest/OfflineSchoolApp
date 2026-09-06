@@ -549,16 +549,30 @@ const saveBulkScores = async ({
   scores,
   schoolId,
   enteredBy = null,
+  // Why a published or locked result is being changed. The server refuses the
+  // write with 423 REASON_REQUIRED without it, and only an administrator may
+  // give one at all.
+  changeReason = null,
 }) => {
   if (!examId)    throw new Error("examId is required");
   if (!classId)   throw new Error("classId is required");
   if (!subjectId) throw new Error("subjectId is required");
 
+  // Captured before the local write, so a refusal can be undone. See the note
+  // on snapshotScores: an offline failure is queued and will go; a refusal is
+  // never going anywhere and must not be left on the device looking saved.
+  const before = await ExamCache.snapshotScores(
+    examId, subjectId, scores.map((s) => s.studentId)
+  );
+
   const localIds = await ExamCache.saveScoresLocal({
     examId, classId, subjectId, examSubjectId, schoolId, scores, enteredBy,
   });
 
-  const body = { classId, subjectId, examSubjectId, scores, schoolId };
+  const body = {
+    classId, subjectId, examSubjectId, scores, schoolId,
+    ...(changeReason ? { changeReason } : {}),
+  };
 
   try {
     const res = await api.post(`/exams/${examId}/scores/bulk`, body);
@@ -576,7 +590,13 @@ const saveBulkScores = async ({
 
     return { ...res.data, success: true, queued: false, saved: localIds.length };
   } catch (err) {
-    if (!isOfflineError(err)) throw err;
+    if (!isOfflineError(err)) {
+      // The server refused. Undo the optimistic write rather than leave the
+      // sheet showing a mark that was never accepted and that nothing on this
+      // device will ever send — see the note on snapshotScores.
+      await ExamCache.restoreScores(before, examId, subjectId).catch(() => {});
+      throw err;
+    }
 
     await MutationQueue.enqueue({
       entityKey: `exam-scores:${examId}:${classId}:${subjectId}`,

@@ -515,6 +515,73 @@ export const saveScoresLocal = async ({
   return ids;
 };
 
+/**
+ * The rows as they stand, before a save overwrites them.
+ *
+ * Marks are written locally first so the sheet keeps working with no signal.
+ * That is right for an offline failure — the write is queued and will go. It
+ * is wrong for a REFUSAL: the server said no, and the phone was left holding
+ * marks it had accepted, flagged unsent, with nothing on the device that ever
+ * retries or even counts them. countUnsyncedScores has existed all along and
+ * nothing calls it.
+ *
+ * So a refused save is rolled back to this, and the sheet shows what the
+ * server actually has rather than what somebody hoped it would.
+ *
+ * @returns {Promise<{rows: object[], created: string[]}>} rows that existed
+ *   before, and the ids of any that did not and must be removed on a rollback.
+ */
+export const snapshotScores = async (examId, subjectId, studentIds = []) => {
+  await ensureExamTables();
+  const db = await getDatabase();
+
+  const rows = [];
+  const seen = [];
+  for (const studentId of studentIds) {
+    if (!studentId) continue;
+    const row = await db.getFirstAsync(
+      "SELECT * FROM exam_scores WHERE examId = ? AND studentId = ? AND subjectId = ?",
+      [String(examId), String(studentId), String(subjectId)]
+    ).catch(() => null);
+    if (row) rows.push(row); else seen.push(String(studentId));
+  }
+  return { rows, created: seen };
+};
+
+/** Put back what snapshotScores captured, and delete what did not exist. */
+export const restoreScores = async (snapshot, examId, subjectId) => {
+  if (!snapshot) return 0;
+  await ensureExamTables();
+  const db = await getDatabase();
+  let n = 0;
+
+  for (const r of snapshot.rows ?? []) {
+    await db.runAsync(
+      `UPDATE exam_scores SET
+         score = ?, maxScore = ?, percentage = ?, isAbsent = ?, isExempt = ?,
+         teacherRemark = ?, _synced = ?, _synced_at = ?, updated_at = ?
+       WHERE id = ?`,
+      [
+        r.score ?? null, r.maxScore ?? null, r.percentage ?? null,
+        r.isAbsent ?? 0, r.isExempt ?? 0, r.teacherRemark ?? null,
+        r._synced ?? 1, r._synced_at ?? null, r.updated_at ?? null, r.id,
+      ]
+    ).catch(() => {});
+    n++;
+  }
+
+  // A mark that had no row before the refused save must not be left behind.
+  for (const studentId of snapshot.created ?? []) {
+    await db.runAsync(
+      "DELETE FROM exam_scores WHERE examId = ? AND studentId = ? AND subjectId = ?",
+      [String(examId), String(studentId), String(subjectId)]
+    ).catch(() => {});
+    n++;
+  }
+
+  return n;
+};
+
 export const countUnsyncedScores = async () => {
   await ensureExamTables();
   const db = await getDatabase();
