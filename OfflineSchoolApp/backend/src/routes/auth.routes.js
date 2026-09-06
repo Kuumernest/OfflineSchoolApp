@@ -271,7 +271,7 @@ router.post("/refresh", async (req, res, next) => {
 
     let decoded;
     try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET, { algorithms: ["HS256"] });
     } catch (err) {
       const isExpired = err.name === "TokenExpiredError";
       return res.status(401).json({
@@ -470,7 +470,7 @@ router.post("/logout", (req, res) => {
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith("Bearer ")) {
       const token   = authHeader.split(" ")[1];
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
       console.log(`👋 Logout: userId=${decoded.id}`);
     }
   } catch { /* token missing or expired — fine */ }

@@ -232,21 +232,60 @@ export const dropAndRecreateStudentTable = async () => {
 
   try {
     let backupData = [];
-    try {
-      const hasTable = await tableExists(db, "students");
-      if (hasTable) {
-        backupData = await db
-          .getAllAsync(`SELECT * FROM students`)
-          .catch(() => []);
-        console.log(
-          `[dropAndRecreateStudentTable] Backed up ${backupData.length} rows`
-        );
-      }
-    } catch (backupErr) {
-      console.warn(
-        "[dropAndRecreateStudentTable] Backup failed:",
-        backupErr.message
+    let rowCount   = 0;
+    const hasTable = await tableExists(db, "students");
+
+    if (hasTable) {
+      // Counted separately, and this is the point of the whole guard below.
+      rowCount = await db
+        .getFirstAsync(`SELECT COUNT(*) AS n FROM students`)
+        .then((r) => Number(r?.n ?? 0))
+        .catch(() => -1);
+
+      backupData = await db
+        .getAllAsync(`SELECT * FROM students`)
+        .catch((err) => {
+          console.warn(
+            "[dropAndRecreateStudentTable] Backup read failed:",
+            err?.message
+          );
+          return [];
+        });
+
+      console.log(
+        `[dropAndRecreateStudentTable] Backed up ${backupData.length} of ${rowCount} row(s)`
       );
+    }
+
+    // ── The drop does not happen on a backup nobody checked ─────────────────
+    //
+    // The backup was a SELECT with .catch(() => []) inside a try that only
+    // warned, and then the DROP ran regardless. So the one situation this
+    // function exists for — a students table too broken to read — was also
+    // the situation in which it silently emptied the table and reported
+    // success.
+    //
+    // That is not only a cache: approve, reject, suspend and class-move all
+    // write `_synced = 0` onto the row here and rely on the sweeper to push
+    // it. Those edits live in this table and nowhere else, so a pupil
+    // approved on a phone with no signal would simply never have been
+    // approved, and nothing would say so.
+    //
+    // Refusing leaves the table exactly as it was: still broken, still
+    // reporting the UNIQUE error that got us here, and now saying why.
+    if (hasTable && rowCount !== 0 && backupData.length === 0) {
+      console.error(
+        "[dropAndRecreateStudentTable] ABORTED — the table holds " +
+        `${rowCount === -1 ? "an unknown number of" : rowCount} row(s) and none ` +
+        "could be read. Dropping now would destroy any offline approval or " +
+        "class move that has not reached the server."
+      );
+      return {
+        success: false,
+        aborted: true,
+        reason:  "backup-unreadable",
+        rowCount,
+      };
     }
 
     await db.execAsync(`DROP TABLE IF EXISTS students;`).catch(() => {});
@@ -257,10 +296,10 @@ export const dropAndRecreateStudentTable = async () => {
     await ensureStudentSchema(db);
     console.log("[dropAndRecreateStudentTable] ✅ Schema recreated");
 
-    if (backupData.length > 0) {
-      let restored = 0;
-      let failed   = 0;
+    let restored = 0;
+    let failed   = 0;
 
+    if (backupData.length > 0) {
       await db.execAsync("PRAGMA foreign_keys = OFF;");
 
       for (const row of backupData) {
@@ -324,7 +363,10 @@ export const dropAndRecreateStudentTable = async () => {
     console.log(
       "[dropAndRecreateStudentTable] ✅ Complete — table is clean"
     );
-    return { success: true, restored: backupData.length };
+    // restored, not backupData.length. Rows that failed to come back were
+    // being counted as restored, so the one number a caller could check said
+    // the rebuild was clean whatever had actually happened to the data.
+    return { success: true, restored, failed, backedUp: backupData.length };
   } catch (err) {
     console.error("[dropAndRecreateStudentTable] failed:", err.message);
     return { success: false, error: err.message };

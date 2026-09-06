@@ -334,7 +334,7 @@ const portalAuth = async (req, res, next) => {
 
   let decoded;
   try {
-    decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: "portal" });
+    decoded = jwt.verify(token, process.env.JWT_SECRET, { audience: "portal", algorithms: ["HS256"] });
   } catch (err) {
     return unauthorised(
       err.name === "TokenExpiredError" ? "TOKEN_EXPIRED" : "INVALID_TOKEN",

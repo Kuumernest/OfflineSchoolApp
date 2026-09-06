@@ -130,7 +130,10 @@ app.use(cors({
     : true,
   credentials:    true,
   methods:        ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Range"],
+  // Idempotency-Key is read by middleware/idempotency.js. A browser client
+  // that sends it would have the header stripped by the preflight without
+  // this, and would silently lose the protection it was asking for.
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "Range", "Idempotency-Key"],
   exposedHeaders: ["Content-Range", "Content-Length", "Accept-Ranges"],
 }));
 
