@@ -28,6 +28,7 @@ import {
   fetchExpenses, recordExpense, voidExpense,
 } from "@/services/finance.service";
 import type { SpendMethod } from "@/types/finance.types";
+import { useAttemptId } from "@/hooks/useAttemptId";
 
 const METHODS: SpendMethod[] = ["cash", "mobile_money", "bank", "cheque", "other"];
 
@@ -65,9 +66,15 @@ export default function ExpensesPage() {
 
   const invalidate = () => { void qc.invalidateQueries({ queryKey: ["finance"] }); };
 
+  // Expense carries no unique natural key at all — unlike a payment, which at
+  // least has a receipt number — so a retried request is simply a second
+  // expense. The server accepts a client-chosen _id and answers a repeat with
+  // the row it already has.
+  const attemptId = useAttemptId();
+
   const recordMutation = useMutation({
-    mutationFn: () =>
-      recordExpense({
+    mutationFn: () => {
+      const payload = {
         schoolId,
         categoryId:  form.categoryId,
         amount:      Number(form.amount),
@@ -75,7 +82,9 @@ export default function ExpensesPage() {
         vendor:      form.vendor.trim() || null,
         method:      form.method,
         reference:   form.reference.trim() || null,
-      }),
+      };
+      return recordExpense({ _id: attemptId(payload), ...payload });
+    },
     onSuccess: () => {
       toast({ kind: "success", title: t("expenses.recorded") });
       setExpenseOpen(false);

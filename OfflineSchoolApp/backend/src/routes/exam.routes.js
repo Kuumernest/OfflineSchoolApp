@@ -1187,6 +1187,20 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
           }
         : computeGrade(score, maxScore, gradingConfig);
 
+      // The row this mark belongs to, decided before the write rather than
+      // inside it.
+      //
+      // $setOnInsert used to mint the id, which meant nothing outside the
+      // bulkWrite knew it — and the audit entry below reached for `doc._id`,
+      // a variable that does not exist in this scope. Every score row threw a
+      // ReferenceError there, was caught by the try around it, and was counted
+      // as failed. The mark itself had already been queued and did save, so a
+      // teacher saw "1 saved, 1 failed" for one pupil, and ResultChangeLog —
+      // the entire record of who changed a mark from what to what — was never
+      // written to at all.
+      const prior   = priorByStudent.get(String(studentId));
+      const scoreId = prior?._id ? String(prior._id) : uuidv4();
+
       // Collected and sent as one write after the loop. This is the save at
       // the end of entering a mark sheet, and it awaited an upsert per
       // pupil: a class of forty paid forty sequential round trips, on the
@@ -1215,7 +1229,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
               lastSyncedAt:  now,
             },
             $setOnInsert: {
-              _id: uuidv4(), examId, studentId, subjectId, schoolId,
+              _id: scoreId, examId, studentId, subjectId, schoolId,
             },
           },
           upsert: true,
@@ -1225,7 +1239,6 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
 
       // Record only what moved. Re-saving an unchanged sheet is common and
       // must not fill the history with noise.
-      const prior = priorByStudent.get(String(studentId));
       const fields = prior
         ? [
             diffField("score",         prior.score         ?? null, score         ?? null),
@@ -1238,7 +1251,7 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
       for (const f of fields) {
         changes.push({
           entity:    "score",
-          entityId:  String(doc._id),
+          entityId:  scoreId,
           action:    prior ? "updated" : "created",
           studentId: String(studentId),
           subjectId,

@@ -35,6 +35,7 @@ import {
 import { printHtml } from "@/print/document";
 import type { PaymentMethod } from "@/types/fees.types";
 import PaymentPlanPanel from "@/pages/fees/PaymentPlanPanel";
+import { useAttemptId } from "@/hooks/useAttemptId";
 
 const METHODS: PaymentMethod[] = [
   "cash", "mobile_money", "bank", "cheque", "waiver", "other",
@@ -70,9 +71,15 @@ export default function StudentFeeAccountPage() {
     void qc.invalidateQueries({ queryKey: ["fees"] });
   };
 
+  // A payment carries a client-chosen id so that pressing the button again
+  // after a lost reply re-sends the same payment instead of recording a
+  // second one. The id is derived from the payload, so correcting the amount
+  // and sending again is a different payment, which it is.
+  const attemptId = useAttemptId();
+
   const payMutation = useMutation({
-    mutationFn: () =>
-      recordPayment({
+    mutationFn: () => {
+      const payload = {
         schoolId,
         studentId,
         academicYear: year,
@@ -80,7 +87,9 @@ export default function StudentFeeAccountPage() {
         method:       form.method,
         reference:    form.reference.trim() || null,
         note:         form.note.trim() || null,
-      }),
+      };
+      return recordPayment({ _id: attemptId(payload), ...payload });
+    },
     onSuccess: ({ payment }) => {
       toast({
         kind:    "success",

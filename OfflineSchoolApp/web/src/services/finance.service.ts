@@ -56,6 +56,8 @@ export async function fetchExpenses(
 }
 
 export async function recordExpense(payload: {
+  /** Optional client id. Supplying one makes the request safe to retry. */
+  _id?:         string;
   schoolId:     string;
   categoryId:   string;
   amount:       number;
