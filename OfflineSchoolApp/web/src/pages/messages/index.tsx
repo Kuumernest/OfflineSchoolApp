@@ -39,6 +39,7 @@ import { useUser } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
+import { conversationMatches } from "./participants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -180,6 +181,21 @@ export default function MessagesPage() {
 
   const conversations = conversationsQuery.data ?? [];
 
+  // Searched here rather than at the server, unlike the audit list.
+  //
+  // This is one person's own threads, all of them already loaded, and the
+  // guardians in them have already been labelled with their children by the
+  // time they arrive — so typing a pupil's name finds their parent without a
+  // round trip. The audit list searches every thread in the school and is
+  // paged, so filtering what happened to be loaded there would quietly search
+  // only the first fifty.
+  const [search, setSearch] = useState("");
+
+  const visible = useMemo(
+    () => conversations.filter((c) => conversationMatches(c, search)),
+    [conversations, search],
+  );
+
   // Open the first thread once, so the pane is not empty on arrival.
   useEffect(() => {
     if (!activeId && conversations.length) setActiveId(conversations[0]._id);
@@ -295,6 +311,29 @@ export default function MessagesPage() {
 
         {/* ── Conversation list ──────────────────────────────────────────── */}
         <aside className="w-72 shrink-0 border-r border-gray-200 bg-white overflow-y-auto">
+          <div className="sticky top-0 z-10 border-b border-gray-100 bg-white p-2.5">
+            <div className="flex items-center gap-2 rounded-lg border-2 border-gray-200
+                            bg-gray-50 px-2.5 py-1.5
+                            focus-within:border-blue-500 focus-within:bg-white">
+              <Search size={14} className="shrink-0 text-gray-400" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("messages.searchPh")}
+                className="min-w-0 flex-1 bg-transparent text-sm outline-none"
+              />
+              {search && (
+                <button
+                  onClick={() => setSearch("")}
+                  aria-label={t("common.clear")}
+                  className="shrink-0 text-gray-400 hover:text-gray-600"
+                >
+                  <X size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
           {conversationsQuery.isLoading && (
             <div className="flex justify-center py-10">
               <Loader2 size={22} className="animate-spin text-blue-600" />
@@ -315,7 +354,19 @@ export default function MessagesPage() {
             </div>
           )}
 
-          {conversations.map((c) => (
+          {/* Having no threads and having no MATCHING thread are different
+              things, and telling somebody "no messages yet" when they have
+              simply mistyped a name is the sort of answer that sends them
+              looking for a bug. */}
+          {!conversationsQuery.isLoading &&
+            conversations.length > 0 &&
+            visible.length === 0 && (
+              <div className="p-6 text-center text-sm text-gray-500">
+                {t("messages.noneMatching", { query: search })}
+              </div>
+            )}
+
+          {visible.map((c) => (
             <button
               key={c._id}
               onClick={() => { setActiveId(c._id); setSendError(null); }}

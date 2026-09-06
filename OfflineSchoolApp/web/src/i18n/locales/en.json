@@ -100,7 +100,8 @@
     "clearSearch": "Clear search",
     "processing": "Processing...",
     "cannotUndo": "This action cannot be undone.",
-    "discardChanges": "Discard unsaved changes and go back?"
+    "discardChanges": "Discard unsaved changes and go back?",
+    "clear": "Clear"
   },
   "flow": {
     "title": "Results workflow",
@@ -2379,9 +2380,12 @@
       "people": "People",
       "lastActivity": "Last activity",
       "directConversation": "Direct conversation",
-      "read": "Read"
+      "read": "Read",
+      "searchPh": "Search by name — staff, pupil, or a pupil’s parent"
     },
-    "auditNotice": "This read is recorded. Deleted messages are shown in full here — that is the point of an audit — and are not visible to participants."
+    "auditNotice": "This read is recorded. Deleted messages are shown in full here — that is the point of an audit — and are not visible to participants.",
+    "noneMatching": "No conversation matches “{{query}}”.",
+    "andMore": "{{names}} +{{count}} more"
   },
   "examType": {
     "test": "Test",

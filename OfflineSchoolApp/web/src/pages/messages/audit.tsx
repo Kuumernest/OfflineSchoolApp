@@ -33,6 +33,7 @@ import { useUser } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
+import { summariseParticipants } from "./participants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -62,8 +63,12 @@ export default function MessageAuditPage() {
 
   const listQuery = useQuery<Conversation[], Error>({
     queryKey: ["audit-conversations", submitted],
+    // Searched by name, not by id. Asking an administrator for a
+    // participant id meant looking one up somewhere else before this page
+    // could be used at all. The server resolves a name to staff, pupils,
+    // and the parents who hold those pupils.
     queryFn:  () => auditConversations(
-      submitted ? { participantId: submitted } : {},
+      submitted ? { q: submitted } : {},
     ),
     enabled:  isAdmin,
   });
@@ -248,7 +253,7 @@ export default function MessageAuditPage() {
               value={participantId}
               onChange={(e) => setParticipantId(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") submit(); }}
-              placeholder={t("messages.audit.participantPh")}
+              placeholder={t("messages.audit.searchPh")}
               className="flex-1 bg-transparent text-sm outline-none"
             />
           </div>
@@ -298,14 +303,16 @@ export default function MessageAuditPage() {
             <tbody>
               {rows.map((c) => (
                 <tr key={c._id} className="border-t border-gray-100">
-                  <td className="px-4 py-2.5">
-                    <div className="font-semibold text-gray-900">
+                  {/* max-w-0 with w-full is what makes `truncate` work in a
+                      table cell: without a width to truncate against the cell
+                      simply grows, and a class thread naming all forty-two of
+                      its pupils pushed the whole table off the page. */}
+                  <td className="px-4 py-2.5 max-w-0 w-full">
+                    <div className="truncate font-semibold text-gray-900">
                       {c.title || t("messages.audit.directConversation")}
                     </div>
                     <div className="truncate text-xs text-gray-500">
-                      {(c.participants ?? [])
-                        .map((p) => p.name || p.id)
-                        .join(", ")}
+                      {summariseParticipants(c.participants ?? [], t)}
                     </div>
                   </td>
                   <td className="px-4 py-2.5 text-xs text-gray-600">{c.kind}</td>

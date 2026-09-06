@@ -100,7 +100,8 @@
     "clearSearch": "Effacer la recherche",
     "processing": "Traitement…",
     "cannotUndo": "Cette action est irréversible.",
-    "discardChanges": "Abandonner les modifications non enregistrées et revenir en arrière ?"
+    "discardChanges": "Abandonner les modifications non enregistrées et revenir en arrière ?",
+    "clear": "Effacer"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -2379,9 +2380,12 @@
       "people": "Personnes",
       "lastActivity": "Dernière activité",
       "directConversation": "Conversation directe",
-      "read": "Lire"
+      "read": "Lire",
+      "searchPh": "Rechercher par nom — personnel, élève ou parent d’élève"
     },
-    "auditNotice": "Cette consultation est enregistrée. Les messages supprimés sont affichés ici en entier — c’est l’objet d’un audit — et ne sont pas visibles par les participants."
+    "auditNotice": "Cette consultation est enregistrée. Les messages supprimés sont affichés ici en entier — c’est l’objet d’un audit — et ne sont pas visibles par les participants.",
+    "noneMatching": "Aucune conversation ne correspond à « {{query}} ».",
+    "andMore": "{{names}} +{{count}} autre(s)"
   },
   "examType": {
     "test": "Interrogation",

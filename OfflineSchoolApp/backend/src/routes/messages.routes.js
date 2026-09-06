@@ -28,6 +28,12 @@ const router  = express.Router();
 const Conversation = require("../db/models/Conversation");
 const Message      = require("../db/models/Message");
 
+// Searched by name in the audit list. A parent has no name of their own, so
+// they are found through the child they hold — see the note at that query.
+const User           = require("../db/models/User");
+const Student        = require("../db/models/Student");
+const GuardianAccess = require("../db/models/GuardianAccess");
+
 const policy = require("../services/communication/policy.service");
 const svc    = require("../services/communication/conversation.service");
 const permissions = require("../services/permissions.service");
@@ -542,8 +548,62 @@ router.get("/audit/conversations", asyncHandler(async (req, res) => {
   }
 
   const { participantId, kind, conversationKind, limit = 50 } = req.query;
+  const q = String(req.query.q ?? "").trim();
 
   const filter = { schoolId: String(me.schoolId), deletedAt: null };
+
+  // ── Searching by name, including a parent by their child ────────────────
+  //
+  // The only search here was an exact participant id, which is a thing an
+  // administrator has to go and look up before they can use the page at all.
+  //
+  // A regex over participants.name would find staff and nobody else. The name
+  // stored on a participant is what was denormalised when the thread was
+  // created, and for a guardian that is the literal string "Parent/Guardian" —
+  // the children are attached when the row is read, not when it is written.
+  // So a parent is found the way a school thinks of them: match the child, and
+  // the parent is whoever holds them.
+  //
+  // Resolved to ids first, then matched, because the id is the only thing the
+  // conversation actually stores about a person.
+  if (q) {
+    const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+
+    const [users, students] = await Promise.all([
+      User.find({ schoolId: me.schoolId, name: rx }).select("_id").lean().catch(() => []),
+      Student.find({
+        schoolId: me.schoolId,
+        $or: [{ studentName: rx }, { firstName: rx }, { lastName: rx }],
+      }).select("_id").lean().catch(() => []),
+    ]);
+
+    const studentIds = students.map((s) => String(s._id));
+    const guardians  = studentIds.length
+      ? await GuardianAccess.find({
+          schoolId:   me.schoolId,
+          studentIds: { $in: studentIds },
+        }).select("_id").lean().catch(() => [])
+      : [];
+
+    // A guardian the office has named is findable by that name too.
+    const labelled = await GuardianAccess
+      .find({ schoolId: me.schoolId, label: rx })
+      .select("_id").lean().catch(() => []);
+
+    const ids = [...new Set([
+      ...users.map((u) => String(u._id)),
+      ...studentIds,
+      ...guardians.map((g) => String(g._id)),
+      ...labelled.map((g) => String(g._id)),
+    ])];
+
+    filter.$or = [
+      { "participants.id":   { $in: ids } },
+      { "participants.name": rx },
+      { title:               rx },
+    ];
+  }
+
   if (participantId) {
     // $elemMatch so both conditions land on the same participant — see
     // conversation.service.js listFor() for why the dotted form is wrong.
@@ -562,9 +622,14 @@ router.get("/audit/conversations", asyncHandler(async (req, res) => {
     .select("-lastMessagePreview")  // metadata search should not leak content
     .lean();
 
+  // The child names an administrator just searched by have to be visible in
+  // the result, or the row they matched looks like it matched nothing.
+  await svc.labelGuardians(me.schoolId, { conversations });
+
   console.warn(
     `[audit] ${me.id} searched conversations` +
-    (participantId ? ` for participant ${participantId}` : "")
+    (participantId ? ` for participant ${participantId}` : "") +
+    (q ? ` matching "${q}"` : "")
   );
 
   return res.json({ success: true, count: conversations.length, conversations });

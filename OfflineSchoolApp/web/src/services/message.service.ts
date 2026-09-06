@@ -21,6 +21,15 @@ export interface Participant {
   kind:              PrincipalKind;
   id:                string;
   name?:             string | null;
+  /**
+   * The children a guardian holds, sent alongside the composed name.
+   *
+   * A guardian has no name of their own in this system — they are an access
+   * row and a code — so the server labels them by their children. This is the
+   * same information structured, for anything that would rather match or draw
+   * the names than read them back out of a string.
+   */
+  childNames?:       string[] | null;
   role?:             string | null;
   lastReadSeq?:      number;
   lastDeliveredSeq?: number;
@@ -225,6 +234,8 @@ export async function toggleReaction(
  * separately logged request. A safeguarding question starts here.
  */
 export async function auditConversations(params: {
+  /** A name to search for: staff, a pupil, or a pupil's parent. */
+  q?:                string;
   participantId?:    string;
   kind?:             PrincipalKind;
   conversationKind?: ConversationKind;
