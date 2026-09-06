@@ -168,6 +168,79 @@ const bad = (label, detail) => {
 
   if (lockedStored?.score === 17) ok("and the mark on record is untouched by the refusal");
   else bad("the mark is untouched", JSON.stringify(lockedStored?.score));
+
+  // ── And the way through it ───────────────────────────────────
+  //
+  // A refusal with no way past it is not a safeguard, it is a dead end. The
+  // override existed on the server from the start and no client could reach
+  // it: the strings for the prompt sat in both locale files and nothing
+  // rendered them, so an administrator correcting a mark after an appeal got
+  // a 423 and nowhere to put the reason.
+  console.log("\n--- correcting a published result, which an admin may do ---");
+
+  // The same summary, moved from locked to published: ResultSummary carries a
+  // unique index on examId+studentId, so there is only ever one per pupil.
+  await mongoose.model("ResultSummary").updateOne(
+    { _id: "sum-1" },
+    { $set: { isLocked: false, isPublished: true, publishedAt: new Date() } }
+  );
+
+  const marksAs = (who, role, score, changeReason) =>
+    post(who, role, "/api/exams/ex-1/scores/bulk", {
+      schoolId: S, classId: "cls-1", subjectId: "sub-1", examSubjectId: "es-1",
+      scores: [{ studentId: "st-1", score }],
+      ...(changeReason ? { changeReason } : {}),
+    });
+
+  // A teacher is refused whatever they write in the box.
+  const teacherTry = await marksAs("tea-1", "teacher", 19, "I disagree with it");
+  if (teacherTry.status === 423 && teacherTry.body?.code === "RESULTS_PUBLISHED") {
+    ok("a teacher is refused a published result, and a reason does not help them");
+  } else {
+    bad("a teacher is refused a published result",
+      `${teacherTry.status} ${JSON.stringify(teacherTry.body).slice(0, 140)}`);
+  }
+
+  const noReason = await marksAs("adm-1", "school_admin", 19);
+  if (noReason.status === 423 && noReason.body?.code === "REASON_REQUIRED") {
+    ok("an administrator with no reason is asked for one, by a code the client can act on");
+  } else {
+    bad("an administrator with no reason is asked for one",
+      `${noReason.status} ${JSON.stringify(noReason.body).slice(0, 140)}`);
+  }
+
+  const REASON = "Paper 2 remarked after appeal";
+  const withReason = await marksAs("adm-1", "school_admin", 19, REASON);
+  if (withReason.status < 400) ok(`and with one the correction goes through (${withReason.status})`);
+  else bad("the correction goes through", `${withReason.status} ${JSON.stringify(withReason.body).slice(0, 160)}`);
+
+  const corrected = await StudentScore.findOne({ examId: "ex-1", studentId: "st-1" }).lean();
+  if (corrected?.score === 19) ok("the mark is the corrected one");
+  else bad("the mark is corrected", JSON.stringify(corrected?.score));
+
+  const override = (await ResultChangeLog.find({ studentId: "st-1" }).lean())
+    .find((l) => l.isOverride);
+
+  if (override) ok("the change is recorded as an override, not an ordinary edit");
+  else bad("the change is recorded as an override", "no row carries isOverride");
+
+  if (override?.reason === REASON) {
+    ok("and the reason typed by the administrator is what was stored");
+  } else {
+    bad("the reason is stored", JSON.stringify(override?.reason));
+  }
+
+  // The web has to be able to send it, or the server’s door opens onto a wall.
+  const page = require("fs").readFileSync(
+    path.join(ROOT, "..", "web", "src", "pages", "exams", "[id]", "index.tsx"), "utf8");
+  if (/REASON_REQUIRED/.test(page) && /changeReason/.test(page)) {
+    ok("the marks screen recognises the refusal and can send a reason back");
+  } else {
+    bad("the marks screen can send a reason",
+      "the server asks for a changeReason and the screen has nowhere to type one, " +
+      "so the correction cannot be completed in the app at all.");
+  }
+
   await mongoose.model("ResultSummary").deleteOne({ _id: "sum-1" });
 
   // ── Attendance: the natural key is unique, so a re-mark is an update ──────

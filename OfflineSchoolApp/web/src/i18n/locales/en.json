@@ -843,7 +843,13 @@
     "tileGoPending": "Go to the results waiting to be published",
     "tileGoMissing": "Go to the marks that are missing",
     "tileGoAnalytics": "Open the results analytics",
-    "unknownClass": "Unassigned class"
+    "unknownClass": "Unassigned class",
+    "overrideLockTitle": "Override the lock",
+    "correctPublishedTitle": "Correct a published result",
+    "correctPublishedHint": "These results have already been published, so parents may have seen them. Record why you are changing them.",
+    "changeReasonPlaceholder": "e.g. Paper 2 remarked after appeal",
+    "changeReasonKept": "Kept with the change for as long as the result exists.",
+    "saveWithReason": "Save correction"
   },
   "examCreate": {
     "title": "Create exam",

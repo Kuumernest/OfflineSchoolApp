@@ -814,7 +814,21 @@ const ScoreEntryPanel = ({
     });
   }, []);
 
-  const handleSave = async () => {
+  // ── Correcting a published result ───────────────────────────────────────
+  //
+  // The server refuses a write to a locked or published result with 423. An
+  // administrator may override it, but only by recording why, and until now
+  // there was nowhere to say: the strings for this prompt existed in both
+  // locale files and nothing rendered them, so an admin correcting a mark
+  // after an appeal got an error and no way forward at all.
+  //
+  // The code decides which of the two states it is, because "locked" and
+  // "published" are different things to a head teacher: one they can unlock,
+  // the other has already been seen by parents.
+  const [reasonPrompt, setReasonPrompt] = useState<null | "locked" | "published">(null);
+  const [reasonText,   setReasonText]   = useState("");
+
+  const handleSave = async (changeReason?: string) => {
     setSaving(true);
     try {
       const records = students.map((s) => {
@@ -863,12 +877,29 @@ const ScoreEntryPanel = ({
           examSubjectId: subId,
           scores:        records,
           schoolId,
+          ...(changeReason ? { changeReason } : {}),
         },
         { onProgress: (done, total) => setSaveProgress({ done, total }) },
       );
       setSaved(true);
+      setReasonPrompt(null);
+      setReasonText("");
     } catch (err) {
-      toast({ kind: "error", title: getErrorMessage(err) || t("exams.saveFailed") });
+      // 423 is not a failure to report and stop at — it is the server asking
+      // for something the person can actually give.
+      const res  = (err as { response?: { status?: number; data?: { code?: string } } })?.response;
+      const code = res?.data?.code;
+
+      if (res?.status === 423 && code === "REASON_REQUIRED") {
+        setReasonPrompt("published");
+      } else if (res?.status === 423 && code === "RESULTS_LOCKED") {
+        setReasonPrompt("locked");
+      } else if (res?.status === 423) {
+        // Protected, and this account may not override it whatever they type.
+        toast({ kind: "error", title: getErrorMessage(err) || t("exams.saveFailed") });
+      } else {
+        toast({ kind: "error", title: getErrorMessage(err) || t("exams.saveFailed") });
+      }
     } finally {
       setSaving(false);
       setSaveProgress({ done: 0, total: 0 });
@@ -924,7 +955,9 @@ const ScoreEntryPanel = ({
             />
           )}
           <button
-            onClick={handleSave}
+            // Wrapped: passing the handler directly hands React's click event
+            // in as the first argument, which is now the changeReason.
+            onClick={() => handleSave()}
             disabled={saving}
             className={`px-4 py-1.5 rounded-lg text-xs font-bold
               transition-colors disabled:opacity-60
@@ -1098,6 +1131,65 @@ const ScoreEntryPanel = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Why a published result is being changed.
+
+          Only reachable by an administrator: a teacher hitting a published
+          result is refused outright, with no reason that would help, so the
+          server answers them with a different code and this never opens. */}
+      {reasonPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900">
+              {reasonPrompt === "locked"
+                ? t("exams.overrideLockTitle")
+                : t("exams.correctPublishedTitle")}
+            </h3>
+            <p className="mt-1 text-sm text-gray-500">
+              {reasonPrompt === "locked"
+                ? t("results.changeReasonRequired")
+                : t("exams.correctPublishedHint")}
+            </p>
+
+            <label className="mt-4 block text-sm font-semibold text-gray-700">
+              {t("results.changeReason")}
+            </label>
+            <textarea
+              value={reasonText}
+              onChange={(e) => setReasonText(e.target.value)}
+              rows={3}
+              autoFocus
+              placeholder={t("exams.changeReasonPlaceholder")}
+              className="mt-1 w-full rounded-lg border-2 border-gray-200 px-3 py-2
+                         text-sm outline-none focus:border-blue-500"
+            />
+
+            {/* It is kept with the change for as long as the result exists, so
+                it is worth saying that before somebody types "correction". */}
+            <p className="mt-2 text-xs text-gray-400">
+              {t("exams.changeReasonKept")}
+            </p>
+
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                onClick={() => { setReasonPrompt(null); setReasonText(""); }}
+                className="rounded-lg px-4 py-2 text-sm font-semibold text-gray-600
+                           hover:bg-gray-100"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={() => handleSave(reasonText.trim())}
+                disabled={saving || reasonText.trim().length < 4}
+                className="rounded-lg bg-primary-600 px-4 py-2 text-sm font-bold
+                           text-white hover:bg-primary-700 disabled:opacity-60"
+              >
+                {saving ? t("common.saving") : t("exams.saveWithReason")}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

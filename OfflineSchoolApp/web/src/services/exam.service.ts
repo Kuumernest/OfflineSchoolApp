@@ -221,6 +221,14 @@ isAbsent: boolean;
 teacherRemark: string | null;
 }>;
 schoolId: string;
+/**
+ * Why a published or locked result is being changed.
+ *
+ * The server refuses the write with 423 REASON_REQUIRED without it, and
+ * only an administrator may supply one at all. It rides on every chunk
+ * because each chunk is its own request and each is guarded separately.
+ */
+changeReason?: string;
 },
   opts: {
     /** Rows per request. 0 or below sends everything in one. */

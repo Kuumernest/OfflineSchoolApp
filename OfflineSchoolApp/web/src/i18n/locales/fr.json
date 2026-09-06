@@ -843,7 +843,13 @@
     "tileGoPending": "Aller aux résultats en attente de publication",
     "tileGoMissing": "Aller aux notes manquantes",
     "tileGoAnalytics": "Ouvrir l’analyse des résultats",
-    "unknownClass": "Classe non attribuée"
+    "unknownClass": "Classe non attribuée",
+    "overrideLockTitle": "Déroger au verrouillage",
+    "correctPublishedTitle": "Corriger un résultat publié",
+    "correctPublishedHint": "Ces résultats sont déjà publiés ; les parents ont pu les consulter. Indiquez le motif de la modification.",
+    "changeReasonPlaceholder": "ex. : épreuve 2 recorrigée après recours",
+    "changeReasonKept": "Conservé avec la modification aussi longtemps que le résultat existe.",
+    "saveWithReason": "Enregistrer la correction"
   },
   "examCreate": {
     "title": "Créer une évaluation",
