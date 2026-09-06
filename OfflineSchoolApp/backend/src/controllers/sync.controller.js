@@ -44,6 +44,27 @@ try {
  * Builds a Mongoose updatedAt filter.
  * If lastSyncDate is in the future we clamp to epoch so the filter
  * is always present and we never accidentally return every record.
+ *
+ * ── Why this is $gte and not $gt ──────────────────────────────────────────
+ *
+ * The cursor handed back to the client is stamped BEFORE these queries run, so
+ * that a row written while they are in flight is re-sent next time rather than
+ * skipped. That reasoning is right and it had an off-by-one-millisecond hole
+ * left in it, because the filter was exclusive.
+ *
+ * Take a cursor stamped at T. The queries begin in that same millisecond. A row
+ * written at exactly T, after its collection's query has already run, is not in
+ * the reply — and the next pull asks for updatedAt > T, which excludes it. That
+ * row is never offered to that device again. Not a delay: a permanent hole, one
+ * millisecond wide, in the collection somebody happened to be writing to.
+ *
+ * Inclusive closes it. The cost is that rows stamped exactly on the cursor come
+ * back once more, which is what the client already tolerates — every pull
+ * applies as an upsert, and the comment on pulledAt already accepts re-sending
+ * as the safe direction. Skipping is the unsafe one.
+ *
+ * The desktop feed does not need this: its cursor is the pair (updatedAt, _id),
+ * which is a total order, so it can be exclusive without a boundary at all.
  */
 const sinceFilter = (lastSyncDate) => {
   const now = new Date();
@@ -56,7 +77,7 @@ const sinceFilter = (lastSyncDate) => {
     return { updatedAt: { $gt: new Date(0) } };
   }
 
-  return { updatedAt: { $gt: lastSyncDate } };
+  return { updatedAt: { $gte: lastSyncDate } };
 };
 
 /** Excludes soft-deleted documents from any query. */

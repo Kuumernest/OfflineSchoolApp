@@ -50,7 +50,8 @@
     "typescript": "~5.8.3"
   },
   "scripts": {
-    "check": "node scripts/check.js && npm run check:lint && npm run check:types",
+    "check": "node scripts/check-id-map.js && node scripts/check.js && npm run check:lint && npm run check:types",
+    "check:idmap": "node scripts/check-id-map.js",
     "check:lint": "eslint app src",
     "check:types": "tsc --noEmit -p tsconfig.json",
     "start": "expo start",

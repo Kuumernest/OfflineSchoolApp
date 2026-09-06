@@ -30,7 +30,7 @@
     "check:enrollindex": "node scripts/check-enrollment-index.js",
     "check:orphans": "node scripts/check-orphans.js",
     "check": "npm run check:roles && npm run check:policy && npm run check:mail && npm run check:reportcard && npm run check:tplrepair",
-    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login && npm run check:feed && npm run check:tenancy && npm run check:idem && npm run check:desktop && npm run check:cards && npm run check:coeff && npm run check:term && npm run check:homework && npm run check:attendance && npm run check:messaging && npm run check:portalmsg && npm run check:portalgate && npm run check:msgsearch && npm run check:enrollindex && npm run check:orphans && npm run check:hourly && npm run check:salaryedit && npm run check:myresults && npm run check:classnames && npm run check:resultnames && npm run check:authz && npm run check:crossschool && npm run check:money && npm run check:conflicts && npm run check:smoke",
+    "check:all": "npm run check && npm run check:approvals && npm run check:admin && npm run check:reminders && npm run check:staff && npm run check:login && npm run check:feed && npm run check:tenancy && npm run check:idem && npm run check:desktop && npm run check:cards && npm run check:coeff && npm run check:term && npm run check:homework && npm run check:attendance && npm run check:messaging && npm run check:portalmsg && npm run check:portalgate && npm run check:msgsearch && npm run check:enrollindex && npm run check:orphans && npm run check:hourly && npm run check:salaryedit && npm run check:myresults && npm run check:classnames && npm run check:resultnames && npm run check:authz && npm run check:crossschool && npm run check:money && npm run check:conflicts && npm run check:cursor && npm run check:plans && npm run check:smoke",
     "test": "echo \"Error: no test specified\" && exit 1",
     "check:tenancy": "node scripts/check-announcement-tenancy.js && node scripts/check-student-tenancy.js",
     "check:term": "node scripts/check-term-compute.js",
@@ -46,7 +46,9 @@
     "check:authz": "node scripts/check-authz-matrix.js",
     "check:crossschool": "node scripts/check-cross-school.js",
     "check:money": "node scripts/check-duplicate-money.js",
-    "check:conflicts": "node scripts/check-conflicts.js"
+    "check:conflicts": "node scripts/check-conflicts.js",
+    "check:cursor": "node scripts/check-sync-cursor.js",
+    "check:plans": "node scripts/check-query-plans.js"
   },
   "keywords": [],
   "author": "",

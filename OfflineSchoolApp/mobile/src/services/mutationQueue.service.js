@@ -51,6 +51,7 @@ import api from "./api";
 import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID } from "../utils/idHelpers";
+import { remapPayload } from "./idMap";
 
 const TABLE = "mutation_outbox";
 const ID_MAP = "sync_id_map";
@@ -203,10 +204,8 @@ export const resolveId = async (localId) => {
  * id inside the endpoint path is always rewritten too.
  */
 const applyIdMap = async (db, row, payload) => {
-  const fields = Array.isArray(payload?.__resolve) ? payload.__resolve : [];
-  let endpoint = row.endpoint;
-  const next = { ...payload };
-
+  // The rewrite itself lives in idMap.js, which takes a lookup rather than a
+  // database so it can be exercised without a device. This supplies the lookup.
   const lookup = async (value) => {
     if (!value) return value;
     const hit = await db.getFirstAsync(
@@ -215,24 +214,11 @@ const applyIdMap = async (db, row, payload) => {
     return hit?.server_id || value;
   };
 
-  for (const field of fields) {
-    const current = next[field];
-    if (typeof current !== "string" || !current) continue;
-    const mapped = await lookup(current);
-    if (mapped !== current) {
-      next[field] = mapped;
-      // The path often embeds the same id (e.g. /exams/:id/scores/bulk).
-      endpoint = endpoint.split(current).join(mapped);
-    }
-  }
-
-  // Rewrite any local id still sitting in the URL (PUT/DELETE by id).
-  const segments = endpoint.split("/").filter(Boolean);
-  for (const seg of segments) {
-    if (seg.length < 8) continue;             // ids only, not route words
-    const mapped = await lookup(seg);
-    if (mapped !== seg) endpoint = endpoint.split(seg).join(mapped);
-  }
+  const { endpoint, payload: next } = await remapPayload({
+    endpoint: row.endpoint,
+    payload,
+    lookup,
+  });
 
   return { endpoint, payload: next };
 };
