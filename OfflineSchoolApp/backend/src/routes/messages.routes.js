@@ -353,6 +353,13 @@ router.get("/conversations/:id", asyncHandler(async (req, res) => {
   const loaded = await loadReadable(req, res);
   if (!loaded) return;
 
+  // The header of a thread with a parent said "Parent/Guardian" and nothing
+  // else. Relabelled here rather than in the database, because every thread
+  // that already exists stored the bare string.
+  await svc.labelGuardians(loaded.conversation.schoolId, {
+    conversations: [loaded.conversation],
+  });
+
   return res.json({
     success:      true,
     conversation: loaded.conversation,
@@ -382,6 +389,24 @@ router.get("/conversations/:id/messages", asyncHandler(async (req, res) => {
 
   // Include participant read states so the sender can derive per-message
   // delivery and read status (e.g. WhatsApp-style checkmarks).
+  // An admin auditing sees the real rows, including deleted bodies — that is
+  // the point of an audit. Everyone else gets the redacted view. Either way
+  // attachment URLs go out signed: a signature says nothing about who is
+  // reading, only that the server handed this link out now, and an unsigned
+  // audit link would die the day REQUIRE_MEDIA_SIGNATURE goes to 1.
+  const rows = docs.map((m) => {
+    const row = loaded.audit ? m.toObject() : m.toClientJSON();
+    row.attachments = signAttachmentUrls(row.attachments ?? []);
+    return row;
+  });
+
+  // A parent's own messages carry the name that was stored when they were
+  // sent, so the thread has to relabel them the same way the header is.
+  await svc.labelGuardians(loaded.conversation.schoolId, {
+    conversations: [loaded.conversation],
+    messages:      rows,
+  });
+
   const participantReads = (loaded.conversation.participants || []).map((p) => ({
     kind:             p.kind,
     id:               p.id,
@@ -397,11 +422,7 @@ router.get("/conversations/:id/messages", asyncHandler(async (req, res) => {
     // way attachment URLs go out signed: a signature says nothing about who
     // is reading, only that the server handed this link out now, and an
     // unsigned audit link would die the day REQUIRE_MEDIA_SIGNATURE goes to 1.
-    messages: docs.map((m) => {
-      const row = loaded.audit ? m.toObject() : m.toClientJSON();
-      row.attachments = signAttachmentUrls(row.attachments ?? []);
-      return row;
-    }),
+    messages: rows,
     participantReads,
     viaAudit: loaded.audit,
   });

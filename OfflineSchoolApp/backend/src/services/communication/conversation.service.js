@@ -26,6 +26,7 @@ const User           = require("../../db/models/User");
 const School         = require("../../db/models/School");
 const GuardianAccess = require("../../db/models/GuardianAccess");
 const Student           = require("../../db/models/Student");
+const { displayName }   = require("../../utils/studentName");
 const Class             = require("../../db/models/Class");
 const TeacherAssignment = require("../../db/models/TeacherAssignment");
 
@@ -86,12 +87,14 @@ async function resolveTargetPrincipal(schoolId, kind, id) {
     }).select("_id schoolId studentIds label").lean();
 
     if (!g) return null;
+    const label = (await guardianLabels(g.schoolId, [g._id])).get(String(g._id));
     return {
       kind:       "guardian",
       id:         String(g._id),
       schoolId:   String(g.schoolId),
       studentIds: (g.studentIds || []).map(String),
-      name:       g.label || "Parent/Guardian",
+      name:       label?.name || g.label || GUARDIAN_FALLBACK,
+      childNames: label?.childNames ?? [],
     };
   }
 
@@ -184,14 +187,22 @@ async function findCandidateRecipients(principal, settings, { q = "", limit = 40
       .limit(limit)
       .lean();
 
+    // "guardian of 1 student(s)" told a teacher choosing between three
+    // parents precisely nothing. The children are the whole identifier.
+    const labels = await guardianLabels(schoolId, guardians.map((g) => g._id));
+
     for (const g of guardians) {
+      const l = labels.get(String(g._id));
       out.push({
         kind:       "guardian",
         id:         String(g._id),
         schoolId,
         studentIds: (g.studentIds || []).map(String),
-        name:       g.label || "Parent/Guardian",
-        subtitle:   `guardian of ${(g.studentIds || []).length} student(s)`,
+        name:       l?.name || g.label || GUARDIAN_FALLBACK,
+        childNames: l?.childNames ?? [],
+        subtitle:   l?.childNames?.length
+          ? `guardian of ${l.childNames.join(", ")}`
+          : "guardian",
       });
     }
   }
@@ -496,6 +507,121 @@ async function createChannel({
 }
 
 /** Conversations this principal belongs to, most recent first. */
+// ─────────────────────────────────────────────────────────────────────────────
+// WHAT TO CALL A GUARDIAN
+//
+// A guardian has no name of their own anywhere in this system. They are a
+// GuardianAccess row and an access code; the school never types their name in,
+// and there is no field to hold it. So every conversation, every recipient
+// list and every message from a parent read "Parent/Guardian" — identical for
+// all of them. A teacher with three parent threads had three rows with the
+// same title and no way to tell whose parent was whose.
+//
+// The one thing the school does know is which children the access is linked
+// to, and a child's name is exactly how a school thinks of a parent. So the
+// label is composed: the guardian's own label when the office set one, then
+// the children in brackets.
+//
+//   Parent/Guardian (Bern Constance)
+//   Parent/Guardian (Bern Constance, Tem Charles)
+//   Mrs Ngu (Bern Constance)          — when the office named them
+//
+// childNames goes alongside, so a client that would rather draw the children
+// as chips than read them out of a string has them structured.
+//
+// This is applied when a thread is created AND again whenever one is read.
+// Reading is what matters: every conversation that already exists has the bare
+// string stored on its participants and on every message a parent has sent,
+// and relabelling on the way out fixes those without touching the database.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const GUARDIAN_FALLBACK = "Parent/Guardian";
+
+/**
+ * Labels for a set of GuardianAccess ids.
+ *
+ * Two queries whatever the number of guardians, because this runs on the
+ * conversation list and a per-guardian lookup there is a per-row round trip.
+ *
+ * @returns {Promise<Map<string, {name: string, childNames: string[]}>>}
+ */
+async function guardianLabels(schoolId, ids) {
+  const wanted = [...new Set((ids ?? []).filter(Boolean).map(String))];
+  if (!wanted.length) return new Map();
+
+  const rows = await GuardianAccess
+    .find({ _id: { $in: wanted }, schoolId: String(schoolId) })
+    .select("_id label studentIds")
+    .lean()
+    .catch(() => []);
+
+  const studentIds = [...new Set(
+    rows.flatMap((r) => (r.studentIds ?? []).map(String))
+  )];
+
+  const students = studentIds.length
+    ? await Student
+        .find({ _id: { $in: studentIds }, schoolId: String(schoolId) })
+        .select("_id studentName name firstName lastName")
+        .lean()
+        .catch(() => [])
+    : [];
+
+  const nameOf = new Map(students.map((s) => [String(s._id), displayName(s)]));
+
+  const out = new Map();
+  for (const r of rows) {
+    const childNames = (r.studentIds ?? [])
+      .map((id) => nameOf.get(String(id)))
+      .filter(Boolean);
+
+    const base = r.label || GUARDIAN_FALLBACK;
+    out.set(String(r._id), {
+      name:       childNames.length ? `${base} (${childNames.join(", ")})` : base,
+      childNames,
+    });
+  }
+  return out;
+}
+
+/**
+ * Rewrite the guardian names on conversations and messages as they go out.
+ *
+ * Mutates the lean documents it is given, which is the point: the stored
+ * strings are stale for every thread created before this existed, and a
+ * migration would have to be re-run every time a child changes their name.
+ */
+async function labelGuardians(schoolId, { conversations = [], messages = [] } = {}) {
+  const convs = Array.isArray(conversations) ? conversations : [conversations];
+  const msgs  = Array.isArray(messages)      ? messages      : [messages];
+
+  const ids = [];
+  for (const c of convs) {
+    for (const p of c?.participants ?? []) if (p?.kind === "guardian") ids.push(p.id);
+  }
+  for (const m of msgs) {
+    if (m?.sender?.kind === "guardian") ids.push(m.sender.id);
+  }
+  if (!ids.length) return;
+
+  const labels = await guardianLabels(schoolId, ids);
+
+  for (const c of convs) {
+    for (const p of c?.participants ?? []) {
+      const l = p?.kind === "guardian" ? labels.get(String(p.id)) : null;
+      if (!l) continue;
+      p.name       = l.name;
+      p.childNames = l.childNames;
+    }
+  }
+  for (const m of msgs) {
+    const l = m?.sender?.kind === "guardian" ? labels.get(String(m.sender.id)) : null;
+    if (!l) continue;
+    m.sender.name       = l.name;
+    m.sender.childNames = l.childNames;
+  }
+}
+
 async function listFor(principal, { limit = 50, before = null } = {}) {
   // $elemMatch, not two dotted conditions: the latter matches a conversation
   // where SOME participant has this kind and SOME OTHER has this id. A
@@ -513,10 +639,16 @@ async function listFor(principal, { limit = 50, before = null } = {}) {
   };
   if (before) filter.lastMessageAt = { $lt: new Date(before) };
 
-  return Conversation.find(filter)
+  const rows = await Conversation.find(filter)
     .sort({ lastMessageAt: -1, createdAt: -1 })
     .limit(Math.min(Number(limit) || 50, 100))
     .lean();
+
+  // Both the staff list and the portal list come through here, so this is the
+  // one place that has to remember to do it.
+  await labelGuardians(principal.schoolId, { conversations: rows });
+
+  return rows;
 }
 
 // ── Messages ────────────────────────────────────────────────────────────────
@@ -657,6 +789,8 @@ async function markDelivered(conversationId, principal, seq) {
 
 module.exports = {
   principalFromRequest,
+  guardianLabels,
+  labelGuardians,
   findCandidateRecipients,
   resolveTargetPrincipal,
   loadSettings,

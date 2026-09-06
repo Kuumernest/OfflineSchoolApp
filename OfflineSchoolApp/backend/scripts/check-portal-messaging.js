@@ -179,6 +179,63 @@ const bad = (label, detail) => {
     bad("a message can be delivered without being read", JSON.stringify(staff));
   }
 
+  // ── A guardian has to be identifiable ─────────────────────────────────────
+  console.log("\n--- who the parent is ---");
+
+  // A guardian has no name of their own in this system: no field holds one,
+  // and the school never types one in. Every thread, every recipient row and
+  // every message from a parent therefore read "Parent/Guardian", identically
+  // for all of them — a teacher with three parent threads had three rows with
+  // the same title. The children are what the school knows a parent by.
+  const guardianOf = (d.conversation?.participants ?? [])
+    .find((p) => p.kind === "guardian");
+
+  if (guardianOf?.name?.includes("A Child") && guardianOf?.name?.includes("Another Child")) {
+    ok(`the guardian is named by their children ("${guardianOf.name}")`);
+  } else {
+    bad("the guardian is named by their children", JSON.stringify(guardianOf?.name));
+  }
+
+  if (Array.isArray(guardianOf?.childNames) && guardianOf.childNames.length === 2) {
+    ok("and the names come through structured, not only inside a string");
+  } else {
+    bad("the names come through structured", JSON.stringify(guardianOf?.childNames));
+  }
+
+  // The stored string on every existing thread is the bare one. Relabelling
+  // happens on the way out, so a message sent long before this existed reads
+  // correctly now without the database being touched.
+  const fromParent = (d.messages ?? []).find((m) => m.sender?.kind === "guardian");
+  if (fromParent?.sender?.name?.includes("A Child")) {
+    ok("a message stored as \"Parent/Guardian\" is relabelled when it is read");
+  } else {
+    bad("a stored message is relabelled when read", JSON.stringify(fromParent?.sender?.name));
+  }
+
+  // A guardian the office has named keeps that name; the children are added
+  // to it rather than replacing it.
+  await GuardianAccess.updateOne({ _id: ACCESS }, { label: "Mrs Ngu" });
+  r = await get(`/messages/conversations/${CONV}`);
+  const named = (r.body?.data?.conversation?.participants ?? [])
+    .find((p) => p.kind === "guardian");
+  if (named?.name?.startsWith("Mrs Ngu (")) {
+    ok(`an office-given name is kept and the children added ("${named.name}")`);
+  } else {
+    bad("an office-given name is kept", JSON.stringify(named?.name));
+  }
+  await GuardianAccess.updateOne({ _id: ACCESS }, { label: null });
+
+  // An access linked to no child still has to render as something.
+  await GuardianAccess.updateOne({ _id: OTHER }, { studentIds: [] });
+  const svc = require(path.join(SRC, "services/communication/conversation.service"));
+  const bare = (await svc.guardianLabels(SCHOOL, [OTHER])).get(OTHER);
+  if (bare?.name === "Parent/Guardian" && bare.childNames.length === 0) {
+    ok("an access with no child falls back to the plain label");
+  } else {
+    bad("an access with no child falls back", JSON.stringify(bare));
+  }
+  await GuardianAccess.updateOne({ _id: OTHER }, { studentIds: ["stu-1"] });
+
   // ── A stranger sees nothing ───────────────────────────────────────────────
   console.log("\n--- somebody else's thread ---");
 

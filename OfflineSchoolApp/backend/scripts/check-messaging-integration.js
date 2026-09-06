@@ -297,6 +297,16 @@ const check = (label, actual, expected) => {
       _id: "guardian-1", schoolId: S, label: "Mrs Okafor", studentIds: ["student-1"],
     });
 
+    // studentIds point at Student rows, not the User rows above — that is what
+    // portalAuth resolves them against — so the guardian only has a child to be
+    // named by if one exists.
+    await mongoose.model("Student").create({
+      // Deliberately not class-5a: the group-conversation roster further down
+      // counts that class, and a fixture for one assertion must not move another.
+      _id: "student-1", userId: "student-1", schoolId: S, classId: "class-unrelated",
+      studentName: "Ada Okafor", enrollmentNo: "EN-student-1", isActive: true,
+    });
+
     const pick = async (principal, settings) => {
       const cands = await svc.findCandidateRecipients(principal, settings, { limit: 50 });
       return cands
@@ -329,6 +339,23 @@ const check = (label, actual, expected) => {
 
     const forTeacher = await pick(t1, defaults);
     check("teacher is offered guardians", forTeacher.includes("guardian:guardian-1"), true);
+
+    // A guardian has no name of their own, so a recipient list of three parents
+    // was three rows reading "Parent/Guardian" and "guardian of 1 student(s)".
+    // The child is the identifier a school actually uses.
+    {
+      const cands = await svc.findCandidateRecipients(t1, defaults, { limit: 50 });
+      const g = cands.find((c) => c.kind === "guardian" && c.id === "guardian-1");
+
+      check("a guardian candidate names the child rather than counting them",
+        Boolean(g && g.name.includes("Ada Okafor") && g.subtitle.includes("Ada Okafor")), true);
+
+      check("and keeps the name the office gave them",
+        Boolean(g && g.name.startsWith("Mrs Okafor (")), true);
+
+      check("with the children structured alongside the label",
+        Boolean(g && Array.isArray(g.childNames) && g.childNames[0] === "Ada Okafor"), true);
+    }
     check("teacher is offered students",  forTeacher.includes("user:student-1"), true);
 
     const forGuardian = await pick(g1, defaults);

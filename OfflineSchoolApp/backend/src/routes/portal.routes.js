@@ -596,6 +596,15 @@ router.get("/messages/conversations/:id", asyncHandler(async (req, res) => {
     beforeSeq: req.query.beforeSeq,
   });
 
+  const messages = docs.map((m) => m.toClientJSON());
+
+  // The parent sees their own name here too, and "Parent/Guardian" is not a
+  // name. Their children are what the school knows them by.
+  await comms.labelGuardians(conversation.schoolId, {
+    conversations: [conversation],
+    messages,
+  });
+
   const participantReads = (conversation.participants || []).map((p) => ({
     kind:             p.kind,
     id:               p.id,
@@ -607,7 +616,7 @@ router.get("/messages/conversations/:id", asyncHandler(async (req, res) => {
     success: true,
     data: {
       conversation,
-      messages: docs.map((m) => m.toClientJSON()),
+      messages,
       participantReads,
 
       // Who is asking. The portal has no other way to know: a guardian is
