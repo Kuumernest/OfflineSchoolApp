@@ -220,6 +220,25 @@ async function computeClassAnnualAverages({
   academicYear,
   classId,
 }) {
+  // The class name, resolved once from the class being computed.
+  //
+  // This was `student.className`, copied straight off the pupil document. A
+  // pupil enrolled without that string — three on this school's roster were,
+  // on the day they were admitted — got a term result with no class on it,
+  // and the exams and results screens showed the column empty for them while
+  // every other screen had them in Form 1.
+  //
+  // classId is what the whole computation is scoped by, so the name is one
+  // lookup for the entire class rather than a join per pupil. The stored
+  // string still wins when it is there, because a pupil moved mid-term keeps
+  // the class the term was actually sat in.
+  const classDoc = await mongoose.model("Class")
+    .findOne({ _id: classId, schoolId })
+    .select("_id name")
+    .lean()
+    .catch(() => null);
+  const resolvedClassName = classDoc?.name ?? null;
+
   const Student = mongoose.model("Student");
   const students = await Student.find({
     schoolId,
@@ -243,7 +262,7 @@ async function computeClassAnnualAverages({
         studentId:   student._id,
         studentName: student.studentName,
         admissionNo: student.enrollmentNo,
-        className:   student.className,
+        className:   student.className || resolvedClassName,
       });
       computed++;
     } catch (err) {

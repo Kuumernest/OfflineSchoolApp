@@ -8,6 +8,7 @@ const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
+const { fillResultNames } = require("../utils/resultNames");
 const { buildTermCard, loadReportTemplate, loadSchoolForCard,
         cardVerification, periodDocumentKey, absoluteLogoUrl } =
   require("../services/reportCardData.service");
@@ -70,6 +71,10 @@ router.get(
       const { staleIds, latestMark } = await staleness.termStaleness({
         schoolId, academicYear, term: Number(term), results,
       });
+      // Rows computed before the class name was resolved from classId still
+      // carry nothing there; filled on the way out rather than recomputed.
+      await fillResultNames(results, schoolId);
+
       const stamped = staleness.withStaleness(results, staleIds);
 
       res.json({
