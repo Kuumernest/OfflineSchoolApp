@@ -533,7 +533,9 @@ router.get("/reports/submissions", staffOnly, asyncHandler(async (req, res) => {
 // GET /api/exams/submissions
 // ─────────────────────────────────────────────────────────
 
-router.get("/submissions", asyncHandler(async (req, res) => {
+// Every exam subject in the school with its submission status. Staff view:
+// tenant-scoped but, until this guard, readable by any signed-in account.
+router.get("/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId, subjectId, status } = req.query;
 
@@ -570,7 +572,7 @@ router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   return res.json({ success: true, results, total: results.length });
 }));
 
-router.get("/submissions/submissions", asyncHandler(async (req, res) => {
+router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
 
@@ -1083,7 +1085,10 @@ router.delete(
 // SCORES
 // ─────────────────────────────────────────────────────────
 
-router.get("/:examId/scores", asyncHandler(async (req, res) => {
+// The whole cohort’s marks for one exam. Its sibling POST .../scores/bulk was
+// staffOnly and this read was not, so a pupil could fetch every classmate’s
+// score for any exam in their school by asking for it.
+router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
   const { classId, subjectId } = req.query;
   const query = {

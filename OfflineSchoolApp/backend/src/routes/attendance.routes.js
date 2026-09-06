@@ -107,6 +107,14 @@ const resolveStudentIds = async (userId, schoolId) => {
 
 const { requirePermission } = require("../../middleware/permissions");
 
+// The school a request may touch is the caller's, never the caller's choice.
+// `req.query.schoolId || req.user.schoolId` reads as a sensible default and is
+// the opposite: the client-supplied value wins, so any authenticated user of
+// one school could read another's by changing a parameter. resolveSchoolId is
+// the rule the rest of the backend already followed — a super_admin may name a
+// school, everybody else is their own.
+const { resolveSchoolId } = require("../utils/tenant");
+
 const isStudentRole = (req) => req.user?.role === "student";
 
 // Three capabilities where this file had three hand-rolled role checks. The
@@ -137,7 +145,7 @@ const scopeToSelfForStudents = async (req, res, next) => {
   if (!isStudentRole(req)) return next();
   try {
     const userId   = req.user?._id || req.user?.id;
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
     req.selfStudentIds = await resolveStudentIds(userId, schoolId);
     next();
   } catch (err) {
@@ -160,7 +168,7 @@ const scopeToSelfForStudents = async (req, res, next) => {
 router.get("/students/me", async (req, res) => {
   try {
     const userId   = req.user?._id || req.user?.id;
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
 
     if (!userId) {
       return res.status(401).json({ message: "Authentication required" });
@@ -214,7 +222,7 @@ router.get("/students/me", async (req, res) => {
 // Used by teachers/admins to get the list of students in a class.
 router.get("/students/roster", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
     const classId  = req.query.classId;
 
     if (!schoolId) {
@@ -251,7 +259,7 @@ router.get("/students/roster", staffRead, async (req, res) => {
 // Accepts optional periodId to filter to a specific class period.
 router.get("/students/today", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
     const classId  = req.query.classId;
     const periodId = req.query.periodId || null;
     const today    = todayStr();
@@ -642,7 +650,7 @@ router.post("/students", teachingOnly, async (req, res) => {
 router.get("/teachers/me", staffRead, async (req, res) => {
   try {
     const teacherId = String(req.user?._id || req.user?.id || "");
-    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const schoolId  = resolveSchoolId(req);
 
     if (!teacherId) {
       return res.status(401).json({ message: "Authentication required" });
@@ -681,7 +689,7 @@ router.get("/teachers/me", staffRead, async (req, res) => {
 // Used by admins to get the list of all teachers in a school.
 router.get("/teachers/roster", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
 
     if (!schoolId) {
       return res.status(400).json({ message: "schoolId is required" });
@@ -712,7 +720,7 @@ router.get("/teachers/roster", staffRead, async (req, res) => {
 // Used by admins to view all teachers' attendance today.
 router.get("/teachers/today", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
     const today    = todayStr();
 
     const [records, teachers] = await Promise.all([
@@ -1015,7 +1023,7 @@ router.post("/teachers", adminOnly, async (req, res) => {
 // ── GET /api/attendance/report/overview ──────────────────────────────────────
 router.get("/report/overview", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
     const date     = dateStr(req.query.date);
 
     const [studentRecords, teacherRecords, totalStudents, totalTeachers] =
@@ -1073,7 +1081,7 @@ router.get("/report/overview", staffRead, async (req, res) => {
 // ── GET /api/attendance/report/weekly ────────────────────────────────────────
 router.get("/report/weekly", staffRead, async (req, res) => {
   try {
-    const schoolId = req.query.schoolId || req.user?.schoolId;
+    const schoolId = resolveSchoolId(req);
 
     // Shared with the desktop — see the note in shared/attendance.js on why the
     // local/UTC mix in this arithmetic is not worth writing twice.
@@ -1141,7 +1149,7 @@ router.get("/report/weekly", staffRead, async (req, res) => {
 // ── GET /api/attendance/report/class/:classId ─────────────────────────────────
 router.get("/report/class/:classId", staffRead, async (req, res) => {
   try {
-    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const schoolId  = resolveSchoolId(req);
     const classId   = req.params.classId;
     const startDate = dateStr(req.query.startDate);
     const endDate   = dateStr(req.query.endDate || new Date());
@@ -1200,7 +1208,7 @@ router.get("/report/class/:classId", staffRead, async (req, res) => {
 // Shows each student's status for that specific period.
 router.get("/report/period/:periodId", staffRead, async (req, res) => {
   try {
-    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const schoolId  = resolveSchoolId(req);
     const periodId  = req.params.periodId;
     const classId   = req.query.classId;
     const date      = dateStr(req.query.date);
@@ -1235,7 +1243,7 @@ router.get("/report/period/:periodId", staffRead, async (req, res) => {
 // Used by the parent portal to show detailed attendance statistics.
 router.get("/report/student/:studentId", staffRead, async (req, res) => {
   try {
-    const schoolId  = req.query.schoolId || req.user?.schoolId;
+    const schoolId  = resolveSchoolId(req);
     const studentId = req.params.studentId;
     const startDate = dateStr(req.query.startDate);
     const endDate   = dateStr(req.query.endDate || new Date());

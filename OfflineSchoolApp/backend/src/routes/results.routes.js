@@ -16,6 +16,14 @@ const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 const { requirePermission } = require("../../middleware/permissions");
 
+// The school a request may touch is the caller's, never the caller's choice.
+// `req.query.schoolId || req.user.schoolId` reads as a sensible default and is
+// the opposite: the client-supplied value wins, so any authenticated user of
+// one school could read another's by changing a parameter. resolveSchoolId is
+// the rule the rest of the backend already followed — a super_admin may name a
+// school, everybody else is their own.
+const { resolveSchoolId } = require("../utils/tenant");
+
 // ── Apply authenticate to ALL routes ─────────────────────
 router.use(authenticate);
 
@@ -72,7 +80,7 @@ const adminOnly      = requirePermission("results.publish");
 // connection this app spends its life apologising for.
 router.get("/my-results", asyncHandler(async (req, res) => {
   const userId   = req.user?._id || req.user?.id;
-  const schoolId = req.query.schoolId || req.user?.schoolId;
+  const schoolId = resolveSchoolId(req);
 
   if (!userId)   return res.status(401).json({ success: false, message: "Not signed in" });
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });

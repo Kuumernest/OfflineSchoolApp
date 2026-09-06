@@ -150,6 +150,11 @@ const normalizeSlot = (s) => ({
 const { isAdmin } = require("../config/roles");
 const { requirePermission } = require("../../middleware/permissions");
 
+// The school a request may touch is the caller’s, never the caller’s choice.
+// These two reads took schoolId from the query string and filtered on it as
+// given, so a staff member of one school could read another’s timetable.
+const { resolveSchoolId } = require("../utils/tenant");
+
 const staffOnly = requirePermission("timetable.view");
 const adminOnly = requirePermission("timetable.manage");
 
@@ -173,7 +178,8 @@ router.get(
   authenticate,
   staffOnly,
   asyncHandler(async (req, res) => {
-    const { schoolId, classId } = req.query;
+    const { classId } = req.query;
+    const schoolId    = resolveSchoolId(req);
     let   { teacherId }         = req.query;
 
     if (!isAdminRole(req.user)) {
@@ -512,7 +518,8 @@ router.get(
   adminOnly,
   asyncHandler(async (req, res) => {
     const { teacherId }         = req.params;
-    const { schoolId, weekDay } = req.query;
+    const { weekDay } = req.query;
+    const schoolId    = resolveSchoolId(req);
 
     const filter = { teacherId, ...NOT_DELETED };
     if (schoolId) filter.schoolId  = String(schoolId).trim();

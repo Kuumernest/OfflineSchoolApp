@@ -145,10 +145,47 @@ const bad = (label, detail) => {
   if (r.status === 200 && (r.body?.data?.length ?? 0) === 0) ok("an unmatched identity sees nothing, not everything");
   else bad("an unmatched identity sees nothing", `${r.status} ${JSON.stringify(r.body).slice(0, 140)}`);
 
-  // Another school's pupil.
+  // ── Naming another school gets you nothing of that school's ──────────────
+  //
+  // This used to assert that a foreign schoolId returned an empty list, which
+  // it did, because the parameter was filtered on. The parameter is no longer
+  // trusted at all — resolveSchoolId gives the caller their own school — so the
+  // answer is now their own results rather than nothing.
+  //
+  // That is the stronger behaviour, and the weaker assertion would have hidden
+  // it: "returns nothing" is also what a broken endpoint returns. What has to
+  // be true is that no row of the other school comes back, so there is now a
+  // row over there to come back, and the assertion looks for it by name.
+  await User.create({
+    _id: "usr-far", name: "Far", email: "far@example.test",
+    password: "check-only-password", role: "student", schoolId: "sch-other", isActive: true,
+  });
+  await Student.create({
+    _id: "stu-far", userId: "usr-far", schoolId: "sch-other", classId: "cls-far",
+    studentName: "Far", enrollmentNo: "ENR-FAR", isActive: true,
+  });
+  await Exam.create({
+    _id: "ex-far", schoolId: "sch-other", name: "Far Sequence", type: "test",
+    academicYear: "2026/2027", term: 1, sequenceNumber: 1,
+    status: "completed", classId: "cls-far", totalMarks: 20, passMark: 10,
+  });
+  await ResultSummary.create({
+    _id: "sum-far", examId: "ex-far", schoolId: "sch-other", studentId: "stu-far",
+    classId: "cls-far", totalScore: 99, maxTotalScore: 100, percentage: 99,
+    average: 19.8, overallGrade: "A", isPublished: true, publishedAt: new Date(),
+    classPosition: 1, totalInClass: 1,
+  });
+
   r = await get(asUser("usr-ama", "student"), "schoolId=sch-other");
-  if ((r.body?.data?.length ?? 0) === 0) ok("a different schoolId returns nothing");
-  else bad("a different schoolId returns nothing", JSON.stringify(r.body).slice(0, 140));
+  const leaked = JSON.stringify(r.body ?? {}).includes("sum-far");
+  if (!leaked) ok("naming another school returns nothing belonging to it");
+  else bad("naming another school returns nothing belonging to it",
+    JSON.stringify(r.body).slice(0, 200));
+
+  const mineOnly = (r.body?.data ?? []).every((d) => String(d.studentId) === "stu-ama");
+  if (mineOnly) ok("and still only ever the caller's own rows");
+  else bad("only the caller's own rows",
+    JSON.stringify((r.body?.data ?? []).map((d) => d.studentId)));
 
   // ── Publishing is the gate ────────────────────────────────────────────────
   console.log("\n--- computed is not published ---");

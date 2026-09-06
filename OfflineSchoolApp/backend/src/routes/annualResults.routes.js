@@ -2,6 +2,8 @@
 "use strict";
 
 const router           = require("express").Router();
+const { requirePermission } = require("../../middleware/permissions");
+const { resolveSchoolId }   = require("../utils/tenant");
 const AnnualResult     = require("../db/models/AnnualResult");
 const annualGrading    = require("../services/annualGrading.service");
 const staleness        = require("../services/resultStaleness.service");
@@ -11,11 +13,28 @@ const { buildAnnualCard, loadReportTemplate, loadSchoolForCard,
   require("../services/reportCardData.service");
 
 // ── GET /api/annual-results ────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// THE SCHOOL IS THE CALLER'S, NOT THE QUERY STRING'S
+//
+// Every route here read schoolId straight off the request and filtered on it
+// as given, and none carried a role guard. Proved with records in two schools:
+// a PUPIL of one school could read the other school's entire results table by
+// changing a query parameter, and could POST /compute and /publish against it.
+//
+// resolveSchoolId is the rule the other seventeen routers already followed —
+// a super_admin may name a school, everybody else is their own.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const canView    = requirePermission("results.view");
+const canCompute = requirePermission("results.edit");
+const canPublish = requirePermission("results.publish");
 router.get(
   "/",
+  canView,
   async (req, res) => {
     try {
-      const { schoolId, academicYear, classId, page = 1, limit = 50 } = req.query;
+      const { academicYear, classId, page = 1, limit = 50 } = req.query;
+      const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear) {
         return res.status(400).json({
@@ -70,10 +89,12 @@ router.get(
 // ── GET /api/annual-results/student/:studentId ─────────────────────────────
 router.get(
   "/student/:studentId",
+  canView,
   async (req, res) => {
     try {
       const { studentId } = req.params;
-      const { schoolId, academicYear } = req.query;
+      const { academicYear } = req.query;
+      const schoolId = resolveSchoolId(req);
 
       const filter = { studentId, deletedAt: null };
       if (schoolId)     filter.schoolId = schoolId;
@@ -92,9 +113,11 @@ router.get(
 // ── POST /api/annual-results/compute ───────────────────────────────────────
 router.post(
   "/compute",
+  canCompute,
   async (req, res) => {
     try {
-      const { schoolId, academicYear, classId } = req.body;
+      const { academicYear, classId } = req.body;
+      const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear) {
         return res.status(400).json({
@@ -128,9 +151,11 @@ router.post(
 // ── POST /api/annual-results/publish ───────────────────────────────────────
 router.post(
   "/publish",
+  canPublish,
   async (req, res) => {
     try {
-      const { schoolId, academicYear, classId } = req.body;
+      const { academicYear, classId } = req.body;
+      const schoolId = resolveSchoolId(req);
 
       const filter = {
         schoolId,
@@ -167,9 +192,11 @@ router.post(
  */
 router.get(
   "/:studentId/report-card",
+  canView,
   async (req, res) => {
     try {
-      const { schoolId, academicYear, classId, lang, templateId } = req.query;
+      const { academicYear, classId, lang, templateId } = req.query;
+      const schoolId = resolveSchoolId(req);
       if (!schoolId || !academicYear || !classId) {
         return res.status(400).json({
           success: false,

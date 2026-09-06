@@ -17,6 +17,7 @@ const User         = require("../db/models/User");
 // where the recipient is a specific guardian. An announcement is a broadcast
 // to the whole school, and "school closes Friday" is not a finance decision.
 const { requirePermission } = require("../../middleware/permissions");
+const { resolveSchoolId } = require("../utils/tenant");
 
 const adminOnly      = requirePermission("announcements.manage");
 const adminOrTeacher = requirePermission("announcements.create");
@@ -445,8 +446,11 @@ router.get("/student", authenticated, noCache, handleStudentAnnouncements);
 
 router.post("/read-all", authenticated, async (req, res) => {
   try {
-    const { schoolId } = req.body;
-    const userId       = req.user._id;
+    // The body named the school; the caller is the school. Marking every
+    // notice read is harmless enough, but it is the only read in this file
+    // that took the value from the client and it should not be the exception.
+    const schoolId = resolveSchoolId(req);
+    const userId   = req.user._id;
 
     const announcements = await Announcement.find({
       schoolId,
