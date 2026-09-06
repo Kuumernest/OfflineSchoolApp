@@ -6,7 +6,7 @@
 // figure comes from the server's ledger aggregation; nothing is summed in the
 // browser, so this page cannot disagree with the student's own account page.
 
-import { useState }        from "react";
+import { useState, Fragment } from "react";
 import { useQuery }        from "@tanstack/react-query";
 import { useNavigate }     from "react-router-dom";
 import { useTranslation }  from "react-i18next";
@@ -76,6 +76,39 @@ export default function FeesPage() {
       (r.enrollmentNo ?? "").toLowerCase().includes(q)
     );
   });
+
+  // classId is on every row and the class list is already loaded for the
+  // filter above, so the names cost nothing extra.
+  // Not a hook: there is an early return above for the loading state, and a
+  // single pass over the arrears rows is not worth a rule violation to skip.
+  const arrearsGroups = (() => {
+    const names = new Map((classesQ.data ?? []).map((c) => [String(c._id), c.name]));
+
+    type Row      = (typeof rows)[number];
+    type Grouping = { classId: string | null; className: string; items: Row[]; total: number };
+
+    const byClass = new Map<string, Grouping>();
+    for (const r of rows) {
+      const key = r.classId ? String(r.classId) : "";
+      if (!byClass.has(key)) {
+        byClass.set(key, {
+          classId:   r.classId ?? null,
+          className: (r.classId && names.get(String(r.classId))) || t("fees.noClass"),
+          items:     [],
+          total:     0,
+        });
+      }
+      const g = byClass.get(key)!;
+      g.items.push(r);
+      g.total += r.balance ?? 0;
+    }
+
+    // The biggest debt is still the first thing on the page, now under a class.
+    return [...byClass.values()].sort((a, b) => b.total - a.total);
+  })();
+
+  // One class means one heading, which is noise. Same rule as the exam page.
+  const showClassRows = arrearsGroups.length > 1;
 
   const classOptions = [
     { value: "", label: t("fees.allClasses") },
@@ -173,6 +206,18 @@ export default function FeesPage() {
       </div>
 
       <Card padding={false}>
+        {/* Grouped by class.
+
+            A bursar chasing arrears across the whole school was reading one
+            flat list of names with no way to see which class a debt sat in,
+            which is how the chase is actually organised — a form master takes
+            their own class.
+
+            The rows arrive sorted by balance, biggest first, and that is the
+            point of the screen. So the groups are ordered by what each class
+            owes in total, and the rows inside each keep the order they came
+            in: the largest debt is still the first thing on the page, and it
+            now has a class over it. */}
         {rows.length === 0 ? (
           <EmptyTable
             icon={<Search />}
@@ -192,7 +237,26 @@ export default function FeesPage() {
               </Tr>
             </THead>
             <TBody>
-              {rows.map((r) => (
+              {arrearsGroups.map((group) => (
+                <Fragment key={group.classId ?? "no-class"}>
+                  {showClassRows && (
+                    <Tr className="bg-indigo-50/60">
+                      <Td colSpan={5} className="py-2">
+                        <span className="text-xs font-semibold uppercase
+                                         tracking-wide text-indigo-700">
+                          {group.className}
+                        </span>
+                        <span className="ml-2 text-[11px] text-ink-faint tabular-nums">
+                          {t("fees.owingCount", { count: group.items.length })}
+                        </span>
+                      </Td>
+                      <Td numeric className="py-2 font-semibold text-danger">
+                        {fmt.money(group.total)}
+                      </Td>
+                    </Tr>
+                  )}
+
+              {group.items.map((r) => (
                 <Tr
                   key={r.studentId}
                   onClick={() => navigate(`/fees/students/${r.studentId}?year=${encodeURIComponent(year)}`)}
@@ -211,6 +275,8 @@ export default function FeesPage() {
                     />
                   </Td>
                 </Tr>
+              ))}
+                </Fragment>
               ))}
             </TBody>
           </Table>

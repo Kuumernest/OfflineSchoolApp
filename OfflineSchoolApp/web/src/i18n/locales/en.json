@@ -1795,7 +1795,9 @@
     "penaltyGrace": "Grace period (days)",
     "penaltyGraceHint": "Days after the due date before a late fee may be added",
     "activate": "Could not activate the fee structure",
-    "reactivate": "Reactivate"
+    "reactivate": "Reactivate",
+    "owingCount": "{{count}} owing",
+    "noClass": "No class"
   },
   "chase": {
     "title": "Chasing what is owed",

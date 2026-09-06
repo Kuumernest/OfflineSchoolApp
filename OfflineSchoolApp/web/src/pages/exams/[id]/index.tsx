@@ -69,6 +69,32 @@ interface ClassGroup {
  * First-seen order is kept, so the sections follow the order the server
  * returned the subjects in rather than being re-sorted underneath the user.
  */
+/**
+ * The school's class names, by id.
+ *
+ * Both tabs that list subjects need this, and react-query dedupes on the key,
+ * so asking twice is one request. Kept as a hook rather than lifted to the
+ * page because the tabs mount independently and neither should wait on the
+ * other's data to render.
+ */
+const useClassNames = (schoolId: string) => {
+  const classesQ = useQuery({
+    queryKey: ["classes", "for-exam-grouping", schoolId],
+    queryFn:  () => fetchClasses(schoolId),
+    enabled:  Boolean(schoolId),
+    staleTime: 10 * 60 * 1000,
+  });
+
+  return useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of classesQ.data ?? []) {
+      const id = String(c._id ?? c.id ?? "");
+      if (id && c.name) map[id] = c.name;
+    }
+    return map;
+  }, [classesQ.data]);
+};
+
 const groupSubjectsByClass = (
   submissions: ExamSubjectWithTotals[],
   classNames:  Record<string, string>,
@@ -271,13 +297,30 @@ const DetailsTab = ({
     setEditOpen(false);
   };
 
-  const subjectProgress = submissions.map((sub) => {
-    const entered = sub.totalScoresEntered ?? 0;
-    const total   = sub.totalStudents      ?? 0;
-    const pct     = total > 0 ? Math.round((entered / total) * 100) : 0;
-    const meta    = SUBMISSION_META[sub.submissionStatus] ?? SUBMISSION_META.pending;
-    return { sub, entered, total, pct, meta };
-  });
+  // Grouped by class, like the marks tab beside it.
+  //
+  // An exam set across four classes has the same subject in it four times,
+  // and the row carries only a classId — so flat, the list read "Maths,
+  // English, Maths, English…" with no way to tell which Maths was which, and
+  // the progress bars underneath belonged to nobody in particular.
+  const classNames = useClassNames(String(exam.schoolId ?? ""));
+
+  const progressGroups = useMemo(() => {
+    const grouped = groupSubjectsByClass(submissions, classNames, t("exams.unknownClass"));
+    return grouped.map((group) => ({
+      ...group,
+      items: group.items.map((sub) => {
+        const entered = sub.totalScoresEntered ?? 0;
+        const total   = sub.totalStudents      ?? 0;
+        const pct     = total > 0 ? Math.round((entered / total) * 100) : 0;
+        const meta    = SUBMISSION_META[sub.submissionStatus] ?? SUBMISSION_META.pending;
+        return { sub, entered, total, pct, meta };
+      }),
+    }));
+  }, [submissions, classNames, t]);
+
+  const subjectCount   = submissions.length;
+  const showClassHeads = progressGroups.length > 1;
 
   return (
     <div className="space-y-5">
@@ -590,13 +633,28 @@ const DetailsTab = ({
           {t("exams.marksProgressHint")}
         </p>
 
-        {subjectProgress.length === 0 ? (
+        {subjectCount === 0 ? (
           <p className="text-sm text-gray-400 text-center py-6">
             {t("exams.noSubjectsYet")}
           </p>
         ) : (
           <div className="space-y-3">
-            {subjectProgress.map(({ sub, entered, total, pct, meta }) => (
+            {progressGroups.map((group) => (
+              <div key={group.classId ?? "no-class"} className="space-y-3">
+                {showClassHeads && (
+                  <div className="flex items-center gap-2 pt-3 first:pt-0">
+                    <h4 className="text-xs font-semibold uppercase tracking-wide
+                                   text-indigo-700 shrink-0">
+                      {group.className}
+                    </h4>
+                    <span className="text-[11px] font-medium text-gray-400 tabular-nums">
+                      {group.items.length}
+                    </span>
+                    <span className="flex-1 border-t border-gray-100" />
+                  </div>
+                )}
+
+            {group.items.map(({ sub, entered, total, pct, meta }) => (
               <div key={sub._id}>
                 <div className="flex items-center justify-between mb-1">
                   <div className="flex items-center gap-2">
@@ -632,6 +690,8 @@ const DetailsTab = ({
                     style={{ width: `${pct}%` }}
                   />
                 </div>
+              </div>
+            ))}
               </div>
             ))}
           </div>
@@ -1066,21 +1126,7 @@ const MarksTab = ({
   // An ExamSubject carries classId and no class name, so the names for the
   // per-class headers are resolved here. Long staleTime: a class list changes
   // once a term, and this is a lookup table, not a view of it.
-  const classesQ = useQuery({
-    queryKey: ["classes", "for-exam-grouping", schoolId],
-    queryFn:  () => fetchClasses(schoolId),
-    enabled:  Boolean(schoolId),
-    staleTime: 10 * 60 * 1000,
-  });
-
-  const classNames = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const c of classesQ.data ?? []) {
-      const id = String(c._id ?? c.id ?? "");
-      if (id && c.name) map[id] = c.name;
-    }
-    return map;
-  }, [classesQ.data]);
+  const classNames = useClassNames(schoolId);
 
   const groups = useMemo(
     () => groupSubjectsByClass(submissions, classNames, t("exams.unknownClass")),

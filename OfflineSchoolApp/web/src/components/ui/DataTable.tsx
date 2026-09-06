@@ -120,11 +120,14 @@ export function Td({
   children,
   className,
   numeric = false,
+  colSpan,
 }: {
   children?:  React.ReactNode;
   className?: string;
   /** Right-align, for columns of figures. */
   numeric?:   boolean;
+  /** For a row that spans the table — a group heading inside the body. */
+  colSpan?:   number;
 }) {
   return (
     <td
@@ -137,6 +140,7 @@ export function Td({
         numeric ? "text-right tabular" : "text-left",
         className
       )}
+      colSpan={colSpan}
     >
       {children}
     </td>

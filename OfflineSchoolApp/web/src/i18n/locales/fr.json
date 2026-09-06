@@ -1795,7 +1795,9 @@
     "penaltyGrace": "Délai de grâce (jours)",
     "penaltyGraceHint": "Jours après l'échéance avant qu'une pénalité puisse être ajoutée",
     "activate": "Impossible d’activer la grille tarifaire",
-    "reactivate": "Réactiver"
+    "reactivate": "Réactiver",
+    "owingCount": "{{count}} en retard",
+    "noClass": "Sans classe"
   },
   "chase": {
     "title": "Recouvrement",
