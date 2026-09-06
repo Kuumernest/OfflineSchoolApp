@@ -882,6 +882,23 @@ const ScoreEntry = ({
   // through a ref rather than closing over a stale copy.
   const saveWithReasonRef = useRef(null);
 
+  // Marks that have not reached the server, and whether anything will send
+  // them. The bar in the layout above counts OUTBOX entries, which is the
+  // right thing for queued work and blind to the case that matters most here:
+  // a dirty score row with nothing carrying it is invisible to a queue that
+  // has no entry for it.
+  const [scoreSync, setScoreSync] = useState(null);
+
+  const refreshScoreSync = useCallback(async () => {
+    try {
+      setScoreSync(await ExamService.scoreSyncState());
+    } catch (err) {
+      // Not fatal to mark entry, but not swallowed either: an indicator that
+      // silently stops updating is worse than none.
+      console.warn("[marks] could not read the score sync state:", err.message);
+    }
+  }, []);
+
   const loadData = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
@@ -924,6 +941,7 @@ const ScoreEntry = ({
   }, [classId, examId, schoolId, role, subjectId, t]);
 
   useEffect(() => { loadData(); }, [loadData]);
+  useEffect(() => { refreshScoreSync(); }, [refreshScoreSync]);
 
   const updateScore = useCallback((studentId, field, value) => {
     setDirty(true);
@@ -1046,6 +1064,8 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
         }
       } finally {
         setSaving(false);
+        // However it ended — sent, queued, or refused — the count changes.
+        await refreshScoreSync();
       }
     };
 
@@ -1067,7 +1087,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
     }
 
     await doSave();
-  }, [saving, students, t, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved]);
+  }, [saving, students, t, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved, refreshScoreSync]);
 
   useEffect(() => {
     if (saveRef) saveRef.current = handleSave;
@@ -1136,6 +1156,32 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
               <Text style={se.markAllText}>{t("marksEntry.markAllPresent")}</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Where the marks actually are.
+
+              Waiting and failed are never one number: a teacher who reads
+              “not uploaded” every morning on a bad line stops reading it, and
+              the morning it means the server refused their marks looks exactly
+              the same. Nothing is shown when there is nothing outstanding —
+              a permanent green tick is furniture. */}
+          {scoreSync && scoreSync.total > 0 && (() => {
+            const stuck = scoreSync.failed.length + scoreSync.orphaned.length;
+            const failed = stuck > 0;
+            return (
+              <View style={[se.syncNote, failed ? se.syncNoteBad : se.syncNoteWait]}>
+                <Ionicons
+                  name={failed ? "alert-circle-outline" : "cloud-upload-outline"}
+                  size={14}
+                  color={failed ? "#9F2318" : "#8A5A00"}
+                />
+                <Text style={[se.syncNoteText, failed && se.syncNoteTextBad]}>
+                  {failed
+                    ? t("marksEntry.marksFailed", { count: stuck })
+                    : t("marksEntry.marksPending", { count: scoreSync.pending.length })}
+                </Text>
+              </View>
+            );
+          })()}
         </View>
 
         {/* Search */}
@@ -1309,6 +1355,15 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
 };
 
 const se = StyleSheet.create({
+  syncNote: {
+    flexDirection: "row", alignItems: "center", gap: 6,
+    marginTop: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 8,
+  },
+  syncNoteWait:    { backgroundColor: "#FBF4E6" },
+  syncNoteBad:     { backgroundColor: "#FBEFEE" },
+  syncNoteText:    { fontSize: 12, fontWeight: "600", color: "#8A5A00", flex: 1 },
+  syncNoteTextBad: { color: "#9F2318" },
+
   reasonBackdrop: {
     flex: 1, backgroundColor: "rgba(15, 18, 26, 0.55)",
     alignItems: "center", justifyContent: "center", padding: 20,

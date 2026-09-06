@@ -9,6 +9,10 @@ const { StudentAttendance, TeacherAttendance } =
 const User    = require("../db/models/User");
 const Student = require("../db/models/Student");
 
+// What a register entry used to say, for the one record type where
+// last-write-wins used to leave no trace at all.
+const AttendanceChangeLog = require("../db/models/AttendanceChangeLog");
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -440,6 +444,19 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
     const ops    = [];
     const opRows = [];
 
+    // The derived _id of each row this batch touches, in op order.
+    //
+    // Attendance is last-write-wins and the natural key is unique, so a
+    // re-mark UPDATES in place and the status it replaced is gone. markedBy
+    // names whoever set the surviving value and nothing said what it replaced
+    // — a pupil marked present by the form master and absent by a subject
+    // teacher an hour later ended the day absent, with no way for anybody to
+    // learn there had been a disagreement.
+    //
+    // The id is derived from the natural key, so the prior state of the whole
+    // batch is one query rather than one per pupil.
+    const opIds = [];
+
     for (const row of records) {
       if (!row.studentId || !validStatuses.includes(row.status)) {
         failed.push({ ...row, reason: "Invalid studentId or status" });
@@ -459,6 +476,15 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
       // latency before the teacher gets an answer. They go as one write
       // below. Each upsert is keyed on its natural identity and carries a
       // derived _id, so batching changes nothing about what is stored.
+      const derivedId = attendanceId({
+        schoolId:  resolvedSchoolId,
+        classId,
+        subjectId: subjectId || null,
+        periodId:  resolvedPeriodId,
+        studentId: row.studentId,
+        date:      resolvedDate,
+      });
+
       ops.push({
         updateOne: {
           filter: {
@@ -478,14 +504,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
               note:     row.note || null,
             },
             $setOnInsert: {
-              _id: attendanceId({
-                schoolId:  resolvedSchoolId,
-                classId,
-                subjectId: subjectId || null,
-                periodId:  resolvedPeriodId,
-                studentId: row.studentId,
-                date:      resolvedDate,
-              }),
+              _id: derivedId,
               schoolId:  resolvedSchoolId,
               classId,
               subjectId: subjectId || null,
@@ -497,6 +516,7 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
         },
       });
       opRows.push(row);
+      opIds.push(derivedId);
     }
 
     // One write for the register.
@@ -505,6 +525,17 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
     // class — and the rows that did fail are still reported individually,
     // because writeErrors carry the index of the op that raised them and
     // opRows maps that index back to the pupil.
+    // Before the write, because after it there is nothing left to read.
+    const priorById = new Map();
+    if (opIds.length) {
+      const priors = await StudentAttendance
+        .find({ _id: { $in: opIds }, schoolId: resolvedSchoolId })
+        .select("_id status markedBy markedAt")
+        .lean()
+        .catch(() => []);
+      for (const p of priors) priorById.set(String(p._id), p);
+    }
+
     let writeErrors = [];
     if (ops.length) {
       try {
@@ -524,6 +555,55 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
       });
     }
     savedCount = ops.length - writeErrors.length;
+
+    // ── What the register used to say ─────────────────────────────────────
+    //
+    // Only where the status actually MOVED. That is what makes a replayed
+    // sync safe without a de-duplication key: the first attempt applies
+    // present → absent and records it, and the retry reads absent, finds the
+    // new value equal to the old, and writes nothing. A deliberate change
+    // back is three genuine rows, and any key clever enough to suppress the
+    // retry would suppress that too.
+    //
+    // A first mark is not a change and gets no row: there was nothing to lose.
+    const failedIdx = new Set(writeErrors.map((we) => we.index ?? we.err?.index));
+    const history = [];
+
+    for (let i = 0; i < opRows.length; i++) {
+      if (failedIdx.has(i)) continue;                 // never written
+      const prior = priorById.get(String(opIds[i]));
+      if (!prior) continue;                           // created, not changed
+
+      const from = prior.status ?? null;
+      const to   = opRows[i].status;
+      if (from === to) continue;                      // a replay, or a re-save
+
+      history.push({
+        schoolId:         resolvedSchoolId,
+        attendanceId:     String(opIds[i]),
+        studentId:        String(opRows[i].studentId),
+        date:             resolvedDate,
+        previousStatus:   from,
+        newStatus:        to,
+        previousMarkedBy: prior.markedBy ?? null,
+        previousMarkedAt: prior.markedAt ?? null,
+        changedBy:        req.user?._id ? String(req.user._id) : null,
+        changedByName:    req.user?.name || null,
+        changedByRole:    req.user?.role || null,
+        changedAt:        new Date(),
+        source:           req.get("X-Client-Source") || req.body?.source || null,
+      });
+    }
+
+    if (history.length) {
+      // Not awaited into the response contract, but not swallowed either: a
+      // register that saved and a history row that did not is worth a line in
+      // the log, and is not worth failing the teacher's save over.
+      await AttendanceChangeLog.insertMany(history, { ordered: false })
+        .catch((err) =>
+          console.warn("[attendance] change history not written:", err.message)
+        );
+    }
 
     console.log(
       `📋 Bulk student attendance: saved=${savedCount} failed=${failed.length}` +
@@ -1241,6 +1321,74 @@ router.get("/report/period/:periodId", staffRead, async (req, res) => {
 // ── GET /api/attendance/report/student/:studentId ────────────────────────────
 // Student attendance summary: per-period breakdown over a date range.
 // Used by the parent portal to show detailed attendance statistics.
+// ─────────────────────────────────────────────────────────────────────────────────
+// GET /api/attendance/history
+//
+// What a register entry used to say, and who said it.
+//
+// staffRead, the same capability as every other register view: this contains
+// no more than the register itself, only older. It is scoped by school through
+// resolveSchoolId like the rest of this file — the value is taken from the
+// caller, never from the query string, so a school cannot read another's by
+// asking.
+// ─────────────────────────────────────────────────────────────────────────────────
+
+router.get("/history", staffRead, async (req, res) => {
+  try {
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId) {
+      return res.status(400).json({ success: false, message: "No school on this session" });
+    }
+
+    const filter = { schoolId };
+    if (req.query.studentId)    filter.studentId    = String(req.query.studentId).trim();
+    if (req.query.attendanceId) filter.attendanceId = String(req.query.attendanceId).trim();
+    if (req.query.date)         filter.date         = String(req.query.date).trim();
+
+    if (req.query.from || req.query.to) {
+      filter.date = filter.date || {};
+      if (typeof filter.date === "string") {
+        // An exact date and a range are contradictory; the exact one wins.
+      } else {
+        if (req.query.from) filter.date.$gte = String(req.query.from).trim();
+        if (req.query.to)   filter.date.$lte = String(req.query.to).trim();
+      }
+    }
+
+    const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
+
+    const changes = await AttendanceChangeLog
+      .find(filter)
+      .sort({ changedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    // The names, resolved for display. Stored ids rather than names on the row
+    // itself for the previous marker, because a teacher who leaves is
+    // deactivated and their name would otherwise vanish from the history.
+    const actorIds = [...new Set(
+      changes.flatMap((c) => [c.changedBy, c.previousMarkedBy]).filter(Boolean).map(String)
+    )];
+    const actors = actorIds.length
+      ? await User.find({ _id: { $in: actorIds }, schoolId }).select("_id name").lean().catch(() => [])
+      : [];
+    const nameOf = new Map(actors.map((u) => [String(u._id), u.name]));
+
+    return res.json({
+      success: true,
+      count:   changes.length,
+      changes: changes.map((c) => ({
+        ...c,
+        changedByName:        c.changedByName || nameOf.get(String(c.changedBy)) || null,
+        previousMarkedByName: nameOf.get(String(c.previousMarkedBy)) || null,
+      })),
+    });
+  } catch (err) {
+    console.error("[attendance] history error:", err.message);
+    return res.status(500).json({ success: false, message: "Failed to read attendance history" });
+  }
+});
+
 router.get("/report/student/:studentId", staffRead, async (req, res) => {
   try {
     const schoolId  = resolveSchoolId(req);

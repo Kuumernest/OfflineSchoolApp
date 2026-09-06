@@ -4650,7 +4650,15 @@
     "correctPublishedHint": "These results have already been published, so parents may have seen them. Record why you are changing them.",
     "changeReasonPlaceholder": "e.g. Paper 2 remarked after appeal",
     "changeReasonKept": "Kept with the change for as long as the result exists.",
-    "saveWithReason": "Save correction"
+    "saveWithReason": "Save correction",
+    "marksPending": {
+      "one": "1 mark waiting to upload",
+      "other": "{{count}} marks waiting to upload"
+    },
+    "marksFailed": {
+      "one": "1 mark failed to upload — tap Save to try again",
+      "other": "{{count}} marks failed to upload — tap Save to try again"
+    }
   },
   "examMonitor": {
     "title": "Submission Monitor",

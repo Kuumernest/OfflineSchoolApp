@@ -332,6 +332,13 @@ const EXCLUDED = {
     "mirroring answers to a device is a decision needing more care than a " +
     "capability check.",
 
+  AttendanceChangeLog:
+    "The same, for the register. Written only when a mark actually moves, " +
+    "and read when somebody asks why a pupil's status changed — which is a " +
+    "question asked from an office, on a screen with a connection, not from " +
+    "a phone in a corridor. Mirroring it would put every historical " +
+    "disagreement on every handset to answer that.",
+
   ResultChangeLog:
     "An audit trail of mark changes. Append-only server-side and read on " +
     "demand; mirroring it would double the academic data on the machine to " +

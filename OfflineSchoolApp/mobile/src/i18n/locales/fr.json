@@ -4650,7 +4650,15 @@
     "correctPublishedHint": "Ces résultats sont déjà publiés ; les parents ont pu les consulter. Indiquez le motif de la modification.",
     "changeReasonPlaceholder": "ex. : épreuve 2 recorrigée après recours",
     "changeReasonKept": "Conservé avec la modification aussi longtemps que le résultat existe.",
-    "saveWithReason": "Enregistrer la correction"
+    "saveWithReason": "Enregistrer la correction",
+    "marksPending": {
+      "one": "1 note en attente d’envoi",
+      "other": "{{count}} notes en attente d’envoi"
+    },
+    "marksFailed": {
+      "one": "1 note n’a pas pu être envoyée — appuyez sur Enregistrer pour réessayer",
+      "other": "{{count}} notes n’ont pas pu être envoyées — appuyez sur Enregistrer pour réessayer"
+    }
   },
   "examMonitor": {
     "title": "Suivi des soumissions",

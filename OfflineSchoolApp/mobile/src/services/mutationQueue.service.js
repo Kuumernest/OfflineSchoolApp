@@ -256,6 +256,37 @@ const backoffFor = (retryCount) =>
  * Decides how to treat a failed attempt.
  * @returns {"transient" | "conflict" | "permanent" | "resolved"}
  */
+/**
+ * Outbox entries that carry rows of one local table, with their status.
+ *
+ * The queue already knows which local rows each request is responsible for —
+ * payload.__local.ids is what clears their dirty flag on success. This exposes
+ * the same link for reading, so a screen can say whether a dirty row is queued
+ * or stuck without a second tracking system to keep in step with this one.
+ *
+ * Entries already marked synced are excluded: they have settled their rows.
+ *
+ * @param {string} table  e.g. "exam_scores"
+ * @returns {Promise<Array<{status: string, payload: object}>>}
+*/
+export const outboxRowsForTable = async (table) => {
+  const db = await getDatabase();
+  await ensureSchema(db);
+
+  const rows = await db.getAllAsync(
+    `SELECT status, payload FROM ${TABLE} WHERE status != synced`
+  ).catch(() => []);
+
+  const out = [];
+  for (const r of rows) {
+    let payload = null;
+    try { payload = JSON.parse(r.payload || "{}"); } catch { continue; }
+    if (payload?.__local?.table !== table) continue;
+    out.push({ status: r.status, payload });
+  }
+  return out;
+};
+
 export const classifyError = (error, method) => {
   const status = error?.response?.status;
   const code = error?.response?.data?.code;

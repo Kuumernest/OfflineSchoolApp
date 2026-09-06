@@ -969,6 +969,9 @@ export const ExamService = {
 
   // Offline helpers
   countUnsyncedScores: ExamCache.countUnsyncedScores,
+  // Which of them are queued and which are stuck. countUnsyncedScores answers
+  // "how many" and that is two opposite situations in one number.
+  scoreSyncState:      ExamCache.scoreSyncState,
 };
 
 export default ExamService;

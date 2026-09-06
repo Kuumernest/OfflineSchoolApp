@@ -22,6 +22,7 @@
 import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID } from "../utils/idHelpers";
+import { classifyDirtyRows } from "./syncState";
 
 const SCHEMA_KEY = "exam_tables";
 
@@ -589,6 +590,41 @@ export const countUnsyncedScores = async () => {
     "SELECT COUNT(*) AS n FROM exam_scores WHERE _synced = 0"
   ).catch(() => null);
   return row?.n ?? 0;
+};
+
+/**
+ * Which marks have not reached the server, and why.
+ *
+ * countUnsyncedScores answers "how many" and has been exported, and called by
+ * nothing, since it was written. "How many" is not enough to put in front of a
+ * teacher: a mark queued on a bad line and a mark the server refused are the
+ * same number and opposite situations.
+ *
+ * The queue already knows which is which. This joins the dirty rows to the
+ * outbox entries carrying them — no second bookkeeping, and nothing to fall
+ * out of step.
+ *
+ * @returns {Promise<{pending: string[], failed: string[], orphaned: string[], total: number}>}
+ */
+export const scoreSyncState = async () => {
+  await ensureExamTables();
+  const db = await getDatabase();
+
+  const rows = await db.getAllAsync(
+    "SELECT id FROM exam_scores WHERE _synced = 0"
+  ).catch(() => []);
+
+  const dirtyIds = rows.map((r) => String(r.id));
+  if (dirtyIds.length === 0) {
+    return { pending: [], failed: [], orphaned: [], total: 0 };
+  }
+
+  // Required lazily: mutationQueue imports this module, and a static import
+  // back would be a cycle.
+  const { outboxRowsForTable } = require("./mutationQueue.service");
+  const outboxRows = await outboxRowsForTable("exam_scores").catch(() => []);
+
+  return classifyDirtyRows({ dirtyIds, outboxRows, table: "exam_scores" });
 };
 
 // ═════════════════════════════════════════════════════════════════════════════
