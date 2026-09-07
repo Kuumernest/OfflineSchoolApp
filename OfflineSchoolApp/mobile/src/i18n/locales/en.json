@@ -96,7 +96,8 @@
     "password": "Password",
     "dismiss": "Dismiss",
     "optionalContact": "Optional, but the school will usually want a contact on file.",
-    "tryDifferent": "Try a different name or keyword"
+    "tryDifferent": "Try a different name or keyword",
+    "unknown": "Unknown"
   },
   "nav": {
     "dashboard": "Dashboard",

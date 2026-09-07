@@ -1,5 +1,6 @@
 // web/src/lib/axios.ts
 import axios            from "axios";
+import i18n             from "@/i18n";
 import { getAuthState } from "@/store/auth.store";
 import { offlineAdapter } from "@/lib/offline/adapter";
 
@@ -221,19 +222,67 @@ api.interceptors.response.use(
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Extract the error message from an axios error.
- * Handles both server-returned messages and network errors.
+ * The message to show a user for a failed request.
+ *
+ * ── Why this function translates, and where it does not ───────────────────
+ *
+ * Seventy-four call sites use this, fifty-one of them to fill in the body of a
+ * toast. It returned the server's string verbatim, and the API answers in
+ * English only — so a francophone user got a French toast title above an
+ * English sentence, on every failure in the app. It also returned axios's own
+ * `error.message` when there was no response, which is how "Network Error" and
+ * "timeout of 30000ms exceeded" reached real users, and the final fallback was
+ * a hardcoded English sentence.
+ *
+ * i18next is a singleton and imports nothing from here, so this can translate
+ * without becoming a hook and without touching a single call site.
+ *
+ * The split is deliberate:
+ *
+ *   no response, 5xx, 401, 403  →  a translated message. The server's text here
+ *                                  is either absent, an axios internal, or a
+ *                                  server-side fault whose body may carry a
+ *                                  Mongo or driver string. None of that should
+ *                                  reach a parent or a bursar.
+ *
+ *   4xx with a message          →  the server's own text. This is the
+ *                                  actionable half — "This email address is
+ *                                  already registered", "Results are locked" —
+ *                                  and dropping it for a generic sentence would
+ *                                  make the app less usable, not more
+ *                                  bilingual. It is still English: backend
+ *                                  localisation is a separate piece of work and
+ *                                  is recorded as a known gap rather than
+ *                                  half-done here.
  */
 export const getErrorMessage = (error: unknown): string => {
+  const tr = (key: string) => i18n.t(key);
+
   if (axios.isAxiosError(error)) {
+    const status = error.response?.status;
+
+    // No response at all: offline, DNS, or a cancelled request.
+    if (!error.response) {
+      return error.code === "ECONNABORTED" || /timeout/i.test(error.message || "")
+        ? tr("errors.timeout")
+        : tr("errors.offline");
+    }
+
+    if (status === 401) return tr("errors.signedOut");
+    if (status === 403) return tr("errors.forbidden");
+    if (status && status >= 500) return tr("errors.server");
+
     const serverMsg =
       (error.response?.data as Record<string, unknown>)?.message ||
       (error.response?.data as Record<string, unknown>)?.error;
     if (typeof serverMsg === "string" && serverMsg) return serverMsg;
-    if (error.message) return error.message;
+
+    return tr("errors.unexpected");
   }
-  if (error instanceof Error) return error.message;
-  return "An unexpected error occurred";
+
+  // A non-axios Error is ours, not the server's, and its message is written for
+  // a developer. Users get the translated generic.
+  return tr("errors.unexpected");
 };
 
 export const isNotFound = (error: unknown): boolean =>

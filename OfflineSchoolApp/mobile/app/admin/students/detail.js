@@ -612,7 +612,7 @@ export default function StudentDetailScreen() {
               ]}>
                 <View style={[styles.badgeDot, { backgroundColor: statusConfig.dot }]} />
                 <Text style={[styles.badgeText, { color: statusConfig.color }]}>
-                  {statusConfig.label}
+                  {statusConfig.labelKey ? t(statusConfig.labelKey) : statusConfig.label}
                 </Text>
               </View>
 

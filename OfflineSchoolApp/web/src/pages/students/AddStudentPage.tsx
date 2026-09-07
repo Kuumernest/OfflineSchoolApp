@@ -145,7 +145,7 @@ export default function AddStudentPage() {
       });
     },
     onError: (err) =>
-      toast({ title: "Could not enroll the student", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("students.errEnroll"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const set = <K extends keyof FormState>(key: K) =>

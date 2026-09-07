@@ -135,7 +135,7 @@ export default function EditTeacherPage() {
   const loadAll = useCallback(
     async (isRefresh = false) => {
       if (!teacherId) {
-        setLoadError("No teacher ID provided.");
+        setLoadError(t("teachers.noId"));
         setLoading(false);
         return;
       }
@@ -154,7 +154,7 @@ export default function EditTeacherPage() {
         if (!isMounted.current) return;
 
         const t = teacherRes.data?.data || teacherRes.data?.teacher || teacherRes.data;
-        if (!t) { setLoadError("Teacher not found."); return; }
+        if (!t) { setLoadError(t("teachers.notFound")); return; }
 
         setTeacher(t);
         setName(t.name  ?? "");
@@ -213,7 +213,7 @@ export default function EditTeacherPage() {
         }
       }
     },
-    [teacherId, schoolId]
+    [teacherId, schoolId, t]
   );
 
   // loadAll is useCallback([teacherId, schoolId]) and guards every write with
@@ -232,15 +232,19 @@ export default function EditTeacherPage() {
    * rebuilt the other. Safe by coincidence rather than by construction, and the
    * next field added to validate would have broken it silently.
    */
+  // The three messages below are the ones the Add Teacher page already uses
+  // (teachersAdd.err*), translated in both locales. They were hardcoded
+  // English here, on a screen otherwise fully translated, so a francophone
+  // admin got a French form with English validation.
   const validate = useCallback((): boolean => {
     const next: FormErrors = {};
-    if (!name.trim())  next.name  = "Name is required.";
-    if (!email.trim()) next.email = "Email is required.";
+    if (!name.trim())  next.name  = t("teachersAdd.errNameRequired");
+    if (!email.trim()) next.email = t("teachersAdd.errEmailRequired");
     else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()))
-      next.email = "Enter a valid email address.";
+      next.email = t("teachersAdd.errEmailInvalid");
     setErrors(next);
     return Object.keys(next).length === 0;
-  }, [name, email]);
+  }, [name, email, t]);
 
   // ── Save profile ────────────────────────────────────────
 

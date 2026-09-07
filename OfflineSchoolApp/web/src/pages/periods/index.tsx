@@ -193,7 +193,7 @@ export default function PeriodsPage() {
         "Any timetable lesson scheduled in this period will lose its slot. " +
         "If you only want to take it out of use for now, hide it instead — " +
         "that keeps the existing timetable intact.",
-      confirmLabel: "Remove period",
+      confirmLabel: t("periods.remove"),
       kind:         "danger",
     });
     if (ok) removeMutation.mutate(p._id);

@@ -388,7 +388,7 @@ const StudentCard = React.memo(({ student, onPress }) => {
         <View style={styles.cardRight}>
           <View style={[styles.statusBadge, { backgroundColor: statusConfig.bg }]}>
             <Text style={[styles.statusText, { color: statusConfig.color }]}>
-              {statusConfig.label}
+              {statusConfig.labelKey ? t(statusConfig.labelKey) : statusConfig.label}
             </Text>
           </View>
           <Ionicons

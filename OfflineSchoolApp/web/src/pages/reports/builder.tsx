@@ -176,9 +176,9 @@ const buildStarterHtml = (t: (key: string) => string) => `<div style="font-famil
       <td style="padding: 6px; font-weight: bold;">{{admission_number}}</td>
     </tr>
     <tr>
-      <td style="padding: 6px; color: #6B7280; font-size: 12px;">Class</td>
+      <td style="padding: 6px; color: #6B7280; font-size: 12px;">${t("builder.tplClass")}</td>
       <td style="padding: 6px; font-weight: bold;">{{class}} {{stream}}</td>
-      <td style="padding: 6px; color: #6B7280; font-size: 12px;">Gender</td>
+      <td style="padding: 6px; color: #6B7280; font-size: 12px;">${t("builder.tplGender")}</td>
       <td style="padding: 6px;">{{gender}}</td>
     </tr>
     <tr>
@@ -199,21 +199,21 @@ const buildStarterHtml = (t: (key: string) => string) => `<div style="font-famil
   <div style="display: flex; gap: 12px; margin: 16px 0;">
     <div style="flex: 1; text-align: center; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px;">
       <div style="font-size: 22px; font-weight: bold; color: #2563EB;">{{average}}</div>
-      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">Average</div>
+      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">${t("builder.tplAverage")}</div>
     </div>
     <div style="flex: 1; text-align: center; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px;">
       <div style="font-size: 22px; font-weight: bold; color: #7C3AED;">{{grade}}</div>
-      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">Grade</div>
+      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">${t("builder.tplGrade")}</div>
     </div>
     <div style="flex: 1; text-align: center; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px;">
       <div style="font-size: 22px; font-weight: bold; color: #059669;">
         {{position}} / {{total_students}}
       </div>
-      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">Position</div>
+      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">${t("builder.tplPosition")}</div>
     </div>
     <div style="flex: 1; text-align: center; border: 1px solid #E5E7EB; border-radius: 8px; padding: 10px;">
       <div style="font-size: 22px; font-weight: bold; color: #D97706;">{{promotion_status}}</div>
-      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">Status</div>
+      <div style="font-size: 10px; color: #6B7280; margin-top: 2px;">${t("builder.tplStatus")}</div>
     </div>
   </div>
 

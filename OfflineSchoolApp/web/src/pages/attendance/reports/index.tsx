@@ -138,10 +138,10 @@ export default function AttendanceReportsPage() {
           icon={Users}
           summary={students}
           statuses={[
-            { key: "present", label: "Present", tone: "bg-emerald-500" },
-            { key: "absent",  label: "Absent",  tone: "bg-red-500" },
-            { key: "late",    label: "Late",    tone: "bg-amber-500" },
-            { key: "excused", label: "Excused", tone: "bg-blue-500" },
+            { key: "present", label: t("academic.present"), tone: "bg-emerald-500" },
+            { key: "absent",  label: t("academic.absent"),  tone: "bg-red-500" },
+            { key: "late",    label: t("academic.late"),    tone: "bg-amber-500" },
+            { key: "excused", label: t("academic.excused"), tone: "bg-blue-500" },
           ]}
         />
         <SummaryPanel

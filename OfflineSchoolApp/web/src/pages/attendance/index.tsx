@@ -209,11 +209,11 @@ export default function AttendancePage() {
       // whole register landed.
       if (result.failed > 0) {
         toast({
-          title:   "Partly saved",
+          title:   t("attendance.partlySaved"),
           message:
-            `${result.saved} saved, ${result.failed} rejected` +
+              t("attendance.partlySavedBody", { saved: result.saved, failed: result.failed }) +
             (result.failedRecords[0]?.reason
-              ? ` — first reason: ${result.failedRecords[0].reason}`
+              ? ` — ${result.failedRecords[0].reason}`
               : ""),
           kind:     "warning",
           duration: 0,

@@ -96,7 +96,8 @@
     "password": "Mot de passe",
     "dismiss": "Fermer",
     "optionalContact": "Facultatif, mais l'établissement souhaite généralement disposer d'un contact.",
-    "tryDifferent": "Essayez un autre nom ou mot-clé"
+    "tryDifferent": "Essayez un autre nom ou mot-clé",
+    "unknown": "Inconnu"
   },
   "nav": {
     "dashboard": "Tableau de bord",

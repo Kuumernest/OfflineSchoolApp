@@ -29,33 +29,38 @@ const DEBOUNCE_MS      = 300;
 // ─── Type display config ──────────────────────────────────────────────────────
 const TYPE_CONFIG: Record<
   SearchResult["type"],
-  { label: string; icon: React.ReactNode; badge: string }
+  { labelKey: string; oneKey: string; icon: React.ReactNode; badge: string }
 > = {
   // The icon distinguishes the kind of result; the chip does not need to
   // repeat that in a fifth colour. One neutral chip keeps a mixed result list
   // scannable instead of turning it into a swatch board.
   page: {
-    label: "Pages",
+    labelKey: "search.groupPages",
+    oneKey:   "search.onePage",
     icon:  <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
     badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   student: {
-    label: "Students",
+    labelKey: "search.groupStudents",
+    oneKey:   "search.oneStudent",
     icon:  <GraduationCap  className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
     badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   teacher: {
-    label: "Teachers",
+    labelKey: "search.groupTeachers",
+    oneKey:   "search.oneTeacher",
     icon:  <Users          className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
     badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   class: {
-    label: "Classes",
+    labelKey: "search.groupClasses",
+    oneKey:   "search.oneClass",
     icon:  <BookOpen       className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
     badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
   subject: {
-    label: "Subjects",
+    labelKey: "search.groupSubjects",
+    oneKey:   "search.oneSubject",
     icon:  <User           className="h-3.5 w-3.5 shrink-0 text-ink-faint" />,
     badge: "bg-canvas text-ink-muted ring-1 ring-inset ring-line",
   },
@@ -384,7 +389,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                           {/* Group header */}
                           <div className="sticky top-0 border-y border-line bg-surface-muted px-4 py-1.5">
                             <span className="text-[11px] font-semibold uppercase tracking-wider text-ink-faint">
-                              {TYPE_CONFIG[type].label}
+                              {t(TYPE_CONFIG[type].labelKey)}
                               <span className="ml-1.5 text-line-strong">
                                 ({grouped[type].length})
                               </span>
@@ -449,7 +454,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                                     TYPE_CONFIG[type].badge
                                   )}
                                 >
-                                  {TYPE_CONFIG[type].label.slice(0, -1)}
+                                  {t(TYPE_CONFIG[type].oneKey)}
                                 </span>
                               </button>
                             );

@@ -42,7 +42,14 @@ const C = STUDENT_STATUS_COLORS;
 
 /**
  * @param {string|null|undefined} status
- * @returns {{ key: string, label: string, color: string, bg: string, dot: string }}
+ * @returns {{ key: string, labelKey: string|null, label: string|null,
+ *             color: string, bg: string, dot: string }}
+ *
+ * labelKey rather than label: this is a plain module, so it cannot call the
+ * translator. It returned English words that two screens rendered straight
+ * into a status chip, which is why an otherwise French roster said "Active".
+ * The keys are the ones already used elsewhere for these five states, so the
+ * wording matches the rest of the app rather than being a second set.
  */
 export const getStudentStatusConfig = (status) => {
   const key = String(status ?? "").trim().toLowerCase();
@@ -50,20 +57,23 @@ export const getStudentStatusConfig = (status) => {
   switch (key) {
     case "approved":
     case "active":
-      return { key: "approved",  label: "Active",    color: C.success, bg: C.successBg, dot: C.successDot };
+      return { key: "approved",  labelKey: "common.active",              color: C.success, bg: C.successBg, dot: C.successDot };
     case "pending":
-      return { key: "pending",   label: "Pending",   color: C.warning, bg: C.warningBg, dot: C.warningDot };
+      return { key: "pending",   labelKey: "common.pending",             color: C.warning, bg: C.warningBg, dot: C.warningDot };
     case "suspended":
-      return { key: "suspended", label: "Suspended", color: C.error,   bg: C.errorBg,   dot: C.errorDot };
+      return { key: "suspended", labelKey: "approvedStudents.suspended", color: C.error,   bg: C.errorBg,   dot: C.errorDot };
     case "rejected":
-      return { key: "rejected",  label: "Rejected",  color: C.purple,  bg: C.purpleBg,  dot: C.purpleDot };
+      return { key: "rejected",  labelKey: "approvedStudents.rejected",  color: C.purple,  bg: C.purpleBg,  dot: C.purpleDot };
     case "inactive":
-      return { key: "inactive",  label: "Inactive",  color: C.gray,    bg: C.grayBg,    dot: C.grayDot };
+      return { key: "inactive",  labelKey: "common.inactive",            color: C.gray,    bg: C.grayBg,    dot: C.grayDot };
     default:
       return {
         key:   key || "unknown",
-        // Show what we actually hold rather than inventing a friendly label.
-        label: status ? String(status) : "Unknown",
+            // An unrecognised status is shown exactly as stored, because a
+            // friendly substitute would hide real data. Only the empty case
+            // gets a translated word.
+            labelKey: status ? null : "common.unknown",
+            label:    status ? String(status) : null,
         color: C.gray, bg: C.grayBg, dot: C.grayDot,
       };
   }

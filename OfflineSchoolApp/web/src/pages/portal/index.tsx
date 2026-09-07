@@ -602,7 +602,7 @@ export default function ParentPortalPage() {
               {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 0 && (
                 <Card padding={false}>
                   <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">Today's Attendance</h2>
+                    <h2 className="text-sm font-semibold text-ink">{t("portal.todayAttendance")}</h2>
                     <p className="text-xs text-ink-muted">
                       {attendanceQ.data.dailySummaries[0]?.date}
                     </p>
@@ -704,7 +704,7 @@ export default function ParentPortalPage() {
               {attendanceQ.data?.dailySummaries && attendanceQ.data.dailySummaries.length > 1 && (
                 <Card padding={false}>
                   <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">Recent Days</h2>
+                    <h2 className="text-sm font-semibold text-ink">{t("portal.recentDays")}</h2>
                   </div>
                   <ul className="divide-y divide-line">
                     {attendanceQ.data.dailySummaries.slice(1, 15).map((day) => (

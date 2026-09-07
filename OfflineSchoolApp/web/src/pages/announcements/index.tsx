@@ -177,28 +177,28 @@ export default function AnnouncementsPage() {
       invalidate();
     },
     onError: (err) =>
-      toast({ title: "Could not save", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("announcements.errSave"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const removeMutation = useMutation({
     mutationFn: (id: string) => deleteAnnouncement(id),
-    onSuccess: () => { toast({ title: "Announcement removed", kind: "success" }); invalidate(); },
+    onSuccess: () => { toast({ title: t("announcements.removed"), kind: "success" }); invalidate(); },
     onError: (err) =>
-      toast({ title: "Could not remove", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("announcements.errRemove"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const pinMutation = useMutation({
     mutationFn: (id: string) => togglePin(id),
     onSuccess: invalidate,
     onError: (err) =>
-      toast({ title: "Could not change pin", message: getErrorMessage(err), kind: "error" }),
+      toast({ title: t("announcements.errPin"), message: getErrorMessage(err), kind: "error" }),
   });
 
   const readAllMutation = useMutation({
     mutationFn: () => markAllRead(schoolId),
     onSuccess: (marked) => {
       toast({
-        title:   "Marked as read",
+        title:   t("announcements.markedRead"),
         message: marked > 0
           ? `${marked} announcement${marked === 1 ? "" : "s"} marked as read.`
           : "Nothing was left unread.",

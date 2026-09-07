@@ -257,9 +257,9 @@ export default function NotificationPanel() {
           {/* Filter tabs */}
           <div className="px-4 py-2 border-b border-gray-100 flex gap-2">
             {([
-              { key: "all"    as const, label: "All"    },
-              { key: "unread" as const, label: "Unread" },
-              { key: "alerts" as const, label: "Alerts" },
+              { key: "all"    as const, label: t("notifications.filterAll") },
+              { key: "unread" as const, label: t("notifications.filterUnread") },
+              { key: "alerts" as const, label: t("notifications.filterAlerts") },
             ]).map(({ key, label }) => (
               <button
                 key={key}

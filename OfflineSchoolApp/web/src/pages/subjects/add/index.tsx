@@ -75,20 +75,33 @@ const EXAMPLES = ["Mathematics", "English", "Biology", "History"] as const;
 // VALIDATION
 // ─────────────────────────────────────────────────────────────────────────────
 
-const validate = (form: FormState): FormErrors => {
+/*
+ * `t` is passed in rather than read from a hook.
+ *
+ * This is a module-level pure function, so it cannot call useTranslation, and
+ * that is exactly why every message in it was hardcoded English on a page whose
+ * labels are all translated. Every string below already existed in both locales
+ * under subjectsEdit.* — the Edit Subject page uses them — so this is the same
+ * wording, not a second set. The rules and their order are untouched.
+ */
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+const validate = (form: FormState, t: Translate): FormErrors => {
   const errors: FormErrors = {};
   const name = form.name.trim();
 
   if (!name) {
-    errors.name = "Subject name is required.";
+    errors.name = t("subjectsEdit.errNameRequired");
   } else if (name.length < 2) {
-    errors.name = "Subject name must be at least 2 characters.";
+    errors.name = t("subjectsEdit.errNameMin");
   } else if (name.length > MAX_NAME_LENGTH) {
-    errors.name = `Subject name cannot exceed ${MAX_NAME_LENGTH} characters.`;
+    errors.name = t("subjectsEdit.errNameMax", { max: MAX_NAME_LENGTH });
   }
 
   if (form.classIds.length === 0) {
-    errors.classIds = "Please select at least one class.";
+    // Not subjectsEdit.errClassRequired ("Please select a class."): this page
+    // links a subject to several classes at once, so the message has to say so.
+    errors.classIds = t("subjectsAdd.errClassAtLeastOne");
   }
 
   // Optional, but a coefficient of 0 or a typo would rescale every average in
@@ -96,9 +109,9 @@ const validate = (form: FormState): FormErrors => {
   const coeff = form.coefficient.trim();
   if (coeff !== "") {
     const n = Number(coeff);
-    if (!Number.isFinite(n)) errors.coefficient = "Coefficient must be a number.";
-    else if (n < 0.1)        errors.coefficient = "Coefficient must be at least 0.1.";
-    else if (n > 20)         errors.coefficient = "Coefficient cannot exceed 20.";
+    if (!Number.isFinite(n)) errors.coefficient = t("subjectsEdit.errCoefficientNumber");
+    else if (n < 0.1)        errors.coefficient = t("subjectsEdit.errCoefficientMin");
+    else if (n > 20)         errors.coefficient = t("subjectsEdit.errCoefficientMax");
   }
 
   return errors;
@@ -357,7 +370,7 @@ export default function AddSubjectPage() {
   const handleSubmit = useCallback(
     (e: React.FormEvent) => {
       e.preventDefault();
-      const errs = validate(form);
+      const errs = validate(form, t);
       if (Object.keys(errs).length > 0) {
         setErrors(errs);
         return;
@@ -365,7 +378,7 @@ export default function AddSubjectPage() {
       setErrors({});
       mutate(form);
     },
-    [form, mutate]
+    [form, mutate, t]
   );
 
   const handleDiscard = useCallback(async () => {

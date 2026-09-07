@@ -297,7 +297,7 @@ export default function StudentResultsListScreen() {
           <Ionicons name="alert-circle-outline" size={16} color={COLORS.error} />
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity onPress={() => load()}>
-            <Text style={styles.retryText}>Retry</Text>
+            <Text style={styles.retryText}>{t("common.retry")}</Text>
           </TouchableOpacity>
         </View>
       )}

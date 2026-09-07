@@ -217,17 +217,17 @@ export default function TimetablePage() {
             room:      input.room || null,
           }),
     onSuccess: () => {
-      toast({ title: "Timetable updated", kind: "success" });
+      toast({ title: t("timetable.updated"), kind: "success" });
       setCell(null);
       invalidate();
     },
-    onError: (err) => reportError(err, "Could not save the lesson"),
+    onError: (err) => reportError(err, t("timetable.errSaveLesson")),
   });
 
   const removeMutation = useMutation({
     mutationFn: (slotId: string) => deleteSlot(slotId),
     onSuccess: () => {
-      toast({ title: "Lesson removed", kind: "success" });
+      toast({ title: t("timetable.lessonRemoved"), kind: "success" });
       setCell(null);
       invalidate();
     },
@@ -260,7 +260,7 @@ export default function TimetablePage() {
     // half-applied.
     if (slotAt(grid, day, periodId)) {
       toast({
-        title:   "That period is taken",
+        title:   t("timetable.periodTaken"),
         message: "Remove the lesson already there first, then move this one in.",
         kind:    "warning",
       });

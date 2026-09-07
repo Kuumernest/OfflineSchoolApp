@@ -101,7 +101,10 @@
     "processing": "Processing...",
     "cannotUndo": "This action cannot be undone.",
     "discardChanges": "Discard unsaved changes and go back?",
-    "clear": "Clear"
+    "clear": "Clear",
+    "male": "Male",
+    "female": "Female",
+    "unknown": "Unknown"
   },
   "flow": {
     "title": "Results workflow",
@@ -504,7 +507,8 @@
     "guardianName": "Guardian",
     "allStatuses": "All Statuses",
     "suspended": "Suspended",
-    "rejected": "Rejected"
+    "rejected": "Rejected",
+    "errEnroll": "Could not enrol the student"
   },
   "teachers": {
     "title": "Teachers",
@@ -538,7 +542,9 @@
     "errRestore": "Could not restore this teacher",
     "removeSubjectFailed": "Failed to remove subject.",
     "assignSubjectFailed": "Failed to assign subject.",
-    "unassignConfirm": "Remove “{{name}}” from this teacher?"
+    "unassignConfirm": "Remove “{{name}}” from this teacher?",
+    "notFound": "Teacher not found",
+    "noId": "No teacher was specified."
   },
   "subjects": {
     "title": "Subjects",
@@ -567,7 +573,8 @@
     "classCount": "{{count}} class",
     "classCount_other": "{{count}} classes",
     "noneAssigned": "No subjects assigned to you yet",
-    "noneAssignedHint": "Subjects appear here once an administrator assigns you to teach them."
+    "noneAssignedHint": "Subjects appear here once an administrator assigns you to teach them.",
+    "assigned": "Assigned"
   },
   "classes": {
     "classTeacher": "Class teacher (form master)",
@@ -621,7 +628,9 @@
     "discardConfirm": "Discard unsaved changes?",
     "registerSaved": "Register saved",
     "period": "Period",
-    "allDay": "All day"
+    "allDay": "All day",
+    "partlySaved": "Partly saved",
+    "partlySavedBody": "{{saved}} saved, {{failed}} rejected"
   },
   "announcements": {
     "title": "Announcements",
@@ -643,7 +652,12 @@
     "removeConfirm": "Remove this announcement?",
     "errMarkRead": "Could not mark as read",
     "anyPriority": "Any priority",
-    "everyAudience": "Every audience"
+    "everyAudience": "Every audience",
+    "errSave": "Could not save",
+    "removed": "Announcement removed",
+    "errRemove": "Could not remove",
+    "errPin": "Could not change pin",
+    "markedRead": "Marked as read"
   },
   "timetable": {
     "title": "Timetable",
@@ -665,7 +679,12 @@
     "teachersBusy": "{{count}} teacher is already teaching in this period.",
     "teachersBusy_other": "{{count}} teachers are already teaching in this period.",
     "removeLessonHint": "The period becomes free again. Nothing else changes.",
-    "removeLessonConfirm": "Remove this lesson?"
+    "removeLessonConfirm": "Remove this lesson?",
+    "updated": "Timetable updated",
+    "lessonRemoved": "Lesson removed",
+    "errSaveLesson": "Could not save the lesson",
+    "errRemoveLesson": "Could not remove the lesson",
+    "periodTaken": "That period is taken"
   },
   "periods": {
     "title": "The school day",
@@ -689,7 +708,8 @@
     "errRemove": "Could not remove period",
     "errReorder": "Could not reorder",
     "errSave": "Could not save",
-    "removed": "Period removed"
+    "removed": "Period removed",
+    "remove": "Remove period"
   },
   "exams": {
     "title": "Exams & results",
@@ -960,7 +980,10 @@
     "approveFailed": "Failed to approve application",
     "rejectFailed": "Failed to reject application",
     "approveConfirm": "Approve {{name}} and assign them to “{{className}}”?",
-    "rejectConfirm": "Reject {{name}}’s application? This cannot be undone."
+    "rejectConfirm": "Reject {{name}}’s application? This cannot be undone.",
+    "approvedNoEmail": "Approved — no email sent",
+    "approvedOffline": "Approved (offline)",
+    "errSelectClass": "Please choose a class before approving."
   },
   "teachersAdd": {
     "title": "Add teacher",
@@ -1013,7 +1036,8 @@
     "another": "Add another subject",
     "noClasses": "No classes found. Create a class first.",
     "examples": "Examples:",
-    "namePh": "e.g. Mathematics, English Language"
+    "namePh": "e.g. Mathematics, English Language",
+    "errClassAtLeastOne": "Please select at least one class."
   },
   "subjectsEdit": {
     "title": "Edit subject",
@@ -1126,7 +1150,10 @@
     "alert": "Alert",
     "high": "High",
     "urgent": "Urgent",
-    "viewAll": "View all notifications"
+    "viewAll": "View all notifications",
+    "filterAll": "All",
+    "filterUnread": "Unread",
+    "filterAlerts": "Alerts"
   },
   "applications": {
     "refresh": "Refresh applications",
@@ -1321,7 +1348,13 @@
     "tplRate": "Rate:",
     "tplTeacherRemark": "CLASS TEACHER'S REMARK",
     "tplPrincipalRemark": "PRINCIPAL'S REMARK",
-    "tplNextTerm": "Next Term Begins:"
+    "tplNextTerm": "Next Term Begins:",
+    "tplClass": "Class",
+    "tplGender": "Gender",
+    "tplAverage": "Average",
+    "tplGrade": "Grade",
+    "tplPosition": "Position",
+    "tplStatus": "Status"
   },
   "settings": {
     "nextTermResumption": "Next term resumes",
@@ -2214,7 +2247,9 @@
     "chooseRecipient": "Who would you like to write to?",
     "noRecipients": "There is nobody available to write to.",
     "writeMessage": "Write a message…",
-    "messageDeleted": "This message was deleted"
+    "messageDeleted": "This message was deleted",
+    "todayAttendance": "Today's attendance",
+    "recentDays": "Recent days"
   },
   "codes": {
     "title": "Portal access",
@@ -2425,7 +2460,17 @@
   "search": {
     "attendanceReports": "Attendance Reports",
     "failed": "Search failed. Please try again.",
-    "searching": "Searching…"
+    "searching": "Searching…",
+    "groupPages": "Pages",
+    "groupStudents": "Students",
+    "groupTeachers": "Teachers",
+    "groupClasses": "Classes",
+    "groupSubjects": "Subjects",
+    "onePage": "Page",
+    "oneStudent": "Student",
+    "oneTeacher": "Teacher",
+    "oneClass": "Class",
+    "oneSubject": "Subject"
   },
   "alerts": {
     "appsPending": "{{count}} application pending over 3 days",
@@ -2586,5 +2631,13 @@
     "recompute": "Recompute",
     "staleTag": "needs recomputing",
     "staleRow": "A term result for this pupil was recomputed after the year was."
+  },
+  "errors": {
+    "unexpected": "Something went wrong. Please try again.",
+    "offline": "No connection. Check your network and try again.",
+    "timeout": "The server took too long to answer. Please try again.",
+    "server": "The server ran into a problem. Please try again in a moment.",
+    "forbidden": "You do not have permission to do that.",
+    "signedOut": "Your session has ended. Please sign in again."
   }
 }

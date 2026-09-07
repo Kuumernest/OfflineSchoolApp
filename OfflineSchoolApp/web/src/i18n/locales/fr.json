@@ -101,7 +101,10 @@
     "processing": "Traitement…",
     "cannotUndo": "Cette action est irréversible.",
     "discardChanges": "Abandonner les modifications non enregistrées et revenir en arrière ?",
-    "clear": "Effacer"
+    "clear": "Effacer",
+    "male": "Masculin",
+    "female": "Féminin",
+    "unknown": "Inconnu"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -504,7 +507,8 @@
     "guardianName": "Tuteur",
     "allStatuses": "Tous les statuts",
     "suspended": "Suspendu",
-    "rejected": "Rejeté"
+    "rejected": "Rejeté",
+    "errEnroll": "Impossible d'inscrire l'élève"
   },
   "teachers": {
     "title": "Enseignants",
@@ -538,7 +542,9 @@
     "errRestore": "Impossible de restaurer cet enseignant",
     "removeSubjectFailed": "Échec de la suppression de la matière.",
     "assignSubjectFailed": "Échec de l'attribution de la matière.",
-    "unassignConfirm": "Retirer « {{name}} » de cet enseignant ?"
+    "unassignConfirm": "Retirer « {{name}} » de cet enseignant ?",
+    "notFound": "Enseignant introuvable",
+    "noId": "Aucun enseignant n'a été indiqué."
   },
   "subjects": {
     "title": "Matières",
@@ -567,7 +573,8 @@
     "classCount": "{{count}} classe",
     "classCount_other": "{{count}} classes",
     "noneAssigned": "Aucune matière ne vous est encore attribuée",
-    "noneAssignedHint": "Les matières apparaissent ici dès qu'un administrateur vous les attribue."
+    "noneAssignedHint": "Les matières apparaissent ici dès qu'un administrateur vous les attribue.",
+    "assigned": "Affectées"
   },
   "classes": {
     "classTeacher": "Professeur titulaire",
@@ -621,7 +628,9 @@
     "discardConfirm": "Abandonner les modifications ?",
     "registerSaved": "Feuille enregistrée",
     "period": "Période",
-    "allDay": "Toute la journée"
+    "allDay": "Toute la journée",
+    "partlySaved": "Enregistré en partie",
+    "partlySavedBody": "{{saved}} enregistré(s), {{failed}} rejeté(s)"
   },
   "announcements": {
     "title": "Communiqués",
@@ -643,7 +652,12 @@
     "removeConfirm": "Supprimer cette annonce ?",
     "errMarkRead": "Impossible de marquer comme lue",
     "anyPriority": "Toute priorité",
-    "everyAudience": "Tous les destinataires"
+    "everyAudience": "Tous les destinataires",
+    "errSave": "Enregistrement impossible",
+    "removed": "Communiqué supprimé",
+    "errRemove": "Suppression impossible",
+    "errPin": "Impossible de modifier l'épinglage",
+    "markedRead": "Marqué comme lu"
   },
   "timetable": {
     "title": "Emploi du temps",
@@ -665,7 +679,12 @@
     "teachersBusy": "{{count}} enseignant enseigne déjà à cette période.",
     "teachersBusy_other": "{{count}} enseignants enseignent déjà à cette période.",
     "removeLessonHint": "La période redevient libre. Rien d’autre ne change.",
-    "removeLessonConfirm": "Supprimer ce cours ?"
+    "removeLessonConfirm": "Supprimer ce cours ?",
+    "updated": "Emploi du temps mis à jour",
+    "lessonRemoved": "Cours retiré",
+    "errSaveLesson": "Impossible d'enregistrer le cours",
+    "errRemoveLesson": "Impossible de retirer le cours",
+    "periodTaken": "Ce créneau est déjà occupé"
   },
   "periods": {
     "title": "La journée scolaire",
@@ -689,7 +708,8 @@
     "errRemove": "Impossible de supprimer la période",
     "errReorder": "Réorganisation impossible",
     "errSave": "Enregistrement impossible",
-    "removed": "Période supprimée"
+    "removed": "Période supprimée",
+    "remove": "Retirer le créneau"
   },
   "exams": {
     "title": "Évaluations et résultats",
@@ -960,7 +980,10 @@
     "approveFailed": "Échec de l'approbation de la demande",
     "rejectFailed": "Échec du rejet de la demande",
     "approveConfirm": "Approuver {{name}} et l’affecter à « {{className}} » ?",
-    "rejectConfirm": "Rejeter la demande de {{name}} ? Cette action est irréversible."
+    "rejectConfirm": "Rejeter la demande de {{name}} ? Cette action est irréversible.",
+    "approvedNoEmail": "Validé — aucun e-mail envoyé",
+    "approvedOffline": "Validé (hors ligne)",
+    "errSelectClass": "Veuillez choisir une classe avant de valider."
   },
   "teachersAdd": {
     "title": "Ajouter un enseignant",
@@ -1013,7 +1036,8 @@
     "another": "Ajouter une autre matière",
     "noClasses": "Aucune classe. Créez d'abord une classe.",
     "examples": "Exemples :",
-    "namePh": "ex. Mathématiques, Français"
+    "namePh": "ex. Mathématiques, Français",
+    "errClassAtLeastOne": "Veuillez choisir au moins une classe."
   },
   "subjectsEdit": {
     "title": "Modifier la matière",
@@ -1126,7 +1150,10 @@
     "alert": "Alerte",
     "high": "Élevée",
     "urgent": "Urgent",
-    "viewAll": "Voir toutes les notifications"
+    "viewAll": "Voir toutes les notifications",
+    "filterAll": "Toutes",
+    "filterUnread": "Non lues",
+    "filterAlerts": "Alertes"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
@@ -1321,7 +1348,13 @@
     "tplRate": "Taux :",
     "tplTeacherRemark": "APPRÉCIATION DU PROFESSEUR PRINCIPAL",
     "tplPrincipalRemark": "APPRÉCIATION DU CHEF D’ÉTABLISSEMENT",
-    "tplNextTerm": "Rentrée le :"
+    "tplNextTerm": "Rentrée le :",
+    "tplClass": "Classe",
+    "tplGender": "Sexe",
+    "tplAverage": "Moyenne",
+    "tplGrade": "Mention",
+    "tplPosition": "Rang",
+    "tplStatus": "Statut"
   },
   "settings": {
     "nextTermResumption": "Rentrée du prochain trimestre",
@@ -2214,7 +2247,9 @@
     "chooseRecipient": "À qui souhaitez-vous écrire ?",
     "noRecipients": "Personne n'est disponible pour recevoir un message.",
     "writeMessage": "Écrire un message…",
-    "messageDeleted": "Ce message a été supprimé"
+    "messageDeleted": "Ce message a été supprimé",
+    "todayAttendance": "Présence du jour",
+    "recentDays": "Jours récents"
   },
   "codes": {
     "title": "Accès parents",
@@ -2425,7 +2460,17 @@
   "search": {
     "attendanceReports": "Rapports de présence",
     "failed": "La recherche a échoué. Veuillez réessayer.",
-    "searching": "Recherche…"
+    "searching": "Recherche…",
+    "groupPages": "Pages",
+    "groupStudents": "Élèves",
+    "groupTeachers": "Enseignants",
+    "groupClasses": "Classes",
+    "groupSubjects": "Matières",
+    "onePage": "Page",
+    "oneStudent": "Élève",
+    "oneTeacher": "Enseignant",
+    "oneClass": "Classe",
+    "oneSubject": "Matière"
   },
   "alerts": {
     "appsPending": "{{count}} candidature en attente depuis plus de 3 jours",
@@ -2586,5 +2631,13 @@
     "recompute": "Recalculer",
     "staleTag": "à recalculer",
     "staleRow": "Un résultat trimestriel de cet élève a été recalculé après l’année."
+  },
+  "errors": {
+    "unexpected": "Une erreur s'est produite. Veuillez réessayer.",
+    "offline": "Aucune connexion. Vérifiez votre réseau, puis réessayez.",
+    "timeout": "Le serveur a mis trop de temps à répondre. Veuillez réessayer.",
+    "server": "Le serveur a rencontré un problème. Réessayez dans un instant.",
+    "forbidden": "Vous n'avez pas les droits nécessaires pour cette action.",
+    "signedOut": "Votre session a expiré. Veuillez vous reconnecter."
   }
 }

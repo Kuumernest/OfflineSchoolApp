@@ -427,7 +427,7 @@ export default function ExamsDashboardScreen() {
 
             <View style={styles.resultsPills}>
               {[
-                { label: "Published", val: dashboard.results.published,          color: "#7C3AED" },
+                { label: t("results.published"), val: dashboard.results.published, color: "#7C3AED" },
                 { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       color: "#D97706" },
                 { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, color: "#DC2626" },
                 { id: "avg",      label: t("examsDash.avgScore"),      val: `${dashboard.results.averagePerformance ?? 0}%`, color: "#059669" },

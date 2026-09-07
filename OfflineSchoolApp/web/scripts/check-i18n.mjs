@@ -88,6 +88,62 @@ for (const lang of languages.filter((l) => l !== BASE)) {
   }
 }
 
+// ── Hard-coded English in the three places it actually hid ──────────────────
+//
+// Key parity and reference resolution are both about keys. Neither can see a
+// string that never became a key, which is how "Name is required." shipped on
+// the Edit Teacher page while the identical sentence sat translated in both
+// locale files under teachersAdd.errNameRequired.
+//
+// A general "no string literals" rule over 300 files would be mostly false
+// positives and would be switched off within a week. These three patterns are
+// narrow on purpose: they are the positions this audit actually found defects
+// in, and a capitalised literal in any of them is user-visible by construction.
+//
+//   errors.field = "…"      a validation message
+//   toast({ title: "…" })   a notification somebody reads
+//   setError("…")           an inline form or page error
+//
+// A literal that genuinely never reaches a user opts out with a comment on the
+// same line or the line above:   // i18n-exempt: <reason>
+const LITERAL_PATTERNS = [
+  [/\b(?:errors|next)\.[A-Za-z_$][\w$]*\s*=\s*"([A-Z][^"]{3,})"/g, "validation message"],
+  [/\btoast\(\s*\{[^{}]*?\btitle:\s*"([A-Z][^"]{3,})"/g,           "toast title"],
+  [/\b(?:setError|setLoadError)\(\s*"([A-Z][^"]{3,})"/g,           "inline error"],
+];
+
+const literals = [];
+for (const file of sourceFiles) {
+  const text  = readFileSync(file, "utf8");
+  const lines = text.split(/\r?\n/);
+  for (const [re, kind] of LITERAL_PATTERNS) {
+    for (const m of text.matchAll(re)) {
+      const lineNo = text.slice(0, m.index).split(/\r?\n/).length;
+      const here   = lines[lineNo - 1] ?? "";
+      const above  = lines[lineNo - 2] ?? "";
+      if (/i18n-exempt/.test(here) || /i18n-exempt/.test(above)) continue;
+      literals.push({
+        file: file.replace(root + "\\", "").replace(root + "/", ""),
+        line: lineNo,
+        kind,
+        text: m[1],
+      });
+    }
+  }
+}
+
+if (literals.length) {
+  problems += literals.length;
+  console.error(
+    `\n  ${literals.length} hard-coded user-visible string(s) bypassing the translation system:`
+  );
+  for (const l of literals) {
+    console.error(`      ${l.file}:${l.line}  (${l.kind})  ${JSON.stringify(l.text)}`);
+  }
+  console.error(`\n  Add the key to en.json and fr.json and call t(), or mark the line`);
+  console.error(`  // i18n-exempt: <reason>  if it genuinely never reaches a user.`);
+}
+
 const unknown = [...referenced].filter(([key]) => !baseKeys.has(key));
 if (unknown.length) {
   problems += unknown.length;

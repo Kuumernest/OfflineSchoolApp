@@ -158,7 +158,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
   // ── Approve ─────────────────────────────────────────────────────────────
   const handleApprove = async () => {
     if (!selectedClassId) {
-      setError("Please select a class before approving.");
+      setError(t("admissions.errSelectClass"));
       return;
     }
     const ok = await confirm({
