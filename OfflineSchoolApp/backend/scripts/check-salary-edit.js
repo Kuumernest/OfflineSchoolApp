@@ -82,8 +82,37 @@ const bad = (label, detail) => {
     return { status: res.status, body: await res.json().catch(() => ({})) };
   };
 
-  /** A fresh structure in force, with one allowance. */
+  /*
+   * A fresh structure in force, with one allowance.
+   *
+   * ── Why the delete is scoped by userId and not by _id ─────────────────────
+   *
+   * SalaryStructure carries a partial unique index over (schoolId, userId)
+   * where effectiveTo and deletedAt are both null — "one open-ended structure
+   * per person", so that "what is in force today" has one answer.
+   *
+   * This deleted by `_id`, which meant each section left its predecessor behind:
+   * st-1, st-2 and st-4 are all open-ended for the same teacher, so by the third
+   * section the fixtures held three rows the schema forbids. It passed anyway,
+   * because mongodb-memory-server builds indexes asynchronously and the writes
+   * usually landed first — usually. Measured over six runs it failed one, with
+   * an E11000 on an unrelated pull request that looks like the change under
+   * review broke payroll.
+   *
+   * Scoping the delete to this teacher's OPEN-ENDED rows makes each section
+   * replace the last, which is what the sections were always assuming. Rows with
+   * an effectiveTo — st-3 here, st-old below — are closed history, sit outside
+   * the partial index, and are deliberately left alone: the two sections that
+   * test superseded structures depend on them surviving.
+   *
+   * And awaiting the index below means the constraint is actually enforced while
+   * this runs, so the fixtures are proven legal rather than merely lucky.
+   */
+  await SalaryStructure.init();
+  await SalaryPayment.init();
+
   const makeStructure = async (id, extra = {}) => {
+    await SalaryStructure.deleteMany({ userId: STAFF, effectiveTo: null });
     await SalaryStructure.deleteMany({ _id: id });
     return SalaryStructure.create({
       _id: id, schoolId: SCHOOL, userId: STAFF,

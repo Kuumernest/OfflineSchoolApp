@@ -58,6 +58,25 @@ const bad = (label, detail) => {
   const Attendance      = mongoose.model("StudentAttendance");
   const FeePayment      = mongoose.model("FeePayment");
 
+  /*
+   * Wait for the indexes before writing anything.
+   *
+   * Mongoose builds them in the background after connecting, so on a fresh
+   * database the first writes can land before the unique constraints exist.
+   * This is not harness hygiene: the assertion below — "there is one score row,
+   * not two" — tests an INDEX, and without this it would pass or fail on
+   * timing, which is worse than not testing it at all.
+   *
+   * Same reasoning and same shape as check-approvals.js, which already does
+   * this, and the same failure check-salary-edit.js was hitting about one run in
+   * six before its fixtures were corrected.
+   */
+  await Promise.all([
+    StudentScore.syncIndexes(),
+    Attendance.syncIndexes(),
+    FeePayment.syncIndexes(),
+  ]);
+
   const S    = "school-a";
   const YEAR = "2026/2027";
 
