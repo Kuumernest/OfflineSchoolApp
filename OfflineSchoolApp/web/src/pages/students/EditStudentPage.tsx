@@ -14,7 +14,7 @@
 // numbers come from a gapless per-school counter. A correction form that
 // quietly did any of that would be the more dangerous kind of convenience.
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -81,6 +81,22 @@ type FormState = Record<FieldName, string>;
 const emptyForm = (): FormState =>
   Object.fromEntries(ALL_FIELDS.map((f) => [f, ""])) as FormState;
 
+/*
+ * A query key of its own, and this is not cosmetic.
+ *
+ * The form first shipped using ["student", id] — the key StudentDetailPage
+ * already uses for fetchStudentById. Two different queryFns under one key means
+ * whichever page mounted last owns the cache, so arriving here from the detail
+ * page handed the form the display projection: no firstName, no lastName, empty
+ * name boxes. A hard refresh had no cache, ran this page's own fetch, and
+ * worked — which is exactly the "empty until you refresh" this fixes.
+ *
+ * It cut both ways. The detail page could equally have rendered this shape and
+ * shown "Unknown Student", because the projection it wants is the one this key
+ * no longer holds.
+ */
+const EDIT_KEY = (id: string | undefined) => ["student", id, "editable"] as const;
+
 export default function EditStudentPage() {
   const { t }    = useTranslation();
   const { id }   = useParams<{ id: string }>();
@@ -88,23 +104,11 @@ export default function EditStudentPage() {
   const qc       = useQueryClient();
   const { toast } = useToast();
 
-  const [form, setForm]         = useState<FormState>(emptyForm);
-  const [initial, setInitial]   = useState<FormState>(emptyForm);
   const [reason, setReason]     = useState("");
   const [showHistory, setShow]  = useState(false);
-  /*
-   * The updatedAt the form was loaded with.
-   *
-   * Sent back as baseUpdatedAt so the server can tell that somebody else edited
-   * this record between the load and the save. The write still goes through —
-   * last-write-wins is the rule everywhere in this system — but the version it
-   * replaced is snapshotted into SyncOverwrite, and the person whose edit lost
-   * can be shown what happened.
-   */
-  const [baseUpdatedAt, setBase] = useState<string | null>(null);
 
   const studentQuery = useQuery({
-    queryKey: ["student", id],
+    queryKey: EDIT_KEY(id),
     queryFn:  () => fetchStudentForEdit(id!),
     enabled:  Boolean(id),
   });
@@ -115,28 +119,59 @@ export default function EditStudentPage() {
     enabled:  Boolean(id) && showHistory,
   });
 
-  // Seed the form once the record arrives, and keep a pristine copy to diff
-  // against so only genuinely changed fields are sent.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => {
+  /*
+   * ── The form holds EDITS, not a copy of the record ────────────────────────
+   *
+   * This was an effect that copied the loaded record into form state, and it is
+   * the second reason the boxes came up empty. An effect runs after the render
+   * that triggered it, so any render where the data is already present — a
+   * cached record, a back-navigation — paints once from empty state before the
+   * effect catches up. With a stale cache under the same key it never caught up
+   * at all.
+   *
+   * `initial` is now derived, so it is correct on the very first render that has
+   * data, with no window and no effect. State holds only the fields somebody has
+   * actually typed into, and the displayed value is the edit if there is one and
+   * the record otherwise.
+   *
+   * It also makes `dirty` exact rather than a string comparison against a copy:
+   * a field is dirty when an edit exists AND differs from what was loaded, so
+   * typing a character and deleting it again leaves nothing to save.
+   */
+  const initial = useMemo<FormState>(() => {
     const s = studentQuery.data as Record<string, unknown> | undefined;
-    if (!s) return;
     const next = emptyForm();
+    if (!s) return next;
     for (const f of ALL_FIELDS) next[f] = s[f] == null ? "" : String(s[f]);
-    setForm(next);
-    setInitial(next);
-    setBase(typeof s.updatedAt === "string" ? s.updatedAt : null);
+    return next;
   }, [studentQuery.data]);
 
-  const dirty = useMemo(
-    () => ALL_FIELDS.filter((f) => form[f] !== initial[f]),
-    [form, initial]
+  const [edits, setEdits] = useState<Partial<FormState>>({});
+
+  const form = useMemo<FormState>(
+    () => ({ ...initial, ...edits }),
+    [initial, edits]
   );
+
+  const dirty = useMemo(
+    () => ALL_FIELDS.filter((f) => edits[f] !== undefined && edits[f] !== initial[f]),
+    [edits, initial]
+  );
+
+  /*
+   * Sent back as baseUpdatedAt so the server can tell that somebody else edited
+   * this record between the load and the save. The write still goes through —
+   * last-write-wins is the rule everywhere in this system — but the version it
+   * replaced is snapshotted into SyncOverwrite, and the person whose edit lost
+   * can be shown what happened. Read straight off the loaded record; there is
+   * nothing for state to add.
+   */
+  const baseUpdatedAt = studentQuery.data?.updatedAt ?? null;
 
   const set = useCallback(
     (field: FieldName) => (
       e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-    ) => setForm((prev) => ({ ...prev, [field]: e.target.value })),
+    ) => setEdits((prev) => ({ ...prev, [field]: e.target.value })),
     []
   );
 
@@ -156,6 +191,11 @@ export default function EditStudentPage() {
       // The pupil's name is denormalised into the roster, the register and the
       // report-card lists, so a corrected surname has to invalidate more than
       // this one record.
+      // Both shapes of this pupil, and the lists that denormalise their name.
+      // A corrected surname is on the roster, the register and the report-card
+      // pickers, so invalidating only the record leaves the old spelling on
+      // screen everywhere else.
+      void qc.invalidateQueries({ queryKey: EDIT_KEY(id) });
       void qc.invalidateQueries({ queryKey: ["student", id] });
       void qc.invalidateQueries({ queryKey: ["students"] });
       void qc.invalidateQueries({ queryKey: ["student-history", id] });
