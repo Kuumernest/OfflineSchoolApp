@@ -109,6 +109,21 @@ const nextId = () => `toast-${++_idCounter}-${Date.now()}`;
 
 const ToastContext = createContext<ToastContextValue | null>(null);
 
+/*
+ * ACCEPTED TECHNICAL DEBT — react-refresh/only-export-components.
+ *
+ * The rule is right: this module exports ToastProvider (a component) and
+ * useToast (a hook), so editing it makes Fast Refresh remount the subtree
+ * instead of preserving state. That is a development-time cost and nothing
+ * else — no runtime behaviour, no bundle, no correctness.
+ *
+ * Splitting it is not cheap: useToast closes over ToastContext, so the context
+ * would have to move too or be exported for the hook to reach, and 42 files
+ * import from here. That is a mechanical change across the app in exchange for
+ * a nicer edit-refresh loop in one file, so it is deferred deliberately rather
+ * than overlooked. Suppressed on this export only.
+ */
+// eslint-disable-next-line react-refresh/only-export-components
 export const useToast = (): ToastContextValue => {
   const ctx = useContext(ToastContext);
   if (!ctx) throw new Error("useToast must be used inside <ToastProvider>");

@@ -19,9 +19,8 @@ import AttendanceWidget          from "@/components/dashboard/AttendanceWidget";
 import SchoolBanner              from "@/components/dashboard/SchoolBanner";
 import SystemHealthGrid          from "@/components/dashboard/SystemHealthGrid";
 import QuickActions              from "@/components/dashboard/QuickActions";
-import AlertsPanel, {
-  deriveAlerts,
-}                                from "@/components/dashboard/AlertsPanel";
+import AlertsPanel               from "@/components/dashboard/AlertsPanel";
+import { deriveAlerts }          from "@/services/dashboardAlerts";
 
 import {
   fetchStudentStats,

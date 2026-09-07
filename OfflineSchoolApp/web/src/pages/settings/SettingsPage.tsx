@@ -1212,6 +1212,8 @@ function AdminsSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
+  // load is useCallback([schoolId]) and writes none of its own dependencies.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   const handleCreate = async () => {

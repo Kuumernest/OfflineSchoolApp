@@ -179,7 +179,18 @@ export default function MessagesPage() {
     refetchInterval: 20_000,
   });
 
-  const conversations = conversationsQuery.data ?? [];
+  /*
+   * Memoised because `?? []` builds a NEW empty array on every render, and each
+   * of these feeds a useMemo or a useEffect below. A dependency that changes
+   * identity every render means the memo never memoises and the effect re-runs
+   * every render — including one that calls setState, which is how a cheap
+   * fallback turns into a render every render. React Query keeps `data` stable
+   * between fetches, so the memo only breaks when the data really changed.
+   */
+  const conversations = useMemo(
+    () => conversationsQuery.data ?? [],
+    [conversationsQuery.data]
+  );
 
   // Searched here rather than at the server, unlike the audit list.
   //
@@ -197,7 +208,10 @@ export default function MessagesPage() {
   );
 
   // Open the first thread once, so the pane is not empty on arrival.
+  // activeId IS a dependency and IS written here, but the !activeId guard means
+  // the second run is a no-op: one extra render, and it converges.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!activeId && conversations.length) setActiveId(conversations[0]._id);
   }, [conversations, activeId]);
 
@@ -276,7 +290,7 @@ export default function MessagesPage() {
       // Reset the input so choosing the same file twice still fires onChange.
       if (fileRef.current) fileRef.current.value = "";
     }
-  }, [activeId]);
+  }, [activeId, t]);
 
   const deleteMutation = useMutation({
     mutationFn: (id: string) => deleteMessage(id),

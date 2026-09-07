@@ -153,7 +153,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
       return;
     }
     window.open(uri, "_blank", "noopener,noreferrer");
-  }, []);
+  }, [t, toast]);
 
   // ── Approve ─────────────────────────────────────────────────────────────
   const handleApprove = async () => {

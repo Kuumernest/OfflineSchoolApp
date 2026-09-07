@@ -403,22 +403,41 @@ setLoading(false);
 load();
 }, [schoolId]);
 
-// Load subjects when class selected
+/*
+ * Subjects and teacher assignments for the selected class.
+ *
+ * `stale` is what makes this correct rather than merely usually correct. Two
+ * requests go out per class and neither was cancelled, so switching class
+ * before they landed left the answers racing: an earlier class's subjects
+ * could arrive after a later class's and overwrite them. The screen would then
+ * show one class's name above another class's subject list, and an exam
+ * created from it would carry the wrong subjects — with nothing on screen
+ * suggesting anything had gone wrong.
+ *
+ * The teardown flips the flag, so a response belonging to a superseded class,
+ * or to a screen the user has left, is dropped instead of written.
+ */
 useEffect(() => {
+// eslint-disable-next-line react-hooks/set-state-in-effect
 if (!activeClass) { setSubjects([]); setClassTeacherMap({}); return; }
+
+let stale = false;
+
 api.get("/admin/subjects", {
 params: { schoolId, classId: activeClass },
 }).then((res) => {
+if (stale) return;
 const body = res.data as { subjects?: SubjectOption[] } | SubjectOption[] | undefined;
 setSubjects(
 Array.isArray(body) ? body : body?.subjects ?? []
 );
-}).catch(() => setSubjects([]));
+}).catch(() => { if (!stale) setSubjects([]); });
 
 // Load teacher assignments for this class to auto-fill teachers
 api.get("/admin/teacher-assignments", {
 params: { schoolId, classId: activeClass },
 }).then((res) => {
+if (stale) return;
 const assignments = res.data?.assignments || (Array.isArray(res.data) ? res.data : []);
 const map: Record<string, string> = {};
 for (const a of assignments) {
@@ -427,7 +446,9 @@ for (const a of assignments) {
   }
 }
 setClassTeacherMap(map);
-}).catch(() => setClassTeacherMap({}));
+}).catch(() => { if (!stale) setClassTeacherMap({}); });
+
+return () => { stale = true; };
 }, [activeClass, schoolId]);
 
 const toggleClass = (cls: ClassOption) => {

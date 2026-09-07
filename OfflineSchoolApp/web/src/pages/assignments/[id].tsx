@@ -121,7 +121,9 @@ export default function TeacherAssignmentDetailPage() {
   });
 
   const teacher     = teacherQuery.data;
-  const assignments = assignmentsQuery.data ?? [];
+  // Memoised: `?? []` is a new array each render, and these feed a useMemo
+  // below, which then recomputes every render instead of memoising.
+  const assignments = useMemo(() => assignmentsQuery.data ?? [], [assignmentsQuery.data]);
 
   // ── Delete mutation ───────────────────────────────────
 

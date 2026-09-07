@@ -321,7 +321,7 @@ export default function TemplateBuilderPage() {
         setError(err?.response?.data?.error || err.message);
       })
       .finally(() => setLoading(false));
-  }, [templateId, schoolId]);
+  }, [templateId, schoolId, t]);
 
   // ── Save ───────────────────────────────────────────────
 
@@ -359,7 +359,7 @@ export default function TemplateBuilderPage() {
     } finally {
       setSaving(false);
     }
-  }, [name, html, css, isDefault, isEditing, templateId, schoolId, navigate, t]);
+  }, [name, html, css, isDefault, isEditing, templateId, schoolId, navigate, t, toast]);
 
   // ── Keyboard shortcut Ctrl/Cmd + S ────────────────────
 

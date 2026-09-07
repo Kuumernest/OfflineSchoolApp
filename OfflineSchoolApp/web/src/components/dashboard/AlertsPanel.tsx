@@ -6,111 +6,13 @@ import {
   Info,
   ChevronRight,
 } from "lucide-react";
-import { type SystemHealthStats } from "@/services/dashboard.service";
 import { useTranslation } from "react-i18next";
+import type { AlertSeverity, DashAlert } from "@/services/dashboardAlerts";
 
-// ─────────────────────────────────────────────────────────
-// TYPES
-// ─────────────────────────────────────────────────────────
-
-type AlertSeverity = "danger" | "warning" | "info";
-
-export interface DashAlert {
-  id:      string;
-  type:    AlertSeverity;
-  /** Resolved by AlertsPanel so the text follows the active language. */
-  messageKey: string;
-  params?: Record<string, unknown>;
-  route:   string;
-}
-
-// ─────────────────────────────────────────────────────────
-// ALERT DERIVATION
-// Pure function — easy to unit-test independently.
-// ─────────────────────────────────────────────────────────
-
-export function deriveAlerts(stats: SystemHealthStats): DashAlert[] {
-  const list: DashAlert[] = [];
-
-  if (stats.stalePendingApps > 0) {
-    const n = stats.stalePendingApps;
-    list.push({
-      id:      "stale",
-      type:    "danger",
-      messageKey: "alerts.appsPending", params: { count: n },
-      // The admissions page is mounted under /students, not at the root. The
-      // bare "/admissions" this used to point at matched no route, so acting
-      // on the most urgent alert on the dashboard landed on the 404 page.
-      route:   "/students/admissions",
-    });
-  }
-
-  if (stats.unassignedTeachers > 0) {
-    const n = stats.unassignedTeachers;
-    list.push({
-      id:      "unassigned",
-      type:    "warning",
-      messageKey: "alerts.teachersUnassigned", params: { count: n },
-      route:   "/teachers/assignments",
-    });
-  }
-
-  if (stats.classesWithoutSubjects > 0) {
-    const n = stats.classesWithoutSubjects;
-    list.push({
-      id:      "missing-subjects",
-      type:    "warning",
-      messageKey: "alerts.classesNoSubjects", params: { count: n },
-      route:   "/classes?tab=subjects",
-    });
-  }
-
-  if (stats.timetableConflicts > 0) {
-    const n = stats.timetableConflicts;
-    list.push({
-      id:      "conflicts",
-      type:    "danger",
-      messageKey: "alerts.timetableConflicts", params: { count: n },
-      route:   "/timetable",
-    });
-  }
-
-  if (stats.incompleteTimetableSlots > 0 && stats.totalClasses > 0) {
-    const pct = Math.round(
-      (stats.incompleteTimetableSlots / stats.totalClasses) * 100
-    );
-    if (pct > 50) {
-      const n = stats.incompleteTimetableSlots;
-      list.push({
-        id:      "timetable-incomplete",
-        type:    "info",
-        messageKey: "alerts.classesNoTimetable", params: { count: n, pct },
-        route:   "/timetable",
-      });
-    }
-  }
-
-  /**
-   * FIXED (Issue 3 from admin.routes.js fix):
-   * assignedSubjects is now returned by the backend stats endpoint.
-   * This alert fires correctly when no teacher-subject assignments exist
-   * but teachers and subjects have been created.
-   */
-  if (
-    stats.assignedSubjects === 0 &&
-    stats.totalTeachers     >  0 &&
-    stats.totalSubjects     >  0
-  ) {
-    list.push({
-      id:      "no-assignments",
-      type:    "warning",
-      messageKey: "alerts.noAssignments",
-      route:   "/teachers/assignments",
-    });
-  }
-
-  return list;
-}
+// deriveAlerts and the DashAlert/AlertSeverity types now live in
+// services/dashboardAlerts.ts. This file exports only components, which is what
+// lets React Fast Refresh keep the panel mounted across an edit — and it means a
+// service no longer has to import a component to reach a pure function.
 
 // ─────────────────────────────────────────────────────────
 // STYLE MAP
@@ -196,7 +98,6 @@ function AlertRow({
 // ─────────────────────────────────────────────────────────
 
 export default function AlertsPanel({ alerts }: { alerts: DashAlert[] }) {
-  const { t } = useTranslation();
   const navigate = useNavigate();
 
   if (alerts.length === 0) return null;

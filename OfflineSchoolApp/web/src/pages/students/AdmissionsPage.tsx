@@ -664,8 +664,10 @@ export default function AdmissionsPage() {
     staleTime: 60_000,
   });
 
-  const applications = applicationsQuery.data ?? [];
-  const classes      = classesQuery.data ?? [];
+  // Memoised: `?? []` is a new array each render, and these feed a useMemo
+  // below, which then recomputes every render instead of memoising.
+  const applications = useMemo(() => applicationsQuery.data ?? [], [applicationsQuery.data]);
+  const classes      = useMemo(() => classesQuery.data      ?? [], [classesQuery.data]);
 
   // ── Derived ────────────────────────────────────────────
 
@@ -691,13 +693,6 @@ export default function AdmissionsPage() {
     setShowClassPicker(false);
   }, []);
 
-  const closeReviewModal = useCallback(() => {
-    if (approveMutation.isPending || rejectMutation.isPending) return;
-    setSelectedApplication(null);
-    setSelectedClassId(null);
-    setRejectReason("");
-    setShowClassPicker(false);
-  }, []);
 
   const handleClassSelect = useCallback((classItem: SchoolClass) => {
     setSelectedClassId(String(classItem._id ?? classItem.id));
@@ -715,7 +710,7 @@ export default function AdmissionsPage() {
     }
 
     window.open(url, "_blank", "noopener,noreferrer");
-  }, []);
+  }, [t, toast]);
 
   const copyToClipboard = useCallback(async (value: string) => {
     try {
@@ -724,7 +719,7 @@ export default function AdmissionsPage() {
     } catch {
       toast({ kind: "error", title: t("admissions.copyFailed", { value }) });
     }
-  }, []);
+  }, [t, toast]);
 
   // ── Mutations ───────────────────────────────────────────
 
@@ -825,6 +820,23 @@ export default function AdmissionsPage() {
       qc.invalidateQueries({ queryKey: ["applications", schoolId] });
     },
   });
+
+  /*
+   * Declared AFTER the two mutations, because it depends on them.
+   *
+   * It used to sit above both. The body referencing approveMutation from up
+   * there was survivable — a callback body runs later, by which time the const
+   * exists — but a dependency array is evaluated during render, so naming them
+   * as dependencies from above the declarations is a real temporal-dead-zone
+   * error rather than a lint opinion. tsc says so too: TS2448.
+   */
+  const closeReviewModal = useCallback(() => {
+    if (approveMutation.isPending || rejectMutation.isPending) return;
+    setSelectedApplication(null);
+    setSelectedClassId(null);
+    setRejectReason("");
+    setShowClassPicker(false);
+  }, [approveMutation.isPending, rejectMutation.isPending]);
 
   // ── Actions ─────────────────────────────────────────────
 

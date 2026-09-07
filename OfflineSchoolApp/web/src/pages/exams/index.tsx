@@ -951,10 +951,9 @@ export default function ExamsPage() {
   const [showQuickMenu,   setShowQuickMenu]   = useState(false);
   const [showFilters,     setShowFilters]     = useState(false);
   const [selectedExam,    setSelectedExam]    = useState<Exam | null>(null);
-  const [alerts,          setAlerts]          = useState<AlertItem[]>([]);
+  // alerts and availableTypes are derived below with useMemo, not stored.
   const [classes,         setClasses]         = useState<ClassOption[]>([]);
   const [subjects,        setSubjects]        = useState<SubjectOption[]>([]);
-  const [availableTypes,  setAvailableTypes]  = useState<string[]>([]);
 
   const quickMenuRef = useRef<HTMLDivElement>(null);
 
@@ -987,16 +986,27 @@ export default function ExamsPage() {
     });
   }, [schoolId]);
 
-  // ── Derive filter options from loaded exams ───────────────────────────────
-  useEffect(() => {
-    const exams = examsData?.exams ?? [];
-    setAvailableTypes([...new Set(exams.map((e) => e.type).filter(Boolean))]);
-  }, [examsData]);
+  /*
+   * ── Derived, not stored ──────────────────────────────────────────────────
+   *
+   * Both of these were effects that ended in a setState. Nothing else ever
+   * wrote to either value and nothing downstream mutates them — they are read
+   * to render a filter list and an alert panel — so holding them in state
+   * bought nothing and cost a second render on every dashboard fetch: the
+   * query resolves, the component renders, the effect runs, setState renders
+   * it again. Both also built a fresh array each run, so the extra render was
+   * guaranteed rather than deduplicated by React.
+   *
+   * As useMemo the value is ready on the same render the data arrives on.
+   */
+  const availableTypes = useMemo(
+    () => [...new Set((examsData?.exams ?? []).map((e) => e.type).filter(Boolean))],
+    [examsData]
+  );
 
-  // ── Derive alerts from dashboard data ────────────────────────────────────
-  useEffect(() => {
+  const alerts = useMemo<AlertItem[]>(() => {
     const derived: AlertItem[] = [];
-    if (!d) return;
+    if (!d) return derived;
 
     if (d.draft > 0) {
       derived.push({
@@ -1042,8 +1052,8 @@ export default function ExamsPage() {
       });
     }
 
-    setAlerts(derived);
-  }, [d, dashData, t, navigate, setStatusFilter]);
+    return derived;
+  }, [d, dashData, t, navigate]);
 
   // ── The results strip's five tiles, each with somewhere to go ───────────
   //
@@ -1201,7 +1211,7 @@ export default function ExamsPage() {
     toast({ title: t("exams.archivedCount", { count }), kind: "success" });
     refetch();
     refetchDash();
-  }, [examsData, schoolId, refetch, refetchDash, toast, t]);
+  }, [examsData, schoolId, refetch, refetchDash, toast, t, confirm]);
 
   const handleRefresh = () => { refetch(); refetchDash(); };
 

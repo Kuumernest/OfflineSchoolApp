@@ -124,17 +124,23 @@ export default function NotificationPanel() {
     } finally {
       setIsLoading(false);
     }
-  }, [schoolId]);
+  }, [schoolId, t]);
 
   // ── Initial load + polling ──────────────────────────────────────────────────
+  // loadNotifications is useCallback([schoolId]) and sets none of schoolId, so
+  // this cannot re-trigger itself. The interval is cleared on teardown.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadNotifications();
     const interval = setInterval(loadNotifications, POLL_INTERVAL);
     return () => clearInterval(interval);
   }, [loadNotifications]);
 
   // ── Reload when panel opens ─────────────────────────────────────────────────
+  // Refresh when the panel opens. Same stable callback as above; isOpen is a
+  // prop of the caller, not something this effect writes.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen) loadNotifications();
   }, [isOpen, loadNotifications]);
 

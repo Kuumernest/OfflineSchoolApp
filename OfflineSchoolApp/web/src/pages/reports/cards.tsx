@@ -130,7 +130,10 @@ export default function ReportCardsPage() {
     (examsData?.exams ?? []).map((e) => e.academicYear).filter(Boolean)
   )].sort().reverse() as string[];
 
+  // Defaulting the year once the list arrives. The !academicYear guard makes the
+  // second run a no-op, so it converges rather than looping.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!academicYear && academicYears.length) setAcademicYear(academicYears[0]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [academicYears.join(",")]);
@@ -145,15 +148,28 @@ export default function ReportCardsPage() {
   /** What this card is of, for the messages and the confirm. */
   const typeLabel = t(`reportCards.type_${cardType}`);
 
-  // Load classes when exam selected
+  /*
+   * Load classes when the exam or period changes.
+   *
+   * Six dependencies, and changing card type moves several of them at once, so
+   * two of these can easily be in flight together. The response was written
+   * unconditionally, which meant the slower of two overlapping requests won —
+   * and for a sequence card the filter below depends on `selectedExam`, so a
+   * late response could apply the previous exam's coverage filter to the class
+   * list the reader is looking at. `stale` drops anything that has been
+   * superseded, and anything that arrives after the screen has gone.
+   */
   useEffect(() => {
     if (!periodChosen) return;
+    let stale = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setClassLoading(true);
     setClasses([]);
     setSelectedClass(null);
     setStudents([]);
     api.get("/admin/classes", { params: { schoolId } })
       .then((res) => {
+        if (stale) return;
         const all: ClassOption[] =
           res.data?.classes || (Array.isArray(res.data) ? res.data : []);
 
@@ -184,8 +200,9 @@ export default function ReportCardsPage() {
             : all
         );
       })
-      .catch(() => setClasses([]))
-      .finally(() => setClassLoading(false));
+      .catch(() => { if (!stale) setClasses([]); })
+      .finally(() => { if (!stale) setClassLoading(false); });
+    return () => { stale = true; };
   }, [periodChosen, cardType, selectedExam, academicYear, termNumber, schoolId]);
 
   /**
@@ -203,6 +220,8 @@ export default function ReportCardsPage() {
    */
   useEffect(() => {
     if (!selectedClass) return;
+    let stale = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStudentLoading(true);
     setStudents([]);
     setSelectedStudent(null);
@@ -225,10 +244,18 @@ export default function ReportCardsPage() {
             studentName: r.studentName ?? "",
           })));
 
+    /*
+     * Guarded for the same reason as the class list above, and it matters more
+     * here: switching card type changes both the endpoint and the shape of what
+     * comes back, so a late reply from the roster endpoint could land as the
+     * pupil list for a term card — a list of every pupil in the class where the
+     * empty list is the signal that Compute has not been run.
+     */
     request
-      .then(setStudents)
-      .catch(() => setStudents([]))
-      .finally(() => setStudentLoading(false));
+      .then((rows) => { if (!stale) setStudents(rows); })
+      .catch(() => { if (!stale) setStudents([]); })
+      .finally(() => { if (!stale) setStudentLoading(false); });
+    return () => { stale = true; };
   }, [selectedClass, cardType, academicYear, termNumber, schoolId]);
 
   // ── Generate ────────────────────────────────────────────

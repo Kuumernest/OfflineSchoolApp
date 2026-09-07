@@ -192,14 +192,25 @@ export default function AssignTeacherPage() {
     staleTime: 15_000,
   });
 
-  const teachers = teachersQuery.data?.teachers ?? [];
-  const classes  = classesQuery.data            ?? [];
-  const subjects = subjectsQuery.data           ?? [];
-  const existing = existingQuery.data           ?? [];
+  /*
+   * Memoised because `?? []` builds a NEW empty array on every render, and each
+   * of these feeds a useMemo or a useEffect below. A dependency that changes
+   * identity every render means the memo never memoises and the effect re-runs
+   * every render — including one that calls setState, which is how a cheap
+   * fallback turns into a render every render. React Query keeps `data` stable
+   * between fetches, so the memo only breaks when the data really changed.
+   */
+  const teachers = useMemo(() => teachersQuery.data?.teachers ?? [], [teachersQuery.data]);
+  const classes  = useMemo(() => classesQuery.data            ?? [], [classesQuery.data]);
+  const subjects = useMemo(() => subjectsQuery.data           ?? [], [subjectsQuery.data]);
+  const existing = useMemo(() => existingQuery.data           ?? [], [existingQuery.data]);
 
+  // Pre-selecting the teacher named in the URL once the list has loaded.
+  // selectedTeacher is not a dependency, so this settles in one pass.
   useEffect(() => {
     if (!preTeacherId || !teachers.length) return;
     const found = teachers.find((t) => t._id === preTeacherId);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (found) setSelectedTeacher(found);
   }, [preTeacherId, teachers]);
 

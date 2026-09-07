@@ -64,6 +64,20 @@ export default function LoginPage() {
     formState: { errors },
   } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
 
+  /*
+   * ACCEPTED — react-hooks/incompatible-library (a warning, not an error).
+   *
+   * react-hook-form's watch() returns a function the React Compiler cannot
+   * memoize safely, so it skips compiling this component. That is a library
+   * limitation rather than a fault here, and the cost is one uncompiled
+   * component. The compiler's caveat — trouble if the value reaches a
+   * memoized child — does not apply: `identifier` is read once, below, to
+   * decide whether the input looks like an email, and is passed to nothing.
+   *
+   * useWatch({ control }) would narrow the re-render to this field and may
+   * satisfy the compiler, but changing how the login form subscribes to its
+   * own input is not a change to make while tidying lint.
+   */
   const identifier     = watch("identifier", "");
   const looksLikeEmail = identifier.includes("@");
 

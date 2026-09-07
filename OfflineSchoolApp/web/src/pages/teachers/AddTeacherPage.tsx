@@ -66,6 +66,14 @@ export default function AddTeacherPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useAuthStore((s) => s.user);
+  /*
+   * Read out of `user` here rather than optional-chained inside handleSubmit's
+   * dependency array. `user?.schoolId` as a dependency is a member expression
+   * the React Compiler cannot map to a stable slot, so it skipped compiling
+   * this component altogether — which costs the whole file its optimisation
+   * for a value that is a plain string once read.
+   */
+  const schoolId = user?.schoolId;
 
   const nameRef  = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
@@ -145,7 +153,7 @@ export default function AddTeacherPage() {
         const res = await api.post("/admin/teachers", {
           name:     submittedName,
           email:    submittedEmail,
-          schoolId: user?.schoolId,
+          schoolId,
         });
 
         const {
@@ -174,7 +182,7 @@ export default function AddTeacherPage() {
         setSaving(false);
       }
     },
-    [validate, trimmedName, trimmedEmail, user?.schoolId, t]
+    [validate, trimmedName, trimmedEmail, schoolId, t]
   );
 
   // ─────────────────────────────────────────────────────────

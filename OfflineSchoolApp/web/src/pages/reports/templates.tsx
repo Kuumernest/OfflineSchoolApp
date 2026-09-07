@@ -59,10 +59,13 @@ export default function TemplatesPage() {
     }
   }, [schoolId]);
 
+  // load is useCallback([schoolId]) and writes templates/loading/error, none
+  // of which are its dependencies.
   useEffect(() => {
     if (!schoolId) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, [schoolId]);
+  }, [schoolId, load]);
 
   // ── Seed the built-in layout ───────────────────────────
 

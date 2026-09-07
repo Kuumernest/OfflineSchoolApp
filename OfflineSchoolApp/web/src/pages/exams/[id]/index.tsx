@@ -16,7 +16,6 @@ import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
               ExamSubject,
               ExamType,
-              SequenceNumber,
               TermNumber }                  from "@/types/exam.types";
 import * as ExamService                      from "@/services/exam.service";
 import api                                   from "@/services/api";
@@ -1849,8 +1848,11 @@ export default function ExamDetailPage() {
   const submissions = (subData?.submissions ?? []) as ExamSubjectWithTotals[];
 
   // Keep tab in sync with ?tab= URL param
+  // Adopting the tab named in the query string. activeTab is not a dependency,
+  // so this applies once per searchParams change.
   useEffect(() => {
     const tab = searchParams.get("tab") as Tab;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (tab && TABS.find((tb) => tb.key === tab)) setActiveTab(tab);
   }, [searchParams]);
 

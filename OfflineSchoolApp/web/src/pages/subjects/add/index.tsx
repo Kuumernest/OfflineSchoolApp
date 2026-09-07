@@ -1,4 +1,4 @@
-import { useState, useCallback, useId } from "react";
+import { useState, useCallback, useId, useMemo } from "react";
 import { useNavigate }                  from "react-router-dom";
 import { useQuery, useMutation }        from "@tanstack/react-query";
 import {
@@ -248,7 +248,9 @@ export default function AddSubjectPage() {
     staleTime: 60_000,
   });
 
-  const classes  = classesQuery.data           ?? [];
+  // Memoised: `?? []` is a new array each render, and these feed a useMemo
+  // below, which then recomputes every render instead of memoising.
+  const classes  = useMemo(() => classesQuery.data ?? [], [classesQuery.data]);
   const teachers = teachersQuery.data?.teachers ?? [];
 
   const allSelected = classes.length > 0 &&

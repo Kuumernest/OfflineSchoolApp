@@ -439,7 +439,9 @@ const RankingsTable = ({
   const { t } = useTranslation();
   const [search, setSearch] = useState("");
   const { data, isLoading } = useRankings(examId, scope);
-  const rankings: ResultSummary[] = data?.data ?? [];
+  // Memoised: `?? []` is a new array each render, and these feed a useMemo
+  // below, which then recomputes every render instead of memoising.
+  const rankings: ResultSummary[] = useMemo(() => data?.data ?? [], [data]);
 
   const posField: keyof ResultSummary =
     scope === "school" ? "schoolPosition" :

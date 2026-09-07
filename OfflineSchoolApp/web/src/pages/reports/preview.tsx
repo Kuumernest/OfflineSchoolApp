@@ -23,8 +23,20 @@ export default function TemplatePreviewPage() {
   const [loading, setLoading] = useState(true);
   const [error,   setError]   = useState<string | null>(null);
 
+  /*
+   * Rendering a template can take a while — it assembles a whole report card
+   * server-side — which is exactly the window in which a reader closes the tab
+   * or changes the template. `stale` stops the reply being written to a screen
+   * that has moved on, and stops a superseded render overwriting a newer one.
+   *
+   * `t` is a dependency because the no-template message is translated; without
+   * it a language switch left the previous language's error on screen.
+   */
   useEffect(() => {
+    let stale = false;
+
     if (!templateId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setError(t("templates.noTemplateId"));
       setLoading(false);
       return;
@@ -38,16 +50,20 @@ export default function TemplatePreviewPage() {
       ...(studentId ? { studentId } : {}),
     })
       .then((res) => {
+        if (stale) return;
         const data = res.data;
         setHtml(data.renderedHtml);
         setName(data.templateName || "Preview");
         setIsRaw(data.isRaw       || false);
       })
       .catch((err) => {
+        if (stale) return;
         setError(err?.response?.data?.error || err.message);
       })
-      .finally(() => setLoading(false));
-  }, [templateId, examId, studentId, schoolId]);
+      .finally(() => { if (!stale) setLoading(false); });
+
+    return () => { stale = true; };
+  }, [templateId, examId, studentId, schoolId, t]);
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">

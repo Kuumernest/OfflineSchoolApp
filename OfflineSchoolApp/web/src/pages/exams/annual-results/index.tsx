@@ -6,7 +6,6 @@ import {
   Loader2, ArrowLeft, Calculator, Send, Award, TrendingUp, Users, GraduationCap,
   AlertTriangle,
 } from "lucide-react";
-import { useToast } from "@/components/ui/Toast";
 import {
   useAnnualResults,
   useComputeAnnualResults,
@@ -40,7 +39,6 @@ const PROMO_COLORS: Record<string, string> = {
 
 export default function AnnualResultsPage() {
   const { t } = useTranslation();
-  const { toast } = useToast();
 
   const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[1]);
   const [page, setPage] = useState(1);
@@ -63,12 +61,17 @@ export default function AnnualResultsPage() {
   const passRate = results.length ? ((passed / results.length) * 100).toFixed(0) : "—";
   const promoted = results.filter((r) => r.promotionStatus === "promoted").length;
 
-  const handleCompute = async () => {
-    await computeMutation.mutateAsync({ academicYear });
+  /*
+   * `mutate`, not `await mutateAsync` — see the note on the term-results page.
+   * mutateAsync rejects on failure regardless of onError, so the hook showed its
+   * error toast and an unhandled rejection was raised alongside it.
+   */
+  const handleCompute = () => {
+    computeMutation.mutate({ academicYear });
   };
 
-  const handlePublish = async () => {
-    await publishMutation.mutateAsync({ academicYear });
+  const handlePublish = () => {
+    publishMutation.mutate({ academicYear });
   };
 
   return (

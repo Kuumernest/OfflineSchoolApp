@@ -216,11 +216,23 @@ export default function EditTeacherPage() {
     [teacherId, schoolId]
   );
 
+  // loadAll is useCallback([teacherId, schoolId]) and guards every write with
+  // isMounted.current, so nothing lands after the screen has gone.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadAll(); }, [loadAll]);
 
   // ── Validation ──────────────────────────────────────────
 
-  const validate = (): boolean => {
+  /*
+   * useCallback so handleSave can declare it as a dependency.
+   *
+   * It was a plain function, recreated every render, which is why handleSave
+   * could not list it. That happened to be safe — validate reads only name and
+   * email, and handleSave already depended on both, so every rebuild of one
+   * rebuilt the other. Safe by coincidence rather than by construction, and the
+   * next field added to validate would have broken it silently.
+   */
+  const validate = useCallback((): boolean => {
     const next: FormErrors = {};
     if (!name.trim())  next.name  = "Name is required.";
     if (!email.trim()) next.email = "Email is required.";
@@ -228,7 +240,7 @@ export default function EditTeacherPage() {
       next.email = "Enter a valid email address.";
     setErrors(next);
     return Object.keys(next).length === 0;
-  };
+  }, [name, email]);
 
   // ── Save profile ────────────────────────────────────────
 
@@ -251,7 +263,7 @@ export default function EditTeacherPage() {
     } finally {
       if (isMounted.current) setSaving(false);
     }
-  }, [name, email, saving, teacherId, schoolId, navigate]);
+  }, [name, email, saving, teacherId, schoolId, navigate, validate]);
 
   // ── Unassign ────────────────────────────────────────────
 
@@ -317,7 +329,7 @@ export default function EditTeacherPage() {
         }
       }
     },
-    [teacherId, schoolId]
+    [teacherId, schoolId, confirm, t, toast]
   );
 
   // ── Assign ──────────────────────────────────────────────
@@ -419,7 +431,7 @@ export default function EditTeacherPage() {
         }
       }
     },
-    [teacherId, schoolId, actioningIds]
+    [teacherId, schoolId, actioningIds, t, toast]
   );
 
   // ─────────────────────────────────────────────────────────

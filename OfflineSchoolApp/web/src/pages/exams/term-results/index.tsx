@@ -3,10 +3,9 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import {
-  Loader2, ArrowLeft, Calculator, Send, ChevronDown, Award, TrendingUp, Users,
+  Loader2, ArrowLeft, Calculator, Send, Award, TrendingUp, Users,
   AlertTriangle,
 } from "lucide-react";
-import { useToast } from "@/components/ui/Toast";
 import {
   useTermResults,
   useComputeTermResults,
@@ -38,7 +37,6 @@ const TERMS: { value: TermNumber; labelKey: string }[] = [
 
 export default function TermResultsPage() {
   const { t } = useTranslation();
-  const { toast } = useToast();
 
   const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[1]);
   const [term, setTerm] = useState<TermNumber>(1);
@@ -61,12 +59,22 @@ export default function TermResultsPage() {
   const passed = results.filter((r) => r.isPassing).length;
   const passRate = results.length ? ((passed / results.length) * 100).toFixed(0) : "—";
 
-  const handleCompute = async () => {
-    await computeMutation.mutateAsync({ academicYear, term });
+  /*
+   * `mutate`, not `await mutateAsync`.
+   *
+   * Neither handler uses the resolved value, and mutateAsync rejects on failure
+   * whatever onError does — so a failed compute both showed its toast (from the
+   * hook) AND raised an unhandled promise rejection, which is the kind of noise
+   * that ends up in Sentry looking like a second, separate fault. useComputeTermResults
+   * and usePublishTermResults already toast on both success and error, so there
+   * is nothing for a local catch to add.
+   */
+  const handleCompute = () => {
+    computeMutation.mutate({ academicYear, term });
   };
 
-  const handlePublish = async () => {
-    await publishMutation.mutateAsync({ academicYear, term });
+  const handlePublish = () => {
+    publishMutation.mutate({ academicYear, term });
   };
 
   return (

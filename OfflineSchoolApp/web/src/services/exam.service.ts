@@ -13,8 +13,6 @@ AnnualResultsResponse,
 AcademicStructure,
 CreateExamForm,
 ExamSubject,
-TermResult,
-AnnualResult,
 } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────

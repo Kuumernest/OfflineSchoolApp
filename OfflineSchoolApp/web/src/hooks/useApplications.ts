@@ -181,7 +181,10 @@ export const useApplications = (): UseApplicationsReturn => {
     [schoolId]
   );
 
+  // loadData is useCallback([schoolId]); it writes applications/classes/loading,
+  // none of which are its dependencies, so this runs once per school.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData();
   }, [loadData]);
 

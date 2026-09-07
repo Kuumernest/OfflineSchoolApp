@@ -111,6 +111,25 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const inputRef    = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  /*
+   * closeSearch is declared BEFORE the outside-click effect that calls it.
+   *
+   * It used to sit fifty lines below, and the effect closed over it from up
+   * here. That worked, but only by timing: the effect body runs after render
+   * finishes, by which point the `const` has been initialised. Anything that
+   * reached the handler during the same render pass would have hit the
+   * temporal dead zone and thrown a ReferenceError instead of closing a
+   * dropdown. The React Compiler flags it as reading a variable before it is
+   * declared, and it is right to — the ordering was the only thing holding it
+   * up, and ordering is not a guarantee anybody wrote down.
+   */
+  const closeSearch = useCallback(() => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    setResults([]);
+    setError(null);
+  }, []);
+
   // ── Close on outside click ──────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -129,10 +148,29 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, [closeSearch]);
+
+  /*
+   * Cancel a pending debounce on unmount.
+   *
+   * handleSearch schedules the request DEBOUNCE_MS after the last keystroke and
+   * only ever cleared that timer on the next keystroke. Type into the search box
+   * and navigate away inside that window and the timer still fired: a search
+   * request nobody was waiting for, and setResults on a component that had gone.
+   * The ref is the only thing holding the handle, so the teardown belongs here.
+   */
+  useEffect(() => () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }, []);
 
   // ── Reset active index when results change ──────────────────────────────────
+  //
+  // Resetting the keyboard highlight when the result list changes. activeIndex
+  // is not a dependency, so this settles in one pass and cannot re-trigger
+  // itself; the alternative — deriving the highlight — would need the previous
+  // result list kept somewhere to know when to drop it.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveIndex(-1);
   }, [results]);
 
@@ -164,15 +202,10 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
         setIsLoading(false);
       }
     }, DEBOUNCE_MS);
-  }, []);
-
-  // ── Close search ────────────────────────────────────────────────────────────
-  const closeSearch = useCallback(() => {
-    setSearchOpen(false);
-    setSearchQuery("");
-    setResults([]);
-    setError(null);
-  }, []);
+    // `t` is a dependency: an empty array closed over the t from first render,
+    // so after a language switch a failed search still reported its error in
+    // the previous language.
+  }, [t]);
 
   // ── Navigate to result ──────────────────────────────────────────────────────
   const handleSelect = useCallback(

@@ -1,7 +1,7 @@
 // web/src/pages/settings/AcademicStructureSection.tsx
 import { useState, useEffect, useCallback } from "react";
 import {
-  Calendar, Save, Loader2, AlertCircle, Plus, Trash2, ChevronDown, ChevronUp,
+  Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useToast } from "@/components/ui/Toast";
@@ -137,6 +137,10 @@ export default function AcademicStructureSection({ schoolId }: Props) {
     }
   }, [schoolId, academicYear, t, toast]);
 
+  // load is useCallback([schoolId, academicYear, t, toast]); toast comes from a
+  // useMemo'd context whose two callbacks are useCallback([]), so the identity is
+  // stable and this cannot re-run itself.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { load(); }, [load]);
 
   // ── Save ──

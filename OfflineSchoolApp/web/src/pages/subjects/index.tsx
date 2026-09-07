@@ -382,6 +382,10 @@ export default function AdminSubjectsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const user     = useUser();
+  // Read here, not optional-chained inside loadData's dependency array —
+  // `user?.role` as a dependency is a member expression the React Compiler
+  // cannot map to a stable slot, and it bails on the whole component.
+  const role     = user?.role;
   const schoolId = user?.schoolId ?? "";
 
   /**
@@ -418,7 +422,7 @@ export default function AdminSubjectsPage() {
           // the school's. The sidebar has offered teachers this page all along
           // and it answered 403 for them, because the service asked the
           // admin-only route regardless of who was calling.
-          role: user?.role,
+          role,
         }),
         fetchClasses(schoolId),
       ]);
@@ -439,8 +443,11 @@ export default function AdminSubjectsPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, selectedClassId]);
+  }, [schoolId, selectedClassId, t, role]);
 
+  // loadData is useCallback([schoolId, selectedClassId]); it writes classes,
+  // subjects, loading and error, none of which are dependencies.
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadData(); }, [loadData]);
 
   const handleDelete = useCallback(async () => {

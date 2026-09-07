@@ -161,9 +161,12 @@ export default function EditSubjectPage() {
     (s) => s._id === id || (s as Subject & { id?: string }).id === id
   );
 
+  // Seeding the form from the fetched subject, and keeping a pristine copy to
+  // diff against on save. Neither form nor originalForm is a dependency.
   useEffect(() => {
     if (subject) {
       const initial = subjectToForm(subject);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setForm(initial);
       setOriginalForm(initial);
     }

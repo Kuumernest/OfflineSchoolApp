@@ -4,10 +4,12 @@ import {
   fetchSystemHealth,
   type SystemHealthStats,
 }                                from "@/services/dashboard.service";
+// Pure logic, from a module with no React in it — this file is a service and
+// used to reach through a component to get here.
 import {
   deriveAlerts,
   type DashAlert,
-}                                from "@/components/dashboard/AlertsPanel";
+}                                from "@/services/dashboardAlerts";
 import { fetchConversations } from "./message.service";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
