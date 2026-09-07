@@ -2217,6 +2217,68 @@ const coerceEditable = (field, raw) => {
   return { value: String(raw).trim() || null };
 };
 
+/*
+ * GET /api/students/:id/editable
+ *
+ * The record as the correction form needs it, which is not the record as any
+ * screen displays it.
+ *
+ * The edit form was first built on GET /admin/students/:id and its name fields
+ * came up empty, because two normalisers sit between the document and the form
+ * and each drops what it does not need to show:
+ *
+ *   shared/students.js normaliseStudentDoc   collapses firstName + lastName into
+ *                                            `name` and omits alternatePhone,
+ *                                            city, state, nationalId,
+ *                                            guardianRelation, bloodGroup and
+ *                                            medicalConditions
+ *
+ *   web normaliseStudent                     then drops firstName and lastName
+ *                                            as well
+ *
+ * Between them the form could be pre-filled with seven of its eighteen fields,
+ * and a form that shows a blank box for data the school actually holds invites
+ * somebody to retype it — or to read the blank as "we never collected this".
+ *
+ * Widening either normaliser instead would have been the wrong lever: they are
+ * display projections shared by the roster, the report card, the sync feed and
+ * the desktop mirror, and every field added to them is added to all of those.
+ *
+ * So this returns exactly EDITABLE_FIELDS, from the document, unprojected — one
+ * list serving the read and the write, so the form can never offer a field the
+ * PATCH would drop. Guarded by canManage rather than a view capability: this is
+ * the read half of an edit, and anyone who cannot save has no reason to load it.
+ */
+router.get("/:id/editable", authenticate, canManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req);
+  if (!schoolId) return sendError(res, 400, "No school on this session");
+
+  const student = await Student.findById(req.params.id).lean();
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+
+  const editable = {};
+  for (const field of Object.keys(EDITABLE_FIELDS)) {
+    editable[field] = student[field] ?? null;
+  }
+
+  return sendSuccess(res, {
+    data: {
+      _id: String(student._id),
+      ...editable,
+      // The form sends this back as baseUpdatedAt so a concurrent edit by
+      // somebody else is detected rather than silently lost.
+      updatedAt: student.updatedAt ?? null,
+      // Read-only context, so the form can show whose record it is without a
+      // second request. Not editable here — see the note on EDITABLE_FIELDS.
+      studentName:  student.studentName ?? null,
+      enrollmentNo: student.enrollmentNo ?? null,
+      className:    student.className ?? null,
+      status:       student.status ?? null,
+    },
+  });
+}));
+
 router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;

@@ -486,6 +486,91 @@ const bad = (label, detail) => {
     else bad("contact updates still work", `${rubbish.status}`);
   }
 
+  // ── The form has to be able to SHOW what it edits ───────────────────────
+  //
+  // The bug this closes: the edit form was built on GET /admin/students/:id and
+  // its name boxes came up empty. Two normalisers sit between the document and
+  // the form — shared/students.js collapses firstName and lastName into `name`
+  // and omits seven other editable fields, and the web client's own normaliser
+  // then drops firstName and lastName as well. Between them the form could be
+  // pre-filled with seven of eighteen fields.
+  //
+  // A form that shows a blank box for data the school holds invites somebody to
+  // retype it, or to read the blank as "we never collected this". So there is a
+  // read that returns exactly what the write accepts, and this asserts the two
+  // agree — which is the assertion that was missing when it shipped.
+  console.log("\n--- the form can show every field it can edit ---");
+  {
+    await reset();
+    await Student.updateOne({ _id: "st-1" }, { $set: {
+      alternatePhone: "690111222", city: "Bamenda", state: "North West",
+      nationalId: "ID-1", guardianRelation: "mother", bloodGroup: "O+",
+      medicalConditions: "asthma", notes: "office note",
+      guardianName: "A Guardian", guardianEmail: "g@example.test",
+      email: "pupil@example.test", phone: "670000111", address: "Some street",
+    } });
+
+    const r = await call("adminA", "GET", `/api/students/st-1/editable?schoolId=${A}`);
+    if (r.status === 200) ok("the form's own read answers");
+    else bad("the editable read answers", `${r.status} ${JSON.stringify(r.body).slice(0, 160)}`);
+
+    const got = r.body?.data ?? r.body ?? {};
+
+    // Read the server's own list rather than restating it here: a field added
+    // to EDITABLE_FIELDS and forgotten in the read would otherwise pass.
+    const fs2 = require("fs");
+    const routeSrc = fs2.readFileSync(path.join(SRC, "routes", "students.routes.js"), "utf8");
+    const m = routeSrc.match(/const EDITABLE_FIELDS = Object\.freeze\(\{([\s\S]*?)\}\);/);
+    const serverFields = m ? [...m[1].matchAll(/^[ \t]+([a-zA-Z]+):/gm)].map((x) => x[1]) : [];
+
+    const absent = serverFields.filter((f) => !(f in got));
+    if (absent.length === 0) {
+      ok(`every one of the ${serverFields.length} editable fields is present in the read`);
+    } else {
+      bad("the read carries every editable field", "absent: " + absent.join(", "));
+    }
+
+    // The specific thing the user saw.
+    if (got.firstName === "Bern" && got.lastName === "Constanse") {
+      ok("the name arrives as first and last, not collapsed into one display string");
+    } else {
+      bad("the name arrives in parts",
+        `firstName=${JSON.stringify(got.firstName)} lastName=${JSON.stringify(got.lastName)}`);
+    }
+
+    // The seven the shared projection drops.
+    const dropped = {
+      alternatePhone: "690111222", city: "Bamenda", state: "North West",
+      nationalId: "ID-1", guardianRelation: "mother", bloodGroup: "O+",
+      medicalConditions: "asthma",
+    };
+    const wrong = Object.entries(dropped).filter(([k, v]) => got[k] !== v);
+    if (wrong.length === 0) {
+      ok("and so do the seven fields the display projection omits");
+    } else {
+      bad("the fields the display projection omits are present",
+        wrong.map(([k, v]) => `${k}: expected ${v}, got ${JSON.stringify(got[k])}`).join("; "));
+    }
+
+    if (typeof got.dateOfBirth === "string" && /^\d{4}-\d{2}-\d{2}$/.test(got.dateOfBirth)) {
+      ok("the date of birth comes back in the format the save requires");
+    } else {
+      bad("dateOfBirth round-trips in YYYY-MM-DD", JSON.stringify(got.dateOfBirth));
+    }
+
+    if (got.updatedAt) ok("with the updatedAt the form sends back for overwrite detection");
+    else bad("updatedAt is included", JSON.stringify(got.updatedAt));
+
+    // Same guard as the write: reading a record for editing is half of editing.
+    const t2 = await call("teacherA", "GET", `/api/students/st-1/editable?schoolId=${A}`);
+    if (t2.status === 403) ok("a teacher cannot load it, as they cannot save it");
+    else bad("the editable read needs students.manage", `${t2.status}`);
+
+    const x = await call("adminB", "GET", `/api/students/st-1/editable?schoolId=${A}`);
+    if (x.status === 403 || x.status === 404) ok(`and another school cannot (${x.status})`);
+    else bad("the editable read is school-scoped", `${x.status}`);
+  }
+
   // ── The three lists that must not drift ─────────────────────────────────
   //
   // The server's EDITABLE_FIELDS is the security boundary. The web page and the

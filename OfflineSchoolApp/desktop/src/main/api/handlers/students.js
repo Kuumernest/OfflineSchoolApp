@@ -370,6 +370,60 @@ module.exports = [
   },
 
   {
+    route: "GET /api/students/:id/editable",
+
+    /**
+     * The record as the correction form needs it, offline.
+     *
+     * This is the one student read that must NOT go through
+     * normaliseStudentDoc. That projection is what every display screen wants
+     * and it is wrong here twice over: it collapses firstName and lastName into
+     * a single `name`, and it omits alternatePhone, city, state, nationalId,
+     * guardianRelation, bloodGroup and medicalConditions. A form built on it
+     * shows empty boxes for data the school holds, which invites somebody to
+     * retype a name that was already correct.
+     *
+     * So it emits an explicit list instead — the server's EDITABLE_FIELDS, the
+     * same list writes/students.js validates against. Explicit rather than
+     * spreading the row, so a column added to the mirror later cannot leak
+     * through, which is the property normaliseStudentDoc was giving us and the
+     * reason not to simply widen it.
+     */
+    handler: ({ params }, { docs, session }) => {
+      const isSuper  = session?.role === "super_admin";
+      const schoolId = session?.schoolId ? String(session.schoolId) : null;
+      if (!isSuper && !schoolId) return null;
+
+      const id  = String(params.id).trim();
+      const row = docs.get("student", id);
+      if (!row) return null;
+      if (!isSuper && String(row.schoolId ?? "") !== schoolId) return null;
+
+      const EDITABLE = [
+        "firstName", "lastName", "dateOfBirth", "gender",
+        "email", "phone", "alternatePhone", "address", "city", "state", "nationalId",
+        "guardianName", "guardianPhone", "guardianEmail", "guardianRelation",
+        "bloodGroup", "medicalConditions", "notes",
+      ];
+
+      const editable = {};
+      for (const field of EDITABLE) editable[field] = row[field] ?? null;
+
+      return ok({
+        data: {
+          _id: String(row._id),
+          ...editable,
+          updatedAt:    row.updatedAt    ?? null,
+          studentName:  row.studentName  ?? null,
+          enrollmentNo: row.enrollmentNo ?? null,
+          className:    row.className    ?? null,
+          status:       row.status       ?? null,
+        },
+      });
+    },
+  },
+
+  {
     route: "GET /api/admin/students/:id",
 
     /**

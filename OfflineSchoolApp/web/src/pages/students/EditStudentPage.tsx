@@ -27,7 +27,7 @@ import { Spinner }                 from "@/components/ui/Spinner";
 import { useToast }                from "@/components/ui/Toast";
 import { getErrorMessage }         from "@/lib/axios";
 import {
-  fetchStudentById,
+  fetchStudentForEdit,
   updateStudent,
   getStudentHistory,
   type StudentEditPayload,
@@ -105,7 +105,7 @@ export default function EditStudentPage() {
 
   const studentQuery = useQuery({
     queryKey: ["student", id],
-    queryFn:  () => fetchStudentById(id!),
+    queryFn:  () => fetchStudentForEdit(id!),
     enabled:  Boolean(id),
   });
 
@@ -197,6 +197,9 @@ export default function EditStudentPage() {
     );
   }
 
+  // Past the guards above, so the record is loaded.
+  const student = studentQuery.data;
+
   const renderField = (field: FieldName) => {
     if (field === "gender") {
       return (
@@ -253,9 +256,20 @@ export default function EditStudentPage() {
           >
             <ArrowLeft className="h-5 w-5 text-ink-muted" aria-hidden="true" />
           </Link>
-          <div>
-            <h1 className="text-lg font-semibold text-ink">{t("studentEdit.title")}</h1>
-            <p className="text-xs text-ink-muted">{t("studentEdit.blurb")}</p>
+          {/*
+            The pupil's name leads, not the screen's own title. You are
+            correcting one child's record, and the first question when a
+            correction goes wrong is "whose?". It reads from the record as
+            loaded, so it stays right while the name fields below are edited.
+          */}
+          <div className="min-w-0">
+            <h1 className="truncate text-lg font-semibold text-ink">
+              {student.studentName || t("studentEdit.title")}
+            </h1>
+            <p className="truncate text-xs text-ink-muted">
+              {[student.enrollmentNo, student.className]
+                .filter(Boolean).join(" · ") || t("studentEdit.blurb")}
+            </p>
           </div>
         </div>
 

@@ -31,7 +31,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import NetInfo from "@react-native-community/netinfo";
 
-import StudentService, { getStudentById } from "@/services/student.service";
+import StudentService from "@/services/student.service";
 import DateField          from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText }      from "../../../src/utils/appError";
@@ -112,19 +112,29 @@ export default function EditStudentScreen() {
    * happened on the sync-overwrites screen.
    */
   const [baseUpdatedAt, setBase] = useState(null);
+  const [who, setWho] = useState({ name: null, enrollmentNo: null, className: null });
 
   const load = useCallback(async () => {
     if (!studentId) { setLoadErr(t("studentDetail.notFound")); setLoading(false); return; }
     setLoading(true);
     setLoadErr(null);
     try {
-      const s = await getStudentById(studentId);
+      const s = await StudentService.getStudentForEdit(studentId);
       if (!s) { setLoadErr(t("studentDetail.notFound")); return; }
       const next = blank();
       for (const f of ALL) next[f.key] = s[f.key] == null ? "" : String(s[f.key]);
       setForm(next);
       setInitial(next);
       setBase(s.updatedAt ?? null);
+      // Read-only context for the header: you are correcting one child's
+      // record, and the first question when a correction goes wrong is
+      // "whose?". Held separately from the form so it stays correct while
+      // the name fields are being edited.
+      setWho({
+        name:         s.studentName  ?? null,
+        enrollmentNo: s.enrollmentNo ?? null,
+        className:    s.className    ?? null,
+      });
     } catch (err) {
       setLoadErr(errorText(t, err, "studentEdit.errSave"));
     } finally {
@@ -304,8 +314,13 @@ export default function EditStudentScreen() {
           <Ionicons name="arrow-back" size={22} color={COLORS.text} />
         </TouchableOpacity>
         <View style={s.headerText}>
-          <Text style={s.title}>{t("studentEdit.title")}</Text>
-          <Text style={s.subtitle} numberOfLines={2}>{t("studentEdit.blurb")}</Text>
+          <Text style={s.title} numberOfLines={1}>
+            {who.name || t("studentEdit.title")}
+          </Text>
+          <Text style={s.subtitle} numberOfLines={1}>
+            {[who.enrollmentNo, who.className].filter(Boolean).join(" · ")
+              || t("studentEdit.blurb")}
+          </Text>
         </View>
       </View>
 

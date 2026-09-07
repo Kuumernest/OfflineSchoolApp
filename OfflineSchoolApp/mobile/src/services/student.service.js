@@ -1820,6 +1820,25 @@ export const StudentService = {
     return data;
   },
 
+  /**
+   * The record as the correction form needs it.
+   *
+   * Not getStudentById: that reads the local SQLite mirror and passes it through
+   * normaliseStudent, and neither carries every editable field — the mirror has
+   * its own column subset and the normaliser is a display projection. The edit
+   * form built on it showed empty name boxes for a pupil whose name the school
+   * holds, which invites somebody to retype it.
+   *
+   * Server-read, like the save itself: correcting a record is online-only in
+   * this app, so there is nothing to gain from a local copy that is narrower.
+   */
+  async getStudentForEdit(studentId) {
+    if (!studentId) throw new Error("studentId is required");
+    const response = await api.get(`/students/${studentId}/editable`);
+    const body = response.data || {};
+    return body.data ?? body;
+  },
+
   /** A pupil's correction history, newest first. Needs students.viewFull. */
   async getStudentHistory(studentId, limit = 100) {
     if (!studentId) throw new Error("studentId is required");

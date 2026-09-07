@@ -641,6 +641,56 @@ export async function updateStudent(
   return data as StudentEditResult;
 }
 
+/**
+ * The record as the correction form needs it.
+ *
+ * Not fetchStudentById: that returns a NormalisedStudent, a display projection
+ * that collapses firstName and lastName into `name` and omits nine of the
+ * eighteen editable fields. The edit form was first built on it and its name
+ * boxes came up empty — a form showing a blank for data the school holds
+ * invites somebody to retype it, or to read the blank as "never collected".
+ *
+ * The endpoint returns exactly the server's EDITABLE_FIELDS, unprojected, so
+ * the form can never offer a field the PATCH would drop.
+ */
+export interface StudentEditable {
+  _id:                string;
+  firstName:          string | null;
+  lastName:           string | null;
+  dateOfBirth:        string | null;
+  gender:             string | null;
+  email:              string | null;
+  phone:              string | null;
+  alternatePhone:     string | null;
+  address:            string | null;
+  city:               string | null;
+  state:              string | null;
+  nationalId:         string | null;
+  guardianName:       string | null;
+  guardianPhone:      string | null;
+  guardianEmail:      string | null;
+  guardianRelation:   string | null;
+  bloodGroup:         string | null;
+  medicalConditions:  string | null;
+  notes:              string | null;
+  /** Sent back as baseUpdatedAt so a concurrent edit is detected. */
+  updatedAt:          string | null;
+  /** Read-only context for the form's header. */
+  studentName:        string | null;
+  enrollmentNo:       string | null;
+  className:          string | null;
+  status:             string | null;
+}
+
+export async function fetchStudentForEdit(studentId: string): Promise<StudentEditable> {
+  const { data } = await api.get(`/students/${studentId}/editable`);
+  const raw = data?.data ?? data;
+  if (!raw || typeof raw !== "object") {
+    throw new Error(`fetchStudentForEdit(${studentId}): unexpected response shape`);
+  }
+  return raw as StudentEditable;
+}
+
 export interface StudentChange {
   _id:           string;
   field:         string;
