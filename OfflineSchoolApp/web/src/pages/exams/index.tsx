@@ -159,22 +159,43 @@ const StatCard = ({
   onClick?:   () => void;
   highlight?: boolean;
 }) => (
+  /*
+   * The label gets its own row rather than sitting beside the icon.
+   *
+   * Seven of these share one `lg:grid-cols-7` row, so a card is about 144px
+   * wide. A 48px icon, `p-5` and `gap-4` spent 104px of that on chrome and left
+   * roughly 40px for the text — and the shortest label in this strip is
+   * SCHEDULED. The flex child had no `min-w-0` either, so it could not shrink to
+   * its column and ran out past the card's own padding instead of wrapping.
+   *
+   * French is what settles the layout: `exams.passRate` is "Taux de réussite"
+   * and `exams.schoolAvg` is "moyenne école". Nothing that long fits next to an
+   * icon at this width, at any padding worth having, so the icon and the number
+   * keep the top row and the label spans the full card underneath. It wraps to
+   * two lines where it needs to, and grid rows stretch together, so the strip
+   * stays level whichever language it renders in.
+   */
   <button
     onClick={onClick}
-    className={`bg-white rounded-xl p-5 flex items-center gap-4 shadow-sm
+    className={`bg-white rounded-xl p-4 flex flex-col gap-2 shadow-sm
       border transition-all text-left w-full
       ${highlight
         ? "border-primary-300 ring-2 ring-primary-100"
         : "border-gray-100 hover:shadow-md hover:border-gray-200"
       }`}
   >
-    <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${color}`}>
-      <Icon className="w-6 h-6" />
+    <div className="flex items-center gap-3">
+      <div className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center ${color}`}>
+        <Icon className="w-5 h-5" />
+      </div>
+      {/* tabular-nums so the counts line up across the seven cards. */}
+      <p className="text-2xl font-bold text-gray-900 leading-none tabular-nums">{value}</p>
     </div>
-    <div>
-      <p className="text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{label}</p>
-      {sub && <p className="text-xs text-gray-400 mt-0.5">{sub}</p>}
+    <div className="min-w-0">
+      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide leading-tight">
+        {label}
+      </p>
+      {sub && <p className="text-[11px] text-gray-400 mt-0.5 leading-tight">{sub}</p>}
     </div>
   </button>
 );
@@ -1341,7 +1362,7 @@ export default function ExamsPage() {
             highlight={statusFilter === "published"}
             onClick={() => setStatusFilter("published")}
           />
-                    <StatCard
+          <StatCard
             label={t("exams.passRate")}
             value={`${dashData?.dashboard?.results?.passRate ?? 0}%`}
             icon={BookOpen}   color="bg-teal-50 text-teal-600"
