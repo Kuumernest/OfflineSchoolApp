@@ -25,6 +25,7 @@ const Class         = require("../db/models/Class");
 const Announcement  = require("../db/models/Announcement");
 const Content       = require("../db/models/Content");
 const SyncOverwrite = require("../db/models/SyncOverwrite");
+const StudentChangeLog = require("../db/models/StudentChangeLog");
 const photoStorage  = require("../utils/photoStorage");
 
 const { sendEmail } = require("../services/email.service");
@@ -422,6 +423,7 @@ const { requirePermission } = require("../../middleware/permissions");
 const canManage = requirePermission("students.manage");
 const canAdmit  = requirePermission("students.admit");
 const canDelete = requirePermission("students.delete");
+const canViewFull = requirePermission("students.viewFull");
 
 /**
  * The office desk: admins and the bursar, READS ONLY.
@@ -998,18 +1000,42 @@ router.put(
     const userId   = req.user._id?.toString();
     const schoolId = resolveSchoolId(req);
 
+    /*
+     * ── firstName, lastName, gender and dateOfBirth are FILL-ONLY here ──────
+     *
+     * They used to be freely writable. A pupil could rewrite their own legal
+     * name and date of birth through this route, with no approval and no
+     * record, while the office could not correct either — there was no admin
+     * edit route at all until PATCH /api/students/:id. That was backwards: the
+     * school types the data at admission and is answerable for it, and those
+     * four fields are what a report card, an identity card and a transcript
+     * assert.
+     *
+     * But refusing them outright was wrong too, and briefly shipped that way.
+     * app/student/profile/setup.js is a first-run wizard that REQUIRES a first
+     * and last name, so a flat refusal meant a pupil filling the form in and
+     * the name silently not saving — a worse failure than the one being fixed.
+     *
+     * So the rule is: an empty field may be completed, a set field may not be
+     * overwritten. It is the same principle the change logs use — a first entry
+     * is not a change, because there was nothing to lose — and it closes the
+     * actual hole, which was rewriting a name the school had already put on a
+     * certificate. Corrections after that go through the office, where they are
+     * recorded in StudentChangeLog.
+     *
+     * A refused value is dropped rather than erroring: an older build posts the
+     * whole profile on every save, and failing the request would stop a pupil
+     * updating their own phone number.
+     */
     const {
-      firstName, lastName, gender, dateOfBirth, nationalId,
+      firstName, lastName, gender, dateOfBirth,
+      nationalId,
       phone, alternatePhone, address, city, state,
       guardianName, guardianPhone, guardianRelation, guardianEmail,
       bloodGroup, medicalConditions, bio, profileCompleted,
     } = req.body;
 
     const allowedUpdate = {};
-    if (firstName         !== undefined) allowedUpdate.firstName         = firstName?.trim()         || null;
-    if (lastName          !== undefined) allowedUpdate.lastName          = lastName?.trim()          || null;
-    if (gender            !== undefined) allowedUpdate.gender            = gender                    || null;
-    if (dateOfBirth       !== undefined) allowedUpdate.dateOfBirth       = dateOfBirth               || null;
     if (nationalId        !== undefined) allowedUpdate.nationalId        = nationalId?.trim()        || null;
     if (phone             !== undefined) allowedUpdate.phone             = phone?.trim()             || null;
     if (alternatePhone    !== undefined) allowedUpdate.alternatePhone    = alternatePhone?.trim()    || null;
@@ -1029,12 +1055,51 @@ router.put(
 
     const current = await resolveStudentRecord(userId, schoolId);
 
+    /*
+     * ── Identity: a pupil may COMPLETE an empty field, never overwrite one ──
+     *
+     * The rule is not "students cannot touch these". app/student/profile/setup.js
+     * is a first-run wizard that requires a first and last name, so refusing
+     * outright would have left a pupil filling in the form and the name silently
+     * not saving — a worse failure than the one being fixed.
+     *
+     * So: empty stays fillable, set stays the office's. It is the same principle
+     * the change log uses — a first entry is not a change, because there was
+     * nothing to lose — and it closes the actual hole, which was a pupil
+     * REWRITING a name the school had already asserted on a certificate.
+     *
+     * A rejected value is dropped rather than erroring, because an older build
+     * posts the whole profile on every save and failing the request would stop
+     * a pupil updating their phone number.
+     */
+    const fillIfEmpty = (field, value) => {
+      if (value === undefined) return;
+      const held = String(current?.[field] ?? "").trim();
+      if (held) return;                                  // the school set it
+      const next = typeof value === "string" ? value.trim() : value;
+      if (!next) return;                                 // nothing to fill with
+      allowedUpdate[field] = next;
+    };
+
+    fillIfEmpty("firstName",   firstName);
+    fillIfEmpty("lastName",    lastName);
+    fillIfEmpty("dateOfBirth", dateOfBirth);
+    if (gender !== undefined && !String(current?.gender ?? "").trim()) {
+      const g = String(gender ?? "").trim().toLowerCase();
+      if (["male", "female", "other"].includes(g)) allowedUpdate.gender = g;
+    }
+
+    /*
+     * studentName follows a first fill, and only a first fill.
+     *
+     * Only studentName — `name` is not a path on this schema and the schema is
+     * strict, so the assignment that used to sit here was silently dropped.
+     */
     if (allowedUpdate.firstName !== undefined || allowedUpdate.lastName !== undefined) {
-      const finalFirst = allowedUpdate.firstName ?? current?.firstName ?? "";
-      const finalLast  = allowedUpdate.lastName  ?? current?.lastName  ?? "";
-      const finalName  = `${finalFirst} ${finalLast}`.trim() || current?.name || "";
-      allowedUpdate.name        = finalName;
-      allowedUpdate.studentName = finalName;
+      const first = allowedUpdate.firstName ?? current?.firstName ?? "";
+      const last  = allowedUpdate.lastName  ?? current?.lastName  ?? "";
+      const full  = `${first} ${last}`.trim();
+      if (full) allowedUpdate.studentName = full;
     }
 
     if (!current) {
@@ -2014,6 +2079,285 @@ const handleReject = asyncHandler(async (req, res) => {
 
 router.post("/:id/reject", authenticate, canAdmit, handleReject);
 router.put( "/:id/reject", authenticate, canAdmit, handleReject);
+
+// ─── A pupil's correction history ──────────────────────────────────────────────
+/*
+ * GET /api/students/:id/history
+ *
+ * What the record used to say, newest first. Grouped by batchId so one save
+ * that corrected three fields reads as one edit rather than three events.
+ *
+ * Guarded by students.viewFull rather than students.view: a change history
+ * includes the previous values of a pupil's name and date of birth, which is
+ * more than the roster shows.
+ */
+router.get("/:id/history", authenticate, canViewFull, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req);
+  if (!schoolId) return sendError(res, 400, "No school on this session");
+
+  const student = await Student.findById(req.params.id).select("_id schoolId").lean();
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+
+  const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
+
+  const rows = await StudentChangeLog
+    .find({ schoolId, studentId: String(student._id) })
+    .sort({ changedAt: -1 })
+    .limit(limit)
+    .lean();
+
+  return sendSuccess(res, { count: rows.length, changes: rows });
+}));
+
+// ─── Correct a pupil's record ──────────────────────────────────────────────────
+/*
+ * PATCH /api/students/:id
+ *
+ * The gap this closes: a school admin could approve, reject, suspend, restore,
+ * move and delete a pupil, and could not correct one field of their record.
+ * A surname mistyped during admission was permanent from the office's side —
+ * and it is the name that prints on report cards, identity cards and receipts.
+ *
+ * Delete-and-re-create is not the workaround it looks like. Twenty collections
+ * carry a studentId, so a new record detaches the pupil's marks, register,
+ * fees and every report card already issued.
+ *
+ * ── What this route deliberately does NOT touch ────────────────────────────
+ *
+ * Everything that already has its own route, because those carry side effects
+ * this one has no business repeating:
+ *
+ *   classId / className / grade   PATCH /:id/move   — also raises fee charges
+ *                                                     for the destination class
+ *   status / isActive             approve · reject · suspend · restore
+ *   enrollmentNo                  POST /:id/enrollment-number — gapless counter
+ *   photoUrl                      PUT /photo
+ *
+ * And everything a client must never move: schoolId, userId, applicationId,
+ * gateToken, deletedAt, the review fields and the timestamps.
+ *
+ * The result is a correction route, not a general document writer. A field
+ * absent from EDITABLE_FIELDS is ignored rather than rejected, so a client one
+ * version ahead does not fail its whole save on a field this server has never
+ * heard of.
+ */
+const EDITABLE_FIELDS = Object.freeze({
+  // ── Identity. Admin-only: these are what a certificate asserts. ──────────
+  firstName:   "string",
+  lastName:    "string",
+  dateOfBirth: "string",   // "YYYY-MM-DD", stored as a string like the register
+  gender:      "enum:male,female,other",
+
+  // ── Contact ──────────────────────────────────────────────────────────────
+  email:          "email",
+  phone:          "string",
+  alternatePhone: "string",
+  address:        "string",
+  city:           "string",
+  state:          "string",
+  nationalId:     "string",
+
+  // ── Guardian ─────────────────────────────────────────────────────────────
+  guardianName:     "string",
+  guardianPhone:    "string",
+  guardianEmail:    "email",
+  guardianRelation: "string",
+
+  // ── Welfare and office notes ─────────────────────────────────────────────
+  bloodGroup:        "string",
+  medicalConditions: "string",
+  notes:             "string",
+});
+
+/** Normalise one incoming value, or return an Error describing why not. */
+const coerceEditable = (field, raw) => {
+  const kind = EDITABLE_FIELDS[field];
+
+  // An explicit null or "" clears the field. Every one of these is nullable in
+  // the schema, and "the office typed a phone number that turned out to be
+  // wrong" needs a way to become "we do not have one" rather than a blank
+  // string that reads as data.
+  if (raw === null || raw === "") return { value: null };
+
+  if (kind === "enum:male,female,other") {
+    const v = String(raw).trim().toLowerCase();
+    return ["male", "female", "other"].includes(v)
+      ? { value: v }
+      : { error: `${field} must be male, female or other` };
+  }
+
+  if (kind === "email") {
+    const v = String(raw).trim().toLowerCase();
+    // The same shape the rest of this router accepts. Deliberately loose: a
+    // stricter pattern rejects real addresses, and this is a correction form.
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)
+      ? { value: v }
+      : { error: `${field} is not a valid email address` };
+  }
+
+  if (field === "dateOfBirth") {
+    const v = String(raw).trim();
+    // Stored as a string, so it is compared as one. Anchored to the format the
+    // schema already holds rather than passed through new Date(), which would
+    // silently accept "yesterday" and store an ISO timestamp.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) {
+      return { error: "dateOfBirth must be in YYYY-MM-DD format" };
+    }
+    const parsed = new Date(`${v}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      return { error: "dateOfBirth is not a real date" };
+    }
+    if (parsed.getTime() > Date.now()) {
+      return { error: "dateOfBirth cannot be in the future" };
+    }
+    return { value: v };
+  }
+
+  return { value: String(raw).trim() || null };
+};
+
+router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
+  const schoolId      = resolveSchoolId(req);
+  const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
+
+  const student = await Student.findById(req.params.id);
+  if (!student) return sendError(res, 404, "Student not found");
+  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
+
+  // ── Read the submitted fields ──────────────────────────────────────────────
+  const updates = {};
+  const problems = [];
+  for (const field of Object.keys(EDITABLE_FIELDS)) {
+    if (!Object.prototype.hasOwnProperty.call(req.body, field)) continue;
+    const { value, error } = coerceEditable(field, req.body[field]);
+    if (error) problems.push(error);
+    else updates[field] = value;
+  }
+
+  if (problems.length) return sendError(res, 400, problems[0], { errors: problems });
+  if (Object.keys(updates).length === 0) {
+    return sendError(res, 400, "No editable fields were supplied");
+  }
+
+  /*
+   * Only what actually moved.
+   *
+   * This is what makes a replayed sync safe without a de-duplication key: the
+   * retry finds every new value equal to the stored one, writes no history and
+   * reports no change. It is also what stops a form that submits all eighteen
+   * fields on every save from logging eighteen rows each time somebody fixes
+   * one phone number.
+   */
+  const changed      = {};
+  const beforeValues = {};
+  for (const [field, next] of Object.entries(updates)) {
+    const before = student[field] ?? null;
+    if (String(before ?? "") !== String(next ?? "")) {
+      changed[field]      = next;
+      // Captured here, from the document as it was read, and never from the
+      // client. A caller is free to be wrong about what it thought the old
+      // value was, and a log that records the caller's claim is not a log.
+      beforeValues[field] = before;
+    }
+  }
+
+  if (Object.keys(changed).length === 0) {
+    return sendSuccess(res, {
+      message: "No changes to save.",
+      changed: [],
+      data:    student.toObject(),
+    });
+  }
+
+  // ── Guard the one uniqueness this route can breach ────────────────────────
+  //
+  // email is unique per school for a student. Caught here with a readable
+  // message rather than as an E11000 the client would show raw.
+  if (changed.email) {
+    const clash = await Student.findOne({
+      schoolId,
+      email:     changed.email,
+      _id:       { $ne: student._id },
+      deletedAt: null,
+    }).select("_id").lean();
+    if (clash) {
+      return sendError(res, 409, "Another student in this school already uses that email address");
+    }
+  }
+
+  const nameBefore = resolveDisplayName(student);
+
+  for (const [field, value] of Object.entries(changed)) student[field] = value;
+
+  /*
+   * studentName is derived, and it is what the roster, the report card and the
+   * receipt all read through resolveDisplayName.
+   *
+   * Only studentName. `name` is NOT a path on this schema and the schema is
+   * strict, so `student.name = …` is silently dropped — which is what the old
+   * self-service profile route was doing, believing it kept both in step.
+   * resolveDisplayName still reads `name` last, as a fallback for lean
+   * documents that come from elsewhere; nothing here should write it.
+   */
+  if (changed.firstName !== undefined || changed.lastName !== undefined) {
+    const finalName = `${student.firstName ?? ""} ${student.lastName ?? ""}`.trim();
+    if (finalName) student.studentName = finalName;
+  }
+
+  // Detection and audit for the case where somebody else edited first. The
+  // write still proceeds — last-write-wins is preserved, exactly as /move does.
+  const overwrote = await logOverwriteIfNeeded({
+    entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "edit",
+  });
+
+  student.updatedAt     = new Date();
+  student.updatedBy     = req.user?._id  || null;
+  student.updatedByName = req.user?.name || null;
+  await student.save({ validateModifiedOnly: true });
+
+  // ── The history ───────────────────────────────────────────────────────────
+  //
+  // One row per field, sharing a batchId so a single save reads as one edit.
+  // Not awaited into the response contract but not swallowed either: a record
+  // that saved and a history row that did not is worth a line in the log, and
+  // is not worth failing the admin's correction over.
+  const batchId = uuidv4();
+  const now     = new Date();
+  const reason  = String(req.body?.changeReason || req.body?.reason || "").trim() || null;
+
+  const history = Object.entries(changed).map(([field, value]) => ({
+    schoolId,
+    studentId:     String(student._id),
+    studentName:   nameBefore || null,
+    field,
+    previousValue: beforeValues[field] ?? null,
+    newValue:      value,
+    changedBy:     req.user?._id ? String(req.user._id) : null,
+    changedByName: req.user?.name || null,
+    changedByRole: req.user?.role || null,
+    changedAt:     now,
+    batchId,
+    source:        req.get("X-Client-Source") || req.body?.source || null,
+    reason,
+  }));
+
+  await StudentChangeLog.insertMany(history, { ordered: false }).catch((err) =>
+    console.warn("[students] change history not written:", err.message)
+  );
+
+  console.log(
+    `[students] "${nameBefore}" corrected: ${Object.keys(changed).join(", ")} ` +
+    `by ${req.user?.name || req.user?._id}`
+  );
+
+  return sendSuccess(res, {
+    message:   "Student record updated.",
+    changed:   Object.keys(changed),
+    overwrote: overwrote ? { id: overwrote._id } : null,
+    data:      student.toObject(),
+  });
+}));
 
 // ─── Delete ────────────────────────────────────────────────────────────────────
 router.delete("/:id", authenticate, canDelete, asyncHandler(async (req, res) => {

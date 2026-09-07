@@ -668,6 +668,24 @@ export default function StudentDetailScreen() {
         <View style={styles.actionsSection}>
           <Text style={styles.sectionTitle}>{t("studentRecord.sectionActions")}</Text>
 
+          {/*
+            Correct details. First, because it is what the office reaches for
+            most and the one action this screen did not have: it offered Move,
+            Suspend, Restore and Delete, so a mistyped surname left deleting
+            the pupil as the only apparent option.
+          */}
+          <ActionButton
+            icon="create-outline"
+            label={t("studentEdit.edit")}
+            description={t("studentEdit.blurb")}
+            variant="default"
+            disabled={isBusy}
+            onPress={() => router.push({
+              pathname: "/admin/students/edit",
+              params:   { id: studentId },
+            })}
+          />
+
           <ActionButton
             icon="swap-horizontal-outline"
             label={t("studentRecord.moveToClass")}

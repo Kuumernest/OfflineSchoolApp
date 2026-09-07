@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef }          from "react";
 import { useNavigate, useParams }                from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import {
+import { Pencil,
   ChevronLeft,
   User,
   Mail,
@@ -1311,6 +1311,21 @@ export default function StudentDetailPage() {
           <h2 className="text-sm font-bold text-gray-700">{t("common.actions")}</h2>
 
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {/*
+                Correct details. First in the grid, because it is the action
+                the office reaches for most and the one that had no home: this
+                page offered Move, Suspend, Restore and Delete, so a mistyped
+                surname left deleting the pupil as the only apparent option.
+              */}
+              <ActionButton
+                icon={Pencil}
+                label={t("studentEdit.edit")}
+                description={t("studentEdit.blurb")}
+                variant="default"
+                disabled={isBusy}
+                onClick={() => navigate(`/students/${student._id}/edit`)}
+              />
+
             {/* Move */}
             <ActionButton
               icon={ArrowRightLeft}

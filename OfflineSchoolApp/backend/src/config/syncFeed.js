@@ -339,6 +339,14 @@ const EXCLUDED = {
     "a phone in a corridor. Mirroring it would put every historical " +
     "disagreement on every handset to answer that.",
 
+  StudentChangeLog:
+    "And the same again for a pupil's own record. It holds the previous values " +
+    "of names and dates of birth, so it is strictly more sensitive than the " +
+    "roster it describes — students.viewFull gates reading it, while the " +
+    "student collection itself only needs students.view. Mirroring an audit " +
+    "trail to answer a question asked once a term, and widening what a lost " +
+    "handset carries to do it, is the wrong trade.",
+
   ResultChangeLog:
     "An audit trail of mark changes. Append-only server-side and read on " +
     "demand; mirroring it would double the academic data on the machine to " +

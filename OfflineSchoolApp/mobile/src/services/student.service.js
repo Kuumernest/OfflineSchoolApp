@@ -1734,6 +1734,99 @@ export const StudentService = {
 
     return data;
   },
+  // ── CORRECT A RECORD (LWW-aware) ────────────────────────────────────────
+  /**
+   * Fix details that were mistyped when the pupil was admitted.
+   *
+   * The office had no way to do this at all: the only student writes were
+   * approve, reject, suspend, restore, move and delete, so a misspelled surname
+   * was permanent — and it is the surname that prints on report cards, identity
+   * cards and receipts. Deleting the pupil to re-enter them is not a way round
+   * it: twenty server collections carry a studentId, so a fresh record detaches
+   * their marks, register, fees and every card already issued.
+   *
+   * Online-only, deliberately, because that is what every other student write in
+   * this file is. moveToClass, suspend, restore and remove all call the API and
+   * mirror the result into SQLite; none of them queue. Routing only this one
+   * through the outbox would give one screen two different failure modes
+   * depending on which button was pressed. Offline correction is worth having
+   * and is its own piece of work.
+   */
+  async updateStudent(studentId, patch, { baseUpdatedAt, changeReason } = {}) {
+    if (!studentId) throw new Error("studentId is required");
+    if (!patch || Object.keys(patch).length === 0) throw new Error("nothing to update");
+
+    const db = await getDatabase();
+    await ensureStudentSchema(db);
+
+    const url  = appendBaseTimestamp(`/students/${studentId}`, baseUpdatedAt);
+    const body = { ...patch };
+    if (changeReason) body.changeReason = changeReason;
+
+    const response = await api.patch(url, body);
+    const data     = response.data || {};
+
+    if (data.overwrote) {
+      await SyncOverwriteService.saveOverwrite(data.overwrote, {
+        entityType: "student",
+        entityId:   studentId,
+        entityName: data.data?.studentName || null,
+        schoolId:   getSchoolId(),
+        action:     "edit",
+      });
+    }
+
+    /*
+     * Mirror the corrected fields locally.
+     *
+     * Only the ones this table holds, by their snake_case column names — the
+     * mirror does not carry every server field. _synced stays 0 so the next pull
+     * re-reads the row from the server rather than trusting this copy, which is
+     * what moveToClass does as well.
+     */
+    const COLUMN = {
+      firstName:     "first_name",
+      lastName:      "last_name",
+      studentName:   "student_name",
+      dateOfBirth:   "date_of_birth",
+      gender:        "gender",
+      email:         "email",
+      phone:         "phone",
+      address:       "address",
+      guardianName:  "guardian_name",
+      guardianPhone: "guardian_phone",
+      guardianEmail: "guardian_email",
+    };
+
+    const saved  = data.data || {};
+    const sets   = [];
+    const values = [];
+    for (const [field, column] of Object.entries(COLUMN)) {
+      if (saved[field] === undefined) continue;
+      sets.push(`${column} = ?`);
+      values.push(saved[field] ?? null);
+    }
+
+    if (sets.length) {
+      const now = new Date().toISOString();
+      await db
+        .runAsync(
+          `UPDATE students SET ${sets.join(", ")}, updated_at = ?, _synced = 0 WHERE id = ?`,
+          [...values, now, studentId]
+        )
+        .catch(() => {});
+    }
+
+    return data;
+  },
+
+  /** A pupil's correction history, newest first. Needs students.viewFull. */
+  async getStudentHistory(studentId, limit = 100) {
+    if (!studentId) throw new Error("studentId is required");
+    const response = await api.get(`/students/${studentId}/history`, { params: { limit } });
+    const body = response.data || {};
+    return body.data?.changes ?? body.changes ?? [];
+  },
 };
 
 export default StudentService;

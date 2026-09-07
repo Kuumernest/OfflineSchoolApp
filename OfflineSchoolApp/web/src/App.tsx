@@ -40,6 +40,7 @@ const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
 const AddStudentPage   = lazy(() => import("@/pages/students/AddStudentPage"));
+const EditStudentPage  = lazy(() => import("@/pages/students/EditStudentPage"));
 const AdmissionsPage   = lazy(() => import("@/pages/students/AdmissionsPage"));
 const ApplicationsPage = lazy(() => import("@/pages/students/applications/index"));
 
@@ -276,6 +277,7 @@ export default function App() {
             <Route path="/students/applications" element={page(<ApplicationsPage />)} />
             {/* Last: ":id" would otherwise swallow "new" / "admissions". */}
             <Route path="/students/:id"          element={page(<StudentDetail />)} />
+            <Route path="/students/:id/edit"     element={page(<EditStudentPage />)} />
 
             <Route path="/subjects"          element={page(<SubjectsPage />)} />
             <Route path="/subjects/add"      element={page(<AddSubjectPage />)} />

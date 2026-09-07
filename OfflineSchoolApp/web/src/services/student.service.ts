@@ -584,15 +584,83 @@ export async function resetStudentPassword(
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 16 — UPDATE
-// PUT /admin/students/:id  (admin.routes.js)
+// PATCH /students/:id  (students.routes.js)
 // ═════════════════════════════════════════════════════════════════════════════
 
+/** The fields the office may correct. Everything else has its own route. */
+export interface StudentEditPayload {
+  firstName?:         string | null;
+  lastName?:          string | null;
+  dateOfBirth?:       string | null;   // "YYYY-MM-DD"
+  gender?:            "male" | "female" | "other" | null;
+  email?:             string | null;
+  phone?:             string | null;
+  alternatePhone?:    string | null;
+  address?:           string | null;
+  city?:              string | null;
+  state?:             string | null;
+  nationalId?:        string | null;
+  guardianName?:      string | null;
+  guardianPhone?:     string | null;
+  guardianEmail?:     string | null;
+  guardianRelation?:  string | null;
+  bloodGroup?:        string | null;
+  medicalConditions?: string | null;
+  notes?:             string | null;
+  /** Optional, recorded on every history row for this save. */
+  changeReason?:      string;
+  /** The updatedAt the form was loaded with, for overwrite detection. */
+  baseUpdatedAt?:     string | null;
+}
+
+export interface StudentEditResult {
+  success: boolean;
+  message: string;
+  /** Field names that actually moved. Empty when the save was a no-op. */
+  changed: string[];
+  data:    Record<string, unknown>;
+}
+
+/**
+ * Correct a pupil's record.
+ *
+ * This function existed before the endpoint did. It pointed at
+ * `PUT /admin/students/:id`, which admin.routes.js has never registered, and
+ * nothing in the app called it — an edit path abandoned on both ends, which is
+ * why a mistyped surname could not be fixed from the office at all.
+ *
+ * It now points at the route that exists. Class changes still go through
+ * moveStudent and status changes through approve/suspend/restore, because both
+ * carry side effects — a move re-bills the pupil for the destination class.
+ */
 export async function updateStudent(
   studentId: string,
-  payload:   Record<string, unknown>
-): Promise<unknown> {
-  const { data } = await api.put(`/admin/students/${studentId}`, payload);
-  return data;
+  payload:   StudentEditPayload
+): Promise<StudentEditResult> {
+  const { data } = await api.patch(`/students/${studentId}`, payload);
+  return data as StudentEditResult;
+}
+
+export interface StudentChange {
+  _id:           string;
+  field:         string;
+  previousValue: unknown;
+  newValue:      unknown;
+  changedByName: string | null;
+  changedByRole: string | null;
+  changedAt:     string;
+  batchId:       string | null;
+  reason:        string | null;
+  source:        string | null;
+}
+
+/** A pupil's correction history, newest first. Needs students.viewFull. */
+export async function getStudentHistory(
+  studentId: string,
+  limit = 100
+): Promise<StudentChange[]> {
+  const { data } = await api.get(`/students/${studentId}/history`, { params: { limit } });
+  return (data?.data?.changes ?? data?.changes ?? []) as StudentChange[];
 }
 
 // ═════════════════════════════════════════════════════════════════════════════

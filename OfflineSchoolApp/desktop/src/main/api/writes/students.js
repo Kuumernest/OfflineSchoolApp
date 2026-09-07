@@ -483,6 +483,153 @@ module.exports = [
   // ───────────────────────────────────────────────────────────────────────────
 
   {
+    route: "PATCH /api/students/:id",
+
+    /**
+     * Correcting a pupil's record, offline.
+     *
+     * The server route this mirrors did not exist until recently: the office
+     * could approve, reject, suspend, restore, move and delete a pupil and
+     * could not fix a mistyped surname, which is the name that prints on
+     * every report card and identity card.
+     *
+     * ── What this declines rather than guesses ──────────────────────────────
+     *
+     * The allowlist is the server's EDITABLE_FIELDS. A field outside it is
+     * dropped, exactly as the server drops it, so an older or newer renderer
+     * cannot widen what an offline machine may write. Class, status and
+     * enrolment number are not in it and must not be: each has its own route
+     * and its own consequences, and a move re-bills the pupil for the
+     * destination class — arithmetic this handler has no business inventing.
+     *
+     * Validation is duplicated too, and deliberately: this answers while
+     * offline, so a value it accepts is one the queued request will carry to
+     * the server hours later. Accepting a date the server will reject means
+     * the correction looks applied all afternoon and then silently is not.
+     */
+    handler: ({ body, params, query }, { docs, session }) => {
+      const schoolId = schoolOf(body, session);
+      if (!schoolId) return null;
+
+      const id    = String(params?.id ?? "").trim();
+      const pupil = pupilOf(docs, schoolId, id);
+      if (!pupil) return null;
+
+      const EDITABLE = [
+        "firstName", "lastName", "dateOfBirth", "gender",
+        "email", "phone", "alternatePhone", "address", "city", "state", "nationalId",
+        "guardianName", "guardianPhone", "guardianEmail", "guardianRelation",
+        "bloodGroup", "medicalConditions", "notes",
+      ];
+
+      const updates = {};
+      for (const field of EDITABLE) {
+        if (!Object.prototype.hasOwnProperty.call(body ?? {}, field)) continue;
+        const raw = body[field];
+
+        if (raw === null || raw === "") { updates[field] = null; continue; }
+
+        if (field === "gender") {
+          const v = String(raw).trim().toLowerCase();
+          if (!["male", "female", "other"].includes(v)) return null;
+          updates[field] = v;
+          continue;
+        }
+        if (field === "email" || field === "guardianEmail") {
+          const v = String(raw).trim().toLowerCase();
+          if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) return null;
+          updates[field] = v;
+          continue;
+        }
+        if (field === "dateOfBirth") {
+          const v = String(raw).trim();
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return null;
+          const parsed = new Date(`${v}T00:00:00Z`);
+          if (Number.isNaN(parsed.getTime()) || parsed.getTime() > Date.now()) return null;
+          updates[field] = v;
+          continue;
+        }
+        updates[field] = String(raw).trim() || null;
+      }
+
+      if (Object.keys(updates).length === 0) return null;
+
+      // Only what moved, for the same reason the server does it: a form that
+      // submits every field on every save must not read as eighteen changes.
+      const changed = {};
+      for (const [field, next] of Object.entries(updates)) {
+        const before = pupil[field] ?? null;
+        if (String(before ?? "") !== String(next ?? "")) changed[field] = next;
+      }
+      if (Object.keys(changed).length === 0) return null;
+
+      // An email already used by another pupil in this school. Declined so the
+      // request falls through rather than storing a duplicate the server will
+      // refuse with a 409 nobody sees until the outbox drains.
+      if (changed.email) {
+        // docs.find(collection, filter), not docs.all — `all()` belongs to
+        // state(db) and reads sync_state, so `docs.all("student")` is undefined
+        // and the guard below would have been a silent no-op.
+        const clash = (docs.find("student", { schoolId }) ?? [])
+          .find((other) => String(other._id) !== String(pupil._id)
+                        && !other.deletedAt
+                        && String(other.email ?? "").toLowerCase() === changed.email);
+        if (clash) return null;
+      }
+
+      const when = nowISO();
+      const next = {
+        ...changed,
+        updatedBy:     session?.userId ?? null,
+        updatedByName: session?.name   ?? null,
+        updatedAt:     when,
+      };
+
+      /*
+       * studentName only, never `name`.
+       *
+       * `name` is not a path on the server's Student schema and the schema is
+       * strict, so writing it there is silently dropped. Writing it here would
+       * put a value in the local mirror that the next pull removes.
+       */
+      if (changed.firstName !== undefined || changed.lastName !== undefined) {
+        const first = changed.firstName !== undefined ? changed.firstName : pupil.firstName;
+        const last  = changed.lastName  !== undefined ? changed.lastName  : pupil.lastName;
+        const full  = `${first ?? ""} ${last ?? ""}`.trim();
+        if (full) next.studentName = full;
+      }
+
+      const doc = touch(pupil, next);
+
+      return {
+        collection: "student",
+        doc,
+
+        request: {
+          method: "PATCH",
+          path:   `/api/students/${id}`,
+          body:   { ...body, schoolId },
+        },
+
+        response: {
+          status: 200,
+          data: {
+            success:   true,
+            message:   "Student record updated.",
+            changed:   Object.keys(changed),
+            data:      normaliseStudentDoc(doc),
+            overwrote: overwroteFor(
+              pupil,
+              { ...body, baseUpdatedAt: body?.baseUpdatedAt ?? query?.baseUpdatedAt },
+              session
+            ),
+          },
+        },
+      };
+    },
+  },
+
+  {
     route: "PATCH /api/students/:id/suspend",
 
     /**

@@ -214,7 +214,8 @@
     "present": "Présent",
     "absent": "Absent",
     "late": "En retard",
-    "excused": "Excusé"
+    "excused": "Excusé",
+    "dateOfBirthPh": "AAAA-MM-JJ"
   },
   "results": {
     "published": "Publié",
@@ -508,7 +509,16 @@
     "allStatuses": "Tous les statuts",
     "suspended": "Suspendu",
     "rejected": "Rejeté",
-    "errEnroll": "Impossible d'inscrire l'élève"
+    "errEnroll": "Impossible d'inscrire l'élève",
+    "alternatePhone": "Autre téléphone",
+    "city": "Ville",
+    "state": "Région",
+    "nationalId": "Pièce d'identité",
+    "guardianPhone": "Téléphone du parent",
+    "guardianEmail": "E-mail du parent",
+    "guardianRelation": "Lien de parenté",
+    "bloodGroup": "Groupe sanguin",
+    "medicalConditions": "Informations médicales"
   },
   "teachers": {
     "title": "Enseignants",
@@ -2639,5 +2649,32 @@
     "server": "Le serveur a rencontré un problème. Réessayez dans un instant.",
     "forbidden": "Vous n'avez pas les droits nécessaires pour cette action.",
     "signedOut": "Votre session a expiré. Veuillez vous reconnecter."
+  },
+  "studentEdit": {
+    "title": "Corriger la fiche de l'élève",
+    "blurb": "Corrigez les informations mal saisies. La classe, le statut et le matricule se modifient ailleurs.",
+    "identity": "Identité",
+    "identityHint": "Ces informations figurent sur les bulletins, les cartes et les relevés. Les modifications sont enregistrées.",
+    "contact": "Coordonnées",
+    "guardian": "Parent ou tuteur",
+    "welfare": "Santé et notes",
+    "reason": "Motif de la correction",
+    "reasonHint": "Facultatif. Enregistré avec la modification.",
+    "reasonPh": "ex. nom mal saisi à l'inscription",
+    "save": "Enregistrer les corrections",
+    "saved": "Fiche mise à jour",
+    "savedCount": "{{count}} champ corrigé.",
+    "savedCount_other": "{{count}} champs corrigés.",
+    "noChanges": "Rien à enregistrer",
+    "noChangesBody": "Aucun champ n'a été modifié.",
+    "errSave": "Impossible d'enregistrer les corrections",
+    "overwrote": "Quelqu'un d'autre avait modifié cette fiche plus récemment. Votre version a été appliquée et la sienne enregistrée.",
+    "lockedElsewhere": "Modifiez la classe depuis la fiche de l'élève, et le statut depuis les Admissions.",
+    "history": "Historique des corrections",
+    "historyEmpty": "Cette fiche n'a jamais été corrigée.",
+    "historyBy": "par {{name}}",
+    "was": "était",
+    "emptyValue": "(vide)",
+    "edit": "Corriger la fiche"
   }
 }

@@ -214,7 +214,8 @@
     "present": "Present",
     "absent": "Absent",
     "late": "Late",
-    "excused": "Excused"
+    "excused": "Excused",
+    "dateOfBirthPh": "YYYY-MM-DD"
   },
   "results": {
     "published": "Published",
@@ -508,7 +509,16 @@
     "allStatuses": "All Statuses",
     "suspended": "Suspended",
     "rejected": "Rejected",
-    "errEnroll": "Could not enrol the student"
+    "errEnroll": "Could not enrol the student",
+    "alternatePhone": "Other phone",
+    "city": "City or town",
+    "state": "Region",
+    "nationalId": "National ID",
+    "guardianPhone": "Guardian's phone",
+    "guardianEmail": "Guardian's email",
+    "guardianRelation": "Relationship",
+    "bloodGroup": "Blood group",
+    "medicalConditions": "Medical notes"
   },
   "teachers": {
     "title": "Teachers",
@@ -2639,5 +2649,32 @@
     "server": "The server ran into a problem. Please try again in a moment.",
     "forbidden": "You do not have permission to do that.",
     "signedOut": "Your session has ended. Please sign in again."
+  },
+  "studentEdit": {
+    "title": "Correct student record",
+    "blurb": "Fix details that were mistyped. Class, status and enrolment number are changed elsewhere.",
+    "identity": "Identity",
+    "identityHint": "These appear on report cards, identity cards and transcripts. Changes are recorded.",
+    "contact": "Contact",
+    "guardian": "Guardian",
+    "welfare": "Welfare",
+    "reason": "Reason for the correction",
+    "reasonHint": "Optional. Recorded with the change.",
+    "reasonPh": "e.g. surname mistyped at admission",
+    "save": "Save corrections",
+    "saved": "Record updated",
+    "savedCount": "{{count}} field corrected.",
+    "savedCount_other": "{{count}} fields corrected.",
+    "noChanges": "Nothing to save",
+    "noChangesBody": "No field was changed.",
+    "errSave": "Could not save the corrections",
+    "overwrote": "Somebody else had edited this record more recently. Your version was applied and theirs was recorded.",
+    "lockedElsewhere": "Change the class from the pupil's page, and the status from Admissions.",
+    "history": "Correction history",
+    "historyEmpty": "This record has not been corrected.",
+    "historyBy": "by {{name}}",
+    "was": "was",
+    "emptyValue": "(empty)",
+    "edit": "Correct details"
   }
 }
