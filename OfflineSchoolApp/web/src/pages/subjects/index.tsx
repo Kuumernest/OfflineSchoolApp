@@ -367,7 +367,7 @@ const DeleteDialog = ({
           disabled={busy}
           className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
         >
-          {busy ? "Deleting…" : "Delete"}
+          {busy ? t("common.deleting") : "Delete"}
         </button>
       </div>
     </div>
@@ -532,7 +532,7 @@ export default function AdminSubjectsPage() {
             !canManage
               ? t("subjects.noneAssignedHint")
               : selectedClassId
-                ? "No subjects in this class yet. Add one to get started."
+                ? t("subjects.noneInClass")
                 : "Add your first subject and link it to a class."
           }
           // No "Add your first subject" for somebody who cannot add one. An

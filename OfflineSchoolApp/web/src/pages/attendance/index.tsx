@@ -423,7 +423,7 @@ export default function AttendancePage() {
           </p>
           <p className="mt-1 text-sm text-gray-500">
             {subject === "students"
-              ? "This class has no active students yet."
+              ? t("attendance.noActiveStudents")
               : "No active teachers found for this school."}
           </p>
         </Card>

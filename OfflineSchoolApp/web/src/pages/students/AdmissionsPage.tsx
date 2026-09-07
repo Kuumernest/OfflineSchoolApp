@@ -244,7 +244,7 @@ function ApplicationCard({
               : "bg-amber-50 text-amber-700"
           )}
         >
-          {stale ? "Stale" : "Pending"}
+          {stale ? t("common.stale") : "Pending"}
         </span>
       </div>
 

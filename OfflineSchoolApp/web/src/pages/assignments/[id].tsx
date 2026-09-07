@@ -83,7 +83,7 @@ const DeleteDialog = ({ assignment, onConfirm, onCancel, busy }: DeleteDialogPro
           disabled={busy}
           className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
         >
-          {busy ? "Removing…" : "Remove"}
+          {busy ? t("common.removing") : "Remove"}
         </button>
       </div>
     </div>

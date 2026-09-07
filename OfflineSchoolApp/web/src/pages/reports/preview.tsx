@@ -81,7 +81,7 @@ export default function TemplatePreviewPage() {
         <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-900 truncate">{name}</h1>
           <p className="text-xs text-gray-500">
-            {examId ? "Live Preview" : "Layout Preview"}
+            {examId ? t("reports.livePreview") : "Layout Preview"}
           </p>
         </div>
         {templateId && (

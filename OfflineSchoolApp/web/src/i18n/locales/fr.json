@@ -104,7 +104,14 @@
     "clear": "Effacer",
     "male": "Masculin",
     "female": "Féminin",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "saveChanges": "Enregistrer les modifications",
+    "tryDifferentSearch": "Essayez un autre terme de recherche.",
+    "deleteFailed": "Suppression impossible. Veuillez réessayer.",
+    "deleting": "Suppression…",
+    "stale": "En attente depuis longtemps",
+    "inUse": "Utilisé",
+    "removing": "Retrait…"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -459,7 +466,10 @@
     "identifierHint": "Le personnel saisit son e-mail · Les élèves saisissent leur matricule",
     "asStaff": "Connexion en tant que personnel / administrateur",
     "asStudent": "Connexion en tant qu'élève",
-    "copyright": "Système de gestion scolaire © {{year}}"
+    "copyright": "Système de gestion scolaire © {{year}}",
+    "errIdentifierRequired": "L'adresse e-mail ou le matricule est requis",
+    "errPasswordRequired": "Le mot de passe est requis",
+    "forgotten": "Mot de passe oublié ? Contactez votre administrateur système."
   },
   "changePassword": {
     "title": "Définir un nouveau mot de passe",
@@ -518,7 +528,10 @@
     "guardianEmail": "E-mail du parent",
     "guardianRelation": "Lien de parenté",
     "bloodGroup": "Groupe sanguin",
-    "medicalConditions": "Informations médicales"
+    "medicalConditions": "Informations médicales",
+    "emailedThem": "Ses identifiants de connexion lui ont été envoyés par e-mail.",
+    "emailedThem2": "L'élève a reçu ses identifiants par e-mail.",
+    "adjustFilters": "Essayez d'ajuster vos filtres"
   },
   "teachers": {
     "title": "Enseignants",
@@ -554,7 +567,9 @@
     "assignSubjectFailed": "Échec de l'attribution de la matière.",
     "unassignConfirm": "Retirer « {{name}} » de cet enseignant ?",
     "notFound": "Enseignant introuvable",
-    "noId": "Aucun enseignant n'a été indiqué."
+    "noId": "Aucun enseignant n'a été indiqué.",
+    "none": "Aucun enseignant",
+    "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières."
   },
   "subjects": {
     "title": "Matières",
@@ -584,7 +599,13 @@
     "classCount_other": "{{count}} classes",
     "noneAssigned": "Aucune matière ne vous est encore attribuée",
     "noneAssignedHint": "Les matières apparaissent ici dès qu'un administrateur vous les attribue.",
-    "assigned": "Affectées"
+    "assigned": "Affectées",
+    "create": "Créer la matière",
+    "firstOne": "Commencez par ajouter votre première matière.",
+    "deselectAll": "Tout désélectionner",
+    "loadingTeachers": "Chargement des enseignants…",
+    "noneInClass": "Aucune matière dans cette classe. Ajoutez-en une pour commencer.",
+    "deleteTitle": "Supprimer la matière"
   },
   "classes": {
     "classTeacher": "Professeur titulaire",
@@ -603,7 +624,13 @@
     "selectClass": "Choisir une classe",
     "filterByClass": "Filtrer par classe",
     "pageTabs": "Onglets de la page",
-    "noneHint": "Créez une classe avant de définir la progression."
+    "noneHint": "Créez une classe avant de définir la progression.",
+    "create": "Créer la classe",
+    "firstOne": "Commencez par ajouter votre première classe.",
+    "deleteWarning": "Toutes les matières rattachées et les affectations d'enseignants seront également supprimées.",
+    "errNameRequired": "Le nom de la classe est obligatoire.",
+    "errNameMax": "Le nom de la classe ne peut pas dépasser {{max}} caractères.",
+    "deleteTitle": "Supprimer la classe"
   },
   "attendance": {
     "title": "Assiduité",
@@ -640,7 +667,8 @@
     "period": "Période",
     "allDay": "Toute la journée",
     "partlySaved": "Enregistré en partie",
-    "partlySavedBody": "{{saved}} enregistré(s), {{failed}} rejeté(s)"
+    "partlySavedBody": "{{saved}} enregistré(s), {{failed}} rejeté(s)",
+    "noActiveStudents": "Cette classe n'a encore aucun élève actif."
   },
   "announcements": {
     "title": "Communiqués",
@@ -667,7 +695,12 @@
     "removed": "Communiqué supprimé",
     "errRemove": "Suppression impossible",
     "errPin": "Impossible de modifier l'épinglage",
-    "markedRead": "Marqué comme lu"
+    "markedRead": "Marqué comme lu",
+    "updated": "Communiqué mis à jour",
+    "noneMatch": "Aucun résultat pour ces filtres",
+    "clearFilters": "Essayez de retirer les filtres.",
+    "unpin": "Détacher",
+    "editOne": "Modifier le communiqué"
   },
   "timetable": {
     "title": "Emploi du temps",
@@ -694,7 +727,8 @@
     "lessonRemoved": "Cours retiré",
     "errSaveLesson": "Impossible d'enregistrer le cours",
     "errRemoveLesson": "Impossible de retirer le cours",
-    "periodTaken": "Ce créneau est déjà occupé"
+    "periodTaken": "Ce créneau est déjà occupé",
+    "someoneElseFirst": "Quelqu'un d'autre est passé avant vous"
   },
   "periods": {
     "title": "La journée scolaire",
@@ -719,7 +753,10 @@
     "errReorder": "Réorganisation impossible",
     "errSave": "Enregistrement impossible",
     "removed": "Période supprimée",
-    "remove": "Retirer le créneau"
+    "remove": "Retirer le créneau",
+    "updated": "Créneau mis à jour",
+    "hideInactive": "Masquer les inactifs",
+    "hideFromTable": "Masquer dans l'emploi du temps"
   },
   "exams": {
     "title": "Évaluations et résultats",
@@ -1114,7 +1151,10 @@
     "stepTeacher": "Choisir l’enseignant",
     "stepClass": "Choisir la classe",
     "confirming": "Confirmation…",
-    "loading": "Chargement des attributions…"
+    "loading": "Chargement des attributions…",
+    "created": "Affectation créée",
+    "noTeacherHit": "Aucun enseignant ne correspond à votre recherche.",
+    "firstOne": "Affectez un enseignant à une classe et à une matière pour commencer."
   },
   "reports": {
     "title": "Rapports",
@@ -1128,7 +1168,8 @@
     "presentToday": "Présents aujourd'hui",
     "builtFromTemplate": "Les bulletins sont créés à partir d'un modèle, puis générés par évaluation.",
     "cardTemplatesBlurb": "Concevez la mise en page reçue par les parents. Définissez-en une par défaut et tous les examens l’utiliseront.",
-    "generateCardsBlurb": "Choisissez un examen et une classe, puis générez et imprimez le bulletin de chaque élève."
+    "generateCardsBlurb": "Choisissez un examen et une classe, puis générez et imprimez le bulletin de chaque élève.",
+    "livePreview": "Aperçu en direct"
   },
   "templates": {
     "title": "Modèles de bulletins",

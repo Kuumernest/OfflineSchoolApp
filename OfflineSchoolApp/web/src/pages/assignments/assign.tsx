@@ -380,7 +380,7 @@ export default function AssignTeacherPage() {
             }
           </div>
           <h2 className="text-xl font-bold text-gray-900">
-            {allOk ? "Assignment Created!" : "Partial Success"}
+            {allOk ? t("assignments.created") : "Partial Success"}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
             Assigned to{" "}
@@ -481,7 +481,7 @@ export default function AssignTeacherPage() {
             <p className="py-6 text-center text-sm text-gray-400">Loading teachers…</p>
           ) : filteredTeachers.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-400">
-              {teacherSearch ? "No teachers match your search." : "No teachers found."}
+              {teacherSearch ? t("assignments.noTeacherHit") : "No teachers found."}
             </p>
           ) : (
             <div className="flex flex-col gap-2">

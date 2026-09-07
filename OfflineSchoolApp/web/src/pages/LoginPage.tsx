@@ -1,5 +1,5 @@
 // web/src/pages/LoginPage.tsx
-import { useEffect, useState }    from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useNavigate }            from "react-router-dom";
 import { useForm }                from "react-hook-form";
 import { zodResolver }            from "@hookform/resolvers/zod";
@@ -20,12 +20,22 @@ import loginBg from "@/assets/login-bg.jpg";
 // SCHEMA
 // ─────────────────────────────────────────────────────────────────────────────
 
-const loginSchema = z.object({
-  identifier: z.string().min(1, "Email or enrollment number is required").transform((v) => v.trim()),
-  password:   z.string().min(1, "Password is required"),
+/*
+ * Built from `t`, because a schema at module scope has no translator.
+ *
+ * Both messages were English literals, so the one screen every user meets
+ * first refused them in a language they may not read. Same shape as the
+ * classes screen: the rules and their order are untouched, only where the
+ * message comes from has changed.
+ */
+type Translate = (key: string) => string;
+
+const buildLoginSchema = (t: Translate) => z.object({
+  identifier: z.string().min(1, t("login.errIdentifierRequired")).transform((v) => v.trim()),
+  password:   z.string().min(1, t("login.errPasswordRequired")),
 });
 
-type LoginForm = z.infer<typeof loginSchema>;
+type LoginForm = z.infer<ReturnType<typeof buildLoginSchema>>;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // COMPONENT
@@ -57,12 +67,16 @@ export default function LoginPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Rebuilt on a language change so a message already on screen is replaced
+  // rather than left in the previous language.
+  const loginRules = useMemo(() => buildLoginSchema(t), [t]);
+
   const {
     register,
     handleSubmit,
     watch,
     formState: { errors },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  } = useForm<LoginForm>({ resolver: zodResolver(loginRules) });
 
   /*
    * ACCEPTED — react-hooks/incompatible-library (a warning, not an error).
@@ -194,7 +208,7 @@ export default function LoginPage() {
               className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-              {isLoading ? "Signing in…" : "Sign In"}
+              {isLoading ? t("common.saving") : "Sign In"}
             </button>
 
           </form>
@@ -202,7 +216,7 @@ export default function LoginPage() {
           {/* Forgot password */}
           <p className="text-center text-gray-400 text-xs mt-5">
             {looksLikeEmail
-              ? "Forgotten your password? Contact your system administrator."
+              ? t("login.forgotten")
               : "Forgotten your password? Ask your class teacher or school admin to reset it."}
           </p>
         </div>

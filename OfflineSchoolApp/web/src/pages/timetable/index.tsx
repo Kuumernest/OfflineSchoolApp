@@ -178,7 +178,7 @@ export default function TimetablePage() {
     if (err instanceof TimetableConflictError) {
       const { kind, message } = err.conflict;
       toast({
-        title:   kind === "version" ? "Someone else got there first" : "That clashes",
+        title:   kind === "version" ? t("timetable.someoneElseFirst") : "That clashes",
         message: kind === "version"
           ? `${message} The grid has been refreshed with their version.`
           : message,
@@ -188,7 +188,7 @@ export default function TimetablePage() {
       return;
     }
     toast({ title: fallback, message: getErrorMessage(err), kind: "error" });
-  }, [toast, invalidate]);
+  }, [toast, invalidate, t]);
 
   // ── Mutations ──────────────────────────────────────────────────────────────
   const saveMutation = useMutation({
@@ -795,7 +795,7 @@ function SlotEditor({
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saving}>
-              {existing ? "Save changes" : "Add lesson"}
+              {existing ? t("common.saveChanges") : "Add lesson"}
             </Button>
           </div>
         </div>

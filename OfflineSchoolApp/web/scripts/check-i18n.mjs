@@ -110,6 +110,24 @@ const LITERAL_PATTERNS = [
   [/\b(?:errors|next)\.[A-Za-z_$][\w$]*\s*=\s*"([A-Z][^"]{3,})"/g, "validation message"],
   [/\btoast\(\s*\{[^{}]*?\btitle:\s*"([A-Z][^"]{3,})"/g,           "toast title"],
   [/\b(?:setError|setLoadError)\(\s*"([A-Z][^"]{3,})"/g,           "inline error"],
+
+  /*
+   * The two that let the classes screen through.
+   *
+   * Its Zod schemas sat at module scope, where there is no translator, so every
+   * validation message on it was English whatever the app was set to. And its
+   * buttons and modal titles were ternaries — {editing ? "Edit Class" : "Add
+   * Class"} — which is not an assignment, not a toast and not a setError, so
+   * none of the three rules above could see them.
+   *
+   * Both are narrow enough to be worth failing on. A Zod message is
+   * user-visible by construction. A ternary whose BOTH branches are quoted
+   * sentences is a rendered string in all but the rarest case, and the rare
+   * case can say so with i18n-exempt.
+   */
+  [/\.(?:min|max|length|email|url|regex)\([^)]*?,\s*"([A-Z][^"]{3,})"\s*\)/g, "validation rule"],
+  [/\brequired_error:\s*"([A-Z][^"]{3,})"/g,                                  "validation rule"],
+  [/\?\s*"([A-Z][^"]{2,})"\s*:\s*"[A-Z][^"]{2,}"/g,                           "ternary label"],
 ];
 
 const literals = [];

@@ -526,7 +526,7 @@ export default function EditTeacherPage() {
             ? <Loader2 size={15} className="animate-spin" />
             : <Save size={15} />
           }
-          {saving ? "Saving…" : "Save"}
+          {saving ? t("common.saving") : "Save"}
         </button>
       </div>
 

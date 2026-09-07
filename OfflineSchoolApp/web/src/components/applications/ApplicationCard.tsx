@@ -104,7 +104,7 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
               : "bg-amber-100 text-amber-700",
           ].join(" ")}
         >
-          {stale ? "Stale" : "Pending"}
+          {stale ? t("common.stale") : "Pending"}
         </span>
       </div>
 

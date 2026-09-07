@@ -172,7 +172,7 @@ export default function AnnouncementsPage() {
         : createAnnouncement(payload);
     },
     onSuccess: () => {
-      toast({ title: editing ? "Announcement updated" : "Announcement posted", kind: "success" });
+      toast({ title: editing ? t("announcements.updated") : "Announcement posted", kind: "success" });
       closeComposer();
       invalidate();
     },
@@ -328,11 +328,11 @@ export default function AnnouncementsPage() {
         <Card className="text-center py-16">
           <Megaphone className="w-8 h-8 text-gray-300 mx-auto" />
           <p className="mt-3 text-sm font-medium text-gray-700">
-            {audience || priority ? "Nothing matches those filters" : "No announcements yet"}
+            {audience || priority ? t("announcements.noneMatch") : "No announcements yet"}
           </p>
           <p className="mt-1 text-sm text-gray-500">
             {audience || priority
-              ? "Try clearing the filters."
+              ? t("announcements.clearFilters")
               : "Post one to reach staff, students, or a particular class."}
           </p>
           {!audience && !priority && (
@@ -402,7 +402,7 @@ export default function AnnouncementsPage() {
                       </IconAction>
                       {pinAllowed && (
                         <IconAction
-                          title={a.isPinned ? "Unpin" : "Pin to the top"}
+                          title={a.isPinned ? t("announcements.unpin") : "Pin to the top"}
                           onClick={() => pinMutation.mutate(a._id)}
                         >
                           {a.isPinned
@@ -438,7 +438,7 @@ export default function AnnouncementsPage() {
       <Modal
         open={composerOpen}
         onClose={closeComposer}
-        title={editing ? "Edit announcement" : "New announcement"}
+        title={editing ? t("announcements.editOne") : "New announcement"}
         size="lg"
       >
         <form
@@ -567,7 +567,7 @@ export default function AnnouncementsPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saveMutation.isPending}>
-              {editing ? "Save changes" : "Post announcement"}
+              {editing ? t("common.saveChanges") : "Post announcement"}
             </Button>
           </div>
         </form>

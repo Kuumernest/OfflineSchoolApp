@@ -415,7 +415,7 @@ export default function StudentsPage() {
             title={t("students.none")}
             subtitle={
               search || classId || status !== "all"
-                ? "Try adjusting your filters"
+                ? t("students.adjustFilters")
                 : "Add your first student to get started"
             }
             action={

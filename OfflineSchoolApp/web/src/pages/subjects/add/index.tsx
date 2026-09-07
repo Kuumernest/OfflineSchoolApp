@@ -624,7 +624,7 @@ export default function AddSubjectPage() {
                         : <Square      size={16} className="text-gray-400 shrink-0"   />
                       }
                       <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                        {allSelected ? "Deselect All" : "Select All"}
+                        {allSelected ? t("subjects.deselectAll") : "Select All"}
                       </span>
                       <span className="ml-auto text-xs text-gray-400">
                         {form.classIds.length}/{classes.length}
@@ -717,7 +717,7 @@ export default function AddSubjectPage() {
                 )}
               >
                 <option value="">
-                  {teachersQuery.isLoading ? "Loading teachers…" : "No teacher assigned"}
+                  {teachersQuery.isLoading ? t("subjects.loadingTeachers") : "No teacher assigned"}
                 </option>
                 {teachers.map((t) => (
                   <option key={t._id} value={t._id}>{t.name}</option>

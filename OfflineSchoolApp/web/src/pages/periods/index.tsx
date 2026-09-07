@@ -122,7 +122,7 @@ export default function PeriodsPage() {
         : createPeriod(payload);
     },
     onSuccess: () => {
-      toast({ title: editing ? "Period updated" : "Period added", kind: "success" });
+      toast({ title: editing ? t("periods.updated") : "Period added", kind: "success" });
       closeModal();
       invalidate();
     },
@@ -250,7 +250,7 @@ export default function PeriodsPage() {
               : <Eye className="w-4 h-4" />}
             onClick={() => setShowInactive((v) => !v)}
           >
-            {showInactive ? "Hide inactive" : "Show inactive"}
+            {showInactive ? t("periods.hideInactive") : "Show inactive"}
           </Button>
           <Button icon={<Plus className="w-4 h-4" />} onClick={openCreate}>
             {t("periods.add")}
@@ -350,7 +350,7 @@ export default function PeriodsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <Badge
-                          label={p.isActive ? "In use" : "Hidden"}
+                          label={p.isActive ? t("common.inUse") : "Hidden"}
                           variant={p.isActive ? "success" : "default"}
                         />
                         {p.isBreak && <Badge label={t("timetable.break")} variant="warning" />}
@@ -360,7 +360,7 @@ export default function PeriodsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <IconAction
-                          title={p.isActive ? "Hide from timetable" : "Put back in use"}
+                          title={p.isActive ? t("periods.hideFromTable") : "Put back in use"}
                           onClick={() => toggleMutation.mutate(p._id)}
                         >
                           {p.isActive
@@ -442,7 +442,7 @@ export default function PeriodsPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saveMutation.isPending}>
-              {editing ? "Save changes" : "Add period"}
+              {editing ? t("common.saveChanges") : "Add period"}
             </Button>
           </div>
         </form>

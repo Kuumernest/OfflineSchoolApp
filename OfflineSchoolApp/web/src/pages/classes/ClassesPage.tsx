@@ -1,4 +1,4 @@
-import { useState }                                      from "react";
+import { useState, useMemo }                             from "react";
 import { useSearchParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }         from "@tanstack/react-query";
 import { School, Plus, Pencil, Trash2, BookOpen }        from "lucide-react";
@@ -37,11 +37,26 @@ import { useTranslation } from "react-i18next";
 // SCHEMAS
 // ─────────────────────────────────────────────────────────
 
-const classSchema = z.object({
-  // max(100) matches Class.js maxlength on the server, so the console refuses
-  // up front what the server would reject as a 500-shaped ValidationError.
-  name:    z.string().min(1, "Class name is required")
-                  .max(100, "Class name must not exceed 100 characters"),
+/*
+ * The schemas are built from `t`, not declared with English literals.
+ *
+ * They sat at module scope, where there is no translator, so every validation
+ * message on this screen was English however the app was set — a French admin
+ * got a French form that refused them in English. Taking the translator as an
+ * argument is the smallest change that fixes it: the rules, their order and
+ * their bounds are untouched, and the messages now come from the same catalogue
+ * as the labels above them.
+ */
+type Translate = (key: string, opts?: Record<string, unknown>) => string;
+
+const MAX_CLASS_NAME = 100;
+
+// max(100) matches Class.js maxlength on the server, so the console refuses up
+// front what the server would reject as a 500-shaped ValidationError.
+const buildClassSchema = (t: Translate) => z.object({
+  name: z.string()
+    .min(1, t("classes.errNameRequired"))
+    .max(MAX_CLASS_NAME, t("classes.errNameMax", { max: MAX_CLASS_NAME })),
   level:   z.string().optional(),
   section: z.string().optional(),
   // The form master. Optional: a class may genuinely not have one assigned
@@ -50,15 +65,21 @@ const classSchema = z.object({
   classTeacherId: z.string().optional(),
 });
 
-const subjectSchema = z.object({
-  name:      z.string().min(1, "Subject name is required"),
+const buildSubjectSchema = (t: Translate) => z.object({
+  name:      z.string().min(1, t("subjectsEdit.errNameRequired")),
   code:      z.string().optional(),
-  classId:   z.string().min(1, "Class is required"),
+  classId:   z.string().min(1, t("subjectsEdit.errClassRequired")),
   teacherId: z.string().optional(),
 });
 
-type ClassForm   = z.infer<typeof classSchema>;
-type SubjectForm = z.infer<typeof subjectSchema>;
+/*
+ * The form types come from the builders' return types, not from a placeholder
+ * schema built with a stub translator. A placeholder would be a real value
+ * nothing validates against — the kind of thing that survives a refactor and
+ * then quietly becomes the resolver somebody reaches for.
+ */
+type ClassForm   = z.infer<ReturnType<typeof buildClassSchema>>;
+type SubjectForm = z.infer<ReturnType<typeof buildSubjectSchema>>;
 
 // ─────────────────────────────────────────────────────────
 // TEACHER TYPE
@@ -179,9 +200,14 @@ export default function ClassesPage() {
   // FORMS
   // ─────────────────────────────────────────────────────
 
+  // Rebuilt on a language change so a message already on screen is replaced
+  // rather than left in the previous language.
+  const classRules   = useMemo(() => buildClassSchema(t),   [t]);
+  const subjectRules = useMemo(() => buildSubjectSchema(t), [t]);
+
   // ── Class form ─────────────────────────────────────────
   const classForm = useForm<ClassForm>({
-    resolver:      zodResolver(classSchema),
+    resolver:      zodResolver(classRules),
     defaultValues: { name: "", level: "", section: "", classTeacherId: "" },
   });
 
@@ -215,7 +241,7 @@ export default function ClassesPage() {
 
   // ── Subject form ───────────────────────────────────────
   const subjectForm = useForm<SubjectForm>({
-    resolver:      zodResolver(subjectSchema),
+    resolver:      zodResolver(subjectRules),
     defaultValues: { name: "", code: "", classId: "", teacherId: "" },
   });
 
@@ -359,7 +385,7 @@ export default function ClassesPage() {
           className="flex items-center gap-2"
         >
           <Plus className="h-4 w-4" />
-          {tab === "classes" ? "Add Class" : "Add Subject"}
+          {tab === "classes" ? t("classes.add") : t("subjects.add")}
         </Button>
       </div>
 
@@ -429,8 +455,8 @@ export default function ClassesPage() {
             title={t("classes.none")}
             description={
               search
-                ? "Try a different search term."
-                : "Get started by adding your first class."
+                ? t("common.tryDifferentSearch")
+                : t("classes.firstOne")
             }
             action={
               <Button onClick={() => openClassModal()}>
@@ -475,8 +501,8 @@ export default function ClassesPage() {
             title={t("subjects.none")}
             description={
               search
-                ? "Try a different search term."
-                : "Get started by adding your first subject."
+                ? t("common.tryDifferentSearch")
+                : t("subjects.firstOne")
             }
             action={
               <Button onClick={() => openSubjectModal()}>
@@ -501,7 +527,7 @@ export default function ClassesPage() {
       <Modal
         open={classModal}
         onClose={closeClassModal}
-        title={editingClass ? "Edit Class" : "Add Class"}
+        title={editingClass ? t("classes.edit") : t("classes.add")}
       >
         <form
           onSubmit={classForm.handleSubmit((v) => classMutation.mutate(v))}
@@ -569,7 +595,7 @@ export default function ClassesPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" loading={classMutation.isPending}>
-              {editingClass ? "Save Changes" : "Create Class"}
+              {editingClass ? t("common.saveChanges") : t("classes.create")}
             </Button>
           </div>
         </form>
@@ -579,7 +605,7 @@ export default function ClassesPage() {
       <Modal
         open={subjectModal}
         onClose={closeSubjectModal}
-        title={editingSubject ? "Edit Subject" : "Add Subject"}
+        title={editingSubject ? t("subjects.edit") : t("subjects.add")}
       >
         <form
           onSubmit={subjectForm.handleSubmit((v) => subjectMutation.mutate(v))}
@@ -643,7 +669,7 @@ export default function ClassesPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" loading={subjectMutation.isPending}>
-              {editingSubject ? "Save Changes" : "Create Subject"}
+              {editingSubject ? t("common.saveChanges") : t("subjects.create")}
             </Button>
           </div>
         </form>
@@ -653,7 +679,9 @@ export default function ClassesPage() {
       <Modal
         open={!!deleteConfirm}
         onClose={() => setDeleteConfirm(null)}
-        title={`Delete ${deleteConfirm?.type === "class" ? "Class" : "Subject"}`}
+        title={deleteConfirm?.type === "class"
+            ? t("classes.deleteTitle")
+            : t("subjects.deleteTitle")}
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
@@ -663,7 +691,7 @@ export default function ClassesPage() {
             </span>
             ?{" "}
             {deleteConfirm?.type === "class" &&
-              "All linked subjects and teacher assignments will also be removed. "}
+              t("classes.deleteWarning") + " "}
             {t("common.cannotUndo")}
           </p>
 
@@ -671,7 +699,7 @@ export default function ClassesPage() {
             <p className="text-sm text-red-600">
               {(deleteMutation.error as { response?: { data?: { message?: string } } })
                 ?.response?.data?.message ??
-                "Delete failed. Please try again."}
+                t("common.deleteFailed")}
             </p>
           )}
 

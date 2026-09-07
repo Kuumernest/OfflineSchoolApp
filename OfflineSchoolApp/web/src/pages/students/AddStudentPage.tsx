@@ -168,7 +168,7 @@ export default function AddStudentPage() {
             </h2>
             <p className="mt-1 text-sm text-gray-500">
               {result.emailSent
-                ? "Their sign-in details have been emailed to them."
+                ? t("students.emailedThem")
                 : "No email was sent — pass these details on yourself."}
             </p>
           </div>
@@ -212,7 +212,7 @@ export default function AddStudentPage() {
               {result.warning
                 ? result.warning
                 : result.emailSent
-                  ? "The student has received their details by email."
+                  ? t("students.emailedThem2")
                   : "Write these down before leaving this page — they are not shown again, and recovering them means resetting the account."}
             </p>
           </div>

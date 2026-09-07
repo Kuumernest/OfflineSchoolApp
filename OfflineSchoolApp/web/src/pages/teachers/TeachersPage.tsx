@@ -299,11 +299,11 @@ export default function TeachersPage() {
           <div className="py-16 text-center">
             <Users className="w-8 h-8 text-gray-300 mx-auto" />
             <p className="mt-3 text-sm font-medium text-gray-700">
-              {teachers.length === 0 ? "No teachers yet" : "Nothing matches that search"}
+              {teachers.length === 0 ? t("teachers.none") : "Nothing matches that search"}
             </p>
             <p className="mt-1 text-sm text-gray-500">
               {teachers.length === 0
-                ? "Add a teacher to give them an account and assign them subjects."
+                ? t("teachers.firstOne")
                 : "Search only covers the current page — try another page or clear the filter."}
             </p>
             {teachers.length === 0 && (

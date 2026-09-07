@@ -104,7 +104,14 @@
     "clear": "Clear",
     "male": "Male",
     "female": "Female",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "saveChanges": "Save changes",
+    "tryDifferentSearch": "Try a different search term.",
+    "deleteFailed": "Could not delete. Please try again.",
+    "deleting": "Deleting…",
+    "stale": "Stale",
+    "inUse": "In use",
+    "removing": "Removing…"
   },
   "flow": {
     "title": "Results workflow",
@@ -459,7 +466,10 @@
     "identifierHint": "Staff enter their email · Students enter their enrolment number",
     "asStaff": "Signing in as staff / admin",
     "asStudent": "Signing in as student",
-    "copyright": "School Management System © {{year}}"
+    "copyright": "School Management System © {{year}}",
+    "errIdentifierRequired": "Email or enrolment number is required",
+    "errPasswordRequired": "Password is required",
+    "forgotten": "Forgotten your password? Contact your system administrator."
   },
   "changePassword": {
     "title": "Set a new password",
@@ -518,7 +528,10 @@
     "guardianEmail": "Guardian's email",
     "guardianRelation": "Relationship",
     "bloodGroup": "Blood group",
-    "medicalConditions": "Medical notes"
+    "medicalConditions": "Medical notes",
+    "emailedThem": "Their sign-in details have been emailed to them.",
+    "emailedThem2": "The student has received their details by email.",
+    "adjustFilters": "Try adjusting your filters"
   },
   "teachers": {
     "title": "Teachers",
@@ -554,7 +567,9 @@
     "assignSubjectFailed": "Failed to assign subject.",
     "unassignConfirm": "Remove “{{name}}” from this teacher?",
     "notFound": "Teacher not found",
-    "noId": "No teacher was specified."
+    "noId": "No teacher was specified.",
+    "none": "No teachers yet",
+    "firstOne": "Add a teacher to give them an account and assign them subjects."
   },
   "subjects": {
     "title": "Subjects",
@@ -584,7 +599,13 @@
     "classCount_other": "{{count}} classes",
     "noneAssigned": "No subjects assigned to you yet",
     "noneAssignedHint": "Subjects appear here once an administrator assigns you to teach them.",
-    "assigned": "Assigned"
+    "assigned": "Assigned",
+    "create": "Create subject",
+    "firstOne": "Get started by adding your first subject.",
+    "deselectAll": "Deselect all",
+    "loadingTeachers": "Loading teachers…",
+    "noneInClass": "No subjects in this class yet. Add one to get started.",
+    "deleteTitle": "Delete subject"
   },
   "classes": {
     "classTeacher": "Class teacher (form master)",
@@ -603,7 +624,13 @@
     "selectClass": "Select a class",
     "filterByClass": "Filter by class",
     "pageTabs": "Page tabs",
-    "noneHint": "Create a class before setting up progression."
+    "noneHint": "Create a class before setting up progression.",
+    "create": "Create class",
+    "firstOne": "Get started by adding your first class.",
+    "deleteWarning": "All linked subjects and teacher assignments will also be removed.",
+    "errNameRequired": "Class name is required.",
+    "errNameMax": "Class name cannot exceed {{max}} characters.",
+    "deleteTitle": "Delete class"
   },
   "attendance": {
     "title": "Attendance",
@@ -640,7 +667,8 @@
     "period": "Period",
     "allDay": "All day",
     "partlySaved": "Partly saved",
-    "partlySavedBody": "{{saved}} saved, {{failed}} rejected"
+    "partlySavedBody": "{{saved}} saved, {{failed}} rejected",
+    "noActiveStudents": "This class has no active students yet."
   },
   "announcements": {
     "title": "Announcements",
@@ -667,7 +695,12 @@
     "removed": "Announcement removed",
     "errRemove": "Could not remove",
     "errPin": "Could not change pin",
-    "markedRead": "Marked as read"
+    "markedRead": "Marked as read",
+    "updated": "Announcement updated",
+    "noneMatch": "Nothing matches those filters",
+    "clearFilters": "Try clearing the filters.",
+    "unpin": "Unpin",
+    "editOne": "Edit announcement"
   },
   "timetable": {
     "title": "Timetable",
@@ -694,7 +727,8 @@
     "lessonRemoved": "Lesson removed",
     "errSaveLesson": "Could not save the lesson",
     "errRemoveLesson": "Could not remove the lesson",
-    "periodTaken": "That period is taken"
+    "periodTaken": "That period is taken",
+    "someoneElseFirst": "Someone else got there first"
   },
   "periods": {
     "title": "The school day",
@@ -719,7 +753,10 @@
     "errReorder": "Could not reorder",
     "errSave": "Could not save",
     "removed": "Period removed",
-    "remove": "Remove period"
+    "remove": "Remove period",
+    "updated": "Period updated",
+    "hideInactive": "Hide inactive",
+    "hideFromTable": "Hide from timetable"
   },
   "exams": {
     "title": "Exams & results",
@@ -1114,7 +1151,10 @@
     "stepTeacher": "Select Teacher",
     "stepClass": "Select Class",
     "confirming": "Confirming...",
-    "loading": "Loading assignments..."
+    "loading": "Loading assignments...",
+    "created": "Assignment created",
+    "noTeacherHit": "No teachers match your search.",
+    "firstOne": "Assign a teacher to a class and subject to get started."
   },
   "reports": {
     "title": "Reports",
@@ -1128,7 +1168,8 @@
     "presentToday": "Present today",
     "builtFromTemplate": "Report cards are built from a template, then generated per exam.",
     "cardTemplatesBlurb": "Design the layout parents receive. Set one as the default and every exam uses it.",
-    "generateCardsBlurb": "Pick an exam and a class, then produce and print each student’s card."
+    "generateCardsBlurb": "Pick an exam and a class, then produce and print each student’s card.",
+    "livePreview": "Live preview"
   },
   "templates": {
     "title": "Report templates",
