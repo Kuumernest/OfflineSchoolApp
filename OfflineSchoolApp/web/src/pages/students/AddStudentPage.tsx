@@ -248,8 +248,7 @@ export default function AddStudentPage() {
       <div>
         <h1 className="text-lg font-semibold text-gray-900">{t("students.enroll")}</h1>
         <p className="text-sm text-gray-500 mt-0.5">
-          For a student joining directly. Applications that came through the
-          public form are handled under{" "}
+          {t("students.directJoinHint")}{" "}
           <Link to="/students/admissions" className="text-primary-600 hover:underline">
             {t("admissions.title")}
           </Link>
@@ -342,7 +341,7 @@ export default function AddStudentPage() {
 
         <div className="flex items-center justify-between gap-3">
           <p className="text-xs text-gray-400">
-            An enrollment number and temporary password are generated on save.
+            {t("students.generatedOnSave")}
           </p>
           <div className="flex gap-2">
             <Button type="button" variant="ghost" onClick={() => navigate("/students")}>

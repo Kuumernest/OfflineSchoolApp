@@ -548,7 +548,7 @@ return (
       <p className="text-xs text-gray-500 font-medium">{t("academic.subject_other")}</p>
     </div>
     <p className="text-xs text-gray-500 ml-2">
-      Select classes on the left, then tick subjects on the right
+      {t("examCreate.pickClassesThenSubjects")}
     </p>
   </div>
 

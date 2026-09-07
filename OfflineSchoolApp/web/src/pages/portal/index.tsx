@@ -658,7 +658,7 @@ export default function ParentPortalPage() {
                     ))}
                     {(attendanceQ.data.dailySummaries[0]?.periods ?? []).length === 0 && (
                       <li className="px-4 py-4 text-center text-xs text-ink-muted">
-                        No period records for today
+                        {t("portal.noPeriodsToday")}
                       </li>
                     )}
                   </ul>
@@ -671,7 +671,7 @@ export default function ParentPortalPage() {
                   <div className="border-b border-line px-4 py-2.5">
                     <h2 className="flex items-center gap-2 text-sm font-semibold text-ink">
                       <BookOpen className="h-4 w-4" />
-                      Attendance by Subject
+                      {t("portal.attendanceBySubject")}
                     </h2>
                   </div>
                   <ul className="divide-y divide-line">

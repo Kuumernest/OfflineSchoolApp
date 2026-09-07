@@ -128,17 +128,72 @@ const LITERAL_PATTERNS = [
   [/\.(?:min|max|length|email|url|regex)\([^)]*?,\s*"([A-Z][^"]{3,})"\s*\)/g, "validation rule"],
   [/\brequired_error:\s*"([A-Z][^"]{3,})"/g,                                  "validation rule"],
   [/\?\s*"([A-Z][^"]{2,})"\s*:\s*"[A-Z][^"]{2,}"/g,                           "ternary label"],
+
+  /*
+   * The two that let the classes page's own heading through.
+   *
+   * A francophone admin opened /classes and read "Classes & Subjects", "Manage
+   * your school's classes and subjects", "Search subjects…", "All Classes" and
+   * four English column headers on a page whose buttons and dialogs were all
+   * translated. None of it was a toast, a ternary or a validation message.
+   *
+   * A placeholder is user-visible by definition, so that one is unconditional.
+   *
+   * Bare JSX text is the noisier of the two, so it is deliberately narrow: the
+   * whole line has to be prose and nothing else — no braces, no tag, no
+   * attribute — and at least two words. That catches a heading or a paragraph
+   * sitting directly in the markup and ignores everything interpolated, which
+   * is where the false positives would come from.
+   */
+  [/placeholder=\{?[`"]([A-Z][^`"]{3,})[`"]/g,                                "placeholder"],
+  [/^\s{6,}([A-Z][a-z]+(?:&[a-z]+;|[ ][A-Za-z'’,.-]+){1,12})\s*$/gm,          "jsx text"],
 ];
+
+/**
+ * Which lines sit inside a comment.
+ *
+ * This codebase explains itself in prose, and a lot of that prose lives in
+ * `{​/* … *​/}` blocks inside the markup. Skipping a line because it STARTS with
+ * `//` or `*` is not enough there: the opening `{​/*` is on its own line and the
+ * paragraph under it looks exactly like a rendered heading.
+ *
+ * Without this the jsx-text rule reported 36 findings of which 27 were the
+ * comments describing the code around them — the kind of noise that gets a
+ * check switched off rather than acted on.
+ */
+const commentLines = (lines) => {
+  const inside = new Set();
+  let open = false;
+  lines.forEach((raw, i) => {
+    const line = raw.trim();
+    if (open) {
+      inside.add(i + 1);
+      if (line.includes("*/")) open = false;
+      return;
+    }
+    if (line.startsWith("//")) { inside.add(i + 1); return; }
+    const start = line.indexOf("/*");
+    if (start !== -1 && !line.includes("*/", start + 2)) {
+      inside.add(i + 1);
+      open = true;
+    } else if (start !== -1) {
+      inside.add(i + 1);
+    }
+  });
+  return inside;
+};
 
 const literals = [];
 for (const file of sourceFiles) {
   const text  = readFileSync(file, "utf8");
   const lines = text.split(/\r?\n/);
+  const inComment = commentLines(lines);
   for (const [re, kind] of LITERAL_PATTERNS) {
     for (const m of text.matchAll(re)) {
       const lineNo = text.slice(0, m.index).split(/\r?\n/).length;
       const here   = lines[lineNo - 1] ?? "";
       const above  = lines[lineNo - 2] ?? "";
+      if (inComment.has(lineNo)) continue;
       if (/i18n-exempt/.test(here) || /i18n-exempt/.test(above)) continue;
       literals.push({
         file: file.replace(root + "\\", "").replace(root + "/", ""),

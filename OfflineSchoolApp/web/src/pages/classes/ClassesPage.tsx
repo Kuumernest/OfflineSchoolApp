@@ -338,7 +338,7 @@ export default function ClassesPage() {
   }
 
   const filterClassOptions: SelectOption[] = [
-    { value: "", label: "All Classes" },
+    { value: "", label: t("students.allClasses") },
     ...classOptions,
   ];
 
@@ -371,10 +371,10 @@ export default function ClassesPage() {
           <h1 className="text-2xl font-bold text-gray-900
                          flex items-center gap-2">
             <School className="h-7 w-7 text-primary-600" />
-            Classes &amp; Subjects
+            {t("classes.pageTitle")}
           </h1>
           <p className="text-sm text-gray-500 mt-1">
-            Manage your school&apos;s classes and subjects
+            {t("classes.pageBlurb")}
           </p>
         </div>
 
@@ -392,24 +392,24 @@ export default function ClassesPage() {
       {/* Tabs */}
       <div className="border-b border-gray-200">
         <nav className="flex gap-6" aria-label={t("classes.pageTabs")}>
-          {(["classes", "subjects"] as const).map((t) => (
+          {(["classes", "subjects"] as const).map((key) => (
             <button
-              key={t}
-              onClick={() => setTab(t)}
-              aria-selected={tab === t}
+              key={key}
+              onClick={() => setTab(key)}
+              aria-selected={tab === key}
               role="tab"
-              className={`pb-3 text-sm font-medium capitalize border-b-2 transition-colors ${
-                tab === t
+              className={`pb-3 text-sm font-medium border-b-2 transition-colors ${
+                tab === key
                   ? "border-primary-600 text-primary-600"
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              {t}
+              {key === "classes" ? t("classes.title") : t("subjects.title")}
               <Badge
-                variant={tab === t ? "primary" : "secondary"}
+                variant={tab === key ? "primary" : "secondary"}
                 className="ml-2"
               >
-                {t === "classes" ? classes.length : subjects.length}
+                {key === "classes" ? classes.length : subjects.length}
               </Badge>
             </button>
           ))}
@@ -421,7 +421,9 @@ export default function ClassesPage() {
         <SearchInput
           value={search}
           onChange={setSearch}
-          placeholder={`Search ${tab}…`}
+          placeholder={tab === "classes"
+            ? t("classes.searchPh")
+            : t("subjects.searchPh")}
           className="max-w-xs"
         />
 
@@ -852,7 +854,13 @@ function SubjectsTable({
       <table className="w-full text-sm" role="grid">
         <thead>
           <tr className="border-b border-gray-200 bg-gray-50">
-            {(["Subject", "Code", "Class", "Teacher", ""] as const).map((h) => (
+            {([
+            t("academic.subject"),
+            t("common.code"),
+            t("academic.class"),
+            t("academic.teacher"),
+            "",
+          ]).map((h) => (
               <th
                 key={h}
                 className="text-left px-4 py-3 font-medium text-gray-600"

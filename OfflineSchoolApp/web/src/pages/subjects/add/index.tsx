@@ -461,7 +461,7 @@ export default function AddSubjectPage() {
             <div className="flex items-start gap-3 rounded-xl bg-blue-50 px-4 py-3" role="note">
               <BookOpen size={16} className="mt-0.5 shrink-0 text-blue-600" aria-hidden="true" />
               <p className="text-sm text-blue-800 font-medium leading-5">
-                Select multiple classes to create this subject in all of them at once.
+                {t("subjects.multiClassHint")}
               </p>
             </div>
 

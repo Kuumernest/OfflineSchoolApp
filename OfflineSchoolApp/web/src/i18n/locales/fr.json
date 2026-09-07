@@ -531,7 +531,10 @@
     "medicalConditions": "Informations médicales",
     "emailedThem": "Ses identifiants de connexion lui ont été envoyés par e-mail.",
     "emailedThem2": "L'élève a reçu ses identifiants par e-mail.",
-    "adjustFilters": "Essayez d'ajuster vos filtres"
+    "adjustFilters": "Essayez d'ajuster vos filtres",
+    "directJoinHint": "Pour un élève inscrit directement. Les candidatures reçues via le formulaire public sont traitées dans",
+    "noActiveClasses": "Aucune classe active. Créez une classe avant de valider.",
+    "generatedOnSave": "Un matricule et un mot de passe temporaire sont générés à l'enregistrement."
   },
   "teachers": {
     "title": "Enseignants",
@@ -605,7 +608,9 @@
     "deselectAll": "Tout désélectionner",
     "loadingTeachers": "Chargement des enseignants…",
     "noneInClass": "Aucune matière dans cette classe. Ajoutez-en une pour commencer.",
-    "deleteTitle": "Supprimer la matière"
+    "deleteTitle": "Supprimer la matière",
+    "searchPh": "Rechercher des matières…",
+    "multiClassHint": "Choisissez plusieurs classes pour créer cette matière dans toutes à la fois."
   },
   "classes": {
     "classTeacher": "Professeur titulaire",
@@ -630,7 +635,10 @@
     "deleteWarning": "Toutes les matières rattachées et les affectations d'enseignants seront également supprimées.",
     "errNameRequired": "Le nom de la classe est obligatoire.",
     "errNameMax": "Le nom de la classe ne peut pas dépasser {{max}} caractères.",
-    "deleteTitle": "Supprimer la classe"
+    "deleteTitle": "Supprimer la classe",
+    "pageTitle": "Classes et matières",
+    "pageBlurb": "Gérez les classes et les matières de votre établissement",
+    "searchPh": "Rechercher des classes…"
   },
   "attendance": {
     "title": "Assiduité",
@@ -668,7 +676,8 @@
     "allDay": "Toute la journée",
     "partlySaved": "Enregistré en partie",
     "partlySavedBody": "{{saved}} enregistré(s), {{failed}} rejeté(s)",
-    "noActiveStudents": "Cette classe n'a encore aucun élève actif."
+    "noActiveStudents": "Cette classe n'a encore aucun élève actif.",
+    "markThenSave": "Faites l'appel, puis enregistrez. Rien n'est envoyé avant."
   },
   "announcements": {
     "title": "Communiqués",
@@ -728,7 +737,8 @@
     "errSaveLesson": "Impossible d'enregistrer le cours",
     "errRemoveLesson": "Impossible de retirer le cours",
     "periodTaken": "Ce créneau est déjà occupé",
-    "someoneElseFirst": "Quelqu'un d'autre est passé avant vous"
+    "someoneElseFirst": "Quelqu'un d'autre est passé avant vous",
+    "perClassHint": "Chaque classe a son propre emploi du temps, construit à partir des mêmes créneaux."
   },
   "periods": {
     "title": "La journée scolaire",
@@ -953,7 +963,8 @@
     "passMarkRange": "Doit être compris entre 0 et {{max}}",
     "sequenceRequired": "Choisissez la séquence à laquelle cet examen appartient",
     "promoSequenceHint": "* Les séquences 5 et 6 peuvent servir d’examens de passage",
-    "createFailed": "Impossible de créer l’examen."
+    "createFailed": "Impossible de créer l’examen.",
+    "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite"
   },
   "reportCards": {
     "allStudents": "Les {{count}} élève",
@@ -1169,7 +1180,8 @@
     "builtFromTemplate": "Les bulletins sont créés à partir d'un modèle, puis générés par évaluation.",
     "cardTemplatesBlurb": "Concevez la mise en page reçue par les parents. Définissez-en une par défaut et tous les examens l’utiliseront.",
     "generateCardsBlurb": "Choisissez un examen et une classe, puis générez et imprimez le bulletin de chaque élève.",
-    "livePreview": "Aperçu en direct"
+    "livePreview": "Aperçu en direct",
+    "blurb": "La situation de l'établissement aujourd'hui, et les outils pour produire les documents"
   },
   "templates": {
     "title": "Modèles de bulletins",
@@ -1187,7 +1199,8 @@
     "rendering": "Génération de l’aperçu…",
     "cannotDeleteDefault": "Impossible de supprimer le modèle par défaut. Définissez d'abord un autre modèle par défaut.",
     "setDefaultConfirm": "Définir ce modèle par défaut pour tous les bulletins ?",
-    "deleteConfirm": "Supprimer « {{name}} » ? Cette action est irréversible."
+    "deleteConfirm": "Supprimer « {{name}} » ? Cette action est irréversible.",
+    "firstOne": "Créez votre premier modèle de bulletin en collant la mise en page HTML de votre établissement et en utilisant des espaces réservés."
   },
   "notifications": {
     "title": "Notifications",
@@ -2300,7 +2313,9 @@
     "writeMessage": "Écrire un message…",
     "messageDeleted": "Ce message a été supprimé",
     "todayAttendance": "Présence du jour",
-    "recentDays": "Jours récents"
+    "recentDays": "Jours récents",
+    "noPeriodsToday": "Aucun relevé de créneau pour aujourd'hui",
+    "attendanceBySubject": "Présence par matière"
   },
   "codes": {
     "title": "Accès parents",

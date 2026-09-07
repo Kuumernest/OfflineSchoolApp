@@ -352,7 +352,7 @@ export default function TimetablePage() {
             {t("timetable.pickClass")}
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Each class has its own timetable, built from the same periods.
+            {t("timetable.perClassHint")}
           </p>
         </Card>
       ) : slotsQ.isLoading ? (

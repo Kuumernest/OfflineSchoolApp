@@ -280,7 +280,7 @@ export default function AttendancePage() {
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t("attendance.title")}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Mark the register, then save. Nothing is sent until you do.
+            {t("attendance.markThenSave")}
           </p>
         </div>
 

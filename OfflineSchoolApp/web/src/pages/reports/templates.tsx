@@ -238,8 +238,7 @@ export default function TemplatesPage() {
             </div>
             <h2 className="text-lg font-bold text-gray-700">{t("templates.none")}</h2>
             <p className="text-sm text-gray-500 text-center max-w-sm">
-              Create your first report card template by pasting your school's
-              HTML layout and using placeholders.
+              {t("templates.firstOne")}
             </p>
             <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
               <button

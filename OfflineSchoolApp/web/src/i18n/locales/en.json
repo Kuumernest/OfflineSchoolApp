@@ -531,7 +531,10 @@
     "medicalConditions": "Medical notes",
     "emailedThem": "Their sign-in details have been emailed to them.",
     "emailedThem2": "The student has received their details by email.",
-    "adjustFilters": "Try adjusting your filters"
+    "adjustFilters": "Try adjusting your filters",
+    "directJoinHint": "For a student joining directly. Applications that came through the public form are handled under",
+    "noActiveClasses": "No active classes found. Create a class before approving.",
+    "generatedOnSave": "An enrolment number and temporary password are generated on save."
   },
   "teachers": {
     "title": "Teachers",
@@ -605,7 +608,9 @@
     "deselectAll": "Deselect all",
     "loadingTeachers": "Loading teachers…",
     "noneInClass": "No subjects in this class yet. Add one to get started.",
-    "deleteTitle": "Delete subject"
+    "deleteTitle": "Delete subject",
+    "searchPh": "Search subjects…",
+    "multiClassHint": "Select multiple classes to create this subject in all of them at once."
   },
   "classes": {
     "classTeacher": "Class teacher (form master)",
@@ -630,7 +635,10 @@
     "deleteWarning": "All linked subjects and teacher assignments will also be removed.",
     "errNameRequired": "Class name is required.",
     "errNameMax": "Class name cannot exceed {{max}} characters.",
-    "deleteTitle": "Delete class"
+    "deleteTitle": "Delete class",
+    "pageTitle": "Classes & subjects",
+    "pageBlurb": "Manage your school's classes and subjects",
+    "searchPh": "Search classes…"
   },
   "attendance": {
     "title": "Attendance",
@@ -668,7 +676,8 @@
     "allDay": "All day",
     "partlySaved": "Partly saved",
     "partlySavedBody": "{{saved}} saved, {{failed}} rejected",
-    "noActiveStudents": "This class has no active students yet."
+    "noActiveStudents": "This class has no active students yet.",
+    "markThenSave": "Mark the register, then save. Nothing is sent until you do."
   },
   "announcements": {
     "title": "Announcements",
@@ -728,7 +737,8 @@
     "errSaveLesson": "Could not save the lesson",
     "errRemoveLesson": "Could not remove the lesson",
     "periodTaken": "That period is taken",
-    "someoneElseFirst": "Someone else got there first"
+    "someoneElseFirst": "Someone else got there first",
+    "perClassHint": "Each class has its own timetable, built from the same periods."
   },
   "periods": {
     "title": "The school day",
@@ -953,7 +963,8 @@
     "passMarkRange": "Must be between 0 and {{max}}",
     "sequenceRequired": "Choose the sequence this exam belongs to",
     "promoSequenceHint": "* Sequences 5 and 6 can be configured as promotion exams",
-    "createFailed": "Could not create the exam."
+    "createFailed": "Could not create the exam.",
+    "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right"
   },
   "reportCards": {
     "allStudents": "All {{count}} pupil",
@@ -1169,7 +1180,8 @@
     "builtFromTemplate": "Report cards are built from a template, then generated per exam.",
     "cardTemplatesBlurb": "Design the layout parents receive. Set one as the default and every exam uses it.",
     "generateCardsBlurb": "Pick an exam and a class, then produce and print each student’s card.",
-    "livePreview": "Live preview"
+    "livePreview": "Live preview",
+    "blurb": "Where the school stands today, and the tools to produce paperwork"
   },
   "templates": {
     "title": "Report templates",
@@ -1187,7 +1199,8 @@
     "rendering": "Rendering preview...",
     "cannotDeleteDefault": "Cannot delete the default template. Set another as default first.",
     "setDefaultConfirm": "Set this template as the default for all reports?",
-    "deleteConfirm": "Delete “{{name}}”? This cannot be undone."
+    "deleteConfirm": "Delete “{{name}}”? This cannot be undone.",
+    "firstOne": "Create your first report card template by pasting your school's HTML layout and using placeholders."
   },
   "notifications": {
     "title": "Notifications",
@@ -2300,7 +2313,9 @@
     "writeMessage": "Write a message…",
     "messageDeleted": "This message was deleted",
     "todayAttendance": "Today's attendance",
-    "recentDays": "Recent days"
+    "recentDays": "Recent days",
+    "noPeriodsToday": "No period records for today",
+    "attendanceBySubject": "Attendance by subject"
   },
   "codes": {
     "title": "Portal access",
