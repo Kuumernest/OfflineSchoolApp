@@ -442,10 +442,27 @@ const ExamRow = ({
         <span>{exam.passMark}</span>
       </td>
 
-      {/* Actions */}
+      {/*
+        Actions — visible, not revealed on hover.
+
+        These were `opacity-0 group-hover:opacity-100`, which looks calm on a
+        list somebody is scanning and costs more than it looks:
+
+          · an opacity-0 element is still in the tab order, so a keyboard user
+            tabbed onto an invisible View link and an invisible menu button and
+            had no way to know what they had landed on;
+
+          · there is no hover on a touchscreen, so on the tablets this is used
+            on the row's only actions were reachable by accident at best;
+
+          · and a reader following instructions cannot follow them to a control
+            that is not on screen until the mouse is already over it.
+
+        The row still lifts on hover, so the pointer affordance is not lost —
+        only the hiding is.
+      */}
       <td className="px-4 py-3">
-        <div className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100
-                        transition-opacity">
+        <div className="flex items-center gap-1.5">
           <Link to={`/exams/${exam._id}`}
             className="text-xs font-semibold text-primary-600 hover:text-primary-700
                        bg-primary-50 hover:bg-primary-100 px-2.5 py-1.5 rounded-lg

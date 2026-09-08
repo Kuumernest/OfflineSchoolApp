@@ -514,7 +514,12 @@ export default function MessagesPage() {
                           {mine && !m.isDeleted && (
                             <button
                               onClick={() => deleteMutation.mutate(m._id)}
-                              className="opacity-0 transition-opacity group-hover:opacity-100"
+                              // Hover-revealed on purpose here — a delete button on every message
+                              // bubble would be clutter, and this one is destructive. But focus-visible
+                              // is added because opacity-0 does not remove an element from the tab
+                              // order: without it a keyboard user lands on an invisible delete.
+                              className="opacity-0 transition-opacity group-hover:opacity-100
+                                         focus-visible:opacity-100"
                               title={t("messages.deleteMessage")}
                             >
                               <Trash2 size={12} />
