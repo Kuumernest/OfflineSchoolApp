@@ -9,7 +9,7 @@ const { render }      = require("./templates");
 const { getChannel, availableChannels } = require("./channels");
 
 /**
- * The notification queue.
+ * The notification queue — and the only way to create a notification.
  *
  * Two operations, deliberately separate:
  *
@@ -22,6 +22,32 @@ const { getChannel, availableChannels } = require("./channels");
  * Keeping them apart is what makes the whole thing offline-tolerant: the school
  * can work all day with no connectivity and the queue simply drains when the
  * line comes back, in the order things happened.
+ *
+ * ── The record is the truth; delivery is a separate job ───────────────────
+ *
+ * Every producer goes through enqueue(), and nothing anywhere calls
+ * Notification.create() directly — check-portal-notices asserts that, because
+ * the alternative is each feature growing its own half of this and each half
+ * getting a different subset of it right.
+ *
+ * The rule that had not been written down: a notification EXISTS because
+ * something happened, not because it could be delivered. What follows from it,
+ * and what was wrong before:
+ *
+ *   • A producer that does not want an email says so with `deliver: false`,
+ *     and still gets a row. The gate had been implementing that decision by
+ *     not calling enqueue at all — so an on-time arrival left no trace, and a
+ *     parent looking in the portal for the time their child came through
+ *     found nothing. Not sending 20,000 emails a month is right. Not
+ *     remembering 20,000 arrivals is a different thing, and was not intended.
+ *
+ *   • A row with nowhere to send it is `skipped`, and is still a record of
+ *     what happened. The portal shows it. Nothing about a family having no
+ *     email address makes their child's arrival less true.
+ *
+ *   • `skipReason` says which of those two it was, because "we do not send
+ *     those" and "we had nowhere to send it" are different answers to a parent
+ *     asking why they were not told.
  */
 
 // A failed send is retried on a widening delay. Six attempts spans roughly a
@@ -66,14 +92,31 @@ const resolveChannel = (school) => {
   return "log";
 };
 
+/** What "no address" means, in the language of the channel that wanted one. */
+const ADDRESS_NAME = {
+  email:    "email address",
+  whatsapp: "phone number",
+  sms:      "phone number",
+  log:      "email address",   // the log channel stands in for email
+};
+
 /**
  * Queue a message about a student.
  *
  * Returns the notification, including when it was skipped — a caller that wants
  * to tell the user "no email on file for this child" can read skipReason rather
  * than assuming it went.
+ *
+ * @param {boolean} [deliver=true]  false records the event without asking any
+ *                                  channel to carry it. The row is `skipped`,
+ *                                  the dispatcher never picks it up, and the
+ *                                  parent still sees it in the portal.
+ * @param {string}  [deliverReason] why not, in words a parent could be shown.
  */
-const enqueue = async ({ schoolId, kind, studentId, data = {}, lang, createdBy }) => {
+const enqueue = async ({
+  schoolId, kind, studentId, data = {}, lang, createdBy,
+  deliver = true, deliverReason = null,
+}) => {
   const school = await School.findById(schoolId).lean().catch(() => null);
   const channel = resolveChannel(school);
 
@@ -114,25 +157,31 @@ const enqueue = async ({ schoolId, kind, studentId, data = {}, lang, createdBy }
     });
   }
 
-  // No address is a SKIP, not a failure: nothing was attempted and retrying
-  // will not help until somebody enters an email.
-  if (!to) {
-    return Notification.create({
-      schoolId, kind, studentId: studentId ?? null,
-      to: "—", toSource: null, channel,
-      subject, body, data: { ...payload, text },
-      status: "skipped",
-      skipReason: `No ${channel === "email" ? "email address" : "phone number"} on file`,
-      createdBy: createdBy ?? null,
-    });
-  }
+  // Both of the reasons a message will not go. Either way the row is written:
+  // it is the record that something happened, and the portal reads it without
+  // needing any address at all.
+  //
+  //   the producer said not to   — an on-time arrival, under gateNotify
+  //   there is nowhere to send   — no email or phone on file for the family
+  //
+  // A skip is not a failure. Nothing was attempted, and retrying changes
+  // nothing until either the policy or the address does, which is why the
+  // dispatcher's query — status "pending" — steps over these.
+  const skipReason = !deliver
+    ? (deliverReason ?? "Not sent by policy")
+    : (!to ? `No ${ADDRESS_NAME[channel] ?? "address"} on file` : null);
 
   return Notification.create({
     schoolId, kind, studentId: studentId ?? null,
-    to, toSource: source, channel,
-    subject, body, data: { ...payload, text },
-    status: "pending",
-    createdBy: createdBy ?? null,
+    to: to ?? "—", toSource: to ? source : null, channel,
+    subject, body, text,
+    // `text` was only ever inside `data`, where a reader had to know to look
+    // for it — so the portal rendered `body`, which is a whole HTML email, into
+    // a phone's Text node. Kept in `data` too: rows written before this exist.
+    data: { ...payload, text },
+    status:     skipReason ? "skipped" : "pending",
+    skipReason: skipReason,
+    createdBy:  createdBy ?? null,
   });
 };
 

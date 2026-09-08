@@ -1429,6 +1429,10 @@
     "noticeStatus_pending": "Queued — not sent yet",
     "noticeStatus_failed": "Could not be delivered",
     "noticeMessage": "Message",
+    "unreadCount": {
+      "one": "%{count} unread",
+      "other": "%{count} unread"
+    },
     "gateTimes": "Arrival and departure",
     "arrived": "Arrived",
     "left": "Left",

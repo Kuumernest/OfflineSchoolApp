@@ -2315,7 +2315,22 @@
     "todayAttendance": "Today's attendance",
     "recentDays": "Recent days",
     "noPeriodsToday": "No period records for today",
-    "attendanceBySubject": "Attendance by subject"
+    "attendanceBySubject": "Attendance by subject",
+    "notices": "Notices",
+    "noticeArrival": "Arrived at school",
+    "noticeDeparture": "Left school",
+    "noticeAbsent": "Marked absent",
+    "noticeFeeReminder": "Fee reminder",
+    "noticePayment": "Payment received",
+    "noticeResults": "Results published",
+    "noticeAnnouncement": "School notice",
+    "noticeMessage": "Message",
+    "noticeOther": "Notice",
+    "noNotices": "Nothing from the school yet.",
+    "noticeStatus_pending": "Queued — not sent yet",
+    "noticeStatus_failed": "Could not be delivered",
+    "unreadCount": "{{count}} unread",
+    "unreadCount_other": "{{count}} unread"
   },
   "codes": {
     "title": "Portal access",

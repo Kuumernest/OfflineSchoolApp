@@ -134,6 +134,31 @@ router.get("/me", asyncHandler(async (req, res) => {
     .select("name").lean();
   const className = new Map(classes.map((c) => [String(c._id), c.name]));
 
+  // How many unread messages are waiting.
+  //
+  // Here rather than only on /notifications because this is the one endpoint
+  // every screen loads, whatever tab it is showing — and a badge that needs a
+  // second request to a tab the parent has not opened is a badge no client
+  // draws. A parent had no indication anywhere that a message had arrived; the
+  // count existed and nothing carried it to a place it could be seen.
+  //
+  // Read-only and best-effort: a messaging fault must not take out the screen
+  // that shows a child's fees.
+  const unreadMessages = await (async () => {
+    try {
+      const me      = comms.principalFromRequest(req);
+      const threads = await comms.listFor(me, { limit: 50 });
+      return threads.reduce((total, c) => {
+        const mine = (c.participants || []).find(
+          (p) => p.kind === "guardian" && String(p.id) === String(me.id)
+        );
+        return total + Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+      }, 0);
+    } catch {
+      return 0;
+    }
+  })();
+
   return res.json({
     success: true,
     data: {
@@ -143,6 +168,7 @@ router.get("/me", asyncHandler(async (req, res) => {
         className: c.classId ? (className.get(String(c.classId)) ?? null) : null,
       })),
       selectedId: String(student._id),
+      unreadMessages,
       student: {
         _id:          String(student._id),
         name:         displayName(student) || null,
@@ -300,29 +326,117 @@ router.get("/notifications", asyncHandler(async (req, res) => {
     "announcement",
   ];
 
+  // Filtered on what RENDERED, not on what was delivered.
+  //
+  // This was `status: { $ne: "skipped" }`, and that one clause is most of the
+  // reported bug. A notification is skipped when nothing was attempted and
+  // retrying cannot help — overwhelmingly because the family has no email
+  // address on file, which is the ordinary state of the school that reported
+  // this. So the surface that needs no address at all was the one hiding the
+  // record, and a gate scan that had been dutifully written down was invisible
+  // to the only person it was for.
+  //
+  // `subject: { $ne: null }` replaces it. That excludes the one row that has
+  // nothing to show — a template that would not render, stored as `failed` so
+  // it is visible to us rather than thrown at a bursar mid-payment — while a
+  // skipped row, which rendered fully and then found nowhere to go, is exactly
+  // what a parent should see.
   const notifications = await Notification.find({
     schoolId,
     studentId,
     kind: { $in: GUARDIAN_NOTICE_KINDS },
     deletedAt: null,
-    status: { $ne: "skipped" },
+    subject: { $ne: null },
   })
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
 
-  return res.json({
-    success: true,
-    data: notifications.map((n) => ({
+  // ── Unread threads, as notices ───────────────────────────────────────────
+  //
+  // A message to a parent raised no notification anywhere. It should not raise
+  // a row in the collection above: that is a delivery queue with a channel and
+  // a retry backoff, so a row in it is an email or an SMS actually going out,
+  // and one per message on a live thread is the noise problem all over again.
+  //
+  // Derived here instead, from conversations that are already stored — so it
+  // survives a reload, a new session and a dead transport for the same reason
+  // everything else here does. One entry per thread, not per message: a thread
+  // with nine unread is one thing to go and read.
+  //
+  // This was being assembled on the phone. Moving it here means every client
+  // gets it, the ordering is decided once, and the unread total below exists
+  // at all — a client cannot badge a tab it has to fetch two endpoints to
+  // count.
+  const me       = comms.principalFromRequest(req);
+  const threads  = await comms.listFor(me, { limit: 50 }).catch(() => []);
+
+  const messageNotices = threads
+    .map((c) => {
+      const mine = (c.participants || []).find(
+        (p) => p.kind === "guardian" && String(p.id) === String(me.id)
+      );
+      const unread = Math.max(0, (c.lastMessageSeq || 0) - (mine?.lastReadSeq || 0));
+      if (unread < 1) return null;
+
+      const others = (c.participants || []).filter(
+        (p) => !(p.kind === "guardian" && String(p.id) === String(me.id))
+      );
+
+      return {
+        // Prefixed, so it cannot collide with a Notification id and a client
+        // keying a list by _id has one namespace.
+        _id:     `message-${c._id}`,
+        kind:    "message",
+        subject: c.title || others.map((p) => p.name).filter(Boolean).join(", ") || null,
+        body:    c.lastMessagePreview || null,
+        text:    c.lastMessagePreview || null,
+        // Nothing was queued, so nothing can be pending or failed. Without
+        // this the card prints a delivery status for a delivery that never
+        // happened.
+        status:  "sent",
+        sentAt:  c.lastMessageAt,
+        createdAt: c.lastMessageAt,
+        conversationId: c._id,
+        unread,
+        // The other side, structured, so a client names the thread in its own
+        // language rather than reading the server's English back out.
+        otherParticipants: others.map((p) => ({
+          kind: p.kind, id: p.id, name: p.name, role: p.role,
+          childNames: p.childNames ?? [], officeLabel: p.officeLabel ?? null,
+        })),
+      };
+    })
+    .filter(Boolean);
+
+  const rows = [
+    ...messageNotices,
+    ...notifications.map((n) => ({
       _id:       n._id,
       kind:      n.kind,
       subject:   n.subject,
-      body:      n.body,
+      // `text` is the displayable form. `body` is the channel's payload, and
+      // for email that is a whole HTML document — which a phone put straight
+      // into a Text node, showing the reader the markup. Falls back to
+      // data.text for rows written before `text` was a field, then to body,
+      // because something legible beats nothing.
+      body:      n.text ?? n.data?.text ?? n.body,
+      html:      n.body,
       data:      n.data,
       status:    n.status,
+      skipReason: n.skipReason ?? null,
       sentAt:    n.sentAt,
       createdAt: n.createdAt,
     })),
+  ].sort((a, b) =>
+    String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
+  );
+
+  return res.json({
+    success: true,
+    // What a badge needs, counted once on the side that can count it.
+    unread: messageNotices.reduce((n, m) => n + m.unread, 0),
+    data: rows,
   });
 }));
 

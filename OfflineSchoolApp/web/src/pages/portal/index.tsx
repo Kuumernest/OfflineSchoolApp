@@ -19,6 +19,7 @@ import { useTranslation } from "react-i18next";
 import {
   Printer, LogOut, Wallet, GraduationCap, CalendarCheck, Megaphone,
   MessageSquare, Send, Loader2, ArrowLeft, Clock, BookOpen,
+  Bell, LogIn, AlertCircle, Receipt, Wallet2,
 } from "lucide-react";
 
 import { Card }        from "@/components/ui/Card";
@@ -41,7 +42,36 @@ import {
   type PortalConversation, type PortalMessage, type PortalRecipient,
 } from "@/services/portal.service";
 
-type Tab = "fees" | "results" | "attendance" | "news" | "messages";
+type Tab = "fees" | "results" | "attendance" | "notices" | "news" | "messages";
+
+/**
+ * One row per notification kind the portal is allowed to show.
+ *
+ * Keyed on the kind the server sends, so a kind added server-side and not
+ * listed here falls back rather than being mislabelled — which is what the
+ * card this replaced did: it chose between two fee wordings with a ternary, so
+ * anything that was not a fee reminder was announced as a payment
+ * confirmation.
+ *
+ * The same keys as the phone's NOTICE_META, and the same wording, because the
+ * two catalogues are kept in step deliberately.
+ */
+const NOTICE_META: Record<
+  string,
+  { icon: React.ReactNode; tone: string; labelKey: string }
+> = {
+  "gate.arrival":      { icon: <LogIn className="h-3.5 w-3.5" />,        tone: "bg-success-50 text-success-700",  labelKey: "portal.noticeArrival" },
+  "gate.departure":    { icon: <LogOut className="h-3.5 w-3.5" />,       tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeDeparture" },
+  "attendance.absent": { icon: <AlertCircle className="h-3.5 w-3.5" />,  tone: "bg-danger-50 text-danger-700",    labelKey: "portal.noticeAbsent" },
+  "fee.reminder":      { icon: <Wallet2 className="h-3.5 w-3.5" />,      tone: "bg-warning-50 text-warning-700",  labelKey: "portal.noticeFeeReminder" },
+  "fee.payment":       { icon: <Receipt className="h-3.5 w-3.5" />,      tone: "bg-success-50 text-success-700",  labelKey: "portal.noticePayment" },
+  "result.published":  { icon: <GraduationCap className="h-3.5 w-3.5" />,tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeResults" },
+  "announcement":      { icon: <Megaphone className="h-3.5 w-3.5" />,    tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeAnnouncement" },
+  // Not a row in the notification queue — derived by the server from the
+  // threads it already stores. See the /notifications route.
+  "message":           { icon: <MessageSquare className="h-3.5 w-3.5" />,tone: "bg-primary-50 text-primary-700",  labelKey: "portal.noticeMessage" },
+  default:             { icon: <Bell className="h-3.5 w-3.5" />,         tone: "bg-canvas text-ink-muted",        labelKey: "portal.noticeOther" },
+};
 
 export default function ParentPortalPage() {
   const { t, i18n } = useTranslation();
@@ -79,6 +109,9 @@ export default function ParentPortalPage() {
   // youngest's name until the refetch landed.
   const selected = childId ?? meQ.data?.selectedId ?? null;
 
+  // Across every thread, from the one query that runs on every tab.
+  const unreadMessages = meQ.data?.unreadMessages ?? 0;
+
   const feesQ = useQuery({
     queryKey: ["portal", "fees", selected], queryFn: () => fetchFees(selected),
     enabled: signedIn && tab === "fees", retry: false,
@@ -103,10 +136,19 @@ export default function ParentPortalPage() {
     retry:    false,
   });
 
+  // Notices had no tab. They were a card at the bottom of Fees, fetched only
+  // while that tab was open, so a gate arrival or an absence had nowhere to
+  // appear at all — and the card titled every row with a two-way ternary
+  // between "Fee Reminder" and "Payment Confirmation", which would have
+  // labelled a child's arrival at school a payment confirmation.
   const notificationsQ = useQuery({
     queryKey: ["portal", "notifications", selected],
     queryFn:  () => fetchNotifications(selected),
-    enabled:  signedIn && tab === "fees",
+    enabled:  signedIn && tab === "notices",
+    // A message arriving is the thing a parent most wants to know about and
+    // the list is derived server-side from stored threads, so it is cheap to
+    // ask again. Matches the conversation list's own interval.
+    refetchInterval: 25_000,
     retry:    false,
   });
 
@@ -225,6 +267,7 @@ export default function ParentPortalPage() {
     { key: "fees",       label: t("portal.fees"),       icon: <Wallet className="h-4 w-4" /> },
     { key: "results",    label: t("portal.results"),    icon: <GraduationCap className="h-4 w-4" /> },
     { key: "attendance", label: t("portal.attendance"), icon: <CalendarCheck className="h-4 w-4" /> },
+    { key: "notices",    label: t("portal.notices"),    icon: <Bell className="h-4 w-4" /> },
     { key: "news",       label: t("portal.news"),       icon: <Megaphone className="h-4 w-4" /> },
     { key: "messages",   label: t("portal.messages"),   icon: <MessageSquare className="h-4 w-4" /> },
   ];
@@ -301,6 +344,17 @@ export default function ParentPortalPage() {
             >
               {tb.icon}
               {tb.label}
+              {/* The count exists on every thread and had nowhere to be seen
+                  without first opening the tab it was about. It rides on /me,
+                  the one request every screen makes. */}
+              {tb.key === "messages" && unreadMessages > 0 && (
+                <span className="ml-0.5 inline-flex min-w-[1.1rem] items-center justify-center
+                                 rounded-full bg-danger-600 px-1 text-[0.65rem] font-bold
+                                 leading-tight text-white"
+                      aria-label={t("portal.unreadCount", { count: unreadMessages })}>
+                  {unreadMessages > 9 ? "9+" : unreadMessages}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -478,42 +532,11 @@ export default function ParentPortalPage() {
                 </Card>
               )}
 
-              {/* Notification history */}
-              {(notificationsQ.data?.length ?? 0) > 0 && (
-                <Card padding={false}>
-                  <div className="border-b border-line px-4 py-2.5">
-                    <h2 className="text-sm font-semibold text-ink">
-                      {t("portal.notificationHistory", "Notification History")}
-                    </h2>
-                    <p className="text-xs text-ink-muted">
-                      {t("portal.notificationHistoryHint", "Reminders and confirmations sent to you")}
-                    </p>
-                  </div>
-                  <ul className="divide-y divide-line">
-                    {notificationsQ.data?.map((n) => (
-                      <li key={n._id} className="px-4 py-3">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-ink">
-                              {n.kind === "fee.reminder"
-                                ? t("portal.feeReminderNotice", "Fee Reminder")
-                                : t("portal.paymentConfirmation", "Payment Confirmation")}
-                            </p>
-                            <p className="text-xs text-ink-muted">
-                              {n.sentAt
-                                ? fmt.dateShort(n.sentAt)
-                                : fmt.dateShort(n.createdAt)}
-                            </p>
-                          </div>
-                          <Badge variant={n.status === "sent" ? "success" : n.status === "failed" ? "danger" : "default"}>
-                            {n.status}
-                          </Badge>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </Card>
-              )}
+              {/* The notification card that used to sit here has moved to its
+                  own tab. It was fetched only while Fees was open and titled
+                  every row by a ternary between two fee wordings, so a gate
+                  arrival would have read "Payment Confirmation". Two places
+                  showing the same list, one of them wrong, is worse than one. */}
             </>
           )
         )}
@@ -730,6 +753,96 @@ export default function ParentPortalPage() {
                 </Card>
               )}
             </>
+          )
+        )}
+
+        {/* ── Notices ──────────────────────────────────────────────────────
+            Everything the school has recorded for this parent: gate arrivals
+            and departures, absences, fee reminders and payments, published
+            results, and the threads with something unread in them.
+
+            Every row is a stored record, which is the whole point. A notice is
+            here because something happened, not because an email went out —
+            so a school with no mail plan and a family with no email address
+            still have a place where the parent is told, and it is still there
+            tomorrow. The delivery status is shown only when the school tried
+            and has not managed it yet. */}
+        {tab === "notices" && (
+          notificationsQ.isLoading ? <div className="flex justify-center py-10"><Spinner /></div> :
+          (notificationsQ.data?.length ?? 0) === 0 ? (
+            <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noNotices")}</p></Card>
+          ) : (
+            <Card padding={false}>
+              <ul className="divide-y divide-line">
+                {notificationsQ.data?.map((n) => {
+                  const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
+                  const openable = Boolean(n.conversationId);
+                  return (
+                    <li key={n._id}>
+                      <button
+                        type="button"
+                        disabled={!openable}
+                        onClick={() => { if (openable) setTab("messages"); }}
+                        className={cn(
+                          "flex w-full items-start gap-3 px-4 py-3 text-left",
+                          openable && "transition-colors hover:bg-canvas"
+                        )}
+                      >
+                        <span className={cn(
+                          "mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
+                          meta.tone
+                        )}>
+                          {meta.icon}
+                        </span>
+
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            <span className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
+                              {t(meta.labelKey)}
+                            </span>
+                            {(n.unread ?? 0) > 0 && (
+                              <span className="inline-flex min-w-[1.1rem] items-center justify-center
+                                               rounded-full bg-ink px-1 text-[0.65rem] font-bold
+                                               leading-tight text-white">
+                                {n.unread}
+                              </span>
+                            )}
+                            <span className="ml-auto shrink-0 text-xs text-ink-faint">
+                              {fmt.dateShort(n.sentAt ?? n.createdAt)}
+                            </span>
+                          </span>
+
+                          {n.subject && (
+                            <span className="mt-0.5 block truncate text-sm font-medium text-ink">
+                              {n.subject}
+                            </span>
+                          )}
+                          {/* `body` is the plain-text rendering. The HTML the
+                              channel carried is under `html` and is not put on
+                              screen — a whole email document in a text node is
+                              what the phone was showing its readers. */}
+                          {n.body && (
+                            <span className="mt-0.5 block text-sm text-ink-body">{n.body}</span>
+                          )}
+
+                          {/* Only while the school is still trying, or has
+                              failed. A skipped notice — an on-time arrival, or
+                              a family with no address — needs no apology on the
+                              screen where it is being read. */}
+                          {(n.status === "pending" || n.status === "failed") && (
+                            <span className="mt-1 block">
+                              <Badge variant={n.status === "failed" ? "danger" : "default"}>
+                                {t(`portal.noticeStatus_${n.status}`)}
+                              </Badge>
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </Card>
           )
         )}
 

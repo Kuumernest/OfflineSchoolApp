@@ -57,7 +57,19 @@ const notificationSchema = new mongoose.Schema(
     },
 
     subject: { type: String, default: null },
+    /** The rendered message for the channel — for email, a full HTML document. */
     body:    { type: String, default: null },
+    /**
+     * The same message as plain text.
+     *
+     * Templates have always produced both and only `body` was stored at the
+     * top level, so the portal — which puts a notice straight into a phone's
+     * Text node — rendered an entire HTML email, tags and all, to the parent.
+     * A first-class field rather than `data.text`, so a reader does not have
+     * to know to go looking inside a Mixed blob for the one form that is
+     * displayable.
+     */
+    text:    { type: String, default: null },
     /** Values the template rendered from, kept so a resend is reproducible. */
     data:    { type: mongoose.Schema.Types.Mixed, default: {} },
 

@@ -181,11 +181,14 @@ export default function ParentPortalScreen() {
    */
   const loadSeq = useRef(0);
 
-  const loadAll = useCallback(async () => {
+  const loadAll = useCallback(async ({ quiet = false } = {}) => {
     const ticket  = ++loadSeq.current;
     const current = () => ticket === loadSeq.current;
 
-    setLoading(true);
+    // A poll must not put a spinner over a screen the parent is reading. The
+    // ticket still applies, so a slow poll that lands after a tab change is
+    // dropped like any other superseded load.
+    if (!quiet) setLoading(true);
     try {
       const meRes = await PortalService.fetchMe(childId);
       if (!current()) return;
@@ -200,49 +203,15 @@ export default function ParentPortalScreen() {
         fees:       PortalService.fetchFees,
         results:    PortalService.fetchResults,
         attendance: PortalService.fetchAttendance,
-        // Notices, plus the threads with something unread in them.
+        // Notices, including the threads with something unread in them.
         //
-        // Sending a message notified nobody: there is no message kind in the
-        // Notification collection, and there should not be — that collection
-        // is a delivery queue with a channel and a retry backoff, so a row
-        // in it is an email or an SMS actually going out. One per message on
-        // a live thread is not a notification, it is a nuisance.
-        //
-        // So the unread count the server already returns is merged in here
-        // instead: one entry per thread, not per message, because a thread
-        // with nine unread is one thing to go and read.
-        notices: async (sid) => {
-          const [notices, convos] = await Promise.all([
-            PortalService.fetchNotifications(sid),
-            // A failure here must not empty the notices the school did send.
-            PortalService.fetchConversations(sid).catch(() => ({ data: [] })),
-          ]);
-
-          const unread = (convos?.data ?? [])
-            .filter((c) => (c.unread ?? 0) > 0)
-            .map((c) => ({
-              _id:            `message-${c._id}`,
-              kind:           "message",
-              subject:        conversationName(
-                                c, c.otherParticipants || c.participants, t
-                              ),
-              body:           c.lastMessagePreview || "",
-              sentAt:         c.lastMessageAt,
-              // Nothing was queued, so nothing can be pending or failed —
-              // without this the card would print a delivery status for a
-              // delivery that never happened.
-              status:         "sent",
-              conversationId: c._id,
-            }));
-
-          const rows = [...unread, ...(notices?.data ?? [])].sort((a, b) =>
-            String(b.sentAt || b.createdAt || "").localeCompare(
-              String(a.sentAt || a.createdAt || "")
-            )
-          );
-
-          return { ...notices, data: rows };
-        },
+        // The merge used to happen here, on the phone: two requests, sorted
+        // together locally. It is one request now because the server does it,
+        // which is what makes the two slower halves of this screen the same
+        // speed as the rest — and it is why the notice list can carry an
+        // unread total at all. A client cannot count what it would need a
+        // second endpoint to see.
+        notices:    PortalService.fetchNotifications,
         news:       PortalService.fetchAnnouncements,
         messages:   PortalService.fetchConversations,
       }[tab];
@@ -268,15 +237,34 @@ export default function ParentPortalScreen() {
       if (!current()) return;
       if (!(await handle401(err))) setSection(null);
     } finally {
-      if (current()) setLoading(false);
+      if (current() && !quiet) setLoading(false);
     }
-  // t is a dependency because the notices fetcher names an untitled thread
-  // with it; without it a language switch would leave that one label in
-  // the previous language until something else forced a refetch.
-  }, [tab, childId, handle401, t]);
+  // `t` was a dependency while the notices fetcher named an untitled thread
+  // with it. The server names them now, so nothing in here translates and
+  // keeping it would refetch all six tabs on a language switch for no reason.
+  }, [tab, childId, handle401]);
 
   useEffect(() => {
     if (signedIn) loadAll();
+  }, [signedIn, loadAll]);
+
+  /**
+   * Polled while the portal is open.
+   *
+   * There is no socket layer anywhere in this system and this is not one: a
+   * message sent while the parent is holding the screen appears within about
+   * half a minute, not instantly. What it does replace is the parent having to
+   * pull down to find out — which they had no reason to do, because nothing on
+   * screen suggested there was anything new.
+   *
+   * Quiet, so no spinner appears over what they are reading. The staff thread
+   * screen has polled at 20s for a while; 25s here because this refreshes a
+   * whole tab rather than one conversation.
+   */
+  useEffect(() => {
+    if (!signedIn) return undefined;
+    const poll = setInterval(() => { loadAll({ quiet: true }); }, 25000);
+    return () => clearInterval(poll);
   }, [signedIn, loadAll]);
 
   const refresh = useCallback(async () => {
@@ -466,19 +454,41 @@ export default function ParentPortalScreen() {
         </View>
       )}
 
+      {/* The unread count on the tab itself.
+          A parent had no indication anywhere that a message had arrived: the
+          count existed on every thread and nothing carried it to a place it
+          could be seen without first opening the tab it was about. It rides on
+          /portal/me, which is the one request every load makes whatever tab is
+          showing — a badge that needs a second request to a tab nobody has
+          opened is a badge no client draws. */}
       <View style={styles.tabs}>
-        {TABS.map((key) => (
-          <TouchableOpacity
-            key={key}
-            style={[styles.tab, tab === key && styles.tabOn]}
-            onPress={() => setTab(key)}
-            activeOpacity={0.8}
-          >
-            <Text style={[styles.tabText, tab === key && styles.tabTextOn]}>
-              {t(`portal.${key}`)}
-            </Text>
-          </TouchableOpacity>
-        ))}
+        {TABS.map((key) => {
+          const unread = key === "messages" ? (me?.unreadMessages ?? 0) : 0;
+          return (
+            <TouchableOpacity
+              key={key}
+              style={[styles.tab, tab === key && styles.tabOn]}
+              onPress={() => setTab(key)}
+              activeOpacity={0.8}
+              accessibilityLabel={
+                unread > 0
+                  ? `${t(`portal.${key}`)} (${t("portal.unreadCount", { count: unread })})`
+                  : t(`portal.${key}`)
+              }
+            >
+              <Text style={[styles.tabText, tab === key && styles.tabTextOn]}>
+                {t(`portal.${key}`)}
+              </Text>
+              {unread > 0 ? (
+                <View style={styles.tabBadge}>
+                  <Text style={styles.tabBadgeText}>
+                    {unread > 9 ? "9+" : unread}
+                  </Text>
+                </View>
+              ) : null}
+            </TouchableOpacity>
+          );
+        })}
       </View>
 
       <ScrollView
@@ -959,9 +969,15 @@ export default function ParentPortalScreen() {
                   const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
                   // A notice about a message that cannot be opened from the
                   // notice is a dead end; the rest have nowhere to go.
+                  //
+                  // Straight into the thread now, rather than switching to the
+                  // Messages tab and leaving the parent to find the row again.
                   const Card = n.conversationId ? TouchableOpacity : View;
                   const press = n.conversationId
-                    ? { onPress: () => setTab("messages"), activeOpacity: 0.7 }
+                    ? {
+                        onPress: () => router.push(`/portal/messages/${n.conversationId}`),
+                        activeOpacity: 0.7,
+                      }
                     : {};
                   return (
                     <Card key={n._id} style={styles.card} {...press}>
@@ -972,6 +988,11 @@ export default function ParentPortalScreen() {
                         <Text style={styles.noticeKind} numberOfLines={1}>
                           {t(meta.labelKey)}
                         </Text>
+                        {n.unread > 0 ? (
+                          <View style={styles.convoBadge}>
+                            <Text style={styles.convoBadgeText}>{n.unread}</Text>
+                          </View>
+                        ) : null}
                         <Text style={styles.lineMeta}>
                           {formatDateShort(n.sentAt || n.createdAt)}
                         </Text>
@@ -987,8 +1008,20 @@ export default function ParentPortalScreen() {
                       {/* A queued notice has not left the school yet, and a
                           failed one never will — saying so is kinder than a
                           silent absence when a parent is asking why they were
-                          not told. */}
-                      {n.status && n.status !== "sent" ? (
+                          not told.
+
+                          Only those two. This was every status except "sent",
+                          which was safe while the server hid skipped rows and
+                          is not now that it shows them: a skipped notice is
+                          one the school never tried to send — an on-time
+                          arrival, or a family with no email address — and
+                          telling a parent it was not emailed, on the screen
+                          where they are reading it, is an apology for
+                          nothing. There is also no such translation: the key
+                          would have rendered as portal.noticeStatus_skipped
+                          on screen, because until now it could never be
+                          reached. */}
+                      {n.status === "pending" || n.status === "failed" ? (
                         <Text style={styles.noticePending}>
                           {t(`portal.noticeStatus_${n.status}`)}
                         </Text>
@@ -1055,8 +1088,18 @@ const styles = StyleSheet.create({
     flexDirection: "row", backgroundColor: C.surface,
     borderBottomWidth: 1, borderBottomColor: C.line,
   },
-  tab:       { flex: 1, paddingVertical: 11, alignItems: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
+  tab: {
+    flex: 1, paddingVertical: 11, borderBottomWidth: 2, borderBottomColor: "transparent",
+    // Row rather than centre-only, so the badge sits beside the word instead
+    // of over it. The gap holds the label in place whether or not it is there.
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 4,
+  },
   tabOn:     { borderBottomColor: C.primary },
+  tabBadge: {
+    minWidth: 16, paddingHorizontal: 4, paddingVertical: 1,
+    borderRadius: 8, backgroundColor: C.danger, alignItems: "center",
+  },
+  tabBadgeText: { fontSize: 10, fontWeight: "700", color: "#FFFFFF" },
   tabText:   { fontSize: 12, fontWeight: "600", color: C.inkMuted },
   tabTextOn: { color: C.primary },
 

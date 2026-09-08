@@ -892,20 +892,24 @@ const checkReceiptContrast = () => {
 // cancels the fetch already in flight, so without a guard the LAST response to
 // arrive wins — regardless of which tab the parent is now looking at.
 //
-// That would be harmless if all six took the same time. They do not: `notices`
-// merges notifications with conversations, so it makes two requests where the
-// other five make one, and it is therefore reliably the slowest and reliably
-// the loser. Notices → Messages put the notifications array under the Messages
-// tab, and for a parent whose school had sent no notifications that array was
-// empty: "no conversations yet", over a thread that had already loaded and was
-// still sitting on the server. Readable by name, absent from the list, and back
-// again after a pull-to-refresh, because a refresh fires one fetcher.
+// When it was found, `notices` merged notifications with conversations on the
+// phone — two requests where the other five made one — so it was reliably the
+// slowest and reliably the loser. Notices → Messages put the notifications
+// array under the Messages tab, and for a parent whose school had sent no
+// notifications that array was empty: "no conversations yet", over a thread
+// that had already loaded and was still sitting on the server. Readable by
+// name, absent from the list, and back after a pull-to-refresh, because a
+// refresh fires one fetcher.
 //
-// Two things are asserted, because either alone would be misleading. First that
-// the asymmetry is still real — if some later change made every tab one request
-// the guard would be belt-and-braces rather than load-bearing, and this comment
-// would be wrong. Second that every setState in loadAll is behind the ticket
-// check, which is the part a refactor can quietly drop.
+// That merge has since moved to the server and all six tabs are one request
+// each. The hazard is NOT gone: two requests to different endpoints can still
+// come back out of order on a bad link. What changed is that the failure went
+// from reliable to intermittent, which is worse to diagnose, not better — so
+// the guard stays, and this check no longer argues from request counts.
+//
+// What it asserts instead is the structure that makes a guard necessary: one
+// state slot written by a function that re-runs per tab. Plus the guard itself,
+// which is the part a refactor can quietly drop.
 
 const checkPortalTabRace = () => {
   console.log("");
@@ -922,32 +926,24 @@ const checkPortalTabRace = () => {
 
   // ── 1. The asymmetry that makes the guard necessary ─────────────────────
   //
-  // Counted off the fetcher map, not assumed: the map is `tab: fetcher`, and
-  // the notices entry is the only one with a function body rather than a bare
-  // service reference.
+  // Read off the source, not assumed: every tab resolves a fetcher out of one
+  // map, the result goes into one setSection, and loadAll lists `tab` among
+  // its dependencies so it re-runs whenever the tab changes. Those facts
+  // together ARE the race.
   const mapStart = body.indexOf("const fetcher = {");
   const mapBody  = mapStart === -1 ? "" : body.slice(mapStart, body.indexOf("}[tab]", mapStart));
-  const calls    = (label) => {
-    const at = mapBody.indexOf(`${label}:`);
-    if (at === -1) return -1;
-    const next = mapBody.slice(at + label.length + 1);
-    const stop = next.search(/\n\s{8}[a-z]+:/);
-    // No trailing "(": five of the six entries are a bare service reference
-    // passed as the fetcher, and only `notices` calls anything itself.
-    return [...(stop === -1 ? next : next.slice(0, stop))
-      .matchAll(/PortalService\.fetch\w+/g)].length;
-  };
+  const tabs     = [...mapBody.matchAll(/^\s{8}([a-z]+):/gm)].map((m) => m[1]);
 
-  const notices = calls("notices");
-  const messages = calls("messages");
-  if (notices > messages && messages >= 1) {
-    ok(`notices makes ${notices} requests to messages' ${messages}, so response order is not tab order`);
+  const oneSlot  = (body.match(/\bsetSection\(/g) ?? []).length >= 1;
+  const perTab   = /\}\s*,\s*\[\s*tab\s*,/.test(body);
+
+  if (tabs.length >= 2 && oneSlot && perTab) {
+    ok(`${tabs.length} tabs resolve one fetcher into one section, re-run per tab`);
   } else {
-    bad("the tabs still take different numbers of requests",
-      `notices ${notices}, messages ${messages}.\n` +
-      "If every tab is now one request, re-read the comment above this check —\n" +
-      "the guard may no longer be load-bearing, but do not remove it without\n" +
-      "confirming nothing else can reorder the responses.");
+    bad("the tabs share one state slot filled per tab",
+      `tabs: ${tabs.join(", ") || "none"}; setSection: ${oneSlot}; tab in deps: ${perTab}.\n` +
+      "If the tabs no longer share a slot then the race is gone and this whole\n" +
+      "check should be reconsidered — do not just make it pass again.");
   }
 
   // ── 2. A ticket, taken once, at the top ─────────────────────────────────
@@ -1009,6 +1005,104 @@ const checkPortalTabRace = () => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// WHAT THE PORTAL TELLS A PARENT
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// Three reported failures, and the client half of each.
+//
+//   • An unread thread is a notice now, and the server derives it. The phone
+//     used to assemble that list itself from two requests — which is what made
+//     the notices tab the slowest and lost the race above.
+//
+//   • The unread count rides on /portal/me, the one request every load makes
+//     whatever tab is showing, so the Messages tab can carry a badge. The
+//     count existed on every thread all along and nothing carried it anywhere
+//     a parent would see it without first opening the tab it was about.
+//
+//   • A notice's status line is rendered from an interpolated key. That was
+//     safe only while the server hid skipped rows, and it does not any more —
+//     a notification the school never tried to send is exactly what a parent
+//     should see. `portal.noticeStatus_skipped` does not exist in either
+//     catalogue, so the old condition would have printed the key itself on
+//     screen. Every status the render admits has to have wording.
+
+const checkPortalNotices = () => {
+  console.log("");
+  console.log("THE PORTAL'S NOTICES");
+
+  const src = fs.readFileSync(path.join(ROOT, "app/portal/index.js"), "utf8");
+  const en  = JSON.parse(fs.readFileSync(path.join(ROOT, "src/i18n/locales/en.json"), "utf8"));
+  const fr  = JSON.parse(fs.readFileSync(path.join(ROOT, "src/i18n/locales/fr.json"), "utf8"));
+
+  // ── 1. The list comes from one request ──────────────────────────────────
+  const fetcherMap = src.slice(
+    src.indexOf("const fetcher = {"),
+    src.indexOf("}[tab]", src.indexOf("const fetcher = {"))
+  );
+  if (/notices:\s*PortalService\.fetchNotifications/.test(fetcherMap)) {
+    ok("the notices tab is one request — the merge lives on the server");
+  } else {
+    bad("the notices tab fetches one endpoint",
+      "Assembling it here is what made this tab reliably the slowest, and it\n" +
+      "is why the list could not carry an unread total.");
+  }
+
+  // ── 2. Every status the render admits has wording, in both languages ────
+  //
+  // Read the condition, do not assume it: whatever statuses it lets through
+  // are the ones that reach t(), and each needs a key.
+  const guard = /n\.status === "(\w+)"(?:\s*\|\|\s*n\.status === "(\w+)")*/.exec(src);
+  const shown = guard
+    ? [...src.slice(guard.index, guard.index + 120).matchAll(/n\.status === "(\w+)"/g)].map((m) => m[1])
+    : [];
+
+  if (shown.length) {
+    const missing = [];
+    for (const status of shown) {
+      const key = `noticeStatus_${status}`;
+      if (en.portal?.[key] === undefined) missing.push(`en portal.${key}`);
+      if (fr.portal?.[key] === undefined) missing.push(`fr portal.${key}`);
+    }
+    if (!missing.length) {
+      ok(`both catalogues word every status the card shows (${shown.join(", ")})`);
+    } else {
+      bad("every status the card shows has wording",
+        missing.join("\n") + "\n" +
+        "An interpolated key that is missing renders as the key, on a phone,\n" +
+        "offline, with no console to notice it in.");
+    }
+  } else {
+    bad("the status condition can be read", "no `n.status === \"…\"` guard found");
+  }
+
+  // And not the statuses that must NOT reach it. A skipped notice is one the
+  // school never tried to send; apologising for that on the screen where the
+  // parent is reading it is an apology for nothing.
+  if (!shown.includes("skipped")) {
+    ok("and a skipped notice is not apologised for");
+  } else {
+    bad("a skipped notice shows no delivery status",
+      "It has no wording, and it needs none — the parent is reading it.");
+  }
+
+  // ── 3. The badge, from the request that always runs ─────────────────────
+  if (/me\?\.unreadMessages/.test(src)) {
+    ok("the Messages tab badges from /portal/me, which every load fetches");
+  } else {
+    bad("the tab badge reads the count from /me",
+      "Anywhere else and it needs a second request to a tab nobody opened.");
+  }
+
+  if (/portal\.unreadCount/.test(src) && en.portal?.unreadCount !== undefined) {
+    ok("and says the count out loud for a screen reader");
+  } else {
+    bad("the badge has an accessible label",
+      "A number in a circle is not a label; a count read as \"3\" tells\n" +
+      "somebody using a screen reader nothing about what there are three of.");
+  }
+};
+
 checkParse();
 checkLocales();
 checkLinkQuality();
@@ -1019,6 +1113,7 @@ checkScreenEdges();
 checkNavigationReach();
 checkReceiptContrast();
 checkPortalTabRace();
+checkPortalNotices();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);

@@ -2315,7 +2315,22 @@
     "todayAttendance": "Présence du jour",
     "recentDays": "Jours récents",
     "noPeriodsToday": "Aucun relevé de créneau pour aujourd'hui",
-    "attendanceBySubject": "Présence par matière"
+    "attendanceBySubject": "Présence par matière",
+    "notices": "Avis",
+    "noticeArrival": "Arrivé à l'école",
+    "noticeDeparture": "Sorti de l'école",
+    "noticeAbsent": "Marqué absent",
+    "noticeFeeReminder": "Rappel de frais",
+    "noticePayment": "Paiement reçu",
+    "noticeResults": "Résultats publiés",
+    "noticeAnnouncement": "Avis de l'école",
+    "noticeMessage": "Message",
+    "noticeOther": "Avis",
+    "noNotices": "Rien de l'école pour le moment.",
+    "noticeStatus_pending": "En attente d'envoi",
+    "noticeStatus_failed": "Envoi impossible",
+    "unreadCount": "{{count}} non lu",
+    "unreadCount_other": "{{count}} non lus"
   },
   "codes": {
     "title": "Accès parents",

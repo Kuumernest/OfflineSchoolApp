@@ -162,6 +162,15 @@ export interface PortalMe {
   children:   PortalStudent[];
   selectedId: string;
   student:    PortalStudent;
+  /**
+   * Unread messages waiting, across every thread.
+   *
+   * On /me because this is the one request every screen makes whatever tab it
+   * is showing. A badge that needs a second request to a tab the parent has
+   * not opened is a badge no client draws, which is how a parent ended up with
+   * no indication anywhere that a message had arrived.
+   */
+  unreadMessages?: number;
 }
 
 export const fetchMe = async (studentId?: string | null): Promise<PortalMe> =>
@@ -186,11 +195,32 @@ export interface PortalNotification {
   _id:       string;
   kind:      string;
   subject:   string | null;
+  /**
+   * The message as displayable text.
+   *
+   * Not the channel payload: for email that is a whole HTML document, and the
+   * server now sends the plain-text rendering under this name and the markup
+   * under `html`. Anything that puts this on screen gets text.
+   */
   body:      string | null;
+  html?:     string | null;
   data:      Record<string, unknown>;
   status:    string;
+  skipReason?: string | null;
   sentAt:    string | null;
   createdAt: string;
+
+  /**
+   * Set only on the derived "message" rows.
+   *
+   * An unread thread is a notice too, and it is not a row in the notification
+   * queue — that queue has a channel and a retry backoff, so a row in it is an
+   * email actually going out. The server derives these from the conversations
+   * it already stores, which is why they carry a thread to open and a count
+   * rather than a delivery status.
+   */
+  conversationId?: string;
+  unread?:         number;
 }
 
 export const fetchNotifications = async (studentId?: string | null): Promise<PortalNotification[]> =>

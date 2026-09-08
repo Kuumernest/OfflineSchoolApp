@@ -78,13 +78,20 @@ const minutesOf = (hhmm) => {
 };
 
 /**
- * Whether this particular scan is worth telling a parent about.
+ * Whether this particular scan is worth SENDING a parent a message about.
  *
  * The default is "exceptions", and the reasoning is worth stating: a school of
  * 500 scanning twice a day is 20,000 messages a month. After the first week
  * "arrived 07:42" is noise a parent stops opening — which is worse than
  * silence, because the message that mattered is then buried in it. A late
  * arrival or a child leaving at 11am is the message somebody acts on.
+ *
+ * That is a decision about DELIVERY, and it used to be implemented as a
+ * decision about whether to remember: `notify: false` meant enqueue was never
+ * called, so an on-time arrival left no notification anywhere and a parent
+ * opening the portal to see what time their child came through found nothing.
+ * The two are now separate — every scan is recorded, this governs only what
+ * leaves the building — and the default is deliberately unchanged.
  *
  * @returns {{ notify: boolean, reason: string }}
  */
@@ -202,20 +209,35 @@ const scan = async ({
   const policy = shouldNotify({ school, direction, at: when });
 
   let notification = null;
-  if (notifyGuardian && policy.notify) {
-    // Queued, never sent inline. A gate with no connectivity must still let a
-    // queue of children through at the same speed.
-    notification = await notify.enqueue({
-      schoolId,
-      kind: direction === "in" ? "gate.arrival" : "gate.departure",
-      studentId: String(student._id),
-      data: { at: when, reason: policy.reason },
-    });
+  if (notifyGuardian) {
+    // EVERY scan is recorded; `deliver` is where the policy applies. Queued,
+    // never sent inline — a gate with no connectivity must still let a queue of
+    // children through at the same speed.
+    //
+    // And never allowed to undo the scan. The register is the thing that has to
+    // survive: a child walked through the gate whatever the notification
+    // pipeline thinks about it, so a failure here is caught and logged and the
+    // arrival stands. This is the one place in the flow where that ordering
+    // matters, because the event is already written by the time we get here.
+    try {
+      notification = await notify.enqueue({
+        schoolId,
+        kind: direction === "in" ? "gate.arrival" : "gate.departure",
+        studentId: String(student._id),
+        data: { at: when, reason: policy.reason },
+        deliver: policy.notify,
+        deliverReason: policy.reason,
+      });
 
-    await GateEvent.updateOne(
-      { _id: event._id },
-      { notificationId: String(notification._id) }
-    );
+      await GateEvent.updateOne(
+        { _id: event._id },
+        { notificationId: String(notification._id) }
+      );
+    } catch (err) {
+      console.error(
+        `[gate] scan recorded for ${student._id} but the notification failed: ${err.message}`
+      );
+    }
   }
 
   return {

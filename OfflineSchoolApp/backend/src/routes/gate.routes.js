@@ -79,6 +79,15 @@ router.post("/scan", asyncHandler(async (req, res) => {
       // Why no message went, when none did — "arrived on time" is an answer,
       // an empty field is a worry.
       notifyReason:  result.notifyPolicy?.reason ?? null,
+      // The decision itself, separate from what came of it.
+      //
+      // `notified` above is false for two unrelated reasons — the school does
+      // not email on-time arrivals, or this family has no address — and the
+      // operator screen was left to guess which. It also now means something
+      // narrower than it used to: every scan is recorded whatever this says,
+      // so "not notified" no longer implies "not written down".
+      notifyPolicy:  result.notifyPolicy ?? null,
+      recorded:      Boolean(result.notification),
     });
   } catch (err) {
     return res.status(err.status ?? 500).json({
