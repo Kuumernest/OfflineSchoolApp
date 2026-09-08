@@ -97,7 +97,8 @@
     "dismiss": "Dismiss",
     "optionalContact": "Optional, but the school will usually want a contact on file.",
     "tryDifferent": "Try a different name or keyword",
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    "languageHint": "Applies immediately, and is remembered on this device."
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -1864,7 +1865,8 @@
     "pwChanged": "Password changed",
     "errPwChange": "Failed to change password",
     "errGradingSave": "Failed to save config",
-    "errCreateAdmin": "Failed to create admin"
+    "errCreateAdmin": "Failed to create admin",
+    "preferences": "Preferences"
   },
   "examDetail": {
     "statusDraft": "Draft",

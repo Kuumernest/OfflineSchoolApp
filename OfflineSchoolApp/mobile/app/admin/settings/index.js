@@ -25,6 +25,7 @@ import { useRouter }       from "expo-router";
 import * as ImagePicker    from "expo-image-picker";
 import { toDisplayUri }    from "../../../src/utils/logoUri";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
+import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 import { useAuthStore }    from "../../../src/store/auth.store";
 import DateField           from "../../../src/components/DateField";
 import {
@@ -759,6 +760,20 @@ const ProfileSection = ({ user, onProfileUpdated }) => {
 
   return (
     <View>
+      {/*
+        Language is a personal preference, not a school-wide one, so it sits in
+        Profile beside this admin's own name rather than under School where the
+        whole institution's settings live. First card, because an admin hunting
+        for it cannot read the tabs above it.
+      */}
+      <Card>
+        <Text style={styles.cardTitle}>{t("adminSettings.preferences")}</Text>
+        <LanguageSwitcher />
+        <Text style={{ fontSize: 11, color: "#6B7280", marginTop: 6 }}>
+          {t("common.languageHint")}
+        </Text>
+      </Card>
+
       <Card>
         <Text style={styles.cardTitle}>{t("adminSettings.personalInfo")}</Text>
         <SettingRow label={t("adminSettings.fullName")}>

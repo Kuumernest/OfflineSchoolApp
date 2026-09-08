@@ -97,7 +97,8 @@
     "dismiss": "Fermer",
     "optionalContact": "Facultatif, mais l'établissement souhaite généralement disposer d'un contact.",
     "tryDifferent": "Essayez un autre nom ou mot-clé",
-    "unknown": "Inconnu"
+    "unknown": "Inconnu",
+    "languageHint": "S'applique immédiatement et est mémorisé sur cet appareil."
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -1864,7 +1865,8 @@
     "pwChanged": "Mot de passe modifié",
     "errPwChange": "Échec du changement de mot de passe",
     "errGradingSave": "Échec de l'enregistrement de la configuration",
-    "errCreateAdmin": "Échec de la création de l'administrateur"
+    "errCreateAdmin": "Échec de la création de l'administrateur",
+    "preferences": "Préférences"
   },
   "examDetail": {
     "statusDraft": "Brouillon",

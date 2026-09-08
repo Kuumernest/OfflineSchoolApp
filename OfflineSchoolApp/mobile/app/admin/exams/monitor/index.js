@@ -310,7 +310,16 @@ export default function SubmissionMonitorScreen() {
         },
       ]
     );
-  }, [t, selectedExam._id, schoolId, loadSubmissions]);
+  // selectedExam?._id, not selectedExam._id.
+  //
+  // This screen opens with no exam when it is reached from the menu rather
+  // than from a specific exam — useState starts it at null on line 219 and
+  // there is a picker behind the `if (!selectedExam)` guard further down.
+  // But a dependency array is evaluated DURING render, so this ran before
+  // that guard and threw on `_id` of null. The callback bodies below read
+  // selectedExam._id unguarded quite safely: they only run once an exam has
+  // been chosen.
+  }, [t, selectedExam?._id, schoolId, loadSubmissions]);
 
   // ── Reject ─────────────────────────────────────────────
   const handleRejectConfirm = useCallback(async (reason) => {
@@ -330,7 +339,7 @@ export default function SubmissionMonitorScreen() {
     } finally {
       setRejectLoading(false);
     }
-  }, [rejectModal, selectedExam._id, schoolId, loadSubmissions, t]);
+  }, [rejectModal, selectedExam?._id, schoolId, loadSubmissions, t]);
 
   // ── View scores ────────────────────────────────────────
   const handleViewScores = useCallback((subject) => {

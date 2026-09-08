@@ -20,6 +20,7 @@ import { useAuthStore } from "../../../src/store/auth.store";
 import { getDatabase }  from "../../../src/db/database";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -576,6 +577,18 @@ export default function TeacherSettingsScreen() {
 
         {/* ── Preferences ── */}
         <Section title={t("teacherSettings.preferences")}>
+          {/*
+            Language first in Preferences. Somebody looking for this control is,
+            by definition, reading an interface in a language they did not choose,
+            so it sits above the toggles rather than below them.
+          */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
+            <LanguageSwitcher />
+            <Text style={{ fontSize: 11, color: C.gray500, marginTop: 6 }}>
+              {t("common.languageHint")}
+            </Text>
+          </View>
+
           {/* ✅ Fix 2 + Fix 5 — persisted toggle, renders as View not TouchableOpacity */}
           <SettingRow
             icon="notifications-outline"

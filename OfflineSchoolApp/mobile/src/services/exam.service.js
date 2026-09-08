@@ -679,13 +679,31 @@ const getExamStats = async (examId, schoolId) => {
 
   try {
     const res = await api.get(`/results/${examId}/stats`, { params: { schoolId } });
-    await ExamCache.putBlob(key, res.data).catch(() => {});
-    return { ...res.data, isStale: false };
+    /*
+     * Unwrap the envelope.
+     *
+     * The endpoint answers { success, data: { totalStudents, passed, … } }, and
+     * this returned the whole body. The screen then read stats.totalStudents off
+     * the envelope, found undefined, and its `?? 0` rendered a row of zeros —
+     * Total 0, Passed 0, Failed 0, Pass 0% — directly above a rankings list
+     * showing five pupils. Nothing failed and nothing was logged, because the
+     * request had succeeded; only the shape was one level out.
+     *
+     * getResults and getStudentResult in this same file already unwrap; these
+     * two did not. Unwrapped BEFORE the cache write so the offline path below
+     * returns the same shape as the online one — caching the envelope is how a
+     * shape bug outlives the fix that corrected it.
+     */
+    const stats = res.data?.data ?? res.data;
+    await ExamCache.putBlob(key, stats).catch(() => {});
+    return { ...stats, isStale: false };
   } catch (err) {
     if (!isOfflineError(err)) throw err;
     const cached = await ExamCache.getBlob(key);
     if (!cached?.data) throw offlineOnly("Exam statistics");
-    return { ...cached.data, isStale: true, cachedAt: cached.cachedAt };
+    // An older cache entry still holds the envelope, so unwrap on read too.
+    const stats = cached.data?.data ?? cached.data;
+    return { ...stats, isStale: true, cachedAt: cached.cachedAt };
   }
 };
 

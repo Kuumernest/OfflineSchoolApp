@@ -23,6 +23,7 @@ import { getDatabase }  from "../../../src/db/database";
 import api, { API_URL } from "../../../src/services/api";
 import { API }          from "../../../src/services/apiEndpoints";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
 import * as ImagePicker from "expo-image-picker";
 import { errorText } from "../../../src/utils/appError";
 
@@ -1227,6 +1228,18 @@ export default function StudentSettingsScreen() {
 
         {/* ── PREFERENCES ── */}
         <Section title={t("studentSettings.preferences")}>
+          {/*
+            Language first in Preferences, above the toggles: a pupil looking for
+            this control is reading an interface in a language they did not choose.
+            The app shipped bilingual with no way to switch it.
+          */}
+          <View style={{ paddingHorizontal: 14, paddingTop: 12, paddingBottom: 4 }}>
+            <LanguageSwitcher />
+            <Text style={{ fontSize: 11, color: C.gray500, marginTop: 6 }}>
+              {t("common.languageHint")}
+            </Text>
+          </View>
+
           <SettingRow
             icon="notifications-outline" iconBg="#FEF3C7" iconColor={C.warning}
             title={t("studentSettings.pushNotifications")}
