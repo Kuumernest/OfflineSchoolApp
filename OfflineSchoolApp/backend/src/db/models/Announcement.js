@@ -347,8 +347,23 @@ announcementSchema.statics.expandLegacyAudience = function (audience) {
     case "students": return ["students"];
     case "teachers": return ["teachers"];
     case "parents":  return ["parents"];
-    // "class" scoped the announcement to students of targetClasses.
-    case "class":    return ["students"];
+    /*
+     * "class" scopes the announcement to targetClasses — and reaches the
+     * pupils in those classes AND their parents.
+     *
+     * It used to expand to ["students"] alone. That was defensible on its own
+     * terms, but it made "the parents of Upper sixth" inexpressible: the
+     * composer offers four mutually exclusive audiences — Everyone, Teachers
+     * only, Students only, Specific classes — and no Parents option at all.
+     * So the only notice a parent could ever receive was one addressed to
+     * Everyone, and a notice aimed at their child's class was, by
+     * construction, not addressed to them.
+     *
+     * That is a real thing a school wants to say, and it is the commonest
+     * thing they want to say to one class: a trip, a fee, a uniform, an exam
+     * date. Parents are now in the audience.
+     */
+    case "class":    return ["students", "parents"];
     default:         return [];
   }
 };
@@ -449,13 +464,31 @@ announcementSchema.statics.audienceMatch = function ({
   ];
 
   if (classes.length) {
-    // Legacy class-scoped rows. `targetClasses` is an array, so $in against a
-    // list of the reader's classes is the same operator Mongo already used for
-    // a single value — which is what makes "any of my children's classes"
-    // one query rather than one per child.
+    /*
+     * Class-scoped rows, by the `audience: "class"` marker.
+     *
+     * `targetClasses` is an array, so $in against a list of the reader's
+     * classes is the same operator Mongo already used for a single value —
+     * which is what makes "any of my children's classes" one query rather
+     * than one per child.
+     *
+     * No `legacyOnly` guard on this one, and that is the load-bearing part.
+     * The create route stores BOTH fields: `audience: "class"` and
+     * `audiences: expandLegacyAudience("class")`. So every class notice
+     * already written carries audiences:["students"] — the value that
+     * expansion used to produce — and requiring `audiences` to be absent
+     * would fix only notices written from today, leaving every existing one
+     * invisible to parents.
+     *
+     * `audience: "class"` is set by nothing but the class picker, so it is a
+     * reliable statement that this notice is scoped to these classes rather
+     * than to a role. The targetStudents guard is kept: a notice that also
+     * names particular pupils is narrowed to them, and the branch below
+     * carries it to the right families.
+     */
     conditions.push({
       audience: "class", targetClasses: { $in: classes },
-      $and: [{ $or: legacyOnly }, unscoped[1]],
+      $and: [unscoped[1]],
     });
     // New rows scoped to specific classes: one of the reader's classes must be
     // among them AND their audience must be one the announcement targets.

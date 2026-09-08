@@ -337,13 +337,39 @@ const note = (label) => console.log(`       ${label}`);
   });
 
   console.log("\n--- the notices, as stored ---");
+  //
+  // The shapes below are the shapes the PRODUCT writes, which is not what this
+  // suite originally asserted against. It used audiences:["parents"] alongside
+  // targetClasses — a combination the composer cannot produce, because it
+  // offers four mutually exclusive audiences (Everyone / Teachers only /
+  // Students only / Specific classes) and no Parents option. So the suite
+  // passed on a record that could not exist while the real one, written by the
+  // class picker, was invisible to the parent it was about.
+  //
+  // What the create route actually stores for "Specific classes" is BOTH
+  // fields: audience:"class" and audiences:expandLegacyAudience("class").
+  // `*-as-written` below is that exact pair, with audiences frozen at
+  // ["students"] — the value the expansion produced before today, and the
+  // value sitting in every class notice already in the database.
   await mk("all-school",      { audience: "all" });
   await mk("parents-only",    { audiences: ["parents"] });
   await mk("teachers-only",   { audiences: ["teachers"] });
-  await mk("class-5a-legacy", { audience: "class", targetClasses: [CLASS_A] });
-  await mk("class-5b-new",    { audiences: ["parents"], targetClasses: [CLASS_B] });
-  await mk("class-5c-only",   { audiences: ["parents"], targetClasses: [CLASS_C] });
-  await mk("class-5b-and-5c", { audiences: ["parents"], targetClasses: [CLASS_B, CLASS_C] });
+  await mk("class-5a-as-written", {
+    audience: "class", audiences: ["students"], targetClasses: [CLASS_A],
+  });
+  await mk("class-5b-as-written", {
+    audience: "class", audiences: ["students"], targetClasses: [CLASS_B],
+  });
+  await mk("class-5c-as-written", {
+    audience: "class", audiences: ["students"], targetClasses: [CLASS_C],
+  });
+  await mk("class-5b-and-5c", {
+    audience: "class", audiences: ["students"], targetClasses: [CLASS_B, CLASS_C],
+  });
+  // And one written from today, whose stored audiences names parents outright.
+  await mk("class-5a-new-shape", {
+    audience: "class", audiences: ["students", "parents"], targetClasses: [CLASS_A],
+  });
   await mk("child-1-only",    { audiences: ["parents"], targetStudents: [CHILD_1] });
   await mk("other-child-only",{ audiences: ["parents"], targetStudents: [OTHER] });
   await mk("expired",         { audience: "all", expiresAt: new Date(Date.now() - 86400000) });
@@ -369,7 +395,7 @@ const note = (label) => console.log(`       ${label}`);
     // The reported failure. The token resolves CHILD_1 (5A) first, so under
     // the old query this was decided entirely by 5A — and could not have
     // matched even then, because it filtered a field that does not exist.
-    if (titles(r.rows).includes("class-5b-new")) {
+    if (titles(r.rows).includes("class-5b-as-written")) {
       ok("the 5B notice reaches the parent, via their child in 5B");
     } else {
       bad("a notice for any child's class reaches the parent",
@@ -377,7 +403,7 @@ const note = (label) => console.log(`       ${label}`);
         `This is the reported failure.`);
     }
 
-    if (titles(r.rows).includes("class-5a-legacy")) {
+    if (titles(r.rows).includes("class-5a-as-written")) {
       ok("and so does the 5A one, written in the older shape");
     } else {
       bad("a legacy audience:\"class\" notice reaches the parent", "5A notice absent");
@@ -394,7 +420,7 @@ const note = (label) => console.log(`       ${label}`);
   console.log("\n--- 3: and a notice for a class none of their children are in ---");
   {
     const r = await announcements();
-    if (!titles(r.rows).includes("class-5c-only")) {
+    if (!titles(r.rows).includes("class-5c-as-written")) {
       ok("the 5C notice does not reach them");
     } else {
       bad("a notice for an unrelated class is withheld",
@@ -405,13 +431,13 @@ const note = (label) => console.log(`       ${label}`);
     // matches anything.
     const theirs = await announcements(asStranger);
     note(`stranger's titles: ${JSON.stringify(titles(theirs.rows))}`);
-    if (titles(theirs.rows).includes("class-5c-only")) {
+    if (titles(theirs.rows).includes("class-5c-as-written")) {
       ok("and does reach the family whose child IS in 5C");
     } else {
       bad("the 5C notice reaches the 5C family", JSON.stringify(titles(theirs.rows)));
     }
-    if (!titles(theirs.rows).includes("class-5a-legacy") &&
-        !titles(theirs.rows).includes("class-5b-new")) {
+    if (!titles(theirs.rows).includes("class-5a-as-written") &&
+        !titles(theirs.rows).includes("class-5b-as-written")) {
       ok("who in turn see neither the 5A nor the 5B notice");
     } else {
       bad("notices do not leak to the wrong class", JSON.stringify(titles(theirs.rows)));
@@ -483,7 +509,7 @@ const note = (label) => console.log(`       ${label}`);
         `only in child 1: ${onChild1.filter((x) => !onChild2.includes(x))}\n` +
         `only in child 2: ${onChild2.filter((x) => !onChild1.includes(x))}`);
     }
-    if (onChild1.includes("class-5a-legacy") && onChild1.includes("class-5b-new")) {
+    if (onChild1.includes("class-5a-as-written") && onChild1.includes("class-5b-as-written")) {
       ok("and both children's class notices are in it either way");
     } else {
       bad("both classes are represented", JSON.stringify(onChild1));

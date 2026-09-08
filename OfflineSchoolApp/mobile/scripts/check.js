@@ -972,8 +972,22 @@ const checkPortalTabRace = () => {
     for (const setter of GUARDED) {
       if (!new RegExp(`\\b${setter}\\(`).test(line)) continue;
       // Guarded either on this line (`if (current()) setLoading(false)`) or by
-      // an early return on one of the three lines above it.
-      const window = lines.slice(Math.max(0, i - 3), i + 1).join("\n");
+      // an early return just above it.
+      //
+      // Comment and blank lines are dropped before the three preceding lines
+      // are counted. This codebase explains itself in prose, and a paragraph
+      // between a guard and the statement it guards is ordinary — the first
+      // version of this check measured raw distance and reported a correctly
+      // guarded write as naked because four lines of comment sat in between.
+      const above = lines
+        .slice(0, i)
+        .filter((l) => {
+          const trimmed = l.trim();
+          return trimmed !== "" && !trimmed.startsWith("//") && !trimmed.startsWith("*")
+            && !trimmed.startsWith("/*");
+        })
+        .slice(-3);
+      const window = [...above, line].join("\n");
       if (!/current\(\)/.test(window)) {
         naked.push(`line ${i + 1}: ${line.trim()}`);
       }

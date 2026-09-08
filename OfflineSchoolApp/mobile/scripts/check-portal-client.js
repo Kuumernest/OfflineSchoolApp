@@ -371,10 +371,12 @@ const loadMobileModule = (relPath, stubs) => {
 
     const dataLine = /const\s+data\s*=\s*([^;]+);/.exec(screen);
     note(`screen reads: const data = ${dataLine?.[1]}`);
-    if (dataLine && /section\?\.data/.test(dataLine[1])) {
-      ok("the messages tab reads section.data, which is what the service returns");
+    // Either straight off `section`, or off the tab-guarded view of it — the
+    // point is that it derives from the stored payload and nothing else.
+    if (dataLine && /(?:section|forThisTab)\?\.data/.test(dataLine[1])) {
+      ok("the messages tab reads the stored section, which is what the service returns");
     } else {
-      bad("the screen reads section.data", dataLine?.[1] ?? "(not found)");
+      bad("the screen reads the stored section", dataLine?.[1] ?? "(not found)");
     }
 
     // The empty-state test, exactly as written in the tab.
@@ -397,6 +399,98 @@ const loadMobileModule = (relPath, stubs) => {
           `the expression returned true against ${JSON.stringify(data).slice(0, 160)}`);
       }
     }
+  }
+
+  // ── One tab must never render another tab's payload ─────────────────────
+  //
+  // This is what actually reached the parent, and it took a red box on a phone
+  // to find: `section` is one state slot for six tabs, each of which reads a
+  // different SHAPE out of it. Fees and attendance are objects; results,
+  // notices and messages are arrays.
+  //
+  // On a tab switch the new branch rendered the old tab's payload for as long
+  // as the new fetch was in flight, and the spinner could not intervene
+  // because its condition is `loading && !data` — the old payload made `data`
+  // truthy. Two faces, one bug:
+  //
+  //   Fees → Messages       an object has no .length, so the empty-state test
+  //                         was false and `.map()` was reached on an object:
+  //                         "undefined is not a function", render error.
+  //   Notices → Messages    an empty ARRAY crossed over and the tab printed
+  //                         "No conversations yet" over a conversation that
+  //                         was on the server the whole time.
+  //
+  // Asserted by evaluating the screen's own derivation against a foreign
+  // payload, rather than by reading it and hoping.
+  console.log("\n--- a tab cannot render another tab's data ---");
+  {
+    const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
+
+    const decl = /const\s+forThisTab\s*=\s*([^;]+);/.exec(screen);
+    if (decl && /section\?\.tab\s*===\s*tab/.test(decl[1])) {
+      ok("the screen only reads a section tagged with the current tab");
+    } else {
+      bad("section is matched against the tab before being read",
+        `const forThisTab = ${decl?.[1] ?? "(not found)"}`);
+    }
+
+    if (/setSection\(\{\s*\.\.\.loaded,\s*tab\s*\}\)/.test(screen)) {
+      ok("and every payload is tagged when it is stored");
+    } else {
+      bad("the payload carries the tab it was fetched for",
+        "Expected setSection({ ...loaded, tab }).");
+    }
+
+    // The real shapes, from the real service, cross-wired on purpose.
+    const feesSection = await Portal.fetchFees(CHILD_A);
+    const isObject = feesSection.data && !Array.isArray(feesSection.data);
+    if (isObject) ok("fees really does return an object, so the shapes really do differ");
+    else bad("the fees payload is an object", typeof feesSection.data);
+
+    const dataDecl = /const\s+data\s*=\s*([^;]+);/.exec(screen);
+    const derive = new Function("section", "tab", `
+      const forThisTab = section?.tab === tab ? section : null;
+      return ${dataDecl[1]};
+    `);
+
+    // Standing on Messages while section still holds the Fees payload.
+    const leaked = derive({ ...feesSection, tab: "fees" }, "messages");
+    if (leaked === undefined || leaked === null) {
+      ok("the fees payload is invisible to the messages tab");
+    } else {
+      bad("a foreign payload does not reach the messages tab",
+        `messages tab would receive a ${Array.isArray(leaked) ? "array" : typeof leaked}`);
+    }
+
+    // And the render decision that crashed: with the leak closed, the empty
+    // state is reached instead of .map() on an object.
+    const emptyExpr = /\((data \?\? \[\])\)\.length === 0/.exec(screen);
+    const decides = new Function("data", `
+      const target = (${emptyExpr[1]});
+      if (target.length === 0) return "empty-state";
+      if (typeof target.map !== "function") return "CRASH";
+      return "rows";
+    `);
+    if (decides(leaked) === "empty-state") {
+      ok("so the messages tab shows its empty state rather than crashing");
+    } else {
+      bad("the messages tab cannot crash on a foreign payload",
+        `it would ${decides(leaked)}`);
+    }
+    // Proof the assertion above is not vacuous: the old derivation crashes.
+    const before = new Function("section", "tab", "return section?.data;")(
+      { ...feesSection, tab: "fees" }, "messages"
+    );
+    if (decides(before) === "CRASH") {
+      ok("and the derivation this replaced does crash, on the same payload");
+    } else {
+      bad("the old derivation is shown to be the fault", `it would ${decides(before)}`);
+    }
+
+    // Its own tab still reads it, or the fix would have broken every tab.
+    const own = derive({ ...feesSection, tab: "fees" }, "fees");
+    if (own && !Array.isArray(own)) ok("while the fees tab still reads its own payload");
+    else bad("a tab reads its own payload", JSON.stringify(own).slice(0, 120));
   }
 
   // ── The cache, which is the other way a list goes empty ─────────────────
@@ -434,7 +528,7 @@ const loadMobileModule = (relPath, stubs) => {
     // is indistinguishable from "we could not ask".
     const screen = fs.readFileSync(path.join(MOBILE, "app/portal/index.js"), "utf8");
     const banner = /const stale = ([^;]+);/.exec(screen);
-    if (banner && /section\?\.stale/.test(banner[1]) && /\{stale && \(/.test(screen)) {
+    if (banner && /(?:section|forThisTab)\?\.stale/.test(banner[1]) && /\{stale && \(/.test(screen)) {
       ok("and the screen shows an offline banner whenever the copy is cached");
     } else {
       bad("a cached list is labelled as cached",

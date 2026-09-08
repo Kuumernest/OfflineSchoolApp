@@ -167,13 +167,15 @@ export default function ParentPortalScreen() {
    * conversations) where every other fetcher makes one, so it is reliably the
    * slowest and reliably the loser.
    *
-   * That is the reported bug. Open Notices, tap Messages: the conversation
-   * list arrives first and renders, then the notices response lands on top of
-   * it and the Messages tab is showing the notifications array. A parent whose
-   * school had sent no notifications got `[]` — "no conversations yet" — over a
-   * thread that had loaded a moment earlier and was still there on the server.
-   * Which is why the thread was readable by name and absent from the list, and
-   * why pulling to refresh brought it back: a refresh fires one fetcher.
+   * Open Notices, tap Messages: the conversation list arrives first and
+   * renders, then the notices response lands on top of it and the Messages tab
+   * is showing the notifications array.
+   *
+   * This is HALF of what was reported, and for a while it was mistaken for all
+   * of it. A ticket stops a superseded response from being written; it does
+   * nothing about a payload already written by another tab, which is the other
+   * half and the one that actually reached the parent. See `forThisTab` further
+   * down — that is where "No conversations yet" was really coming from.
    *
    * A ticket per load, compared before every setState. The stale response is
    * dropped rather than cancelled — it is already paid for, and its cached copy
@@ -218,7 +220,10 @@ export default function ParentPortalScreen() {
 
       const loaded = await fetcher(childId ?? selected);
       if (!current()) return;
-      setSection(loaded);
+      // Tagged with the tab it was fetched for. The render refuses to read a
+      // payload belonging to another tab, which is what stops one tab's shape
+      // being handed to another tab's markup.
+      setSection({ ...loaded, tab });
 
       // Also fetch fee reminders when on the fees tab
       if (tab === "fees") {
@@ -400,8 +405,35 @@ export default function ParentPortalScreen() {
     );
   }
 
-  const data  = section?.data;
-  const stale = section?.stale;
+  /**
+   * The section, but only if it belongs to the tab being drawn.
+   *
+   * `section` is one state slot for six tabs, and every tab reads a different
+   * SHAPE out of it: fees and attendance are objects, results and messages and
+   * notices are arrays. On a tab switch the new branch used to render the old
+   * tab's payload for as long as the new fetch was in flight — and the spinner
+   * could not intervene, because its condition is `loading && !data` and the
+   * old payload made `data` truthy.
+   *
+   * Fees → Messages was therefore a crash: an object has no `.length`, so
+   * `(data ?? []).length === 0` was false and the code fell through to
+   * `.map()`, which an object does not have. "undefined is not a function",
+   * on a parent's phone, on the tab they were told to check.
+   *
+   * Notices → Messages was the quieter face of the same bug: back when
+   * /notifications returned nothing, an empty ARRAY crossed over and the
+   * messages tab printed "No conversations yet" over a conversation that was
+   * sitting on the server the whole time. That is the reported failure, and
+   * the reason no amount of looking at the request explained it.
+   *
+   * Comparing the tag rather than clearing the slot on switch: clearing works
+   * only if every writer remembers to, and a background poll landing a moment
+   * later would put a foreign shape straight back. A payload that carries the
+   * tab it was fetched for cannot be read by the wrong tab at all.
+   */
+  const forThisTab = section?.tab === tab ? section : null;
+  const data  = forThisTab?.data;
+  const stale = forThisTab?.stale;
 
   return (
     <View style={styles.screen}>
@@ -501,8 +533,8 @@ export default function ParentPortalScreen() {
           <View style={styles.banner}>
             <Ionicons name="cloud-offline-outline" size={15} color={C.warning} />
             <Text style={styles.bannerText}>
-              {section?.fetchedAt
-                ? t("payroll.lastUpdated", { date: formatDateShort(section.fetchedAt) })
+              {forThisTab?.fetchedAt
+                ? t("payroll.lastUpdated", { date: formatDateShort(forThisTab.fetchedAt) })
                 : t("exp.onlineOnly")}
             </Text>
           </View>
