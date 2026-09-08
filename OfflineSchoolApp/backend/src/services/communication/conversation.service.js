@@ -93,8 +93,9 @@ async function resolveTargetPrincipal(schoolId, kind, id) {
       id:         String(g._id),
       schoolId:   String(g.schoolId),
       studentIds: (g.studentIds || []).map(String),
-      name:       label?.name || g.label || GUARDIAN_FALLBACK,
-      childNames: label?.childNames ?? [],
+      name:        label?.name || g.label || GUARDIAN_FALLBACK,
+      childNames:  label?.childNames ?? [],
+      officeLabel: label?.officeLabel ?? g.label ?? null,
     };
   }
 
@@ -198,9 +199,13 @@ async function findCandidateRecipients(principal, settings, { q = "", limit = 40
         id:         String(g._id),
         schoolId,
         studentIds: (g.studentIds || []).map(String),
-        name:       l?.name || g.label || GUARDIAN_FALLBACK,
-        childNames: l?.childNames ?? [],
-        subtitle:   l?.childNames?.length
+        name:        l?.name || g.label || GUARDIAN_FALLBACK,
+        childNames:  l?.childNames ?? [],
+        officeLabel: l?.officeLabel ?? g.label ?? null,
+        // English, and the picker shows it. Kept for clients that render it
+        // directly; a client with a catalogue composes its own from
+        // childNames, which is why those are sent structured.
+        subtitle:    l?.childNames?.length
           ? `guardian of ${l.childNames.join(", ")}`
           : "guardian",
       });
@@ -543,7 +548,24 @@ const GUARDIAN_FALLBACK = "Parent/Guardian";
  * Two queries whatever the number of guardians, because this runs on the
  * conversation list and a per-guardian lookup there is a per-row round trip.
  *
- * @returns {Promise<Map<string, {name: string, childNames: string[]}>>}
+ * ── Why `officeLabel` is sent alongside the composed name ─────────────────
+ *
+ * `name` is a display string with two very different things inside it. When
+ * the office named the guardian it is a person's name — "Mrs Ngu (Bern
+ * Constance)" — which must never be translated. When they did not, it is
+ * GUARDIAN_FALLBACK, an English phrase, and a francophone parent reading their
+ * own messages in the portal saw "Parent/Guardian" over every bubble they had
+ * written. The client could not tell the two cases apart from the string, so it
+ * could not translate one and leave the other alone.
+ *
+ * `officeLabel` is that missing bit: the name the office gave, or null when
+ * there is none. With it and childNames a client composes the label in its own
+ * language — which is the pattern used everywhere else here for a display
+ * string over the API (see the labelKey convention on the phone). `name` is
+ * still sent, unchanged, because the desktop and any client a version behind
+ * render it directly.
+ *
+ * @returns {Promise<Map<string, {name: string, childNames: string[], officeLabel: string|null}>>}
  */
 async function guardianLabels(schoolId, ids) {
   const wanted = [...new Set((ids ?? []).filter(Boolean).map(String))];
@@ -577,8 +599,9 @@ async function guardianLabels(schoolId, ids) {
 
     const base = r.label || GUARDIAN_FALLBACK;
     out.set(String(r._id), {
-      name:       childNames.length ? `${base} (${childNames.join(", ")})` : base,
+      name:        childNames.length ? `${base} (${childNames.join(", ")})` : base,
       childNames,
+      officeLabel: r.label || null,
     });
   }
   return out;
@@ -610,15 +633,17 @@ async function labelGuardians(schoolId, { conversations = [], messages = [] } = 
     for (const p of c?.participants ?? []) {
       const l = p?.kind === "guardian" ? labels.get(String(p.id)) : null;
       if (!l) continue;
-      p.name       = l.name;
-      p.childNames = l.childNames;
+      p.name        = l.name;
+      p.childNames  = l.childNames;
+      p.officeLabel = l.officeLabel;
     }
   }
   for (const m of msgs) {
     const l = m?.sender?.kind === "guardian" ? labels.get(String(m.sender.id)) : null;
     if (!l) continue;
-    m.sender.name       = l.name;
-    m.sender.childNames = l.childNames;
+    m.sender.name        = l.name;
+    m.sender.childNames  = l.childNames;
+    m.sender.officeLabel = l.officeLabel;
   }
 }
 

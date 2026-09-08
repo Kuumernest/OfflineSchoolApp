@@ -10,7 +10,7 @@
 // school yard still sees the balance they came to check — with the screen
 // saying plainly when it is showing an older copy.
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, RefreshControl, KeyboardAvoidingView,
@@ -25,6 +25,7 @@ import { useTranslation } from "../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../src/hooks/useScreenInsets";
 import { formatMoney, formatDateShort, formatTime } from "../../src/i18n/format";
 import { errorText } from "../../src/utils/appError";
+import { conversationName } from "../../src/utils/participantName";
 
 const C = {
   primary:   "#3B4996",
@@ -156,10 +157,38 @@ export default function ParentPortalScreen() {
     return false;
   }, [leave, t]);
 
+  /**
+   * Which load is the current one.
+   *
+   * Every tab shares one `section`, and loadAll re-runs on each tab change
+   * without cancelling the fetch already in flight — so the LAST response to
+   * arrive won, not the one belonging to the tab on screen. The tabs do not
+   * take the same time: `notices` makes two round trips (notifications and
+   * conversations) where every other fetcher makes one, so it is reliably the
+   * slowest and reliably the loser.
+   *
+   * That is the reported bug. Open Notices, tap Messages: the conversation
+   * list arrives first and renders, then the notices response lands on top of
+   * it and the Messages tab is showing the notifications array. A parent whose
+   * school had sent no notifications got `[]` — "no conversations yet" — over a
+   * thread that had loaded a moment earlier and was still there on the server.
+   * Which is why the thread was readable by name and absent from the list, and
+   * why pulling to refresh brought it back: a refresh fires one fetcher.
+   *
+   * A ticket per load, compared before every setState. The stale response is
+   * dropped rather than cancelled — it is already paid for, and its cached copy
+   * is still worth keeping for the tab it belongs to.
+   */
+  const loadSeq = useRef(0);
+
   const loadAll = useCallback(async () => {
+    const ticket  = ++loadSeq.current;
+    const current = () => ticket === loadSeq.current;
+
     setLoading(true);
     try {
       const meRes = await PortalService.fetchMe(childId);
+      if (!current()) return;
       setMe(meRes.data);
 
       // Pin the selection once the server has told us who is on screen. Without
@@ -194,12 +223,9 @@ export default function ParentPortalScreen() {
             .map((c) => ({
               _id:            `message-${c._id}`,
               kind:           "message",
-              subject:        c.title ||
-                              (c.otherParticipants || c.participants || [])
-                                .map((p) => p.name)
-                                .filter(Boolean)
-                                .join(", ") ||
-                              t("msgMobile.conversation"),
+              subject:        conversationName(
+                                c, c.otherParticipants || c.participants, t
+                              ),
               body:           c.lastMessagePreview || "",
               sentAt:         c.lastMessageAt,
               // Nothing was queued, so nothing can be pending or failed —
@@ -221,21 +247,28 @@ export default function ParentPortalScreen() {
         messages:   PortalService.fetchConversations,
       }[tab];
 
-      setSection(await fetcher(childId ?? selected));
+      const loaded = await fetcher(childId ?? selected);
+      if (!current()) return;
+      setSection(loaded);
 
       // Also fetch fee reminders when on the fees tab
       if (tab === "fees") {
         try {
           const remindersRes = await PortalService.fetchFeeReminders(childId ?? selected);
+          if (!current()) return;
           setFeeReminders(remindersRes.data);
         } catch {
-          setFeeReminders(null);
+          if (current()) setFeeReminders(null);
         }
       }
     } catch (err) {
+      // A superseded load must not blank the tab now on screen, and must not
+      // sign the parent out on a 401 that belongs to a request nobody is
+      // waiting for any more.
+      if (!current()) return;
       if (!(await handle401(err))) setSection(null);
     } finally {
-      setLoading(false);
+      if (current()) setLoading(false);
     }
   // t is a dependency because the notices fetcher names an untitled thread
   // with it; without it a language switch would leave that one label in
@@ -891,12 +924,9 @@ export default function ParentPortalScreen() {
                               participant showed a parent their own name over
                               a message from the school. participants is the
                               fallback for an older server. */}
-                          {c.title ||
-                            (c.otherParticipants || c.participants || [])
-                              .map((p) => p.name)
-                              .filter(Boolean)
-                              .join(", ") ||
-                            t("msgMobile.conversation")}
+                          {conversationName(
+                            c, c.otherParticipants || c.participants, t
+                          )}
                         </Text>
                         <Text style={styles.convoPreview} numberOfLines={1}>
                           {c.lastMessagePreview || t("portal.noMessages")}

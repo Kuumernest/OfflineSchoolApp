@@ -20,6 +20,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { participantName, recipientSubtitle } from "../../../src/utils/participantName";
 
 const C = {
   ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
@@ -79,6 +80,8 @@ export default function PortalNewMessageScreen() {
 
   const renderItem = ({ item }) => {
     const key = `${item.kind}:${item.id}`;
+    const who = participantName(item, t) || item.name;
+    const sub = recipientSubtitle(item, t, true);
     return (
       <TouchableOpacity
         style={s.row}
@@ -88,13 +91,18 @@ export default function PortalNewMessageScreen() {
       >
         <View style={s.avatar}>
           <Text style={s.avatarText}>
-            {(item.name || "?").slice(0, 1).toUpperCase()}
+            {(who || "?").slice(0, 1).toUpperCase()}
           </Text>
         </View>
         <View style={{ flex: 1 }}>
-          <Text style={s.name} numberOfLines={1}>{item.name}</Text>
-          {item.subtitle ? (
-            <Text style={s.sub} numberOfLines={1}>{item.subtitle}</Text>
+          <Text style={s.name} numberOfLines={1}>{who}</Text>
+          {/* Both lines came from the server in English: a role slug under a
+              teacher's name, "your child" under a pupil's. The name itself is
+              a person's and is left alone; the description of them is ours to
+              write, so it comes from the catalogue. ownChild is true here
+              because the portal only ever offers a parent their own children. */}
+          {sub ? (
+            <Text style={s.sub} numberOfLines={1}>{sub}</Text>
           ) : null}
         </View>
         {opening === key

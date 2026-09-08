@@ -18,6 +18,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import * as PortalService from "../../../src/services/portal.service";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { participantName, conversationName } from "../../../src/utils/participantName";
 
 const C = {
   ink: "#111827", inkBody: "#374151", inkMuted: "#6B7280", inkFaint: "#9CA3AF",
@@ -104,12 +105,21 @@ export default function PortalThreadScreen() {
       setMe(payload.me ?? null);
       setReads(payload.participantReads ?? []);
 
-      const c = payload.conversation;
-      setTitle(
-        c?.title ||
-        (c?.participants || []).map((p) => p.name).filter(Boolean).join(", ") ||
-        t("msgMobile.conversation")
+      // The header named everyone on the thread, this parent included, in the
+      // server's English. It read "Parent/Guardian (Bern Constance), Kuum
+      // Ernest" — the parent's own label, untranslatable because the server
+      // had composed it, in front of the one name they opened the thread to
+      // see. The list screen had already learned to drop the reader from the
+      // row; this screen had not, and it is the one with a title bar.
+      //
+      // payload.me is what makes that possible: the thread says who is asking,
+      // so the reader can be taken out of their own header.
+      const c    = payload.conversation;
+      const self = payload.me ?? null;
+      const others = (c?.participants || []).filter(
+        (p) => !(self && p.kind === self.kind && String(p.id) === String(self.id))
       );
+      setTitle(conversationName(c, others.length ? others : c?.participants, t));
 
       const newest = (payload.messages ?? [])
         .filter((m) => m.seq != null)
@@ -174,7 +184,7 @@ export default function PortalThreadScreen() {
                        return (
     <View style={[s.bubble, mine && s.bubbleMine]}>
       {!mine && (
-        <Text style={s.sender}>{item.sender?.name || t("msgMobile.schoolSender")}</Text>
+        <Text style={s.sender}>{participantName(item.sender, t) || t("msgMobile.schoolSender")}</Text>
       )}
       <Text style={[s.body, mine && s.bodyMine]}>
         {item.isDeleted ? t("msgMobile.deletedMessage") : item.body}

@@ -516,6 +516,10 @@ router.get("/messages/conversations", asyncHandler(async (req, res) => {
         participants:       c.participants,
         otherParticipants:  others.map((p) => ({
           kind: p.kind, id: p.id, name: p.name, role: p.role,
+          // labelGuardians has already put these on the participant; passing
+          // them through is what lets the row name an unnamed guardian in the
+          // reader's language instead of the server's.
+          childNames: p.childNames ?? [], officeLabel: p.officeLabel ?? null,
         })),
         lastMessageAt:      c.lastMessageAt,
         lastMessagePreview: c.lastMessagePreview,
@@ -550,6 +554,11 @@ router.get("/messages/recipients", asyncHandler(async (req, res) => {
       name:     c.name,
       role:     c.kind === "guardian" ? "guardian" : c.role,
       subtitle: c.subtitle ?? null,
+      // See the same projection in messages.routes.js: `name` has English
+      // baked in for an unnamed guardian, and these two are what let the
+      // phone write the label in the language the phone is set to.
+      childNames:  c.childNames  ?? [],
+      officeLabel: c.officeLabel ?? null,
     }));
 
   return res.json({ success: true, data: allowed });

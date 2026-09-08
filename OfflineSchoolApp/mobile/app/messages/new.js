@@ -22,6 +22,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { participantName, recipientSubtitle } from "../../src/utils/participantName";
 import { errorText } from "../../src/utils/appError";
 
 const C = {
@@ -92,6 +93,8 @@ export default function NewConversationScreen() {
 
   const renderItem = ({ item }) => {
     const key = `${item.kind}:${item.id}`;
+    const who = participantName(item, t) || item.name;
+    const sub = recipientSubtitle(item, t);
     return (
       <TouchableOpacity
         style={s.row}
@@ -101,14 +104,17 @@ export default function NewConversationScreen() {
       >
         <View style={s.avatar}>
           <Text style={s.avatarText}>
-            {(item.name || "?").slice(0, 1).toUpperCase()}
+            {(who || "?").slice(0, 1).toUpperCase()}
           </Text>
         </View>
 
         <View style={s.rowBody}>
-          <Text style={s.rowName} numberOfLines={1}>{item.name}</Text>
-          {item.subtitle ? (
-            <Text style={s.rowSub} numberOfLines={1}>{item.subtitle}</Text>
+          <Text style={s.rowName} numberOfLines={1}>{who}</Text>
+          {/* The server's subtitle is English — a role slug for staff. Staff
+              may write to any pupil, not only their own child, so ownChild is
+              left false here and a student reads as "Student". */}
+          {sub ? (
+            <Text style={s.rowSub} numberOfLines={1}>{sub}</Text>
           ) : null}
         </View>
 

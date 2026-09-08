@@ -30,6 +30,15 @@ export interface Participant {
    * the names than read them back out of a string.
    */
   childNames?:       string[] | null;
+  /**
+   * The name the office typed for this guardian, or null when they typed none.
+   *
+   * `name` above is a composed display string, and it hides which half of it
+   * is translatable: "Mrs Ngu (Bern Constance)" is a person's name and must be
+   * left alone, "Parent/Guardian (Bern Constance)" is an English sentence. This
+   * is the field that says which — see guardianName() in pages/messages.
+   */
+  officeLabel?:      string | null;
   role?:             string | null;
   lastReadSeq?:      number;
   lastDeliveredSeq?: number;
@@ -93,6 +102,10 @@ export interface Recipient {
   name:      string;
   role?:     string | null;
   subtitle?: string | null;
+  // Same two as on Participant, for the same reason: the picker shows a
+  // guardian's label and cannot translate a string the server composed.
+  childNames?:  string[] | null;
+  officeLabel?: string | null;
 }
 
 // ─── Recipients ───────────────────────────────────────────────────────────────

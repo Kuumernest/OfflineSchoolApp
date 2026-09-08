@@ -25,6 +25,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { participantName } from "../../src/utils/participantName";
 import { errorText } from "../../src/utils/appError";
 
 const C = {
@@ -276,7 +277,7 @@ export default function ThreadScreen() {
           ]}
         >
           {!mine && !item.isDeleted && (
-            <Text style={s.senderName}>{item.sender?.name || t("msgMobile.unknownSender")}</Text>
+            <Text style={s.senderName}>{participantName(item.sender, t) || t("msgMobile.unknownSender")}</Text>
           )}
 
           <Text

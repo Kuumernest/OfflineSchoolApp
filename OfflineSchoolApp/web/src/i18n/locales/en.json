@@ -2471,6 +2471,8 @@
     "nobodyAvailable": "There is nobody you can start a conversation with.",
     "genericError": "Something went wrong",
     "conversation": "Conversation",
+    "guardian": "Parent/Guardian",
+    "guardianOf": "Parent/Guardian ({{children}})",
     "audit": {
       "title": "Message audit",
       "blurb": "Find conversations across the school. Reading one is recorded.",

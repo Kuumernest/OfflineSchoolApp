@@ -39,7 +39,7 @@ import { useUser } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/utils/cn";
-import { conversationMatches } from "./participants";
+import { conversationMatches, participantName } from "./participants";
 
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -62,15 +62,21 @@ const timeLabel = (iso?: string | null): string => {
     : d.toLocaleDateString(undefined, { day: "numeric", month: "short" });
 };
 
-/** Direct threads have no title; they are named for the other person. */
+/**
+ * Direct threads have no title; they are named for the other person.
+ *
+ * Through participantName, because a guardian's name is composed by the server
+ * and for an unnamed one it is an English phrase — so a French console showed
+ * "Parent/Guardian (Bern Constance)" as the name of the thread.
+ */
 const titleFor = (
   c: Conversation,
   myId: string,
-  t: (key: string) => string,
+  t: (key: string, vars?: Record<string, unknown>) => string,
 ): string => {
   if (c.title) return c.title;
   const other = c.participants?.find((p) => String(p.id) !== String(myId));
-  return other?.name || t("messages.conversation");
+  return (other ? participantName(other, t) : "") || t("messages.conversation");
 };
 
 const KindIcon = ({ kind }: { kind: Conversation["kind"] }) => {
@@ -468,7 +474,7 @@ export default function MessagesPage() {
                       >
                         {!mine && !m.isDeleted && (
                           <div className="mb-0.5 text-[11px] font-semibold text-gray-500">
-                            {m.sender?.name || t("messages.unknownSender")}
+                            {(m.sender ? participantName(m.sender, t) : "") || t("messages.unknownSender")}
                           </div>
                         )}
 
@@ -756,11 +762,11 @@ function NewConversationModal({
               >
                 <div className="flex h-9 w-9 shrink-0 items-center justify-center
                                 rounded-full bg-blue-50 text-xs font-bold text-blue-600">
-                  {(r.name || "?").slice(0, 1).toUpperCase()}
+                  {(participantName(r, t) || r.name || "?").slice(0, 1).toUpperCase()}
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-semibold text-gray-900">
-                    {r.name}
+                    {participantName(r, t) || r.name}
                   </div>
                   {r.subtitle && (
                     <div className="truncate text-xs text-gray-500">{r.subtitle}</div>

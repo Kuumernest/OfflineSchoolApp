@@ -19,6 +19,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { useAuthStore } from "../../src/store/auth.store";
 import MessageService   from "../../src/services/message.service";
 import { useTranslation } from "../../src/i18n/useTranslation";
+import { participantName } from "../../src/utils/participantName";
 
 const C = {
   primary: "#2563EB", primaryBg: "#EFF6FF", white: "#FFFFFF",
@@ -39,11 +40,18 @@ const timeLabel = (iso) => {
     : d.toLocaleDateString([], { day: "numeric", month: "short" });
 };
 
-/** Direct threads carry no title; they are named for the other person. */
+/**
+ * Direct threads carry no title; they are named for the other person.
+ *
+ * Through participantName, because a guardian has no name of their own: the
+ * server composes one, and for an unnamed guardian it is an English phrase. A
+ * teacher with the app in French read "Parent/Guardian (Bern Constance)" as
+ * the name of the thread.
+ */
 const titleFor = (c, myId, t) => {
   if (c.title) return c.title;
   const other = (c.participants || []).find((p) => String(p.id) !== String(myId));
-  return other?.name || t("msgMobile.conversation");
+  return (other ? participantName(other, t) : null) || t("msgMobile.conversation");
 };
 
 const iconFor = (kind) => {

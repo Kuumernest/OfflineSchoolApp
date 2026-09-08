@@ -242,6 +242,11 @@ router.get("/recipients", asyncHandler(async (req, res) => {
       name:     c.name,
       role:     c.kind === "guardian" ? "guardian" : c.role,
       subtitle: c.subtitle ?? null,
+      // Both carried so the picker can write the label in the reader's own
+      // language: `name` and `subtitle` have English baked in for an unnamed
+      // guardian, and only these two say which part was a person's name.
+      childNames:  c.childNames  ?? [],
+      officeLabel: c.officeLabel ?? null,
     }));
 
   return res.json({ success: true, count: allowed.length, recipients: allowed });

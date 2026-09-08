@@ -2471,6 +2471,8 @@
     "nobodyAvailable": "Il n'y a personne avec qui démarrer une conversation.",
     "genericError": "Une erreur est survenue",
     "conversation": "Conversation",
+    "guardian": "Parent/Tuteur",
+    "guardianOf": "Parent/Tuteur ({{children}})",
     "audit": {
       "title": "Audit des messages",
       "blurb": "Recherchez les conversations de l'école. Chaque lecture est enregistrée.",

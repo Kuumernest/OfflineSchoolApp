@@ -883,6 +883,132 @@ const checkReceiptContrast = () => {
       "clearly brighter there is nothing left to tell them apart");
   }
 };
+// ─────────────────────────────────────────────────────────────────────────────
+// ONE STATE SLOT, SIX TABS, NO CANCELLATION
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The parent portal is one screen with six tabs sharing a single `section`
+// state, refetched by a single loadAll whenever the tab changes. Nothing
+// cancels the fetch already in flight, so without a guard the LAST response to
+// arrive wins — regardless of which tab the parent is now looking at.
+//
+// That would be harmless if all six took the same time. They do not: `notices`
+// merges notifications with conversations, so it makes two requests where the
+// other five make one, and it is therefore reliably the slowest and reliably
+// the loser. Notices → Messages put the notifications array under the Messages
+// tab, and for a parent whose school had sent no notifications that array was
+// empty: "no conversations yet", over a thread that had already loaded and was
+// still sitting on the server. Readable by name, absent from the list, and back
+// again after a pull-to-refresh, because a refresh fires one fetcher.
+//
+// Two things are asserted, because either alone would be misleading. First that
+// the asymmetry is still real — if some later change made every tab one request
+// the guard would be belt-and-braces rather than load-bearing, and this comment
+// would be wrong. Second that every setState in loadAll is behind the ticket
+// check, which is the part a refactor can quietly drop.
+
+const checkPortalTabRace = () => {
+  console.log("");
+  console.log("THE PORTAL'S TABS CANNOT OVERWRITE EACH OTHER");
+
+  const file = path.join(ROOT, "app/portal/index.js");
+  const src  = fs.readFileSync(file, "utf8");
+
+  // ── loadAll, from its declaration to the closing of its useCallback ──────
+  const start = src.indexOf("const loadAll = useCallback");
+  if (start === -1) { bad("loadAll can be found in app/portal/index.js"); return; }
+  const end = src.indexOf("useEffect(() => {", start);
+  const body = src.slice(start, end === -1 ? src.length : end);
+
+  // ── 1. The asymmetry that makes the guard necessary ─────────────────────
+  //
+  // Counted off the fetcher map, not assumed: the map is `tab: fetcher`, and
+  // the notices entry is the only one with a function body rather than a bare
+  // service reference.
+  const mapStart = body.indexOf("const fetcher = {");
+  const mapBody  = mapStart === -1 ? "" : body.slice(mapStart, body.indexOf("}[tab]", mapStart));
+  const calls    = (label) => {
+    const at = mapBody.indexOf(`${label}:`);
+    if (at === -1) return -1;
+    const next = mapBody.slice(at + label.length + 1);
+    const stop = next.search(/\n\s{8}[a-z]+:/);
+    // No trailing "(": five of the six entries are a bare service reference
+    // passed as the fetcher, and only `notices` calls anything itself.
+    return [...(stop === -1 ? next : next.slice(0, stop))
+      .matchAll(/PortalService\.fetch\w+/g)].length;
+  };
+
+  const notices = calls("notices");
+  const messages = calls("messages");
+  if (notices > messages && messages >= 1) {
+    ok(`notices makes ${notices} requests to messages' ${messages}, so response order is not tab order`);
+  } else {
+    bad("the tabs still take different numbers of requests",
+      `notices ${notices}, messages ${messages}.\n` +
+      "If every tab is now one request, re-read the comment above this check —\n" +
+      "the guard may no longer be load-bearing, but do not remove it without\n" +
+      "confirming nothing else can reorder the responses.");
+  }
+
+  // ── 2. A ticket, taken once, at the top ─────────────────────────────────
+  const ticket = /\+\+\s*loadSeq\.current/.test(body) &&
+                 /ticket\s*===\s*loadSeq\.current/.test(body);
+  if (ticket) ok("loadAll takes a ticket and compares it against the latest");
+  else bad("loadAll takes a ticket and compares it against the latest",
+    "Expected `const ticket = ++loadSeq.current` and a `current()` that\n" +
+    "compares it, so a superseded response can be recognised.");
+
+  // ── 3. Every setState behind it ─────────────────────────────────────────
+  //
+  // The ticket is worth nothing if one writer skips it, and `setSection` is
+  // the one that matters most — it is the slot the tabs share.
+  // Only what runs AFTER the first await can be superseded. `setLoading(true)`
+  // at the top is synchronous with the tap that caused it and is correct as it
+  // stands; demanding a guard there would be asking for a check the code has no
+  // reason to satisfy.
+  const GUARDED = ["setMe", "setSection", "setFeeReminders", "setLoading"];
+  const lines   = body.split(/\r?\n/);
+  const firstAwait = lines.findIndex((l) => /\bawait\b/.test(l));
+  const naked   = [];
+
+  lines.forEach((line, i) => {
+    if (firstAwait === -1 || i < firstAwait) return;
+    for (const setter of GUARDED) {
+      if (!new RegExp(`\\b${setter}\\(`).test(line)) continue;
+      // Guarded either on this line (`if (current()) setLoading(false)`) or by
+      // an early return on one of the three lines above it.
+      const window = lines.slice(Math.max(0, i - 3), i + 1).join("\n");
+      if (!/current\(\)/.test(window)) {
+        naked.push(`line ${i + 1}: ${line.trim()}`);
+      }
+    }
+  });
+
+  if (!naked.length) {
+    ok("every setState in loadAll is behind the ticket check");
+  } else {
+    bad("every setState in loadAll is behind the ticket check",
+      naked.join("\n") + "\n" +
+      "An unguarded write here lets a superseded tab's payload land on the\n" +
+      "tab now on screen.");
+  }
+
+  // ── 4. And the 401 handler too ──────────────────────────────────────────
+  //
+  // handle401 signs the parent out. Reached from a response nobody is waiting
+  // for any more, it would end a working session over a request the screen has
+  // already abandoned.
+  const catchAt = body.indexOf("} catch (err) {");
+  const catchBody = catchAt === -1 ? "" : body.slice(catchAt, catchAt + 400);
+  if (/current\(\)/.test(catchBody.slice(0, catchBody.indexOf("handle401")))) {
+    ok("a superseded failure cannot sign the parent out");
+  } else {
+    bad("a superseded failure cannot sign the parent out",
+      "handle401 ends the session; it must not run for a request the screen\n" +
+      "has already moved on from.");
+  }
+};
+
 checkParse();
 checkLocales();
 checkLinkQuality();
@@ -892,6 +1018,7 @@ checkStudentSyncPlan();
 checkScreenEdges();
 checkNavigationReach();
 checkReceiptContrast();
+checkPortalTabRace();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);
