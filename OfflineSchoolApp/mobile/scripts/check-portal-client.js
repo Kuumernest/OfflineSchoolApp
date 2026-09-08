@@ -206,11 +206,79 @@ const loadMobileModule = (relPath, stubs) => {
 
   const exported = Object.keys(Portal).sort();
   note(`portal.service.js exports ${exported.length}: ${exported.join(", ")}`);
-  if (typeof Portal.fetchConversations === "function") {
-    ok("src/services/portal.service.js loads and exports fetchConversations");
-  } else {
+  if (typeof Portal.fetchConversations !== "function") {
     bad("the mobile portal service loads", `exports: ${exported.join(", ")}`);
     process.exit(1);
+  }
+  ok("src/services/portal.service.js loads");
+
+  // ── Every screen gets what IT imports ───────────────────────────────────
+  //
+  // This check had the same blind spot as the bug it exists to catch, which is
+  // worth writing down. It reached for `mod.exports` — the namespace, holding
+  // every named export — and passed, while app/portal/index.js imports the
+  // DEFAULT and got undefined for fetchConversations. Its own header says the
+  // point is "the module the screen imports"; it then tested a different
+  // object.
+  //
+  // So the import style is read out of each screen and honoured. A function
+  // added to the service and forgotten in the default export now fails here
+  // instead of on a parent's phone, in one tab, as an empty list.
+  console.log("\n--- each portal screen gets the functions it calls ---");
+  {
+    const screens = [
+      "app/portal/index.js",
+      "app/portal/messages/new.js",
+      "app/portal/messages/[id].js",
+    ];
+
+    for (const rel of screens) {
+      const src = fs.readFileSync(path.join(MOBILE, rel), "utf8");
+      const imp = /import\s+(\*\s+as\s+)?(\w+)\s+from\s+["'][^"']*portal\.service["']/.exec(src);
+      if (!imp) { bad(`${rel} imports the portal service`, "no import found"); continue; }
+
+      const isNamespace = Boolean(imp[1]);
+      const alias       = imp[2];
+      // The object that screen actually holds at runtime.
+      const surface = isNamespace ? Portal : Portal.default;
+
+      // Every property touched, called or not.
+      //
+      // Requiring a "(" was this check's second blind spot in a row: the tab
+      // that broke reads its fetcher out of a map —
+      //
+      //     messages:   PortalService.fetchConversations,
+      //
+      // — a bare reference, invoked later as `fetcher(...)`. So the one usage
+      // that mattered was the one shape the pattern could not see, and the
+      // per-screen assertion passed with the bug reintroduced.
+      const used = [...new Set(
+        [...src.matchAll(new RegExp(`\\b${alias}\\.(\\w+)`, "g"))].map((m) => m[1])
+      )].sort();
+
+      const missing = used.filter((fn) => typeof surface?.[fn] !== "function");
+
+      if (!missing.length) {
+        ok(`${rel} (${isNamespace ? "namespace" : "default"}) — all ${used.length} calls resolve`);
+      } else {
+        bad(`${rel} calls only functions its import provides`,
+          `imports the ${isNamespace ? "namespace" : "default"} export as \`${alias}\`\n` +
+          `missing: ${missing.join(", ")}\n` +
+          `A named export that is not in the default object is invisible to a\n` +
+          `default import, and the call throws at the moment the tab is opened.`);
+      }
+    }
+
+    // And the two surfaces must agree, so the next function cannot go missing.
+    const named   = Object.keys(Portal).filter((k) => k !== "default" && typeof Portal[k] === "function");
+    const inDefault = Object.keys(Portal.default ?? {});
+    const notExported = named.filter((k) => !inDefault.includes(k));
+    if (!notExported.length) {
+      ok(`the default export carries all ${named.length} named functions`);
+    } else {
+      bad("the default export carries every named function",
+        `missing: ${notExported.join(", ")}`);
+    }
   }
 
   // The token the phone would be holding after a code login.

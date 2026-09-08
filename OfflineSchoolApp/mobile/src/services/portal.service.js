@@ -194,9 +194,37 @@ export const fetchReportCardHtml = async (summaryId) => {
   return data?.data ?? null;
 };
 
+/**
+ * The default export, and it must carry EVERYTHING.
+ *
+ * The messaging functions were added as named exports and never added here.
+ * Two of the three portal screens import this module as a namespace —
+ * `import * as PortalService` — so they saw every named export and worked.
+ * The third, app/portal/index.js, imports the default:
+ *
+ *   import PortalService from "../../src/services/portal.service";
+ *   PortalService.fetchConversations      // undefined
+ *
+ * `await undefined(childId)` throws, loadAll catches it, setSection(null)
+ * runs, and the Messages tab prints "No conversations yet" — over a
+ * conversation the server was returning the whole time. The recipient picker
+ * and the thread screen kept working, because they use the namespace import.
+ * Which is the reported symptom exactly: the messages only appeared when you
+ * opened the sender by name.
+ *
+ * Nothing was wrong with the request, the URL, the parent's identity or the
+ * response. One object literal was missing seven keys.
+ *
+ * check-portal-client asserts this against the object each screen actually
+ * imports, derived from that screen's own import statement, so a function
+ * added below and forgotten here fails the check rather than one screen.
+ */
 export default {
-  login, signOut, getToken, clearToken,
+  login, signOut, getToken, setToken, clearToken,
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
   fetchResults, fetchAttendance, fetchAnnouncements,
   fetchReceiptHtml, fetchReportCardHtml,
+  // Messaging. The omission that caused all of the above.
+  fetchConversations, fetchRecipients, openConversation,
+  fetchThread, sendMessage, markRead,
 };
