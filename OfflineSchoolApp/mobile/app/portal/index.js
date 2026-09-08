@@ -495,7 +495,14 @@ export default function ParentPortalScreen() {
           opened is a badge no client draws. */}
       <View style={styles.tabs}>
         {TABS.map((key) => {
-          const unread = key === "messages" ? (me?.unreadMessages ?? 0) : 0;
+          // Messages counts unread threads; Notices counts school notices
+          // that arrived since the parent last opened that tab. Deliberately
+          // disjoint — the notices list carries an unread-thread row too, and
+          // a number showing up in two badges at once is a number nobody
+          // trusts.
+          const unread =
+            key === "messages" ? (me?.unreadMessages ?? 0) :
+            key === "notices"  ? (me?.unreadNotices  ?? 0) : 0;
           return (
             <TouchableOpacity
               key={key}
@@ -999,6 +1006,14 @@ export default function ParentPortalScreen() {
               ) : (
                 data.map((n) => {
                   const meta = NOTICE_META[n.kind] ?? NOTICE_META.default;
+                  // Whose notice it is. The list covers every child on the
+                  // access now rather than only the one selected — a parent
+                  // looking at their eldest should still learn the younger one
+                  // was absent — so "was not recorded at school today" needs a
+                  // name against it. Only worth showing when there are two.
+                  const about = (me?.children?.length ?? 0) > 1
+                    ? (me.children.find((c) => String(c._id) === String(n.studentId))?.name ?? null)
+                    : null;
                   // A notice about a message that cannot be opened from the
                   // notice is a dead end; the rest have nowhere to go.
                   //
@@ -1027,6 +1042,7 @@ export default function ParentPortalScreen() {
                         ) : null}
                         <Text style={styles.lineMeta}>
                           {formatDateShort(n.sentAt || n.createdAt)}
+                          {about ? ` · ${about}` : ""}
                         </Text>
                       </View>
 

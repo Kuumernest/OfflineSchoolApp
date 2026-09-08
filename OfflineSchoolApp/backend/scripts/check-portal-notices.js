@@ -552,6 +552,138 @@ const bad = (label, detail) => {
   }
 
   // ═════════════════════════════════════════════════════════════════════════
+  // An absence, which nothing used to tell anybody about
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // `attendance.absent` was in the Notification enum, its template was written
+  // in both languages, and the portal's allowlist would have shown it — and no
+  // code path created one. So a child was marked absent and their parent was
+  // told nothing: no email, no SMS, and nothing in the portal. It was the only
+  // one of the four producerless kinds where the fact was unreachable by any
+  // other route.
+  console.log("\n--- a child is marked absent ---");
+  {
+    app.use("/api/attendance", auth.authenticate,
+      require(path.join(SRC, "routes/attendance.routes")));
+
+    const DAY = "2026-09-08";
+    const mark = (status, periodId) => staff("POST", "/api/attendance/students/bulk", {
+      schoolId: SCHOOL, classId: "cls-1", date: DAY, periodId,
+      records: [{ studentId: STUDENT, status }],
+    });
+
+    const r = await mark("absent", "per-1");
+    if (r.status < 400 && r.body?.saved === 1) ok("the register saves");
+    else bad("the register saves", `${r.status} ${JSON.stringify(r.body).slice(0, 200)}`);
+
+    const rows = await notices();
+    const absent = rows.filter((n) => n.kind === "attendance.absent");
+    if (absent.length === 1) ok("and the parent is told");
+    else bad("the parent is told about an absence",
+      `${absent.length} absence notice(s); kinds: ${[...new Set(rows.map((n) => n.kind))].join(", ")}`);
+
+    if (/John Doe/.test(String(absent[0]?.body ?? ""))) ok("by name");
+    else if (absent.length) bad("the notice names the child", JSON.stringify(absent[0]?.body));
+
+    // One per child per day. A pupil away all day is six or eight absences in
+    // the register and one thing to tell a parent.
+    await mark("absent", "per-2");
+    await mark("absent", "per-3");
+    const after = (await notices()).filter((n) => n.kind === "attendance.absent");
+    if (after.length === 1) ok("three periods of absence are still one notice");
+    else bad("absences are deduped per child per day", `${after.length} notices`);
+
+    const stored = await Notification.findOne({
+      schoolId: SCHOOL, kind: "attendance.absent", studentId: STUDENT,
+    }).lean();
+    if (String(stored?._id) === `absent:${SCHOOL}:${STUDENT}:${DAY}`) {
+      ok("keyed on the child and the day, so a replayed sync is free");
+    } else {
+      bad("the notice id is derived from child and date", String(stored?._id));
+    }
+
+    // Unlike an on-time gate arrival, an absence is meant to be sent. Here
+    // there is no address, so it is skipped for that reason and not by policy.
+    if (/address/i.test(String(stored?.skipReason ?? ""))) {
+      ok("and queued for delivery, not withheld by policy");
+    } else {
+      bad("an absence is queued for delivery",
+        JSON.stringify({ status: stored?.status, skipReason: stored?.skipReason }));
+    }
+
+    // Marking somebody present must not raise one.
+    await mark("present", "per-4");
+    const still = (await notices()).filter((n) => n.kind === "attendance.absent");
+    if (still.length === 1) ok("and marking a pupil present raises nothing");
+    else bad("only an absence notifies", `${still.length} notices after a present mark`);
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
+  // The notices badge
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // A message thread carries a read marker per participant, so unread messages
+  // were already arithmetic. Notices had nothing of the kind: the tab could
+  // show four cards with no indication that two of them arrived since the
+  // parent last looked, and a badge counting every notice would be permanently
+  // lit and ignored within a week.
+  console.log("\n--- and the notices tab can be badged ---");
+  {
+    // Back to "never looked".
+    //
+    // Every notices() call above marks them seen — that is the feature — so by
+    // now this access has looked a dozen times and the honest count is zero.
+    // The assertion is about a parent who has not, so the marker is put back
+    // rather than the assertion being written around it.
+    const listed = (await notices()).filter((n) => n.kind !== "message").length;
+    await GuardianAccess.updateOne({ _id: MOTHER, schoolId: SCHOOL },
+      { $set: { noticesSeenAt: null } });
+
+    const fresh = await mother("GET", "/api/portal/me");
+    const count = fresh.body?.data?.unreadNotices ?? null;
+    if (count === listed && count > 0) {
+      ok(`/me counts ${count} unseen notices, matching the list`);
+    } else {
+      bad("/me counts the unseen notices", `/me ${count}, list ${listed}`);
+    }
+
+    // Reading the list is what marks them seen.
+    await mother("GET", "/api/portal/notifications");
+    const after = await mother("GET", "/api/portal/me");
+    if ((after.body?.data?.unreadNotices ?? null) === 0) {
+      ok("and opening the list clears it");
+    } else {
+      bad("the badge clears once the list is opened",
+        String(after.body?.data?.unreadNotices));
+    }
+
+    // The message rows are NOT in this count — the Messages badge owns those,
+    // and one number in two badges is a number nobody trusts. The parent read
+    // that thread earlier in this suite, so a fresh message is needed for the
+    // assertion to have anything to be about.
+    await staff("POST", `/api/messages/conversations/${convId}/messages`, {
+      schoolId: SCHOOL, body: "One more thing.",
+    });
+    const r = await mother("GET", "/api/portal/notifications");
+    const msgRows = (r.body?.data ?? []).filter((n) => n.kind === "message").length;
+    if (msgRows === 1 && (r.body?.unreadNotices ?? 0) === 0) {
+      ok("an unread thread is counted by Messages, not twice");
+    } else {
+      bad("the two badges do not double-count",
+        `message rows ${msgRows}, unreadNotices ${r.body?.unreadNotices}`);
+    }
+
+    // A notice arriving after that shows up again.
+    await scan(localTime(16, 40, 10));
+    const later = await mother("GET", "/api/portal/me");
+    if ((later.body?.data?.unreadNotices ?? 0) >= 1) {
+      ok("and a notice arriving afterwards lights it again");
+    } else {
+      bad("a new notice raises the count", String(later.body?.data?.unreadNotices));
+    }
+  }
+
+  // ═════════════════════════════════════════════════════════════════════════
   // One way in, so this cannot be got wrong a fourth time
   // ═════════════════════════════════════════════════════════════════════════
   //
@@ -618,26 +750,23 @@ const bad = (label, detail) => {
   // Not a defect fixed here, but the audit turned it up and an assertion is the
   // only way it stays known.
   //
-  // The portal's allowlist admits seven kinds. The whole codebase contains two
-  // enqueue() calls, between them producing three: fee.reminder, gate.arrival
-  // and gate.departure. The other four are complete in every respect except
+  // The portal's allowlist admits seven kinds, and the codebase now produces
+  // four of them: fee.reminder, gate.arrival, gate.departure and
+  // attendance.absent. The other three are complete in every respect except
   // that nothing creates them — the enum admits them, the templates render
   // them in both languages, the allowlist would show them, and no code path
   // enqueues one.
   //
   // What that costs a parent varies, and the difference matters:
   //
-  //   attendance.absent   nothing else tells them. Their child was marked
-  //                       absent and they are not told, on any surface.
   //   fee.payment         the fees tab shows the payment and the receipt, so
   //                       the fact is reachable; the notice is not.
   //   result.published    the results tab shows the card once published.
   //   announcement        the news tab reads the Announcement collection.
   //
-  // So one of the four is a silent gap in what a parent knows, and three are a
-  // notice missing over information they can still find. Writing the producers
-  // is out of scope for the three reported failures; leaving it undocumented
-  // is not.
+  // So all three that remain are a notice missing over information a parent can
+  // still find in another tab. The one that was a silent gap — a child marked
+  // absent and nobody told, on any surface — has a producer now.
   console.log("\n--- and the kinds nothing produces are known ---");
   {
     const fs   = require("fs");
@@ -669,7 +798,10 @@ const bad = (label, detail) => {
       "gate.arrival", "gate.departure", "result.published", "announcement",
     ];
     const dead     = allowed.filter((k) => !producers.has(k)).sort();
-    const EXPECTED = ["announcement", "attendance.absent", "fee.payment", "result.published"];
+    // attendance.absent left this list when its producer was written — which
+    // is what this assertion is for. It was the only one of the four where the
+    // fact was unreachable by any other route.
+    const EXPECTED = ["announcement", "fee.payment", "result.published"];
 
     if (String(dead) === String(EXPECTED)) {
       ok(`${dead.length} allowlisted kinds have no producer (${dead.join(", ")}) — known gap`);
@@ -682,10 +814,10 @@ const bad = (label, detail) => {
     }
 
     if (producers.has("gate.arrival") && producers.has("gate.departure") &&
-        producers.has("fee.reminder")) {
-      ok("and the three that do are the gate's two and the fee reminder");
+        producers.has("fee.reminder") && producers.has("attendance.absent")) {
+      ok("and the four that do are the gate's two, the fee reminder and absences");
     } else {
-      bad("the produced kinds are the expected three", [...producers].join(", "));
+      bad("the produced kinds are the expected four", [...producers].join(", "));
     }
   }
 

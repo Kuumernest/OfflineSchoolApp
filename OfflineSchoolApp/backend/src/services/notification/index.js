@@ -92,6 +92,25 @@ const resolveChannel = (school) => {
   return "log";
 };
 
+/**
+ * Create the row, or hand back the one already there.
+ *
+ * With a dedupeKey the _id is the natural key of the event, so a second call
+ * about the same thing collides on the primary key. That collision is the
+ * success case — it means somebody already owes this message — so it is
+ * answered with the stored row rather than raised at a caller who was only
+ * saving a register.
+ */
+const insert = async (doc, dedupeKey) => {
+  if (!dedupeKey) return Notification.create(doc);
+  try {
+    return await Notification.create({ ...doc, _id: dedupeKey });
+  } catch (err) {
+    if (err?.code === 11000) return Notification.findById(dedupeKey);
+    throw err;
+  }
+};
+
 /** What "no address" means, in the language of the channel that wanted one. */
 const ADDRESS_NAME = {
   email:    "email address",
@@ -112,10 +131,22 @@ const ADDRESS_NAME = {
  *                                  the dispatcher never picks it up, and the
  *                                  parent still sees it in the portal.
  * @param {string}  [deliverReason] why not, in words a parent could be shown.
+ * @param {string}  [dedupeKey]     the row's _id, derived from the natural key
+ *                                  of the thing that happened. A second call
+ *                                  with the same key returns the row already
+ *                                  queued instead of adding another.
+ *
+ *                                  This is how a pupil absent for six periods
+ *                                  becomes one message rather than six: the
+ *                                  key is the child and the day, and the same
+ *                                  derived-id trick the register itself uses
+ *                                  makes a replayed sync harmless. Callers
+ *                                  with nothing natural to key on omit it and
+ *                                  get a uuid.
  */
 const enqueue = async ({
   schoolId, kind, studentId, data = {}, lang, createdBy,
-  deliver = true, deliverReason = null,
+  deliver = true, deliverReason = null, dedupeKey = null,
 }) => {
   const school = await School.findById(schoolId).lean().catch(() => null);
   const channel = resolveChannel(school);
@@ -150,11 +181,11 @@ const enqueue = async ({
     // A template that will not render is a programming error, not a delivery
     // one. Recorded as failed so it is visible rather than thrown into the
     // caller's face mid-payment.
-    return Notification.create({
+    return insert({
       schoolId, kind, studentId: studentId ?? null,
       to: to ?? "unknown", channel, status: "failed",
       error: err.message, data: payload, createdBy: createdBy ?? null,
-    });
+    }, dedupeKey);
   }
 
   // Both of the reasons a message will not go. Either way the row is written:
@@ -171,7 +202,7 @@ const enqueue = async ({
     ? (deliverReason ?? "Not sent by policy")
     : (!to ? `No ${ADDRESS_NAME[channel] ?? "address"} on file` : null);
 
-  return Notification.create({
+  return insert({
     schoolId, kind, studentId: studentId ?? null,
     to: to ?? "—", toSource: to ? source : null, channel,
     subject, body, text,
@@ -182,7 +213,7 @@ const enqueue = async ({
     status:     skipReason ? "skipped" : "pending",
     skipReason: skipReason,
     createdBy:  createdBy ?? null,
-  });
+  }, dedupeKey);
 };
 
 /**

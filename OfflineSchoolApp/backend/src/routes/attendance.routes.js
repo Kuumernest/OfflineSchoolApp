@@ -13,6 +13,61 @@ const Student = require("../db/models/Student");
 // last-write-wins used to leave no trace at all.
 const AttendanceChangeLog = require("../db/models/AttendanceChangeLog");
 
+const notify = require("../services/notification");
+
+/**
+ * Tell the families of the children marked absent.
+ *
+ * This had no producer at all. `attendance.absent` was in the Notification
+ * enum, its template was written in both languages, and the portal's allowlist
+ * would have shown it — and nothing in the codebase ever created one. So a
+ * child was marked absent and their parent was told nothing, on any surface:
+ * no email, no SMS, and nothing in the portal either. Of the four kinds that
+ * had no producer this was the only one where the fact was unreachable by any
+ * other route; a payment shows in Fees, a result in Results, an announcement
+ * in News.
+ *
+ * ── One per child per day ────────────────────────────────────────────────
+ *
+ * A register is marked per period. A pupil away all day is six or eight
+ * absences, and six messages about it is the noise problem the gate policy
+ * exists to avoid. The dedupe key is the child and the date, so the first
+ * period to record an absence raises the message and the rest collide with
+ * it — which also makes a replayed sync free, the same way the register's own
+ * derived ids do.
+ *
+ * ── Recorded and sent, both ──────────────────────────────────────────────
+ *
+ * Unlike an on-time gate arrival, an absence is an exception by definition:
+ * it happens a handful of times a year, not twice a day, and it is precisely
+ * the message a parent needs the same morning. So there is no `deliver: false`
+ * here and no policy switch to add — every absence is recorded AND queued for
+ * delivery.
+ *
+ * Never allowed to fail the register. A teacher's save is the thing that must
+ * survive; being unable to tell somebody about it afterwards is a lesser
+ * problem, and it is logged rather than raised.
+ */
+const notifyAbsences = async ({ schoolId, date, studentIds, createdBy }) => {
+  for (const studentId of [...new Set(studentIds.map(String))]) {
+    try {
+      await notify.enqueue({
+        schoolId,
+        kind:      "attendance.absent",
+        studentId,
+        data:      { date },
+        createdBy: createdBy ? String(createdBy) : null,
+        dedupeKey: `absent:${schoolId}:${studentId}:${date}`,
+      });
+    } catch (err) {
+      console.warn(
+        `[attendance] ${studentId} marked absent on ${date} but the` +
+        ` notification failed: ${err.message}`
+      );
+    }
+  }
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -605,8 +660,24 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
         );
     }
 
+    // The families of whoever was actually written as absent. Rows that failed
+    // to write are excluded: nobody is told about a record that does not exist.
+    const absentIds = opRows
+      .map((row, i) => (!failedIdx.has(i) && row.status === "absent" ? row.studentId : null))
+      .filter(Boolean);
+
+    if (absentIds.length) {
+      await notifyAbsences({
+        schoolId:  resolvedSchoolId,
+        date:      resolvedDate,
+        studentIds: absentIds,
+        createdBy: req.user?._id,
+      });
+    }
+
     console.log(
       `📋 Bulk student attendance: saved=${savedCount} failed=${failed.length}` +
+      ` absent=${absentIds.length}` +
       ` [class=${classId}, period=${resolvedPeriodId || "day"}, date=${resolvedDate}]`
     );
 
@@ -705,6 +776,18 @@ router.post("/students", teachingOnly, async (req, res) => {
       },
       { upsert: true, returnDocument: 'after' }
     );
+
+    // Same producer as the bulk route, so a register saved one pupil at a time
+    // tells the same families. The dedupe key is the child and the day, so
+    // marking period after period raises one message, not one each.
+    if (status === "absent") {
+      await notifyAbsences({
+        schoolId:   resolvedSchoolId,
+        date:       resolvedDate,
+        studentIds: [studentId],
+        createdBy:  req.user?._id,
+      });
+    }
 
     console.log(
       `📋 Student attendance: studentId=${studentId} → ${status}` +

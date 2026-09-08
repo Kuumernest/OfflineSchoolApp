@@ -381,6 +381,10 @@ const portalAuth = async (req, res, next) => {
 
   req.portal = {
     accessId:   String(access._id),
+    // Read here rather than re-queried by the notices route: this middleware
+    // already has the row, and it re-reads it on every request anyway so a
+    // revoked code stops working at once.
+    noticesSeenAt: access.noticesSeenAt ?? null,
     schoolId:   decoded.schoolId,
     studentIds: allowed,
     studentId:  String(student._id),

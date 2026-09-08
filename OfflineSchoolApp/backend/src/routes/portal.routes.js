@@ -9,6 +9,8 @@ const Class         = require("../db/models/Class");
 // Needed by /announcements, to read the class of every child on the access
 // rather than only the one the token resolved.
 const Student       = require("../db/models/Student");
+// Written by /notifications to remember when the parent last looked.
+const GuardianAccess = require("../db/models/GuardianAccess");
 const Period        = require("../db/models/Period");
 const Subject       = require("../db/models/Subject");
 const FeeCharge     = require("../db/models/FeeCharge");
@@ -120,6 +122,33 @@ router.post("/login", asyncHandler(async (req, res) => {
 
 router.use(portal.portalAuth);
 
+// ── Which notification kinds a guardian may see ─────────────────────────────
+//
+// Module scope, because two routes need it: /notifications lists them and /me
+// counts the unseen ones for the tab badge. One allowlist, read from one place.
+//
+// An ALLOW-list, deliberately, and not to be turned into a blocklist.
+//
+// `body` below is the rendered message the pipeline sent, and that is why
+// config/syncFeed.js refuses to mirror this collection at all: for an admin
+// welcome or a password reset the body contains a temporary password. None
+// of those kinds are listed here and none may be added. Anything new is
+// opted in by name after somebody has looked at what its body holds.
+//
+// Until now the list was fee reminders and payments only, so a parent could
+// see what they owed and never that their child had been marked absent,
+// scanned through the gate, or that a term's results had been published —
+// messages the school had already sent them by email or SMS.
+const GUARDIAN_NOTICE_KINDS = [
+  "fee.reminder",
+  "fee.payment",
+  "attendance.absent",
+  "gate.arrival",
+  "gate.departure",
+  "result.published",
+  "announcement",
+];
+
 /**
  * The school heading, EVERY child this code covers, and which one is selected.
  *
@@ -162,6 +191,26 @@ router.get("/me", asyncHandler(async (req, res) => {
     }
   })();
 
+  // School notices that arrived since this parent last opened the tab. Same
+  // reasoning as unreadMessages: it rides on the one request every screen
+  // makes, because a badge that needs a request to the tab it is about is a
+  // badge nobody can draw before the parent has already gone there.
+  const unreadNotices = await (async () => {
+    try {
+      const filter = {
+        schoolId,
+        studentId: { $in: (studentIds ?? []).map(String) },
+        kind: { $in: GUARDIAN_NOTICE_KINDS },
+        deletedAt: null,
+        subject: { $ne: null },
+      };
+      if (req.portal.noticesSeenAt) filter.createdAt = { $gt: req.portal.noticesSeenAt };
+      return await Notification.countDocuments(filter);
+    } catch {
+      return 0;
+    }
+  })();
+
   return res.json({
     success: true,
     data: {
@@ -172,6 +221,7 @@ router.get("/me", asyncHandler(async (req, res) => {
       })),
       selectedId: String(student._id),
       unreadMessages,
+      unreadNotices,
       student: {
         _id:          String(student._id),
         name:         displayName(student) || null,
@@ -305,29 +355,8 @@ router.get("/fees/reminders", asyncHandler(async (req, res) => {
  * from the email/SMS pipeline — this endpoint just surfaces it.
  */
 router.get("/notifications", asyncHandler(async (req, res) => {
-  const { studentId, schoolId } = req.portal;
+  const { studentId, studentIds, schoolId, accessId } = req.portal;
 
-  // An ALLOW-list, deliberately, and not to be turned into a blocklist.
-  //
-  // `body` below is the rendered message the pipeline sent, and that is why
-  // config/syncFeed.js refuses to mirror this collection at all: for an admin
-  // welcome or a password reset the body contains a temporary password. None
-  // of those kinds are listed here and none may be added. Anything new is
-  // opted in by name after somebody has looked at what its body holds.
-  //
-  // Until now the list was fee reminders and payments only, so a parent could
-  // see what they owed and never that their child had been marked absent,
-  // scanned through the gate, or that a term's results had been published —
-  // messages the school had already sent them by email or SMS.
-  const GUARDIAN_NOTICE_KINDS = [
-    "fee.reminder",
-    "fee.payment",
-    "attendance.absent",
-    "gate.arrival",
-    "gate.departure",
-    "result.published",
-    "announcement",
-  ];
 
   // Filtered on what RENDERED, not on what was delivered.
   //
@@ -344,13 +373,27 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // it is visible to us rather than thrown at a bursar mid-payment — while a
   // skipped row, which rendered fully and then found nowhere to go, is exactly
   // what a parent should see.
-  const notifications = await Notification.find({
+  // Every child on the access, not only the one on screen.
+  //
+  // Fees, results and attendance are per-child because the thing itself is: a
+  // balance, a report card, a register. A notice is an event — "Mark arrived at
+  // 07:42", "Constance was not recorded at school today" — and a parent wants
+  // all of them in one place. Scoping this to the selected child is how a
+  // parent looking at their eldest never learns the younger one was absent,
+  // which is the same mistake /announcements was making and the same fix.
+  //
+  // Each row carries the child it concerns so the card can say whose it is.
+  const forChildren = (studentIds ?? [studentId]).map(String);
+
+  const notificationFilter = {
     schoolId,
-    studentId,
+    studentId: { $in: forChildren },
     kind: { $in: GUARDIAN_NOTICE_KINDS },
     deletedAt: null,
     subject: { $ne: null },
-  })
+  };
+
+  const notifications = await Notification.find(notificationFilter)
     .sort({ createdAt: -1 })
     .limit(50)
     .lean();
@@ -412,11 +455,20 @@ router.get("/notifications", asyncHandler(async (req, res) => {
     })
     .filter(Boolean);
 
+  // Counted against the marker rather than a flag per row: a notice has no
+  // per-guardian read state, and giving it one would mean a write for every
+  // card a parent scrolls past.
+  const seenAt = req.portal.noticesSeenAt ?? null;
+  const unreadNotices = seenAt
+    ? await Notification.countDocuments({ ...notificationFilter, createdAt: { $gt: seenAt } })
+    : notifications.length;
+
   const rows = [
     ...messageNotices,
     ...notifications.map((n) => ({
       _id:       n._id,
       kind:      n.kind,
+      studentId: n.studentId ?? null,
       subject:   n.subject,
       // `text` is the displayable form. `body` is the channel's payload, and
       // for email that is a whole HTML document — which a phone put straight
@@ -435,10 +487,27 @@ router.get("/notifications", asyncHandler(async (req, res) => {
     String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
   );
 
+  // Marked seen BEFORE responding, and awaited.
+  //
+  // Fire-and-forget after res.json() looked cheaper and left a race: two loads
+  // in quick succession — a tab switch and the 25s poll landing together —
+  // would both read the old marker and both report a count the parent had
+  // already cleared. One indexed write on the caller's own row is worth
+  // paying for to make "the list has been read" true by the time we say so.
+  await GuardianAccess.updateOne(
+    { _id: accessId, schoolId },
+    { $set: { noticesSeenAt: new Date() } }
+  ).catch((err) => console.warn("[portal] noticesSeenAt not saved:", err.message));
+
   return res.json({
     success: true,
     // What a badge needs, counted once on the side that can count it.
     unread: messageNotices.reduce((n, m) => n + m.unread, 0),
+    // School notices that arrived since this parent last opened the tab, which
+    // is what the tab's own badge counts. Deliberately NOT including the
+    // unread-thread rows above: those are counted by the Messages badge, and a
+    // number that appears in two places at once is a number nobody trusts.
+    unreadNotices,
     data: rows,
   });
 }));

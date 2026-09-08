@@ -45,6 +45,19 @@ const guardianAccessSchema = new mongoose.Schema(
     lockedUntil: { type: Date,   default: null },
     lastSeenAt:  { type: Date,   default: null },
 
+    /**
+     * When this guardian last opened their notices.
+     *
+     * A message thread carries a read marker per participant, so "unread
+     * messages" was already arithmetic. Notices had nothing of the kind, so
+     * the tab could show a parent four notices and no indication that two of
+     * them arrived since they last looked — and a badge that counted every
+     * notice would be permanently lit and quickly ignored.
+     *
+     * Null means "never looked", which correctly counts everything as new.
+     */
+    noticesSeenAt: { type: Date, default: null },
+
     createdBy: { type: String, default: null },
     deletedAt: { type: Date,   default: null },
   },
