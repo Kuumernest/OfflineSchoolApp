@@ -6,6 +6,9 @@ const router  = express.Router();
 
 const School        = require("../db/models/School");
 const Class         = require("../db/models/Class");
+// Needed by /announcements, to read the class of every child on the access
+// rather than only the one the token resolved.
+const Student       = require("../db/models/Student");
 const Period        = require("../db/models/Period");
 const Subject       = require("../db/models/Subject");
 const FeeCharge     = require("../db/models/FeeCharge");
@@ -971,23 +974,78 @@ router.get("/attendance", asyncHandler(async (req, res) => {
 
 /** School announcements a parent should see. */
 router.get("/announcements", asyncHandler(async (req, res) => {
-  const { schoolId, student } = req.portal;
+  const { schoolId, studentIds } = req.portal;
 
+  // ── Every child's class, and only what concerns them ─────────────────────
+  //
+  // This query was hand-written instead of calling audienceMatch(), and it did
+  // not so much filter as wave everything through. Measured against twelve
+  // notices, a parent saw eleven — including one archived, one expired, one
+  // not yet published, a staff-only one, one for a class neither of their
+  // children is in, and one about somebody else's child.
+  //
+  //   { classId: student.classId }
+  //         Announcement has no `classId`. The field is `targetClasses`, an
+  //         array. So the branch meant to admit class notices could not match
+  //         a document in any school, ever — it was doing nothing at all.
+  //
+  //   audience: { $in: ["all", "parents", "students"] }
+  //         Which left this branch deciding everything. `audience` carries a
+  //         schema default of "all", so it caught almost every row whatever it
+  //         was scoped to — and the one shape it could NOT catch is
+  //         audience:"class", because "class" is not in that list and the
+  //         field exists so the $exists branch missed it too.
+  //
+  //         That is the reported failure exactly: a notice aimed at a class
+  //         through the single-select picker was the one kind of notice a
+  //         parent could not see, while notices aimed at other people's
+  //         children were the ones they could.
+  //
+  //   student.classId
+  //         One child — whichever the token resolved first, or whichever was
+  //         selected. Harmless only because the field it was compared against
+  //         does not exist; correct now, and a parent with children in 5A, 5B
+  //         and 5C gets all three.
+  //
+  //   no `audiences` guard, no lifecycle
+  //         audiences:["teachers"] still has audience:"all" sitting under it,
+  //         so a staff-only notice reached parents. audienceMatch() exists to
+  //         prevent precisely that and says so in its own comments. And
+  //         nothing checked isActive, publishAt or expiresAt, which the
+  //         student feed has always checked.
+  const children = await Student.find({
+    _id: { $in: studentIds }, schoolId, deletedAt: null,
+  }).select("_id classId").lean();
+
+  const classIds = [...new Set(children.map((c) => c.classId).filter(Boolean).map(String))];
+  const childIds = children.map((c) => String(c._id));
+
+  const now = new Date();
   const rows = await Announcement.find({
     schoolId,
+    isActive:  { $ne: false },
     deletedAt: null,
-    $or: [
-      { audience: { $in: ["all", "parents", "students"] } },
-      { audience: { $exists: false } },
-      { classId: student.classId },
+    $or: Announcement.audienceMatch({
+      audience: "parents",
+      classIds,
+      studentIds: childIds,
+    }),
+    $and: [
+      { $or: [{ publishAt: null }, { publishAt: { $exists: false } }, { publishAt: { $lte: now } }] },
+      { $or: [{ expiresAt: null }, { expiresAt: { $exists: false } }, { expiresAt: { $gte: now } }] },
     ],
-  }).sort({ createdAt: -1 }).limit(30).lean();
+  }).sort({ isPinned: -1, createdAt: -1 }).limit(30).lean();
 
   return res.json({
     success: true,
     data: rows.map((a) => ({
       _id: a._id, title: a.title, body: a.body ?? a.message ?? null,
       createdAt: a.createdAt, priority: a.priority ?? null,
+      isPinned: a.isPinned ?? false,
+      // Which of this parent's children the notice concerns, when it names
+      // any. A parent with three children reading "bring PE kit on Thursday"
+      // needs to know which of them it is about.
+      forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
     })),
   });
 }));

@@ -852,15 +852,28 @@ export default function ParentPortalPage() {
           (newsQ.data?.length ?? 0) === 0 ? (
             <Card><p className="py-6 text-center text-sm text-ink-muted">{t("portal.noNews")}</p></Card>
           ) : (
-            newsQ.data?.map((a) => (
-              <Card key={a._id}>
-                <p className="text-sm font-semibold text-ink">{a.title ?? "—"}</p>
-                <p className="mt-0.5 text-xs text-ink-faint">{fmt.dateShort(a.createdAt)}</p>
-                {a.body && (
-                  <p className="mt-2 whitespace-pre-line text-sm text-ink-body">{a.body}</p>
-                )}
-              </Card>
-            ))
+            newsQ.data?.map((a) => {
+              // Whose notice it is, when it names a child. The list now
+              // carries notices for every child's class rather than only the
+              // one selected, so a parent with three children needs the card
+              // to say which of them "bring PE kit on Thursday" is about.
+              const about = (a.forStudents ?? [])
+                .map((id) => meQ.data?.children
+                  ?.find((c) => String(c._id) === String(id))?.name)
+                .filter(Boolean);
+              return (
+                <Card key={a._id}>
+                  <p className="text-sm font-semibold text-ink">{a.title ?? "—"}</p>
+                  <p className="mt-0.5 text-xs text-ink-faint">
+                    {fmt.dateShort(a.createdAt)}
+                    {about.length ? ` · ${about.join(", ")}` : ""}
+                  </p>
+                  {a.body && (
+                    <p className="mt-2 whitespace-pre-line text-sm text-ink-body">{a.body}</p>
+                  )}
+                </Card>
+              );
+            })
           )
         )}
 

@@ -115,6 +115,26 @@ const announcementSchema = new mongoose.Schema(
       },
     ],
 
+    /**
+     * Named pupils, when a notice concerns them and not their whole class.
+     *
+     * "Your child has been selected for the regional finals" is addressed to
+     * three families, not to Form 5A. Until this existed the narrowest a
+     * notice could be aimed was a class, so anything meant for one pupil was
+     * either sent to everyone in their class or sent by another route
+     * entirely.
+     *
+     * No existing row carries this field, so the `$exists: false` guards in
+     * audienceMatch() below match every row already stored and nobody's
+     * visibility changes.
+     */
+    targetStudents: [
+      {
+        type: String,
+        ref:  "Student",
+      },
+    ],
+
     // ── Subject link (optional) ───────────────────────────────────────────
     subjectId: {
       type:    String,
@@ -352,23 +372,57 @@ announcementSchema.methods.effectiveAudiences = function () {
  * rows from before and after this field existed, and a reader who only
  * matched one shape would silently miss half their notices.
  *
+ * ── One reader, several classes ───────────────────────────────────────────
+ *
+ * A student has one class and a parent has as many as they have children, so
+ * this takes a LIST. It used to take a single `classId`, which is right for a
+ * pupil and silently wrong for a family: the guardian portal resolved the
+ * class from whichever child was on screen, so a notice for Child 2's class
+ * was invisible while Child 1 was selected — and switching child was not
+ * something a parent had any reason to do to find a notice they did not know
+ * existed.
+ *
+ * `classId` is still accepted, because the student feed passes one and there
+ * is nothing wrong with it.
+ *
  * @param {object}  opts
  * @param {"students"|"teachers"|"parents"} opts.audience  reader's audience
- * @param {string} [opts.classId]  reader's class, when they have one
+ * @param {string}   [opts.classId]    one class, for a reader who has one
+ * @param {string[]} [opts.classIds]   every class this reader can see into
+ * @param {string[]} [opts.studentIds] pupils this reader is entitled to
  * @returns {object[]} conditions for $or
  */
-announcementSchema.statics.audienceMatch = function ({ audience, classId }) {
-  // New shape, NOT scoped to particular classes — everyone in the audience.
+announcementSchema.statics.audienceMatch = function ({
+  audience, classId, classIds, studentIds,
+}) {
+  // Ids are compared as strings throughout — Class._id and Student._id are
+  // String UUIDs here, but a caller holding an ObjectId or a populated
+  // document would otherwise produce a filter that matches nothing and looks
+  // like "there are no notices".
+  const asIds = (v) => [...new Set(
+    (Array.isArray(v) ? v : [v])
+      .filter(Boolean)
+      .map((x) => String(x?._id ?? x))
+  )];
+
+  const classes  = asIds([...(classIds ?? []), ...(classId ? [classId] : [])]);
+  const students = asIds(studentIds ?? []);
+
+  // A notice is "unscoped" only if it names neither classes nor pupils.
   //
-  // The empty/absent test matters: without it a school-wide match would also
-  // return announcements that were deliberately narrowed to one class, and a
-  // Form 5A notice would appear on every Form 5B student's feed.
+  // Without these a school-wide match would also return announcements that
+  // were deliberately narrowed — a Form 5A notice on every Form 5B feed, and
+  // now a notice about three named children on everyone's.
+  const unscoped = [
+    { $or: [{ targetClasses:  { $size: 0 } }, { targetClasses:  { $exists: false } }] },
+    { $or: [{ targetStudents: { $size: 0 } }, { targetStudents: { $exists: false } }] },
+  ];
+
+  // New shape, NOT scoped to particular classes or pupils — everyone in the
+  // audience.
   const unscopedNew = {
     audiences: audience,
-    $or: [
-      { targetClasses: { $size: 0 } },
-      { targetClasses: { $exists: false } },
-    ],
+    $and: unscoped,
   };
 
   // A row that HAS `audiences` must be judged by that alone.
@@ -386,16 +440,32 @@ announcementSchema.statics.audienceMatch = function ({ audience, classId }) {
     unscopedNew,
     // Legacy shape. "all"/"students"/"teachers"/"parents" rows were never
     // class-scoped — only audience:"class" was — so they need no class guard.
-    { audience: "all", $or: legacyOnly },
-    { audience,        $or: legacyOnly },
+    //
+    // They do get the targetStudents guard, and it costs nothing: no row
+    // written before that field existed has it, so `$exists: false` matches
+    // every one of them and no stored notice changes hands.
+    { audience: "all", $and: [{ $or: legacyOnly }, unscoped[1]] },
+    { audience,        $and: [{ $or: legacyOnly }, unscoped[1]] },
   ];
 
-  if (classId) {
-    // Legacy class-scoped rows.
-    conditions.push({ audience: "class", targetClasses: classId, $or: legacyOnly });
-    // New rows scoped to specific classes: the reader's class must be among
-    // them AND their audience must be one the announcement targets.
-    conditions.push({ audiences: audience, targetClasses: classId });
+  if (classes.length) {
+    // Legacy class-scoped rows. `targetClasses` is an array, so $in against a
+    // list of the reader's classes is the same operator Mongo already used for
+    // a single value — which is what makes "any of my children's classes"
+    // one query rather than one per child.
+    conditions.push({
+      audience: "class", targetClasses: { $in: classes },
+      $and: [{ $or: legacyOnly }, unscoped[1]],
+    });
+    // New rows scoped to specific classes: one of the reader's classes must be
+    // among them AND their audience must be one the announcement targets.
+    conditions.push({ audiences: audience, targetClasses: { $in: classes } });
+  }
+
+  if (students.length) {
+    // A notice naming a pupil reaches whoever is entitled to that pupil,
+    // whatever audience it was written for: it is about their child.
+    conditions.push({ targetStudents: { $in: students } });
   }
 
   return conditions;

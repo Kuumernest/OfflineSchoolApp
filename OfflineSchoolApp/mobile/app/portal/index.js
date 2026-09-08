@@ -1038,13 +1038,28 @@ export default function ParentPortalScreen() {
                   <Text style={styles.empty}>{t("portal.noNews")}</Text>
                 </View>
               ) : (
-                data.map((a) => (
-                  <View key={a._id} style={styles.card}>
-                    <Text style={styles.cardTitle}>{a.title || "—"}</Text>
-                    <Text style={styles.lineMeta}>{formatDateShort(a.createdAt)}</Text>
-                    {a.body ? <Text style={styles.newsBody}>{a.body}</Text> : null}
-                  </View>
-                ))
+                data.map((a) => {
+                  // Which of this parent's children the notice is about, when
+                  // it names any. The list now carries notices for every
+                  // child's class rather than only the one on screen — which
+                  // is the fix — and that makes "bring PE kit on Thursday"
+                  // ambiguous for a parent with three children unless the card
+                  // says whose Thursday it is.
+                  const about = (a.forStudents ?? [])
+                    .map((id) => (me?.children ?? [])
+                      .find((c) => String(c._id) === String(id))?.name)
+                    .filter(Boolean);
+                  return (
+                    <View key={a._id} style={styles.card}>
+                      <Text style={styles.cardTitle}>{a.title || "—"}</Text>
+                      <Text style={styles.lineMeta}>
+                        {formatDateShort(a.createdAt)}
+                        {about.length ? ` · ${about.join(", ")}` : ""}
+                      </Text>
+                      {a.body ? <Text style={styles.newsBody}>{a.body}</Text> : null}
+                    </View>
+                  );
+                })
               )
             )}
           </>
