@@ -66,14 +66,42 @@ export default function FeesIndexScreen() {
       const rows = Array.isArray(list) ? list : (list?.students ?? []);
       setStudents(rows);
 
-      // One account read per student. The roster on a phone is a class or two,
-      // not the whole school, so this stays cheap.
-      const next = {};
-      for (const s of rows) {
-        const id = s._id || s.id;
-        if (!id) continue;
-        const acct = await FeeService.getStudentAccount(id, year);
-        next[id] = acct.totals;
+      /*
+       * The school's own balances, in one request, falling back to the mirror.
+       *
+       * This read the local SQLite mirror and nothing else, and nothing was
+       * filling it — FeeService.pullStudentAccount existed and had no call
+       * site anywhere — so every row on this screen showed a balance of zero
+       * whatever the pupil actually owed.
+       *
+       * One request rather than one per pupil: /fees/outstanding answers for
+       * the whole school, and a pupil missing from the reply owes nothing,
+       * which is what this list should show for them. See pullOutstanding for
+       * why it is not written into the mirror.
+       *
+       * Offline the mirror is all there is, so the per-student read stays as
+       * the fallback. It will under-report a pupil whose charges have never
+       * reached this device, and saying zero is then the honest answer: this
+       * phone has never been told.
+       */
+      let next = null;
+      if (schoolId) {
+        next = await FeeService
+          .pullOutstanding({ schoolId, academicYear: year })
+          .catch((err) => {
+            console.warn("[fees] balances not refreshed:", err.message);
+            return null;
+          });
+      }
+
+      if (!next) {
+        next = {};
+        for (const s of rows) {
+          const id = s._id || s.id;
+          if (!id) continue;
+          const acct = await FeeService.getStudentAccount(id, year);
+          next[id] = acct.totals;
+        }
       }
       setBalances(next);
 
@@ -85,7 +113,7 @@ export default function FeesIndexScreen() {
       setLoading(false);
       setRefresh(false);
     }
-  }, [year]);
+  }, [year, schoolId]);
 
   useEffect(() => { load(); }, [load]);
   useFocusEffect(useCallback(() => { load(); }, [load]));

@@ -1434,6 +1434,7 @@
       "other": "%{count} unread"
     },
     "unreadNotice": "New",
+    "markAllRead": "Mark all read",
     "gateTimes": "Arrival and departure",
     "arrived": "Arrived",
     "left": "Left",

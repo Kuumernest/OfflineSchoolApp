@@ -541,6 +541,40 @@ router.get("/notifications", asyncHandler(async (req, res) => {
 }));
 
 /**
+ * Mark every unread notice read.
+ *
+ * Per-card receipts are right for a parent who opens the tab daily and wrong
+ * for one coming back after a week of gate scans, who otherwise faces a dozen
+ * taps to clear a badge. This is the companion to the endpoint below, not a
+ * replacement for it.
+ *
+ * The filter is the same `unread` one the count uses, so this clears exactly
+ * what the badge was counting — no more, and nothing belonging to another
+ * family or another child. Rows already read are excluded by that filter, so
+ * their original readAt stands.
+ */
+router.post("/notifications/read-all", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, accessId } = req.portal;
+
+  const { unread } = noticeFilters({
+    schoolId, studentIds, accessId, noticesSeenAt: req.portal.noticesSeenAt,
+  });
+
+  const result = await Notification.updateMany(
+    unread,
+    { $addToSet: { readBy: { accessId: String(accessId), readAt: new Date() } } }
+  );
+
+  return res.json({
+    success: true,
+    marked: result.modifiedCount ?? 0,
+    // Zero by construction, and sent anyway so the client settles on the
+    // server's number rather than assuming.
+    unreadNotices: await Notification.countDocuments(unread),
+  });
+}));
+
+/**
  * Mark one notice read.
  *
  * The filter is the caller's own scope — their school, their children, and a

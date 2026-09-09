@@ -301,6 +301,29 @@ export default function ParentPortalScreen() {
     }
   }, []);
 
+  /**
+   * Acknowledge the lot.
+   *
+   * Same optimism as one card, applied to the list: every row is flipped and
+   * the badge zeroed before the request returns, then settled on the server's
+   * own count. A parent returning after a week of gate scans should not tap
+   * twelve cards to clear a badge.
+   */
+  const markAllNotices = useCallback(async () => {
+    setSection((prev) => (prev?.tab !== "notices" ? prev : {
+      ...prev,
+      data: (prev.data ?? []).map((n) => (n.conversationId ? n : { ...n, read: true })),
+    }));
+    setMe((prev) => (prev ? { ...prev, unreadNotices: 0 } : prev));
+
+    try {
+      const count = await PortalService.markAllNoticesRead();
+      if (count != null) setMe((prev) => (prev ? { ...prev, unreadNotices: count } : prev));
+    } catch {
+      // Left to the poll, like one card.
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try { await loadAll(); } finally { setRefreshing(false); }
@@ -1027,6 +1050,19 @@ export default function ParentPortalScreen() {
                 published results. The records existed from the moment each
                 message went out — nothing in the portal had ever read them, so
                 a parent whose phone lost the SMS had no second place to look. */}
+            {tab === "notices" && (data?.length ?? 0) > 0 &&
+              (me?.unreadNotices ?? 0) > 0 && (
+                <TouchableOpacity
+                  style={styles.markAllBtn}
+                  onPress={markAllNotices}
+                  activeOpacity={0.7}
+                  accessibilityRole="button"
+                >
+                  <Ionicons name="checkmark-done-outline" size={15} color={C.primary} />
+                  <Text style={styles.markAllText}>{t("portal.markAllRead")}</Text>
+                </TouchableOpacity>
+              )}
+
             {tab === "notices" && (
               (data?.length ?? 0) === 0 ? (
                 <View style={styles.card}>
@@ -1394,6 +1430,14 @@ const styles = StyleSheet.create({
     borderLeftColor: C.primary,
     backgroundColor: C.primaryBg,
   },
+  // Shown only while there is something to clear, so it is never a button
+  // that does nothing.
+  markAllBtn: {
+    flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6,
+    paddingVertical: 9, marginBottom: 10, borderRadius: 10,
+    borderWidth: 1, borderColor: C.line, backgroundColor: C.surface,
+  },
+  markAllText: { fontSize: 13, fontWeight: "600", color: C.primary },
   unreadDot: {
     width: 7, height: 7, borderRadius: 4,
     backgroundColor: C.primary,

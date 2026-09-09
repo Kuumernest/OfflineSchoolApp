@@ -146,6 +146,17 @@ export const markNoticeRead = async (noticeId) => {
   return data?.unreadNotices ?? null;
 };
 
+/**
+ * Mark every unread notice read.
+ *
+ * The companion to the above for a parent coming back after a week of gate
+ * scans, who would otherwise tap a dozen cards to clear a badge.
+ */
+export const markAllNoticesRead = async () => {
+  const { data } = await client.post("/notifications/read-all");
+  return data?.unreadNotices ?? null;
+};
+
 // ── Messaging ───────────────────────────────────────────────────────────────
 //
 // The first part of the portal that writes. Conversations go through `load` so
@@ -240,7 +251,7 @@ export default {
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
   fetchResults, fetchAttendance, fetchAnnouncements,
   fetchReceiptHtml, fetchReportCardHtml,
-  markNoticeRead,
+  markNoticeRead, markAllNoticesRead,
   // Messaging. The omission that caused all of the above.
   fetchConversations, fetchRecipients, openConversation,
   fetchThread, sendMessage, markRead,

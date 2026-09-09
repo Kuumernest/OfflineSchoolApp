@@ -1434,6 +1434,7 @@
       "other": "%{count} non lus"
     },
     "unreadNotice": "Nouveau",
+    "markAllRead": "Tout marquer comme lu",
     "gateTimes": "Arrivée et départ",
     "arrived": "Arrivé",
     "left": "Parti",

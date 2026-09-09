@@ -782,18 +782,49 @@ const bad = (label, detail) => {
       return e.name.endsWith(".js") ? [full] : [];
     });
 
+    // The rule is about CREATION, and this said `updateMany` too.
+    //
+    // It was written as a blunt catch-all and it caught the wrong thing the
+    // moment a reader appeared: /notifications/read-all stamps a receipt with
+    // updateMany, which creates nothing. Worse, it never listed updateOne, so
+    // the single-notice version of the same write slipped past — the pattern
+    // was arbitrary rather than expressing the rule.
+    //
+    // What must stay true: no producer outside the service brings a
+    // notification into existence, because each one would then answer the
+    // record-versus-delivery question for itself and one of them would get it
+    // wrong. Creation is `create`, `insertMany`, and an update with `upsert`.
+    // Stamping who has read one is not creation.
+    const CREATES = [
+      /Notification\.(?:create|insertMany)\s*\(/,
+      /Notification\.update\w*\([\s\S]{0,600}?upsert:\s*true/,
+      /Notification\.findOneAndUpdate\([\s\S]{0,600}?upsert:\s*true/,
+    ];
+
     const offenders = walk(SRC)
       .filter((f) => !f.includes(path.join("services", "notification")))
-      .filter((f) => /Notification\.(create|insertMany|updateMany)\s*\(/
-        .test(fs.readFileSync(f, "utf8")));
+      .filter((f) => {
+        const text = fs.readFileSync(f, "utf8");
+        return CREATES.some((re) => re.test(text));
+      });
 
     if (!offenders.length) {
-      ok("nothing outside the notification service writes to the collection");
+      ok("nothing outside the notification service creates a notification");
     } else {
       bad("notifications are only created through enqueue()",
         offenders.map((f) => "  " + path.relative(ROOT, f)).join("\n") + "\n" +
         "A producer that writes the row itself gets its own answer to the\n" +
         "record-versus-delivery question, and one of them will get it wrong.");
+    }
+
+    // And the narrowing must not have made the check vacuous: the service
+    // itself still has to be the one place that creates them.
+    const svcText = fs.readFileSync(path.join(SRC, "services/notification/index.js"), "utf8");
+    if (/Notification\.create\s*\(/.test(svcText)) {
+      ok("and the service is where that happens");
+    } else {
+      bad("the notification service creates the rows",
+        "If nothing creates them here either, this check proves nothing.");
     }
 
     const svc = fs.readFileSync(path.join(SRC, "services/notification/index.js"), "utf8");

@@ -258,6 +258,43 @@ export const listPendingPayments = async () => {
  * yet — those are the authority until they sync, and clobbering them would
  * erase cash that has already been handed over.
  */
+/**
+ * Every outstanding balance in the school, in one request.
+ *
+ * The list screen shows one number per pupil — the balance — and read it out
+ * of the local mirror, which nothing was filling. Every row said zero.
+ *
+ * Pulling each account individually would fix it and cost one request per
+ * pupil on a roster of sixty. This endpoint answers the whole question at
+ * once, and the shape suits it: /fees/outstanding returns only the pupils who
+ * actually owe, so a pupil absent from the reply has a balance of zero, which
+ * is exactly what the list should show for them.
+ *
+ * Deliberately NOT written into the mirror. It carries totals, not the charge
+ * and payment rows the mirror is made of, and half-filling those tables would
+ * make the detail screen — which renders them — lie in a new way. The list is
+ * a summary and reads the summary; the detail screen is the record and reads
+ * the record. Offline, the caller falls back to the mirror.
+ *
+ * @returns {Promise<Record<string, {charged, waived, paid, balance}>>}
+ */
+export const pullOutstanding = async ({ schoolId, academicYear }) => {
+  const { data } = await api.get("/fees/outstanding", {
+    params: { schoolId, academicYear },
+  });
+  const rows = data?.data ?? data ?? [];
+  const byStudent = {};
+  for (const r of Array.isArray(rows) ? rows : []) {
+    byStudent[String(r.studentId)] = {
+      charged: r.charged ?? 0,
+      waived:  r.waived  ?? 0,
+      paid:    r.paid    ?? 0,
+      balance: r.balance ?? 0,
+    };
+  }
+  return byStudent;
+};
+
 export const pullStudentAccount = async ({ schoolId, studentId, academicYear }) => {
   const { data } = await api.get(`/fees/students/${studentId}`, {
     params: { schoolId, academicYear },
@@ -311,4 +348,5 @@ export default {
   getStudentAccount,
   listPendingPayments,
   pullStudentAccount,
+  pullOutstanding,
 };

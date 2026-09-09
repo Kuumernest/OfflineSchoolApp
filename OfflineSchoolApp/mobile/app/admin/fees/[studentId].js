@@ -61,6 +61,33 @@ export default function StudentFeeScreen() {
 
   const load = useCallback(async () => {
     try {
+      /*
+       * Fetch the school's own figures, THEN read the mirror.
+       *
+       * getStudentAccount reads only the local SQLite tables, and nothing was
+       * filling them: FeeService.pullStudentAccount existed, exported, written
+       * for exactly this, and had no call site anywhere in the app. So this
+       * screen showed a balance of zero, "Nothing billed yet" and "No payments
+       * recorded" for a pupil whose charges and payments were sitting on the
+       * server — and a bursar could have recorded a second payment against a
+       * bill that looked unpaid.
+       *
+       * The mirror stays the thing rendered, which is what makes the screen
+       * work with no signal and what lets a payment queued on this device show
+       * up before it has synced. pullStudentAccount already respects that: it
+       * refuses to overwrite any payment row still marked unsynced.
+       *
+       * The pull is allowed to fail. Offline, the mirror is all there is, and
+       * showing yesterday's copy beats showing nothing.
+       */
+      if (schoolId) {
+        await FeeService.pullStudentAccount({
+          schoolId, studentId: String(studentId), academicYear,
+        }).catch((err) => {
+          console.warn("[fees] account not refreshed:", err.message);
+        });
+      }
+
       const [s, acct] = await Promise.all([
         getStudentById(String(studentId)).catch(() => null),
         FeeService.getStudentAccount(String(studentId), academicYear),
@@ -72,7 +99,7 @@ export default function StudentFeeScreen() {
     } finally {
       setLoading(false);
     }
-  }, [studentId, academicYear]);
+  }, [studentId, academicYear, schoolId]);
 
   useEffect(() => { load(); }, [load]);
 
