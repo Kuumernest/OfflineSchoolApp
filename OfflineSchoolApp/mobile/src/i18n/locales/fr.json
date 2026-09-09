@@ -1433,6 +1433,7 @@
       "one": "%{count} non lu",
       "other": "%{count} non lus"
     },
+    "unreadNotice": "Nouveau",
     "gateTimes": "Arrivée et départ",
     "arrived": "Arrivé",
     "left": "Parti",

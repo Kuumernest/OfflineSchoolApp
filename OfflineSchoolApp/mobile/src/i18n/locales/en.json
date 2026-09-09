@@ -1433,6 +1433,7 @@
       "one": "%{count} unread",
       "other": "%{count} unread"
     },
+    "unreadNotice": "New",
     "gateTimes": "Arrival and departure",
     "arrived": "Arrived",
     "left": "Left",

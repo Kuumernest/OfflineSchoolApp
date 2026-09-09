@@ -130,6 +130,22 @@ export const fetchResults       = (studentId) => load("results", "/results", stu
 export const fetchAttendance    = (studentId) => load("attendance", "/attendance", studentId);
 export const fetchAnnouncements = (studentId) => load("news", "/announcements", studentId);
 
+/**
+ * Mark one notice read.
+ *
+ * Deliberately NOT through `load`: nothing to cache, and a failure here must
+ * not be papered over with a stale copy. The screen marks optimistically and
+ * the next poll settles it, so a lost call costs a badge that is one too high
+ * for twenty-five seconds.
+ *
+ * Returns the server's new unread count, so the caller can settle onto it
+ * rather than trusting its own arithmetic.
+ */
+export const markNoticeRead = async (noticeId) => {
+  const { data } = await client.post(`/notifications/${noticeId}/read`);
+  return data?.unreadNotices ?? null;
+};
+
 // ── Messaging ───────────────────────────────────────────────────────────────
 //
 // The first part of the portal that writes. Conversations go through `load` so
@@ -224,6 +240,7 @@ export default {
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
   fetchResults, fetchAttendance, fetchAnnouncements,
   fetchReceiptHtml, fetchReportCardHtml,
+  markNoticeRead,
   // Messaging. The omission that caused all of the above.
   fetchConversations, fetchRecipients, openConversation,
   fetchThread, sendMessage, markRead,

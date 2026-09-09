@@ -1101,11 +1101,42 @@ const checkPortalNotices = () => {
   }
 
   // ── 3. The badge, from the request that always runs ─────────────────────
-  if (/me\?\.unreadMessages/.test(src)) {
-    ok("the Messages tab badges from /portal/me, which every load fetches");
+  if (/me\?\.unreadMessages/.test(src) && /me\?\.unreadNotices/.test(src)) {
+    ok("both tab badges read from /portal/me, which every load fetches");
   } else {
-    bad("the tab badge reads the count from /me",
-      "Anywhere else and it needs a second request to a tab nobody opened.");
+    bad("the tab badges read their counts from /me",
+      "Anywhere else and they need a second request to a tab nobody opened.");
+  }
+
+  // ── 4. A notice is marked read by being opened, not by being listed ─────
+  //
+  // The first version of this cleared the whole tab when the list loaded,
+  // which is not what "read" means when four notices arrived and the parent
+  // looked at one. Three things have to hold together, and any one of them
+  // alone would leave a badge that does not match the cards under it.
+  if (/markNoticeRead/.test(src) && /markNotice\(n\._id\)/.test(src)) {
+    ok("tapping an unread notice marks it read");
+  } else {
+    bad("a notice is marked read when it is opened",
+      "Expected a markNotice(n._id) call on the card's onPress.");
+  }
+
+  // Optimistic, or the card stays lit until the round trip returns.
+  const handler = src.slice(src.indexOf("const markNotice"), src.indexOf("const refresh"));
+  if (/setSection\(\(prev\)/.test(handler) && /setMe\(\(prev\)/.test(handler)) {
+    ok("and the card and the badge settle before the server answers");
+  } else {
+    bad("marking read is optimistic",
+      "Both the row and the count are local state; a parent should not wait\n" +
+      "for a round trip to see a card stop being new.");
+  }
+
+  // The unread cue is not colour alone.
+  if (/styles\.unreadDot/.test(src) && /cardUnread/.test(src)) {
+    ok("an unread card is marked by a dot as well as a tint");
+  } else {
+    bad("the unread cue does not rest on colour alone",
+      "Expected both cardUnread and unreadDot on the notice card.");
   }
 
   if (/portal\.unreadCount/.test(src) && en.portal?.unreadCount !== undefined) {

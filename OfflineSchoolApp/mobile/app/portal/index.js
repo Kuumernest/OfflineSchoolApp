@@ -272,6 +272,35 @@ export default function ParentPortalScreen() {
     return () => clearInterval(poll);
   }, [signedIn, loadAll]);
 
+  /**
+   * Acknowledge one notice.
+   *
+   * Optimistic: the card and the badge settle before the request returns,
+   * because a parent tapping a card should see it stop being new immediately
+   * and the round trip is not theirs to wait for.
+   *
+   * Both pieces of local state are corrected from the server's own count when
+   * it answers, and a failure needs no handling — the 25s poll re-reads both
+   * and the worst case is a badge one too high until then. Nothing is lost:
+   * the receipt either landed or it did not, and the notice is still there.
+   */
+  const markNotice = useCallback(async (noticeId) => {
+    setSection((prev) => (prev?.tab !== "notices" ? prev : {
+      ...prev,
+      data: (prev.data ?? []).map((n) => (n._id === noticeId ? { ...n, read: true } : n)),
+    }));
+    setMe((prev) => (prev ? { ...prev, unreadNotices: Math.max(0, (prev.unreadNotices ?? 1) - 1) } : prev));
+
+    try {
+      const count = await PortalService.markNoticeRead(noticeId);
+      if (count != null) {
+        setMe((prev) => (prev ? { ...prev, unreadNotices: count } : prev));
+      }
+    } catch {
+      // Left to the poll. See above.
+    }
+  }, []);
+
   const refresh = useCallback(async () => {
     setRefreshing(true);
     try { await loadAll(); } finally { setRefreshing(false); }
@@ -1019,15 +1048,31 @@ export default function ParentPortalScreen() {
                   //
                   // Straight into the thread now, rather than switching to the
                   // Messages tab and leaving the parent to find the row again.
-                  const Card = n.conversationId ? TouchableOpacity : View;
-                  const press = n.conversationId
-                    ? {
-                        onPress: () => router.push(`/portal/messages/${n.conversationId}`),
-                        activeOpacity: 0.7,
-                      }
-                    : {};
+                  // Every card is tappable now, because tapping is what marks
+                  // it read. A message notice also opens its thread; the rest
+                  // have nowhere to go and are simply acknowledged.
+                  //
+                  // The message rows carry no `read` of their own — an unread
+                  // thread stops being a notice at all once the thread is
+                  // opened, which the thread screen's own marker handles.
+                  const isNotice = !n.conversationId;
+                  const unreadCard = isNotice && n.read === false;
                   return (
-                    <Card key={n._id} style={styles.card} {...press}>
+                    <TouchableOpacity
+                      key={n._id}
+                      style={[styles.card, unreadCard && styles.cardUnread]}
+                      activeOpacity={0.7}
+                      onPress={() => {
+                        if (n.conversationId) {
+                          router.push(`/portal/messages/${n.conversationId}`);
+                          return;
+                        }
+                        if (unreadCard) markNotice(n._id);
+                      }}
+                      accessibilityLabel={
+                        unreadCard ? `${t(meta.labelKey)} · ${t("portal.unreadNotice")}` : undefined
+                      }
+                    >
                       <View style={styles.noticeHead}>
                         <View style={[styles.noticeIcon, { backgroundColor: meta.bg }]}>
                           <Ionicons name={meta.icon} size={14} color={meta.fg} />
@@ -1040,6 +1085,10 @@ export default function ParentPortalScreen() {
                             <Text style={styles.convoBadgeText}>{n.unread}</Text>
                           </View>
                         ) : null}
+                        {/* A dot rather than a number: there is only ever one
+                            of this notice, and "1" beside every new card is
+                            noise. */}
+                        {unreadCard ? <View style={styles.unreadDot} /> : null}
                         <Text style={styles.lineMeta}>
                           {formatDateShort(n.sentAt || n.createdAt)}
                           {about ? ` · ${about}` : ""}
@@ -1074,7 +1123,7 @@ export default function ParentPortalScreen() {
                           {t(`portal.noticeStatus_${n.status}`)}
                         </Text>
                       ) : null}
-                    </Card>
+                    </TouchableOpacity>
                   );
                 })
               )
@@ -1337,4 +1386,16 @@ const styles = StyleSheet.create({
     borderRadius: 10, backgroundColor: C.ink, alignItems: "center",
   },
   convoBadgeText: { fontSize: 11, fontWeight: "700", color: "#FFFFFF" },
+  // An unread notice: a tinted edge down the left of the card and a dot by
+  // the kind. Colour is not carrying this alone — the dot is a second cue for
+  // anyone who cannot pick the tint out.
+  cardUnread: {
+    borderLeftWidth: 3,
+    borderLeftColor: C.primary,
+    backgroundColor: C.primaryBg,
+  },
+  unreadDot: {
+    width: 7, height: 7, borderRadius: 4,
+    backgroundColor: C.primary,
+  },
 });

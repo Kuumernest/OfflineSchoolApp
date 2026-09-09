@@ -139,6 +139,38 @@ router.use(portal.portalAuth);
 // see what they owed and never that their child had been marked absent,
 // scanned through the gate, or that a term's results had been published —
 // messages the school had already sent them by email or SMS.
+/**
+ * The notices one guardian may see, and which of them they have not read.
+ *
+ * Both routes need the same two filters and they must not drift: /me counts
+ * the unread for the tab badge and /notifications lists them and says which
+ * is which. A badge that disagrees with the list under it is worse than no
+ * badge.
+ */
+const noticeFilters = ({ schoolId, studentIds, accessId, noticesSeenAt }) => {
+  const all = {
+    schoolId,
+    studentId: { $in: (studentIds ?? []).map(String) },
+    kind: { $in: GUARDIAN_NOTICE_KINDS },
+    deletedAt: null,
+    // Rendered. A template that would not render is stored `failed` so it is
+    // visible to us, and has nothing to show a parent.
+    subject: { $ne: null },
+  };
+
+  const unread = {
+    ...all,
+    // No receipt from THIS guardian. Two parents on one child read the same
+    // notice separately.
+    readBy: { $not: { $elemMatch: { accessId: String(accessId) } } },
+  };
+  // Everything from before the old whole-tab marker counts as read, so the
+  // switch to per-notice receipts does not light up a term of history.
+  if (noticesSeenAt) unread.createdAt = { $gt: noticesSeenAt };
+
+  return { all, unread };
+};
+
 const GUARDIAN_NOTICE_KINDS = [
   "fee.reminder",
   "fee.payment",
@@ -197,15 +229,12 @@ router.get("/me", asyncHandler(async (req, res) => {
   // badge nobody can draw before the parent has already gone there.
   const unreadNotices = await (async () => {
     try {
-      const filter = {
-        schoolId,
-        studentId: { $in: (studentIds ?? []).map(String) },
-        kind: { $in: GUARDIAN_NOTICE_KINDS },
-        deletedAt: null,
-        subject: { $ne: null },
-      };
-      if (req.portal.noticesSeenAt) filter.createdAt = { $gt: req.portal.noticesSeenAt };
-      return await Notification.countDocuments(filter);
+      const { unread } = noticeFilters({
+        schoolId, studentIds,
+        accessId:      req.portal.accessId,
+        noticesSeenAt: req.portal.noticesSeenAt,
+      });
+      return await Notification.countDocuments(unread);
     } catch {
       return 0;
     }
@@ -385,13 +414,10 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Each row carries the child it concerns so the card can say whose it is.
   const forChildren = (studentIds ?? [studentId]).map(String);
 
-  const notificationFilter = {
-    schoolId,
-    studentId: { $in: forChildren },
-    kind: { $in: GUARDIAN_NOTICE_KINDS },
-    deletedAt: null,
-    subject: { $ne: null },
-  };
+  const { all: notificationFilter, unread: unreadFilter } = noticeFilters({
+    schoolId, studentIds: forChildren, accessId,
+    noticesSeenAt: req.portal.noticesSeenAt,
+  });
 
   const notifications = await Notification.find(notificationFilter)
     .sort({ createdAt: -1 })
@@ -458,10 +484,15 @@ router.get("/notifications", asyncHandler(async (req, res) => {
   // Counted against the marker rather than a flag per row: a notice has no
   // per-guardian read state, and giving it one would mean a write for every
   // card a parent scrolls past.
+  const unreadNotices = await Notification.countDocuments(unreadFilter);
+
+  // Which of the listed rows this guardian has read, so the card can show it.
+  // Computed against the same floor the count uses, or a card could look
+  // unread while contributing nothing to the badge.
   const seenAt = req.portal.noticesSeenAt ?? null;
-  const unreadNotices = seenAt
-    ? await Notification.countDocuments({ ...notificationFilter, createdAt: { $gt: seenAt } })
-    : notifications.length;
+  const isRead = (n) =>
+    (seenAt && n.createdAt && new Date(n.createdAt) <= new Date(seenAt)) ||
+    (n.readBy ?? []).some((r) => String(r.accessId) === String(accessId));
 
   const rows = [
     ...messageNotices,
@@ -469,6 +500,7 @@ router.get("/notifications", asyncHandler(async (req, res) => {
       _id:       n._id,
       kind:      n.kind,
       studentId: n.studentId ?? null,
+      read:      isRead(n),
       subject:   n.subject,
       // `text` is the displayable form. `body` is the channel's payload, and
       // for email that is a whole HTML document — which a phone put straight
@@ -487,17 +519,13 @@ router.get("/notifications", asyncHandler(async (req, res) => {
     String(b.sentAt || b.createdAt || "").localeCompare(String(a.sentAt || a.createdAt || ""))
   );
 
-  // Marked seen BEFORE responding, and awaited.
+  // Nothing is marked read here any more.
   //
-  // Fire-and-forget after res.json() looked cheaper and left a race: two loads
-  // in quick succession — a tab switch and the 25s poll landing together —
-  // would both read the old marker and both report a count the parent had
-  // already cleared. One indexed write on the caller's own row is worth
-  // paying for to make "the list has been read" true by the time we say so.
-  await GuardianAccess.updateOne(
-    { _id: accessId, schoolId },
-    { $set: { noticesSeenAt: new Date() } }
-  ).catch((err) => console.warn("[portal] noticesSeenAt not saved:", err.message));
+  // This used to stamp noticesSeenAt and clear the whole tab the moment the
+  // list loaded, which is not what "read" means when four notices arrived and
+  // the parent looked at one. Each card is marked by being opened — see
+  // POST /notifications/:id/read below — and noticesSeenAt stays frozen as the
+  // floor for everything cleared under the old behaviour.
 
   return res.json({
     success: true,
@@ -509,6 +537,59 @@ router.get("/notifications", asyncHandler(async (req, res) => {
     // number that appears in two places at once is a number nobody trusts.
     unreadNotices,
     data: rows,
+  });
+}));
+
+/**
+ * Mark one notice read.
+ *
+ * The filter is the caller's own scope — their school, their children, and a
+ * kind on the allowlist — so a guardian cannot stamp a receipt onto a row
+ * belonging to somebody else's child, and cannot use this to discover that one
+ * exists: an id outside their scope is a 404 whether or not it is real.
+ *
+ * $addToSet, so the same card tapped twice is one receipt and the first
+ * readAt stands. Idempotent by construction, which matters because the phone
+ * marks optimistically and retries nothing.
+ */
+router.post("/notifications/:id/read", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, accessId } = req.portal;
+
+  const result = await Notification.updateOne(
+    {
+      _id: String(req.params.id),
+      schoolId,
+      studentId: { $in: (studentIds ?? []).map(String) },
+      kind: { $in: GUARDIAN_NOTICE_KINDS },
+      deletedAt: null,
+      readBy: { $not: { $elemMatch: { accessId: String(accessId) } } },
+    },
+    { $addToSet: { readBy: { accessId: String(accessId), readAt: new Date() } } }
+  );
+
+  // Nothing matched means either "already read" or "not yours". Those are the
+  // same answer to the caller: it is read now either way, and saying which
+  // would tell a guardian whether a notice they cannot see exists.
+  if (!result.matchedCount) {
+    const exists = await Notification.countDocuments({
+      _id: String(req.params.id),
+      schoolId,
+      studentId: { $in: (studentIds ?? []).map(String) },
+      deletedAt: null,
+    });
+    if (!exists) return res.status(404).json({ success: false, message: "Not found" });
+  }
+
+  const { unread } = noticeFilters({
+    schoolId, studentIds, accessId, noticesSeenAt: req.portal.noticesSeenAt,
+  });
+
+  // The new count comes back with the acknowledgement, so a client that marked
+  // optimistically can settle onto the server's number without another round
+  // trip to /me.
+  return res.json({
+    success: true,
+    unreadNotices: await Notification.countDocuments(unread),
   });
 }));
 

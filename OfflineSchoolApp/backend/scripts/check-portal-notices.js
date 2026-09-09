@@ -618,71 +618,148 @@ const bad = (label, detail) => {
     else bad("only an absence notifies", `${still.length} notices after a present mark`);
   }
 
-  // ═════════════════════════════════════════════════════════════════════════
-  // The notices badge
-  // ═════════════════════════════════════════════════════════════════════════
+  // =========================================================================
+  // The notices badge, and what "read" means
+  // =========================================================================
   //
   // A message thread carries a read marker per participant, so unread messages
-  // were already arithmetic. Notices had nothing of the kind: the tab could
-  // show four cards with no indication that two of them arrived since the
-  // parent last looked, and a badge counting every notice would be permanently
-  // lit and ignored within a week.
-  console.log("\n--- and the notices tab can be badged ---");
+  // were already arithmetic. Notices had nothing of the kind.
+  //
+  // The first attempt was one timestamp on the access row, moved when the list
+  // was opened. That cleared the whole tab the moment a parent glanced at it,
+  // which is not what "read" means when four notices arrived and they looked
+  // at one. Receipts are per notice now, keyed by GuardianAccess — the same
+  // shape Announcement.readBy has, for a different kind of reader.
+  console.log("\n--- the notices badge counts what has not been read ---");
   {
-    // Back to "never looked".
-    //
-    // Every notices() call above marks them seen — that is the feature — so by
-    // now this access has looked a dozen times and the honest count is zero.
-    // The assertion is about a parent who has not, so the marker is put back
-    // rather than the assertion being written around it.
-    const listed = (await notices()).filter((n) => n.kind !== "message").length;
+    // Back to "never looked". noticesSeenAt is the floor for whatever the old
+    // whole-tab behaviour already cleared, and this suite has moved it.
     await GuardianAccess.updateOne({ _id: MOTHER, schoolId: SCHOOL },
       { $set: { noticesSeenAt: null } });
+    await Notification.updateMany({ schoolId: SCHOOL }, { $set: { readBy: [] } });
 
+    const rows  = (await notices()).filter((n) => n.kind !== "message");
     const fresh = await mother("GET", "/api/portal/me");
     const count = fresh.body?.data?.unreadNotices ?? null;
-    if (count === listed && count > 0) {
-      ok(`/me counts ${count} unseen notices, matching the list`);
+
+    if (count === rows.length && count > 0) {
+      ok(`/me counts ${count} unread notices, matching the list`);
     } else {
-      bad("/me counts the unseen notices", `/me ${count}, list ${listed}`);
+      bad("/me counts the unread notices", `/me ${count}, list ${rows.length}`);
     }
 
-    // Reading the list is what marks them seen.
+    // The whole point of the change: reading the LIST marks nothing.
     await mother("GET", "/api/portal/notifications");
     const after = await mother("GET", "/api/portal/me");
-    if ((after.body?.data?.unreadNotices ?? null) === 0) {
-      ok("and opening the list clears it");
+    if ((after.body?.data?.unreadNotices ?? null) === count) {
+      ok("opening the list marks nothing — the count is unchanged");
     } else {
-      bad("the badge clears once the list is opened",
-        String(after.body?.data?.unreadNotices));
+      bad("the list does not clear the badge",
+        `was ${count}, now ${after.body?.data?.unreadNotices}`);
     }
 
-    // The message rows are NOT in this count — the Messages badge owns those,
-    // and one number in two badges is a number nobody trusts. The parent read
-    // that thread earlier in this suite, so a fresh message is needed for the
-    // assertion to have anything to be about.
+    if (rows.every((n) => n.read === false)) ok("and every card reports itself unread");
+    else bad("each row carries its own read state", JSON.stringify(rows.map((n) => n.read)));
+
+    // One card, tapped.
+    const target = rows[0];
+    const marked = await mother("POST", `/api/portal/notifications/${target._id}/read`);
+    if (marked.status === 200) ok("one notice can be marked read");
+    else bad("a notice can be marked read", `${marked.status} ${JSON.stringify(marked.body).slice(0, 160)}`);
+
+    if (marked.body?.unreadNotices === count - 1) {
+      ok(`and the reply carries the new count (${marked.body.unreadNotices}) — nothing to re-fetch`);
+    } else {
+      bad("the reply carries the new count", `expected ${count - 1}, got ${marked.body?.unreadNotices}`);
+    }
+
+    const reread = (await notices()).filter((n) => n.kind !== "message");
+    const one = reread.find((n) => n._id === target._id);
+    if (one?.read === true) ok("that card is read");
+    else bad("the marked card reports itself read", JSON.stringify(one?.read));
+    if (reread.filter((n) => n.read === false).length === count - 1) {
+      ok("and the rest are untouched");
+    } else {
+      bad("only the marked notice changed", JSON.stringify(reread.map((n) => [n.kind, n.read])));
+    }
+
+    // Idempotent: the phone marks optimistically and retries nothing.
+    const again = await mother("POST", `/api/portal/notifications/${target._id}/read`);
+    if (again.status === 200 && again.body?.unreadNotices === count - 1) {
+      ok("marking it twice is the same as marking it once");
+    } else {
+      bad("marking read is idempotent", `${again.status} unread=${again.body?.unreadNotices}`);
+    }
+
+    // One notice, two parents, two receipts.
+    const fatherCount = (await father("GET", "/api/portal/me")).body?.data?.unreadNotices ?? null;
+    const fatherRow = (await notices(father)).find((n) => n._id === target._id);
+    if (fatherRow?.read === false) ok("the child's other guardian still has it unread");
+    else bad("receipts are per guardian", JSON.stringify(fatherRow?.read));
+    if (fatherCount === count) ok(`and their own count is untouched (${fatherCount})`);
+    else bad("one guardian reading does not clear the other", `${fatherCount} vs ${count}`);
+
+    // Scope. A guardian may not stamp a receipt onto another family's notice,
+    // and may not learn from the answer whether one exists.
+    await Notification.create({
+      _id: "notif-elsewhere", schoolId: SCHOOL, studentId: "stu-other",
+      kind: "gate.arrival", to: "—", channel: "log",
+      subject: "Arrived at school", body: "Someone Else arrived at 07:50.",
+      status: "skipped", skipReason: "No email address on file",
+    });
+    const foreign = await mother("POST", "/api/portal/notifications/notif-elsewhere/read");
+    if (foreign.status === 404) ok("another child's notice cannot be marked");
+    else bad("marking is scoped to the caller's children", String(foreign.status));
+
+    const invented = await mother("POST", "/api/portal/notifications/does-not-exist/read");
+    if (invented.status === 404) ok("and neither can one that does not exist — the same answer");
+    else bad("an unknown id is a 404", String(invented.status));
+
+    // The floor, so switching to per-notice receipts lights up no history.
+    await Notification.updateMany({ schoolId: SCHOOL }, { $set: { readBy: [] } });
+    await GuardianAccess.updateOne({ _id: MOTHER, schoolId: SCHOOL },
+      { $set: { noticesSeenAt: new Date() } });
+    const floored = await mother("GET", "/api/portal/me");
+    if ((floored.body?.data?.unreadNotices ?? null) === 0) {
+      ok("a term of history behind the old marker counts as read");
+    } else {
+      bad("noticesSeenAt is the floor", String(floored.body?.data?.unreadNotices));
+    }
+    const flooredRows = (await notices()).filter((n) => n.kind !== "message");
+    if (flooredRows.every((n) => n.read === true)) {
+      ok("and those cards show read, so the list agrees with the badge");
+    } else {
+      bad("the cards agree with the floor", JSON.stringify(flooredRows.map((n) => n.read)));
+    }
+
+    // Something arriving after the floor is new again.
+    await GuardianAccess.updateOne({ _id: MOTHER, schoolId: SCHOOL },
+      { $set: { noticesSeenAt: new Date(Date.now() - 1000) } });
+    await scan(localTime(16, 40, 10));
+    const later = await mother("GET", "/api/portal/me");
+    if ((later.body?.data?.unreadNotices ?? 0) >= 1) {
+      ok("and a notice arriving afterwards is unread again");
+    } else {
+      bad("a new notice raises the count", String(later.body?.data?.unreadNotices));
+    }
+
+    // The unread-thread rows are NOT in this count — the Messages badge owns
+    // those, and one number in two badges is a number nobody trusts.
     await staff("POST", `/api/messages/conversations/${convId}/messages`, {
       schoolId: SCHOOL, body: "One more thing.",
     });
     const r = await mother("GET", "/api/portal/notifications");
-    const msgRows = (r.body?.data ?? []).filter((n) => n.kind === "message").length;
-    if (msgRows === 1 && (r.body?.unreadNotices ?? 0) === 0) {
+    const msgRows = (r.body?.data ?? []).filter((n) => n.kind === "message");
+    const noticeRows = (r.body?.data ?? []).filter((n) => n.kind !== "message");
+    if (msgRows.length === 1 &&
+        r.body.unreadNotices === noticeRows.filter((n) => n.read === false).length) {
       ok("an unread thread is counted by Messages, not twice");
     } else {
       bad("the two badges do not double-count",
-        `message rows ${msgRows}, unreadNotices ${r.body?.unreadNotices}`);
-    }
-
-    // A notice arriving after that shows up again.
-    await scan(localTime(16, 40, 10));
-    const later = await mother("GET", "/api/portal/me");
-    if ((later.body?.data?.unreadNotices ?? 0) >= 1) {
-      ok("and a notice arriving afterwards lights it again");
-    } else {
-      bad("a new notice raises the count", String(later.body?.data?.unreadNotices));
+        `message rows ${msgRows.length}, unreadNotices ${r.body?.unreadNotices},` +
+        ` unread cards ${noticeRows.filter((n) => n.read === false).length}`);
     }
   }
-
   // ═════════════════════════════════════════════════════════════════════════
   // One way in, so this cannot be got wrong a fourth time
   // ═════════════════════════════════════════════════════════════════════════

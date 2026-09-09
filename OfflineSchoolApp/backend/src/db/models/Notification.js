@@ -98,6 +98,34 @@ const notificationSchema = new mongoose.Schema(
      */
     skipReason: { type: String, default: null },
 
+    /**
+     * Which guardians have read this notice, and when.
+     *
+     * Keyed by GuardianAccess._id, not by User: a guardian is not a user, and
+     * one notice about one child is read separately by each parent holding a
+     * code for that child. Bounded by the number of guardians on a child —
+     * one to three — which is why the receipts live here rather than as an
+     * ever-growing list of ids on the access row.
+     *
+     * The same shape as Announcement.readBy, keyed for a different kind of
+     * reader.
+     *
+     * A marker on the access row came first: one timestamp, moved when the
+     * list was opened. That cleared the whole tab the moment a parent glanced
+     * at it, which is not what "read" means when four things arrived and they
+     * looked at one. `noticesSeenAt` survives as the FLOOR — everything at or
+     * before it was already cleared under the old behaviour and stays read —
+     * so no migration is needed and nobody's badge lights up with a term's
+     * worth of history on deploy.
+     */
+    readBy: {
+      type: [new mongoose.Schema({
+        accessId: { type: String, required: true },
+        readAt:   { type: Date,   default: Date.now },
+      }, { _id: false })],
+      default: [],
+    },
+
     createdBy: { type: String, default: null },
     deletedAt: { type: Date,   default: null },
   },
