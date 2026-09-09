@@ -251,12 +251,51 @@ const SUBJECTS = 8;
 
   // ── What it costs end to end ───────────────────────────────────────────
   //
-  // A plan is not a latency. These are the queries above, timed as the
-  // endpoint runs them, so there is a number to hold a release to rather
-  // than a feeling.
-  console.log("\n--- measured, at this size ---");
+  // A plan is not a latency, and this section used to assert one: four
+  // absolute millisecond budgets, "a number to hold a release to rather than
+  // a feeling". The intent was right and the mechanism could not work.
+  //
+  // It failed three times in a row on an unchanged codebase with a DIFFERENT
+  // set of assertions each time — the roster at 619 ms, then 133 ms, then
+  // 687 ms with a worst case of 2042; the same term-results query between 26
+  // and 70 ms. Four budgets all sitting close enough to the machine's noise
+  // floor that any of them could trip, which is a gate nobody can use: the
+  // one thing a release gate must not do is fail for reasons unrelated to the
+  // change under test.
+  //
+  // ── Why not a ratio to a calibration workload ─────────────────────────
+  //
+  // The obvious repair is to stop encoding "this machine, unloaded" and
+  // measure a reference workload in the same run, asserting each query as a
+  // multiple of it. Measured over six rounds, that is WORSE:
+  //
+  //                      absolute hi/lo    ratio-to-unit hi/lo
+  //   roster                   3.42              4.33
+  //   mark sheet               1.62              3.48
+  //   term results             4.62             10.40
+  //   change feed              4.01              6.14
+  //
+  // The calibration itself swung 2.85x (92–262 ms), so dividing by it
+  // compounds the jitter rather than cancelling it. The noise is not a
+  // machine-speed factor that divides out; it is independent per-measurement
+  // variance — GC, page cache, whatever else the box is doing — and a ratio
+  // adds two of those together.
+  //
+  // With a 3–5x spread on the same query on the same machine, no threshold
+  // separates a real regression from noise: loose enough not to flake is
+  // loose enough to miss a doubling.
+  //
+  // ── So the assertion moved to work done ───────────────────────────────
+  //
+  // Documents returned is deterministic. It is also the thing that actually
+  // predicts slowness on a school's own hardware, which is what the timing
+  // was a proxy for: the plan assertions above catch a scan, and these catch
+  // the volume crossing the wire. The measurement is still taken and still
+  // printed — a human reading a release still gets the number — it simply no
+  // longer decides whether the suite passes.
+  console.log("\n--- what crosses the wire, at this size ---");
 
-  const timed = async (label, fn, budgetMs) => {
+  const measured = async (fn) => {
     await fn();                       // warm the cache; the first is not typical
     const runs = [];
     for (let i = 0; i < 5; i++) {
@@ -265,41 +304,112 @@ const SUBJECTS = 8;
       runs.push(Date.now() - t);
     }
     runs.sort((a, b) => a - b);
-    const median = runs[2];
-    const worst  = runs[4];
+    return { median: runs[2], worst: runs[4] };
+  };
 
-    if (median <= budgetMs) {
-      ok(`${label} — median ${median} ms, worst ${worst} ms (budget ${budgetMs})`);
+  /**
+   * Assert the volume a query returns, against a bound derived from something
+   * else.
+   *
+   * A bound, not an exact number, and the reason is worth stating. An exact
+   * count would just re-encode this fixture — 1363 approved pupils, 75 in a
+   * class — and the first change to the seeding would fail the suite for no
+   * reason, which is the flakiness this section is being rescued from in a
+   * new costume. And deriving the exact number from the same collection the
+   * query reads is circular: it would assert that a query agrees with itself.
+   *
+   * So each bound comes from an INDEPENDENT fact. The mark sheet's ceiling is
+   * the class roster times the number of subjects, counted off the students
+   * collection — a mark sheet that exceeds it is duplicating rows, which is
+   * the fan-out this is really guarding against. Nonzero at the other end,
+   * because a query that quietly returns nothing passes any upper bound.
+   */
+  const bounded = async (label, fn, { atMost, because }) => {
+    const rows = await fn();
+    const n = Array.isArray(rows) ? rows.length : (rows ? 1 : 0);
+    const { median, worst } = await measured(fn);
+    const timing = `median ${median} ms, worst ${worst} ms — not asserted`;
+
+    if (n > 0 && n <= atMost) {
+      ok(`${label} — ${n} document(s), at most ${atMost} (${because}); ${timing}`);
+    } else if (n === 0) {
+      bad(`${label} returns something`,
+        `it returned nothing. An empty result passes any ceiling, so this is\n` +
+        `checked separately: either the fixture stopped seeding or the filter\n` +
+        `stopped matching.\n(${timing})`);
     } else {
-      bad(`${label} within ${budgetMs} ms`,
-        `median ${median} ms, worst ${worst} ms across ${counts.students} pupils.`);
+      bad(`${label} returns at most ${atMost} document(s)`,
+        `it returned ${n}. The ceiling is ${because}, so exceeding it means\n` +
+        `rows are being duplicated or the filter widened — either way every\n` +
+        `call now carries volume nobody asked for.\n(${timing})`);
     }
   };
 
-  await timed("the whole roster, fetched and sorted the way the endpoint does",
+  // Independent facts, counted once, that the ceilings below are built from.
+  const inSchoolA = await Student.countDocuments({ schoolId: A });
+  const inClass3  = await Student.countDocuments({ schoolId: A, classId: "cls-3" });
+
+  // The roster fetches every APPROVED pupil and sorts them in JS to show the
+  // first fifty, so its ceiling is every pupil in the school — a count taken
+  // without the status filter, which is what keeps this from being circular.
+  // If it ever exceeds that, the filter has widened past the school.
+  await bounded("the whole roster, fetched and sorted the way the endpoint does",
     async () => {
       const rows = await Student.find({ schoolId: A, status: "approved" }).lean();
       rows.sort((a, b) =>
         String(a.studentName ?? "").toLowerCase()
           .localeCompare(String(b.studentName ?? "").toLowerCase()));
-      return rows.slice(0, 50);
-    }, 400);
+      return rows;
+    },
+    { atMost: inSchoolA, because: `every pupil in the school (${inSchoolA})` });
 
-  await timed("one class's mark sheet",
-    () => StudentScore.find({ examId: "ex-1", classId: "cls-3", schoolId: A }).lean(), 120);
+  // One row per pupil in the class per subject, and no more. More than that is
+  // a fan-out — the classic symptom of a lookup that joins twice.
+  await bounded("one class's mark sheet",
+    () => StudentScore.find({ examId: "ex-1", classId: "cls-3", schoolId: A }).lean(),
+    { atMost: inClass3 * SUBJECTS,
+      because: `${inClass3} pupils x ${SUBJECTS} subjects` });
 
-  await timed("a term's results for a class",
+  // One row per pupil in the class.
+  await bounded("a term's results for a class",
     () => TermResult.find({ schoolId: A, academicYear: YEAR, term: 1, classId: "cls-3" })
-      .sort({ classPosition: 1 }).lean(), 120);
+      .sort({ classPosition: 1 }).lean(),
+    { atMost: inClass3, because: `${inClass3} pupils in the class` });
 
-  await timed("a page of the change feed",
+  // A page is a page. More than the limit means the cursor is not doing its
+  // job and every sync on every device gets heavier.
+  await bounded("a page of the change feed",
     () => Student.find({
       schoolId: A,
       $or: [
         { updatedAt: { $gt: new Date(0) } },
         { updatedAt: new Date(0), _id: { $gt: "st-0" } },
       ],
-    }).sort({ updatedAt: 1, _id: 1 }).limit(500).lean(), 250);
+    }).sort({ updatedAt: 1, _id: 1 }).limit(500).lean(),
+    { atMost: 500, because: "the page limit" });
+
+  // ── One backstop, loose enough that it cannot flake ───────────────────
+  //
+  // Everything above is deterministic, which leaves a gap: a change that
+  // makes a query pathologically slow without changing what it returns — a
+  // dropped index the plan assertions somehow miss, a lock, a full sort in
+  // memory. So one ceiling, and it is deliberately enormous. The worst run
+  // observed while writing this was 2042 ms; ten seconds is five times that,
+  // so it will not trip on a busy machine, and nothing that trips it is
+  // anything but broken.
+  {
+    const CEILING_MS = 10_000;
+    const { median, worst } = await measured(
+      () => Student.find({ schoolId: A, status: "approved" }).lean()
+    );
+    if (worst <= CEILING_MS) {
+      ok(`nothing is pathologically slow (worst ${worst} ms, ceiling ${CEILING_MS})`);
+    } else {
+      bad(`the roster query completes within ${CEILING_MS} ms`,
+        `median ${median} ms, worst ${worst} ms. This ceiling is five times the\n` +
+        `slowest run seen on a loaded machine, so this is not noise.`);
+    }
+  }
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);
