@@ -529,7 +529,11 @@ const normaliseStudent = (r) => {
     r.user?.id                                   ||
     null;
 
+  // Same chain as the writer, for the same reason: this normalises rows that
+  // came straight from the API as well as rows read back out of SQLite.
   const admissionNo =
+    r.enrollmentNo     ||
+    r.enrollment_no    ||
     r.admissionNo      ||
     r.admissionNumber  ||
     r.admission_no     ||
@@ -553,6 +557,10 @@ const normaliseStudent = (r) => {
     grade:         r.grade         || r.class_grade    || r.className    || null,
     admissionNo,
     admissionNumber: admissionNo,
+    // Under the server's name too. Screens written against the API — the fee
+    // screen reads student?.enrollmentNo — were asking for a field this
+    // normaliser has never produced, and got undefined every time.
+    enrollmentNo:    admissionNo,
     isActive:      r.isActive      ?? r.is_active      ?? true,
     schoolId:      r.schoolId      || null,
     classId,
@@ -656,7 +664,23 @@ const cacheStudentsLocally = async (
         s.class?.id  ||
         null;
 
+      /*
+       * The server calls it enrollmentNo, and this chain never looked.
+       *
+       * Six aliases for "admission number" and not one of them the name the
+       * API actually sends, so every student synced to this phone stored NULL
+       * — and every screen showing or searching by admission number showed
+       * and matched nothing. The fee screen's header printed "—" where a
+       * bursar looks to confirm they have the right pupil before taking
+       * money.
+       *
+       * enrollmentNo first, which is the same precedence the backend itself
+       * uses: results.controller reads `s.enrollmentNo || s.admissionNo`, the
+       * legacy field being the fallback rather than the other way round.
+       */
       const admNo =
+        s.enrollmentNo     ||
+        s.enrollment_no    ||
         s.admissionNo      ||
         s.admissionNumber  ||
         s.admission_no     ||

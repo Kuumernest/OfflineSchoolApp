@@ -1148,6 +1148,69 @@ const checkPortalNotices = () => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// THE NAME THE SERVER USES FOR AN ADMISSION NUMBER
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// The API calls it `enrollmentNo`. student.service resolved an admission
+// number from six aliases — admissionNo, admissionNumber, admission_no,
+// admission_number, admNo, rollNo — and not one of them was the name the
+// server sends. So every student synced to a phone stored NULL, and every
+// screen showing or searching by admission number showed and matched nothing:
+// the attendance reports, the rankings table, the search filters, and the fee
+// screen's header, which printed "—" exactly where a bursar checks they have
+// the right pupil before taking money.
+//
+// Six aliases is what made it invisible. It looks exhaustive.
+//
+// Asserted on both chains, because they are separate: one maps a server object
+// into SQLite, the other maps a row back out, and a screen reads whichever it
+// happens to get.
+
+const checkAdmissionNumberAliases = () => {
+  console.log("");
+  console.log("THE SERVER'S NAME FOR AN ADMISSION NUMBER");
+
+  const src = fs.readFileSync(path.join(ROOT, "src/services/student.service.js"), "utf8");
+
+  // The two alias chains, by the variable each assigns.
+  const chains = [
+    ["the write path (server object → SQLite)", /const\s+admNo\s*=([\s\S]{0,400}?);/],
+    ["the read path (SQLite row → screen)",     /const\s+admissionNo\s*=([\s\S]{0,400}?);/],
+  ];
+
+  for (const [label, re] of chains) {
+    const m = re.exec(src);
+    if (!m) { bad(`${label} can be found`); continue; }
+    if (/\benrollmentNo\b/.test(m[1])) {
+      ok(`${label} reads enrollmentNo`);
+    } else {
+      bad(`${label} reads the server's field name`,
+        "The API sends enrollmentNo. Without it in this chain the value is\n" +
+        "NULL for every student and no screen can show or search it.");
+    }
+  }
+
+  // And the normalised object has to offer it under that name, because screens
+  // written against the API ask for it — app/admin/fees/[studentId].js reads
+  // student?.enrollmentNo.
+  if (/enrollmentNo:\s*admissionNo/.test(src)) {
+    ok("and the normalised student carries enrollmentNo as well as admissionNo");
+  } else {
+    bad("the normalised student offers the server's name",
+      "A screen reading student?.enrollmentNo gets undefined otherwise.");
+  }
+
+  // The screens that actually print it, so this stays tied to something real.
+  const readers = ["app/admin/fees/[studentId].js"];
+  for (const rel of readers) {
+    const text = fs.readFileSync(path.join(ROOT, rel), "utf8");
+    const uses = /student\?\.(enrollmentNo|admissionNo)/.exec(text);
+    if (uses) ok(`${rel} prints it as student?.${uses[1]}`);
+    else bad(`${rel} still shows an admission number`, "the reference is gone");
+  }
+};
+
 checkParse();
 checkLocales();
 checkLinkQuality();
@@ -1159,6 +1222,7 @@ checkNavigationReach();
 checkReceiptContrast();
 checkPortalTabRace();
 checkPortalNotices();
+checkAdmissionNumberAliases();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);
