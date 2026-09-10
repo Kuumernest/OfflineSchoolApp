@@ -1628,7 +1628,7 @@ export default function MarkEntryScreen() {
       ? `${selectedExam?.name || t("marksEntry.exam")} · ${
           selectedSubject?.className ||
           selectedClass?.className ||
-          displayClass(selectedClass)
+          displayClass(selectedClass, t)
         }` :
     step === 1
       ? t("marksEntry.subChooseSubject")                                     :

@@ -1211,6 +1211,86 @@ const checkAdmissionNumberAliases = () => {
   }
 };
 
+// ─────────────────────────────────────────────────────────────────────────────
+// A HELPER THAT TAKES THE TRANSLATOR, AND A CALL THAT FORGETS IT
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// There is no translator at module scope, so a helper outside a component that
+// needs one takes it as a parameter. Fifty of them do. Two call sites did not
+// pass it, and both crashed the screen they were on:
+//
+//   displayClass(cls, t)  called as displayClass(selectedClass)
+//     → app/admin/exams/marks.js — mark entry
+//   formatDate(d, t)      called as formatDate(today)
+//     → app/admin/attendance/students.js — the register's own header
+//
+// `t` was undefined inside, so `t(...)` threw "undefined is not a function".
+// Neither helper had a chance of working: displayClass calls t on every branch
+// and formatDate on its only line. They were dead the day they were written.
+//
+// The failure looks like a render crash pointing at the helper, which sends
+// you reading the helper, which is correct. Nothing in it is wrong. Only the
+// caller is, and the caller is somewhere else in a large file.
+//
+// Parse cannot see it — the code is valid. Nor can the locale check: the keys
+// exist and are translated. So it is counted here.
+
+const checkTranslatorIsPassed = () => {
+  console.log("");
+  console.log("HELPERS THAT TAKE THE TRANSLATOR ARE GIVEN IT");
+
+  const files = ["app", "src"]
+    .map((d) => path.join(ROOT, d))
+    .filter((d) => fs.existsSync(d))
+    .flatMap(walk);
+
+  // A helper declared at module scope — column 0 — whose parameters include t.
+  const DECL = /^const\s+(\w+)\s*=\s*\(([^)]*)\)\s*=>/gm;
+
+  let helpers = 0;
+  const offenders = [];
+
+  for (const file of files) {
+    const src = fs.readFileSync(file, "utf8");
+    const rel = path.relative(ROOT, file).replace(/\\/g, "/");
+
+    for (const decl of src.matchAll(DECL)) {
+      const name   = decl[1];
+      const params = decl[2].split(",").map((p) => p.trim()).filter(Boolean);
+      const tAt    = params.findIndex((p) => p === "t");
+      if (tAt === -1) continue;
+      helpers++;
+
+      // Calls in the same file. Nested parens are excluded rather than parsed:
+      // an argument list containing a call of its own is not something this
+      // needs to judge, and guessing at it would produce noise.
+      const call = new RegExp("\\b" + name + "\\s*\\(([^()]*)\\)", "g");
+      for (const c of src.matchAll(call)) {
+        if (c.index === decl.index + decl[0].indexOf(name)) continue;  // the declaration
+        const raw = c[1].trim();
+        if (!raw) continue;
+        const args = raw.split(",").map((a) => a.trim());
+        if (args.length > tAt) continue;            // enough arguments to reach t
+        const line = src.slice(0, c.index).split("\n").length;
+        offenders.push(
+          `${rel}:${line}\n` +
+          `  declared ${name}(${params.join(", ")}) — t is argument ${tAt + 1}\n` +
+          `  called   ${name}(${raw}) — ${args.length} argument(s), so t is undefined`
+        );
+      }
+    }
+  }
+
+  if (!offenders.length) {
+    ok(`${helpers} helper(s) take t, and every call site passes it`);
+  } else {
+    bad(`${offenders.length} call site(s) omit the translator`,
+      offenders.join("\n") + "\n" +
+      "Inside the helper `t` is undefined and calling it throws. This is a\n" +
+      "crash on whatever screen reaches that line.");
+  }
+};
+
 checkParse();
 checkLocales();
 checkLinkQuality();
@@ -1223,6 +1303,7 @@ checkReceiptContrast();
 checkPortalTabRace();
 checkPortalNotices();
 checkAdmissionNumberAliases();
+checkTranslatorIsPassed();
 
 console.log("");
 console.log(`  ${pass} passed, ${fail} failed`);

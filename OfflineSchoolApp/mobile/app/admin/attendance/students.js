@@ -867,7 +867,7 @@ export default function MarkStudentAttendanceScreen() {
           </Text>
           <Text style={mainS.headerSub}>
             {selectedClass
-              ? formatDate(today)
+              ? formatDate(today, t)
               : t("attAdmin.selectClassToBegin")}
           </Text>
         </View>
