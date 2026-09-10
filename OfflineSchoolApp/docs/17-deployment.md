@@ -57,7 +57,12 @@ no values appear in this documentation.
 | `SCHOOL_NAME` | unset | used in outbound email |
 | `APP_LOGIN_URL` | unset | login link in emails |
 | `BASE_URL` | unset | absolute URLs in generated documents |
-| `EMAIL_FROM`, `GMAIL_USER` | unset | mail transport |
+| `BREVO_API_KEY` | unset | **email is unavailable without it**; everything else works |
+| `BREVO_SENDER_EMAIL` | unset | the From address; must be authenticated in Brevo |
+| `BREVO_SENDER_NAME` | unset | display name only — mail sends without it |
+| `BREVO_REPLY_TO` | unset | where a reply goes |
+| `BREVO_TEMPLATE_*` | unset | seven optional template ids; unset sends the app's own HTML |
+| `EMAIL_FROM` | unset | legacy override for `BREVO_SENDER_EMAIL` |
 | `DISABLE_LOGIN_RATE_LIMIT` | unset | lifts the login limiter — **set only by `scripts/`, never in production** |
 
 ### Read by the code but NOT in `.env.example` — DISCREPANCY
@@ -68,7 +73,6 @@ no values appear in this documentation.
 | `DISABLE_LOGIN_RATE_LIMIT` | `auth.routes.js` |
 | `WHATSAPP_TOKEN` | notification code |
 | `WHATSAPP_PHONE_NUMBER_ID` | notification code |
-| `GMAIL_USER` | `email.transport.js` |
 
 The two WhatsApp variables are the notable pair: code reads them, nothing
 documents them, and there is no evidence of a working WhatsApp delivery path.
@@ -76,6 +80,12 @@ Treat WhatsApp messaging as **NOT IMPLEMENTED** until proven otherwise.
 
 Conversely `.env.example` lists `EMAIL_FROM`, which **is** read (via the `env`
 helper in `email.transport.js`) — that one is fine.
+
+`GMAIL_USER` was in this list and is no longer read by anything: Gmail and
+SendGrid were both removed from the provider registry when this app moved to
+Brevo. An environment still holding `GMAIL_USER`, `GMAIL_APP_PASSWORD` or
+`SENDGRID_API_KEY` is treated as **unconfigured** rather than routed through a
+retired provider, and the startup log says so. See [20-email.md](20-email.md).
 
 ### Docker Compose — required with no default
 

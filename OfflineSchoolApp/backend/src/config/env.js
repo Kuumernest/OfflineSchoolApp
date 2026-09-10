@@ -40,6 +40,65 @@ const REFUSED_SECRETS = new Set([
   "your_jwt_secret", "supersecret", "jwt-secret",
 ]);
 
+/**
+ * Email configuration, checked but never fatal.
+ *
+ * Returned as warnings rather than added to `problems`, deliberately. A school
+ * runs this backend on a laptop in an office to take a register and record
+ * fees; none of that needs an outbound mail provider, so refusing to start
+ * over an unset API key would turn a missing convenience into a closed
+ * school. The queue already degrades honestly without one: every notification
+ * is still recorded, the portal still shows it, and the row says why nothing
+ * was delivered.
+ *
+ * Production is held to more: a deployment that means to send email and is
+ * missing half its configuration should say so loudly at boot rather than at
+ * the moment a bursar presses Send. Still a warning — the same reasoning
+ * applies to a production server whose job is the register.
+ *
+ * Never prints a value. BREVO_API_KEY is reported as present or not.
+ */
+// What Brevo actually needs before it will accept a message. BREVO_SENDER_NAME
+// is NOT here: it is a display name, mail sends without it, and treating it as
+// required is what previously turned a cosmetic omission into no email at all
+// (see the note in services/email.brevo.js). It is reported as advice below.
+const EMAIL_REQUIRED = ["BREVO_API_KEY", "BREVO_SENDER_EMAIL"];
+const EMAIL_ADVISED  = ["BREVO_SENDER_NAME"];
+
+function emailWarnings(env = process.env) {
+  const set = (k) => Boolean(String(env[k] ?? "").trim());
+  const missing = EMAIL_REQUIRED.filter((k) => !set(k));
+
+  // Nothing configured at all is the ordinary offline-first case, and one line
+  // is the right amount to say about it.
+  if (missing.length === EMAIL_REQUIRED.length) {
+    return [
+      "Brevo email service is not configured. Transactional emails will be " +
+      "unavailable; everything else works.",
+    ];
+  }
+
+  const out = missing.map((k) => `${k} is not set — transactional email needs it`);
+
+  for (const k of EMAIL_ADVISED) {
+    if (!set(k)) {
+      out.push(`${k} is not set — mail still sends, but without the school's name on it`);
+    }
+  }
+
+  // A retired provider still in the environment is worth a word: it reads as
+  // configuration and is now read by nothing.
+  for (const stale of ["SENDGRID_API_KEY", "GMAIL_USER", "GMAIL_APP_PASSWORD"]) {
+    if (set(stale)) {
+      out.push(
+        `${stale} is set but no longer used — this app sends through Brevo. ` +
+        "It can be removed from the environment."
+      );
+    }
+  }
+  return out;
+}
+
 function validateEnv({ env = process.env, exit = true } = {}) {
   const problems = [];
   const production = env.NODE_ENV === "production";
@@ -71,6 +130,12 @@ function validateEnv({ env = process.env, exit = true } = {}) {
     }
   }
 
+  // Printed here so it is seen even when everything required is present.
+  const warnings = emailWarnings(env);
+  if (warnings.length && exit) {
+    for (const w of warnings) console.warn(`  ⚠️  ${w}`);
+  }
+
   if (problems.length && exit) {
     console.error("\n  Cannot start — the environment is incomplete:\n");
     for (const p of problems) console.error(`    · ${p}`);
@@ -83,6 +148,9 @@ function validateEnv({ env = process.env, exit = true } = {}) {
 
 module.exports = {
   validateEnv,
+  emailWarnings,
+  EMAIL_REQUIRED,
+  EMAIL_ADVISED,
   REQUIRED,
   REQUIRED_IN_PRODUCTION,
   PORT: process.env.PORT || 5000,

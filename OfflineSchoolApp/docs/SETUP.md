@@ -25,22 +25,43 @@ table over memory.
 | `SCHOOL_NAME` | no | Fallback name in emails and printed documents. |
 | `APP_LOGIN_URL` | no | Sign-in link included in welcome emails. |
 | `REQUIRE_MEDIA_SIGNATURE` | no | `1` enforces signed URLs for message attachments; unset = observe mode (log only). |
-| `EMAIL_FROM` | for email | Must be a **verified** sender address in the provider account. |
+| `BREVO_API_KEY` | for email | The v3 API key from Brevo. Backend only — never in an `EXPO_PUBLIC_`/`VITE_` variable. |
+| `BREVO_SENDER_EMAIL` | for email | The From address. Must be on a domain **authenticated in Brevo**. |
 
-### Email — exactly one provider block
+### Email — Brevo
 
-Precedence order (deliberate): **SendGrid → Brevo → Gmail → generic SMTP**.
+Full detail in [20-email.md](20-email.md). The short version:
 
-| Provider | Variables |
-|---|---|
-| Brevo (recommended for bulk) | `BREVO_SMTP_USER` (the SMTP login, not the account email), `BREVO_SMTP_KEY` (SMTP key, not API key) |
-| SendGrid | `SENDGRID_API_KEY` (username `apikey` is supplied by the code) |
-| Gmail (testing only) | `GMAIL_USER`, `GMAIL_APP_PASSWORD` (needs 2-Step Verification ON) |
-| Any SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` |
+```
+BREVO_API_KEY=xkeysib-…          # SMTP & API → API keys. Shown once.
+BREVO_SENDER_EMAIL=no-reply@offlineschool.vgrp.org
+BREVO_SENDER_NAME=OfflineSchoolApp   # optional; mail sends without it
+BREVO_REPLY_TO=support@vgrp.org      # optional; no-reply@ is read by nobody
+```
 
-`npm run mail:verify` reports which block is in force and whether the
-credential is accepted — without printing it and without sending anything.
-Nothing is delivered until one block is filled in.
+The sending domain must be authenticated in Brevo (SPF/DKIM) — a job in the
+panel and in DNS, not in this application. Brevo refuses an unauthenticated
+sender.
+
+Precedence, when more than one route is present: **Brevo API → Brevo SMTP relay
+→ generic SMTP**. A dedicated route wins, deliberately, so a half-finished
+migration lands on the one the school is moving *to*.
+
+| Fallback | Variables | When |
+|---|---|---|
+| Brevo over SMTP | `BREVO_SMTP_USER` (the SMTP login, not the account email), `BREVO_SMTP_KEY` (SMTP key, not API key), `EMAIL_FROM` | A network that permits 587 and not 443 |
+| Any SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | A self-hosted relay, or a local mail catcher |
+
+**`GMAIL_USER`, `GMAIL_APP_PASSWORD` and `SENDGRID_API_KEY` are read by
+nothing.** Both providers were removed when this app moved to Brevo. An
+environment still holding one is treated as *unconfigured* rather than routed
+through a provider nobody intends to use. Delete them.
+
+`npm run mail:verify` reports which route is in force, which Brevo account the
+key belongs to, and whether the credential is accepted — without printing it and
+without sending anything. Nothing is delivered until the block above is filled
+in, and nothing else in the app depends on it: a school with no provider takes a
+register and records fees exactly as one with a working provider does.
 
 ## 3. Running each package
 

@@ -37,6 +37,7 @@ or demonstrated by a suite, it is marked as such rather than asserted.
 | 17 | [Deployment](17-deployment.md) | Deployers |
 | 18 | [Operations & troubleshooting](18-operations-troubleshooting.md) | Operators |
 | 19 | [Known limitations & production risks](19-known-limitations.md) | Everyone |
+| 20 | [Email (Brevo transactional email)](20-email.md) | Operators, deployers |
 
 The older sibling files `ARCHITECTURE.md`, `API.md`, `DATA_MODEL.md` and
 `SETUP.md` predate this package (written 2026-09-04). They are shorter and

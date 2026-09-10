@@ -25,7 +25,7 @@ lives in `shared/` so it is written down exactly once.
                     │ + outbox     │ sync │ (Express) │     └─────────┘
                     └──────────────┘      └─────┬─────┘
                     ┌──────────────┐            │
-   phones   ───────►│ mobile (Expo)│──► Nodemailer → SMTP provider
+   phones   ───────►│ mobile (Expo)│──► Brevo transactional email (HTTP)
                     │ + SQLite     │      └─ uploads/ (photos, content, messages)
                     └──────────────┘
 ```

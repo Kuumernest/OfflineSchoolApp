@@ -45,13 +45,35 @@ const main = async () => {
   console.log("");
   console.log("  Email configuration");
   console.log("  ───────────────────");
-  console.log(`  provider   : ${info.label}${info.provider ? ` (${info.provider})` : ""}`);
+  console.log(`  provider    : ${info.label}${info.provider ? ` (${info.provider})` : ""}`);
   console.log(`  from        : ${info.from ?? "— not set —"}`);
+  if (info.replyTo) console.log(`  reply-to    : ${info.replyTo}`);
 
   for (const [key, shape] of Object.entries(info.vars)) {
     const raw = process.env[key];
     const fp  = raw ? `  fp ${fingerprint(String(raw).replace(/\s+/g, ""))}` : "";
     console.log(`  ${key.padEnd(20)}: ${shape}${fp}`);
+  }
+
+  // Set, but worth a word. Nothing here stops a send.
+  for (const note of info.advisories ?? []) console.log(`  note        : ${note}`);
+
+  /*
+   * Which Brevo templates this deployment will use, and which fall back to the
+   * HTML this app renders itself. Unset is a working state, not a fault — the
+   * point of printing it is that "did the wording change?" is otherwise
+   * unanswerable, because an absent id looks exactly like a wrong one.
+   */
+  if (info.templates && Object.keys(info.templates).length) {
+    const assigned = Object.entries(info.templates).filter(([, id]) => id);
+    const unset    = Object.entries(info.templates).filter(([, id]) => !id).map(([k]) => k);
+    console.log("");
+    console.log("  Brevo templates");
+    for (const [purpose, id] of assigned) console.log(`    ${purpose.padEnd(16)}: #${id}`);
+    if (unset.length) {
+      console.log(`    not assigned    : ${unset.join(", ")}`);
+      console.log("    (those send this app's own HTML, which is a supported state)");
+    }
   }
 
   if (info.problems.length) {
@@ -72,33 +94,72 @@ const main = async () => {
   let transport;
   try {
     transport = mail.transport();
-    await transport.verify();
+    /*
+     * Every provider in the registry answers this, but not identically: the
+     * SMTP entries get nodemailer's verify(), which completes a handshake, and
+     * the Brevo API entry has its own, which authenticates against
+     * GET /v3/account. A provider that somehow lacks one is reported as
+     * unverifiable rather than as accepted — this script exists to answer
+     * "will mail actually leave", and a silent skip is the one answer it must
+     * never give.
+     */
+    if (typeof transport.verify !== "function") {
+      console.log("NOT VERIFIABLE");
+      console.log("");
+      console.log("  This provider offers no way to check a credential without");
+      console.log("  sending. Pass an address to send a real test message.");
+      console.log("");
+      process.exit(1);
+    }
+    const account = await transport.verify();
     console.log("accepted ✓");
+    // Which account the key belongs to. The mistake this catches is a valid
+    // key for the wrong Brevo account, which a bare "accepted" would hide.
+    if (account && typeof account === "object" && account.account) {
+      console.log(`  account     : ${account.account}${account.company ? ` (${account.company})` : ""}`);
+      if (account.plan) console.log(`  plan        : ${account.plan}`);
+    }
   } catch (err) {
     console.log("REFUSED");
     console.log("");
     console.log(`    ${err.code ?? "ERR"}: ${String(err.message).split("\n")[0]}`);
     console.log("");
 
-    // 535 is the one worth explaining, because the wording covers four
-    // different mistakes and names none of them.
+    /*
+     * Brevo's API answers 401 for any credential it will not accept, and the
+     * body reads "Key not found" whether the key was revoked, regenerated,
+     * mistyped, or belongs to a different account. The same problem as SMTP's
+     * 535 below: one message, four causes, none of them named.
+     */
+    if (/401|unauthorized|Key not found/i.test(String(err.message))) {
+      console.log("  Brevo rejected the API key. That one answer covers:");
+      console.log("");
+      console.log("    • a key that was regenerated in the panel — generating a new");
+      console.log("      one does NOT keep the old one working.");
+      console.log("    • a key from a different Brevo account than the one the");
+      console.log("      sending domain is authenticated in.");
+      console.log("    • a key pasted with a character missing, or truncated by a");
+      console.log("      shell that treated part of it as a comment.");
+      console.log("    • an SMTP key (xsmtpsib-…) in BREVO_API_KEY, which needs a v3");
+      console.log("      API key (xkeysib-…). Two different credentials, issued from");
+      console.log("      the same panel page.");
+      console.log("");
+      console.log("  The variable shapes above are the quickest check: a v3 key runs");
+      console.log("  to roughly 60-80 characters and contains no whitespace.");
+      console.log("");
+    }
+
+    // 535 is the SMTP equivalent, for the relay and generic-host routes.
     if (/\b535\b/.test(String(err.message))) {
       console.log("  535 means the server understood the request and rejected the");
       console.log("  credential. It does NOT distinguish between:");
       console.log("");
-      if (info.provider === "gmail") {
-        console.log("    • 2-Step Verification switched off on that Google account —");
-        console.log("      which silently invalidates every app password it ever issued.");
-        console.log("      Check: myaccount.google.com/apppasswords. If that page will");
-        console.log("      not load, this is your answer.");
-        console.log("    • an app password generated on a DIFFERENT Google account than");
-        console.log("      GMAIL_USER — easy to do with two accounts in one browser.");
-        console.log("    • a revoked or mistyped password.");
-      } else {
-        console.log("    • a revoked or regenerated key.");
-        console.log("    • a key from a different account than the one being used.");
-        console.log("    • a key pasted with a character missing or added.");
-      }
+      console.log("    • a revoked or regenerated key.");
+      console.log("    • a key from a different account than the one being used.");
+      console.log("    • a key pasted with a character missing or added.");
+      console.log("    • for the Brevo relay: the SMTP login (something like");
+      console.log("      8a1b2c001@smtp-brevo.com) confused with the account's own");
+      console.log("      login email. Only the first is a valid BREVO_SMTP_USER.");
       console.log("");
     }
     process.exit(1);
@@ -116,7 +177,7 @@ const main = async () => {
   process.stdout.write(`  sending a test message to ${target} ... `);
   try {
     const sent = await transport.sendMail({
-      from:    `"${process.env.SCHOOL_NAME || "School App"}" <${info.from}>`,
+      from:    `"${process.env.BREVO_SENDER_NAME || process.env.SCHOOL_NAME || "School App"}" <${info.from}>`,
       to:      target,
       subject: "Test message from your school app",
       text:

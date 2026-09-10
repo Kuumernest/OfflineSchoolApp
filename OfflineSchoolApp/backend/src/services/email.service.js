@@ -6,6 +6,10 @@
 // answered it differently — see src/services/email.transport.js for what that
 // cost.
 const mail = require("./email.transport");
+// The Brevo adapter, for template ids and the configured sender name. The
+// transport above is still what actually sends — see sendTemplateEmail.
+const brevo = require("./email.brevo");
+const { isValidEmail } = require("../utils/email");
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED STYLE HELPERS
@@ -784,6 +788,27 @@ ${schoolName} Administration
 // Never throws — returns { success, messageId?, error? }
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Which Brevo template purpose each of the templates above corresponds to.
+ *
+ * The purposes are the fixed set in email.brevo TEMPLATE_VARS. This map is
+ * what makes BREVO_TEMPLATE_WELCOME and BREVO_TEMPLATE_PASSWORD_RESET reach
+ * anything: without it those variables could be filled in and would change
+ * nothing at all.
+ *
+ * Two templates are deliberately absent — studentApproved and studentRejected
+ * are admissions decisions and there is no purpose in the set that describes
+ * them. They always send the HTML rendered above, which is correct rather than
+ * a limitation: inventing a variable for them would be inventing a Brevo
+ * template a school has no reason to have.
+ */
+const TEMPLATE_PURPOSE = {
+  teacherWelcome:       "welcome",
+  adminWelcome:         "welcome",
+  passwordResetByAdmin: "passwordReset",
+  studentPasswordReset: "passwordReset",
+};
+
 const sendEmail = async ({ to, template, data }) => {
   if (!templates[template]) {
     const msg = `Unknown email template: "${template}"`;
@@ -820,17 +845,36 @@ const sendEmail = async ({ to, template, data }) => {
   try {
     const transporter = mail.transport();
 
+    /*
+     * A Brevo template, if this school has assigned one for this purpose.
+     *
+     * When it has, the rendered HTML above is NOT sent: Brevo ignores
+     * htmlContent alongside a templateId, and posting both invites an
+     * argument about which one arrived. The locally rendered subject is still
+     * passed, because a template's own subject is often a placeholder and the
+     * school's name belongs in it.
+     *
+     * `data` goes across as the template's params, which is the same
+     * information the HTML already carried — including, for a reset, the
+     * temporary password. That is not a new exposure (the body contained it
+     * before) but it is worth knowing that it lands in Brevo's message log
+     * either way. See docs/20-email.md.
+     */
+    const templateId = mail.templateFor(TEMPLATE_PURPOSE[template]);
+
     const info = await transporter.sendMail({
       // The school's name in front of the verified sender. A parent should see
       // who it is from before deciding whether to open it.
       from: `"${data.schoolName || "School App"}" <${mail.fromAddress()}>`,
       to,
       subject,
-      html,
-      text,
+      ...(templateId ? { templateId, params: data } : { html, text }),
     });
 
-    console.log(`📧 Email sent → ${to} [${template}] — ID: ${info.messageId}`);
+    console.log(
+      `📧 Email sent → ${to} [${template}${templateId ? ` via Brevo template #${templateId}` : ""}] ` +
+      `— ID: ${info.messageId}`
+    );
     return { success: true, messageId: info.messageId };
 
   } catch (err) {
@@ -843,4 +887,93 @@ const sendEmail = async ({ to, template, data }) => {
   }
 };
 
-module.exports = { sendEmail };
+/**
+ * Send a Brevo transactional template, by purpose.
+ *
+ * The one genuinely new capability of the Brevo migration. sendEmail above
+ * renders HTML here, in JavaScript, and posts a whole document; Brevo can
+ * render a template it holds from an id and a params object, which keeps the
+ * wording out of this codebase and lets a head teacher change it without a
+ * deploy.
+ *
+ * `purpose` is a key from email.brevo TEMPLATE_VARS — "welcome",
+ * "passwordReset", "feeReceipt" and so on — not a raw number. The id comes
+ * from the environment, so the same code runs against a school that has built
+ * its templates and one that has not.
+ *
+ * ── What happens when no id is set ──────────────────────────────────────
+ *
+ * It returns { success: false, code: "NO_TEMPLATE" } and sends nothing, and
+ * the caller falls back to sendEmail(). That is deliberate: silently posting
+ * this app's HTML under a call that says "template" would make it impossible
+ * to tell, from a log, whether Brevo rendered the message or this file did.
+ * The startup banner lists which purposes have no id yet.
+ *
+ * Goes through mail.transport() like everything else, so a school on the SMTP
+ * fallback gets a clear "templates need the API" rather than a silent
+ * non-delivery: SMTP cannot render a Brevo template.
+ */
+const sendTemplateEmail = async ({ to, name, purpose, templateId, params = {}, subject, attachments } = {}) => {
+  if (!to || !isValidEmail(String(to))) {
+    return { success: false, error: "No valid recipient address", code: "NO_RECIPIENT" };
+  }
+
+  const id = templateId ?? (purpose ? brevo.templateId(purpose) : null);
+  if (!id) {
+    return {
+      success: false,
+      code:    "NO_TEMPLATE",
+      error:   purpose
+        ? `No Brevo template id configured for "${purpose}" (${brevo.TEMPLATE_VARS[purpose] ?? "unknown purpose"})`
+        : "No template id given",
+    };
+  }
+
+  const issues = mail.problems();
+  if (issues.length) {
+    console.warn(`⚠️  Template email not sent to ${to} [${purpose ?? id}]: ${issues[0]}`);
+    return { success: false, error: issues[0], code: "CHANNEL_NOT_CONFIGURED" };
+  }
+
+  try {
+    const transporter = mail.transport();
+    if (typeof transporter.sendMail !== "function") {
+      return { success: false, error: "Transport cannot send", code: "CHANNEL_NOT_CONFIGURED" };
+    }
+
+    const info = await transporter.sendMail({
+      from: `"${brevo.sender().name || "School App"}" <${mail.fromAddress()}>`,
+      to:   name ? [{ email: String(to), name: String(name) }] : String(to),
+      subject,
+      templateId: id,
+      params,
+      attachments,
+    });
+
+    // The purpose and the id, never the params: those carry a reset URL and a
+    // parent's name.
+    console.log(`📧 Template email sent → ${to} [${purpose ?? "id " + id}] — ID: ${info.messageId}`);
+    return { success: true, messageId: info.messageId, templateId: id };
+  } catch (err) {
+    // Message and code only. A provider error can echo the request back, and
+    // the request contains the params.
+    console.error("❌ Template email failed", {
+      recipient: to,
+      operation: purpose ?? `template ${id}`,
+      error:     err.message,
+      code:      err.code ?? null,
+    });
+    return { success: false, error: err.message, code: err.code ?? null };
+  }
+};
+
+module.exports = {
+  sendEmail,
+  sendTemplateEmail,
+  // Exported for scripts/check-email-transport.js, which asserts that every
+  // name in it is a template that exists and every purpose is one Brevo knows
+  // — a typo either side is an assigned template id that silently does nothing.
+  TEMPLATE_PURPOSE,
+  // The template names this service can render, for the same reason.
+  TEMPLATE_NAMES: Object.keys(templates),
+};

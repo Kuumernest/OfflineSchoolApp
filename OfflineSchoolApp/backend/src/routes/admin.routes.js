@@ -736,6 +736,130 @@ router.get("/stats", requirePermission("dashboard.view"), asyncHandler(async (re
   return sendSuccess(res, { stats, data: stats });
 }));
 
+/**
+ * GET /api/admin/email/config — what the mail provider is, by shape.
+ *
+ * The question a head teacher's IT contact actually has when a fee reminder
+ * does not arrive: is this thing configured, and as whom? Answered without
+ * sending anything and without revealing a credential — describe() reports
+ * the API key's LENGTH and whether it contains whitespace, because a pasted
+ * key with a trailing newline is the common fault and both of those identify
+ * it while neither exposes the value.
+ *
+ * settings.view, so it is the same people who can see the rest of the
+ * school's configuration.
+ */
+router.get("/email/config", requirePermission("settings.view"), asyncHandler(async (req, res) => {
+  const mail  = require("../services/email.transport");
+  const shape = mail.describe();
+
+  // Belt and braces. describe() is written not to include the key, and this
+  // asserts it on the way out: a future edit to that function must not be
+  // able to turn this endpoint into a credential leak.
+  const serialised = JSON.stringify(shape);
+  const key = (process.env.BREVO_API_KEY || "").trim();
+  if (key && serialised.includes(key)) {
+    console.error("[email/config] describe() leaked the API key — refusing to answer");
+    return res.status(500).json({ success: false, message: "Configuration cannot be displayed" });
+  }
+
+  return res.json({ success: true, email: shape, configured: mail.isConfigured() });
+}));
+
+/**
+ * POST /api/admin/email/test — send one test email, to a controlled address.
+ *
+ * ── What stops this being an open relay ───────────────────────────────────
+ *
+ * An endpoint that sends arbitrary mail from an authenticated school domain is
+ * a spam cannon, and one that takes a recipient from the request body is
+ * exactly that. So:
+ *
+ *   · settings.manage — the narrowest capability that already means "may
+ *     change how this school is configured"
+ *   · refused outright when NODE_ENV is production
+ *   · the recipient is the CALLER'S OWN address, taken from the verified
+ *     token and never from the body. A body that names someone else is
+ *     refused rather than ignored, so nobody believes they tested delivery
+ *     to a parent
+ *   · the subject and body are fixed here; nothing from the request reaches
+ *     the message
+ *
+ * It reports the provider's own outcome verbatim, because "did it leave" is
+ * the entire question and a friendlier summary would hide the answer.
+ */
+router.post("/email/test", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
+  if (process.env.NODE_ENV === "production") {
+    return res.status(403).json({
+      success: false,
+      message: "The email test endpoint is disabled in production. Send a real " +
+               "notification to a test account instead, or check Brevo's " +
+               "transactional log.",
+    });
+  }
+
+  const mail = require("../services/email.transport");
+  const to   = String(req.user?.email || "").trim();
+
+  if (!to) {
+    return res.status(400).json({
+      success: false,
+      message: "Your own account has no email address, and this endpoint will " +
+               "only send to the signed-in user.",
+    });
+  }
+
+  // A named recipient is refused, not silently replaced: somebody who asked
+  // to test delivery to a parent must not be told it worked.
+  const asked = String(req.body?.to || "").trim().toLowerCase();
+  if (asked && asked !== to.toLowerCase()) {
+    return res.status(400).json({
+      success: false,
+      message: "This endpoint only sends to the signed-in user's own address.",
+    });
+  }
+
+  const issues = mail.problems();
+  if (issues.length) {
+    return res.status(400).json({ success: false, configured: false, problems: issues });
+  }
+
+  try {
+    const info = await mail.transport().sendMail({
+      from:    `"${process.env.BREVO_SENDER_NAME || "OfflineSchoolApp"}" <${mail.fromAddress()}>`,
+      to,
+      subject: "OfflineSchoolApp — email configuration test",
+      text:
+        "This is a test of this school's transactional email configuration.\n\n" +
+        "If you are reading it, the provider accepted a message from the " +
+        "configured sender and delivered it. Nothing else about the school " +
+        "was sent.\n\nReply to this message to check the Reply-To address.",
+    });
+
+    console.log(`📧 Email test → ${to} — ID: ${info.messageId}`);
+    return res.json({
+      success:   true,
+      to,
+      messageId: info.messageId ?? null,
+      provider:  mail.provider()?.label ?? null,
+      from:      mail.fromAddress(),
+      replyTo:   process.env.BREVO_REPLY_TO || null,
+    });
+  } catch (err) {
+    // Message and code. Never the key, and never the provider's echoed
+    // request, which contains the whole message.
+    console.error("Brevo email failed", {
+      recipient: to,
+      operation: "admin email test",
+      error:     err.message,
+    });
+    return res.status(502).json({
+      success: false,
+      error:   err.message,
+      code:    err.code ?? null,
+    });
+  }
+}));
 router.get("/debug/counts", requirePermission("dashboard.view"), asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
   const baseQuery = schoolId ? { schoolId } : {};

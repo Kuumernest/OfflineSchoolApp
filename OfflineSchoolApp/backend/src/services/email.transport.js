@@ -2,6 +2,7 @@
 "use strict";
 
 const nodemailer = require("nodemailer");
+const brevoApi   = require("./email.brevo");
 
 /**
  * Where email physically goes, decided once.
@@ -52,23 +53,47 @@ const cred = (v) => (typeof v === "string" ? v.replace(/\s+/g, "") : v);
  */
 const PROVIDERS = [
   {
-    name:  "sendgrid",
-    label: "SendGrid",
-    detect: (e) => Boolean(e.SENDGRID_API_KEY),
-    // The username is the literal string "apikey" for every SendGrid account.
-    // That is not a placeholder to fill in — it is what SendGrid expects.
-    build: (e) => ({
-      host: "smtp.sendgrid.net", port: 587, secure: false,
-      auth: { user: "apikey", pass: cred(e.SENDGRID_API_KEY) },
-    }),
-    // SendGrid refuses to send from an address that has not been verified in
-    // the account, so there is no sensible default to fall back to.
+    /*
+     * Brevo's Transactional Email API — the provider this app now uses.
+     *
+     * First in the list, so a deployment that still has SMTP variables lying
+     * around lands on the API rather than on whatever it is migrating away
+     * from. The precedence note below applies: a half-finished edit must
+     * resolve to the provider the school is moving TO.
+     *
+     * The odd one out in this registry: every other entry describes an SMTP
+     * host for nodemailer, and this one speaks HTTP. makeTransport exists for
+     * exactly that — see the note on it in transport() below. What both send
+     * sites see is unchanged: an object with .sendMail().
+     */
+    name:   "brevo-api",
+    label:  "Brevo (Transactional API)",
+    detect: (e) => Boolean(e.BREVO_API_KEY),
+    // No SMTP options to build; the adapter holds the client.
+    build:  () => null,
+    makeTransport: () => brevoApi,
+    /*
+     * Brevo will not send from an address on a domain that has not been
+     * authenticated in the account, so there is no default worth guessing at.
+     * BREVO_SENDER_EMAIL is the one the adapter reads; EMAIL_FROM still works
+     * and wins, so an existing deployment keeps whatever it had.
+     */
     requiresFrom: true,
-    vars: ["SENDGRID_API_KEY", "EMAIL_FROM"],
+    vars: ["BREVO_API_KEY", "BREVO_SENDER_EMAIL", "BREVO_SENDER_NAME", "BREVO_REPLY_TO"],
+    describe: (e) => brevoApi.describe(e),
   },
   {
-    name:  "brevo",
-    label: "Brevo",
+    /*
+     * Brevo over SMTP, kept as a fallback for the same provider.
+     *
+     * Not a second email system: the same account, the same authenticated
+     * domain, a different route to it. It is below the API deliberately, and
+     * it stays because a deployment that cannot reach Brevo's HTTP endpoint
+     * — a school behind a proxy that permits 587 and not 443 — has somewhere
+     * to go without a code change.
+     */
+    name:  "brevo-smtp",
+    label: "Brevo (SMTP relay)",
     detect: (e) => Boolean(e.BREVO_SMTP_USER && e.BREVO_SMTP_KEY),
     build: (e) => ({
       host: "smtp-relay.brevo.com", port: 587, secure: false,
@@ -82,27 +107,24 @@ const PROVIDERS = [
     requiresFrom: true,
     vars: ["BREVO_SMTP_USER", "BREVO_SMTP_KEY", "EMAIL_FROM"],
   },
-  {
-    name:  "gmail",
-    label: "Gmail",
-    detect: (e) => Boolean(e.GMAIL_USER && e.GMAIL_APP_PASSWORD),
-    build: (e) => ({
-      // 465 + secure, which avoided TLS handshake failures on the networks
-      // this has been run on.
-      host: "smtp.gmail.com", port: 465, secure: true,
-      auth: {
-        user: String(e.GMAIL_USER).trim(),
-        pass: cred(e.GMAIL_APP_PASSWORD),
-      },
-      connectionTimeout: 10_000,
-      greetingTimeout:   10_000,
-      socketTimeout:     15_000,
-    }),
-    // Gmail will only send as the authenticated account, so the account IS the
-    // from address and nothing extra is needed.
-    requiresFrom: false,
-    vars: ["GMAIL_USER", "GMAIL_APP_PASSWORD"],
-  },
+  /*
+   * SendGrid and Gmail were here, and are gone deliberately.
+   *
+   * The app sends through Brevo now. Leaving those entries in the registry
+   * would mean a deployment with a stale SENDGRID_API_KEY or a GMAIL_USER
+   * still in its environment could resolve to a provider nobody intends to
+   * use — silently, because this registry picks the first match and reports
+   * success. That is the failure this file was written to prevent, and
+   * keeping a retired provider "just in case" is how it comes back.
+   *
+   * GMAIL_USER, GMAIL_APP_PASSWORD and SENDGRID_API_KEY are now read by
+   * nothing. A school still on either must move to Brevo; there is no code
+   * path back.
+   *
+   * Generic SMTP below is kept: it is not a retired provider but the escape
+   * hatch for a self-hosted relay and for a local mail catcher in
+   * development.
+   */
   {
     name:  "smtp",
     label: "SMTP",
@@ -147,8 +169,10 @@ const fromAddress = (env = process.env) => {
 
   const p = provider(env);
   if (!p) return null;
-  // Gmail sends as itself and cannot do otherwise.
-  if (p.name === "gmail") return String(env.GMAIL_USER).trim();
+  // The API adapter has its own sender variable, which is the one Brevo
+  // authenticates. EMAIL_FROM above still wins, so a deployment that already
+  // set it keeps working.
+  if (p.name === "brevo-api") return brevoApi.sender(env).email;
   return null;
 };
 
@@ -162,11 +186,16 @@ const problems = (env = process.env) => {
   const p = provider(env);
   if (!p) {
     return [
-      "No email provider is configured. Set one of: SENDGRID_API_KEY, " +
-      "BREVO_SMTP_USER + BREVO_SMTP_KEY, GMAIL_USER + GMAIL_APP_PASSWORD, " +
-      "or SMTP_HOST + SMTP_USER + SMTP_PASS.",
+      "No email provider is configured. Set BREVO_API_KEY and " +
+      "BREVO_SENDER_EMAIL (the supported provider), or, for a self-hosted " +
+      "relay, SMTP_HOST + SMTP_USER + SMTP_PASS.",
     ];
   }
+
+  // The API adapter knows its own requirements — the key, the authenticated
+  // sender — and phrases them once. Asking it keeps one description of what
+  // is wrong rather than two that can drift.
+  if (p.name === "brevo-api") return brevoApi.problems(env);
 
   const out = [];
   if (p.requiresFrom && !fromAddress(env)) {
@@ -176,6 +205,41 @@ const problems = (env = process.env) => {
     );
   }
   return out;
+};
+
+/**
+ * The Brevo template id for a purpose, or null — asked before every send.
+ *
+ * Two things have to be true for a template to be used, and they are checked
+ * here rather than at the two send sites, so neither has to know which
+ * provider is in force:
+ *
+ *   · the active provider can render one. Only Brevo's API can; handing a
+ *     templateId to nodemailer would be silently ignored, which is the worst
+ *     outcome — a school would assign an id in the panel, see no error, and
+ *     get the old wording.
+ *   · an id is actually configured for that purpose. Unset is the ordinary
+ *     state and means "send the HTML this app renders", not "fail".
+ *
+ * `purpose` is a key of email.brevo TEMPLATE_VARS, never a raw number, so a
+ * caller cannot hard-code an id that belongs to somebody else's account.
+ */
+const templateFor = (purpose, env = process.env) => {
+  if (provider(env)?.name !== "brevo-api") return null;
+  return brevoApi.templateId(purpose, env);
+};
+
+/**
+ * Faults worth reporting that do not stop a send.
+ *
+ * Deliberately NOT part of problems(): transport() throws on anything in that
+ * list, so a merely cosmetic omission there would take email out entirely.
+ * The startup log prints both, distinguished.
+ */
+const advisories = (env = process.env) => {
+  const p = provider(env);
+  if (p?.name === "brevo-api") return brevoApi.advisories(env);
+  return [];
 };
 
 // One transporter per provider shape, reused. Built lazily: constructing it at
@@ -208,7 +272,18 @@ const transport = (env = process.env) => {
 
   if (cached && cachedFor === p.name) return cached;
 
-  cached    = nodemailer.createTransport(p.build(env));
+  /*
+   * A provider may bring its own transport.
+   *
+   * Every SMTP entry here hands nodemailer an options object. Brevo's API is
+   * HTTP, so it supplies an object that already implements sendMail() — which
+   * is the whole interface either send site uses. Nothing above this line and
+   * nothing in email.service.js or notification/channels.js needs to know
+   * which kind it got.
+   */
+  cached    = p.makeTransport
+    ? p.makeTransport(env)
+    : nodemailer.createTransport(p.build(env));
   cachedFor = p.name;
   return cached;
 };
@@ -224,6 +299,9 @@ const reset = () => { cached = null; cachedFor = null; };
  */
 const describe = (env = process.env) => {
   const p = provider(env);
+  // The API adapter reports its own shape, including the template ids, and
+  // reports the key by length only.
+  if (p?.describe) return p.describe(env);
   const shape = (v) =>
     v === undefined || v === null || v === ""
       ? "unset"
@@ -235,7 +313,7 @@ const describe = (env = process.env) => {
     from:     fromAddress(env) ?? null,
     problems: problems(env),
     vars: Object.fromEntries(
-      (p?.vars ?? ["SENDGRID_API_KEY", "BREVO_SMTP_USER", "GMAIL_USER", "SMTP_HOST"])
+      (p?.vars ?? ["BREVO_API_KEY", "BREVO_SMTP_USER", "SMTP_HOST"])
         .map((k) => [k, shape(env[k])])
     ),
   };
@@ -247,6 +325,8 @@ module.exports = {
   isConfigured,
   fromAddress,
   problems,
+  advisories,
+  templateFor,
   transport,
   reset,
   describe,

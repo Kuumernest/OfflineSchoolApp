@@ -39,17 +39,59 @@ const emailChannel = {
   /** An address, loosely — enough to catch an empty or obviously wrong field. */
   accepts: (to) => typeof to === "string" && /^[^@\s]+@[^@\s.]+\.[^@\s]+$/.test(to),
 
-  send: async ({ to, subject, text, html, fromName }) => {
+  /**
+   * Which Brevo template purpose each notification kind corresponds to.
+   *
+   * The queue carries fee reminders, receipts, gate scans, absences and
+   * published results, and four of the purposes in email.brevo TEMPLATE_VARS
+   * describe exactly those. Without this map they would be unreachable
+   * variables: a school could assign BREVO_TEMPLATE_FEE_REMINDER in the panel
+   * and every reminder would still go out with the wording compiled into this
+   * repository.
+   *
+   * A kind that is not listed sends the body the queue already rendered, which
+   * is the ordinary case and not a fault.
+   */
+  purposeFor: (kind) => ({
+    // These strings are the Notification.kind enum, exactly. A name that is
+    // not in that enum is not a harmless dead entry — it is an assigned
+    // template id that never gets used, with no error anywhere, which is the
+    // failure mode this whole file was written to prevent. Asserted against
+    // the model in scripts/check-email-transport.js.
+    "fee.payment":       "feeReceipt",
+    "fee.reminder":      "feeReminder",
+    "result.published":  "resultPublished",
+    "attendance.absent": "attendance",
+    "gate.arrival":      "attendance",
+    "gate.departure":    "attendance",
+    // "announcement" and "test" have no purpose in TEMPLATE_VARS and send the
+    // body the queue rendered. Deliberate: a school notice has no fixed shape
+    // to template.
+  }[String(kind ?? "")] ?? null),
+
+  send: async ({ to, subject, text, html, fromName, kind, data }) => {
     // Throws CHANNEL_NOT_CONFIGURED, which the dispatcher records as a skip
     // rather than a delivery failure to retry forever.
     const tx   = mail.transport();
     const from = mail.fromAddress();
 
+    /*
+     * A template id, only if the school assigned one for this kind AND the
+     * active provider can render it. Both conditions live in
+     * email.transport.templateFor(); handing a templateId to nodemailer would
+     * be ignored in silence, so asking there is what keeps an assigned id from
+     * appearing to work while the old wording goes out.
+     */
+    const templateId = mail.templateFor(emailChannel.purposeFor(kind));
+
     const info = await tx.sendMail({
       // The school's name in the From, the verified sender underneath. A parent
       // should see who it is from before deciding whether to open it.
       from: fromName ? `"${fromName}" <${from}>` : from,
-      to, subject, text, html,
+      to, subject,
+      // Brevo ignores htmlContent beside a templateId, so the two are
+      // exclusive rather than both sent.
+      ...(templateId ? { templateId, params: data ?? {} } : { text, html }),
     });
 
     return { ok: true, detail: info.messageId ?? null };

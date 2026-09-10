@@ -266,6 +266,12 @@ const dispatch = async ({ limit = 25, schoolId } = {}) => {
         text:     n.data?.text ?? "",
         html:     n.body,
         fromName: n.data?.schoolName,
+        // The kind and its data, so a channel that can render a provider-side
+        // template for this kind is able to. Passed for every channel and used
+        // by the one that has somewhere to put it — the alternative was the
+        // dispatcher knowing which channels support templates.
+        kind:     n.kind,
+        data:     n.data ?? {},
       });
 
       n.status = "sent";

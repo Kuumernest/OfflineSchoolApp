@@ -1027,6 +1027,48 @@ async function startServer() {
 
     console.log("✅ Indexes verified");
 
+    /*
+     * Email configuration, reported once at startup.
+     *
+     * A warning, not a refusal. A school runs this backend on a laptop in an
+     * office to take a register and record fees, and none of that needs an
+     * outbound mail provider — making the process refuse to start over an
+     * unset API key would turn a missing convenience into a closed school.
+     *
+     * So it says clearly what is unavailable and starts. The queue already
+     * degrades correctly: without a provider, resolveChannel() falls to "log",
+     * every notification is still RECORDED, and the portal still shows a
+     * parent their child's arrival. Only delivery is missing, and the row
+     * carries a skipReason that says so.
+     *
+     * Shape only, never the key. describe() reports lengths.
+     */
+    try {
+      const mailCfg = mail.describe();
+      if (mail.isConfigured()) {
+        console.log(`📧 Email provider  →  ${mailCfg.label} as ${mailCfg.from ?? "(no sender)"}`);
+        if (mailCfg.replyTo) console.log(`   Reply-To        →  ${mailCfg.replyTo}`);
+        // Configured, but not perfectly. Nothing here stops a send, which is
+        // why it reads as a note rather than a warning.
+        for (const note of mailCfg.advisories ?? []) console.log(`   Note            →  ${note}`);
+        const unset = Object.entries(mailCfg.templates ?? {})
+          .filter(([, id]) => !id).map(([k]) => k);
+        if (unset.length) {
+          console.log(
+            `   Brevo templates not yet assigned: ${unset.join(", ")} ` +
+            "— those emails send this app's own HTML until an id is set."
+          );
+        }
+      } else {
+        console.warn("⚠️  Brevo email service is not configured.");
+        console.warn("    Transactional emails will be unavailable; everything else works.");
+        for (const issue of mailCfg.problems ?? []) console.warn(`    - ${issue}`);
+      }
+    } catch (err) {
+      // Reporting configuration must never be the thing that stops a start.
+      console.warn("⚠️  Could not report email configuration:", err.message);
+    }
+
     const server = app.listen(PORT, "0.0.0.0", () => {
       console.log("════════════════════════════════════");
       console.log(`🚀 Server running  →  http://0.0.0.0:${PORT}`);
