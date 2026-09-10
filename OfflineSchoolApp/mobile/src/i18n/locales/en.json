@@ -1839,7 +1839,7 @@
     "lateAfter": "Arrival is late after",
     "earlyBefore": "Departure is early before",
     "gradingSettings": "Grading Settings",
-    "passMark": "Pass Mark %",
+    "passMark": "Pass mark (out of %{max})",
     "gpaSystem": "GPA System",
     "saveGrading": "Save Grading System",
     "gradingSaved": "Grading system updated",
@@ -1872,7 +1872,16 @@
     "errPwChange": "Failed to change password",
     "errGradingSave": "Failed to save config",
     "errCreateAdmin": "Failed to create admin",
-    "preferences": "Preferences"
+    "preferences": "Preferences",
+    "gradeScale": "Grade scale",
+    "gradeScaleHint": "The bands results are graded against. Set by the school.",
+    "colGrade": "Grade",
+    "colRange": "Marks",
+    "colRemark": "Remark",
+    "colPoints": "Points",
+    "showGrades": "Show grades on report cards",
+    "gpaScale": "GPA scale",
+    "noBands": "No grade bands configured"
   },
   "examDetail": {
     "statusDraft": "Draft",
@@ -3099,7 +3108,11 @@
     "changeStatus": "Change Exam Status",
     "currentStatus": "Current: {{status}}",
     "errTitle": "Error",
-    "errStatusUpdate": "Status update failed"
+    "errStatusUpdate": "Status update failed",
+    "pendingResultsAlert": {
+      "one": "%{count} completed exam with unpublished results",
+      "other": "%{count} completed exams with unpublished results"
+    }
   },
   "examType": {
     "test": "Test",

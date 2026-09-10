@@ -1839,7 +1839,7 @@
     "lateAfter": "Arrivée en retard après",
     "earlyBefore": "Départ anticipé avant",
     "gradingSettings": "Paramètres de notation",
-    "passMark": "Note de passage %",
+    "passMark": "Note de passage (sur %{max})",
     "gpaSystem": "Système de moyenne",
     "saveGrading": "Enregistrer la notation",
     "gradingSaved": "Système de notation mis à jour",
@@ -1872,7 +1872,16 @@
     "errPwChange": "Échec du changement de mot de passe",
     "errGradingSave": "Échec de l'enregistrement de la configuration",
     "errCreateAdmin": "Échec de la création de l'administrateur",
-    "preferences": "Préférences"
+    "preferences": "Préférences",
+    "gradeScale": "Barème de notation",
+    "gradeScaleHint": "Les tranches selon lesquelles les résultats sont notés. Définies par l'école.",
+    "colGrade": "Note",
+    "colRange": "Points",
+    "colRemark": "Appréciation",
+    "colPoints": "Coef.",
+    "showGrades": "Afficher les notes sur les bulletins",
+    "gpaScale": "Échelle GPA",
+    "noBands": "Aucune tranche configurée"
   },
   "examDetail": {
     "statusDraft": "Brouillon",
@@ -3099,7 +3108,11 @@
     "changeStatus": "Changer le statut de l'évaluation",
     "currentStatus": "Actuel : {{status}}",
     "errTitle": "Erreur",
-    "errStatusUpdate": "Échec de la mise à jour du statut"
+    "errStatusUpdate": "Échec de la mise à jour du statut",
+    "pendingResultsAlert": {
+      "one": "%{count} examen terminé dont les résultats ne sont pas publiés",
+      "other": "%{count} examens terminés dont les résultats ne sont pas publiés"
+    }
   },
   "examType": {
     "test": "Interrogation",

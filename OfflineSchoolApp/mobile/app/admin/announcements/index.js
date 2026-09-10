@@ -637,7 +637,27 @@ const styles = StyleSheet.create({
     justifyContent:  "center",
   },
 
-  statsScroll:  { maxHeight: 90 },
+  /*
+   * No fixed height on either of these scrollers.
+   *
+   * statsScroll was maxHeight: 90, and the card inside it does not fit in 90.
+   * Count it: an 18px icon, a 20pt value with 4 above it, an 11pt label with 2
+   * above it, 12px of card padding top and bottom, and a 1px border each side
+   * — about 88. Then statsContent adds paddingVertical: 12 top and bottom
+   * INSIDE that cap, so the card had roughly 66px to live in. The icon showed,
+   * the number was clipped and the label was cut in half, which is exactly
+   * what the screen looked like.
+   *
+   * A fixed height on a horizontal scroller whose children hold translated
+   * text is the wrong shape regardless of the number. statLabel is width 100
+   * with textAlign centre, so a longer translation wraps to two lines and adds
+   * another 14px — a cap tuned to fit English clips French, and nothing in the
+   * layout says why.
+   *
+   * Without it, both scrollers size to their tallest child, which is what they
+   * wanted all along.
+   */
+  statsScroll:  {},
   statsContent: {
     paddingHorizontal: 20,
     paddingVertical:   12,
@@ -685,7 +705,7 @@ const styles = StyleSheet.create({
   filterBannerClear:     { paddingHorizontal: 10, paddingVertical: 4 },
   filterBannerClearText: { fontSize: 13, color: "#0891B2", fontWeight: "700" },
 
-  filtersScroll:  { maxHeight: 48 },
+  filtersScroll:  {},   // see statsScroll
   filtersContent: {
     paddingHorizontal: 20,
     gap:               8,

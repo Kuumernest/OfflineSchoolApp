@@ -1103,7 +1103,7 @@ const idCardStyles = StyleSheet.create({
 });
 
 const GradingSection = ({ schoolId }) => {
-  const { t } = useTranslation();
+  const { t, language } = useTranslation();
   const [config,  setConfig]  = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving,  setSaving]  = useState(false);
@@ -1139,16 +1139,43 @@ const GradingSection = ({ schoolId }) => {
   }
   if (!config) return null;
 
+  // Highest to lowest, so the table reads the way a scale is written.
+  const bands = [...(config.grades ?? [])]
+    .sort((a, b) => (b.minMark ?? 0) - (a.minMark ?? 0));
+
+  // The top of the scale, taken from the bands themselves. A school marking
+  // out of 20 and one marking out of 100 both get described correctly.
+  const scaleMax = bands.length
+    ? Math.max(...bands.map((b) => b.maxMark ?? 0))
+    : 100;
+
   return (
     <View>
       <Card>
         <Text style={styles.cardTitle}>{t("adminSettings.gradingSettings")}</Text>
-        <SettingRow label={t("adminSettings.passMark")}>
+        {/* Out of the scale's own top mark, not a percentage.
+
+            The label was "Pass Mark %" and the value it showed was 10 — a
+            mark out of twenty, which is how this school grades: the bands
+            below run 0-20, with A+ at 18 and F under 8. An admin reading
+            "Pass Mark % : 10" would reasonably conclude the pass mark was
+            ten per cent.
+
+            Read off the bands rather than hardcoded, so a school on a
+            different scale is described correctly without another edit. */}
+        <SettingRow label={t("adminSettings.passMark", { max: scaleMax })}>
           <TextInput
             style={[styles.input, styles.inputSmall]}
             value={String(config.passMark ?? 50)}
             onChangeText={(v) => setConfig({ ...config, passMark: Number(v) || 0 })}
             keyboardType="numeric"
+          />
+        </SettingRow>
+        <SettingRow label={t("adminSettings.showGrades")}>
+          <Switch
+            value={config.showGrades !== false}
+            onValueChange={(v) => setConfig({ ...config, showGrades: v })}
+            trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
           />
         </SettingRow>
         <SettingRow label={t("adminSettings.gpaSystem")}>
@@ -1158,6 +1185,83 @@ const GradingSection = ({ schoolId }) => {
             trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
           />
         </SettingRow>
+        {/* Only when GPA is on; a scale for a system nobody uses is noise. */}
+        {config.useGpa && (
+          <SettingRow label={t("adminSettings.gpaScale")}>
+            <TextInput
+              style={[styles.input, styles.inputSmall]}
+              value={String(config.gpaScale ?? 4)}
+              onChangeText={(v) => setConfig({ ...config, gpaScale: Number(v) || 0 })}
+              keyboardType="numeric"
+            />
+          </SettingRow>
+        )}
+      </Card>
+
+      {/* ── The grade scale ─────────────────────────────────────────────
+
+          This tab used to show two rows: a pass mark and a GPA switch. The
+          eight bands that ARE the grading system — the thing every report
+          card is rendered against — were fetched, held in state, sent back
+          on every save, and never drawn. The screen read as empty because
+          nearly all of it was missing.
+
+          Read-only on purpose. Editing a band means keeping eight ranges
+          contiguous and non-overlapping, and a form that lets an admin
+          leave a gap between 11.5 and 12 silently mis-grades a whole term.
+          Showing the scale answers the question an admin opens this tab
+          with; changing it is a separate piece of work with its own
+          validation. The bands still round-trip untouched on save.
+
+          The remark follows the language, because these carry both. */}
+      <Card style={{ marginTop: 16 }}>
+        <Text style={styles.cardTitle}>{t("adminSettings.gradeScale")}</Text>
+        <Text style={styles.gradeHint}>{t("adminSettings.gradeScaleHint")}</Text>
+
+        {bands.length === 0 ? (
+          <Text style={styles.gradeHint}>{t("adminSettings.noBands")}</Text>
+        ) : (
+          <>
+            <View style={[styles.gradeRow, styles.gradeHead]}>
+              <Text style={[styles.gradeCell, styles.gradeCellGrade, styles.gradeHeadText]}>
+                {t("adminSettings.colGrade")}
+              </Text>
+              <Text style={[styles.gradeCell, styles.gradeCellRange, styles.gradeHeadText]}>
+                {t("adminSettings.colRange")}
+              </Text>
+              <Text style={[styles.gradeCell, styles.gradeCellRemark, styles.gradeHeadText]}>
+                {t("adminSettings.colRemark")}
+              </Text>
+              {config.useGpa && (
+                <Text style={[styles.gradeCell, styles.gradeCellPoints, styles.gradeHeadText]}>
+                  {t("adminSettings.colPoints")}
+                </Text>
+              )}
+            </View>
+
+            {bands.map((b, i) => (
+              <View
+                key={`${b.grade ?? "band"}-${i}`}
+                style={[styles.gradeRow, i === bands.length - 1 && styles.gradeRowLast]}
+              >
+                <Text style={[styles.gradeCell, styles.gradeCellGrade, styles.gradeGrade]}>
+                  {b.grade ?? "—"}
+                </Text>
+                <Text style={[styles.gradeCell, styles.gradeCellRange]}>
+                  {b.minMark ?? 0}–{b.maxMark ?? scaleMax}
+                </Text>
+                <Text style={[styles.gradeCell, styles.gradeCellRemark]} numberOfLines={2}>
+                  {(language === "fr" ? b.remarkFr : b.remark) || b.remark || "—"}
+                </Text>
+                {config.useGpa && (
+                  <Text style={[styles.gradeCell, styles.gradeCellPoints]}>
+                    {b.gpaPoints ?? "—"}
+                  </Text>
+                )}
+              </View>
+            ))}
+          </>
+        )}
       </Card>
       <TouchableOpacity
         style={[styles.btn, styles.btnPrimary, { marginTop: 16 }, saving && styles.btnDisabled]}
@@ -1448,7 +1552,43 @@ const styles = StyleSheet.create({
   backBtn:         { width: 36, height: 36, borderRadius: 10, backgroundColor: "#F3F4F6", alignItems: "center", justifyContent: "center" },
   headerTitle:     { fontSize: 20, fontWeight: "700", color: "#111827" },
   headerSub:       { fontSize: 13, color: "#6B7280" },
-  tabsScroll:      { backgroundColor: "#FFFFFF", maxHeight: 52 },
+  /*
+   * No fixed height on the tab strip.
+   *
+   * maxHeight: 52 clipped it: the tab is paddingVertical 8 plus a 13pt label,
+   * and "Grading System" wrapped, so the third tab read "Grading Syst..." with
+   * its descenders cut. A cap tuned to fit English clips a longer translation
+   * for free — the French is "Système de notation".
+   */
+  tabsScroll:      { backgroundColor: "#FFFFFF" },
+
+  gradeHint:  { fontSize: 12, color: "#6B7280", marginBottom: 10, marginTop: -4 },
+  gradeRow: {
+    flexDirection:     "row",
+    alignItems:        "center",
+    paddingVertical:   9,
+    borderBottomWidth: 1,
+    borderBottomColor: "#F3F4F6",
+    gap:               8,
+  },
+  gradeRowLast: { borderBottomWidth: 0 },
+  gradeHead:    { borderBottomColor: "#E5E7EB" },
+  gradeHeadText: {
+    fontSize:      10,
+    fontWeight:    "700",
+    color:         "#6B7280",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  gradeCell:        { fontSize: 13, color: "#374151" },
+  // Flex rather than fixed widths: a remark is "Above Average" in English and
+  // "Au-dessus de la moyenne" in French, and a fixed column truncates one of
+  // the two whatever number is chosen.
+  gradeCellGrade:   { width: 38, fontWeight: "700" },
+  gradeCellRange:   { width: 62, fontVariant: ["tabular-nums"] },
+  gradeCellRemark:  { flex: 1 },
+  gradeCellPoints:  { width: 40, textAlign: "right", fontVariant: ["tabular-nums"] },
+  gradeGrade:       { color: "#111827" },
   tabsContent:     { paddingHorizontal: 12, gap: 4, alignItems: "center" },
   tab:             { flexDirection: "row", alignItems: "center", paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, gap: 6 },
   tabActive:       { backgroundColor: "#EEF2FF" },

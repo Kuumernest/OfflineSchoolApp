@@ -427,7 +427,11 @@ export default function ExamsDashboardScreen() {
 
             <View style={styles.resultsPills}>
               {[
-                { label: t("results.published"), val: dashboard.results.published, color: "#7C3AED" },
+                // Every entry needs an id: it is the key, and the first one
+                // did not have one. React logged a component stack pointing
+                // at the View below, which reads like a render crash and is
+                // not one — it is this line.
+                { id: "published", label: t("results.published"), val: dashboard.results.published, color: "#7C3AED" },
                 { id: "pending",  label: t("common.pending"),          val: dashboard.results.pending,       color: "#D97706" },
                 { id: "missing",  label: t("examsDash.missing"),       val: dashboard.results.missingGrades, color: "#DC2626" },
                 { id: "avg",      label: t("examsDash.avgScore"),      val: `${dashboard.results.averagePerformance ?? 0}%`, color: "#059669" },
@@ -452,9 +456,12 @@ export default function ExamsDashboardScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="alert-circle-outline" size={16} color="#D97706" />
+                {/* Was two lines of English with an "s" bolted on by a
+                    ternary — untranslated, on a screen where everything
+                    around it goes through t(), and a pluralisation rule that
+                    only happens to work in English. */}
                 <Text style={styles.pendingAlertText}>
-                  {counts.pendingResults} completed exam
-                  {counts.pendingResults > 1 ? "s" : ""} with unpublished results
+                  {t("examsDash.pendingResultsAlert", { count: counts.pendingResults })}
                 </Text>
                 <Ionicons name="chevron-forward" size={14} color="#D97706" />
               </TouchableOpacity>

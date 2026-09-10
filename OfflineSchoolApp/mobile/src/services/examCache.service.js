@@ -21,6 +21,9 @@
 
 import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
+// A table created before a column was added to its definition never gets it
+// from CREATE TABLE IF NOT EXISTS. See MIGRATIONS below.
+import { getTableColumns, safeAddColumn } from "../db/dbHelpers";
 import { generateUUID } from "../utils/idHelpers";
 import { classifyDirtyRows } from "./syncState";
 
@@ -163,6 +166,68 @@ export const ensureExamTables = async () => {
       "CREATE INDEX IF NOT EXISTS idx_results_student  ON exam_results(studentId)",
     ];
     for (const sql of indexes) await database.execAsync(sql).catch(() => {});
+
+    /*
+     * Columns added to a definition after a device already had the table.
+     *
+     * CREATE TABLE IF NOT EXISTS does exactly what it says: on a phone whose
+     * exams table was made before `extra_json` was added to the definition
+     * above, the statement is a no-op and the column never appears. Every
+     * cache write then fails —
+     *
+     *   [examCache] cacheExams 5e795490-…: table exams has no column
+     *   named extra_json
+     *
+     * — three times a sync, caught by a `.catch(() => {})` on the caller, so
+     * nothing surfaced except a warning nobody was reading. The exams
+     * themselves come down fine over the network; what breaks is the offline
+     * copy, which is the entire point of this file. An admin on a phone with
+     * no signal saw no exams at all and no reason why.
+     *
+     * The students table has had this migration since early on. These tables
+     * never got one, so a definition could be extended and only new installs
+     * would see it.
+     *
+     * ALTER TABLE ADD COLUMN is the one schema change SQLite does cheaply and
+     * without rewriting rows, so this is safe to run on every open. Anything
+     * that needs a type change or a constraint needs a rebuild and does not
+     * belong in this list.
+     */
+    const MIGRATIONS = {
+      exams: [
+        { name: "extra_json",       def: "TEXT" },
+        { name: "instructions",     def: "TEXT" },
+        { name: "resultsPublished", def: "INTEGER DEFAULT 0" },
+        { name: "createdBy",        def: "TEXT" },
+        { name: "_synced",          def: "INTEGER DEFAULT 1" },
+        { name: "_synced_at",       def: "TEXT" },
+      ],
+      exam_subjects: [
+        { name: "rejectReason",     def: "TEXT" },
+        { name: "submittedAt",      def: "TEXT" },
+        { name: "weight",           def: "REAL DEFAULT 100" },
+      ],
+      exam_scores: [
+        { name: "teacherRemark",    def: "TEXT" },
+        { name: "enteredBy",        def: "TEXT" },
+        { name: "enteredAt",        def: "TEXT" },
+      ],
+      exam_results: [
+        { name: "gpa",              def: "REAL DEFAULT 0" },
+        { name: "isPublished",      def: "INTEGER DEFAULT 0" },
+        { name: "admissionNo",      def: "TEXT" },
+      ],
+    };
+
+    for (const [table, columns] of Object.entries(MIGRATIONS)) {
+      const existing = await getTableColumns(database, table);
+      if (!existing.length) continue;          // table absent; CREATE made it
+      for (const col of columns) {
+        if (!existing.includes(col.name)) {
+          await safeAddColumn(database, table, col.name, col.def);
+        }
+      }
+    }
   }, db);
 };
 

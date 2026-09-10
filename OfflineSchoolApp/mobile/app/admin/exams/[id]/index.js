@@ -1180,7 +1180,20 @@ export default function ExamDetailScreen() {
         { text: t("examDetail.cancel"), style: "cancel" },
       ]
     );
-  }, [t, exam.status, id, schoolId, loadData]);
+  // exam?.status, not exam.status.
+  //
+  // A dependency array is evaluated during RENDER, not when the callback runs.
+  // `exam` starts as null and is set from `examRes?.exam || null`, so the very
+  // first render of this screen — and every render after a fetch that returned
+  // no exam — read `.status` off null and threw before anything drew:
+  //
+  //   TypeError: Cannot read property 'status' of null
+  //     ExamDetailScreen (app/admin/exams/[id]/index.js:1183)
+  //
+  // The callback body is full of `exam?.` guards, which is what makes this
+  // easy to miss: the one place the optional chain was needed is the one place
+  // that looks like it is not code.
+  }, [t, exam?.status, id, schoolId, loadData]);
 
   // ── Process ───────────────────────────────────────────────
 
