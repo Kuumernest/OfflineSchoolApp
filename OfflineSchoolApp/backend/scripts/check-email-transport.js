@@ -18,14 +18,20 @@
  * again except this file, so the assertions are deliberately about AGREEMENT
  * rather than about either one's behaviour alone.
  *
- * ── What changed when this app moved to Brevo ─────────────────────────────
+ * ── Brevo primary, Gmail failover ─────────────────────────────────────────
  *
- * SendGrid and Gmail were removed from the registry rather than left in place
- * "just in case". This suite now asserts their ABSENCE, which is the more
- * useful assertion: a stale SENDGRID_API_KEY or GMAIL_USER in a deployed
- * environment must not resolve to a provider nobody intends to use, because
- * this registry picks the first match and reports success either way. That is
- * the same class of silent-success bug the file was written for.
+ * SendGrid was removed outright and this suite asserts its ABSENCE: a stale
+ * SENDGRID_API_KEY in a deployed environment must not resolve to a provider
+ * nobody intends to use, because the registry picks the first match and
+ * reports success either way.
+ *
+ * Gmail is in the registry but holds a different job — it catches a Brevo send
+ * that has actually failed. Two things therefore have to be true at once, and
+ * both are asserted: a configured Gmail must never DISPLACE Brevo (or a school
+ * sends everything through a personal account while a paid, authenticated
+ * Brevo sits unused), and it must be REACHED when a Brevo send fails (or the
+ * failover is decoration). The interesting assertions are about which failures
+ * fail over — see the classification section.
  *
  * Pure: no database, no network, no sockets opened. Provider selection is a
  * decision about environment variables and is tested as one.
@@ -54,9 +60,10 @@ const ALL = [
   "BREVO_SMTP_USER", "BREVO_SMTP_KEY",
   "SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASS", "SMTP_SECURE",
   "EMAIL_FROM",
-  // Retired. Present here so the "these no longer resolve" cases below are
-  // testing the registry and not the developer's shell.
-  "SENDGRID_API_KEY", "GMAIL_USER", "GMAIL_APP_PASSWORD",
+  // The failover's credentials, and the one genuinely retired variable —
+  // present so the cases below test the registry and not the developer's shell.
+  "GMAIL_USER", "GMAIL_APP_PASSWORD",
+  "SENDGRID_API_KEY",
   // Every template variable, read from the adapter rather than listed, so a
   // purpose added there cannot be silently untestable here — env() below drops
   // anything not in this array, which is exactly how the first draft of the
@@ -89,21 +96,52 @@ check("Brevo's transactional API",       mail.provider(env(API)).name,       "br
 check("Brevo over SMTP",                 mail.provider(env(RELAY)).name,     "brevo-smtp");
 check("a generic SMTP host",             mail.provider(env(SMTP)).name,      "smtp");
 
-console.log("--- the retired providers resolve to nothing at all ---");
+console.log("--- SendGrid resolves to nothing at all ---");
 
 // THE ASSERTION THAT GUARDS THE REMOVAL. A school that moved to Brevo will
 // have a stale key sitting in its environment for a while, and an environment
 // that still holds one must be treated as UNCONFIGURED rather than quietly
-// routed through a provider the school has stopped paying for — or, worse,
-// through a personal Gmail nobody meant to keep using.
+// routed through a provider the school has stopped paying for.
 check("a stale SendGrid key selects no provider",  mail.provider(env(SENDGRID))?.name ?? null, null);
 check("and is reported as not configured",         mail.isConfigured(env(SENDGRID)), false);
-check("a leftover Gmail selects no provider",      mail.provider(env(GMAIL))?.name ?? null, null);
-check("and is reported as not configured",         mail.isConfigured(env(GMAIL)), false);
-check("neither name is in the registry any more",
-  mail.PROVIDERS.map((p) => p.name).filter((n) => n === "sendgrid" || n === "gmail"), []);
-check("the registry is exactly the three supported routes",
-  mail.PROVIDERS.map((p) => p.name), ["brevo-api", "brevo-smtp", "smtp"]);
+check("the name is not in the registry any more",
+  mail.PROVIDERS.map((p) => p.name).filter((n) => n === "sendgrid"), []);
+check("the registry is Brevo, the two SMTP routes, and the failover",
+  mail.PROVIDERS.map((p) => p.name), ["brevo-api", "brevo-smtp", "smtp", "gmail"]);
+
+console.log("--- Gmail is the failover, and never the primary by accident ---");
+
+/*
+ * THE DISTINCTION THIS WHOLE ARRANGEMENT RESTS ON.
+ *
+ * Gmail is last in the registry so it is chosen as a primary only when nothing
+ * else is configured. If it ever outranked Brevo, a school would send every
+ * fee reminder through a personal Google account — subject to Google's sending
+ * limits and its spam treatment of bulk mail from an unauthenticated domain —
+ * while a paid, domain-authenticated Brevo sat configured and idle, and
+ * nothing anywhere would say so.
+ */
+check("Brevo stays primary when Gmail is also configured",
+  mail.provider(env({ ...GMAIL, ...API })).name, "brevo-api");
+check("and Gmail becomes the failover",
+  mail.fallbackProvider(env({ ...GMAIL, ...API }))?.name ?? null, "gmail");
+check("the Brevo SMTP relay keeps it as a failover too",
+  mail.fallbackProvider(env({ ...GMAIL, ...RELAY }))?.name ?? null, "gmail");
+check("as does a generic SMTP host",
+  mail.fallbackProvider(env({ ...GMAIL, ...SMTP }))?.name ?? null, "gmail");
+
+check("with nothing else configured, Gmail is the primary",
+  mail.provider(env(GMAIL)).name, "gmail");
+check("and then there is no failover behind it — it would be itself",
+  mail.fallbackProvider(env(GMAIL)), null);
+check("no Gmail means no failover at all",
+  mail.fallbackProvider(env(API)), null);
+check("and a half-configured Gmail is not a failover either",
+  mail.fallbackProvider(env({ ...API, GMAIL_USER: "a@gmail.com" })), null);
+
+check("Gmail sends as itself, so it needs no EMAIL_FROM",
+  mail.fromAddress(env(GMAIL)), "school@gmail.com");
+check("and is ready without one", mail.problems(env(GMAIL)), []);
 
 console.log("--- the API wins over the routes it is migrating from ---");
 
@@ -118,6 +156,12 @@ check("and the relay over a generic SMTP host",
   mail.provider(env({ ...SMTP, ...RELAY })).name, "brevo-smtp");
 check("a stale SendGrid key does not displace the API",
   mail.provider(env({ ...SENDGRID, ...API })).name, "brevo-api");
+check("and neither does a working Gmail",
+  mail.provider(env({ ...GMAIL, ...API })).name, "brevo-api");
+check("Gmail does not displace the relay either",
+  mail.provider(env({ ...GMAIL, ...RELAY })).name, "brevo-smtp");
+check("nor a generic SMTP host",
+  mail.provider(env({ ...GMAIL, ...SMTP })).name, "smtp");
 
 console.log("--- half-set variables do not count as configured ---");
 
@@ -223,8 +267,8 @@ check("with the code the dispatcher records a SKIP for, not a retry",
   threw?.code, "CHANNEL_NOT_CONFIGURED");
 check("and a message naming what to set",
   /BREVO_API_KEY|BREVO_SENDER_EMAIL|SMTP_HOST/.test(threw?.message ?? ""), true);
-check("and not a retired provider's variable",
-  /SENDGRID|GMAIL/.test(threw?.message ?? ""), false);
+check("and not the retired provider's variable",
+  /SENDGRID/.test(threw?.message ?? ""), false);
 
 const everything = env({ ...API, ...RELAY, ...SMTP });
 const hosts = Object.fromEntries(
@@ -237,6 +281,7 @@ check("and no provider points at a host nobody configured",
   hosts, {
     "brevo-smtp": "smtp-relay.brevo.com",
     smtp:         "mail.host.com",
+    gmail:        "smtp.gmail.com",
   });
 
 console.log("--- the API entry supplies a transport of its own ---");
@@ -386,13 +431,19 @@ try {
   check("both agree: a generic SMTP host is configured",
     [mail.isConfigured(), emailChannel.isConfigured()], [true, true]);
 
-  // And they must agree about the retired ones too, in the other direction:
+  // And they must agree about the retired one too, in the other direction:
   // this is the case that would put fee reminders in a log file while the
   // bursar was told they had been sent.
   for (const k of Object.keys(SMTP)) delete process.env[k];
-  Object.assign(process.env, SENDGRID, GMAIL);
-  check("both agree: a stale SendGrid and Gmail are NOT configured",
+  Object.assign(process.env, SENDGRID);
+  check("both agree: a stale SendGrid is NOT configured",
     [mail.isConfigured(), emailChannel.isConfigured()], [false, false]);
+
+  // Gmail alone IS configured — it is a real provider again, just the last one.
+  for (const k of Object.keys(SENDGRID)) delete process.env[k];
+  Object.assign(process.env, GMAIL);
+  check("both agree: Gmail alone is configured",
+    [mail.isConfigured(), emailChannel.isConfigured()], [true, true]);
 } finally {
   for (const k of ALL) {
     if (saved[k] === undefined) delete process.env[k];
@@ -415,11 +466,294 @@ check("as is the reply-to, for the same reason",
 check("the advisory list travels with it",
   JSON.parse(JSON.stringify(mail.describe(env(NO_NAME)))).advisories.length, 1);
 
+/*
+ * The failover block is a new thing for describe() to carry, and describe()
+ * is what GET /api/admin/email/config returns and what mail:verify prints.
+ * The account address belongs there — it is not a secret, and "which mailbox
+ * is behind this?" is the question being asked. The app password does not.
+ */
+const shownBoth = JSON.stringify(mail.describe(env({ ...API, ...GMAIL })));
+check("the failover is described",
+  JSON.parse(shownBoth).failover?.provider ?? null, "gmail");
+check("naming the account, which is not a secret",
+  JSON.parse(shownBoth).failover?.as ?? null, "school@gmail.com");
+check("but never the app password",
+  shownBoth.includes(GMAIL.GMAIL_APP_PASSWORD) || shownBoth.includes("abcdefghijklmnop"), false);
+check("and no failover is reported as none, not omitted",
+  JSON.parse(JSON.stringify(mail.describe(env(API)))).failover, null);
+
+// Gmail as the primary: its own vars are then reported, and still by shape.
+const shownGmail = JSON.stringify(mail.describe(env(GMAIL)));
+check("Gmail as primary does not print its password either",
+  shownGmail.includes(GMAIL.GMAIL_APP_PASSWORD) || shownGmail.includes("abcdefghijklmnop"), false);
+check("but does report its shape, including the spaces Google displays",
+  /19 chars, contains whitespace/.test(shownGmail), true);
+
 const shownRelay = JSON.stringify(mail.describe(env(RELAY)));
 check("the SMTP key does not appear either",
   shownRelay.includes("xsmtpsib-key"), false);
 check("but its shape does",
   /12 chars/.test(shownRelay), true);
 
-console.log(`\n  ${pass} passed, ${fail} failed`);
-process.exit(fail ? 1 : 0);
+console.log("--- which failures fail over, and which must not ---");
+
+/*
+ * definitelyNotSent() is the whole duplicate-prevention rule, so it is asserted
+ * directly rather than only through its effects.
+ *
+ * Retrying through Gmail turns one failed send into one delivered message —
+ * unless Brevo had in fact accepted it, in which case it turns one delivered
+ * message into two. A parent getting a fee reminder twice is a small harm; a
+ * teacher getting two different temporary passwords is a support call.
+ */
+const notSent = mail.definitelyNotSent;
+
+check("unconfigured: nothing was attempted",        notSent({ code: "CHANNEL_NOT_CONFIGURED" }), true);
+check("a 400: Brevo refused it outright",           notSent({ statusCode: 400 }), true);
+check("a 401: the key was rejected",                notSent({ statusCode: 401 }), true);
+check("a 402: the account is out of credit",        notSent({ statusCode: 402 }), true);
+check("DNS failure: never reached the server",      notSent({ code: "ENOTFOUND" }), true);
+check("connection refused: same",                   notSent({ code: "ECONNREFUSED" }), true);
+
+check("a 500: Brevo may have queued it",            notSent({ statusCode: 500 }), false);
+check("a 503: same",                                notSent({ statusCode: 503 }), false);
+check("a socket timeout: we do not know",           notSent({ code: "ETIMEDOUT" }), false);
+check("a reset connection: we do not know",         notSent({ code: "ECONNRESET" }), false);
+check("a message that merely says timeout",         notSent({ message: "Request timeout after 30s" }), false);
+
+// Not a provider failure at all — a bad address fails identically on Gmail, so
+// retrying achieves nothing and muddies the reported reason.
+check("a bad recipient is not a provider failure",  notSent({ code: "NO_RECIPIENT" }), false);
+
+// An unrecognised error is treated as not sent: the common unknown is a
+// rejection, and a lost fee reminder is the worse of the two outcomes.
+check("an unrecognised error is treated as not sent", notSent({ message: "something odd" }), true);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE FAILOVER ITSELF
+//
+// Both providers are mocked. nodemailer.createTransport is replaced, so no
+// socket is opened and Google is never contacted; the Brevo client is stubbed
+// through the adapter's own injection point. Nothing here can send a real
+// email, which is the point — a suite that could would eventually mail a
+// parent during a test run.
+// ─────────────────────────────────────────────────────────────────────────────
+
+(async () => {
+  const nodemailer = require("nodemailer");
+  const realCreate = nodemailer.createTransport;
+
+  const BOTH = env({ ...API, ...GMAIL });
+
+  /** Arms both providers and returns the recorders. */
+  const arm = ({ brevoFails = null } = {}) => {
+    const gmailSent = [];
+    const brevoSent = [];
+
+    nodemailer.createTransport = () => ({
+      sendMail: async (msg) => { gmailSent.push(msg); return { messageId: "gmail-id" }; },
+      verify:   async () => true,
+    });
+
+    brevo.__setClient({
+      transactionalEmails: {
+        sendTransacEmail: async (payload) => {
+          if (brevoFails) throw brevoFails;
+          brevoSent.push(payload);
+          return { messageId: "brevo-id" };
+        },
+      },
+    });
+
+    mail.reset();
+    return { gmailSent, brevoSent };
+  };
+
+  const MESSAGE = {
+    from:    '"Green Valley Academy" <no-reply@offlineschool.vgrp.org>',
+    to:      "parent@example.test",
+    subject: "School fees outstanding",
+    html:    "<p>45,000 XAF outstanding</p>",
+    text:    "45,000 XAF outstanding",
+  };
+
+  console.log("--- the happy path sends exactly once ---");
+  {
+    const { gmailSent, brevoSent } = arm();
+    const info = await mail.transport(BOTH).sendMail(MESSAGE);
+
+    check("Brevo sent it", brevoSent.length, 1);
+    // THE DUPLICATE-PREVENTION ASSERTION. If this ever reads 1, every email
+    // this school sends is arriving twice.
+    check("and Gmail was not touched", gmailSent.length, 0);
+    check("the caller gets Brevo's id", info.messageId, "brevo-id");
+    check("and is not told it failed over", info.failedOver ?? false, false);
+  }
+
+  console.log("--- a refused send goes through Gmail ---");
+  {
+    const refusal = new Error("Key not found");
+    refusal.statusCode = 401;
+    const { gmailSent, brevoSent } = arm({ brevoFails: refusal });
+
+    const info = await mail.transport(BOTH).sendMail(MESSAGE);
+
+    check("Brevo accepted nothing", brevoSent.length, 0);
+    check("Gmail sent it once",     gmailSent.length, 1);
+    check("exactly once",           gmailSent.length, 1);
+    check("the caller is told which provider delivered it", info.provider, "gmail");
+    check("and that it failed over", info.failedOver, true);
+
+    /*
+     * The From has to be rewritten. Google will not send as an address on a
+     * domain it has not authorised — it rewrites or rejects — so the failover
+     * keeps the school's display NAME, which is what a parent reads, and
+     * swaps the address for the authenticated account.
+     */
+    check("the display name survives",
+      /^"Green Valley Academy"/.test(gmailSent[0].from), true);
+    check("and the address becomes the Gmail account",
+      /<school@gmail\.com>$/.test(gmailSent[0].from), true);
+    check("the body is intact",    gmailSent[0].html, MESSAGE.html);
+    check("and so is the subject", gmailSent[0].subject, MESSAGE.subject);
+  }
+
+  console.log("--- an ambiguous failure does NOT go through Gmail ---");
+  for (const [label, err] of [
+    ["a 500", Object.assign(new Error("Internal error"), { statusCode: 500 })],
+    ["a timeout", Object.assign(new Error("socket hang up"), { code: "ETIMEDOUT" })],
+  ]) {
+    const { gmailSent } = arm({ brevoFails: err });
+
+    let threw = null;
+    try { await mail.transport(BOTH).sendMail(MESSAGE); } catch (e) { threw = e; }
+
+    check(`${label}: Gmail is not attempted`, gmailSent.length, 0);
+    check(`${label}: and the failure is reported rather than hidden`, Boolean(threw), true);
+  }
+
+  console.log("--- a template-only message has nothing to fall back with ---");
+  {
+    // Brevo renders the wording from an id held in its own account, so a
+    // message carrying only a templateId has no body Gmail could send. An
+    // empty email is worse than a reported failure.
+    const refusal = Object.assign(new Error("Key not found"), { statusCode: 401 });
+    const { gmailSent } = arm({ brevoFails: refusal });
+
+    let threw = null;
+    try {
+      await mail.transport(BOTH).sendMail({
+        from: MESSAGE.from, to: MESSAGE.to, subject: MESSAGE.subject,
+        templateId: 91, params: { amount: 45000 },
+      });
+    } catch (e) { threw = e; }
+
+    check("Gmail is not sent an empty message", gmailSent.length, 0);
+    check("and the failure is reported",        Boolean(threw), true);
+  }
+
+  console.log("--- but a template WITH a body does fall back ---");
+  {
+    // Which is why both send sites now pass html/text alongside templateId.
+    const refusal = Object.assign(new Error("Key not found"), { statusCode: 401 });
+    const { gmailSent } = arm({ brevoFails: refusal });
+
+    await mail.transport(BOTH).sendMail({ ...MESSAGE, templateId: 91, params: { amount: 45000 } });
+
+    check("Gmail sends the rendered body", gmailSent.length, 1);
+    check("and the body is the app's own HTML", gmailSent[0].html, MESSAGE.html);
+    // nodemailer would ignore these, but passing a provider's private fields
+    // to a different provider is how a confusing bug starts.
+    check("Brevo's template fields are stripped", gmailSent[0].templateId ?? null, null);
+    check("including the params",                 gmailSent[0].params ?? null, null);
+  }
+
+  console.log("--- when both providers refuse it ---");
+  {
+    /*
+     * The fallback's error alone is actively misleading: "535 authentication
+     * failed" reads as though Gmail were the provider this school sends
+     * through, and sends whoever is on call to the wrong panel. Both have to
+     * be named.
+     */
+    const refusal = Object.assign(new Error("Key not found"), { statusCode: 401 });
+    arm({ brevoFails: refusal });
+    nodemailer.createTransport = () => ({
+      sendMail: async () => { throw Object.assign(new Error("Invalid login: 535"), { code: "EAUTH" }); },
+    });
+    mail.reset();
+
+    let threw = null;
+    try { await mail.transport(BOTH).sendMail(MESSAGE); } catch (e) { threw = e; }
+
+    check("the caller is told it failed", Boolean(threw), true);
+    check("the message names the primary's failure",
+      /Key not found/.test(threw?.message ?? ""), true);
+    check("and the failover's",
+      /535/.test(threw?.message ?? ""), true);
+    check("with each error still reachable",
+      [threw?.primaryError?.statusCode, threw?.failoverError?.code], [401, "EAUTH"]);
+  }
+
+  console.log("--- with no Gmail configured, a failure is just a failure ---");
+  {
+    const refusal = Object.assign(new Error("Key not found"), { statusCode: 401 });
+    const { gmailSent } = arm({ brevoFails: refusal });
+
+    let threw = null;
+    try { await mail.transport(env(API)).sendMail(MESSAGE); } catch (e) { threw = e; }
+
+    check("nothing is attempted behind it", gmailSent.length, 0);
+    check("and the caller sees Brevo's error", threw?.message, "Key not found");
+  }
+
+  console.log("--- a half-configured Brevo falls back rather than stopping ---");
+  {
+    /*
+     * A key with no authenticated sender cannot send anything. Before the
+     * failover existed that meant no email at all — the school's mail stopped
+     * on a blank variable nobody had noticed. Now it keeps moving through
+     * Gmail, loudly, while somebody fixes the configuration.
+     */
+    const { gmailSent } = arm();
+    const halfBrevo = env({ BREVO_API_KEY: API.BREVO_API_KEY, ...GMAIL });
+
+    await mail.transport(halfBrevo).sendMail(MESSAGE);
+    check("Gmail carries it", gmailSent.length, 1);
+  }
+
+  console.log("--- and no credential appears in any of it ---");
+  {
+    const refusal = Object.assign(new Error("Key not found"), { statusCode: 401 });
+    const { gmailSent } = arm({ brevoFails: refusal });
+
+    const lines = [];
+    const real = { log: console.log, warn: console.warn, error: console.error };
+    for (const k of Object.keys(real)) {
+      console[k] = (...args) => lines.push(args.map((a) =>
+        typeof a === "string" ? a : JSON.stringify(a)).join(" "));
+    }
+    try { await mail.transport(BOTH).sendMail(MESSAGE); }
+    finally { Object.assign(console, real); }
+
+    const logged = lines.join("\n");
+    check("the failover logged something a maintainer can act on",
+      /Gmail/.test(logged), true);
+    check("the Brevo key is not in it",
+      logged.includes(API.BREVO_API_KEY), false);
+    check("nor the Gmail app password",
+      logged.includes(GMAIL.GMAIL_APP_PASSWORD) ||
+      logged.includes(GMAIL.GMAIL_APP_PASSWORD.replace(/\s/g, "")), false);
+    check("and it did deliver", gmailSent.length, 1);
+  }
+
+  nodemailer.createTransport = realCreate;
+  brevo.reset();
+  mail.reset();
+
+  console.log(`\n  ${pass} passed, ${fail} failed`);
+  process.exit(fail ? 1 : 0);
+})().catch((err) => {
+  console.error("Harness error:", err);
+  process.exit(1);
+});

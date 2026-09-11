@@ -48,6 +48,11 @@ const main = async () => {
   console.log(`  provider    : ${info.label}${info.provider ? ` (${info.provider})` : ""}`);
   console.log(`  from        : ${info.from ?? "— not set —"}`);
   if (info.replyTo) console.log(`  reply-to    : ${info.replyTo}`);
+  console.log(
+    info.failover
+      ? `  failover    : ${info.failover.label} as ${info.failover.as ?? "(unknown)"}`
+      : "  failover    : none — a refused send is reported, not retried"
+  );
 
   for (const [key, shape] of Object.entries(info.vars)) {
     const raw = process.env[key];
@@ -163,6 +168,40 @@ const main = async () => {
       console.log("");
     }
     process.exit(1);
+  }
+
+  // ── The failover, checked too ───────────────────────────────────────────
+  /*
+   * A failover nobody has ever authenticated is not a failover. Google
+   * invalidates every app password it ever issued the moment 2-Step
+   * Verification is switched off on the account, silently, and the only time
+   * anyone would otherwise find out is during a Brevo outage — the one moment
+   * it is supposed to help. So it is checked here, deliberately, rather than
+   * assumed.
+   */
+  if (info.failover) {
+    process.stdout.write(`  checking the ${info.failover.label} failover ... `);
+    try {
+      const nodemailer = require("nodemailer");
+      const entry = mail.PROVIDERS.find((p) => p.name === info.failover.provider);
+      await nodemailer.createTransport(entry.build(process.env)).verify();
+      console.log("accepted ✓");
+    } catch (err) {
+      console.log("REFUSED");
+      console.log(`    ${err.code ?? "ERR"}: ${String(err.message).split("\n")[0]}`);
+      console.log("");
+      console.log("  Mail still sends: the failover only matters when a Brevo send");
+      console.log("  fails. But it will not help when it does.");
+      if (/\b535\b/.test(String(err.message))) {
+        console.log("");
+        console.log("  535 on Gmail is usually 2-Step Verification having been switched");
+        console.log("  off on that Google account, which invalidates every app password");
+        console.log("  it ever issued. Check myaccount.google.com/apppasswords — if that");
+        console.log("  page will not load, that is your answer. The other common cause is");
+        console.log("  an app password generated on a DIFFERENT account than GMAIL_USER.");
+      }
+      console.log("");
+    }
   }
 
   // ── Optionally send one ─────────────────────────────────────────────────

@@ -62,6 +62,8 @@ no values appear in this documentation.
 | `BREVO_SENDER_NAME` | unset | display name only — mail sends without it |
 | `BREVO_REPLY_TO` | unset | where a reply goes |
 | `BREVO_TEMPLATE_*` | unset | seven optional template ids; unset sends the app's own HTML |
+| `GMAIL_USER` | unset | the Gmail failover account; both Gmail vars needed |
+| `GMAIL_APP_PASSWORD` | unset | App Password for the failover |
 | `EMAIL_FROM` | unset | legacy override for `BREVO_SENDER_EMAIL` |
 | `DISABLE_LOGIN_RATE_LIMIT` | unset | lifts the login limiter — **set only by `scripts/`, never in production** |
 
@@ -81,11 +83,15 @@ Treat WhatsApp messaging as **NOT IMPLEMENTED** until proven otherwise.
 Conversely `.env.example` lists `EMAIL_FROM`, which **is** read (via the `env`
 helper in `email.transport.js`) — that one is fine.
 
-`GMAIL_USER` was in this list and is no longer read by anything: Gmail and
-SendGrid were both removed from the provider registry when this app moved to
-Brevo. An environment still holding `GMAIL_USER`, `GMAIL_APP_PASSWORD` or
-`SENDGRID_API_KEY` is treated as **unconfigured** rather than routed through a
-retired provider, and the startup log says so. See [20-email.md](20-email.md).
+`SENDGRID_API_KEY` is read by nothing: that provider was removed from the
+registry when this app moved to Brevo, and an environment still holding it is
+treated as **unconfigured** rather than routed through a retired provider. The
+startup log says so.
+
+`GMAIL_USER` and `GMAIL_APP_PASSWORD` **are** read — they configure the Gmail
+failover that catches a Brevo send that has actually failed. They are optional;
+without them a failed send is reported rather than retried. See
+[20-email.md](20-email.md).
 
 ### Docker Compose — required with no default
 

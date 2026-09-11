@@ -117,26 +117,48 @@ const makeStub = (behaviour = "ok") => {
       bad("EMAIL_FROM overrides the sender", String(mail.fromAddress(withLegacy)));
     }
 
-    // §4: neither retired provider may be selectable, however stale the env.
-    const stale = {
-      SENDGRID_API_KEY: "SG.stale", GMAIL_USER: "old@gmail.com",
-      GMAIL_APP_PASSWORD: "abcd efgh ijkl mnop",
-    };
+    // §4: SendGrid is retired and must not be selectable however stale the env.
+    const stale = { SENDGRID_API_KEY: "SG.stale" };
     const chosen = mail.provider(stale);
     if (chosen === null) {
-      ok("a stale SendGrid or Gmail environment selects nothing at all");
+      ok("a stale SendGrid key selects nothing at all");
     } else {
-      bad("retired providers are not selectable",
+      bad("SendGrid is not selectable",
         `it chose "${chosen.name}" — a school could send through a provider ` +
         "nobody intends to use, silently.");
     }
 
+    /*
+     * Gmail is a different case, and the distinction is the point. It IS in the
+     * registry, because it is the nominated failover — but a configured Gmail
+     * must never displace Brevo as the primary. If it did, a school would send
+     * everything through a personal Google account while a paid,
+     * domain-authenticated Brevo sat configured and unused, and nothing would
+     * say so.
+     */
+    const both = { ...ENV, GMAIL_USER: "old@gmail.com", GMAIL_APP_PASSWORD: "abcd efgh ijkl mnop" };
+    if (mail.provider(both)?.name === "brevo-api") {
+      ok("a configured Gmail does not displace Brevo as the primary");
+    } else {
+      bad("Brevo stays the primary when Gmail is also configured", String(mail.provider(both)?.name));
+    }
+    if (mail.fallbackProvider(both)?.name === "gmail") {
+      ok("it is the failover instead, which is where it belongs");
+    } else {
+      bad("Gmail is the failover", String(mail.fallbackProvider(both)?.name));
+    }
+    if (mail.fallbackProvider(ENV) === null) {
+      ok("and with no Gmail configured there is simply no failover, not a broken one");
+    } else {
+      bad("no Gmail means no failover", String(mail.fallbackProvider(ENV)?.name));
+    }
+
     const names = mail.PROVIDERS.map((p) => p.name);
     note(`providers: ${names.join(", ")}`);
-    if (!names.includes("gmail") && !names.includes("sendgrid")) {
-      ok("and neither is in the registry");
+    if (!names.includes("sendgrid")) {
+      ok("and SendGrid is gone from the registry");
     } else {
-      bad("gmail and sendgrid are removed from the registry", names.join(", "));
+      bad("sendgrid is removed from the registry", names.join(", "));
     }
   }
 

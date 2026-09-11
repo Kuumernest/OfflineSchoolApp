@@ -1,9 +1,10 @@
-# 20 — Email (Brevo Transactional Email)
+# 20 — Email (Brevo primary, Gmail failover)
 
-Every email this system sends leaves through **Brevo's Transactional Email
-API**. This document is the whole of it: what sends mail, what to put in the
-environment, how to check it before trusting it, and what the failures look
-like.
+Every email this system sends is attempted through **Brevo's Transactional
+Email API**. If an individual send *fails*, that same message is retried once
+through **Gmail SMTP**. This document is the whole of it: what sends mail, what
+to put in the environment, how to check it before trusting it, and what the
+failures look like.
 
 Two things to know before anything else.
 
@@ -41,6 +42,61 @@ credentials while every fee reminder was written to stdout and reported to the
 bursar as sent. `scripts/check-email-transport.js` exists to keep those two
 answers identical and asserts agreement directly.
 
+## 1a. The failover
+
+Brevo is tried for every email. Gmail is attempted **only when a Brevo send has
+actually failed**, and never otherwise — so the ordinary path sends exactly
+once, through Brevo, and Gmail is never contacted.
+
+Both send sites are unchanged by this. They call
+`mail.transport().sendMail(...)` exactly as before; what they get back is a
+composite transport that tries the second provider itself. Failover belongs to
+the registry, which is the one place allowed to know which providers exist.
+
+### Which failures fail over — and which deliberately do not
+
+Retrying turns one failed send into one delivered message, *unless* Brevo had
+in fact accepted it — in which case it turns one delivered message into two. A
+parent getting a fee reminder twice is a small harm; a teacher getting two
+different temporary passwords is a support call. So the question is never "did
+we get an error" but **"do we know the message was not accepted"**.
+
+| Failure | Falls over? | Why |
+|---|---|---|
+| Not configured | **yes** | Nothing was attempted. |
+| 4xx (400, 401, 402, 403) | **yes** | Brevo refused it outright. |
+| DNS failure, connection refused | **yes** | The server was never reached. |
+| An unrecognised error | **yes** | The common unknown is a rejection, and a lost reminder is the worse outcome. |
+| 5xx | **no** | Brevo may have queued it and failed to say so. |
+| Timeout, reset connection | **no** | The request went out; we do not know what became of it. |
+| Invalid recipient | **no** | Not a provider failure — it fails identically on Gmail. |
+
+The ambiguous cases surface as failures, which the notification queue already
+handles: it records the attempt and retries on its own backoff, and a retry
+that finds Brevo healthy sends exactly once. **Preferring a possible
+non-delivery over a possible duplicate is a deliberate choice**, and it is the
+one the caller can recover from.
+
+### Two things the failover has to do to the message
+
+- **Rewrite the From.** Google will not send as an address on a domain it has
+  not authorised — it rewrites or rejects. The failover keeps the school's
+  display *name*, which is what a parent reads, and swaps the address for
+  `GMAIL_USER`.
+- **Drop the Brevo template fields.** `templateId` and `params` mean nothing
+  to SMTP. This is why both send sites pass the rendered HTML *alongside* a
+  template id rather than instead of it: Brevo ignores `htmlContent` when a
+  `templateId` is present, so it costs nothing there, and it is the only thing
+  Gmail has to send. A message carrying **only** a template id is not failed
+  over at all — it is reported as a failure, because an empty email is worse.
+
+### A half-configured Brevo falls back rather than stopping
+
+A key with no authenticated sender cannot send anything. Before the failover
+existed that meant *no email at all* — the school's mail stopped on a blank
+variable nobody had noticed. It now moves to Gmail, with a warning in the log
+naming the variable to fix.
+
 ### There is no self-service password reset, and no email verification
 
 Worth stating plainly, because both are usual in a system like this and neither
@@ -58,8 +114,9 @@ exists here:
 One consequence is worth flagging rather than hiding: an admin-issued reset
 mails a **temporary password in the message body**. That is pre-existing
 behaviour, unchanged by the move to Brevo, and it means the temporary password
-passes through — and is retained in — the provider's message log, exactly as it
-previously passed through Gmail or SendGrid. It is also why the parent portal's
+passes through — and is retained in — the provider's message log. That is true of
+both providers: if a reset falls over to Gmail, it is in that mailbox's Sent
+folder as well. It is also why the parent portal's
 notification list is an explicit *allowlist* of kinds rather than a blocklist:
 `Notification.body` can contain one.
 
@@ -77,6 +134,8 @@ with placeholders and no values.
 | `BREVO_SENDER_NAME` | no | The display name a parent sees. Mail sends without it; they just see a bare address. |
 | `BREVO_REPLY_TO` | no | Where a reply goes — `support@vgrp.org`. Without it, replies go to a `no-reply@` nobody reads. |
 | `BREVO_TEMPLATE_*` | no | Seven optional template ids. See §4. |
+| `GMAIL_USER` | no | The failover account. Both Gmail variables are needed, or there is no failover. |
+| `GMAIL_APP_PASSWORD` | no | An **App Password**, not the account password. Google account → Security → 2-Step Verification (must be ON) → App passwords. |
 | `EMAIL_FROM` | no | Legacy. Overrides `BREVO_SENDER_EMAIL` if set. Kept so an existing deployment keeps working; leave it empty in new ones. |
 
 **Required means required to send, not required to boot.** The server starts
@@ -102,15 +161,27 @@ email system; the API wins whenever `BREVO_API_KEY` is present.
 | Brevo over SMTP | `BREVO_SMTP_USER`, `BREVO_SMTP_KEY` | Same Brevo account, port 587 instead of 443 — for a network that permits one and not the other. `BREVO_SMTP_USER` is the SMTP login from the panel (like `8a1b2c001@smtp-brevo.com`), **not** the account's login email, and `BREVO_SMTP_KEY` is the SMTP key, **not** the API key. Needs `EMAIL_FROM`. |
 | Any SMTP host | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS` | A self-hosted relay, or a local mail catcher in development. Needs `EMAIL_FROM`. |
 
-### Gmail and SendGrid are gone
+### Gmail's position in the registry
 
-`GMAIL_USER`, `GMAIL_APP_PASSWORD` and `SENDGRID_API_KEY` are **read by
-nothing**. Both providers were removed from the registry rather than left in
-place, because a stale key in a deployed environment would otherwise resolve to
-a provider nobody intends to use — silently, since the registry takes the first
-match and reports success either way. An environment holding one is treated as
-*unconfigured*, which is asserted by the test suite in both directions. The
-startup log warns if either is still present. Delete them.
+Gmail sits **last**, and that position is load-bearing. As a *primary* it is
+chosen only when nothing else is configured at all; with Brevo present, Brevo
+wins and Gmail becomes the failover. If it ever outranked Brevo, a school would
+send every fee reminder through a personal Google account — subject to Google's
+sending limits and its spam treatment of bulk mail from an unauthenticated
+domain — while a paid, domain-authenticated Brevo sat configured and idle, with
+nothing anywhere saying so. Both halves are asserted by the test suite.
+
+Gmail's daily sending limits are far below Brevo's. This is a bridge over a
+failure, not a second bulk-sending route.
+
+### SendGrid is gone
+
+`SENDGRID_API_KEY` is **read by nothing**. The provider was removed from the
+registry rather than left in place, because a stale key in a deployed
+environment would otherwise resolve to a provider nobody intends to use —
+silently, since the registry takes the first match and reports success either
+way. An environment holding one is treated as *unconfigured*, asserted in both
+directions. The startup log warns if it is still present. Delete it.
 
 ---
 
@@ -187,12 +258,18 @@ cd backend
 npm run mail:verify
 ```
 
-Reports the provider, the sender, the reply-to, the shape of every credential,
-any advisories, and which templates are assigned — then **authenticates without
-sending anything** (`GET /v3/account` on the API route, an SMTP handshake on the
-others). It prints the Brevo account the key belongs to, which is the one thing
-a bare "accepted" would hide: a valid key for the *wrong account* is a common
-mistake and looks identical to a correct one.
+Reports the provider, the sender, the reply-to, **the failover**, the shape of
+every credential, any advisories, and which templates are assigned — then
+**authenticates without sending anything** (`GET /v3/account` on the API route,
+an SMTP handshake on the others). It prints the Brevo account the key belongs
+to, which is the one thing a bare "accepted" would hide: a valid key for the
+*wrong account* is a common mistake and looks identical to a correct one.
+
+It then authenticates the **failover** as well. A failover nobody has ever
+checked is not a failover: switching 2-Step Verification off on a Google account
+invalidates every app password it ever issued, silently, and the only other
+time anyone would find out is during a Brevo outage — the one moment it is
+supposed to help.
 
 It never prints a credential. It reports length, whether the value contains
 whitespace, and an 8-character hash — enough to answer "did my edit land?"
@@ -250,10 +327,13 @@ read does that.
 | Delivered but in spam | SPF/DKIM for the sending domain. A DNS job, not a code one. |
 | Reminders "sent" but nobody received them | Check the notification row's `skipReason`. With no provider, the queue falls back to the log channel, which always succeeds. That fallback is why `check:mail` asserts both send paths agree about configuration. |
 | 535 on either SMTP route | A revoked or mistyped key, a key from another account, or — for the relay — the account's login email used as `BREVO_SMTP_USER` instead of the SMTP login. |
+| 535 on the Gmail failover | Usually 2-Step Verification switched off on that Google account, which invalidates every app password it ever issued. Check `myaccount.google.com/apppasswords`; if the page will not load, that is the answer. Otherwise an app password from a *different* account than `GMAIL_USER`. |
+| Mail arrives from the Gmail address, not `no-reply@` | The failover delivered it, so a Brevo send failed. The school name is preserved; the address cannot be. Check the log for the Brevo error that preceded it. |
+| A parent received the same email twice | Should not happen — the ambiguous failures deliberately do not fail over. If it does, check whether something outside the transport is retrying, and read the "which failures fail over" table above. |
 
 ---
 
-## 7. Rotating the key
+## 7. Rotating the keys
 
 The key is used on every send and cached per-key inside the adapter, so
 rotation is an environment edit and a restart. Nothing in the database or in any
@@ -269,6 +349,12 @@ client holds it.
 Rotate immediately, in that order, if a key ever reaches a log, a screenshot, a
 support thread or a commit. Step 5 is what actually revokes it; steps 1–4 only
 stop *this* deployment from using it.
+
+The Gmail app password rotates the same way: generate a new one under **Google
+account → Security → App passwords**, replace `GMAIL_APP_PASSWORD`, restart,
+confirm with `npm run mail:verify`, then revoke the old one in that same panel.
+Revoking it does not stop mail — Brevo is the primary — but it does remove the
+safety net until the new one is in place, so do it in that order.
 
 ## 8. Deploying it safely
 

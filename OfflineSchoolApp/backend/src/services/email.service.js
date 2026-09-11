@@ -868,7 +868,14 @@ const sendEmail = async ({ to, template, data }) => {
       from: `"${data.schoolName || "School App"}" <${mail.fromAddress()}>`,
       to,
       subject,
-      ...(templateId ? { templateId, params: data } : { html, text }),
+      // The rendered HTML goes WITH the template id, not instead of it. Brevo
+      // ignores htmlContent when a templateId is present, so this costs
+      // nothing there — and it is the only thing the Gmail failover has to
+      // send if Brevo refuses the message. Dropping it here meant a
+      // template-only email had no body to fall back to.
+      html,
+      text,
+      ...(templateId ? { templateId, params: data } : {}),
     });
 
     console.log(

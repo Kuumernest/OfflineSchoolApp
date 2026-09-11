@@ -86,9 +86,10 @@ function emailWarnings(env = process.env) {
     }
   }
 
-  // A retired provider still in the environment is worth a word: it reads as
-  // configuration and is now read by nothing.
-  for (const stale of ["SENDGRID_API_KEY", "GMAIL_USER", "GMAIL_APP_PASSWORD"]) {
+  // SendGrid alone. GMAIL_USER and GMAIL_APP_PASSWORD were warned about here
+  // and are not stale any more: they configure the failover that catches a
+  // failed Brevo send, so a school is meant to keep them.
+  for (const stale of ["SENDGRID_API_KEY"]) {
     if (set(stale)) {
       out.push(
         `${stale} is set but no longer used — this app sends through Brevo. ` +
@@ -96,6 +97,20 @@ function emailWarnings(env = process.env) {
       );
     }
   }
+  /*
+   * No failover is a legitimate configuration, not a fault — most schools will
+   * run on Brevo alone. It is worth one line because the difference only shows
+   * on the day Brevo refuses a send, which is exactly when nobody is reading
+   * documentation.
+   */
+  const gmail = set("GMAIL_USER") && set("GMAIL_APP_PASSWORD");
+  if (!gmail && (set("GMAIL_USER") || set("GMAIL_APP_PASSWORD"))) {
+    out.push(
+      "GMAIL_USER and GMAIL_APP_PASSWORD are half-set — the Gmail failover " +
+      "needs both, and with one missing there is nothing behind Brevo"
+    );
+  }
+
   return out;
 }
 

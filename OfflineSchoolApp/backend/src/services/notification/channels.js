@@ -89,9 +89,12 @@ const emailChannel = {
       // should see who it is from before deciding whether to open it.
       from: fromName ? `"${fromName}" <${from}>` : from,
       to, subject,
-      // Brevo ignores htmlContent beside a templateId, so the two are
-      // exclusive rather than both sent.
-      ...(templateId ? { templateId, params: data ?? {} } : { text, html }),
+      // Both, deliberately. Brevo ignores htmlContent when a templateId is
+      // set, so sending it costs nothing — and it is what the Gmail failover
+      // delivers if the Brevo send fails. A template-only message would have
+      // nothing to fall back to.
+      text, html,
+      ...(templateId ? { templateId, params: data ?? {} } : {}),
     });
 
     return { ok: true, detail: info.messageId ?? null };

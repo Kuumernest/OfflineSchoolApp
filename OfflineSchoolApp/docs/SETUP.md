@@ -28,7 +28,7 @@ table over memory.
 | `BREVO_API_KEY` | for email | The v3 API key from Brevo. Backend only — never in an `EXPO_PUBLIC_`/`VITE_` variable. |
 | `BREVO_SENDER_EMAIL` | for email | The From address. Must be on a domain **authenticated in Brevo**. |
 
-### Email — Brevo
+### Email — Brevo, with a Gmail failover
 
 Full detail in [20-email.md](20-email.md). The short version:
 
@@ -44,18 +44,33 @@ panel and in DNS, not in this application. Brevo refuses an unauthenticated
 sender.
 
 Precedence, when more than one route is present: **Brevo API → Brevo SMTP relay
-→ generic SMTP**. A dedicated route wins, deliberately, so a half-finished
-migration lands on the one the school is moving *to*.
+→ generic SMTP → Gmail**. A dedicated route wins, deliberately, so a
+half-finished migration lands on the one the school is moving *to* — and Gmail
+is last so a configured failover can never quietly become the primary.
 
 | Fallback | Variables | When |
 |---|---|---|
 | Brevo over SMTP | `BREVO_SMTP_USER` (the SMTP login, not the account email), `BREVO_SMTP_KEY` (SMTP key, not API key), `EMAIL_FROM` | A network that permits 587 and not 443 |
 | Any SMTP | `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | A self-hosted relay, or a local mail catcher |
 
-**`GMAIL_USER`, `GMAIL_APP_PASSWORD` and `SENDGRID_API_KEY` are read by
-nothing.** Both providers were removed when this app moved to Brevo. An
-environment still holding one is treated as *unconfigured* rather than routed
-through a provider nobody intends to use. Delete them.
+Optionally, a failover. Brevo is tried for every email; if a send **fails**, the
+same message is retried once through Gmail:
+
+```
+GMAIL_USER=school@gmail.com
+GMAIL_APP_PASSWORD=xxxx xxxx xxxx xxxx   # App Password (4 groups as Google shows it)
+```
+
+Both are needed or there is no failover. Gmail can only send as itself, so the
+failover keeps the school's display name and swaps the address. Its daily
+limits are far below Brevo's — it is a bridge over a failure, not a second bulk
+route. Running on Brevo alone is fully supported: a failed send is then
+reported rather than retried.
+
+**`SENDGRID_API_KEY` is read by nothing.** That provider was removed when this
+app moved to Brevo. An environment still holding it is treated as
+*unconfigured* rather than routed through a provider nobody intends to use.
+Delete it.
 
 `npm run mail:verify` reports which route is in force, which Brevo account the
 key belongs to, and whether the credential is accepted — without printing it and

@@ -1048,6 +1048,13 @@ async function startServer() {
       if (mail.isConfigured()) {
         console.log(`📧 Email provider  →  ${mailCfg.label} as ${mailCfg.from ?? "(no sender)"}`);
         if (mailCfg.replyTo) console.log(`   Reply-To        →  ${mailCfg.replyTo}`);
+        // Whether there is anything behind the primary. Worth a line because
+        // the difference only shows on the day a send is refused.
+        console.log(
+          mailCfg.failover
+            ? `   Failover        →  ${mailCfg.failover.label} as ${mailCfg.failover.as ?? "(unknown)"}`
+            : "   Failover        →  none (a refused send is reported, not retried)"
+        );
         // Configured, but not perfectly. Nothing here stops a send, which is
         // why it reads as a note rather than a warning.
         for (const note of mailCfg.advisories ?? []) console.log(`   Note            →  ${note}`);

@@ -370,6 +370,31 @@ const sendMail = async ({
 };
 
 /**
+ * This adapter, bound to one environment.
+ *
+ * ── The bug this exists to close ──────────────────────────────────────────
+ *
+ * email.transport.js used to register this module itself as the transport:
+ * `makeTransport: () => brevoApi`. Every function here defaults its env to
+ * process.env, so `transport(someExplicitEnv)` handed back an object that
+ * ignored that env entirely and sent using whatever was in process.env — a
+ * different key, a different sender, possibly no configuration at all. In
+ * production the two are the same object and nothing showed; anywhere an
+ * explicit environment is passed — a diagnostic, a test, a second school's
+ * configuration — it silently sent as somebody else.
+ *
+ * That is the same shape as the stub/cache bug fixed earlier in this file: a
+ * second source of truth for which credentials are in force. Binding removes
+ * it, so the transport the registry hands out is tied to the environment it
+ * was built from.
+ */
+const bind = (env = process.env) => ({
+  sendMail: (message) => sendMail(message, env),
+  verify:   () => verify(env),
+  describe: () => describe(env),
+});
+
+/**
  * Is this key accepted, without sending anything?
  *
  * The SMTP providers answer this with nodemailer's verify(), which completes a
@@ -440,6 +465,7 @@ module.exports = {
   recipients,
   attachments,
   sendMail,
+  bind,
   verify,
   describe,
   reset,
