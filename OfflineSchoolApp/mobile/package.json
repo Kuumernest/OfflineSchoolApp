@@ -50,12 +50,13 @@
     "typescript": "~5.8.3"
   },
   "scripts": {
-    "check": "node scripts/check-id-map.js && node scripts/check-sync-state.js && node scripts/check.js && node scripts/check-portal-client.js && node scripts/check-fees-client.js && node scripts/check-exam-cache-migration.js && npm run check:lint && npm run check:types",
+    "check": "node scripts/check-id-map.js && node scripts/check-sync-state.js && node scripts/check.js && node scripts/check-portal-client.js && node scripts/check-fees-client.js && node scripts/check-exam-cache-migration.js && node scripts/check-teacher-profile-table.js && npm run check:lint && npm run check:types",
     "check:syncstate": "node scripts/check-sync-state.js",
     "check:idmap": "node scripts/check-id-map.js",
     "check:portal": "node scripts/check-portal-client.js",
     "check:fees": "node scripts/check-fees-client.js",
     "check:examcache": "node scripts/check-exam-cache-migration.js",
+    "check:teacherprofile": "node scripts/check-teacher-profile-table.js",
     "check:lint": "eslint app src",
     "check:types": "tsc --noEmit -p tsconfig.json",
     "start": "expo start",

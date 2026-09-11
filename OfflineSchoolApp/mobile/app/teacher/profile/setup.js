@@ -19,6 +19,7 @@ import { router }               from "expo-router";
 import { Ionicons }             from "@expo/vector-icons";
 import { useAuthStore }         from "../../../src/store/auth.store";
 import { getDatabase }          from "../../../src/db/database";
+import TeacherProfile           from "../../../src/services/teacherProfile.service";
 import DateField                from "../../../src/components/DateField";
 // ✅ FIX: correct relative path — file lives at src/utils/withRetry.js
 //    not app/utils/withRetry.js
@@ -306,100 +307,42 @@ const saveProfile = async (form, userId) => {
     // Non-fatal — SQLite save below is the source of truth on device
   }
 
-  // ── SQLite save ───────────────────────────────────────
+  /*
+   * ── SQLite save — the one that matters ──────────────────────────────────
+   *
+   * On a phone with no signal this IS the save; the API call above is the
+   * optimistic half. So it throws on failure rather than warning, and the
+   * caller keeps the form open.
+   *
+   * It used to write to `teacher_profiles`, which belongs to the attendance
+   * directory and has five columns — none of them teacher_id. Every save on
+   * every device failed with "table teacher_profiles has no column named
+   * teacher_id". The teacher's own record now has its own table; see
+   * src/services/teacherProfile.service.js.
+   */
   try {
-    const db  = await getDatabase();
-    const now = new Date().toISOString();
+    await TeacherProfile.saveLocal(userId, { ...payload, profileCompleted: true });
 
-    await db.runAsync(
-      `INSERT INTO teacher_profiles (
-         teacher_id, first_name, last_name, gender, date_of_birth,
-         national_id, staff_id, qualification, employment_type,
-         join_date, years_experience, previous_school,
-         phone, alternate_phone, address, city, state,
-         emergency_name, emergency_phone, emergency_relation,
-         blood_group, medical_conditions, bio,
-         profile_completed, updated_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-       ON CONFLICT(teacher_id) DO UPDATE SET
-         first_name         = excluded.first_name,
-         last_name          = excluded.last_name,
-         gender             = excluded.gender,
-         date_of_birth      = excluded.date_of_birth,
-         national_id        = excluded.national_id,
-         staff_id           = excluded.staff_id,
-         qualification      = excluded.qualification,
-         employment_type    = excluded.employment_type,
-         join_date          = excluded.join_date,
-         years_experience   = excluded.years_experience,
-         previous_school    = excluded.previous_school,
-         phone              = excluded.phone,
-         alternate_phone    = excluded.alternate_phone,
-         address            = excluded.address,
-         city               = excluded.city,
-         state              = excluded.state,
-         emergency_name     = excluded.emergency_name,
-         emergency_phone    = excluded.emergency_phone,
-         emergency_relation = excluded.emergency_relation,
-         blood_group        = excluded.blood_group,
-         medical_conditions = excluded.medical_conditions,
-         bio                = excluded.bio,
-         profile_completed  = 1,
-         updated_at         = excluded.updated_at`,
-      [
-        userId,
-        payload.firstName         ?? null,
-        payload.lastName          ?? null,
-        payload.gender            ?? null,
-        payload.dateOfBirth       ?? null,
-        payload.nationalId        ?? null,
-        payload.staffId           ?? null,
-        payload.qualification     ?? null,
-        payload.employmentType    ?? null,
-        payload.joinDate          ?? null,
-        payload.yearsOfExperience ?? null,
-        payload.previousSchool    ?? null,
-        payload.phone             ?? null,
-        payload.alternatePhone    ?? null,
-        payload.address           ?? null,
-        payload.city              ?? null,
-        payload.state             ?? null,
-        payload.emergencyName     ?? null,
-        payload.emergencyPhone    ?? null,
-        payload.emergencyRelation ?? null,
-        payload.bloodGroup        ?? null,
-        payload.medicalConditions ?? null,
-        payload.bio               ?? null,
-        now,
-      ]
-    );
-
-    console.log("✅ teacher_profiles upsert complete");
+    console.log("✅ teacher profile saved locally");
 
     // Update display name in users table
+    const db = await getDatabase();
     await db.runAsync(
       `UPDATE users SET name = ?, updated_at = ? WHERE id = ?`,
       [fullName, new Date().toISOString(), userId]
     ).catch(() => {});
 
-    // Mark complete in settings_profile if that table exists
-    const spExists = await db.getFirstAsync(
-      `SELECT name FROM sqlite_master
-       WHERE type='table' AND name='settings_profile'
-       LIMIT 1`
-    ).catch(() => null);
-
-    if (spExists) {
-      await db.runAsync(
-        `INSERT INTO settings_profile (user_id, profile_completed, updated_at)
-         VALUES (?, 1, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           profile_completed = 1,
-           updated_at        = excluded.updated_at`,
-        [userId, new Date().toISOString()]
-      ).catch(() => {});
-    }
-
+    /*
+     * The settings_profile write that used to sit here is gone, and was a
+     * second instance of the same bug: settings.service.js creates that table
+     * as (id, name, email, role, schoolId, updated_at) keyed by id='me', and
+     * this inserted (user_id, profile_completed) into it. It could only ever
+     * fail — and it was wrapped in .catch(() => {}), so it failed on every
+     * save for the life of the feature without one line in the log.
+     *
+     * "Is the profile complete?" now has one home, the profile_completed
+     * column on the record itself.
+     */
   } catch (err) {
     console.warn("[profile/setup] SQLite save error:", err.message);
     throw err;
@@ -437,28 +380,17 @@ export const isTeacherProfileComplete = async (userId) => {
     }
   } catch { /* fall through to SQLite */ }
 
-  // ── 3. SQLite fallback ────────────────────────────────
+  /*
+   * ── 3. SQLite fallback ────────────────────────────────────────────────
+   *
+   * Both queries here read tables whose schema did not match, behind
+   * .catch(() => null) — so this always returned false offline, and a teacher
+   * who had completed the form was asked to complete it again on every
+   * launch. Silently: a swallowed schema error looks exactly like an empty
+   * table.
+   */
   try {
-    const db = await getDatabase();
-
-    const tpRow = await db.getFirstAsync(
-      `SELECT profile_completed
-       FROM   teacher_profiles
-       WHERE  teacher_id = ?
-       LIMIT  1`,
-      [userId]
-    ).catch(() => null);
-    if (tpRow?.profile_completed) return true;
-
-    const spRow = await db.getFirstAsync(
-      `SELECT profile_completed
-       FROM   settings_profile
-       WHERE  user_id = ?
-       LIMIT  1`,
-      [userId]
-    ).catch(() => null);
-    if (spRow?.profile_completed) return true;
-
+    if (await TeacherProfile.isCompleteLocal(userId)) return true;
   } catch { /* ignore */ }
 
   return false;
@@ -549,40 +481,19 @@ export default function TeacherProfileSetup() {
         }
       } catch { /* fall through to SQLite */ }
 
-      // Fallback: local cache
+      // Fallback: local cache. Returns the form's own shape, so there is no
+      // column-name mapping here to drift out of step with the writer.
       try {
-        const db  = await getDatabase();
-        const row = await db.getFirstAsync(
-          `SELECT * FROM teacher_profiles WHERE teacher_id = ? LIMIT 1`,
-          [userId]
-        ).catch(() => null);
-
-        if (row) {
-          setForm((prev) => ({
-            ...prev,
-            firstName:         row.first_name         || prev.firstName,
-            lastName:          row.last_name          || prev.lastName,
-            gender:            row.gender             || prev.gender,
-            dateOfBirth:       row.date_of_birth      || prev.dateOfBirth,
-            nationalId:        row.national_id        || prev.nationalId,
-            staffId:           row.staff_id           || prev.staffId,
-            qualification:     row.qualification      || prev.qualification,
-            employmentType:    row.employment_type    || prev.employmentType,
-            joinDate:          row.join_date          || prev.joinDate,
-            yearsOfExperience: String(row.years_experience || ""),
-            previousSchool:    row.previous_school    || prev.previousSchool,
-            phone:             row.phone              || prev.phone,
-            alternatePhone:    row.alternate_phone    || prev.alternatePhone,
-            address:           row.address            || prev.address,
-            city:              row.city               || prev.city,
-            state:             row.state              || prev.state,
-            emergencyName:     row.emergency_name     || prev.emergencyName,
-            emergencyPhone:    row.emergency_phone    || prev.emergencyPhone,
-            emergencyRelation: row.emergency_relation || prev.emergencyRelation,
-            bloodGroup:        row.blood_group        || prev.bloodGroup,
-            medicalConditions: row.medical_conditions || prev.medicalConditions,
-            bio:               row.bio                || prev.bio,
-          }));
+        const saved = await TeacherProfile.getLocal(userId);
+        if (saved) {
+          setForm((prev) => {
+            const merged = { ...prev };
+            for (const [key, value] of Object.entries(saved)) {
+              if (key === "profileCompleted" || key === "updatedAt") continue;
+              if (value !== "" && value != null) merged[key] = value;
+            }
+            return merged;
+          });
         }
       } catch { /* ignore */ }
     };

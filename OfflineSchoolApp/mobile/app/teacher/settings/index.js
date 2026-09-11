@@ -17,7 +17,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router }       from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "../../../src/store/auth.store";
-import { getDatabase }  from "../../../src/db/database";
+import TeacherProfile from "../../../src/services/teacherProfile.service";
 import api              from "../../../src/services/api";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import LanguageSwitcher from "../../../src/components/LanguageSwitcher";
@@ -328,31 +328,19 @@ export default function TeacherSettingsScreen() {
         }
       } catch { /* fall through to SQLite */ }
 
-      // SQLite fallback
-      const db  = await getDatabase();
-      const row = await db.getFirstAsync(
-        `SELECT * FROM teacher_profiles WHERE teacher_id = ? LIMIT 1`,
-        [userId]
-      ).catch(() => null);
-
-      if (row) {
-        setProfile({
-          firstName:         row.first_name,
-          lastName:          row.last_name,
-          gender:            row.gender,
-          staffId:           row.staff_id,
-          qualification:     row.qualification,
-          // ✅ specialization omitted — admin-assigned
-          employmentType:    row.employment_type,
-          phone:             row.phone,
-          address:           row.address,
-          bloodGroup:        row.blood_group,
-          emergencyName:     row.emergency_name,
-          emergencyPhone:    row.emergency_phone,
-          emergencyRelation: row.emergency_relation,
-          profileCompleted:  !!row.profile_completed,
-        });
-        setProfileComplete(!!row.profile_completed);
+      /*
+       * SQLite fallback.
+       *
+       * This read `teacher_profiles`, which is the attendance directory —
+       * five columns, none of them teacher_id — behind a .catch(() => null).
+       * So offline it found nothing, reported nothing, and the screen showed
+       * an empty profile as though the teacher had never filled the form in.
+       * specialization stays omitted here: it is admin-assigned.
+       */
+      const saved = await TeacherProfile.getLocal(userId);
+      if (saved) {
+        setProfile(saved);
+        setProfileComplete(saved.profileCompleted);
       }
     } catch (err) {
       console.warn("[settings] load profile failed:", err.message);
