@@ -23,6 +23,7 @@ import {
   isAuthenticated,
   getCurrentAuth,
   hasRole,
+  hasPermission,
 }                                       from "../utils/authHelpers";
 import { API }                          from "./apiEndpoints";
 import { MutationQueue }                from "./mutationQueue.service";
@@ -1726,7 +1727,37 @@ class SyncManagerClass {
    */
   async pullFeeStructures() {
     if (this._isUnauthenticated()) return;
-    if (this.isStudent()) return;
+
+    /*
+     * Only pull this if the account could possibly be allowed to.
+     *
+     * The guard used to exclude students alone, so every teacher's sync made a
+     * request that could not succeed:
+     *
+     *   403 ← /fees/structures
+     *   "Access denied. This action requires \"fees.view\"."
+     *
+     * It was caught below and the sync carried on, so nothing visibly broke —
+     * which is why it survived. What it cost was a wasted round trip on every
+     * sync, on a connection this app exists to be careful with, and a red
+     * ERROR line in the device log every time. A log that cries wolf on each
+     * sync is one nobody reads when something real happens, and that is the
+     * actual damage.
+     *
+     * hasPermission falls back to roles when the stored session predates the
+     * permission list, so a phone that has not signed in since that shipped
+     * behaves exactly as it did. The roles here are the server's own defaults
+     * for fees.view — FINANCE_ROLES in backend/src/config/roles.js — plus the
+     * legacy "admin" spelling the phone may still hold.
+     *
+     * This decides what to ASK for, never what is allowed. The server checks
+     * every request for itself; this copy is stale the moment a school changes
+     * something, so a teacher genuinely granted fees.view still gets the
+     * structures — the permission list in their session says so.
+     */
+    if (!hasPermission("fees.view", ["super_admin", "school_admin", "admin", "bursar"])) {
+      return;
+    }
 
     try {
       const schoolId = await this.getSchoolId();
@@ -1736,8 +1767,16 @@ class SyncManagerClass {
       const { count } = await svc.syncFromServer(schoolId);
       if (count > 0) console.log(`[SyncManager] Pulled ${count} fee structure(s)`);
     } catch (err) {
-      // A bursar without fees.view gets a 403 here, which is a permission
-      // rather than a fault; the rest of the sync must not fail for it.
+      /*
+       * A 403 that still gets through — a permission revoked since this
+       * session was stored — is a permission, not a fault. It is logged as
+       * such and the rest of the sync continues; anything else is a real
+       * failure and keeps its warning.
+       */
+      if (err?.response?.status === 403) {
+        console.log("[SyncManager] fee structures not permitted for this account — skipping");
+        return;
+      }
       console.warn("[SyncManager] pullFeeStructures failed:", err.message);
     }
   }

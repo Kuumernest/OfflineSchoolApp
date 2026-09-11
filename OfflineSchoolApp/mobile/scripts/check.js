@@ -618,10 +618,45 @@ const checkStudentSyncPlan = () => {
   const turnsStudentsAway = (name) => {
     const i = manager.indexOf(`async ${name}(`);
     if (i === -1) return null;
-    const body = manager.slice(i, i + 700);
-    // Either spelling counts: turning students away, or admitting only
-    // admins — !isAdmin() excludes a pupil by a wider door.
-    return /isStudent\(\)\s*\)?\s*return|!\s*this\.isAdmin\(\)\s*\)?\s*return/.test(body);
+
+    /*
+     * The method's own body, and nothing after it.
+     *
+     * A fixed character window is wrong in both directions, and this check has
+     * now been caught by each. Too small (it was 700) and a guard explained at
+     * length sits outside it, so a guarded method reads as naked. Too large and
+     * it runs past the closing brace into the NEXT method, whose guard then
+     * answers for this one — which is worse, because it reports a pass.
+     *
+     * So the body is bounded by where the method actually ends, and comments
+     * are stripped so prose about students cannot be mistaken for code.
+     */
+    const NL    = String.fromCharCode(10);
+    const after = manager.slice(i).split(String.fromCharCode(13) + NL).join(NL);
+    const close = after.indexOf(NL + "  }" + NL);
+    const body  = (close === -1 ? after : after.slice(0, close))
+      .replace(/\/\*[\s\S]*?\*\//g, "")
+      .replace(/^\s*\/\/.*$/gm, "");
+
+    // Turning students away, or admitting only admins — !isAdmin() excludes a
+    // pupil by a wider door.
+    if (/isStudent\(\)\s*\)?\s*return|!\s*this\.isAdmin\(\)\s*\)?\s*return/.test(body)) return true;
+
+    /*
+     * A capability guard counts too, and is the better instrument: the server
+     * decides by permission, so a school that grants a teacher fees.view
+     * should get that data on the teacher's phone. What matters to THIS check
+     * is only whether a pupil can reach the request — so the fallback roles,
+     * which stand in for a session stored before the permission list shipped,
+     * must not name one.
+     */
+    const perm = body.match(/hasPermission\(\s*["'][^"']+["']\s*,\s*\[([^\]]*)\]/);
+    if (perm) {
+      const roles = perm[1].split(",").map((r) => r.trim().replace(/["']/g, ""));
+      return !roles.includes("student");
+    }
+
+    return false;
   };
 
   const wrong = [];
