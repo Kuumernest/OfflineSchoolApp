@@ -409,7 +409,7 @@ export default function TeacherMarkAttendanceScreen() {
               activeOpacity={0.7}
             >
               <Text style={[styles.periodChipText, !selectedPeriod && styles.periodChipTextActive]}>
-                {t("attAdmin.allPeriods", "All")}
+                {t("attAdmin.allPeriods")}
               </Text>
             </TouchableOpacity>
             {periods.filter(p => p.isActive !== false).map((p) => (
@@ -445,14 +445,26 @@ export default function TeacherMarkAttendanceScreen() {
           <View style={[styles.progressBarFill, { width: `${pct}%` }]} />
         </View>
         <View style={styles.statusCounts}>
+          {/*
+            * labelKey, not label. These four carried `label: "P"` and were
+            * rendered with t(s.labelKey) — t(undefined), which i18n-js prints
+            * as [missing "en." translation]. Four of those sat across the top
+            * of the register, in front of whoever was taking it.
+            *
+            * The abbreviations are translated rather than hard-coded because
+            * they are not the same letters in both languages: late is R for
+            * retard and excused is J for justifié.
+            */}
           {[
-            { label: "P", value: presentCount, color: "#059669" },
-            { label: "A", value: absentCount,  color: "#DC2626" },
-            { label: "L", value: lateCount,    color: "#D97706" },
-            { label: "E", value: excusedCount, color: "#4F46E5" },
+            { labelKey: "attAdmin.abbrPresent", value: presentCount, color: "#059669" },
+            { labelKey: "attAdmin.abbrAbsent",  value: absentCount,  color: "#DC2626" },
+            { labelKey: "attAdmin.abbrLate",    value: lateCount,    color: "#D97706" },
+            { labelKey: "attAdmin.abbrExcused", value: excusedCount, color: "#4F46E5" },
           ].map((s) => (
             <View
-              key={s.value}
+              // The key was s.value — four counts that all start at 0, so React
+              // saw four children with the same key on first render.
+              key={s.labelKey}
               style={[styles.countChip, { backgroundColor: s.color + "15" }]}
             >
               <Text style={[styles.countVal, { color: s.color }]}>{s.value}</Text>

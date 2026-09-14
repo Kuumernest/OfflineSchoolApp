@@ -50,7 +50,7 @@
     "typescript": "~5.8.3"
   },
   "scripts": {
-    "check": "node scripts/check-id-map.js && node scripts/check-sync-state.js && node scripts/check.js && node scripts/check-portal-client.js && node scripts/check-fees-client.js && node scripts/check-exam-cache-migration.js && node scripts/check-teacher-profile-table.js && node scripts/check-sync-permissions.js && npm run check:lint && npm run check:types",
+    "check": "node scripts/check-id-map.js && node scripts/check-sync-state.js && node scripts/check.js && node scripts/check-portal-client.js && node scripts/check-fees-client.js && node scripts/check-exam-cache-migration.js && node scripts/check-teacher-profile-table.js && node scripts/check-sync-permissions.js && npm run check:i18n && npm run check:lint && npm run check:types",
     "check:syncstate": "node scripts/check-sync-state.js",
     "check:idmap": "node scripts/check-id-map.js",
     "check:portal": "node scripts/check-portal-client.js",
@@ -63,7 +63,8 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "check:i18n": "node scripts/check-i18n.js"
   },
   "overrides": {
     "react": "19.2.3",

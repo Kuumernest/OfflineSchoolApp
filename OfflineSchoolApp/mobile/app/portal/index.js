@@ -677,8 +677,8 @@ export default function ParentPortalScreen() {
                 {/* Fee Reminders */}
                 {feeReminders?.reminders?.length > 0 && (
                   <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.feeReminders", "Fee Reminders")}</Text>
-                    <Text style={styles.cardHint}>{t("portal.feeRemindersHint", "What you owe and when it's due")}</Text>
+                    <Text style={styles.cardTitle}>{t("portal.feeReminders")}</Text>
+                    <Text style={styles.cardHint}>{t("portal.feeRemindersHint")}</Text>
                     {feeReminders.reminders.map((r) => (
                       <View key={r.chargeId} style={styles.line}>
                         <View style={{ flex: 1, minWidth: 0 }}>
@@ -690,19 +690,19 @@ export default function ParentPortalScreen() {
                               styles.lineMeta,
                               r.isOverdue && { color: C.danger, fontWeight: "700" },
                             ]}>
-                              {t("portal.dueBy", "Due by")} {formatDateShort(r.dueDate)}
+                              {t("portal.dueBy")} {formatDateShort(r.dueDate)}
                             </Text>
                             {r.isOverdue && (
                               <View style={[styles.badge, { backgroundColor: C.dangerBg }]}>
                                 <Text style={[styles.badgeText, { color: C.danger }]}>
-                                  {t("portal.overdue", "Overdue")} · {r.daysOverdue}d
+                                  {t("portal.overdue")} · {r.daysOverdue}d
                                 </Text>
                               </View>
                             )}
                             {r.isDueSoon && !r.isOverdue && (
                               <View style={[styles.badge, { backgroundColor: C.warningBg }]}>
                                 <Text style={[styles.badgeText, { color: C.warning }]}>
-                                  {t("portal.dueSoon", "Due soon")}
+                                  {t("portal.dueSoon")}
                                 </Text>
                               </View>
                             )}
@@ -717,7 +717,7 @@ export default function ParentPortalScreen() {
                 {/* Payment Plan */}
                 {feeReminders?.hasPlan && feeReminders.plan && (
                   <View style={styles.card}>
-                    <Text style={styles.cardTitle}>{t("portal.paymentPlan", "Payment Plan")}</Text>
+                    <Text style={styles.cardTitle}>{t("portal.paymentPlan")}</Text>
                     {feeReminders.plan.reason && (
                       <Text style={styles.cardHint}>{feeReminders.plan.reason}</Text>
                     )}
@@ -726,7 +726,7 @@ export default function ParentPortalScreen() {
                       return (
                         <View key={inst.seq} style={styles.line}>
                           <Text style={[styles.lineLabel, isPast && { textDecorationLine: "line-through", color: C.inkMuted }]}>
-                            {t("portal.instalment", "Instalment")} {inst.seq} — {formatDateShort(inst.dueDate)}
+                            {t("portal.instalment")} {inst.seq} — {formatDateShort(inst.dueDate)}
                           </Text>
                           <Text style={styles.lineAmount}>{formatMoney(inst.amount)}</Text>
                         </View>

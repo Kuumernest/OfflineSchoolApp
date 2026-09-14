@@ -98,7 +98,11 @@
     "optionalContact": "Facultatif, mais l'établissement souhaite généralement disposer d'un contact.",
     "tryDifferent": "Essayez un autre nom ou mot-clé",
     "unknown": "Inconnu",
-    "languageHint": "S'applique immédiatement et est mémorisé sur cet appareil."
+    "languageHint": "S'applique immédiatement et est mémorisé sur cet appareil.",
+    "error": "Erreur",
+    "ok": "OK",
+    "male": "Masculin",
+    "female": "Féminin"
   },
   "nav": {
     "dashboard": "Tableau de bord",
@@ -4586,7 +4590,9 @@
     "markTeachersFirst": "Faites d'abord l'appel des enseignants, puis revenez ici",
     "noTeachersMatch": "Aucun enseignant ne correspond à votre recherche",
     "tryAgain": "Réessayer",
-    "noClassesFound": "Aucune classe trouvée"
+    "noClassesFound": "Aucune classe trouvée",
+    "allPeriods": "Toutes les périodes",
+    "selectPeriod": "Sélectionner la période"
   },
   "rankTable": {
     "titleGrade": "Classement du niveau/série",

@@ -98,7 +98,11 @@
     "optionalContact": "Optional, but the school will usually want a contact on file.",
     "tryDifferent": "Try a different name or keyword",
     "unknown": "Unknown",
-    "languageHint": "Applies immediately, and is remembered on this device."
+    "languageHint": "Applies immediately, and is remembered on this device.",
+    "error": "Error",
+    "ok": "OK",
+    "male": "Male",
+    "female": "Female"
   },
   "nav": {
     "dashboard": "Dashboard",
@@ -4586,7 +4590,9 @@
     "markTeachersFirst": "Mark teacher attendance first, then check back here",
     "noTeachersMatch": "No teachers match your search",
     "tryAgain": "Try Again",
-    "noClassesFound": "No classes found"
+    "noClassesFound": "No classes found",
+    "allPeriods": "All periods",
+    "selectPeriod": "Select period"
   },
   "rankTable": {
     "titleGrade": "Grade/Stream Rankings",

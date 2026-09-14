@@ -68,7 +68,7 @@ const PeriodSelector = ({ schoolId, selected, onSelect }) => {
   return (
     <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
       <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 6 }}>
-        {t("attAdmin.selectPeriod", "Select period")}
+        {t("attAdmin.selectPeriod")}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <TouchableOpacity
@@ -80,7 +80,7 @@ const PeriodSelector = ({ schoolId, selected, onSelect }) => {
           activeOpacity={0.7}
         >
           <Text style={[ps.chipText, !selected && ps.chipTextActive]}>
-            {t("attAdmin.allPeriods", "All")}
+            {t("attAdmin.allPeriods")}
           </Text>
         </TouchableOpacity>
         {periods.filter(p => p.isActive !== false).map((p) => (
