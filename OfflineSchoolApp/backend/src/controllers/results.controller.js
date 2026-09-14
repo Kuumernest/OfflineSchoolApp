@@ -27,6 +27,11 @@ const { lookupGrade } = require("../services/grading.service");
 // scripts/check-report-card.js.
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
+// The CA half of a sequence. A sequence card shows both assessments and the
+// mark they combine to; the pairing and the arithmetic are shared with the
+// grading engine so the card cannot print a different number from the one the
+// term average was computed from.
+const sequenceAssessment = require("../services/sequenceAssessment.service");
 
 // ─────────────────────────────────────────────────────────
 // UTILITIES
@@ -332,7 +337,17 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     Exam.findById(examId).lean(),
   ]);
 
-  if (!summary && !scores.length) return { ok: false };
+  /*
+   * The continuous assessment beside this paper.
+   *
+   * Inactive — and every lookup below null — for a school with CA off, for a
+   * card that is not a sequence card, and for a sequence with no CA exam,
+   * which is every report card this system printed before CA existed. Those
+   * cards come out byte-identical.
+   */
+  const ca = await sequenceAssessment.loadSequenceContext(exam);
+
+  if (!summary && !scores.length && ca.caByKey.size === 0) return { ok: false };
 
   /*
    * The form master, from the class this card belongs to.
@@ -374,8 +389,39 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // reach it too and where scripts/check-report-card.js can test it: pupils who
   // did not sit a subject are out of both the ranking and the denominator, and
   // equal marks share a place.
-  const ranking = subjectRanking(allExamScores);
-  const computeSubjectPosition = (score) => ranking.positionOf(score);
+  /*
+   * Ranked on the SEQUENCE mark, not on the paper alone.
+   *
+   * A pupil's place in a subject has to be a place in the mark the card
+   * prints. Ranking the paper while printing CA+paper would put a pupil 3rd
+   * beside a mark that is 1st, on the same line, on paper a family keeps.
+   *
+   * With CA inactive this is the untouched list of paper scores and the
+   * positions are exactly what they were.
+   */
+  const rankingInput = ca.active
+    ? allExamScores.map((row) => {
+        const blended = sequenceAssessment.blendSubject({
+          ca:   ca.lookup(row.studentId, row.subjectId),
+          test: row,
+          settings: ca.settings,
+        });
+        return { ...row, score: blended.score, maxScore: blended.maxScore };
+      })
+    : allExamScores;
+
+  const ranking = subjectRanking(rankingInput);
+  // Positions are looked up by the same identity the ranking was built on, so
+  // a row is probed with its blended mark rather than its paper mark.
+  const blendedForRanking = new Map(
+    rankingInput.map((row) => [
+      `${String(row.studentId)}|${String(row.subjectId)}`, row,
+    ])
+  );
+  const computeSubjectPosition = (score) =>
+    ranking.positionOf(
+      blendedForRanking.get(`${String(score.studentId)}|${String(score.subjectId)}`) || score
+    );
 
   // ── Grade + remark per the school's configured bands (§3, §4) ──────────────
   // The school's GradingConfig.grades bands are on the /20 Cameroon scale
@@ -431,7 +477,34 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // same pupil's sequence card said ×4 and their term card said ×1.
   const resolveCoeff = (es) => coefficientFromWeight(es?.weight);
 
-  const subjectRows = scores.map((score) => {
+  /*
+   * A subject this pupil has CA in and no paper mark for.
+   *
+   * Without these the mark a teacher entered would sit in the database and
+   * appear on no report card, because the card is built from the paper's
+   * scores. A stand-in row carries no paper mark — which is the honest state —
+   * and blends to the CA alone.
+   */
+  const caOnlyRows = [];
+  if (ca.active) {
+    const marked = new Set(scores.map((row) => String(row.subjectId)));
+    for (const [key, caRow] of ca.caByKey) {
+      const [sid, subjectId] = key.split("|");
+      if (String(sid) !== String(studentId)) continue;
+      if (marked.has(subjectId)) continue;
+      caOnlyRows.push({
+        _id: `ca-only:${subjectId}`,
+        studentId, subjectId,
+        examSubjectId: null,
+        score:    null,
+        maxScore: caRow.maxScore,
+        isAbsent: false,
+        isExempt: false,
+      });
+    }
+  }
+
+  const subjectRows = [...scores, ...caOnlyRows].map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
                      subjectMap.get(String(score.subjectId)) || {};
     // The exam's own total before a literal 100. A subject row written before
@@ -441,9 +514,31 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     const maxScore = score.maxScore || es.maxScore || exam?.totalMarks || 100;
     const coeff    = resolveCoeff(es);
 
+    /*
+     * The sequence mark: CA and the paper, combined by the school's split.
+     *
+     * `blended` is null whenever CA is inactive, and then every value below is
+     * the paper's own — the same card this system has always printed.
+     *
+     * A pupil with no CA is graded on the paper alone, not on 60 % of it. A
+     * missing CA is an absent record, not a zero, and the renormalisation in
+     * blendSubject is what keeps those two different.
+     */
+    const blended = ca.active
+      ? sequenceAssessment.blendSubject({
+          ca:   ca.lookup(studentId, score.subjectId),
+          test: { score: score.score, maxScore,
+                  isAbsent: score.isAbsent || false,
+                  isExempt: score.isExempt || false },
+          settings: ca.settings,
+        })
+      : null;
+
+    const effectiveScore = blended ? blended.score : score.score;
+
     const normalizedMark =
-      score.score != null && !score.isAbsent && !score.isExempt
-        ? Math.round((score.score / maxScore) * 20 * 100) / 100
+      effectiveScore != null && !score.isAbsent && !score.isExempt
+        ? Math.round((effectiveScore / maxScore) * 20 * 100) / 100
         : null;
 
     const weightedScore =
@@ -460,8 +555,26 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       examSubjectId: score.examSubjectId || es._id || null,
       subjectName:   es.subjectName  || String(score.subjectId),
       teacherName:   es.teacherName  || null,
-      score:         score.score,
+      // The sequence mark — what the "Score" column has always held, now made
+      // of both assessments when the school uses both.
+      score:         effectiveScore,
       maxScore,
+      /*
+       * The two halves, for the CA and Test columns.
+       *
+       * null throughout when CA is off or nothing was recorded, and null is
+       * what the renderer prints as "—". It must never become a 0: a dash says
+       * "no CA was entered", a zero says "this pupil scored nothing", and a
+       * parent reads the difference.
+       */
+      caScore:       blended?.caScore      ?? null,
+      caMaxScore:    blended?.caMaxScore   ?? null,
+      caMark:        blended?.caMark       ?? null,
+      testScore:     blended?.testScore    ?? null,
+      testMaxScore:  blended?.testMaxScore ?? null,
+      testMark:      blended?.testMark     ?? null,
+      caWeight:      blended?.caWeight     ?? null,
+      testWeight:    blended?.testWeight   ?? null,
       isAbsent:      score.isAbsent      ?? false,
       isExempt:      score.isExempt      ?? false,
       teacherRemark: score.teacherRemark || null,
@@ -562,6 +675,18 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       // The form master, over the signature rule at the foot of the card.
       classTeacher: classTeacherName,
       showGrades,
+      /*
+       * Whether this card carries CA columns at all (§1).
+       *
+       * True only when the school has CA on AND this sequence actually has a
+       * CA exam: a card with two empty columns headed "CA" tells a parent the
+       * school assessed nothing, which is not what "no CA exam was created"
+       * means. The weights ride along so the card can say what the split was —
+       * a mark of 15.2 is not checkable without them.
+       */
+      caEnabled:    ca.active,
+      caWeight:     ca.active ? ca.settings.caWeight   : null,
+      testWeight:   ca.active ? ca.settings.testWeight : null,
       reportType,
       subjects:     subjectRows,
       summary: summary
@@ -1439,6 +1564,10 @@ const getResultHistory = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 module.exports = {
+  // The payload every report-card route is built from, exported so the CA
+  // rules can be asserted against the thing a card is actually made of rather
+  // than against a hand-written imitation of it.
+  buildStudentReportCardData,
   getExamResults,
   getExamStats,
   getExamRankings,

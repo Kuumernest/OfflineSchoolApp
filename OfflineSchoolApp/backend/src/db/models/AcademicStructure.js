@@ -4,6 +4,12 @@
 const mongoose       = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 
+// The same list Exam.type carries. Built from the shared constant rather
+// than required from the Exam model, which would tie two schemas together
+// at load time for the sake of one array.
+const { CA_TYPE } = require("../../../../shared/caAssessment");
+const ASSESSMENT_TYPES = ["test", "practical", "promotion_exam", CA_TYPE];
+
 /**
  * AcademicStructure — one per school per academic year.
  *
@@ -13,9 +19,11 @@ const { v4: uuidv4 } = require("uuid");
 
 const assessmentSchema = new mongoose.Schema(
   {
+    // The same enum Exam.type carries, from the same place — "ca" included, so
+    // a school can describe a sequence that is assessed continuously.
     type: {
       type:    String,
-      enum:    ["test", "practical", "promotion_exam"],
+      enum:    ASSESSMENT_TYPES,
       default: "test",
     },
     label: { type: String, default: null }, // e.g. "Test 1", "Mid-Term"

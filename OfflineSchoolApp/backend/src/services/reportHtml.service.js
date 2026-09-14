@@ -39,6 +39,13 @@ const LABELS = {
     noLogo:       "NO LOGO",
     subject:      "Subject",
     score:        "Score",
+    // Continuous assessment and the sequence paper, the two halves a sequence
+    // is marked in. Short in the header because they are two extra columns on
+    // a page that is already full; the long form is on the note beneath.
+    caCol:        "CA",
+    testCol:      "Test",
+    caFull:       "Continuous Assessment",
+    caNote:       "Sequence mark = CA x {ca}% + Test x {test}%",
     outOf20:      "/20",
     coeff:        "Coeff",
     grade:        "Grade",
@@ -80,6 +87,10 @@ const LABELS = {
     noLogo:       "SANS LOGO",
     subject:      "Matière",
     score:        "Note",
+    caCol:        "CC",
+    testCol:      "Épreuve",
+    caFull:       "Contrôle Continu",
+    caNote:       "Note de séquence = CC x {ca}% + Épreuve x {test}%",
     outOf20:      "/20",
     coeff:        "Coef",
     grade:        "Mention",
@@ -194,6 +205,22 @@ function renderReportCardHtml(payload, opts = {}) {
   const showGrades = opts.showGrades ?? payload.showGrades ?? true;
   const school     = opts.school || {};
 
+  /*
+   * The CA columns (§5 of the CA rules).
+   *
+   * On when the payload says this card's sequence was assessed both ways. Off
+   * for a school that does not use continuous assessment, and off for a term
+   * or annual card, whose subject marks are already combined across several
+   * sequences and have no single CA to name.
+   *
+   * Two columns, in the order a sequence is actually marked: CA, then the
+   * paper, then the mark they make. A card that printed only the combined mark
+   * would give a parent no way to see where it came from.
+   */
+  const showCa = (payload.caEnabled === true) && payload.reportType === "sequence";
+  const caWeight   = payload.caWeight;
+  const testWeight = payload.testWeight;
+
   // The remark in the reader's language. The band carries both; a teacher's own
   // remark carries one, in whichever language they wrote it, and is not
   // translated. Until this existed a French card printed "Observation" over a
@@ -206,6 +233,20 @@ function renderReportCardHtml(payload, opts = {}) {
     remark:   summary?.overallRemark,
     remarkFr: summary?.overallRemarkFr,
   });
+
+  /*
+   * How the sequence mark was arrived at, under the table.
+   *
+   * "CA x 40% + Test x 60%" is the difference between a parent who can check
+   * the 15.2 and a parent who has to take it on trust. Only printed when there
+   * is a split to name — a card with no CA columns needs no explanation of
+   * them.
+   */
+  const caNote = showCa && caWeight != null && testWeight != null
+    ? `<p class="ca-note">${esc(
+        t.caNote.replace("{ca}", String(caWeight)).replace("{test}", String(testWeight))
+      )} &nbsp;·&nbsp; ${esc(t.caCol)} = ${esc(t.caFull)}</p>`
+    : "";
 
   // 2nd / 35 — language-aware ordinal for subject and class positions.
   const ordinal = (n) => {
@@ -232,6 +273,26 @@ function renderReportCardHtml(payload, opts = {}) {
       ? flag
       : `${s.score ?? "—"} / ${s.maxScore ?? 100}`;
 
+    /*
+     * A part of the sequence, or a dash.
+     *
+     * A dash for a CA that was never recorded, never a 0. They are different
+     * facts — one says the pupil was not assessed, the other says they scored
+     * nothing — and the second one is a thing a school would have to answer
+     * for. The whole feature turns on this cell.
+     */
+    const partCell = (score, max) =>
+      score == null ? "—" : `${score} / ${max ?? s.maxScore ?? 20}`;
+
+    const caCells = showCa
+      ? `<td style="text-align:center;color:${absent ? "#9CA3AF" : "#374151"}">
+           ${absent ? flag : esc(partCell(s.caScore, s.caMaxScore))}
+         </td>
+         <td style="text-align:center;color:${absent ? "#9CA3AF" : "#374151"}">
+           ${absent ? flag : esc(partCell(s.testScore, s.testMaxScore))}
+         </td>`
+      : "";
+
     // "2nd / 35" — the student's rank in this subject, over the number of
     // students who actually sat the subject (computed in the controller).
     const posCell = (s) => {
@@ -245,6 +306,7 @@ function renderReportCardHtml(payload, opts = {}) {
         <td>${esc(s.subjectName || "—")}
           ${s.teacherName ? `<div class="teacher">${esc(s.teacherName)}</div>` : ""}
         </td>
+        ${caCells}
         <td style="text-align:center;color:${color}">${esc(scoreCell)}</td>
         <td style="text-align:center;color:${color}">${norm}</td>
         <td style="text-align:center">${s.coefficient ?? 1}</td>
@@ -409,6 +471,9 @@ function renderReportCardHtml(payload, opts = {}) {
     thead th { background: #2563eb; color: #fff; font-size: 11px; }
     tr:nth-child(even) td { background: #f9fafb; }
     .teacher { font-size: 10px; color: #9ca3af; }
+    /* How the sequence mark was made. Small, under the table, and
+       printed only when the school marks a sequence both ways. */
+    .ca-note { font-size: 9.5px; color: #6b7280; margin: 4px 0 0; text-align: right; }
     /* The outcome card, on ONE row: the figures, then the verdict.
        A flex-basis wide enough to be refused is a wrap instruction in
        disguise — these ask for zero and divide what the panel has. */
@@ -561,6 +626,8 @@ function renderReportCardHtml(payload, opts = {}) {
     <thead>
       <tr>
         <th>${t.subject}</th>
+        ${showCa ? `<th style="text-align:center">${t.caCol}</th>
+        <th style="text-align:center">${t.testCol}</th>` : ""}
         <th style="text-align:center">${t.score}</th>
         <th style="text-align:center">${t.outOf20}</th>
         <th style="text-align:center">${t.coeff}</th>
@@ -571,8 +638,9 @@ function renderReportCardHtml(payload, opts = {}) {
       </tr>
     </thead>
     <tbody>${rows ||
-      `<tr><td colspan="${showGrades ? 8 : 7}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
+      `<tr><td colspan="${(showGrades ? 8 : 7) + (showCa ? 2 : 0)}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
   </table>
+  ${caNote}
 
   ${(avg20 != null || pct != null || summary?.overallGrade || summary?.classPosition != null)
     || isPassing != null || overallRemarkText
@@ -761,6 +829,12 @@ function toTemplateData(payload, opts = {}) {
       subjectsFailed:    summary?.subjectsFailed  ?? 0,
       totalCoefficients: computed.totalCoefficients ?? null,
 
+      // Whether this card's sequence was marked both ways, and by what split,
+      // so a school's own layout can decide to show a CA column at all.
+      caEnabled:         payload.caEnabled === true,
+      caWeight:          payload.caWeight   ?? null,
+      testWeight:        payload.testWeight ?? null,
+
       // ── Term, sequence and annual figures ────────────────────────────────
       //
       // The engine has always mapped {{term_average}}, {{annual_class_position}},
@@ -808,8 +882,23 @@ function toTemplateData(payload, opts = {}) {
     subjects: (payload.subjects || []).map((r) => ({
       subjectName:    r.subjectName || "",
       teacherName:    r.teacherName || null,
-      caScore:        null,
-      examScore:      r.score          ?? null,
+      /*
+       * The engine has offered subject.caScore and subject.examScore since it
+       * existed and nothing ever filled the first of them — a school template
+       * addressing {{caScore}} got a blank, because there was no continuous
+       * assessment to put there. Now there is.
+       *
+       * null, not 0, when no CA was recorded: the engine renders null as an
+       * empty cell, and an empty cell is the truthful rendering of a mark
+       * nobody entered.
+       */
+      caScore:        r.caScore        ?? null,
+      caMaxScore:     r.caMaxScore     ?? null,
+      // The paper alone when a sequence has both halves; the exam mark as
+      // before on every card that does not.
+      examScore:      r.testScore      ?? r.score ?? null,
+      examMaxScore:   r.testMaxScore   ?? r.maxScore ?? null,
+      // The two combined — which is what `total` has always meant.
       total:          r.score          ?? null,
       maxScore:       r.maxScore       ?? 100,
       normalizedMark: r.normalizedMark ?? null,

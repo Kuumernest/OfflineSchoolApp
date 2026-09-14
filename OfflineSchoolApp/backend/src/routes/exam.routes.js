@@ -10,6 +10,9 @@ const ExamSubject   = require("../db/models/ExamSubject");
 const StudentScore  = require("../db/models/StudentScore");
 const ResultSummary = require("../db/models/ResultSummary");
 const GradingConfig = require("../db/models/GradingConfig");
+// The CA half of a sequence: created alongside the paper, paired with it, and
+// the source of the split the sequence result is computed by.
+const sequenceAssessment = require("../services/sequenceAssessment.service");
 const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
@@ -757,10 +760,45 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
     }
   }
 
+  /*
+   * ── The other half of the sequence ──────────────────────────────────────
+   *
+   * "CA is an assessment type under every sequence" has to be true of the
+   * data, not of a screen. An administrator who creates Sequence 1 gets both
+   * halves: the paper they just described, and a CA exam bound to it carrying
+   * the same subjects, the same teachers and the same coefficients.
+   *
+   * Skipped when the school has CA off, when the exam is not bound to a
+   * sequence, and when the exam IS the CA — a CA does not get a CA.
+   *
+   * Deliberately not fatal. A school losing the exam it just created because
+   * the companion could not be written is a worse outcome than a sequence with
+   * one half, which an administrator can see and fix; ensureCaExam is
+   * idempotent, so the next edit or the next create picks it up.
+   */
+  let caExam = null;
+  if (type !== "ca") {
+    try {
+      const made = await sequenceAssessment.ensureCaExam({
+        paper:    exam.toObject(),
+        userId:   req.user?._id || null,
+        // An id the client chose, for a create made with no connection: the
+        // same reason the paper's own _id is honoured above.
+        caExamId: req.body.caExamId || null,
+      });
+      caExam = made.exam;
+    } catch (err) {
+      console.error("[exams] CA companion not created:", err.message);
+    }
+  }
+
   console.log(`✅ Exam created: ${exam.name} [${exam._id}]`);
   return res.status(201).json({
     success:  true,
     exam:     { ...exam.toObject(), subjects: createdSubjects },
+    // The CA exam, so a client that has just created a sequence knows where to
+    // send CA marks without going looking for it.
+    caExam:   caExam ? { _id: caExam._id, name: caExam.name, type: caExam.type } : null,
     serverId: exam._id,
   });
 }));
@@ -893,6 +931,25 @@ router.delete("/:id", adminOnly, asyncHandler(async (req, res) => {
   ).lean();
 
   if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+  /*
+   * The sequence's continuous assessment goes with its paper.
+   *
+   * Archiving the paper and leaving the CA behind would leave a half a
+   * sequence in the exam list — an exam nothing pairs with, whose marks reach
+   * no report card and which an administrator has no way to recognise as
+   * orphaned.
+   *
+   * Soft, like the paper's own delete: the marks are not touched and both
+   * exams can be revived together.
+   */
+  if (exam.type !== "ca") {
+    await Exam.updateMany(
+      { parentExamId: String(exam._id), type: "ca", deletedAt: null },
+      { $set: { deletedAt: new Date(), status: "archived" } }
+    ).catch((err) => console.error("[exams] CA not archived:", err.message));
+  }
+
   console.log(`🗑️  Exam soft-deleted: ${exam.name}`);
   return res.json({ success: true, message: "Exam archived" });
 }));
@@ -998,6 +1055,20 @@ router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
     isTheory:    isTheory    ?? true,
     isOral:      isOral      ?? false,
   });
+
+  /*
+   * The same subject on the sequence's continuous assessment.
+   *
+   * A subject attached to the paper after the CA was created would otherwise
+   * be markable in one half of the sequence and not the other, and a teacher
+   * would find Mathematics on the paper's sheet and missing from the CA sheet
+   * with nothing to say why. Idempotent and non-fatal, for the reasons
+   * ensureCaExam is.
+   */
+  if (exam.type !== "ca") {
+    await sequenceAssessment.mirrorSubjectToCa(exam, es)
+      .catch((err) => console.error("[exams] CA subject not mirrored:", err.message));
+  }
 
   return res.status(201).json({ success: true, subject: es });
 }));
@@ -1147,6 +1218,27 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   }
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+
+  /*
+   * ── CA marks into a school that has turned CA off ───────────────────────
+   *
+   * A new CA mark is refused: the school has said it does not assess that way,
+   * the mark would appear on no report card and count towards no average, and
+   * a teacher would be entering marks into nothing.
+   *
+   * An EXISTING CA mark may still be corrected. Turning CA off deletes
+   * nothing — that is the whole point of the toggle — and a school that turns
+   * it off mid-year must still be able to fix a mark somebody typed wrong
+   * before they did, ready for the day they turn it back on.
+   *
+   * 400 rather than 403: this is a statement about the request, and the
+   * offline queue stops on a 4xx and asks a person rather than retrying for
+   * ever.
+   */
+  const caSettings = require("../../../shared/caAssessment")
+    .caSettings(gradingConfig);
+  const caLocked = exam.type === "ca" && !caSettings.caEnabled;
+
   // A count, not a collection: the documents this accumulated were never
   // read — the response and the log both asked only how many. The history
   // diff below works off priorByStudent, which is fetched up front.
@@ -1173,6 +1265,16 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
       const { studentId, score, teacherRemark, isAbsent, isExempt } = row;
       if (!studentId) {
         failed.push({ ...row, reason: "Missing studentId" });
+        continue;
+      }
+
+      // See caLocked above: corrections to a mark that already exists are
+      // allowed; a new one is not.
+      if (caLocked && !priorByStudent.has(String(studentId))) {
+        failed.push({
+          ...row,
+          reason: "Continuous assessment is disabled for this school",
+        });
         continue;
       }
 

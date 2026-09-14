@@ -1881,7 +1881,14 @@
     "colPoints": "Points",
     "showGrades": "Show grades on report cards",
     "gpaScale": "GPA scale",
-    "noBands": "No grade bands configured"
+    "noBands": "No grade bands configured",
+    "caEnabled": "Continuous assessment (CA)",
+    "caWeight": "CA weight (%)",
+    "testWeight": "Test weight (%)",
+    "caSplitHint": "CA and Test must add up to 100%. The sequence mark is CA x its weight plus Test x its weight.",
+    "caWeightSum": "CA and Test must add up to 100% (currently {{total}}%)",
+    "caWeightNegative": "Weights cannot be negative",
+    "caWeightInvalid": "Weights must be numbers"
   },
   "examDetail": {
     "statusDraft": "Draft",
@@ -3117,7 +3124,8 @@
   "examType": {
     "test": "Test",
     "practical": "Practical",
-    "promotion_exam": "Promotion Exam"
+    "promotion_exam": "Promotion Exam",
+    "ca": "Continuous Assessment"
   },
   "reportGen": {
     "headerTitle": "Generate Reports",
@@ -3947,7 +3955,9 @@
       "grade": "Grade",
       "pts": "Pts",
       "points": "Points",
-      "status": "Status"
+      "status": "Status",
+      "ca": "CA",
+      "test": "Test"
     },
     "subjectFallback": "Subject {{index}}",
     "absent": "ABS",

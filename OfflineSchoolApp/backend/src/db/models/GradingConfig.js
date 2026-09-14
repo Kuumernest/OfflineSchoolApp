@@ -6,6 +6,12 @@ const mongoose = require("mongoose");
 /** gradingType's enum. Exported so routes can recognise legacy values without a copy. */
 const GRADING_TYPES = ["percentage", "gpa", "points"];
 
+// The CA rules — defaults, validation and the blending itself — live in
+// shared/ because the desktop mirror, both settings screens and the grading
+// engine all have to agree about them, and four copies of a percentage split
+// is how the report card and the settings page come to disagree.
+const CA = require("../../../../shared/caAssessment");
+
 const gradeBandSchema = new mongoose.Schema(
   {
     grade:     { type: String, required: true },
@@ -57,6 +63,24 @@ const gradingConfigSchema = new mongoose.Schema(
       default: [],
     },
 
+    // ── Continuous assessment ─────────────────────────────
+    // Whether a sequence is marked twice — CA through the weeks, then the
+    // sequence paper — or by the paper alone. ON by default: a school that
+    // does not use CA turns it off, because the opposite default leaves the
+    // schools that DO use it printing half a report card until somebody
+    // notices.
+    //
+    // Turning it off hides CA and stops requiring it. It deletes nothing: the
+    // CA exams, their subjects and every mark a teacher entered stay exactly
+    // where they are, and turning it back on restores the card they had.
+    caEnabled: { type: Boolean, default: CA.DEFAULT_CA_ENABLED },
+
+    // The split, as percentages of the sequence. Validated as a PAIR below —
+    // individually these are just two non-negative numbers, and the rule that
+    // matters (they add to 100) cannot be expressed on either one alone.
+    caWeight:   { type: Number, default: CA.DEFAULT_CA_WEIGHT,   min: 0 },
+    testWeight: { type: Number, default: CA.DEFAULT_TEST_WEIGHT, min: 0 },
+
     // Equal weighting: each term = 33.33 %
     termWeightingMethod: {
       type:    String,
@@ -79,7 +103,30 @@ const gradingConfigSchema = new mongoose.Schema(
   }
 );
 
+/*
+ * CA weight + Test weight = 100, enforced at the schema so that every write
+ * path is covered — the settings route, the sync replay of a queued offline
+ * save, and a script. A validator on caWeight alone cannot see testWeight, so
+ * this is a document-level pre-validate rather than two field validators.
+ *
+ * Only when CA is enabled. With CA off the stored split is dormant, and a
+ * school that turns it off must find its own percentages intact when it turns
+ * it back on rather than having them reset by a validator it never saw.
+ */
+gradingConfigSchema.pre("validate", function caWeightsAddUp() {
+  const verdict = CA.validateCaWeights({
+    caEnabled:  this.caEnabled,
+    caWeight:   this.caWeight,
+    testWeight: this.testWeight,
+  });
+  if (!verdict.ok) {
+    this.invalidate("caWeight", verdict.error, this.caWeight);
+    this.invalidate("testWeight", verdict.error, this.testWeight);
+  }
+});
+
 const GradingConfig = mongoose.model("GradingConfig", gradingConfigSchema);
+GradingConfig.CA = CA;
 GradingConfig.GRADING_TYPES = GRADING_TYPES;
 
 /**

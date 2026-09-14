@@ -1881,7 +1881,14 @@
     "colPoints": "Coef.",
     "showGrades": "Afficher les notes sur les bulletins",
     "gpaScale": "Échelle GPA",
-    "noBands": "Aucune tranche configurée"
+    "noBands": "Aucune tranche configurée",
+    "caEnabled": "Contrôle continu (CC)",
+    "caWeight": "Pondération CC (%)",
+    "testWeight": "Pondération épreuve (%)",
+    "caSplitHint": "Le CC et l'épreuve doivent totaliser 100 %. La note de séquence est le CC x sa pondération plus l'épreuve x la sienne.",
+    "caWeightSum": "Le CC et l'épreuve doivent totaliser 100 % (actuellement {{total}} %)",
+    "caWeightNegative": "Les pondérations ne peuvent pas être négatives",
+    "caWeightInvalid": "Les pondérations doivent être des nombres"
   },
   "examDetail": {
     "statusDraft": "Brouillon",
@@ -3117,7 +3124,8 @@
   "examType": {
     "test": "Interrogation",
     "practical": "Travaux pratiques",
-    "promotion_exam": "Examen de passage"
+    "promotion_exam": "Examen de passage",
+    "ca": "Contrôle Continu"
   },
   "reportGen": {
     "headerTitle": "Générer les bulletins",
@@ -3947,7 +3955,9 @@
       "grade": "Mention",
       "pts": "Pts",
       "points": "Points",
-      "status": "Statut"
+      "status": "Statut",
+      "ca": "CC",
+      "test": "Épreuve"
     },
     "subjectFallback": "Matière {{index}}",
     "absent": "ABS",

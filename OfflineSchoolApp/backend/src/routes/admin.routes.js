@@ -3089,6 +3089,10 @@ const { DEFAULT_GRADES } = require("../../../shared/gradeScale");
 
 const { defaultGradingConfig: getDefaultGradingConfig } = require("../../../shared/gradeScale");
 
+// The CA rules, from the one place that holds them — the settings screens, the
+// desktop mirror and the grading engine all validate against this same module.
+const CA = require("../../../shared/caAssessment");
+
 router.get("/settings/grading", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.query.schoolId);
   const GradingConfig = getGradingConfig();
@@ -3118,13 +3122,70 @@ router.get("/settings/grading", requirePermission("settings.view"), asyncHandler
     config.gradingType = "percentage";
   }
 
+  /*
+   * A config saved before continuous assessment existed carries none of its
+   * three fields, and every settings screen loads this document and puts the
+   * whole thing straight back on save. Undefined in, undefined out, and the
+   * next save would write caEnabled as absent — which the endpoint reads as
+   * the default anyway, but the SCREEN would have rendered an unchecked box
+   * and told an administrator CA was off when it was not.
+   *
+   * Filled with the shipped defaults, which is what the engine grades by for
+   * exactly the same document — so the screen and the report card cannot
+   * disagree about what the school is doing.
+   */
+  config.caEnabled  = config.caEnabled  ?? CA.DEFAULT_CA_ENABLED;
+  // The STORED split, not the effective one. caSettings() answers 0/100 for a
+  // school with CA off — correct for grading, wrong here, because the screen
+  // writes back what it was given and the school's own percentages would be
+  // gone the moment somebody saved with CA off.
+  config.caWeight   = config.caWeight   ?? CA.DEFAULT_CA_WEIGHT;
+  config.testWeight = config.testWeight ?? CA.DEFAULT_TEST_WEIGHT;
+
   return sendSuccess(res, { grading: config });
 }));
 
 router.put("/settings/grading", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.body.schoolId);
   const GradingConfig = getGradingConfig();
-  const { grades, passMark, useGpa, gpaScale, gradingType, showGrades } = req.body;
+  const {
+    grades, passMark, useGpa, gpaScale, gradingType, showGrades,
+    caEnabled, caWeight, testWeight,
+  } = req.body;
+
+  /*
+   * ── CA and Test must add up before anything is written ──────────────────
+   *
+   * The schema carries the same rule, but a document pre-validate hook does
+   * not run on findOneAndUpdate — update validators are per-field, and "these
+   * two add to 100" cannot be expressed on either field alone. So a 30/60
+   * split would have been saved by the very call this endpoint makes, and the
+   * first thing anybody would have noticed is a report card whose sequence
+   * marks were 10 % short.
+   *
+   * 400 rather than 500, for the reason the note below gives: the desktop
+   * queues writes made offline and retries 5xx for ever.
+   */
+  //
+  // An omitted field means "unchanged", so the stored document is read once
+  // and supplies the fallback for all three. Falling back to the shipped
+  // defaults instead would quietly reset a school's own 30/70 split every time
+  // somebody saved the grade bands from a screen that does not show it.
+  const storedCa = GradingConfig
+    ? await GradingConfig.findOne({ schoolId })
+        .select("caEnabled caWeight testWeight").lean().catch(() => null)
+    : null;
+
+  const resolvedCa = {
+    caEnabled:  caEnabled  ?? storedCa?.caEnabled  ?? CA.DEFAULT_CA_ENABLED,
+    caWeight:   caWeight   ?? storedCa?.caWeight   ?? CA.DEFAULT_CA_WEIGHT,
+    testWeight: testWeight ?? storedCa?.testWeight ?? CA.DEFAULT_TEST_WEIGHT,
+  };
+
+  const caVerdict = CA.validateCaWeights(resolvedCa);
+  if (!caVerdict.ok) {
+    return sendError(res, 400, caVerdict.error, { code: caVerdict.code });
+  }
 
   // Coerce stale gradingType values written under an earlier schema so the
   // admin is not stuck behind a validator they cannot otherwise clear.
@@ -3168,6 +3229,12 @@ router.put("/settings/grading", requirePermission("settings.manage"), asyncHandl
         useGpa:      useGpa      ?? false,
         gpaScale:    gpaScale    ?? 4.0,
         gradingType: gradingType || "percentage",
+        // Continuous assessment, resolved above against what is already
+        // stored so that an omitted field means "leave it alone" rather than
+        // "reset it".
+        caEnabled:   resolvedCa.caEnabled,
+        caWeight:    resolvedCa.caWeight,
+        testWeight:  resolvedCa.testWeight,
         updatedBy:   req.user?._id,
       },
       { upsert: true, returnDocument: 'after', runValidators: true }

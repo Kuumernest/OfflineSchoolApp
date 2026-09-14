@@ -1590,7 +1590,16 @@
     "minOf20": "Min (/20)",
     "maxOf20": "Max (/20)",
     "remarkEn": "Remark (English)",
-    "remarkFr": "Remark (French)"
+    "remarkFr": "Remark (French)",
+    "caEnabled": "Continuous assessment (CA)",
+    "caEnabledHint": "When on, every sequence is marked twice — CA and the sequence test — and both appear on the report card. Turning it off hides CA and deletes nothing: marks already entered are kept.",
+    "caSplit": "Sequence weighting",
+    "caWeight": "CA weight",
+    "testWeight": "Test weight",
+    "caSplitHint": "CA and Test must add up to 100%. The sequence mark is CA x its weight plus Test x its weight.",
+    "caWeightSum": "CA and Test must add up to 100% (currently {{total}}%)",
+    "caWeightNegative": "Weights cannot be negative",
+    "caWeightInvalid": "Weights must be numbers"
   },
   "permissions": {
     "title": "Who may do what",
@@ -2516,7 +2525,8 @@
   "examType": {
     "test": "Test",
     "practical": "Practical",
-    "promotion_exam": "Promotion Exam"
+    "promotion_exam": "Promotion Exam",
+    "ca": "Continuous Assessment"
   },
   "examSequence": {
     "seq1": "Sequence 1 (Test 1)",
@@ -2749,5 +2759,10 @@
     "was": "was",
     "emptyValue": "(empty)",
     "edit": "Correct details"
+  },
+  "reportCard": {
+    "ca": "CA",
+    "test": "Test",
+    "caFull": "Continuous Assessment"
   }
 }

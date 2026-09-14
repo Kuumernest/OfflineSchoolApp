@@ -119,7 +119,21 @@ const defaultGradingConfig = (schoolId) => ({
   useGpa:      false,
   gpaScale:    4.0,
   gradingType: "percentage",
+  // Continuous assessment, on by default. The three fields travel together:
+  // a screen that loads this document and saves it whole would otherwise send
+  // caEnabled back as undefined and turn CA off for a school that never
+  // touched the setting.
+  caEnabled:   DEFAULT_CA_ENABLED,
+  caWeight:    DEFAULT_CA_WEIGHT,
+  testWeight:  DEFAULT_TEST_WEIGHT,
 });
+
+// The CA defaults live in caAssessment.js, with the rules that use them, and
+// are re-exported here only so a caller holding the default grading config
+// does not need both modules to understand it.
+const {
+  DEFAULT_CA_ENABLED, DEFAULT_CA_WEIGHT, DEFAULT_TEST_WEIGHT,
+} = require("./caAssessment");
 
 module.exports = {
   DEFAULT_GRADES,

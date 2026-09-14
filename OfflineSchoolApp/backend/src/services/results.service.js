@@ -35,6 +35,13 @@ const {
   gradeSubject,
 } = require("./grading.service");
 
+// Continuous assessment. A sequence is marked twice — CA through the weeks and
+// then the paper — and the sequence result is the two combined by the school's
+// own percentages. The pairing and the arithmetic live in their own service so
+// that this one keeps doing what it did: turn a set of subject marks into a
+// result. What changes below is only WHICH mark a subject contributes.
+const sequenceAssessment = require("./sequenceAssessment.service");
+
 // ─── Main Processing Function ─────────────────────────────────────────────
 
 /**
@@ -84,12 +91,30 @@ async function processResults(examId, classId = null, processedBy = null) {
   if (classId) scoreFilter.classId = classId;
 
   const allScores = await StudentScore.find(scoreFilter);
-  if (allScores.length === 0) throw new Error("NO_SCORES_FOUND");
+
+  /*
+   * The continuous assessment beside this paper, loaded before the
+   * "no scores" check rather than after it.
+   *
+   * `active` is false for a school with CA off, for an exam that is not a
+   * sequence paper, and for a sequence with no CA exam — which is every exam
+   * this system processed before CA existed. In all three cases every lookup
+   * below returns null and the arithmetic is unchanged.
+   *
+   * It is loaded here because a sequence CAN legitimately have CA marks and no
+   * paper marks yet, and answering that with NO_SCORES_FOUND would tell a
+   * school its teachers had entered nothing.
+   */
+  const ca = await sequenceAssessment.loadSequenceContext(exam, classId);
+
+  if (allScores.length === 0 && ca.caByKey.size === 0) {
+    throw new Error("NO_SCORES_FOUND");
+  }
 
   // ── Step 4: Build ExamSubject lookup map ──────────────────────────────
   const subjectMap = new Map();
   for (const es of examSubjects) {
-    subjectMap.set(String(es._id), {
+    const info = {
       maxScore:    es.maxScore    || 100,
       subjectName: es.subjectName || null,
       subjectId:   es.subjectId,
@@ -98,7 +123,12 @@ async function processResults(examId, classId = null, processedBy = null) {
       // (schema default 100). ÷100 → multiplier coefficient, so the default
       // leaves every subject equally weighted (×1).
       weight:      es.weight,
-    });
+    };
+    subjectMap.set(String(es._id), info);
+    // Also by subject, for a row that carries no examSubjectId — a score
+    // entered before the subjects were set up, and the stand-in rows built
+    // above for a subject with CA and no paper mark yet.
+    subjectMap.set(`subject:${String(es.subjectId)}`, info);
   }
 
   // ── Step 5: Group scores by studentId ─────────────────────────────────
@@ -107,6 +137,38 @@ async function processResults(examId, classId = null, processedBy = null) {
     const sid = String(score.studentId);
     if (!studentScoresMap.has(sid)) studentScoresMap.set(sid, []);
     studentScoresMap.get(sid).push(score);
+  }
+
+  // ── Step 5b: subjects a pupil has CA in and no paper row for ──────────
+  /*
+   * A subject a pupil has CA in but no paper row for.
+   *
+   * The paper's StudentScores are what this function iterates, so a pupil who
+   * has been given a CA mark and has not yet sat the paper would contribute
+   * nothing at all — their CA would sit in the database and appear on no
+   * report card. Their sequence mark is the CA alone, which is exactly what
+   * renormalising over the parts present means.
+   */
+  if (ca.active) {
+    for (const [key, caRow] of ca.caByKey) {
+      const [studentId, subjectId] = key.split("|");
+      if (classId && caRow.classId && String(caRow.classId) !== String(classId)) continue;
+      const existing = studentScoresMap.get(studentId) || [];
+      if (existing.some((row) => String(row.subjectId) === subjectId)) continue;
+      // A stand-in row: no paper mark, which is the honest state. blendSubject
+      // reads it as "no test" and the pupil is graded on the CA.
+      studentScoresMap.set(studentId, existing.concat([{
+        _id:           null,
+        studentId,
+        subjectId,
+        examSubjectId: null,
+        classId:       caRow.classId || classId || null,
+        score:         null,
+        maxScore:      caRow.maxScore,
+        isAbsent:      false,
+        isExempt:      false,
+      }]));
+    }
   }
 
   // ── Step 6: Calculate results for each student ────────────────────────
@@ -118,7 +180,8 @@ async function processResults(examId, classId = null, processedBy = null) {
     const subjectScores = [];
 
     for (const scoreDoc of scores) {
-      const subjectInfo = subjectMap.get(String(scoreDoc.examSubjectId));
+      const subjectInfo = subjectMap.get(String(scoreDoc.examSubjectId)) ||
+                          subjectMap.get(`subject:${String(scoreDoc.subjectId)}`);
       const maxScore    = subjectInfo?.maxScore || scoreDoc.maxScore || 100;
 
       // Percentage-style weight → multiplier coefficient (default 100 ⇒ ×1).
@@ -126,14 +189,46 @@ async function processResults(examId, classId = null, processedBy = null) {
         ? Math.round((Number(subjectInfo.weight) / 100) * 100) / 100 || 1
         : 1;
 
+      /*
+       * The sequence mark: CA and the paper, combined by the school's split.
+       *
+       * With CA inactive `blended` is null and `effectiveScore` is the paper
+       * mark exactly as it has always been — the same number, through the same
+       * grading, into the same breakdown.
+       *
+       * With CA active and no CA recorded for this pupil and subject,
+       * blendSubject renormalises onto the paper alone. It does NOT read the
+       * absence as a zero, which is the difference between a pupil who was
+       * never assessed and a pupil who scored nothing.
+       */
+      const paperPart = {
+        score:    scoreDoc.score,
+        maxScore,
+        isAbsent: scoreDoc.isAbsent || false,
+        isExempt: scoreDoc.isExempt || false,
+      };
+      const caPart  = ca.active ? ca.lookup(studentId, scoreDoc.subjectId) : null;
+      const blended = ca.active
+        ? sequenceAssessment.blendSubject({
+            ca: caPart, test: paperPart, settings: ca.settings,
+          })
+        : null;
+
+      const effectiveScore = blended ? blended.score : scoreDoc.score;
+
       subjectScores.push({
-        score:       scoreDoc.score  ?? 0,
+        score:       effectiveScore ?? 0,
         maxScore,
         coefficient,
+        // A stand-in row for a subject with CA and no paper mark is not an
+        // absence: the pupil has a mark, from the other half of the sequence.
         isAbsent:    scoreDoc.isAbsent  || false,
         isExempt:    scoreDoc.isExempt  || false,
         subjectId:   String(scoreDoc.subjectId),
         subjectName: subjectInfo?.subjectName || null,
+        // Carried to the breakdown after grading, so the report card can print
+        // CA and Test beside the sequence mark without re-deriving them.
+        assessment:  blended,
       });
 
       // Queue a grade write-back to StudentScore
@@ -161,6 +256,32 @@ async function processResults(examId, classId = null, processedBy = null) {
     const overall = calculateOverallResult(subjectScores);
     const remark  = generateRemark(overall);
     const first   = scores[0];
+
+    /*
+     * What each sequence mark was made of, onto the breakdown.
+     *
+     * Merged here rather than threaded through grading.service, which grades a
+     * mark and has no business knowing where the mark came from. Every field
+     * stays null when there is no CA — including on the millions of rows that
+     * predate it — because null and 0 are different facts about a pupil.
+     */
+    if (ca.active) {
+      const bySubject = new Map(
+        subjectScores.map((entry) => [String(entry.subjectId), entry.assessment])
+      );
+      for (const row of overall.subjectBreakdown) {
+        const detail = bySubject.get(String(row.subjectId));
+        if (!detail) continue;
+        row.caScore      = detail.caScore;
+        row.caMaxScore   = detail.caMaxScore;
+        row.caMark       = detail.caMark;
+        row.testScore    = detail.testScore;
+        row.testMaxScore = detail.testMaxScore;
+        row.testMark     = detail.testMark;
+        row.caWeight     = detail.caWeight;
+        row.testWeight   = detail.testWeight;
+      }
+    }
 
     resultDocs.push({
       examId,

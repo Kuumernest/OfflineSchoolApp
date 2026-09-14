@@ -14,6 +14,29 @@ const subjectBreakdownSchema = new mongoose.Schema(
     // Coefficient-weighted fields — ExamSubject.weight ÷ 100 (default ×1).
     coefficient:    { type: Number,  default: 1      },
     weightedMark:   { type: Number,  default: null   },
+
+    /*
+     * The two assessments the sequence mark was made of.
+     *
+     * null throughout, and the default is null rather than 0 on purpose: a
+     * pupil with no CA recorded did not score zero in CA, and every one of the
+     * millions of rows written before continuous assessment existed is exactly
+     * that case. Whatever reads these has to be able to tell the difference.
+     *
+     * Stored rather than recomputed because the report card prints them beside
+     * the sequence mark, and re-deriving them would mean reaching back into
+     * two exams' scores for every row of every card.
+     */
+    caScore:        { type: Number,  default: null   },
+    caMaxScore:     { type: Number,  default: null   },
+    caMark:         { type: Number,  default: null   },  // /20
+    testScore:      { type: Number,  default: null   },
+    testMaxScore:   { type: Number,  default: null   },
+    testMark:       { type: Number,  default: null   },  // /20
+    // The split this row was actually graded by, after renormalising over the
+    // parts present — 0/100 on a row whose CA was never entered.
+    caWeight:       { type: Number,  default: null   },
+    testWeight:     { type: Number,  default: null   },
     grade:          { type: String,  default: null   },
     points:         { type: Number,  default: 0      },
     remark:         { type: String,  default: null   },

@@ -1590,7 +1590,16 @@
     "minOf20": "Min (/20)",
     "maxOf20": "Max (/20)",
     "remarkEn": "Appréciation (anglais)",
-    "remarkFr": "Appréciation (français)"
+    "remarkFr": "Appréciation (français)",
+    "caEnabled": "Contrôle continu (CC)",
+    "caEnabledHint": "Lorsque cette option est activée, chaque séquence est notée deux fois — le contrôle continu et l'épreuve de séquence — et les deux figurent sur le bulletin. La désactiver masque le CC sans rien supprimer : les notes déjà saisies sont conservées.",
+    "caSplit": "Pondération de la séquence",
+    "caWeight": "Pondération CC",
+    "testWeight": "Pondération épreuve",
+    "caSplitHint": "Le CC et l'épreuve doivent totaliser 100 %. La note de séquence est le CC x sa pondération plus l'épreuve x la sienne.",
+    "caWeightSum": "Le CC et l'épreuve doivent totaliser 100 % (actuellement {{total}} %)",
+    "caWeightNegative": "Les pondérations ne peuvent pas être négatives",
+    "caWeightInvalid": "Les pondérations doivent être des nombres"
   },
   "permissions": {
     "title": "Qui peut faire quoi",
@@ -2516,7 +2525,8 @@
   "examType": {
     "test": "Interrogation",
     "practical": "Travaux pratiques",
-    "promotion_exam": "Examen de passage"
+    "promotion_exam": "Examen de passage",
+    "ca": "Contrôle Continu"
   },
   "examSequence": {
     "seq1": "Séquence 1 (Interrogation 1)",
@@ -2749,5 +2759,10 @@
     "was": "était",
     "emptyValue": "(vide)",
     "edit": "Corriger la fiche"
+  },
+  "reportCard": {
+    "ca": "CC",
+    "test": "Épreuve",
+    "caFull": "Contrôle Continu"
   }
 }

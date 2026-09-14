@@ -32,6 +32,7 @@ const STATUS_META = {
 
 const EXAM_TYPE_KEYS = {
   test:               "examType.test",
+  ca:                 "examType.ca",
   practical:          "examType.practical",
   promotion_exam:     "examType.promotion_exam",
 };

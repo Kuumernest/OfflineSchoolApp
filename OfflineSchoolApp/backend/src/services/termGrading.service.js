@@ -24,6 +24,7 @@ const TermResult       = require("../db/models/TermResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig    = require("../db/models/GradingConfig");
 const grading          = require("./grading.service");
+const { CA_TYPE }      = require("../../../shared/caAssessment");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -79,17 +80,34 @@ async function loadTermContext({ schoolId, academicYear, term }) {
   const Exam = mongoose.model("Exam");
   const all = await Exam.find({
     schoolId, academicYear, term, deletedAt: null,
-  }).select("_id name sequenceNumber").lean();
+  }).select("_id name sequenceNumber type").lean();
 
-  const exams = all.filter((e) => sequenceNumbers.includes(e.sequenceNumber));
+  /*
+   * The papers, not the continuous assessments.
+   *
+   * A sequence now has two exams: the paper and its CA. The paper's
+   * ResultSummary IS the sequence result — results.service blends the CA into
+   * it — so reading the CA exam's own summary here would count continuous
+   * assessment a second time, as though it were a whole extra sequence.
+   *
+   * Without this filter `exams.find(e => e.sequenceNumber === seqNum)` would
+   * also return whichever of the two Mongo happened to hand over first, which
+   * is a term average that changes between runs.
+   */
+  const exams = all.filter(
+    (e) => sequenceNumbers.includes(e.sequenceNumber) && e.type !== CA_TYPE
+  );
 
   return {
     termConfig,
     sequenceNumbers,
     exams,
     examIds: exams.map((e) => e._id),
+    // A CA exam with no sequence is not a paper a school forgot to bind — it
+    // cannot be marked as one — so it is left out of the report rather than
+    // shown to an administrator as work to do.
     unsequencedExams: all
-      .filter((e) => e.sequenceNumber == null)
+      .filter((e) => e.sequenceNumber == null && e.type !== CA_TYPE)
       .map((e) => ({ _id: String(e._id), name: e.name || null })),
     passMark: gradingConfig?.passMark ?? 10,
   };

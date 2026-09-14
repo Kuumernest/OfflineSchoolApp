@@ -43,6 +43,7 @@ const docVerify         = require("./documentVerify.service");
 const { subjectRanking, periodName } = require("../../../shared/reportCard");
 const { coefficientFromWeight } =
   require("./subjectCoefficient.service");
+const sequenceAssessment = require("./sequenceAssessment.service");
 
 /** A score as a mark out of 20, or null when the pupil did not sit it. */
 const outOf20 = (score, maxScore) => {
@@ -255,13 +256,26 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
     schoolId: String(schoolId), academicYear, term: Number(term),
     ...(seqNumbers.length ? { sequenceNumber: { $in: seqNumbers } } : {}),
     deletedAt: null,
-  }).select("_id sequenceNumber").lean();
+  }).select("_id sequenceNumber term type parentExamId").lean();
 
   const weightBySeq = new Map(
     (termConfig?.sequences || []).map((s) => [s.number, s.weight ?? 50])
   );
-  const weightByExam = new Map(
-    exams.map((e) => [String(e._id), weightBySeq.get(e.sequenceNumber) ?? 50])
+
+  /*
+   * A sequence's share, split between its two assessments.
+   *
+   * The exams above now include the continuous assessments, and a term card
+   * combines per-subject marks across exams by weight. Giving a CA the
+   * sequence's whole share would count it as a third sequence; splitting the
+   * share by the school's CA/Test percentages gives the same subject mark the
+   * sequence card prints, one level up. weightedMark() below already drops the
+   * parts a pupil has no mark for and renormalises over the rest, so a pupil
+   * with no CA is graded on the paper rather than on 60 % of it.
+   */
+  const caSettings   = await sequenceAssessment.loadCaSettings(schoolId);
+  const weightByExam = sequenceAssessment.weightsWithCa(
+    exams, (e) => weightBySeq.get(e.sequenceNumber) ?? 50, caSettings
   );
 
   const { byStudent } = await subjectMarksAcross(
@@ -347,16 +361,19 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
   // the same arithmetic as on the three term cards, carried one level up.
   const exams = await Exam.find({
     schoolId: String(schoolId), academicYear, deletedAt: null,
-  }).select("_id term sequenceNumber").lean();
+  }).select("_id term sequenceNumber type parentExamId").lean();
 
-  const weightByExam = new Map();
-  for (const e of exams) {
+  // The same split the term card makes, applied to the annual share: a
+  // sequence's slice of the year, divided between its CA and its paper.
+  const caSettings = await sequenceAssessment.loadCaSettings(schoolId);
+  const shareOf = (e) => {
     const termConfig = structure?.terms?.find((t) => t.number === e.term);
     const seqConfig  = termConfig?.sequences?.find((s) => s.number === e.sequenceNumber);
     const termShare  = (termConfig?.weight ?? 100 / 3) / 100;
     const seqShare   = (seqConfig?.weight ?? 50) / 100;
-    weightByExam.set(String(e._id), termShare * seqShare * 100);
-  }
+    return termShare * seqShare * 100;
+  };
+  const weightByExam = sequenceAssessment.weightsWithCa(exams, shareOf, caSettings);
 
   const { byStudent } = await subjectMarksAcross(
     exams, (examId) => weightByExam.get(examId) ?? 1
