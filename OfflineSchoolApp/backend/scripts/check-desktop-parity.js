@@ -30,6 +30,8 @@
  *   node scripts/check-desktop-parity.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const fs   = require("fs");
 const os   = require("os");
 const path = require("path");
@@ -993,24 +995,48 @@ const main = async () => {
   // Which narrows what the markedAt secondary sort is for: ordering marks taken
   // in different lessons on the same day. Worth knowing, and worth the fixture
   // being the shape the data can actually take.
+  /*
+   * ── Why these days are in a year that has already gone ──────────────────
+   *
+   * Every date here used to be 2026-09-14 .. 18, and on 2026-09-14 this whole
+   * suite stopped running: MongoBulkWriteError, E11000 on
+   * unique_student_attendance, key { cls-1, p1, null, null, "2026-09-14" }.
+   *
+   * The attendance REPORT section far below marks the same pupils across the
+   * last seven REAL days, because /report/weekly computes its window from the
+   * clock and marks outside it would prove nothing. Its author noted that
+   * "every fixture in this file is dated months later" — which was true of the
+   * register fixtures on the day they were written and stopped being true when
+   * the calendar reached them. One mark per pupil per subject per day is a
+   * unique index, so the two fixtures were simply the same row.
+   *
+   * A date the clock has already passed cannot re-enter a trailing window, so
+   * these sit in the previous academic year and the collision cannot recur.
+   * The guard beside the weekly fixture asserts that, loudly, rather than
+   * leaving the next person to decode an E11000.
+   *
+   * Only the year moved: the relative order and spacing the assertions below
+   * depend on — at-6 > at-3 > at-2 > at-1, the ranges, the two marks on one
+   * day — are unchanged.
+   */
   await StudentAttendance.collection.insertMany([
-    { _id: "at-1", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-14",
-      status: "present", markedAt: new Date("2026-09-14T08:05:00Z"), updatedAt: new Date() },
-    { _id: "at-2", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
-      status: "absent",  markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
-    { _id: "at-3", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
+    { _id: "at-1", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-14",
+      status: "present", markedAt: new Date("2025-09-14T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-2", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-15",
+      status: "absent",  markedAt: new Date("2025-09-15T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-3", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-15",
       subjectId: "sub-1",
-      status: "present", markedAt: new Date("2026-09-15T11:30:00Z"), updatedAt: new Date() },
-    { _id: "at-4", schoolId: SCHOOL, studentId: "p2", classId: "cls-1", date: "2026-09-15",
-      status: "late",    markedAt: new Date("2026-09-15T08:20:00Z"), updatedAt: new Date() },
-    { _id: "at-5", schoolId: SCHOOL, studentId: "p3", classId: "cls-2", date: "2026-09-16",
-      status: "present", markedAt: new Date("2026-09-16T08:05:00Z"), updatedAt: new Date() },
+      status: "present", markedAt: new Date("2025-09-15T11:30:00Z"), updatedAt: new Date() },
+    { _id: "at-4", schoolId: SCHOOL, studentId: "p2", classId: "cls-1", date: "2025-09-15",
+      status: "late",    markedAt: new Date("2025-09-15T08:20:00Z"), updatedAt: new Date() },
+    { _id: "at-5", schoolId: SCHOOL, studentId: "p3", classId: "cls-2", date: "2025-09-16",
+      status: "present", markedAt: new Date("2025-09-16T08:05:00Z"), updatedAt: new Date() },
     // The endpoint applies NO deleted filter, so this must still come back.
-    { _id: "at-6", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-17",
-      status: "present", markedAt: new Date("2026-09-17T08:05:00Z"),
-      deletedAt: new Date("2026-09-18T00:00:00Z"), updatedAt: new Date() },
-    { _id: "at-9", schoolId: "other-school", studentId: "px", classId: "cls-9", date: "2026-09-15",
-      status: "present", markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-6", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-17",
+      status: "present", markedAt: new Date("2025-09-17T08:05:00Z"),
+      deletedAt: new Date("2025-09-18T00:00:00Z"), updatedAt: new Date() },
+    { _id: "at-9", schoolId: "other-school", studentId: "px", classId: "cls-9", date: "2025-09-15",
+      status: "present", markedAt: new Date("2025-09-15T08:05:00Z"), updatedAt: new Date() },
   ]);
 
   docs.putMany("studentAttendance",
@@ -1020,10 +1046,10 @@ const main = async () => {
   await parity("one class",             `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1`, asHead);
   await parity("one pupil",             `/api/attendance/students?schoolId=${SCHOOL}&studentId=p1`, asHead);
   await parity("one status",            `/api/attendance/students?schoolId=${SCHOOL}&status=absent`, asHead);
-  await parity("one exact day",         `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-15`, asHead);
-  await parity("a range, inclusive",    `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-15&endDate=2026-09-16`, asHead);
-  await parity("from only",             `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-16`, asHead);
-  await parity("to only",              `/api/attendance/students?schoolId=${SCHOOL}&endDate=2026-09-14`, asHead);
+  await parity("one exact day",         `/api/attendance/students?schoolId=${SCHOOL}&date=2025-09-15`, asHead);
+  await parity("a range, inclusive",    `/api/attendance/students?schoolId=${SCHOOL}&startDate=2025-09-15&endDate=2025-09-16`, asHead);
+  await parity("from only",             `/api/attendance/students?schoolId=${SCHOOL}&startDate=2025-09-16`, asHead);
+  await parity("to only",              `/api/attendance/students?schoolId=${SCHOOL}&endDate=2025-09-14`, asHead);
   await parity("a day nobody was marked", `/api/attendance/students?schoolId=${SCHOOL}&date=2020-01-01`, asHead);
   await parity("class and status together",
     `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1&status=present`, asHead);
@@ -1031,7 +1057,7 @@ const main = async () => {
   // An exact date wins over a range on the server — both are set on the same
   // query key, so the later assignment replaces the earlier.
   await parity("an exact date beats a range",
-    `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-14&startDate=2026-09-15&endDate=2026-09-16`, asHead);
+    `/api/attendance/students?schoolId=${SCHOOL}&date=2025-09-14&startDate=2025-09-15&endDate=2025-09-16`, asHead);
 
   // Surprising, and therefore worth pinning: an unreadable date becomes TODAY
   // rather than an error. Reproduced rather than improved on, because a mirror
@@ -2831,7 +2857,11 @@ const main = async () => {
   const StudentAttendanceModel = require("../src/db/models/Attendance").StudentAttendance;
   const { attendanceId: derivedId } = require("../../shared/attendance");
 
-  const REGISTER_DAY = "2026-10-06";
+  // In a year the clock has passed, for the reason given beside the at-* 
+  // fixtures: the weekly report marks these same pupils across the last seven
+  // REAL days, and one mark per pupil per day is a unique index. 2026-10-06
+  // would have collided for the week of the 6th to the 12th of October.
+  const REGISTER_DAY = "2025-10-06";
 
   const teachSession = {
     userId: "admin-1", schoolId: SCHOOL,
@@ -3051,7 +3081,8 @@ const main = async () => {
   const TeacherAttendanceModel = require("../src/db/models/Attendance").TeacherAttendance;
   const { teacherAttendanceId: derivedStaffId } = require("../../shared/attendance");
 
-  const STAFF_DAY = "2026-10-07";
+  // Likewise, and for the staff register's own unique index.
+  const STAFF_DAY = "2025-10-07";
 
   const staffSession = {
     userId: "admin-1", schoolId: SCHOOL,
@@ -3198,7 +3229,7 @@ const main = async () => {
     "/api/attendance/teachers?schoolId=" + SCHOOL + "&status=on_leave");
   await parity("and over a range of days",
     "/api/attendance/teachers?schoolId=" + SCHOOL +
-    "&startDate=2026-10-01&endDate=2026-10-31");
+    "&startDate=2025-10-01&endDate=2025-10-31");
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the attendance reports ---");
@@ -3229,6 +3260,36 @@ const main = async () => {
   // file is dated months later — so without marks inside it the report would
   // compare two empty trends and prove nothing about the counting.
   const week = lastSevenDays();
+
+  /*
+   * ── The invariant that keeps this suite from failing one week a year ────
+   *
+   * Everything below is marked on REAL days, because /report/weekly computes
+   * its window from the clock. Everything above is marked on fixed days. One
+   * mark per pupil per subject per day is a unique index, so a fixed day that
+   * wanders into this window is not a clash of fixtures — it is the same row
+   * twice, and the suite dies on an E11000 that says nothing about why.
+   *
+   * That is exactly what happened on 2026-09-14, when the register fixture's
+   * hard-coded "2026-09-14" became today. The fixed days now sit in a year the
+   * clock has passed, which cannot recur — and this asserts it rather than
+   * trusting it, so if somebody dates a new fixture to next Tuesday they are
+   * told which day and why, here, instead of decoding a bulk write error.
+   */
+  const FIXED_REGISTER_DAYS = [
+    "2025-09-14", "2025-09-15", "2025-09-16", "2025-09-17",
+    REGISTER_DAY, STAFF_DAY,
+  ];
+  const wandered = FIXED_REGISTER_DAYS.filter((d) => week.includes(d));
+  if (wandered.length > 0) {
+    throw new Error(
+      "Attendance fixture dates have fallen inside the last-seven-days window " +
+      `the weekly report uses: ${wandered.join(", ")}. They must be days the ` +
+      "clock has already passed, or they collide with the fixtures below on " +
+      "unique_student_attendance. See the note beside the at-* fixtures."
+    );
+  }
+
   await StudentAttendanceModel.collection.insertMany([
     { _id: "wk-1", schoolId: SCHOOL, classId: "cls-1", subjectId: null, studentId: "p1",
       date: week[6], status: "present", markedBy: "admin-1", markedAt: new Date(),
@@ -7692,21 +7753,12 @@ const main = async () => {
 
   await mongoose.disconnect();
 
-  /**
-   * Teardown must not turn a passing run into a failure.
-   *
-   * On a loaded machine mongod sometimes will not exit within the library's
-   * window, and the throw landed AFTER every assertion had been counted and
-   * printed — so the suite said "0 failed" and then exited 1, which is the
-   * worst of both for anything reading the exit code.
-   *
-   * A lingering temporary process is worth knowing about and is not a result.
-   */
-  try {
-    await mongo.stop();
-  } catch (err) {
-    console.log(`  (the temporary mongod did not exit cleanly: ${err.message})`);
-  }
+  // Teardown must not turn a passing run into a failure. The note that used to
+  // be here is now the docstring of scripts/stopQuietly.js, which twenty other
+  // check scripts needed too — they had this teardown without this guard, so
+  // `npm run check:all` died at whichever of them was running when the machine
+  // got slow.
+  await stopQuietly(mongo);
 };
 
 main()

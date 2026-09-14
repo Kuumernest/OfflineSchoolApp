@@ -42,6 +42,8 @@
  *   node scripts/check-idempotency.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const path     = require("path");
 const express  = require("express");
 const mongoose = require("mongoose");
@@ -389,7 +391,7 @@ const main = async () => {
 
   await new Promise((r) => server.close(r));
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
 };

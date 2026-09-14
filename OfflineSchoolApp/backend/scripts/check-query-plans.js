@@ -22,6 +22,8 @@
  *   node scripts/check-query-plans.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const mongoose = require("mongoose");
 const path     = require("path");
 
@@ -415,6 +417,6 @@ const SUBJECTS = 8;
   console.log(`  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exitCode = fail ? 1 : 0;
 })().catch((err) => { console.error("check failed:", err); process.exit(1); });

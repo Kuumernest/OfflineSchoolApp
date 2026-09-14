@@ -14,6 +14,8 @@
  *   node scripts/check-enrollment-index.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const path = require("path");
 const B = path.resolve(__dirname, "..");
 
@@ -96,6 +98,6 @@ const check = (l, a, e) => {
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   await mongoose.disconnect();
-  await mongod.stop();
+  await stopQuietly(mongod);
   process.exitCode = fail ? 1 : 0;
 })().catch((e) => { console.error(e); process.exit(1); });

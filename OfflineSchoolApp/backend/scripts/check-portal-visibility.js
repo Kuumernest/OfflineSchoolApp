@@ -44,6 +44,8 @@
  *   node scripts/check-portal-visibility.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -582,7 +584,7 @@ const note = (label) => console.log(`       ${label}`);
 
   await server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

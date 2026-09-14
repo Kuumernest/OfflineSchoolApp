@@ -1,5 +1,7 @@
 // backend/scripts/check-term-annual-cards.js
 "use strict";
+
+const { stopQuietly } = require("./stopQuietly");
 const mongoose = require("mongoose");
 
 const main = async () => {
@@ -486,7 +488,7 @@ const main = async () => {
   console.log(`
   ${pass} passed, ${fail} failed`);
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail === 0 ? 0 : 1);
 };
 main().catch((e) => { console.error(e); process.exit(1); });

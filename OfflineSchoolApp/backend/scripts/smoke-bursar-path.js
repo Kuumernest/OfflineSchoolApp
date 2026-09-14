@@ -27,6 +27,8 @@
  *   node scripts/smoke-bursar-path.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 
@@ -467,7 +469,7 @@ const main = async () => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail ? 1 : 0);
 };
 

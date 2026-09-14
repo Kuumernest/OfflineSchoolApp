@@ -22,6 +22,8 @@
  *   node scripts/check-fee-reminders.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const mongoose = require("mongoose");
 
 const reminders = require("../src/services/feeReminders.service");
@@ -540,7 +542,7 @@ const main = async () => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail ? 1 : 0);
 };
 

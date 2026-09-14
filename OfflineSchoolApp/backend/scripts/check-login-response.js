@@ -1,6 +1,8 @@
 // backend/scripts/check-login-response.js
 "use strict";
 
+const { stopQuietly } = require("./stopQuietly");
+
 // This suite signs in well over ten times from one address, which the login
 // limiter reads as brute force. Set before auth.routes is required.
 process.env.DISABLE_LOGIN_RATE_LIMIT = "1";
@@ -300,7 +302,7 @@ const main = async () => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail ? 1 : 0);
 };
 

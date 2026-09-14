@@ -37,6 +37,8 @@
  *   node scripts/check-portal-thread-visibility.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -141,7 +143,7 @@ const bad = (label, detail) => {
       bad("the portal session works", `${me.status} ${JSON.stringify(me.body).slice(0, 200)}`);
       console.log("\n  Cannot continue — every assertion below needs a portal session.\n");
       console.log(`  ${pass} passed, ${fail} failed`);
-      await server.close(); await mongoose.disconnect(); await mongo.stop();
+      await server.close(); await mongoose.disconnect(); await stopQuietly(mongo);
       process.exit(1);
     }
   }
@@ -351,7 +353,7 @@ const bad = (label, detail) => {
 
   await server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);
