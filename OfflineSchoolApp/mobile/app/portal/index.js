@@ -129,7 +129,9 @@ export default function ParentPortalScreen() {
 
   useEffect(() => {
     (async () => {
-      setSignedIn(Boolean(await PortalService.getToken()));
+      // Signed in means "this phone holds a session", not "the twenty-minute
+      // access token is still good" — the client renews that on its own.
+      setSignedIn(await PortalService.hasSession());
       setChecking(false);
     })();
   }, []);

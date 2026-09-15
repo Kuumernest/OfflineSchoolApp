@@ -20,6 +20,31 @@ const { v4: uuidv4 } = require("uuid");
  * codes screen shows exactly which children a code unlocks before it is handed
  * over.
  */
+/**
+ * One device's sign-in.
+ *
+ * The code is the credential and the row above is the authorisation; neither
+ * is a session. Without one the portal handed out a twelve-hour token and
+ * nothing else, so every parent typed their code again every morning — a code
+ * they were given once, on paper, and were never meant to memorise.
+ *
+ * `tokenHash` is the SHA-256 of an opaque refresh token the phone keeps. Only
+ * the hash is stored, for the same reason only the code's hash is: a copy of
+ * the database must not be a copy of every parent's session. The token is 256
+ * random bits, so a plain hash is the right tool — bcrypt is for secrets a
+ * person chose.
+ */
+const sessionSchema = new mongoose.Schema(
+  {
+    _id:        { type: String, default: () => uuidv4() },
+    tokenHash:  { type: String, required: true },
+    createdAt:  { type: Date, default: () => new Date() },
+    lastUsedAt: { type: Date, default: () => new Date() },
+    expiresAt:  { type: Date, required: true },
+  },
+  { _id: false }
+);
+
 const guardianAccessSchema = new mongoose.Schema(
   {
     _id: { type: String, default: () => uuidv4() },
@@ -58,6 +83,14 @@ const guardianAccessSchema = new mongoose.Schema(
      */
     noticesSeenAt: { type: Date, default: null },
 
+    /**
+     * The devices this guardian is signed in on — see sessionSchema.
+     *
+     * Emptied whenever the credential changes hands (re-issue, revoke), so a
+     * session can never outlive the code that opened it.
+     */
+    sessions: { type: [sessionSchema], default: [] },
+
     createdBy: { type: String, default: null },
     deletedAt: { type: Date,   default: null },
   },
@@ -67,6 +100,10 @@ const guardianAccessSchema = new mongoose.Schema(
 // Finding the access for a child at sign-in is the hot path: a guardian types
 // one admission number and the lookup runs against this multikey index.
 guardianAccessSchema.index({ schoolId: 1, studentIds: 1, deletedAt: 1 });
+
+// A refresh presents the token and nothing else — no school, no access id —
+// so the row is found by the token's hash.
+guardianAccessSchema.index({ "sessions.tokenHash": 1 });
 
 module.exports =
   mongoose.models.GuardianAccess ||

@@ -27,7 +27,9 @@ is not. Unverified items are listed as unverified.*
 | Alphabet | 30 characters, ambiguous pairs (`O/0`, `I/1`, `S/5`) removed |
 | Length | 8, formatted `XXXX-XXXX` |
 | Max attempts | 6, then a **15-minute lockout** |
-| Session | 12 hours |
+| Access token | 20 minutes, `aud: portal`, HS256 |
+| Session | 90 days per device; SHA-256 of the refresh token on the `GuardianAccess` row; ended by sign-out, revoke, re-issue |
+| Revocation | immediate — the row is re-read on every request and on every refresh |
 | Write surface | messaging only; everything else is read-only |
 
 An 8-character code from a 30-character alphabet is ~39 bits. That is **not**

@@ -22,33 +22,114 @@ import { API_URL }           from "./api";
 import { getDatabase }       from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 
-const TOKEN_KEY = "portal_token";
-const CACHE     = "portal_cache";
+const TOKEN_KEY   = "portal_token";
+const SESSION_KEY = "portal_refresh_token";
+const CACHE       = "portal_cache";
 
 const client = axios.create({ baseURL: `${API_URL}/portal`, timeout: 20_000 });
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSION
+//
+// Two tokens, two jobs. The ACCESS token rides on every request and lasts
+// twenty minutes. The REFRESH token is the session: it lasts ninety days and is
+// what "signed in" means on this phone. The screen asks hasSession(), not
+// whether an access token happens to be unexpired — the first version asked
+// the latter, so a parent who opened the app the next morning was signed out
+// before the first request had gone.
+//
+// A lapsed access token is renewed here, inside the client, and the request
+// that hit it is sent again. No screen knows this happens.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const getToken        = () => SecureStore.getItemAsync(TOKEN_KEY);
+export const setToken        = (t) => SecureStore.setItemAsync(TOKEN_KEY, t);
+export const getRefreshToken = () => SecureStore.getItemAsync(SESSION_KEY);
+export const hasSession      = async () => Boolean(await getRefreshToken());
+
+/** Forget both tokens. Local only — signOut is what tells the server. */
+export const clearToken = async () => {
+  await SecureStore.deleteItemAsync(TOKEN_KEY);
+  await SecureStore.deleteItemAsync(SESSION_KEY);
+};
+
+// One refresh at a time. Three sections waking together after a night offline
+// would otherwise each ask, and the answer is the same token.
+let refreshing = null;
+
+/**
+ * Renew the access token. Resolves to the new token, or null when this phone
+ * holds no session. A 401 from the server is final — the session ended or the
+ * code was withdrawn — so both tokens are dropped and the error is rethrown
+ * for the screen to explain. Any other failure (no signal, a timeout) is
+ * rethrown untouched WITH the session kept: being offline is not a reason to
+ * sign anyone out.
+ */
+const refreshAccessToken = async () => {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const refreshToken = await getRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const { data } = await axios.post(
+        `${API_URL}/portal/refresh`, { refreshToken }, { timeout: 20_000 }
+      );
+      await setToken(data.token);
+      return data.token;
+    } catch (err) {
+      if (err?.response?.status === 401) await clearToken();
+      throw err;
+    }
+  })().finally(() => { refreshing = null; });
+  return refreshing;
+};
+
 client.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync(TOKEN_KEY);
+  let token = await getToken();
+  // A session with no access token: the first request after an update of the
+  // app, or after a refresh whose reply never arrived. Renew before asking.
+  if (!token && (await getRefreshToken())) token = await refreshAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SESSION
-// ─────────────────────────────────────────────────────────────────────────────
+// Which 401s are about the access token rather than the parent. These are
+// renewed and retried once; ACCESS_REVOKED and the rest go straight through to
+// the screen, which knows what to say.
+const RENEWABLE = new Set(["TOKEN_EXPIRED", "NO_TOKEN", "INVALID_TOKEN"]);
 
-export const getToken   = () => SecureStore.getItemAsync(TOKEN_KEY);
-export const setToken   = (t) => SecureStore.setItemAsync(TOKEN_KEY, t);
-export const clearToken = () => SecureStore.deleteItemAsync(TOKEN_KEY);
+client.interceptors.response.use(undefined, async (err) => {
+  const config = err?.config;
+  if (err?.response?.status !== 401 || !config || config._retried) throw err;
+  if (!RENEWABLE.has(err.response?.data?.code)) throw err;
+  if (!(await getRefreshToken())) throw err;
+
+  // A refused refresh replaces the original error, so the screen hears
+  // "session over" or "code revoked" rather than "token expired". A refresh
+  // lost to the network replaces it too — `load` then sees a network failure
+  // and serves the cache, instead of a 401 it would refuse to cache over.
+  await refreshAccessToken();
+  config._retried = true;
+  return client.request(config);
+});
 
 export const login = async ({ admissionNo, code }) => {
   const { data } = await axios.post(`${API_URL}/portal/login`, { admissionNo, code });
+  if (data?.refreshToken) await SecureStore.setItemAsync(SESSION_KEY, data.refreshToken);
   if (data?.token) await setToken(data.token);
   return data;
 };
 
 export const signOut = async () => {
+  const refreshToken = await getRefreshToken();
   await clearToken();
+  // The server is told, so the session cannot be resumed from a backup of this
+  // phone. Not awaited: a parent signing out with no signal is signed out of
+  // the phone regardless, which is what they asked for.
+  if (refreshToken) {
+    axios.post(`${API_URL}/portal/logout`, { refreshToken }, { timeout: 10_000 })
+      .catch(() => {});
+  }
   const db = await getDatabase();
   await ensureSchema(db);
   // The cache holds one child's fees and results. Leaving it behind would show
@@ -247,7 +328,7 @@ export const fetchReportCardHtml = async (summaryId) => {
  * added below and forgotten here fails the check rather than one screen.
  */
 export default {
-  login, signOut, getToken, setToken, clearToken,
+  login, signOut, getToken, setToken, clearToken, getRefreshToken, hasSession,
   fetchMe, fetchFees, fetchFeeReminders, fetchNotifications,
   fetchResults, fetchAttendance, fetchAnnouncements,
   fetchReceiptHtml, fetchReportCardHtml,

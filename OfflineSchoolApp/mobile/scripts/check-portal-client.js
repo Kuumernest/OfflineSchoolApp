@@ -717,6 +717,178 @@ const loadMobileModule = (relPath, stubs) => {
   }
 
   // ── Every URL, for the record ───────────────────────────────────────────
+  // ═════════════════════════════════════════════════════════════════════════
+  // THE SESSION — a parent is not asked for the code every morning
+  // ═════════════════════════════════════════════════════════════════════════
+  //
+  // Everything above ran on a hand-minted token. This is the real thing: the
+  // real login, the real tokens in SecureStore, the real interceptors renewing
+  // them — on a second, clean phone with its own store and its own cache, so
+  // nothing the earlier sections did leaks in.
+  console.log("\n--- a parent signs in once and stays signed in ---");
+  const portalSvc  = require(path.join(BSRC, "services/portal.service"));
+  const phoneStore = new Map();
+  const PhoneStore = {
+    getItemAsync:    async (k) => (phoneStore.has(k) ? phoneStore.get(k) : null),
+    setItemAsync:    async (k, v) => { phoneStore.set(k, v); },
+    deleteItemAsync: async (k) => { phoneStore.delete(k); },
+  };
+  const phoneDb = makeFakeDb();
+  const phoneAt = (apiUrl) => loadMobileModule("src/services/portal.service.js", {
+    "expo-secure-store":   PhoneStore,
+    "./api":               { API_URL: apiUrl },
+    "../db/database":      { getDatabase: async () => phoneDb },
+    "../db/schemaManager": { ensureTableSchema: async (_n, fn, db) => fn(db) },
+  });
+  const Phone = phoneAt(API);
+  // The same phone with no signal: every request is refused at the socket.
+  const NoSignal = phoneAt("http://127.0.0.1:1/api");
+
+  const sessionsOnRow = async () =>
+    (await GuardianAccess.findOne({ _id: PARENT }).lean())?.sessions ?? [];
+
+  /** Overnight, in one line: the stored access token is now in the past. */
+  const expireAccessToken = () => {
+    const { sid } = jwt.decode(phoneStore.get("portal_token"));
+    phoneStore.set("portal_token", jwt.sign(
+      { aud: "portal", accessId: PARENT, schoolId: SCHOOL, sid,
+        exp: Math.floor(Date.now() / 1000) - 60 },
+      process.env.JWT_SECRET
+    ));
+  };
+
+  // A real code, so the real login runs — the fixture had a placeholder hash.
+  const { code } = await portalSvc.issueAccess({ schoolId: SCHOOL, accessId: PARENT });
+
+  {
+    await Phone.login({ admissionNo: "E-1", code });
+    if (phoneStore.get("portal_token") && phoneStore.get("portal_refresh_token")) {
+      ok("login keeps an access token AND a refresh token in SecureStore");
+    } else {
+      bad("login stores both tokens", `keys: ${[...phoneStore.keys()].join(", ")}`);
+    }
+    if (await Phone.hasSession()) ok("hasSession() — what the screen asks on launch — is true");
+    else bad("hasSession() is true after login");
+
+    const before = seen.length;
+    const res    = await Phone.fetchMe(CHILD_A);
+    if (res.stale === false && res.data?.student?._id === CHILD_A) ok("fetchMe → fresh data");
+    else bad("fetchMe works with the fresh token", JSON.stringify(res).slice(0, 200));
+    if (seen.length - before === 1) ok("one request; no refresh needed yet");
+    else bad("no refresh on a fresh token", seen.slice(before).join("\n"));
+  }
+
+  console.log("\n--- next morning: the access token has lapsed ---");
+  {
+    expireAccessToken();
+    const lapsed = phoneStore.get("portal_token");
+    const before = seen.length;
+    const res    = await Phone.fetchMe(CHILD_A);
+    const asked  = seen.slice(before);
+    for (const u of asked) note(`  ${u}`);
+
+    if (res.stale === false && res.data?.student?._id === CHILD_A) {
+      ok("fetchMe still returns fresh data — no sign-in screen");
+    } else {
+      bad("fetchMe survives an expired access token", JSON.stringify(res).slice(0, 200));
+    }
+    if (asked.includes("POST /api/portal/refresh")) ok("the client renewed through POST /api/portal/refresh on its own");
+    else bad("the client called /refresh", JSON.stringify(asked));
+    if (asked.filter((u) => u.startsWith("GET /api/portal/me")).length === 2) ok("and re-sent the request that had failed");
+    else bad("the failed request is retried once", JSON.stringify(asked));
+    const renewed = phoneStore.get("portal_token");
+    if (renewed && renewed !== lapsed && jwt.decode(renewed).exp * 1000 > Date.now()) {
+      ok("SecureStore now holds a renewed, unexpired access token");
+    } else {
+      bad("the renewed token was stored", String(renewed).slice(0, 40));
+    }
+    if (await Phone.hasSession()) ok("the session is untouched");
+    else bad("the session survives a renewal");
+  }
+
+  console.log("\n--- offline for a day: nothing signs the parent out ---");
+  {
+    expireAccessToken();
+    const before = seen.length;
+    const res    = await NoSignal.fetchMe(CHILD_A);
+    if (res?.stale === true && res.data?.student?._id === CHILD_A) {
+      ok("with no signal, fetchMe serves the cached copy, marked stale");
+    } else {
+      bad("offline falls back to the cache", JSON.stringify(res).slice(0, 200));
+    }
+    if (phoneStore.get("portal_refresh_token")) ok("the refresh token is still there — no signal is not a 401");
+    else bad("offline kept the session");
+    if (seen.length === before) ok("and the server heard nothing");
+    else bad("nothing reached the server", seen.slice(before).join("\n"));
+
+    const back = await Phone.fetchMe(CHILD_A);
+    if (back.stale === false) ok("signal back: the next request renews and succeeds");
+    else bad("recovery after being offline", JSON.stringify(back).slice(0, 200));
+  }
+
+  console.log("\n--- three sections wake together with no access token ---");
+  {
+    // An app update that kept the session but not the short-lived token, or a
+    // renewal whose reply never arrived. Every section asks at once.
+    phoneStore.delete("portal_token");
+    const before = seen.length;
+    await Promise.all([
+      Phone.fetchMe(CHILD_A), Phone.fetchFees(CHILD_A), Phone.fetchAnnouncements(CHILD_A),
+    ]);
+    const refreshes = seen.slice(before).filter((u) => u === "POST /api/portal/refresh").length;
+    if (refreshes === 1) ok("one POST /api/portal/refresh, shared by all three");
+    else bad("concurrent requests share one refresh", `${refreshes} refresh call(s)`);
+    if (phoneStore.get("portal_token")) ok("and the access token is back in SecureStore");
+    else bad("the pre-emptive refresh stored a token");
+  }
+
+  console.log("\n--- the parent signs out ---");
+  {
+    const token = phoneStore.get("portal_refresh_token");
+    await Phone.signOut();
+    if (!phoneStore.get("portal_token") && !phoneStore.get("portal_refresh_token")) {
+      ok("both tokens are gone from SecureStore");
+    } else {
+      bad("signOut clears both tokens", `keys: ${[...phoneStore.keys()].join(", ")}`);
+    }
+    if (!(await Phone.hasSession())) ok("hasSession() is false — the screen shows the sign-in form");
+    else bad("hasSession() is false after signOut");
+
+    // signOut does not wait on the server; give the call a moment to land.
+    for (let i = 0; i < 50 && !seen.includes("POST /api/portal/logout"); i++) {
+      await new Promise((r) => setTimeout(r, 40));
+    }
+    if (seen.includes("POST /api/portal/logout")) ok("and the server was told: POST /api/portal/logout");
+    else bad("signOut calls /logout", "not seen on the wire");
+    await new Promise((r) => setTimeout(r, 40));
+    const rows = await sessionsOnRow();
+    if (!rows.some((s) => s.tokenHash === portalSvc.hashToken(token))) ok("the session is gone from the GuardianAccess row");
+    else bad("the server ended the session", `${rows.length} session(s) on the row`);
+    if (phoneDb._rows.size === 0) ok("the section cache was wiped for the next family");
+    else bad("signOut wipes the cache", `${phoneDb._rows.size} row(s) left`);
+  }
+
+  console.log("\n--- the office revokes the code ---");
+  {
+    await Phone.login({ admissionNo: "E-1", code });
+    await portalSvc.revokeAccess({ schoolId: SCHOOL, accessId: PARENT });
+    let caught = null;
+    try { await Phone.fetchMe(CHILD_A); } catch (err) { caught = err; }
+    if (caught?.response?.status === 401 && caught.response.data?.code === "ACCESS_REVOKED") {
+      ok("the very next request fails 401 ACCESS_REVOKED — no cache, no retry, straight to the screen");
+    } else {
+      bad("revocation reaches the phone at once",
+        caught ? `${caught.response?.status} ${JSON.stringify(caught.response?.data)}` : "no error thrown");
+    }
+    // The session cannot renew either, and it is told WHY: the phone shows
+    // "ask the school office", not "sign in again", to a parent who cannot.
+    let refusal = null;
+    try { await portalSvc.refresh({ refreshToken: phoneStore.get("portal_refresh_token") }); }
+    catch (err) { refusal = err; }
+    if (refusal?.status === 401 && refusal.code === "ACCESS_REVOKED") ok("and a refresh is refused with ACCESS_REVOKED, not SESSION_EXPIRED");
+    else bad("refresh names the revocation", refusal ? `${refusal.status} ${refusal.code}` : "refresh succeeded");
+  }
+
   console.log("\n--- every request the phone made ---");
   for (const u of seen.filter((u) => !u.startsWith("POST /api/messages"))) note(u);
   if (!missed.length) {

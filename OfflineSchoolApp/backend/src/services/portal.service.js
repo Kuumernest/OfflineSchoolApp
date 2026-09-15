@@ -4,6 +4,7 @@
 const crypto = require("crypto");
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
+const { v4: uuidv4 } = require("uuid");
 
 const Student        = require("../db/models/Student");
 const GuardianAccess = require("../db/models/GuardianAccess");
@@ -37,9 +38,29 @@ const { displayName } = require("../utils/studentName");
 const ALPHABET = "ABCDEFGHJKLMNPQRTUVWXYZ2346789";
 const CODE_LEN = 8;
 
-const MAX_TRIES   = 6;
-const LOCK_MS     = 15 * 60_000;
-const TOKEN_HOURS = 12;
+const MAX_TRIES = 6;
+const LOCK_MS   = 15 * 60_000;
+
+/**
+ * Two lifetimes, because they answer two different questions.
+ *
+ * The ACCESS token is what every request carries. It is a signed JWT checked
+ * without a database read, so it is kept short: twenty minutes bounds how long
+ * a copied token is worth anything. It used to be twelve hours, and it was the
+ * only token there was - so a parent whose phone had been in a drawer
+ * overnight was signed out by the first request of the morning, and typed
+ * again a code they were handed once, on paper.
+ *
+ * The SESSION is how long a device stays signed in: ninety days from the
+ * sign-in, renewing the access token as it goes. It lives on the
+ * GuardianAccess row, so the office revoking the code ends it at once and the
+ * parent tapping "sign out" ends it for that phone. Being offline does not end
+ * it - a parent with no signal for a week is still that parent.
+ */
+const ACCESS_TOKEN_MINUTES = 20;
+const SESSION_DAYS         = 90;
+/** Sign-ins a guardian may hold at once. The oldest is dropped, not refused. */
+const MAX_SESSIONS         = 10;
 
 /** Random, from a CSPRNG — Math.random is not a secret generator. */
 const generateCode = () => {
@@ -78,6 +99,66 @@ const childrenOf = async (schoolId, studentIds) => {
       status:       s.status,
     }));
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SESSIONS
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** SHA-256, hex. The token is 256 random bits - see the schema note. */
+const hashToken = (token) =>
+  crypto.createHash("sha256").update(String(token)).digest("hex");
+
+const signAccessToken = (access, sessionId) =>
+  jwt.sign(
+    {
+      // A distinct audience. Without it a portal token would be accepted by the
+      // ordinary authenticate middleware and a guardian would hold a staff
+      // session.
+      aud:      "portal",
+      accessId: String(access._id),
+      schoolId: String(access.schoolId),
+      sid:      String(sessionId),
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: `${ACCESS_TOKEN_MINUTES}m` }
+  );
+
+/**
+ * Start a session on `access`, returning the token the device keeps.
+ *
+ * Expired sessions are swept here rather than by a scheduled job - there is no
+ * other moment at which the row is certainly being written - and the cap drops
+ * the least recently used sign-in, so a parent on their eleventh borrowed
+ * phone loses the one they used least, not the one they are holding.
+ */
+const startSession = (access) => {
+  const now          = new Date();
+  const refreshToken = crypto.randomBytes(32).toString("base64url");
+
+  const live = (access.sessions ?? [])
+    .filter((s) => s.expiresAt && s.expiresAt > now)
+    .sort((a, b) => (a.lastUsedAt ?? a.createdAt) - (b.lastUsedAt ?? b.createdAt));
+  while (live.length >= MAX_SESSIONS) live.shift();
+
+  const session = {
+    _id:        uuidv4(),
+    tokenHash:  hashToken(refreshToken),
+    createdAt:  now,
+    lastUsedAt: now,
+    expiresAt:  new Date(now.getTime() + SESSION_DAYS * 86_400_000),
+  };
+  access.sessions = [...live, session];
+
+  return { refreshToken, session };
+};
+
+/** What the client is given at sign-in and at every refresh. */
+const tokenResponse = (access, session, refreshToken) => ({
+  token:            signAccessToken(access, session._id),
+  expiresIn:        ACCESS_TOKEN_MINUTES * 60,
+  ...(refreshToken ? { refreshToken } : {}),
+  sessionExpiresAt: session.expiresAt,
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ISSUING
@@ -157,6 +238,11 @@ const issueAccess = async ({ schoolId, accessId, studentIds, label, createdBy })
   access.revokedAt   = null;
   access.failedTries = 0;
   access.lockedUntil = null;
+  // A new code is a new credential. Sessions opened with the old one end here,
+  // for the same reason a password change ends staff sessions: if the slip was
+  // re-issued because it went astray, whoever holds the old one must not keep
+  // a ninety-day session out of it.
+  access.sessions    = [];
   await access.save();
 
   return { code, accessId: String(access._id), hint: access.codeHint };
@@ -201,6 +287,11 @@ const revokeAccess = async ({ schoolId, accessId }) => {
   access.revokedAt   = new Date();
   access.failedTries = 0;
   access.lockedUntil = null;
+  // The sessions are deliberately LEFT on the row. They are dead - portalAuth
+  // and refresh both refuse a row with no hash on every call - and leaving
+  // them is what lets a refresh answer ACCESS_REVOKED rather than
+  // SESSION_EXPIRED, so the phone can say "ask the school office" instead of
+  // "sign in again" to a parent who cannot. A re-issue clears them.
   await access.save();
 
   return { revokedAt: access.revokedAt };
@@ -286,26 +377,91 @@ const login = async ({ schoolId, admissionNo, code }) => {
   matched.failedTries = 0;
   matched.lockedUntil = null;
   matched.lastSeenAt  = new Date();
+  const { refreshToken, session } = startSession(matched);
   await matched.save();
 
-  const token = jwt.sign(
-    {
-      // A distinct audience. Without it a portal token would be accepted by the
-      // ordinary authenticate middleware and a guardian would hold a staff
-      // session.
-      aud:      "portal",
-      accessId: String(matched._id),
-      schoolId: String(schoolId),
-    },
-    process.env.JWT_SECRET,
-    { expiresIn: `${TOKEN_HOURS}h` }
-  );
-
   return {
-    token,
-    expiresInHours: TOKEN_HOURS,
+    ...tokenResponse(matched, session, refreshToken),
     children: await childrenOf(schoolId, matched.studentIds),
   };
+};
+
+/**
+ * Exchange a session's refresh token for a fresh access token.
+ *
+ * Public - it is called precisely when the access token is no longer any good.
+ * Every refusal is a 401, and the client treats a 401 here as final: the
+ * session is over, whatever the reason. The reasons are still told apart in
+ * `code`, because "your session ended" and "the school withdrew this code"
+ * call for different sentences on the screen.
+ *
+ * The token is not rotated. A rotated token that reaches the server and not
+ * the phone - a timeout after the write, a battery dying mid-response - signs
+ * the parent out, which is the failure this whole arrangement exists to
+ * remove. The cost is that a copied token stays good until sign-out or
+ * revocation, and both of those work.
+ */
+const refresh = async ({ refreshToken }) => {
+  const ended = (code, message) => {
+    const err = new Error(message);
+    err.status = 401;
+    err.code   = code;
+    return err;
+  };
+  const expired = () => ended("SESSION_EXPIRED", "Your session has expired. Sign in again.");
+
+  const token = String(refreshToken ?? "").trim();
+  if (!token) throw expired();
+
+  const hash   = hashToken(token);
+  const access = await GuardianAccess.findOne({
+    "sessions.tokenHash": hash, deletedAt: null,
+  }).lean();
+  if (!access) throw expired();
+
+  const session = (access.sessions ?? []).find((s) => s.tokenHash === hash);
+  if (!session) throw expired();
+
+  // The same rule portalAuth applies on every request: the code is the
+  // authorisation, and a session is only as alive as the code that opened it.
+  if (!access.codeHash || access.revokedAt) {
+    throw ended("ACCESS_REVOKED", "This access code is no longer valid. Ask the school office.");
+  }
+
+  const now = new Date();
+  if (!session.expiresAt || session.expiresAt <= now) {
+    await GuardianAccess.updateOne(
+      { _id: access._id }, { $pull: { sessions: { _id: session._id } } }
+    );
+    throw expired();
+  }
+
+  // lastSeenAt meant "last signed in", which with a ninety-day session would
+  // freeze on the day the code was first used. The office reads it as "is this
+  // code in use", so it now moves with the session.
+  await GuardianAccess.updateOne(
+    { _id: access._id, "sessions._id": session._id },
+    { $set: { "sessions.$.lastUsedAt": now, lastSeenAt: now } }
+  );
+
+  return tokenResponse(access, session, null);
+};
+
+/**
+ * End one device's session. Idempotent and always quiet: the phone has already
+ * forgotten its tokens by the time this is called, and an unknown token means
+ * there is nothing left to end.
+ */
+const logout = async ({ refreshToken }) => {
+  const token = String(refreshToken ?? "").trim();
+  if (!token) return { ended: false };
+
+  const hash   = hashToken(token);
+  const result = await GuardianAccess.updateOne(
+    { "sessions.tokenHash": hash },
+    { $pull: { sessions: { tokenHash: hash } } }
+  );
+  return { ended: (result.modifiedCount ?? 0) > 0 };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -397,6 +553,7 @@ const portalAuth = async (req, res, next) => {
 module.exports = {
   generateCode, normalise,
   issueAccess, setChildren, revokeAccess,
-  login, childrenOf, portalAuth,
-  MAX_TRIES, TOKEN_HOURS,
+  login, refresh, logout, childrenOf, portalAuth,
+  signAccessToken, hashToken,
+  MAX_TRIES, ACCESS_TOKEN_MINUTES, SESSION_DAYS, MAX_SESSIONS,
 };

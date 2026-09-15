@@ -7,22 +7,87 @@
 // would send credentials they do not have, and a genuine "code revoked" would
 // be swallowed by a refresh attempt that cannot succeed.
 
-import axios from "axios";
+import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 
 const BASE = (import.meta.env.VITE_API_URL ?? "/api") + "/portal";
 
-const TOKEN_KEY = "portal_token";
+// Two tokens, two jobs. The ACCESS token rides on every request and lasts
+// twenty minutes. The REFRESH token is the session: it lasts ninety days and is
+// what "signed in" means in this browser. The page asks hasPortalSession(),
+// not whether an access token happens to be unexpired — the first version
+// asked the latter, so a parent who came back the next morning was signed out
+// before the first request had gone. A lapsed access token is renewed here,
+// inside the client, and the request that hit it is sent again.
+const TOKEN_KEY   = "portal_token";
+const SESSION_KEY = "portal_refresh_token";
 
-export const getPortalToken = () => localStorage.getItem(TOKEN_KEY);
-export const setPortalToken = (token: string) => localStorage.setItem(TOKEN_KEY, token);
-export const clearPortalToken = () => localStorage.removeItem(TOKEN_KEY);
+export const getPortalToken        = () => localStorage.getItem(TOKEN_KEY);
+export const setPortalToken        = (token: string) => localStorage.setItem(TOKEN_KEY, token);
+export const getPortalRefreshToken = () => localStorage.getItem(SESSION_KEY);
+export const hasPortalSession      = () => Boolean(getPortalRefreshToken());
+
+export const setPortalSession = ({ token, refreshToken }: { token: string; refreshToken: string }) => {
+  localStorage.setItem(SESSION_KEY, refreshToken);
+  setPortalToken(token);
+};
+
+/** Forget both tokens. Local only — portalLogout is what tells the server. */
+export const clearPortalToken = () => {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(SESSION_KEY);
+};
 
 const client = axios.create({ baseURL: BASE });
 
-client.interceptors.request.use((config) => {
-  const token = getPortalToken();
+// One refresh at a time: every query on the page wakes together after a night
+// away, and the answer is the same token.
+let refreshing: Promise<string | null> | null = null;
+
+/**
+ * Renew the access token. A 401 from the server is final — the session ended
+ * or the code was withdrawn — so both tokens are dropped and the error is
+ * rethrown for the page to explain. Any other failure (offline, a timeout) is
+ * rethrown WITH the session kept.
+ */
+const refreshAccessToken = (): Promise<string | null> => {
+  if (refreshing) return refreshing;
+  refreshing = (async () => {
+    const refreshToken = getPortalRefreshToken();
+    if (!refreshToken) return null;
+    try {
+      const { data } = await axios.post(`${BASE}/refresh`, { refreshToken });
+      setPortalToken(data.token as string);
+      return data.token as string;
+    } catch (err) {
+      if ((err as { response?: { status?: number } })?.response?.status === 401) clearPortalToken();
+      throw err;
+    }
+  })().finally(() => { refreshing = null; });
+  return refreshing;
+};
+
+client.interceptors.request.use(async (config) => {
+  let token = getPortalToken();
+  if (!token && getPortalRefreshToken()) token = await refreshAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
+});
+
+// Which 401s are about the access token rather than the parent. These are
+// renewed and retried once; ACCESS_REVOKED and the rest go straight through.
+const RENEWABLE = new Set(["TOKEN_EXPIRED", "NO_TOKEN", "INVALID_TOKEN"]);
+
+type RetriableConfig = InternalAxiosRequestConfig & { _retried?: boolean };
+
+client.interceptors.response.use(undefined, async (err: AxiosError<{ code?: string }>) => {
+  const config = err.config as RetriableConfig | undefined;
+  if (err.response?.status !== 401 || !config || config._retried) throw err;
+  if (!RENEWABLE.has(err.response.data?.code ?? "")) throw err;
+  if (!getPortalRefreshToken()) throw err;
+
+  await refreshAccessToken();
+  config._retried = true;
+  return client.request(config);
 });
 
 export interface PortalStudent {
@@ -155,9 +220,21 @@ export interface PortalFeeReminders {
 /** One code covers a whole family, so login returns every child it opens. */
 export async function portalLogin(
   admissionNo: string, code: string
-): Promise<{ token: string; children: PortalStudent[] }> {
+): Promise<{ token: string; refreshToken: string; children: PortalStudent[] }> {
   const { data } = await axios.post(`${BASE}/login`, { admissionNo, code });
-  return data as { token: string; children: PortalStudent[] };
+  return data as { token: string; refreshToken: string; children: PortalStudent[] };
+}
+
+/**
+ * Sign this browser out. The server is told so the session cannot be resumed,
+ * but the local tokens go first and regardless — a parent signing out offline
+ * is signed out of this browser, which is what they asked for.
+ */
+export async function portalLogout(): Promise<void> {
+  const refreshToken = getPortalRefreshToken();
+  clearPortalToken();
+  if (!refreshToken) return;
+  await axios.post(`${BASE}/logout`, { refreshToken }).catch(() => { /* best effort */ });
 }
 
 const unwrap = <T,>(body: unknown): T => (body as { data: T }).data;

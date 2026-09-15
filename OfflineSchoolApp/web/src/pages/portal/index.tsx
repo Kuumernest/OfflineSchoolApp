@@ -33,7 +33,7 @@ import { cn }          from "@/utils/cn";
 import { printHtml }   from "@/print/document";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import {
-  portalLogin, getPortalToken, setPortalToken, clearPortalToken,
+  portalLogin, portalLogout, hasPortalSession, setPortalSession,
   fetchMe, fetchFees, fetchResults, fetchAttendance, fetchAnnouncements,
   fetchFeeReminders, fetchNotifications,
   fetchReceiptHtml,
@@ -78,7 +78,8 @@ export default function ParentPortalPage() {
   const fmt = useFormat();
   const qc  = useQueryClient();
 
-  const [signedIn, setSignedIn] = useState(Boolean(getPortalToken()));
+  // A session, not an access token: the client renews the latter on its own.
+  const [signedIn, setSignedIn] = useState(hasPortalSession());
   const [tab, setTab]           = useState<Tab>("fees");
   // Null means "whichever the server picks first" — what a one-child parent
   // gets, and never has to think about.
@@ -91,7 +92,7 @@ export default function ParentPortalPage() {
   const [printing, setPrinting]       = useState<string | null>(null);
 
   const signOut = () => {
-    clearPortalToken();
+    void portalLogout();
     setSignedIn(false);
     setChildId(null);
     qc.clear();
@@ -157,8 +158,7 @@ export default function ParentPortalPage() {
     setBusy(true);
     setError(null);
     try {
-      const { token } = await portalLogin(admissionNo.trim(), code.trim());
-      setPortalToken(token);
+      setPortalSession(await portalLogin(admissionNo.trim(), code.trim()));
       setSignedIn(true);
       setChildId(null);
       setCode("");

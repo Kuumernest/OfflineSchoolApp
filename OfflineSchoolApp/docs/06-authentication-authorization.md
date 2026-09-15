@@ -115,10 +115,38 @@ children**, which is why the row is a `GuardianAccess` and not a `Student`.
 | Normalisation | uppercased, punctuation stripped, so `abcd efgh` = `ABCD-EFGH` |
 | Max tries | 6 |
 | Lockout | 15 minutes |
-| Session | 12 hours |
+| Access token | 20 minutes — a `portal`-audience JWT, renewed by the client |
+| Session | 90 days per device, held on the `GuardianAccess` row |
 
 The alphabet omissions are not cosmetic: a code is read off paper and typed by
 someone who did not choose it, and those three pairs are where that goes wrong.
+
+### Session and token are two different things
+
+The code is the credential and the `GuardianAccess` row is the authorisation.
+Neither is a session, and until one existed the portal issued a single
+twelve-hour token — so every parent re-typed a code they were handed once, on
+paper, every morning.
+
+`POST /portal/login` now returns a short-lived **access token** plus an opaque
+**refresh token**. The refresh token is the session: 90 days from sign-in, one
+per device, stored as a SHA-256 hash in `GuardianAccess.sessions[]`. The
+clients treat "holds a refresh token" as signed in, and renew the access token
+through `POST /portal/refresh` when a request answers `TOKEN_EXPIRED`. Being
+offline — for a day or a month — does not end a session; the next request
+simply renews.
+
+A session ends when:
+
+- the parent signs out (`POST /portal/logout`, public, so it works after the
+  access token has lapsed);
+- the office **revokes** the code — `portalAuth` re-reads the row on every
+  request and `/refresh` applies the same rule, so this is immediate;
+- the office **re-issues** the code — a new credential empties `sessions[]`;
+- 90 days pass.
+
+Refresh tokens are not rotated: a rotated token that reaches the server but not
+the phone would sign the parent out, which is the failure this exists to remove.
 
 ### The portal is read-mostly
 

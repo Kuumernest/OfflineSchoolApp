@@ -47,7 +47,9 @@ mounted **above** the `/api` auth/idempotency layer.
 
 | Method | Path | |
 |---|---|---|
-| POST | `/portal/login` | Portal credential login. |
+| POST | `/portal/login` | Portal credential login → `token` (20 min), `refreshToken` (90-day session), `children`. |
+| POST | `/portal/refresh` | Public. `{ refreshToken }` → a new `token`. 401 `SESSION_EXPIRED` / `ACCESS_REVOKED` is final. |
+| POST | `/portal/logout` | Public. `{ refreshToken }` ends that device's session. Idempotent. |
 | GET | `/portal/me` | Linked students, guardian identity. |
 | GET | `/portal/fees` , `/portal/fees/reminders` | Ledger and reminders. |
 | GET | `/portal/notifications` | |

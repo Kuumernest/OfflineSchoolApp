@@ -116,6 +116,32 @@ router.post("/login", asyncHandler(async (req, res) => {
   }
 }));
 
+/**
+ * A fresh access token for a signed-in device.
+ *
+ * Public, like /login, because it is called when the access token has lapsed
+ * — the one moment a portal-authenticated route cannot serve. The refresh
+ * token is the credential here, and it is checked against the GuardianAccess
+ * row, so a code the office has revoked is refused at once.
+ */
+router.post("/refresh", asyncHandler(async (req, res) => {
+  try {
+    const result = await portal.refresh({ refreshToken: req.body.refreshToken });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return fail(res, err);
+  }
+}));
+
+/**
+ * Sign one device out. Public for the same reason: a parent whose access token
+ * lapsed an hour ago must still be able to leave a shared phone signed out.
+ */
+router.post("/logout", asyncHandler(async (req, res) => {
+  const result = await portal.logout({ refreshToken: req.body.refreshToken });
+  return res.json({ success: true, ...result });
+}));
+
 // ═════════════════════════════════════════════════════════════════════════════
 // Everything below needs a portal token
 // ═════════════════════════════════════════════════════════════════════════════
