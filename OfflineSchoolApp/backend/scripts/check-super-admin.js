@@ -64,6 +64,10 @@ const check = (label, actual, expected) => {
   const { StudentAttendance } = require(path.join(SRC, "db/models/Attendance"));
   const permissions  = require(path.join(SRC, "services/permissions.service"));
 
+  // Mongoose builds indexes in the background after the model compiles; the
+  // duplicate-code assertions below need the unique index to exist first.
+  await School.init();
+
   // ── Two schools, populated with distinguishable records ─────────────────
   const A = "68c0000000000000000000a1";
   const B = "68c0000000000000000000b2";
@@ -273,11 +277,11 @@ const check = (label, actual, expected) => {
   check("  and records nothing", (await auditRows({ action: "school.deactivated" })).length, 1);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- 13. a deactivated school, under the existing rules ---");
+  console.log("\n--- 13. a deactivated school takes its staff with it ---");
   r = await as(T.adminB).get(`/admin/students?schoolId=${B}`);
-  check("its administrator can still read it — deactivation is a platform flag, not a lockout (existing rule)", r.status, 200);
+  check("its administrator's existing token is refused on the next request: 401 SCHOOL_INACTIVE", [r.status, r.body?.code], [401, "SCHOOL_INACTIVE"]);
   const adminBLogin = await call("POST", "/auth/login", { body: { email: "admin-b@example.test", password: PASSWORD } });
-  check("and can still sign in (existing rule)", adminBLogin.status, 200);
+  check("and cannot sign in: 403 SCHOOL_INACTIVE", [adminBLogin.status, adminBLogin.body?.code], [403, "SCHOOL_INACTIVE"]);
   r = await root.get(`/admin/students?schoolId=${B}`);
   check("the super admin can still read a deactivated school", r.status, 200);
   r = await root.post(`/super-admin/schools/${B}/enter`, {});
@@ -285,6 +289,10 @@ const check = (label, actual, expected) => {
   r = await root.post(`/super-admin/schools/${B}/activate`, {});
   check("activate → 200, isActive true", [r.status, r.body?.school?.isActive], [200, true]);
   check("school.activated recorded", (await auditRows({ action: "school.activated" })).length, 1);
+  r = await as(T.adminB).get(`/admin/students?schoolId=${B}`);
+  check("reactivated: the same token works again", r.status, 200);
+  check("and its administrator can sign in again",
+    (await call("POST", "/auth/login", { body: { email: "admin-b@example.test", password: PASSWORD } })).status, 200);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 6. inside a school, the super admin is that school's admin ---");
@@ -382,15 +390,18 @@ const check = (label, actual, expected) => {
   check("a school admin's attempt created nothing", await School.countDocuments(), schoolsBefore);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- 9. a school admin naming another school is answered about their own ---");
+  console.log("\n--- 9. a school admin naming another school is refused ---");
   r = await as(T.adminA).get(`/admin/students?schoolId=${B}`);
-  check("GET /admin/students?schoolId=B as Alpha's admin → Alpha's pupils", listOf(r.body).map((s) => s._id).sort(), ["stu-a1", "stu-a2", "stu-a3"]);
-  check("  and none of Beta's", listOf(r.body).some((s) => s.schoolId === B), false);
+  check("GET /admin/students?schoolId=B as Alpha's admin → 403 SCHOOL_ACCESS_DENIED", [r.status, r.body?.code], [403, "SCHOOL_ACCESS_DENIED"]);
+  check("  and none of Beta's pupils in the body", listOf(r.body).length, 0);
   r = await as(T.adminA).get(`/admin/settings/admins?schoolId=${B}`);
-  check("GET /admin/settings/admins?schoolId=B → Alpha's staff, not admin-b",
-    (r.body?.admins ?? []).map((u) => u._id).includes("admin-b"), false);
+  check("GET /admin/settings/admins?schoolId=B → 403", r.status, 403);
   r = await as(T.adminA).post("/admin/settings/admins", { name: "Planted", email: "planted@example.test", schoolId: B });
-  check("appointing an admin 'in' Beta lands in Alpha instead", [r.status, r.body?.admin?.schoolId], [201, A]);
+  check("appointing an admin 'in' Beta → 403, nothing created", [r.status, await User.countDocuments({ email: "planted@example.test" })], [403, 0]);
+  r = await as(T.adminA).get(`/admin/students?schoolId=${A}`);
+  check("naming their OWN school still works", [r.status, listOf(r.body).length], [200, 3]);
+  r = await as(T.adminA).post("/admin/settings/admins", { name: "Planted", email: "planted@example.test", schoolId: A });
+  check("  and appointing in their own school lands there", [r.status, r.body?.admin?.schoolId], [201, A]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 12. the school context cannot be forged ---");
@@ -398,7 +409,7 @@ const check = (label, actual, expected) => {
   r = await as(forgedRole).get("/super-admin/schools");
   check("a token claiming super_admin for a school_admin's id → 403 (the role comes from the database)", r.status, 403);
   r = await as(forgedRole).get(`/admin/students?schoolId=${B}`);
-  check("  and their school context is still Alpha", listOf(r.body).every((s) => s.schoolId === A), true);
+  check("  and naming Beta is still refused: 403 SCHOOL_ACCESS_DENIED", [r.status, r.body?.code], [403, "SCHOOL_ACCESS_DENIED"]);
   const forgedSchool = jwt.sign({ id: "admin-a", role: "school_admin", schoolId: B }, process.env.JWT_SECRET, { expiresIn: "1h" });
   r = await as(forgedSchool).get("/admin/students");
   check("a token claiming Beta for Alpha's admin is answered about Alpha", listOf(r.body).map((s) => s._id).sort(), ["stu-a1", "stu-a2", "stu-a3"]);
@@ -406,6 +417,8 @@ const check = (label, actual, expected) => {
   r = await as(wrongSecret).get("/super-admin/schools");
   check("a token signed with the wrong secret → 401", r.status, 401);
 
+  r = await as(T.adminA).get("/admin/students?schoolId=68c00000000000000000ffff");
+  check("a school admin naming a school that does not exist → 403 SCHOOL_ACCESS_DENIED (not theirs, whatever it is)", [r.status, r.body?.code], [403, "SCHOOL_ACCESS_DENIED"]);
   r = await root.get("/admin/students?schoolId=68c00000000000000000ffff");
   check("a super admin naming a school that does not exist → 404 SCHOOL_NOT_FOUND", [r.status, r.body?.code], [404, "SCHOOL_NOT_FOUND"]);
   r = await root.get("/admin/students?schoolId=school-that-is-not-an-id");

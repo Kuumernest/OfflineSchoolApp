@@ -56,4 +56,27 @@ const namedAnotherSchool = (req, provided) => {
   return own != null && String(asked).trim() !== String(own);
 };
 
-module.exports = { resolveSchoolId, namedAnotherSchool };
+/**
+ * The door rule for a school named in the PATH.
+ *
+ * middleware/auth.js refuses a school-scoped caller who names another school
+ * in the query or body, but a path parameter is not parsed until the router
+ * matches, so the one router that carries /:schoolId applies this with
+ * router.param("schoolId", guardSchoolParam). Same answer as the door:
+ * super_admin may name any school; everyone else may name only their own,
+ * and gets 403 SCHOOL_ACCESS_DENIED otherwise.
+ */
+const guardSchoolParam = (req, res, next) => {
+  const asked = req.params?.schoolId;
+  if (asked == null || String(asked).trim() === "") return next();
+  if (req.user?.role === "super_admin") return next();
+  const own = req.user?.schoolId ?? req.portal?.schoolId ?? null;
+  if (own != null && String(asked).trim() === String(own)) return next();
+  return res.status(403).json({
+    success: false,
+    code:    "SCHOOL_ACCESS_DENIED",
+    message: "You may only act within your own school.",
+  });
+};
+
+module.exports = { resolveSchoolId, namedAnotherSchool, guardSchoolParam };

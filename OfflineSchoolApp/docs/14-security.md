@@ -47,6 +47,8 @@ not the entropy.
 | Only `bursar` and `teacher` are school-adjustable | IMPLEMENTATION VERIFIED |
 | `platform.*` capabilities held by `super_admin` alone, locked, ungrantable through overrides | TEST VERIFIED — `scripts/check-super-admin.js` |
 | A super_admin's named school is verified at the door (404 if not a school / deleted) | TEST VERIFIED — `scripts/check-super-admin.js` |
+| A school-scoped user naming another school (query, body or path) is refused: 403 `SCHOOL_ACCESS_DENIED` | TEST VERIFIED — `scripts/check-school-scope.js` |
+| A deactivated or deleted school blocks its own users: login 403, existing tokens 401 `SCHOOL_INACTIVE`, refresh refused; reactivation lifts it | TEST VERIFIED — `scripts/check-school-scope.js` |
 | Platform audit trail (`AuditLog`): school lifecycle, administrator changes, entering a school | IMPLEMENTATION VERIFIED |
 | Roles defined once (`config/roles.js`); `"admin"` normalised away | IMPLEMENTATION VERIFIED |
 | Bursar separated from admin (no `payroll.setSalary`, no `approvals.decide`) | IMPLEMENTATION VERIFIED |

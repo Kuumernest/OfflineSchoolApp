@@ -2415,7 +2415,7 @@
       "deactivated": "Établissement désactivé",
       "statusFailed": "Impossible de changer le statut de l'établissement",
       "deactivateTitle": "Désactiver {{name}}",
-      "deactivateBody": "L'établissement disparaît des listes publiques et est marqué désactivé sur toute la plateforme. Ses données sont conservées et il peut être réactivé. Son personnel peut toujours se connecter.",
+      "deactivateBody": "Dès maintenant, plus personne rattaché à l'établissement — administrateurs, économes, enseignants, élèves — ne peut se connecter, et les sessions en cours s'arrêtent à la prochaine requête. L'établissement disparaît des listes publiques. Ses données sont conservées et il peut être réactivé à tout moment.",
       "reason": "Motif",
       "reasonRequired": "Un motif est obligatoire",
       "empty": "Aucun établissement ne correspond",
@@ -2446,7 +2446,7 @@
       "resetFailed": "Impossible de réinitialiser le mot de passe",
       "recentActivity": "Activité récente",
       "noActivity": "Rien d'enregistré pour l'instant",
-      "inactiveBanner": "Cet établissement est désactivé. Son personnel peut toujours se connecter ; il est masqué des listes publiques.",
+      "inactiveBanner": "Cet établissement est désactivé. Son personnel et ses élèves ne peuvent pas se connecter tant qu'il n'est pas réactivé ; il est masqué des listes publiques.",
       "notFound": "Établissement introuvable",
       "createdOn": "Créé le",
       "mustReset": "Doit changer son mot de passe"

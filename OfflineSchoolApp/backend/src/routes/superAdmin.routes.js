@@ -290,11 +290,12 @@ router.patch("/schools/:schoolId", canManage, asyncHandler(async (req, res) => {
 /**
  * POST /schools/:schoolId/activate | /deactivate
  *
- * Deactivation is the platform's "off switch" and nothing more destructive:
- * the school's data stays, its staff can still sign in (that is the existing
- * rule, and changing it is a decision for the school, not a side effect of
- * this route), and it can be switched back on. There is no delete here on
- * purpose.
+ * Deactivation is the platform's "off switch": the school's data stays and it
+ * can be switched back on, but from the moment it is off nobody scoped to it
+ * — administrator, bursar, teacher, pupil — can sign in or be served
+ * (middleware/auth.js refuses them with SCHOOL_INACTIVE, tokens included).
+ * The super_admin can still enter it, which is how it is switched back on.
+ * There is no delete here on purpose.
  */
 const setActive = (isActive, action) => asyncHandler(async (req, res) => {
   const before = await findSchool(req.params.schoolId);

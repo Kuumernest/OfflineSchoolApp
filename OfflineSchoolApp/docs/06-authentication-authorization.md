@@ -344,12 +344,34 @@ resolveSchoolId(req, provided)
 - A **`super_admin` may name a school** — via `provided`, `req.body.schoolId`,
   `req.query.schoolId` or `req.params.schoolId` — and is taken at their word,
   because operating across schools is what the role is for.
-- **Everyone else is their own school**, whatever they asked for. Silently, not
-  as an error: clients legitimately send their own `schoolId` on every request,
-  and refusing would break all of them. The point is only that the value cannot
-  be used to reach further than the caller.
+- **Everyone else is their own school.** Since the platform role landed this is
+  enforced **at the door**, not by silent correction: `authenticate`
+  (`middleware/auth.js`) refuses a school-scoped caller whose request names any
+  other `schoolId` — in the query or the body — with **403
+  `SCHOOL_ACCESS_DENIED`**; the one router that carries `/:schoolId` in the path
+  (`academicStructure.routes.js`) applies the same rule through
+  `router.param("schoolId", guardSchoolParam)`. A `schoolId` equal to the
+  caller's own, or absent, or empty, passes. `resolveSchoolId` still corrects
+  downstream as a second line, but no ordinary caller reaches it with a
+  mismatch any more. A school that does not exist is a 403 for them (not
+  theirs, whatever it is) and a 404 `SCHOOL_NOT_FOUND` for a super_admin.
 - The caller's own school is `req.user.schoolId` **or** `req.portal.schoolId`, so
   the same function serves guardian requests.
+
+### A deactivated school takes its people with it — TEST VERIFIED
+
+`authenticate` also asks whether the caller's **own** school is open. A school
+the platform has switched off (`isActive: false`) or soft-deleted refuses every
+request from anyone scoped to it — administrator, bursar, teacher, pupil — with
+**401 `SCHOOL_INACTIVE`**, so a token issued before the switch fails at its very
+next use. `POST /api/auth/login` answers **403 `SCHOOL_INACTIVE`** to a correct
+password (it is not the password that is wrong), and `/api/auth/refresh` refuses
+to mint a session for a closed school. No token blacklist: the check is one row
+read per request, cached 30 s in-process (`utils/schoolContext.js`) and
+invalidated by the routes that switch a school. Reactivation lifts it as
+immediately. A `schoolId` that matches no `School` document is a dangling
+reference, not a closed school, and is let through. Proved by
+`scripts/check-school-scope.js`.
 
 ### Writes are different
 
@@ -380,6 +402,8 @@ copy.
 | A non-super-admin cannot read another school's data through a `schoolId` parameter | **TEST VERIFIED** — `scripts/check-cross-school.js` |
 | Every router that resolves a school uses `resolveSchoolId` | **IMPLEMENTATION VERIFIED** at this commit |
 | A super_admin may name any school, and the school it names must exist | **TEST VERIFIED** — `scripts/check-super-admin.js`; 404 `SCHOOL_NOT_FOUND` otherwise |
+| A school-scoped user naming another school is refused, not corrected | **TEST VERIFIED** — `scripts/check-school-scope.js`; 403 `SCHOOL_ACCESS_DENIED` via query, body and path |
+| A deactivated or deleted school's users cannot sign in or be served | **TEST VERIFIED** — `scripts/check-school-scope.js`; 403/401 `SCHOOL_INACTIVE`, existing tokens included |
 | The database itself enforces tenancy | **NO.** There is one database and one connection. Tenancy is application-level only. A query that omits `schoolId` returns every school's rows. |
 
 That last row is the one to keep in mind when adding a route. Nothing at the

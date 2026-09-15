@@ -6,7 +6,8 @@ const router   = express.Router();
 const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
-const User     = require("../db/models/User");
+const User     = require("../db/models/User");
+const { isSchoolClosedFor } = require("../utils/schoolContext");
 const { authenticate } = require("../../middleware/auth");
 const {
   effectiveFor,
@@ -243,6 +244,19 @@ router.post("/login", loginLimiter, async (req, res) => {
       });
     }
 
+    // A user whose school the platform has switched off cannot sign in, and is
+    // told why: a correct password answered with "invalid" would send them to
+    // reset a password that is not the problem. super_admin has no school and
+    // is never refused here; a schoolId that matches no School row is not a
+    // closed school (see utils/schoolContext.js).
+    if (await isSchoolClosedFor(user)) {
+      return res.status(403).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: "This school has been deactivated. Contact the platform operator.",
+      });
+    }
+
     console.log(`🔐 Login success: ${user._id} (${user.role})`);
     return res.json(await buildTokenResponse(user));
 
@@ -288,6 +302,16 @@ router.post("/refresh", async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: "User not found or account deactivated",
+      });
+    }
+
+    // The door rule, for the one path that mints a session without passing
+    // the door: a closed school's refresh token must not reissue one.
+    if (await isSchoolClosedFor(user)) {
+      return res.status(401).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: "This school has been deactivated. Contact the platform operator.",
       });
     }
 

@@ -262,9 +262,17 @@ const main = async () => {
     { _id: "b1", schoolId: SCHOOL_B, studentId: "s9", amount: 9999, updatedAt: new Date("2026-01-01"), deletedAt: null },
   ]);
 
+  // Refused at the door (middleware/auth.js), not corrected: a client asking
+  // for another school is mistaken or hostile, and either way gets a 403 that
+  // says so rather than its own school's rows under the other's name.
   const crossTenant = await changes({ collections: "feeCharge", schoolId: SCHOOL_B });
-  check("asking for another school's data returns this school's",
-    crossTenant.body.collections.feeCharge.documents.map((d) => d._id), ["a1"]);
+  check("asking for another school's data is refused: 403 SCHOOL_ACCESS_DENIED",
+    [crossTenant.status, crossTenant.body.code], [403, "SCHOOL_ACCESS_DENIED"]);
+  check("  and none of it comes back",
+    JSON.stringify(crossTenant.body).includes("b1"), false);
+  const ownTenant = await changes({ collections: "feeCharge", schoolId: SCHOOL_A });
+  check("naming one's own school still works",
+    ownTenant.body.collections?.feeCharge?.documents.map((d) => d._id), ["a1"]);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the cursor cannot skip or loop when timestamps collide ---");

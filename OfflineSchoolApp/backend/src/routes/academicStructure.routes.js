@@ -4,7 +4,11 @@
 const router = require("express").Router();
 const AcademicStructure = require("../db/models/AcademicStructure");
 const { requirePermission } = require("../../middleware/permissions");
-const { resolveSchoolId, namedAnotherSchool } = require("../utils/tenant");
+const { resolveSchoolId, namedAnotherSchool, guardSchoolParam } = require("../utils/tenant");
+
+// The path names the school, and the door (middleware/auth.js) cannot see a
+// path parameter. This is the same refusal, applied where the parameter is.
+router.param("schoolId", guardSchoolParam);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE SCHOOL IS THE CALLER'S, NOT THE URL'S

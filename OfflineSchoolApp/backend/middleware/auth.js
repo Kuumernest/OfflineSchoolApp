@@ -4,7 +4,12 @@
 const jwt  = require("jsonwebtoken");
 const User = require("../src/db/models/User");
 const { normalizeRole, ROLES } = require("../src/config/roles");
-const { lookupSchool } = require("../src/utils/schoolContext");
+const { lookupSchool, isSchoolClosedFor } = require("../src/utils/schoolContext");
+
+const SCHOOL_INACTIVE_MESSAGE =
+  "This school has been deactivated. Contact the platform operator.";
+const SCHOOL_ACCESS_DENIED_MESSAGE =
+  "You may only act within your own school.";
 
 const authenticate = async (req, res, next) => {
   try {
@@ -97,16 +102,62 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // A super_admin may name a school on any request, and utils/tenant.js
-    // takes them at their word. The word is checked here, once, at the door:
-    // the school must exist and not be deleted, or the request is refused
-    // with a 404 rather than answered with an empty page that looks like a
-    // real school with nothing in it. A deactivated school is still reachable
-    // — switching it back on is done from inside — and is flagged on
-    // req.schoolContext for whatever cares.
+    // ── The school, at the door ─────────────────────────────────────────────
     //
-    // Nobody else's schoolId is looked at. Theirs is corrected to their own
-    // school downstream whatever they sent, so there is nothing to verify.
+    // Two rules, both decided here and nowhere else, because a rule copied
+    // into seventeen routers is a rule the eighteenth misses.
+    //
+    // 1. A school-scoped caller's OWN school must be open. A school the
+    //    platform has switched off, or deleted, takes its staff and pupils
+    //    with it: this refuses every request from then on, so a token issued
+    //    before the switch stops working at its very next use, with no
+    //    blacklist. Reactivation lifts it just as immediately.
+    //
+    // 2. A school-scoped caller may not NAME another school. utils/tenant.js
+    //    used to correct such a request silently to the caller's own school.
+    //    Silence is the wrong answer to "give me school B's data": the client
+    //    that asked is either mistaken or hostile, and both deserve a 403
+    //    that says so, not school A's figures under school B's heading. The
+    //    correction downstream stays as a second line; it should now never
+    //    be reached by anyone but a super_admin.
+    //
+    //    Path parameters are not visible here — see guardSchoolParam in
+    //    utils/tenant.js, which the one router with /:schoolId applies.
+    //
+    // 3. A super_admin may name any school, and is taken at their word about
+    //    WHICH — but the word is checked: the school must exist and not be
+    //    deleted, or the request is a 404 rather than an empty page that looks
+    //    like a real school with nothing in it. A deactivated school is still
+    //    reachable for them — switching it back on is done from inside — and
+    //    is flagged on req.schoolContext for whatever cares.
+    if (role !== ROLES.SUPER_ADMIN && await isSchoolClosedFor(user)) {
+      return res.status(401).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: SCHOOL_INACTIVE_MESSAGE,
+      });
+    }
+
+    const askedSchoolId = (() => {
+      const q = req.query?.schoolId;
+      if (q != null && String(q).trim() !== "") return String(q).trim();
+      const b = req.body;
+      if (b && typeof b === "object" && !Array.isArray(b) && b.schoolId != null &&
+          String(b.schoolId).trim() !== "") {
+        return String(b.schoolId).trim();
+      }
+      return null;
+    })();
+
+    if (role !== ROLES.SUPER_ADMIN && askedSchoolId !== null &&
+        askedSchoolId !== String(user.schoolId ?? "")) {
+      return res.status(403).json({
+        success: false,
+        code:    "SCHOOL_ACCESS_DENIED",
+        message: SCHOOL_ACCESS_DENIED_MESSAGE,
+      });
+    }
+
     let schoolContext = null;
     if (role === ROLES.SUPER_ADMIN) {
       const asked = req.query?.schoolId ?? req.body?.schoolId;
@@ -168,4 +219,7 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorize };
+module.exports = {
+  authenticate, authorize,
+  SCHOOL_INACTIVE_MESSAGE, SCHOOL_ACCESS_DENIED_MESSAGE,
+};

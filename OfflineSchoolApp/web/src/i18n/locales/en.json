@@ -2415,7 +2415,7 @@
       "deactivated": "School deactivated",
       "statusFailed": "Could not change the school's status",
       "deactivateTitle": "Deactivate {{name}}",
-      "deactivateBody": "The school is hidden from public listings and marked as deactivated across the platform. Its data is kept and it can be switched back on. Its staff can still sign in.",
+      "deactivateBody": "From this moment nobody scoped to the school — administrators, bursars, teachers, pupils — can sign in, and their existing sessions stop working at their next request. The school is hidden from public listings. Its data is kept and it can be switched back on at any time.",
       "reason": "Reason",
       "reasonRequired": "A reason is required",
       "empty": "No schools match",
@@ -2446,7 +2446,7 @@
       "resetFailed": "Could not reset the password",
       "recentActivity": "Recent activity",
       "noActivity": "Nothing recorded yet",
-      "inactiveBanner": "This school is deactivated. Its staff can still sign in; it is hidden from public listings.",
+      "inactiveBanner": "This school is deactivated. Its staff and pupils cannot sign in until it is switched back on; it is hidden from public listings.",
       "notFound": "No such school",
       "createdOn": "Created",
       "mustReset": "Must change password"

@@ -130,6 +130,16 @@ does not exist, on **any** route, is answered 404 `SCHOOL_NOT_FOUND` by
 Appointing a school's administrator is `POST /admin/settings/admins` with the
 school's id in the body — the existing route, which also records `admin.created`.
 
+**Deactivation is a lockout.** From the moment a school is switched off, every
+request from anyone scoped to it answers 401 `SCHOOL_INACTIVE` (tokens issued
+earlier included), `POST /auth/login` answers 403 `SCHOOL_INACTIVE`, and
+`/auth/refresh` refuses. Reactivation lifts all three at once.
+
+**Naming another school.** Any school-scoped caller whose request names a
+`schoolId` other than their own — query, body or path — is answered 403
+`SCHOOL_ACCESS_DENIED` by `authenticate` (or `guardSchoolParam` for the path),
+before any route runs.
+
 ## Teacher — `teacher.routes.js` (all teacher-scoped)
 
 `/me`, `/profile` (GET/PUT + `/password`), `/my-assignments`, `/assignments`,

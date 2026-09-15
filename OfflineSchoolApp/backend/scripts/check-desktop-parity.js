@@ -3895,14 +3895,25 @@ const main = async () => {
     const theirs = await askTpl("GET", `/api/templates/tpl-5?schoolId=${SCHOOL}`, null, tplAs);
     check("nor by the server", theirs.status, 404);
 
-    // resolveSchoolId ignores the request's schoolId for anybody who is not a
-    // super_admin, so asking for another school reads your OWN. A handler that
-    // trusted query.schoolId would answer with tpl-5 here.
-    check("asking for another school still answers with this one",
+    // The desktop has no door: offline, a request naming another school reads
+    // the caller's OWN, which is the safe answer for a machine that cannot
+    // ask. A handler that trusted query.schoolId would answer with tpl-5 here.
+    check("asking for another school, offline, still answers with this one",
       api.handle({ method: "GET", path: "/api/templates", query: { schoolId: "other-school" } }, tplCtx)
         .data.templates.map((t) => t._id),
       ["tpl-1", "tpl-2", "tpl-3"]);
-    await parity("and the server agrees", `/api/templates?schoolId=other-school`, tplAs);
+    // The server does not correct any more — it refuses at the door
+    // (middleware/auth.js, 403 SCHOOL_ACCESS_DENIED). The two answers differ on
+    // purpose, and both are stated so neither can drift unnoticed.
+    {
+      const res  = await fetch(`http://127.0.0.1:${port}/api/templates?schoolId=other-school`,
+        { headers: { authorization: `Bearer ${tplAs.token}` } });
+      const body = await res.json();
+      check("and the server refuses it outright: 403 SCHOOL_ACCESS_DENIED",
+        [res.status, body.code], [403, "SCHOOL_ACCESS_DENIED"]);
+      check("  handing over none of the other school's templates",
+        JSON.stringify(body).includes("tpl-5"), false);
+    }
 
     // ── The guard over the whole router ──────────────────────────────────
     check("a bursar is not answered locally",
@@ -4420,15 +4431,28 @@ const main = async () => {
     "?schoolId=" + SCHOOL + "&status=banana");
 
   /**
-   * resolveSchoolId IGNORES ?schoolId for anybody who is not a super_admin.
+   * A foreign ?schoolId, on the two sides of the seam.
    *
-   * So a school_admin naming another school gets their OWN accounts, not an
-   * empty list — and a handler that took the query parameter (as the sibling
-   * handlers in that directory do) would answer with nothing while the server
-   * answered with five rows.
+   * Offline, the desktop has no door: it answers the caller's OWN accounts,
+   * never the other school's, and a handler that took the query parameter
+   * (as the sibling handlers in that directory do) would answer with nothing.
+   * Online, the server refuses at the door — 403 SCHOOL_ACCESS_DENIED from
+   * middleware/auth.js — rather than correcting. Both are asserted; they are
+   * meant to differ.
    */
-  await stgAdminsParity("a foreign schoolId is ignored, not honoured",
-    "?schoolId=other-school");
+  {
+    const local = api.handle(
+      { method: "GET", path: "/api/admin/settings/admins", query: { schoolId: "other-school" } },
+      stgCtx
+    );
+    check("a foreign schoolId, offline: this school's accounts, none of the other's",
+      local?.data?.admins?.some((a) => a._id === "stg-other") ?? null, false);
+    check("  and not an empty list",
+      (local?.data?.admins?.length ?? 0) > 0, true);
+    const fromServer = await stgGet("/api/admin/settings/admins?schoolId=other-school");
+    check("a foreign schoolId, online: the server refuses at the door — 403 SCHOOL_ACCESS_DENIED",
+      [fromServer.status, fromServer.body?.code], [403, "SCHOOL_ACCESS_DENIED"]);
+  }
 
   const stgAdmins = api.handle(
     { method: "GET", path: "/api/admin/settings/admins", query: { schoolId: SCHOOL } },
