@@ -246,18 +246,88 @@ router.post("/categories", authoring, asyncHandler(async (req, res) => {
 // QUESTIONS
 // ─────────────────────────────────────────────────────────────
 
+/**
+ * Whose questions a caller may see.
+ *
+ * A teacher's bank is their own questions and nothing else — there is no
+ * sharing flag on a question today, so nothing is "shared", and a teacher
+ * naming another teacher's id in `created_by` is answered about their own.
+ * An administrator sees the school's, and may narrow to one teacher.
+ */
+const questionScope = (req) => {
+  const scope = { ...ownScope(req), deleted_at: null };
+  if (!ADMIN_ROLES.includes(req.user?.role)) {
+    scope.created_by = String(req.user?._id || req.user?.id || "__none__");
+  }
+  return scope;
+};
+
+/**
+ * Does this caller teach `subjectId` (in `classId`, when given)? The same
+ * TeacherAssignment lookup POST /quizzes has always made; administrators are
+ * not assigned and are not asked.
+ */
+const teacherTeaches = async (req, subjectId, classId = null) => {
+  if (ADMIN_ROLES.includes(req.user?.role)) return true;
+  const filter = {
+    teacher: String(req.user?._id || req.user?.id || ""),
+    subject: String(subjectId),
+  };
+  if (classId) filter.class = String(classId);
+  return Boolean(await TeacherAssignment.findOne(filter).select("_id").lean());
+};
+
+/**
+ * GET /questions?subject_id=&category_id=&question_type=&difficulty=&limit=
+ *
+ * The bank is asked for BY SUBJECT: a Mathematics quiz gets Mathematics
+ * questions, whatever else the teacher teaches. Filtered here, in the query,
+ * not by the client after the fact.
+ */
 router.get("/questions", authoring, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
-  const questions = await Question.find({ schoolId, deleted_at: null });
+  const filter   = { ...questionScope(req), schoolId };
+
+  const { subject_id, category_id, question_type, difficulty, created_by } = req.query;
+  if (subject_id)    filter.subject_id    = String(subject_id);
+  if (category_id)   filter.category_id   = String(category_id);
+  if (question_type) filter.question_type = String(question_type);
+  if (difficulty)    filter.difficulty    = String(difficulty);
+  // Only an administrator may look at a named teacher's bank; for a teacher
+  // questionScope has already pinned created_by to themselves.
+  if (created_by && ADMIN_ROLES.includes(req.user?.role)) filter.created_by = String(created_by);
+
+  const limit = Math.min(500, parseInt(req.query.limit ?? "200", 10) || 200);
+  const questions = await Question.find(filter).sort({ createdAt: -1 }).limit(limit);
   res.json({ success: true, questions });
 }));
 
+/**
+ * POST /questions — a question belongs to a subject, and the subject to the
+ * teacher. `subject_id` is Subject._id, as on a quiz; a teacher may only file
+ * a question under a subject they are assigned, whatever the body says.
+ */
 router.post("/questions", authoring, asyncHandler(async (req, res) => {
-  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  const schoolId  = resolveSchoolId(req, req.body.schoolId);
+  const subjectId = req.body?.subject_id ? String(req.body.subject_id) : null;
+
+  if (!subjectId) {
+    return res.status(400).json({
+      success: false, code: "SUBJECT_REQUIRED", message: "subject_id is required",
+    });
+  }
+  if (!(await teacherTeaches(req, subjectId))) {
+    return res.status(403).json({
+      success: false, code: "SUBJECT_NOT_ASSIGNED",
+      message: "You are not assigned to teach this subject",
+    });
+  }
+
   const question = await Question.create({
     ...req.body,
     schoolId,
-    created_by: req.user?._id,
+    subject_id: subjectId,
+    created_by: String(req.user?._id || req.user?.id),
   });
   res.status(201).json({ success: true, question });
 }));
@@ -315,8 +385,23 @@ const pick = (body, fields) => {
 };
 
 router.put("/questions/:id", authoring, asyncHandler(async (req, res) => {
+  // Moving a question to a subject is filing it under one: same rule as
+  // creating it there.
+  if (req.body?.subject_id !== undefined) {
+    if (!req.body.subject_id) {
+      return res.status(400).json({
+        success: false, code: "SUBJECT_REQUIRED", message: "subject_id cannot be empty",
+      });
+    }
+    if (!(await teacherTeaches(req, req.body.subject_id))) {
+      return res.status(403).json({
+        success: false, code: "SUBJECT_NOT_ASSIGNED",
+        message: "You are not assigned to teach this subject",
+      });
+    }
+  }
   const q = await Question.findOneAndUpdate(
-    { _id: req.params.id, ...ownScope(req) },
+    { _id: req.params.id, ...questionScope(req) },
     pick(req.body, QUESTION_FIELDS),
     { returnDocument: 'after' }
   );
@@ -330,7 +415,7 @@ router.put("/questions/:id", authoring, asyncHandler(async (req, res) => {
 
 router.delete("/questions/:id", authoring, asyncHandler(async (req, res) => {
   const q = await Question.findOneAndUpdate(
-    { _id: req.params.id, ...ownScope(req) },
+    { _id: req.params.id, ...questionScope(req) },
     { deleted_at: new Date() }
   );
   if (!q) {

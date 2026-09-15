@@ -44,6 +44,14 @@ const QuestionSchema = new mongoose.Schema(
       ref:  "QuestionCategory",
       default: null,
     },
+    /**
+     * The subject this question belongs to — Subject._id, exactly as a quiz
+     * carries it. The bank is asked for by subject (GET /quiz/questions), so
+     * a question without one is in no subject's bank. Nullable only because
+     * questions written before the field existed have none; the phone gives
+     * those the subject of the quizzes they sit in where that is unambiguous.
+     */
+    subject_id:    { type: String, default: null, index: true },
     question_text: { type: String, required: true },
     question_type: {
       type: String,
@@ -75,6 +83,9 @@ const QuestionSchema = new mongoose.Schema(
 // ─────────────────────────────────────────────
 // QUIZ
 // ─────────────────────────────────────────────
+
+// The bank's own query: one teacher's questions in one subject.
+QuestionSchema.index({ schoolId: 1, created_by: 1, subject_id: 1 });
 
 const QuizQuestionSchema = new mongoose.Schema(
   {

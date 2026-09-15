@@ -220,6 +220,21 @@ Rules in [`ARCHITECTURE.md §5`](ARCHITECTURE.md#5-roles-permissions-and-approva
 | `homework.routes.js` | `GET/POST /`, `PUT/DELETE /:id`, `POST /:id/submissions`, `PATCH /:id/submissions/:submissionId/grade` |
 | `quiz.routes.js` | `GET /sync`, `GET/POST /categories`, `GET/POST /questions` (+`PUT/DELETE /:id`), `GET/POST /quizzes` (+`PUT/DELETE /:id`), `POST /attempts`, `GET /attempts/:id`, `GET /analytics/quizzes/:quizId` |
 
+**The question bank is one teacher's questions in one subject.** `Question.subject_id`
+is `Subject._id`, as on a quiz. `GET /quiz/questions?subject_id=` returns, for a
+teacher, only their own questions in that subject — `created_by` in the query is
+ignored for them and honoured only for an administrator; a question with no
+subject is in no subject's bank. `POST /quiz/questions` requires `subject_id`
+(400 `SUBJECT_REQUIRED`) and refuses a subject the teacher is not assigned
+(403 `SUBJECT_NOT_ASSIGNED`); `PUT` applies the same rule to a changed subject,
+and `PUT`/`DELETE` on another teacher's question are 404. A teacher's classes and
+subjects come from `GET /teacher/my-classes` and `GET /teacher/my-subjects?grouped=true`
+(their `TeacherAssignment` rows) — the phone's quiz screen reads those, not a
+local join, because the sync feed does not mirror class, subject or assignment
+tables to teachers. Proved by `scripts/check-quiz-scope.js`; the phone's own
+SQLite bank and its `question_analytics` migration are proved by
+`mobile/scripts/check-quiz-bank.js`.
+
 ## Announcements — `announcement.routes.js`
 
 `GET /stats/summary`, `GET /student`, `POST /read-all`,

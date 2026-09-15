@@ -11,6 +11,10 @@ import { appError } from "../utils/appError";
 // local copy generated ids with Math.random(), which is not a cryptographic
 // generator. Quiz attempts and answers are named by these ids in the outbox.
 import { generateUUID as generateId } from "../utils/idHelpers";
+// Which classes and subjects this teacher may pick from — the server's
+// TeacherAssignment rows, cached. See that file for why the local join here
+// used to answer nothing.
+import * as teacherScope from "./teacherScope.service";
 
 const shuffleArray = (arr) => {
   const a = [...arr];
@@ -366,6 +370,7 @@ export const getCategories = async (schoolId) => {
 export const createQuestion = async ({
   schoolId,
   category_id,
+  subject_id,
   question_text,
   question_type,
   media_url   = null,
@@ -379,6 +384,9 @@ export const createQuestion = async ({
   if (!question_text?.trim()) throw appError("svcErr.questionTextRequired", 'Question text is required');
   if (!question_type)         throw appError("svcErr.questionTypeRequired", 'Question type is required');
   if (!created_by)            throw new Error('Teacher ID is required');
+  // A question belongs to a subject the way a quiz does: by Subject id. The
+  // bank is asked for by subject, and a question without one is in no bank.
+  if (!subject_id)            throw appError("svcErr.questionSubjectRequired", 'Subject is required');
 
   const dedupeKey = [
     schoolId,
@@ -399,14 +407,15 @@ export const createQuestion = async ({
 
     await db.runAsync(
       `INSERT INTO questions (
-         id, schoolId, category_id, question_text, question_type,
+         id, schoolId, category_id, subject_id, question_text, question_type,
          media_url, difficulty, points, explanation,
          is_active, created_by, _synced, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0, datetime('now'))`,
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 0, datetime('now'))`,
       [
         id,
         String(schoolId),
         category_id ? String(category_id) : null,
+        String(subject_id),
         question_text.trim(),
         question_type,
         media_url,
@@ -466,64 +475,36 @@ export const getQuestionById = async (id) => {
   return question;
 };
 
-export const getQuestions = async ({
-  schoolId,
-  category_id   = null,
-  difficulty    = null,
-  question_type = null,
-  search        = null,
-  created_by    = null,
-  limit         = 50,
-  offset        = 0,
-} = {}) => {
-  const safeSchoolId  = schoolId   ? String(schoolId)   : null;
-  const safeCreatedBy = created_by ? String(created_by) : null;
-  const safeLimit     = Number.isFinite(Number(limit))  ? Number(limit)  : 50;
-  const safeOffset    = Number.isFinite(Number(offset)) ? Number(offset) : 0;
-
-  if (!safeSchoolId) {
-    console.warn('[getQuestions] called without a schoolId — returning []');
-    return [];
-  }
-
-  if (!safeCreatedBy) {
-    console.warn(
-      '[getQuestions] ⚠️  called without created_by — ' +
-      'all teachers\' questions will be returned.'
-    );
-  }
-
-  const db         = await getDatabase();
-  const conditions = ['q.schoolId = ?', 'q.is_active = 1', 'q.deleted_at IS NULL'];
-  const params     = [safeSchoolId];
-
-  if (category_id)   { conditions.push('q.category_id = ?');     params.push(String(category_id));   }
-  if (difficulty)    { conditions.push('q.difficulty = ?');       params.push(String(difficulty));    }
-  if (question_type) { conditions.push('q.question_type = ?');    params.push(String(question_type)); }
-  if (search)        { conditions.push('q.question_text LIKE ?'); params.push(`%${search}%`);         }
-  if (safeCreatedBy) { conditions.push('q.created_by = ?');       params.push(safeCreatedBy);         }
-
-  params.push(safeLimit, safeOffset);
+/**
+ * The shared read behind getQuestions and getQuestionBank. `conditions` and
+ * `params` are the WHERE clause the caller has already decided on; this adds
+ * the joins, the ordering and the options.
+ */
+const readQuestions = async (db, conditions, params, { limit = 50, offset = 0 } = {}) => {
+  const safeLimit  = Number.isFinite(Number(limit))  ? Number(limit)  : 50;
+  const safeOffset = Number.isFinite(Number(offset)) ? Number(offset) : 0;
 
   const rows = await db.getAllAsync(
     `SELECT
-       q.id, q.schoolId, q.category_id, q.question_text, q.question_type,
+       q.id, q.schoolId, q.category_id, q.subject_id, q.question_text, q.question_type,
        q.media_url, q.difficulty, q.points, q.explanation, q.is_active,
        q.created_by, q._synced, q.created_at, q.updated_at,
        qc.name                  AS category_name,
+       s.name                   AS subject_name,
        MAX(qa.difficulty_score) AS difficulty_score,
        MAX(qa.times_shown)      AS times_shown
      FROM      questions           q
      LEFT JOIN question_categories qc ON qc.id = q.category_id
+     LEFT JOIN subjects            s  ON s.id  = q.subject_id
      LEFT JOIN question_analytics  qa ON qa.question_id = q.id
      WHERE     ${conditions.join(' AND ')}
      GROUP BY  q.id
      ORDER BY  q.created_at DESC
      LIMIT ? OFFSET ?`,
-    params
+    [...params, safeLimit, safeOffset]
   );
 
-  const withOptions = await Promise.all(
+  return Promise.all(
     rows.map(async (q) => {
       q.options = await db.getAllAsync(
         `SELECT *
@@ -535,13 +516,94 @@ export const getQuestions = async ({
       return q;
     })
   );
+};
 
-  return withOptions;
+/**
+ * A teacher's questions, filtered. Owner-scoped: without `created_by` this
+ * answers [] — the whole school's bank is not a thing a teacher screen should
+ * ever be handed, and the one call that asked for it did so by accident.
+ * An administrator's screen that genuinely wants every teacher's questions
+ * says so with `includeAllTeachers: true`.
+ *
+ * For the quiz workflow use getQuestionBank, which also requires the subject.
+ */
+export const getQuestions = async ({
+  schoolId,
+  category_id        = null,
+  subject_id         = null,
+  difficulty         = null,
+  question_type      = null,
+  search             = null,
+  created_by         = null,
+  includeAllTeachers = false,
+  limit              = 50,
+  offset             = 0,
+} = {}) => {
+  const safeSchoolId  = schoolId   ? String(schoolId)   : null;
+  const safeCreatedBy = created_by ? String(created_by) : null;
+
+  if (!safeSchoolId) {
+    console.warn('[getQuestions] called without a schoolId — returning []');
+    return [];
+  }
+  if (!safeCreatedBy && !includeAllTeachers) {
+    console.warn('[getQuestions] called without created_by — returning [] (pass includeAllTeachers to widen)');
+    return [];
+  }
+
+  const db         = await getDatabase();
+  const conditions = ['q.schoolId = ?', 'q.is_active = 1', 'q.deleted_at IS NULL'];
+  const params     = [safeSchoolId];
+
+  if (safeCreatedBy) { conditions.push('q.created_by = ?');       params.push(safeCreatedBy);         }
+  if (subject_id)    { conditions.push('q.subject_id = ?');       params.push(String(subject_id));    }
+  if (category_id)   { conditions.push('q.category_id = ?');     params.push(String(category_id));   }
+  if (difficulty)    { conditions.push('q.difficulty = ?');       params.push(String(difficulty));    }
+  if (question_type) { conditions.push('q.question_type = ?');    params.push(String(question_type)); }
+  if (search)        { conditions.push('q.question_text LIKE ?'); params.push(`%${search}%`);         }
+
+  return readQuestions(db, conditions, params, { limit, offset });
+};
+
+/**
+ * The question bank for one quiz: THIS teacher's questions in THIS subject.
+ *
+ * Both are required and both are in the WHERE clause, over the
+ * (created_by, subject_id) index — a teacher of Mathematics and Physics
+ * building a Mathematics quiz is shown their Mathematics questions and none of
+ * their Physics ones, and nobody is shown another teacher's. A question with
+ * no subject is in no bank: it is not silently swept into whichever subject is
+ * open. The client filters nothing; what comes back is the bank.
+ */
+export const getQuestionBank = async ({
+  schoolId,
+  teacherId,
+  subjectId,
+  search        = null,
+  question_type = null,
+  difficulty    = null,
+  limit         = 200,
+  offset        = 0,
+} = {}) => {
+  if (!schoolId || !teacherId || !subjectId) return [];
+
+  const db         = await getDatabase();
+  const conditions = [
+    'q.created_by = ?', 'q.subject_id = ?', 'q.schoolId = ?',
+    'q.is_active = 1', 'q.deleted_at IS NULL',
+  ];
+  const params = [String(teacherId), String(subjectId), String(schoolId)];
+
+  if (question_type) { conditions.push('q.question_type = ?');    params.push(String(question_type)); }
+  if (difficulty)    { conditions.push('q.difficulty = ?');       params.push(String(difficulty));    }
+  if (search)        { conditions.push('q.question_text LIKE ?'); params.push(`%${search}%`);         }
+
+  return readQuestions(db, conditions, params, { limit, offset });
 };
 
 export const updateQuestion = async (id, updates) => {
   const ALLOWED = [
-    'question_text', 'question_type', 'category_id', 'difficulty',
+    'question_text', 'question_type', 'category_id', 'subject_id', 'difficulty',
     'points', 'explanation', 'media_url', 'is_active',
   ];
 
@@ -607,92 +669,14 @@ export const deleteQuestion = async (id) => {
 // TEACHER HELPERS
 // ─────────────────────────────────────────────────────────────
 
-export const getTeacherClasses = async (teacherId, schoolId) => {
-  if (!teacherId) return [];
+// The teacher's classes and subjects come from the server's TeacherAssignment
+// rows (cached), not from a join over mirror tables a teacher's phone does not
+// hold. Kept under their old names so the screens need not change.
+export const getTeacherClasses = (teacherId, schoolId) =>
+  teacherScope.getTeacherClasses(teacherId, schoolId);
 
-  const db = await getDatabase();
-
-  try {
-    const taCols = await getTableColumns(db, 'teacher_assignments');
-    if (taCols.size === 0) return [];
-
-    const tidCol = pickCol(taCols, 'teacherId', 'teacher_id');
-    const sidCol = pickCol(taCols, 'schoolId',  'school_id');
-    const clsCol = pickCol(taCols, 'classId',   'class_id');
-
-    if (!tidCol || !clsCol) return [];
-
-    const delFilter = taCols.has('deleted_at')
-      ? `AND (ta.deleted_at IS NULL OR ta.deleted_at = '')`
-      : '';
-    const sidFilter = sidCol && schoolId ? `AND ta."${sidCol}" = ?` : '';
-    const params    = sidCol && schoolId
-      ? [String(teacherId), String(schoolId)]
-      : [String(teacherId)];
-
-    return await db
-      .getAllAsync(
-        `SELECT DISTINCT c.id, c.name, c.level, c.section
-         FROM   teacher_assignments ta
-         JOIN   classes             c  ON c.id = ta."${clsCol}"
-         WHERE  ta."${tidCol}" = ?
-           ${sidFilter}
-           ${delFilter}
-           AND c.deleted_at IS NULL
-           AND c.is_active  = 1
-         ORDER  BY c.name ASC`,
-        params
-      )
-      .catch(() => []);
-  } catch (err) {
-    console.warn('[getTeacherClasses] failed:', err?.message);
-    return [];
-  }
-};
-
-export const getTeacherSubjectsForClass = async (teacherId, classId, schoolId) => {
-  if (!teacherId || !classId) return [];
-
-  const db = await getDatabase();
-
-  try {
-    const taCols = await getTableColumns(db, 'teacher_assignments');
-    if (taCols.size === 0) return [];
-
-    const tidCol = pickCol(taCols, 'teacherId', 'teacher_id');
-    const sidCol = pickCol(taCols, 'schoolId',  'school_id');
-    const clsCol = pickCol(taCols, 'classId',   'class_id');
-    const subCol = pickCol(taCols, 'subjectId', 'subject_id');
-
-    if (!tidCol || !clsCol || !subCol) return [];
-
-    const delFilter = taCols.has('deleted_at')
-      ? `AND (ta.deleted_at IS NULL OR ta.deleted_at = '')`
-      : '';
-    const sidFilter = sidCol && schoolId ? `AND ta."${sidCol}" = ?` : '';
-    const params    = sidCol && schoolId
-      ? [String(teacherId), String(classId), String(schoolId)]
-      : [String(teacherId), String(classId)];
-
-    return await db
-      .getAllAsync(
-        `SELECT DISTINCT s.id, s.name, s.code
-         FROM   teacher_assignments ta
-         JOIN   subjects            s  ON s.id = ta."${subCol}"
-         WHERE  ta."${tidCol}" = ?
-           AND  ta."${clsCol}" = ?
-           ${sidFilter}
-           ${delFilter}
-           AND  s.deleted_at IS NULL
-         ORDER  BY s.name ASC`,
-        params
-      )
-      .catch(() => []);
-  } catch (err) {
-    console.warn('[getTeacherSubjectsForClass] failed:', err?.message);
-    return [];
-  }
-};
+export const getTeacherSubjectsForClass = (teacherId, classId, schoolId) =>
+  teacherScope.getTeacherSubjectsForClass(teacherId, classId, schoolId);
 
 // ─────────────────────────────────────────────────────────────
 // QUIZZES
@@ -748,11 +732,16 @@ export const createQuiz = async ({
       .catch(() => null);
 
     if (!classRow) {
-      throw appError(
-        "svcErr.quizClassNotSynced",
-        `Class [${class_id}] not found in local database. ` +
-        `Please sync before creating a quiz.`
-      );
+      // A teacher's mirror may hold no classes at all (the feed does not send
+      // them the class table); the class is real if it is one of theirs.
+      const mine = await teacherScope.getTeacherClasses(created_by, schoolId).catch(() => []);
+      if (!mine.some((c) => String(c.id) === String(class_id))) {
+        throw appError(
+          "svcErr.quizClassNotSynced",
+          `Class [${class_id}] not found in local database. ` +
+          `Please sync before creating a quiz.`
+        );
+      }
     }
 
     await db.runAsync(

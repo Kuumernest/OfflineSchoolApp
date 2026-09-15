@@ -2719,6 +2719,12 @@
     "bankTitle": "Banque de questions (%{count})",
     "bankEmptyTitle": "Plus aucune question",
     "bankEmptySub": "Toutes les questions de la banque sont déjà ajoutées",
+    "bankSubjectOnly": "Questions de %{subject} uniquement",
+    "bankLoading": "Chargement des questions…",
+    "bankNoSubjectTitle": "Choisissez d'abord une matière",
+    "bankNoSubjectSub": "La banque n'affiche que les questions de la matière du quiz.",
+    "bankEmptyForSubjectTitle": "Aucune question de %{subject} pour l'instant",
+    "bankEmptyForSubjectSub": "Utilisez Nouvelle question — elle sera enregistrée sous %{subject}.",
     "done": "Terminé",
     "sectionTiming": "Durée",
     "timeLimitLabel": "Limite de temps (minutes)",
@@ -3359,6 +3365,7 @@
     "loading": "Chargement des quiz…",
     "searchQuizzes": "Rechercher un quiz…",
     "searchQuestions": "Rechercher une question…",
+    "allSubjects": "Toutes les matières",
     "quizCount": {
       "one": "{{count}} quiz",
       "other": "{{count}} quiz"
@@ -5508,6 +5515,7 @@
     "tplEachCloseWithoutOpen": "Erreur de modèle : /each sans each correspondant",
     "tplUnclosedBlock": "Erreur de modèle : un bloc if ou each n'a jamais été fermé",
     "categoryNameRequired": "Le nom de la catégorie est obligatoire",
+    "questionSubjectRequired": "Une matière est requise pour la question",
     "questionTextRequired": "Le texte de la question est obligatoire",
     "questionTypeRequired": "Le type de question est obligatoire",
     "questionSaving": "Cette question est déjà en cours d'enregistrement. Veuillez patienter.",

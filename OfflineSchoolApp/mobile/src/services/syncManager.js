@@ -6,6 +6,7 @@ import { setRetryContext, clearRetryContext } from "./api";
 import NetInfo                          from "@react-native-community/netinfo";
 import { AppState }                     from "react-native";
 import { getDatabase }                  from "../db/database";
+import { ensureQuizTables }             from "../db/quizSchema";
 import * as SecureStore                 from "expo-secure-store";
 import {
   safeAddColumn,
@@ -705,102 +706,11 @@ class SyncManagerClass {
   }
 
   async migrateQuizTables() {
+    // One definition for the fresh install and for the phone that already has
+    // the tables — db/quizSchema.js, which also says how question_analytics
+    // came to have two shapes and why the question bank threw.
     const db = await getDatabase();
-
-    const creates = [
-      `CREATE TABLE IF NOT EXISTS question_categories (
-        id TEXT PRIMARY KEY, schoolId TEXT, name TEXT NOT NULL,
-        description TEXT, parent_id TEXT, is_active INTEGER DEFAULT 1,
-        deleted_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS questions (
-        id TEXT PRIMARY KEY, schoolId TEXT, category_id TEXT,
-        question_text TEXT NOT NULL, question_type TEXT NOT NULL,
-        media_url TEXT, difficulty TEXT DEFAULT 'medium', points REAL DEFAULT 1.0,
-        explanation TEXT, is_active INTEGER DEFAULT 1, created_by TEXT,
-        deleted_at TEXT, _synced INTEGER DEFAULT 0, _synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS question_options (
-        id TEXT PRIMARY KEY, question_id TEXT NOT NULL,
-        option_text TEXT NOT NULL, is_correct INTEGER DEFAULT 0,
-        match_pair TEXT, display_order INTEGER DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS question_analytics (
-        id TEXT PRIMARY KEY, question_id TEXT NOT NULL,
-        times_seen INTEGER DEFAULT 0, times_correct INTEGER DEFAULT 0,
-        avg_time_secs REAL DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS quizzes (
-        id TEXT PRIMARY KEY, schoolId TEXT, title TEXT NOT NULL,
-        description TEXT, instructions TEXT, subject_id TEXT, class_id TEXT,
-        created_by TEXT, time_limit_minutes INTEGER, time_per_question INTEGER,
-        shuffle_questions INTEGER DEFAULT 0, shuffle_options INTEGER DEFAULT 0,
-        questions_per_page INTEGER DEFAULT 1, allow_backtrack INTEGER DEFAULT 1,
-        max_attempts INTEGER DEFAULT 1, passing_score REAL DEFAULT 70,
-        available_from TEXT, available_until TEXT,
-        show_answers_after TEXT DEFAULT 'on_completion',
-        show_score INTEGER DEFAULT 1, show_explanation INTEGER DEFAULT 1,
-        is_published INTEGER DEFAULT 0, deleted_at TEXT,
-        _synced INTEGER DEFAULT 0, _synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS quiz_questions (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL, question_id TEXT NOT NULL,
-        display_order INTEGER DEFAULT 0, points_override REAL)`,
-      `CREATE TABLE IF NOT EXISTS quiz_attempts (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL, user_id TEXT NOT NULL,
-        attempt_number INTEGER DEFAULT 1, status TEXT DEFAULT 'in_progress',
-        raw_score REAL DEFAULT 0, max_score REAL DEFAULT 0,
-        percentage REAL DEFAULT 0, is_passed INTEGER DEFAULT 0,
-        started_at TEXT, submitted_at TEXT, time_taken_secs INTEGER,
-        deleted_at TEXT, _synced INTEGER DEFAULT 0, _synced_at TEXT)`,
-      `CREATE TABLE IF NOT EXISTS quiz_analytics (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL,
-        total_attempts INTEGER DEFAULT 0, avg_score REAL DEFAULT 0, pass_rate REAL DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS attempt_answers (
-        id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, question_id TEXT NOT NULL,
-        time_taken INTEGER, is_correct INTEGER DEFAULT 0, points REAL DEFAULT 0,
-        _synced INTEGER DEFAULT 0, _synced_at TEXT)`,
-      `CREATE TABLE IF NOT EXISTS attempt_answer_selections (
-        id TEXT PRIMARY KEY, attempt_answer_id TEXT NOT NULL,
-        option_id TEXT, text_response TEXT, match_response TEXT)`,
-    ];
-
-    for (const sql of creates) {
-      await db.execAsync(sql).catch((err) =>
-        console.warn("[migrateQuizTables] CREATE failed:", err.message)
-      );
-    }
-
-    const indexes = [
-      "CREATE INDEX IF NOT EXISTS idx_questions_school    ON questions(schoolId)",
-      "CREATE INDEX IF NOT EXISTS idx_questions_category  ON questions(category_id)",
-      "CREATE INDEX IF NOT EXISTS idx_questions_synced    ON questions(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_q_options_question  ON question_options(question_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_school      ON quizzes(schoolId)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_class       ON quizzes(class_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_subject     ON quizzes(subject_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_synced      ON quizzes(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_quiz_q_quiz         ON quiz_questions(quiz_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_quiz       ON quiz_attempts(quiz_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_user       ON quiz_attempts(user_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_synced     ON quiz_attempts(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_answers_attempt     ON attempt_answers(attempt_id)",
-      "CREATE INDEX IF NOT EXISTS idx_answer_sel_answer   ON attempt_answer_selections(attempt_answer_id)",
-    ];
-    for (const idx of indexes) {
-      await db.execAsync(idx).catch(() => {});
-    }
-
-    const patches = {
-      questions:       [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quizzes:         [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quiz_attempts:   [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      attempt_answers: [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"]],
-    };
-    for (const [table, cols] of Object.entries(patches)) {
-      for (const [col, def] of cols) {
-        await safeAddColumn(db, table, col, def);
-      }
-    }
-
+    await ensureQuizTables(db);
     console.log("[SyncManager] Quiz tables ready");
   }
 
@@ -2784,18 +2694,21 @@ class SyncManagerClass {
 
           await db.runAsync(
             `INSERT INTO questions (
-               id, schoolId, category_id, question_text, question_type,
+               id, schoolId, category_id, subject_id, question_text, question_type,
                media_url, difficulty, points, explanation,
                is_active, created_by, _synced, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
-               category_id = excluded.category_id, question_text = excluded.question_text,
+               category_id = excluded.category_id,
+               subject_id = COALESCE(excluded.subject_id, questions.subject_id),
+               question_text = excluded.question_text,
                question_type = excluded.question_type, media_url = excluded.media_url,
                difficulty = excluded.difficulty, points = excluded.points,
                explanation = excluded.explanation, is_active = excluded.is_active,
                _synced = 1, updated_at = excluded.updated_at`,
             [
               String(id), q.schoolId, categoryId,
+              q.subject_id || q.subjectId || null,
               q.question_text || q.questionText,
               q.question_type || q.questionType,
               q.media_url     || q.mediaUrl    || null,

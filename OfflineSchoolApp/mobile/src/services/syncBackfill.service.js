@@ -346,6 +346,7 @@ const SPECS = [
       id:            row.id,
       schoolId:      row.schoolId || schoolId,
       category_id:   row.category_id || null,
+      subject_id:    row.subject_id  || null,
       question_text: row.question_text,
       question_type: row.question_type,
       media_url:     row.media_url  || null,

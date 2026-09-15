@@ -35,7 +35,7 @@ import {
   getCategories,
   addQuestionToQuiz,
   removeQuestionFromQuiz,
-  getQuestions,
+  getQuestionBank,
   publishQuiz,
   getTeacherClasses,
   getTeacherSubjectsForClass,
@@ -699,6 +699,7 @@ export default function CreateQuizScreen() {
   const [showQuestionForm, setShowQuestionForm] = useState(false);
   const [editingQuestion,  setEditingQuestion]  = useState(null);
   const [showBankPicker,   setShowBankPicker]   = useState(false);
+  const [bankLoading,      setBankLoading]      = useState(false);
   const [savingQuestion,   setSavingQuestion]   = useState(false);
   const [classes,          setClasses]          = useState([]);
   const [subjects,         setSubjects]         = useState([]);
@@ -743,25 +744,42 @@ export default function CreateQuizScreen() {
     setQuizForm((prev) => ({ ...prev, subject_id: subjectId }));
   }, []);
 
+  // ── The question bank IS the quiz's subject ────────────────
+  //
+  // Loaded from the database already filtered to this teacher and this
+  // subject (getQuestionBank), and reloaded whenever the subject changes.
+  // Nothing here filters a wider list down: a Mathematics quiz never has a
+  // Physics question in its bank to filter out, and a bank with no subject
+  // chosen is empty rather than everything.
+  const bankSubjectId = quizForm.subject_id;
+  useEffect(() => {
+    let cancelled = false;
+    if (!bankSubjectId || !schoolId || !teacherId) {
+      setBankQuestions([]);
+      return undefined;
+    }
+    setBankLoading(true);
+    getQuestionBank({ schoolId, teacherId, subjectId: bankSubjectId })
+      .then((rows) => { if (!cancelled) setBankQuestions(rows || []); })
+      .catch((err) => {
+        console.warn("[quiz] question bank failed:", err?.message);
+        if (!cancelled) setBankQuestions([]);
+      })
+      .finally(() => { if (!cancelled) setBankLoading(false); });
+    return () => { cancelled = true; };
+  }, [bankSubjectId, schoolId, teacherId]);
+
   // ── Initial load ──────────────────────────────────────────
   useEffect(() => {
     const load = async () => {
       try {
-        const [catData, bankData, classData] = await Promise.all([
+        // The bank is not loaded here: it belongs to the quiz's subject and is
+        // loaded by the effect above once a subject is chosen.
+        const [catData, classData] = await Promise.all([
           getCategories(schoolId),
-          getQuestions({ schoolId, limit: 200 }),
           getTeacherClasses(teacherId, schoolId),
         ]);
         setCategories(catData || []);
-
-        // Deduplicate bank questions by id
-        const seen       = new Set();
-        const uniqueBank = (bankData || []).filter((q) => {
-          if (seen.has(q.id)) return false;
-          seen.add(q.id);
-          return true;
-        });
-        setBankQuestions(uniqueBank);
         setClasses(classData || []);
 
         if (editQuizId) {
@@ -914,11 +932,20 @@ export default function CreateQuizScreen() {
     async (form) => {
       if (savingQuestion) return;
 
+      // A question is saved under the quiz's subject. Without one there is
+      // no bank for it to go in, so the form refuses rather than saving a
+      // question nobody will find again.
+      if (!quizForm.subject_id) {
+        Alert.alert(t("quizCreate.validationTitle"), t("quizCreate.errSelectSubject"));
+        return;
+      }
+
       setSavingQuestion(true);
       try {
         const payload = {
           ...form,
           schoolId,
+          subject_id: quizForm.subject_id,
           created_by: teacherId,
           points:     parseFloat(form.points) || 1,
         };
@@ -967,7 +994,7 @@ export default function CreateQuizScreen() {
         setSavingQuestion(false);
       }
     },
-    [editingQuestion, quizId, schoolId, teacherId, savingQuestion, t]
+    [editingQuestion, quizId, schoolId, teacherId, savingQuestion, quizForm.subject_id, t]
   );
 
   // ── Add from bank ─────────────────────────────────────────
@@ -1273,26 +1300,53 @@ export default function CreateQuizScreen() {
       const notAdded = bankQuestions.filter(
         (bq) => !quizQuestions.some((qq) => qq.id === bq.id)
       );
+      const bankSubject     = subjects.find((s) => s.id === quizForm.subject_id) || null;
+      const bankSubjectName = bankSubject?.name || t("quizCreate.subjectLabel");
+
+      // Four honest states, in order: no subject chosen; loading; this
+      // teacher has no questions in this subject; every one is already in.
+      let emptyIcon = "list-outline", emptyTitle = null, emptySub = null;
+      if (!quizForm.subject_id) {
+        emptyIcon  = "book-outline";
+        emptyTitle = t("quizCreate.bankNoSubjectTitle");
+        emptySub   = t("quizCreate.bankNoSubjectSub");
+      } else if (bankLoading) {
+        emptyIcon  = "hourglass-outline";
+        emptyTitle = t("quizCreate.bankLoading");
+        emptySub   = "";
+      } else if (bankQuestions.length === 0) {
+        emptyIcon  = "library-outline";
+        emptyTitle = t("quizCreate.bankEmptyForSubjectTitle", { subject: bankSubjectName });
+        emptySub   = t("quizCreate.bankEmptyForSubjectSub",   { subject: bankSubjectName });
+      } else if (notAdded.length === 0) {
+        emptyTitle = t("quizCreate.bankEmptyTitle");
+        emptySub   = t("quizCreate.bankEmptySub");
+      }
 
       return (
         // ✅ Use flex:1 column layout so header stays fixed
         <View style={styles.questionTabContainer}>
           <View style={styles.bankPickerHeader}>
-            <Text style={styles.bankPickerTitle}>
-              {t("quizCreate.bankTitle", { count: notAdded.length })}
-            </Text>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.bankPickerTitle}>
+                {t("quizCreate.bankTitle", { count: notAdded.length })}
+              </Text>
+              {quizForm.subject_id ? (
+                <Text style={styles.bankPickerScope}>
+                  {t("quizCreate.bankSubjectOnly", { subject: bankSubjectName })}
+                </Text>
+              ) : null}
+            </View>
             <TouchableOpacity onPress={() => setShowBankPicker(false)}>
               <Text style={styles.bankPickerClose}>{t("quizCreate.done")}</Text>
             </TouchableOpacity>
           </View>
 
-          {notAdded.length === 0 ? (
+          {emptyTitle !== null ? (
             <View style={styles.emptyState}>
-              <Ionicons name="list-outline" size={40} color="#D1D5DB" />
-              <Text style={styles.emptyTitle}>{t("quizCreate.bankEmptyTitle")}</Text>
-              <Text style={styles.emptySubtitle}>
-                {t("quizCreate.bankEmptySub")}
-              </Text>
+              <Ionicons name={emptyIcon} size={40} color="#D1D5DB" />
+              <Text style={styles.emptyTitle}>{emptyTitle}</Text>
+              {emptySub ? <Text style={styles.emptySubtitle}>{emptySub}</Text> : null}
             </View>
           ) : (
             // ✅ FlatList fills remaining space, header never shrinks
@@ -1807,6 +1861,7 @@ const styles = StyleSheet.create({
     // No flex — intrinsic height only
   },
   bankPickerTitle: { fontSize: 16, fontWeight: "700", color: "#111827" },
+  bankPickerScope: { fontSize: 12, fontWeight: "600", color: "#059669", marginTop: 2 },
   bankPickerClose: { fontSize: 14, fontWeight: "700", color: "#4F46E5" },
   bankQuestionCard: {
     flexDirection: "row", alignItems: "center",

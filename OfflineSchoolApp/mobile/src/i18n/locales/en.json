@@ -2719,6 +2719,12 @@
     "bankTitle": "Question Bank (%{count})",
     "bankEmptyTitle": "No more questions",
     "bankEmptySub": "All bank questions are already added",
+    "bankSubjectOnly": "%{subject} questions only",
+    "bankLoading": "Loading questions…",
+    "bankNoSubjectTitle": "Select a subject first",
+    "bankNoSubjectSub": "The question bank shows only the questions of the quiz's subject.",
+    "bankEmptyForSubjectTitle": "No %{subject} questions yet",
+    "bankEmptyForSubjectSub": "Use New Question — it will be saved under %{subject}.",
     "done": "Done",
     "sectionTiming": "Timing",
     "timeLimitLabel": "Time Limit (minutes)",
@@ -3359,6 +3365,7 @@
     "loading": "Loading quizzes…",
     "searchQuizzes": "Search quizzes…",
     "searchQuestions": "Search questions…",
+    "allSubjects": "All subjects",
     "quizCount": {
       "one": "{{count}} quiz",
       "other": "{{count}} quizzes"
@@ -5508,6 +5515,7 @@
     "tplEachCloseWithoutOpen": "Template error: /each without a matching each",
     "tplUnclosedBlock": "Template error: an if or each block was never closed",
     "categoryNameRequired": "Category name is required",
+    "questionSubjectRequired": "A subject is required for the question",
     "questionTextRequired": "Question text is required",
     "questionTypeRequired": "Question type is required",
     "questionSaving": "This question is already being saved. Please wait.",
