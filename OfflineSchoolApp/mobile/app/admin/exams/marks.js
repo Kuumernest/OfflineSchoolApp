@@ -17,6 +17,8 @@ import api              from "../../../src/services/api";
 import { getDatabase }  from "../../../src/db/database";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
+import { MarkInputRow }  from "../../../src/components/MarkInputRow";
 
 // ─────────────────────────────────────────────────────────
 // HELPERS
@@ -864,12 +866,25 @@ const ScoreEntry = ({
 }) => {
   const { t } = useTranslation();
   const [students,   setStudents]   = useState([]);
-  const [scores,     setScores]     = useState({});
   const [loading,    setLoading]    = useState(true);
   const [saving,     setSaving]     = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [search,     setSearch]     = useState("");
   const [dirty,      setDirty]      = useState(false);
+
+  // The marks. Typing lives in each row; this holds what has been committed —
+  // see useMarkDrafts for why those are two different things, and why a
+  // keystroke no longer re-renders this component.
+  // Guarded by a ref rather than by React noticing the same value twice, so a
+  // keystroke while already dirty schedules nothing on this component at all.
+  const dirtyRef = useRef(dirty);
+  useEffect(() => { dirtyRef.current = dirty; }, [dirty]);
+  const markDirty = useCallback(() => { if (!dirtyRef.current) setDirty(true); }, []);
+  const drafts    = useMarkDrafts({ onDirty: markDirty });
+  const {
+    scores, generation, draftChanged, flush, readPending,
+    replaceScores, toggleAbsent, markAllPresent: markAll,
+  } = drafts;
 
   // Correcting a published or locked result. The server refuses the write and
   // an administrator may override it, but only by recording why — and there
@@ -929,7 +944,7 @@ const ScoreEntry = ({
           isAbsent:      s.isAbsent ?? false,
         };
       }
-      setScores(map);
+      replaceScores(map);
       setDirty(false);
     } catch (err) {
       console.error("ScoreEntry load failed:", err.message);
@@ -938,44 +953,12 @@ const ScoreEntry = ({
       setLoading(false);
       setRefreshing(false);
     }
-  }, [classId, examId, schoolId, role, subjectId, t]);
+  }, [classId, examId, schoolId, role, subjectId, t, replaceScores]);
 
   useEffect(() => { loadData(); }, [loadData]);
   useEffect(() => { refreshScoreSync(); }, [refreshScoreSync]);
 
-  const updateScore = useCallback((studentId, field, value) => {
-    setDirty(true);
-    setScores((prev) => ({
-      ...prev,
-      [studentId]: { ...prev[studentId], [field]: value },
-    }));
-  }, []);
-
-  const toggleAbsent = useCallback((studentId) => {
-    setDirty(true);
-    setScores((prev) => {
-      const wasAbsent = prev[studentId]?.isAbsent ?? false;
-      return {
-        ...prev,
-        [studentId]: {
-          ...prev[studentId],
-          isAbsent: !wasAbsent,
-          score:    !wasAbsent ? "" : prev[studentId]?.score ?? "",
-        },
-      };
-    });
-  }, []);
-
-  const markAllPresent = useCallback(() => {
-    setDirty(true);
-    setScores((prev) => {
-      const updated = {};
-      for (const s of students) {
-        updated[s._id] = { ...(prev[s._id] || {}), isAbsent: false };
-      }
-      return { ...prev, ...updated };
-    });
-  }, [students]);
+  const markAllPresent = useCallback(() => markAll(students), [markAll, students]);
 
   const handleSave = useCallback(async () => {
     if (saving) return;
@@ -984,8 +967,10 @@ const ScoreEntry = ({
       return;
     }
 
+    // Whatever is still inside the 200 ms commit window is saved too.
+    const current = flush();
     const records = students.map((s) => {
-      const entry    = scores[s._id] || {};
+      const entry    = current[s._id] || {};
       const rawScore = String(entry.score ?? "").trim();
       const score    = rawScore === "" ? null : Number(rawScore);
       return {
@@ -1087,7 +1072,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
     }
 
     await doSave();
-  }, [saving, students, t, scores, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved, refreshScoreSync]);
+  }, [saving, students, t, flush, maxScore, examId, classId, subjectId, examSubjectId, schoolId, onSaved, refreshScoreSync]);
 
   useEffect(() => {
     if (saveRef) saveRef.current = handleSave;
@@ -1116,6 +1101,29 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
       ).length,
     [scores]
   );
+
+  const renderRow = useCallback(({ item }) => {
+    const entry = scores[item._id] || {};
+    return (
+      <MarkInputRow
+        student={item}
+        score={String(entry.score ?? "")}
+        isAbsent={Boolean(entry.isAbsent)}
+        generation={generation}
+        maxScore={maxScore}
+        styles={ROW_STYLES}
+        rateColor={rateColor}
+        neutralColor="#9CA3AF"
+        placeholderTextColor="#D1D5DB"
+        absLabel={t("marksEntry.abs")}
+        sanitize={sanitizeScore}
+        onDraft={draftChanged}
+        onToggleAbsent={toggleAbsent}
+        onBlur={flush}
+        readPending={readPending}
+      />
+    );
+  }, [scores, generation, maxScore, t, draftChanged, toggleAbsent, flush, readPending]);
 
   const progressPct = students.length > 0
     ? Math.round((enteredCount / students.length) * 100)
@@ -1218,69 +1226,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
               colors={["#4F46E5"]}
             />
           }
-          renderItem={({ item }) => {
-            const entry    = scores[item._id] || {};
-            const rawScore = String(entry.score ?? "");
-            const numScore = rawScore !== "" ? Number(rawScore) : null;
-            const scorePct = numScore !== null
-              ? Math.round((numScore / maxScore) * 100)
-              : null;
-            const color = scorePct !== null ? rateColor(scorePct) : "#9CA3AF";
-
-            return (
-              <View style={[se.row, entry.isAbsent && se.rowAbsent]}>
-                <View style={[se.avatar, { backgroundColor: color + "20" }]}>
-                  <Text style={[se.avatarText, { color }]}>
-                    {(item.studentName || "?").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={se.studentInfo}>
-                  <Text style={se.studentName} numberOfLines={1}>
-                    {item.studentName}
-                  </Text>
-                  <Text style={se.studentSub}>
-                    {item.admissionNo ? `#${item.admissionNo}` : item.email || ""}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[se.absentBtn, entry.isAbsent && se.absentBtnActive]}
-                  onPress={() => toggleAbsent(item._id)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={[se.absentBtnText, entry.isAbsent && se.absentBtnTextActive]}>
-                    {t("marksEntry.abs")}
-                  </Text>
-                </TouchableOpacity>
-                <View style={se.scoreBox}>
-                  <TextInput
-                    style={[
-                      se.scoreInput,
-                      entry.isAbsent && se.scoreInputAbsent,
-                      numScore !== null && !entry.isAbsent && {
-                        borderColor: color,
-                        borderWidth: 1.5,
-                      },
-                    ]}
-                    value={entry.isAbsent ? t("marksEntry.abs") : rawScore}
-                    onChangeText={(v) => {
-                      if (!entry.isAbsent) {
-                        updateScore(item._id, "score", sanitizeScore(v));
-                      }
-                    }}
-                    keyboardType="numeric"
-                    editable={!entry.isAbsent}
-                    placeholder="—"
-                    placeholderTextColor="#D1D5DB"
-                    selectTextOnFocus
-                    maxLength={5}
-                  />
-                  {scorePct !== null && !entry.isAbsent && (
-                    <Text style={[se.scorePct, { color }]}>{scorePct}%</Text>
-                  )}
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderRow}
           ListEmptyComponent={
             <View style={se.empty}>
               <Ionicons name="people-outline" size={48} color="#D1D5DB" />
@@ -1822,3 +1768,22 @@ const ms = StyleSheet.create({
   crumbLink:   { color: "#4F46E5" },
   crumbActive: { color: "#111827", fontWeight: "700" },
 });
+// MarkInputRow's style contract, in this screen's colours. Module-level, so
+// the memoised rows see one object and never re-render because of it.
+const ROW_STYLES = {
+  row:              se.row,
+  rowAbsent:        se.rowAbsent,
+  avatar:           se.avatar,
+  avatarText:       se.avatarText,
+  info:             se.studentInfo,
+  name:             se.studentName,
+  sub:              se.studentSub,
+  absBtn:           se.absentBtn,
+  absBtnActive:     se.absentBtnActive,
+  absBtnText:       se.absentBtnText,
+  absBtnTextActive: se.absentBtnTextActive,
+  scoreWrap:        se.scoreBox,
+  scoreInput:       se.scoreInput,
+  scoreInputAbsent: se.scoreInputAbsent,
+  scorePct:         se.scorePct,
+};

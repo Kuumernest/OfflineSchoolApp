@@ -18,6 +18,8 @@ import api              from "../../../src/services/api";
 import { DB }           from "../../../src/db/dbService";
 import { getDatabase }  from "../../../src/db/database";
 import { errorText } from "../../../src/utils/appError";
+import { useMarkDrafts } from "../../../src/hooks/useMarkDrafts";
+import { MarkInputRow }  from "../../../src/components/MarkInputRow";
 
 // ─────────────────────────────────────────────────────────
 // COLORS
@@ -379,10 +381,23 @@ function ScoreEntry({
 }) {
   const { t } = useTranslation();
 
-  const [scores,       setScores]       = useState({});
   const [isDirty,      setIsDirty]      = useState(false);
   const [search,       setSearch]       = useState("");
   const [draftHandled, setDraftHandled] = useState(false);
+
+  // The marks. Typing lives in each row; this holds what has been committed —
+  // see useMarkDrafts for why those are two different things, and why a
+  // keystroke no longer re-renders this component.
+  // Guarded by a ref rather than by React noticing the same value twice, so a
+  // keystroke while already dirty schedules nothing on this component at all.
+  const isDirtyRef = useRef(isDirty);
+  useEffect(() => { isDirtyRef.current = isDirty; }, [isDirty]);
+  const markDirty = useCallback(() => { if (!isDirtyRef.current) setIsDirty(true); }, []);
+  const drafts    = useMarkDrafts({ onDirty: markDirty });
+  const {
+    scores, generation, draftChanged, flush, readPending,
+    replaceScores, toggleAbsent, markAllPresent: markAll,
+  } = drafts;
 
   const inputRefs = useRef({});
 
@@ -452,13 +467,13 @@ function ScoreEntry({
                     await AsyncStorage.removeItem(
                       draftKey(examId, subjectId)
                     ).catch(() => {});
-                    setScores(serverScores ?? {});
+                    replaceScores(serverScores ?? {});
                   },
                 },
                 {
                   text: t("teacherExamSubjects.restore"),
                   onPress: () => {
-                    setScores({ ...(serverScores ?? {}), ...draft });
+                    replaceScores({ ...(serverScores ?? {}), ...draft });
                     setIsDirty(true);
                   },
                 },
@@ -468,42 +483,13 @@ function ScoreEntry({
           }
         }
       } catch (_) {}
-      setScores(serverScores ?? {});
+      replaceScores(serverScores ?? {});
     };
 
     applyScores();
-  }, [scoresLoading, serverScores, draftHandled, examId, subjectId, t]);
+  }, [scoresLoading, serverScores, draftHandled, examId, subjectId, t, replaceScores]);
 
-  const updateScore = useCallback((sid, value) => {
-    setIsDirty(true);
-    setScores((p) => ({ ...p, [sid]: { ...p[sid], score: value } }));
-  }, []);
-
-  const toggleAbsent = useCallback((sid) => {
-    setIsDirty(true);
-    setScores((p) => {
-      const was = p[sid]?.isAbsent ?? false;
-      return {
-        ...p,
-        [sid]: {
-          ...p[sid],
-          isAbsent: !was,
-          score:    !was ? "" : p[sid]?.score ?? "",
-        },
-      };
-    });
-  }, []);
-
-  const markAllPresent = useCallback(() => {
-    setIsDirty(true);
-    setScores((p) => {
-      const updated = {};
-      for (const s of safeStudents) {
-        updated[s._id] = { ...(p[s._id] || {}), isAbsent: false };
-      }
-      return { ...p, ...updated };
-    });
-  }, [safeStudents]);
+  const markAllPresent = useCallback(() => markAll(safeStudents), [markAll, safeStudents]);
 
   useEffect(() => {
     if (!isDirty || !examId || !subjectId) return;
@@ -532,8 +518,10 @@ function ScoreEntry({
       return;
     }
 
+    // Whatever is still inside the 200 ms commit window is saved too.
+    const current = flush();
     const records = safeStudents.map((s) => {
-      const entry = scores[s._id] || {};
+      const entry = current[s._id] || {};
       const raw   = String(entry.score ?? "").trim();
       return {
         studentId: s._id,
@@ -617,7 +605,7 @@ function ScoreEntry({
 
     await doSave();
   }, [
-    safeStudents, scores, maxScore,
+    safeStudents, flush, maxScore,
     examId, classId, subjectId, examSubjectId,
     schoolId, onSaved, setSaving, t,
   ]);
@@ -656,6 +644,41 @@ function ScoreEntry({
       ).length,
     [scores]
   );
+
+  // Reached through a ref so the row's callbacks stay stable: a memoised row
+  // handed a fresh closure per render would re-render on every commit.
+  const focusNextRef = useRef(focusNext);
+  useEffect(() => { focusNextRef.current = focusNext; }, [focusNext]);
+  const onSubmitRow   = useCallback((sid) => { flush(); focusNextRef.current(sid); }, [flush]);
+  const registerInput = useCallback((sid, el) => { inputRefs.current[sid] = el; }, []);
+
+  const renderRow = useCallback(({ item }) => {
+    const entry = scores[item._id] || {};
+    return (
+      <MarkInputRow
+        student={item}
+        score={String(entry.score ?? "")}
+        isAbsent={Boolean(entry.isAbsent)}
+        generation={generation}
+        maxScore={maxScore}
+        styles={ROW_STYLES}
+        rateColor={rateColor}
+        neutralColor={C.gray400}
+        placeholderTextColor={C.gray200}
+        absLabel={t("teacherExamSubjects.absShort")}
+        unknownName={t("teacherExamSubjects.unknownStudent")}
+        onDraft={draftChanged}
+        onToggleAbsent={toggleAbsent}
+        onBlur={flush}
+        onSubmit={onSubmitRow}
+        registerInput={registerInput}
+        readPending={readPending}
+      />
+    );
+  }, [
+    scores, generation, maxScore, t,
+    draftChanged, toggleAbsent, flush, onSubmitRow, registerInput, readPending,
+  ]);
 
   const pct =
     safeStudents.length > 0
@@ -807,89 +830,7 @@ function ScoreEntry({
               </Text>
             </View>
           }
-          renderItem={({ item }) => {
-            const entry    = scores[item._id] || {};
-            const raw      = String(entry.score ?? "");
-            const numScore = raw !== "" ? Number(raw) : null;
-            const scorePct =
-              numScore !== null
-                ? Math.round((numScore / maxScore) * 100)
-                : null;
-            const color =
-              scorePct !== null ? rateColor(scorePct) : C.gray400;
-
-            return (
-              <View style={[se.row, entry.isAbsent && se.rowAbsent]}>
-                <View
-                  style={[se.avatar, { backgroundColor: color + "20" }]}
-                >
-                  <Text style={[se.avatarLetter, { color }]}>
-                    {(item.studentName || "?").charAt(0).toUpperCase()}
-                  </Text>
-                </View>
-                <View style={se.info}>
-                  <Text style={se.name} numberOfLines={1}>
-                    {item.studentName ||
-                      t("teacherExamSubjects.unknownStudent")}
-                  </Text>
-                  <Text style={se.sub}>
-                    {item.admissionNo
-                      ? `#${item.admissionNo}`
-                      : item.email || ""}
-                  </Text>
-                </View>
-                <TouchableOpacity
-                  style={[se.absBtn, entry.isAbsent && se.absBtnActive]}
-                  onPress={() => toggleAbsent(item._id)}
-                  activeOpacity={0.7}
-                >
-                  <Text
-                    style={[
-                      se.absBtnText,
-                      entry.isAbsent && se.absBtnTextActive,
-                    ]}
-                  >
-                    {t("teacherExamSubjects.absShort")}
-                  </Text>
-                </TouchableOpacity>
-                <View style={se.scoreWrap}>
-                  <TextInput
-                    ref={(el) => { inputRefs.current[item._id] = el; }}
-                    style={[
-                      se.scoreInput,
-                      entry.isAbsent && se.scoreInputAbsent,
-                      numScore !== null && !entry.isAbsent && {
-                        borderColor: color,
-                        borderWidth: 1.5,
-                      },
-                    ]}
-                    value={
-                      entry.isAbsent
-                        ? t("teacherExamSubjects.absShort")
-                        : raw
-                    }
-                    onChangeText={(v) => {
-                      if (!entry.isAbsent) updateScore(item._id, v);
-                    }}
-                    keyboardType="numeric"
-                    editable={!entry.isAbsent}
-                    placeholder="—"
-                    placeholderTextColor={C.gray200}
-                    selectTextOnFocus
-                    maxLength={5}
-                    returnKeyType="next"
-                    onSubmitEditing={() => focusNext(item._id)}
-                    blurOnSubmit={false}
-                  />
-                  {scorePct !== null && !entry.isAbsent && (
-                    <Text style={[se.scorePct, { color }]}>
-                      {scorePct}%
-                    </Text>
-                  )}
-                </View>
-              </View>
-            );
-          }}
+          renderItem={renderRow}
         />
       </View>
     </KeyboardAvoidingView>
@@ -1793,3 +1734,22 @@ const ms = StyleSheet.create({
   crumbLink:   { fontSize: 13, color: C.primary, fontWeight: "600" },
   crumbActive: { color: C.gray900, fontWeight: "700" },
 });
+// MarkInputRow's style contract, in this screen's colours. Module-level, so
+// the memoised rows see one object and never re-render because of it.
+const ROW_STYLES = {
+  row:              se.row,
+  rowAbsent:        se.rowAbsent,
+  avatar:           se.avatar,
+  avatarText:       se.avatarLetter,
+  info:             se.info,
+  name:             se.name,
+  sub:              se.sub,
+  absBtn:           se.absBtn,
+  absBtnActive:     se.absBtnActive,
+  absBtnText:       se.absBtnText,
+  absBtnTextActive: se.absBtnTextActive,
+  scoreWrap:        se.scoreWrap,
+  scoreInput:       se.scoreInput,
+  scoreInputAbsent: se.scoreInputAbsent,
+  scorePct:         se.scorePct,
+};
