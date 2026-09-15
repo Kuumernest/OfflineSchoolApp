@@ -14,6 +14,10 @@ const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
 const { sendEmail } = require("../services/email.service");
+// The platform audit trail. Appointing or removing a school's administrator,
+// and a super_admin rewriting a school's details, are recorded whoever does
+// them; the rest of this router is a school's own business.
+const { recordAudit, diff: auditDiff } = require("../services/audit.service");
 const {
   applyActiveStructuresForStudent: billStudentForClass,
 } = require("../services/fees.service");
@@ -3349,6 +3353,12 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
     delete restoredObj.password;
     delete restoredObj.tempPassword;
 
+    await recordAudit(req, {
+      action: "admin.restored", schoolId: resolvedSchoolId, schoolName,
+      resource: { type: "user", id: user._id, label: emailClean },
+      after: { role: user.role, name: user.name },
+    });
+
     console.log(`♻️  Staff account restored: ${user.name} (${user._id})`);
     return sendSuccess(res, {
       admin:        restoredObj,
@@ -3382,6 +3392,12 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
   delete adminObj.password;
   delete adminObj.tempPassword;
 
+  await recordAudit(req, {
+    action: "admin.created", schoolId: resolvedSchoolId, schoolName,
+    resource: { type: "user", id: admin._id, label: emailClean },
+    after: { role: normalizedRole, name: name.trim() },
+  });
+
   return sendSuccess(res, {
     admin:     adminObj,
     restored:  false,
@@ -3414,6 +3430,11 @@ router.post("/settings/admins/:id/reset-password", requirePermission("users.mana
     context: "adminWelcome (reset)",
   });
 
+  await recordAudit(req, {
+    action: "admin.passwordReset", schoolId: admin.schoolId, schoolName,
+    resource: { type: "user", id: admin._id, label: admin.email },
+  });
+
   return sendSuccess(res, {
     emailSent:    emailResult.success,
     tempPassword,
@@ -3434,6 +3455,13 @@ router.delete("/settings/admins/:id", requirePermission("users.manage"), asyncHa
     { returnDocument: 'after' }
   );
   if (!admin) return sendError(res, 404, "Admin not found");
+
+  await recordAudit(req, {
+    action: "admin.removed", schoolId: admin.schoolId,
+    schoolName: await getSchoolName(admin.schoolId),
+    resource: { type: "user", id: admin._id, label: admin.email },
+    before: { isActive: true, role: admin.role }, after: { isActive: false },
+  });
 
   return sendSuccess(res, { message: "Admin removed" });
 }));
@@ -3835,10 +3863,31 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     updateFields.logo = null;
   }
 
+  // A super_admin rewriting a school's details from the platform is recorded
+  // with what changed. A school editing itself is its own affair. The logo is
+  // left out of the comparison: it is a file, not a fact.
+  const auditKeys = req.user?.role === ROLES.SUPER_ADMIN
+    ? Object.keys(updateFields).filter((k) => k !== "logo")
+    : [];
+  const previous = auditKeys.length
+    ? await School.findById(schoolId).select(auditKeys.join(" ")).lean()
+    : null;
+
   const school = await School.findByIdAndUpdate(
     schoolId, updateFields, { returnDocument: 'after', runValidators: true }
   );
   if (!school) return sendError(res, 404, "School not found");
+
+  if (previous) {
+    const d = auditDiff(previous, school.toObject(), auditKeys);
+    if (d.changed.length) {
+      await recordAudit(req, {
+        action: "school.updated", schoolId, schoolName: school.name,
+        resource: { type: "school", id: schoolId, label: school.name },
+        before: d.before, after: d.after,
+      });
+    }
+  }
 
   // Only remove the old file once the document points at the new one, and
   // only if it is genuinely a different file.

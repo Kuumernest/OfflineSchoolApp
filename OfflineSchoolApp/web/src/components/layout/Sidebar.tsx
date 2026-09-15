@@ -5,7 +5,7 @@ import { NavLink, useLocation }         from "react-router-dom";
 import { ChevronRight, GraduationCap, X } from "lucide-react";
 import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
 import { sectionForPath, NAV_GROUPS, groupIndexFor } from "@/config/sections";
-import { useUser }                      from "@/store/auth.store";
+import { useUser, useActiveSchool }     from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
 import { type UserRole }                from "@/types";
 
@@ -13,8 +13,19 @@ import { type UserRole }                from "@/types";
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const hasAccess = (item: NavItem, role: UserRole) =>
-  item.roles.includes(role);
+/**
+ * Whether the rail shows an entry to this person, here, now.
+ *
+ * For everyone but the operator it is the role list and nothing else. The
+ * operator has two kinds of entry: the platform's, which they always see, and
+ * a school's, which they see only from inside one — a students page with no
+ * school chosen would be the whole platform's pupils under a school heading.
+ */
+const hasAccess = (item: NavItem, role: UserRole, inSchool: boolean) => {
+  if (!item.roles.includes(role)) return false;
+  if (role !== "super_admin") return true;
+  return item.platform ? true : inSchool;
+};
 
 const isParentActive = (item: NavItem, pathname: string) =>
   item.children?.some((c) => c.path && pathname.startsWith(c.path)) ?? false;
@@ -118,9 +129,11 @@ function SingleItem({
 function GroupItem({
   item,
   role,
+  inSchool,
 }: {
-  item: NavItem;
-  role: UserRole;
+  item:     NavItem;
+  role:     UserRole;
+  inSchool: boolean;
 }) {
   const { pathname } = useLocation();
   const navLabel     = useNavLabel();
@@ -142,7 +155,7 @@ function GroupItem({
   }
 
   const visibleChildren =
-    item.children?.filter((c) => hasAccess(c, role)) ?? [];
+    item.children?.filter((c) => hasAccess(c, role, inSchool)) ?? [];
   if (!visibleChildren.length) return null;
 
   return (
@@ -206,6 +219,8 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
   const { t } = useTranslation();
   const user = useUser();
   const role = (user?.role ?? "student") as UserRole;
+  const activeSchool = useActiveSchool();
+  const inSchool = role !== "super_admin" || Boolean(activeSchool);
   const { pathname } = useLocation();
 
   // Tapping a link on mobile should dismiss the overlay; on desktop the rail
@@ -267,7 +282,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
         <nav className="scrollbar-hide flex-1 overflow-y-auto px-2 py-3">
           {NAV_GROUPS.map((group, gi) => {
             const items = NAV_ITEMS.filter(
-              (item) => hasAccess(item, role) && groupIndexFor(firstPath(item)) === gi
+              (item) => hasAccess(item, role, inSchool) && groupIndexFor(firstPath(item)) === gi
             );
             if (!items.length) return null;
 
@@ -280,7 +295,7 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <div className="space-y-0.5">
                   {items.map((item) =>
                     item.children ? (
-                      <GroupItem key={item.label} item={item} role={role} />
+                      <GroupItem key={item.label} item={item} role={role} inSchool={inSchool} />
                     ) : (
                       <SingleItem key={item.path} item={item} />
                     )

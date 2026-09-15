@@ -105,6 +105,31 @@ Mounted **before** admin (specific prefixes win):
 - `timetable.routes.js` → `/api/admin/timetable`: `GET /`, `POST /`,
   `PUT /:id`, `DELETE /:id`, `GET /teacher/:teacherId`, `GET /my-schedule`.
 
+## Platform — `superAdmin.routes.js` (`/api/super-admin`, super_admin only)
+
+Every route carries a `platform.*` capability; only `super_admin` holds them and
+no school can grant one. Inside a school the same role uses `/api/admin/*` with
+a `schoolId` — nothing here duplicates that. A super_admin naming a school that
+does not exist, on **any** route, is answered 404 `SCHOOL_NOT_FOUND` by
+`authenticate`.
+
+| Method | Path | Capability | |
+|---|---|---|---|
+| GET | `/super-admin/schools` | `platform.schools` | `?search=&status=all\|active\|inactive&page=&limit=` — with pupil and staff counts. |
+| POST | `/super-admin/schools` | `platform.manageSchools` | Create. 409 on a duplicate code/email. Audited `school.created`. |
+| GET | `/super-admin/schools/:schoolId` | `platform.schools` | Details, administrators and bursars, recent audit. |
+| PATCH | `/super-admin/schools/:schoolId` | `platform.manageSchools` | Identity fields only (name, code, contact, address, website, principal, verified). Audited with before/after. |
+| POST | `/super-admin/schools/:schoolId/activate` | `platform.manageSchools` | Audited `school.activated`. |
+| POST | `/super-admin/schools/:schoolId/deactivate` | `platform.manageSchools` | `{ reason }` required. Audited. There is deliberately no delete route. |
+| POST | `/super-admin/schools/:schoolId/enter` | `platform.schools` | Records `school.entered`; returns the context the client displays. |
+| GET | `/super-admin/dashboard` | `platform.dashboard` | Totals plus a row per school. `?schoolId=&academicYear=&term=&from=&to=`. |
+| GET | `/super-admin/performance` | `platform.dashboard` | The per-school comparison, same filters. |
+| GET | `/super-admin/filters` | `platform.dashboard` | Academic years with data, terms, schools. |
+| GET | `/super-admin/audit` | `platform.audit` | `?schoolId=&action=&actorId=&from=&to=&page=&limit=`. |
+
+Appointing a school's administrator is `POST /admin/settings/admins` with the
+school's id in the body — the existing route, which also records `admin.created`.
+
 ## Teacher — `teacher.routes.js` (all teacher-scoped)
 
 `/me`, `/profile` (GET/PUT + `/password`), `/my-assignments`, `/assignments`,

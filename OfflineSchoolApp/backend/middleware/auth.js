@@ -3,7 +3,8 @@
 
 const jwt  = require("jsonwebtoken");
 const User = require("../src/db/models/User");
-const { normalizeRole } = require("../src/config/roles");
+const { normalizeRole, ROLES } = require("../src/config/roles");
+const { lookupSchool } = require("../src/utils/schoolContext");
 
 const authenticate = async (req, res, next) => {
   try {
@@ -96,6 +97,32 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    // A super_admin may name a school on any request, and utils/tenant.js
+    // takes them at their word. The word is checked here, once, at the door:
+    // the school must exist and not be deleted, or the request is refused
+    // with a 404 rather than answered with an empty page that looks like a
+    // real school with nothing in it. A deactivated school is still reachable
+    // — switching it back on is done from inside — and is flagged on
+    // req.schoolContext for whatever cares.
+    //
+    // Nobody else's schoolId is looked at. Theirs is corrected to their own
+    // school downstream whatever they sent, so there is nothing to verify.
+    let schoolContext = null;
+    if (role === ROLES.SUPER_ADMIN) {
+      const asked = req.query?.schoolId ?? req.body?.schoolId;
+      if (asked != null && String(asked).trim() !== "") {
+        const school = await lookupSchool(asked);
+        if (!school) {
+          return res.status(404).json({
+            success: false,
+            code:    "SCHOOL_NOT_FOUND",
+            message: "No such school",
+          });
+        }
+        schoolContext = school;
+      }
+    }
+
     req.user = {
       ...user,
       role,
@@ -103,6 +130,7 @@ const authenticate = async (req, res, next) => {
       _id:          user._id,
       enrollmentNo: user.enrollmentNo ?? null,
     };
+    req.schoolContext = schoolContext;
 
     return next();
 

@@ -1,9 +1,11 @@
 // web/src/layouts/DashboardLayout.tsx
 import { useState, useCallback } from "react";
-import { Outlet, useLocation }   from "react-router-dom";
+import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useTranslation }        from "react-i18next";
 import Sidebar                   from "@/components/layout/Sidebar";
 import TopBar                    from "@/components/layout/TopBar";
+import SchoolContextBar          from "@/components/layout/SchoolContextBar";
+import { useActiveSchool, useUser } from "@/store/auth.store";
 import { NAV_ITEMS }             from "@/config/navigation";
 
 // ── Derive page title from current path ───────────────────
@@ -36,6 +38,16 @@ export default function DashboardLayout() {
   const closeSidebar  = useCallback(() => setSidebarOpen(false),  []);
   const toggleSidebar = useCallback(() => setSidebarOpen((o) => !o), []);
 
+  // The operator outside any school has only the platform to look at. A
+  // school page reached with no school chosen would show the whole platform's
+  // pupils under a school heading, which is worse than being sent back.
+  const { pathname } = useLocation();
+  const user         = useUser();
+  const activeSchool = useActiveSchool();
+  if (user?.role === "super_admin" && !activeSchool && !pathname.startsWith("/platform")) {
+    return <Navigate to="/platform" replace />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-canvas">
 
@@ -44,6 +56,7 @@ export default function DashboardLayout() {
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
 
         <TopBar onMenuClick={toggleSidebar} title={title} />
+        <SchoolContextBar />
 
         {/*
           Capped at 1600px and centred. Left unbounded, a data table on a

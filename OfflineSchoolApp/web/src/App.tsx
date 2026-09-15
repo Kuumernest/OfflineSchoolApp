@@ -98,6 +98,14 @@ const PortalCodesPage  = lazy(() => import("@/pages/portal/codes"));
 const ParentPortalPage = lazy(() => import("@/pages/portal/index"));
 const NotFoundPage     = lazy(() => import("@/pages/NotFoundPage"));
 
+// The platform: above any school. super_admin only — see navigation.ts.
+const PlatformDashboard    = lazy(() => import("@/pages/platform/PlatformDashboardPage"));
+const PlatformSchools      = lazy(() => import("@/pages/platform/SchoolsPage"));
+const PlatformSchoolDetail = lazy(() => import("@/pages/platform/SchoolDetailPage"));
+const PlatformPerformance  = lazy(() => import("@/pages/platform/PerformancePage"));
+const PlatformReports      = lazy(() => import("@/pages/platform/ReportsPage"));
+const PlatformAudit        = lazy(() => import("@/pages/platform/AuditLogPage"));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +151,9 @@ const TEACHING: UserRole[] = ["super_admin", "school_admin", "teacher"];
 /** Anyone the school employs. Reads, and messages. */
 const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar", "teacher"];
 
+/** Above any school: the operator of the deployment. Mirrors PLATFORM_ROLES. */
+const PLATFORM: UserRole[] = ["super_admin"];
+
 /** Wraps a group of routes in one role gate. */
 const gate = (roles: UserRole[]) => (
   <RequireRole roles={roles}>
@@ -162,7 +173,11 @@ const gate = (roles: UserRole[]) => (
  * the app keep working without any of them knowing the role.
  */
 function DashboardHome() {
-  const role = useAuthStore((s) => s.user?.role);
+  const role         = useAuthStore((s) => s.user?.role);
+  const activeSchool = useAuthStore((s) => s.activeSchool);
+  // The operator lands on the platform until they step into a school; inside
+  // one they get that school's dashboard like its own administrator would.
+  if (role === "super_admin" && !activeSchool) return <Navigate to="/platform" replace />;
   return role === "bursar" ? <BursarDashboard /> : <DashboardPage />;
 }
 
@@ -215,6 +230,16 @@ export default function App() {
         <Route element={<StaffOnly><DashboardLayout /></StaffOnly>}>
 
           <Route index element={<Navigate to="/dashboard" replace />} />
+
+          {/* ── The platform: above any school ─────────────────────────── */}
+          <Route element={gate(PLATFORM)}>
+            <Route path="/platform"                   element={page(<PlatformDashboard />)} />
+            <Route path="/platform/schools"           element={page(<PlatformSchools />)} />
+            <Route path="/platform/schools/:schoolId" element={page(<PlatformSchoolDetail />)} />
+            <Route path="/platform/performance"       element={page(<PlatformPerformance />)} />
+            <Route path="/platform/reports"           element={page(<PlatformReports />)} />
+            <Route path="/platform/audit"             element={page(<PlatformAudit />)} />
+          </Route>
 
           {/* Every member of staff has a dashboard; which one is by role. */}
           <Route element={gate(STAFF)}>

@@ -183,9 +183,40 @@ afterwards. `FINANCE_ROLES` keeps the admins in it on purpose: an admin who
 cannot see the books cannot approve anything, and approval is the half of
 segregation of duties that actually protects the school.
 
+### Platform scope — IMPLEMENTATION VERIFIED
+
+`super_admin` is a **platform** role, not a school role. Two things follow:
+
+- **Inside a school it is that school's administrator.** `resolveSchoolId`
+  takes the `schoolId` it names, and `DEFAULTS_BY_ROLE` gives it every school
+  capability. Nothing about running a school is duplicated for it — it uses
+  `/api/admin/*` like the school's own administrator, with a `schoolId`.
+- **Above any school it holds four `platform.*` capabilities** that no school
+  role holds and no school can grant (all locked, defaults `PLATFORM_ROLES`):
+  `platform.schools`, `platform.manageSchools`, `platform.dashboard`,
+  `platform.audit`. They guard `/api/super-admin/*` — see
+  [API.md](API.md#platform--superadminroutesjs-apisuper-admin-super_admin-only).
+
+The school a super_admin names is **checked at the door**: `authenticate`
+looks the id up (`utils/schoolContext.js`, cached 30 s) and answers 404
+`SCHOOL_NOT_FOUND` for an id that is not a school or has been deleted. A
+deactivated school is still reachable — switching it back on is done from
+inside — and is flagged on `req.schoolContext`. Nothing on the server remembers
+which school a super_admin is "in": the context is per request and cannot leak
+into the next one, or into another tab.
+
+Platform actions are recorded in `AuditLog` (`services/audit.service.js`):
+school created / updated / activated / deactivated / entered, and administrator
+appointed / restored / password reset / removed — actor, target school,
+resource, the fields that changed, reason, timestamp. Read through
+`GET /api/super-admin/audit`. `scripts/check-super-admin.js` proves all of the
+above with two populated schools, including that a school administrator, a
+bursar, a teacher, a student and a guardian are refused on every platform route
+and that a forged role or school claim in a token changes nothing.
+
 ### Permissions
 
-**65 keys** across **30 modules**, defined in `src/config/permissions.js`.
+**69 keys** across **31 modules**, defined in `src/config/permissions.js`.
 
 | Property | Count |
 |---|---|
@@ -270,12 +301,16 @@ only the `bursar` and `teacher` columns, and only for the 48 delegable keys.
 | `settings.manage` | YES | YES | — | — | — |
 | `permissions.manage` | YES | YES | — | — | — |
 | `sync.push` | YES | YES | — | — | — |
+| `platform.schools` | YES | — | — | — | — |
+| `platform.manageSchools` | YES | — | — | — | — |
+| `platform.dashboard` | YES | — | — | — | — |
+| `platform.audit` | YES | — | — | — | — |
 
 ### Reading the matrix
 
 Three things in it are worth stating explicitly because they surprise people:
 
-1. **`student` holds no permission at all.** Not one of the 65. Student access is
+1. **`student` holds no permission at all.** Not one of the 69. Student access is
    not expressed through this system — student routes guard themselves with
    `studentOnly` / `scopeToSelfForStudents` and scope every query to the caller's
    own record. The permission table is a *staff* authorization model.
@@ -344,7 +379,7 @@ copy.
 |---|---|
 | A non-super-admin cannot read another school's data through a `schoolId` parameter | **TEST VERIFIED** — `scripts/check-cross-school.js` |
 | Every router that resolves a school uses `resolveSchoolId` | **IMPLEMENTATION VERIFIED** at this commit |
-| A super_admin is trusted completely across schools | **By design** — there is no second check on them |
+| A super_admin may name any school, and the school it names must exist | **TEST VERIFIED** — `scripts/check-super-admin.js`; 404 `SCHOOL_NOT_FOUND` otherwise |
 | The database itself enforces tenancy | **NO.** There is one database and one connection. Tenancy is application-level only. A query that omits `schoolId` returns every school's rows. |
 
 That last row is the one to keep in mind when adding a route. Nothing at the

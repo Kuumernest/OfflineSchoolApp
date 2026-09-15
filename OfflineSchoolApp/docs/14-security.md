@@ -41,10 +41,13 @@ not the entropy.
 
 | Control | Status |
 |---|---|
-| 65 permission keys, one definition file | IMPLEMENTATION VERIFIED |
+| 69 permission keys, one definition file | IMPLEMENTATION VERIFIED |
 | `requirePermission` / `requireAnyPermission` on routes | IMPLEMENTATION VERIFIED |
 | 17 keys **locked** — never delegable | IMPLEMENTATION VERIFIED |
 | Only `bursar` and `teacher` are school-adjustable | IMPLEMENTATION VERIFIED |
+| `platform.*` capabilities held by `super_admin` alone, locked, ungrantable through overrides | TEST VERIFIED — `scripts/check-super-admin.js` |
+| A super_admin's named school is verified at the door (404 if not a school / deleted) | TEST VERIFIED — `scripts/check-super-admin.js` |
+| Platform audit trail (`AuditLog`): school lifecycle, administrator changes, entering a school | IMPLEMENTATION VERIFIED |
 | Roles defined once (`config/roles.js`); `"admin"` normalised away | IMPLEMENTATION VERIFIED |
 | Bursar separated from admin (no `payroll.setSalary`, no `approvals.decide`) | IMPLEMENTATION VERIFIED |
 | The full matrix | TEST VERIFIED — `check-role-matrix.js`, `check-authz-matrix.js`, `check-admin-guards.js` |

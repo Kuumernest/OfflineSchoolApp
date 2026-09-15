@@ -52,7 +52,7 @@ backend/
 │   │   ├── env.js           # boot-time environment validation
 │   │   ├── database.js      # Mongoose connection
 │   │   ├── roles.js         # the five roles, one copy
-│   │   ├── permissions.js   # 65 permission keys + per-role defaults
+│   │   ├── permissions.js   # 69 permission keys + per-role defaults
 │   │   └── syncFeed.js      # 36 fed collections + 16 explicit exclusions
 │   ├── routes/              # 32 routers, 372 handlers
 │   ├── controllers/         # 5 — homework, periods, results, sync, syncFeed
@@ -172,7 +172,7 @@ subtrees.
 
 `permissions.service.js` caches effective permissions per school and invalidates
 on `setRolePermissions`. Defaults come from `config/permissions.js`; a school may
-override them for `bursar` and `teacher` only (`ADJUSTABLE_ROLES`). 48 of the 65
+override them for `bursar` and `teacher` only (`ADJUSTABLE_ROLES`). 48 of the 69
 keys are `delegable`; 17 are locked and cannot be granted away.
 
 ---

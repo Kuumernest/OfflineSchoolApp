@@ -85,6 +85,7 @@ const {
   OFFICE_ROLES,
   TEACHING_ROLES,
   STAFF_ROLES,
+  PLATFORM_ROLES,
 } = require("./roles");
 
 const ALL = [
@@ -312,6 +313,23 @@ const PERMISSION_DEFS = [
     "This screen. A role that can grant itself permissions has no ceiling."),
   p("sync.push",        "sync", ADMIN_ROLES, false,
     "Write period definitions and promotion decisions from a device."),
+
+  // ── The platform ──────────────────────────────────────────────────────────
+  //
+  // Held by the operator alone. school_admin is deliberately NOT in these: it
+  // is the one role whose defaults are otherwise the whole registry, and these
+  // are the capabilities that reach past a school's own walls. All locked —
+  // the overrides a school may write apply to bursar and teacher and drop
+  // locked keys on the way in, so no school can grant itself a view of its
+  // neighbours.
+  p("platform.schools",       "platform", PLATFORM_ROLES, false,
+    "List every school on the deployment and open any of them."),
+  p("platform.manageSchools", "platform", PLATFORM_ROLES, false,
+    "Create a school, change its identity, switch it on or off."),
+  p("platform.dashboard",     "platform", PLATFORM_ROLES, false,
+    "Figures aggregated across schools: enrolment, attendance, results, fees."),
+  p("platform.audit",         "platform", PLATFORM_ROLES, false,
+    "Read the record of what platform administrators did, and to which school."),
 ];
 
 const PERMISSION_KEYS = PERMISSION_DEFS.map((d) => d.key);

@@ -27,6 +27,9 @@ import {
   MessageSquare,
   ShieldAlert,
   ShieldCheck,
+  Globe,
+  Building2,
+  ScrollText,
 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { type UserRole }   from "@/types";
@@ -81,9 +84,57 @@ export interface NavItem {
   roles:     UserRole[];
   children?: NavItem[];
   badge?:    string;
+  /**
+   * Above any school. Shown to super_admin whether or not they are inside a
+   * school; every entry WITHOUT this flag is a school's screen and appears
+   * for super_admin only once a school has been entered. Other roles are
+   * never shown a platform entry — their `roles` list does not include them.
+   */
+  platform?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  // ── The platform (super_admin only) ─────────────────────
+  {
+    label: "Platform dashboard",
+    labelKey: "nav.platform",
+    path:  "/platform",
+    icon:  Globe,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Schools",
+    labelKey: "nav.schools",
+    path:  "/platform/schools",
+    icon:  Building2,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Cross-school performance",
+    labelKey: "nav.platformPerformance",
+    path:  "/platform/performance",
+    icon:  BarChart3,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Platform reports",
+    labelKey: "nav.platformReports",
+    path:  "/platform/reports",
+    icon:  FileSpreadsheet,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Audit log",
+    labelKey: "nav.platformAudit",
+    path:  "/platform/audit",
+    icon:  ScrollText,
+    roles: ["super_admin"],
+    platform: true,
+  },
 
   // ── Dashboard ───────────────────────────────────────────
   // One path, two pages. /dashboard resolves by role in App.tsx: an admin gets

@@ -150,7 +150,12 @@ Every collection carries `schoolId`. Routers resolve it from the authenticated
 user (never from an untrusted query without checking), and tenancy checks live
 in `scripts/check-student-tenancy.js` / `check-announcement-tenancy.js`.
 `super_admin` is the deployment operator and may cross schools; everyone else is
-scoped to one.
+scoped to one. The school it names is verified at the door
+(`utils/schoolContext.js`); what sits above any school — creating one, switching
+it off, the cross-school figures, the audit trail — lives in
+`routes/superAdmin.routes.js` behind four locked `platform.*` capabilities, and
+every such action is recorded in `AuditLog`. See
+06-authentication-authorization.md, "Platform scope".
 
 ## 7. Printed & exported documents
 

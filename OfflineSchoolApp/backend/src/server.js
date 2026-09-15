@@ -839,6 +839,20 @@ app.use("/api/teacher",
 // Mounted above /api/admin, like periods and timetable below it: the admin
 // router is a catch-all for that prefix, so a more specific path has to be
 // registered first or it never sees a request.
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PLATFORM
+//
+// What sits above a school: creating one, switching it off, reading across all
+// of them, the audit trail. Every route carries a platform.* capability that
+// only super_admin holds. A super_admin working INSIDE a school does not come
+// here — they use /api/admin/* with a schoolId, like any other administrator
+// of that school.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use("/api/super-admin",
+  auth.authenticate,
+  loadRoute("./routes/superAdmin.routes")
+);
+
 app.use("/api/admin/permissions",
   auth.authenticate,
   loadRoute("./routes/permissions.routes")
