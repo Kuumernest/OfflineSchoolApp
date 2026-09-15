@@ -342,8 +342,8 @@ export default function TeacherExamsScreen() {
           <Text style={styles.headerTitle}>{t("teacherExams.title")}</Text>
           <Text style={styles.headerSub}>
             {activeFilter === "all"
-              ? `${displayList.length} exam${displayList.length !== 1 ? "s" : ""} with your subjects`
-              : `${filteredList.length} of ${displayList.length} · ${activeFilterMeta?.label || ""}`
+              ? t("teacherExams.headerCount", { count: displayList.length })
+              : `${filteredList.length} ${t("common.of")} ${displayList.length} · ${activeFilterMeta?.label || ""}`
             }
           </Text>
         </View>
@@ -451,7 +451,7 @@ export default function TeacherExamsScreen() {
             <Text style={styles.emptyText}>
               {activeFilter === "all"
                 ? t("teacherExams.emptySub")
-                : `No exams match the "${activeFilterMeta?.label}" filter`}
+                : t("teacherExams.noMatchFilter", { filter: activeFilterMeta?.label || "" })}
             </Text>
             {activeFilter !== "all" && (
               <TouchableOpacity
@@ -527,7 +527,7 @@ function ExamCard({ item, onPress }) {
         <View style={styles.actionHint}>
           <Ionicons name="alert-circle" size={13} color={COLORS.error} />
           <Text style={styles.actionHintText}>
-            {rejected} submission{rejected > 1 ? "s" : ""} rejected — re-enter marks
+            {t("teacherExams.submissionsRejectedHint", { count: rejected })}
           </Text>
         </View>
       )}
@@ -535,7 +535,7 @@ function ExamCard({ item, onPress }) {
         <View style={styles.actionHint}>
           <Ionicons name="create-outline" size={13} color={COLORS.warning} />
           <Text style={[styles.actionHintText, { color: COLORS.warning }]}>
-            {pending} subject{pending > 1 ? "s" : ""} need{pending === 1 ? "s" : ""} marks
+            {t("teacherExams.subjectsNeedMarks", { count: pending })}
           </Text>
         </View>
       )}

@@ -287,6 +287,12 @@ const EXCLUDED = {
     "machines holding a copy would both believe they knew the next value, " +
     "which is exactly the collision the device code exists to avoid.",
 
+  AuditLog:
+    "What a platform operator did, and to which school. It is not scoped to " +
+    "one school at all — the row survives the school it names being switched " +
+    "off — and it is read online by the operator alone, from the platform " +
+    "console. An audit trail has no place on office machines.",
+
   SyncLog:
     "A record of other devices' syncs. Operational, not school data.",
 
@@ -351,6 +357,12 @@ const EXCLUDED = {
     "An audit trail of mark changes. Append-only server-side and read on " +
     "demand; mirroring it would double the academic data on the machine to " +
     "answer a question that is asked rarely.",
+
+  ExamMark:
+    "A teacher's exam marks before they are approved — submitted or rejected, " +
+    "awaiting the administrator's decision. It belongs to one teacher and " +
+    "exists only in flight; once approved the marks are what studentScore " +
+    "mirrors, and an office copy of an undecided queue serves no screen.",
 
   ExamSubject: null,   // placeholder overwritten below — see the check
 };

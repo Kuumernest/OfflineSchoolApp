@@ -61,8 +61,8 @@ import { fetchTeachers, fetchTeacherIdsFor } from "@/services/teacher.service";
 
 import {
   SCHOOL_WEEK,
-  DAY_LABELS,
-  DAY_SHORT,
+  DAY_LABEL_KEYS,
+  DAY_SHORT_KEYS,
   TimetableConflictError,
 } from "@/types/timetable.types";
 import type { DayCode, TimetableSlot } from "@/types/timetable.types";
@@ -311,7 +311,7 @@ export default function TimetablePage() {
         <div>
           <h1 className="text-lg font-semibold text-gray-900">{t("timetable.title")}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Click a free period to add a lesson, or drag a lesson to move it.
+            {t("timetable.gridHint")}
           </p>
         </div>
 
@@ -375,8 +375,8 @@ export default function TimetablePage() {
                         key={day}
                         className="px-3 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider"
                       >
-                        <span className="hidden lg:inline">{DAY_LABELS[day]}</span>
-                        <span className="lg:hidden">{DAY_SHORT[day]}</span>
+                        <span className="hidden lg:inline">{t(DAY_LABEL_KEYS[day])}</span>
+                        <span className="lg:hidden">{t(DAY_SHORT_KEYS[day])}</span>
                       </th>
                     ))}
                   </tr>
@@ -479,8 +479,8 @@ export default function TimetablePage() {
                 title={t("timetable.unfilled")}
                 subtitle={
                   gaps.length === 0
-                    ? "Every teaching period this week has a lesson."
-                    : `${gaps.length} teaching ${gaps.length === 1 ? "period" : "periods"} still empty`
+                    ? t("timetable.noGaps")
+                    : t("timetable.gapsCount", { count: gaps.length })
                 }
               />
               {gaps.length > 0 && (
@@ -491,12 +491,12 @@ export default function TimetablePage() {
                       onClick={() => setCell({ day, periodId: period._id })}
                       className="px-2 py-1 rounded-md bg-gray-50 border border-gray-200 text-xs text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors"
                     >
-                      {DAY_SHORT[day]} · {period.name}
+                      {t(DAY_SHORT_KEYS[day])} · {period.name}
                     </button>
                   ))}
                   {gaps.length > 24 && (
                     <span className="px-2 py-1 text-xs text-gray-400">
-                      +{gaps.length - 24} more
+                      {t("timetable.gapsMore", { count: gaps.length - 24 })}
                     </span>
                   )}
                 </div>
@@ -564,7 +564,7 @@ export default function TimetablePage() {
             const ok = await confirm({
               title:        t("timetable.removeLessonConfirm"),
               message:      t("timetable.removeLessonHint"),
-              confirmLabel: "Remove lesson",
+              confirmLabel: t("timetable.removeLesson"),
               kind:         "danger",
             });
             if (ok) removeMutation.mutate(cell.existing._id);
@@ -590,6 +590,8 @@ function LessonCard({
   onDragStart: () => void;
   onDragEnd:   () => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div
       draggable
@@ -617,10 +619,10 @@ function LessonCard({
       <GripVertical className="w-3 h-3 text-primary-300 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100 transition-opacity" />
       <div className="min-w-0 flex-1">
         <p className="text-xs font-semibold text-primary-900 truncate leading-tight">
-          {slot.subject?.name ?? slot.subjectName ?? "Unknown subject"}
+          {slot.subject?.name ?? slot.subjectName ?? t("timetable.unknownSubject")}
         </p>
         <p className="text-[11px] text-primary-700/80 truncate">
-          {slot.teacher?.name ?? "Unassigned"}
+          {slot.teacher?.name ?? t("timetable.unassigned")}
         </p>
         {slot.room && (
           <p className="text-[10px] text-primary-600/70 truncate">{slot.room}</p>
@@ -715,7 +717,7 @@ function SlotEditor({
     <Modal
       open
       onClose={onClose}
-      title={`${DAY_LABELS[target.day]} · ${periodName}`}
+      title={`${t(DAY_LABEL_KEYS[target.day])} · ${periodName}`}
     >
       <form
         onSubmit={(e) => {
@@ -757,7 +759,7 @@ function SlotEditor({
           />
         </FormField>
 
-        <FormField label={t("timetable.room")} hint="Optional.">
+        <FormField label={t("timetable.room")} hint={t("timetable.roomOptional")}>
           <Input
             value={room ?? ""}
             onChange={(e) => setRoom(e.target.value)}
@@ -769,9 +771,9 @@ function SlotEditor({
           <div className="flex items-start gap-2 px-3 py-2.5 rounded-lg bg-amber-50 border border-amber-200">
             <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-xs text-amber-800">
-              This class has no subjects yet. Add them under{" "}
+              {t("timetable.noSubjectsYet")}{" "}
               <Link to="/subjects" className="underline font-medium">{t("academic.subject_other")}</Link>{" "}
-              before building its timetable.
+              {t("timetable.noSubjectsAfter")}
             </p>
           </div>
         )}
@@ -795,7 +797,7 @@ function SlotEditor({
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saving}>
-              {existing ? t("common.saveChanges") : "Add lesson"}
+              {existing ? t("common.saveChanges") : t("timetable.addLesson")}
             </Button>
           </div>
         </div>

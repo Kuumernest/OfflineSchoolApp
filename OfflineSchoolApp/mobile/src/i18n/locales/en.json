@@ -556,7 +556,12 @@
     "tuesday": "Tuesday",
     "wednesday": "Wednesday",
     "thursday": "Thursday",
-    "friday": "Friday"
+    "friday": "Friday",
+    "saturday": "Saturday",
+    "sunday": "Sunday",
+    "sat": "SAT",
+    "sun": "SUN",
+    "periodN": "Period {{n}}"
   },
   "classes": {
     "title": "Classes",
@@ -5322,7 +5327,20 @@
     "emptySub": "You have no subjects assigned in any active exam",
     "noMatch": "No Matching Exams",
     "showAll": "Show All Exams",
-    "allApproved": "All subjects approved ✓"
+    "allApproved": "All subjects approved ✓",
+    "headerCount": {
+      "one": "{{count}} exam with your subjects",
+      "other": "{{count}} exams with your subjects"
+    },
+    "noMatchFilter": "No exams match the \"{{filter}}\" filter",
+    "subjectsNeedMarks": {
+      "one": "{{count}} subject needs marks",
+      "other": "{{count}} subjects need marks"
+    },
+    "submissionsRejectedHint": {
+      "one": "{{count}} submission rejected — re-enter marks",
+      "other": "{{count}} submissions rejected — re-enter marks"
+    }
   },
   "teacherSubjects": {
     "title": "My Classes & Subjects",

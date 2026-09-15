@@ -467,10 +467,10 @@ export default function TeacherTimetable() {
                     ]}
                   >
                     <Text style={[styles.dayShort, isToday && styles.dayShortToday]}>
-                      {DAY_SHORT[i]}
+                      {t(`timetable.${DAY_SHORT[i].toLowerCase()}`)}
                     </Text>
                     <Text style={[styles.dayFull, isToday && styles.dayFullToday]}>
-                      {day}
+                      {t(`timetable.${day.toLowerCase()}`)}
                     </Text>
                     {isToday && <View style={styles.todayDot} />}
                   </View>

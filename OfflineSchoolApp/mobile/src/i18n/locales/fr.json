@@ -556,7 +556,12 @@
     "tuesday": "Mardi",
     "wednesday": "Mercredi",
     "thursday": "Jeudi",
-    "friday": "Vendredi"
+    "friday": "Vendredi",
+    "saturday": "Samedi",
+    "sunday": "Dimanche",
+    "sat": "SAM",
+    "sun": "DIM",
+    "periodN": "Période {{n}}"
   },
   "classes": {
     "title": "Classes",
@@ -5322,7 +5327,20 @@
     "emptySub": "Aucune matière ne vous est attribuée dans une évaluation active",
     "noMatch": "Aucune évaluation correspondante",
     "showAll": "Voir toutes les évaluations",
-    "allApproved": "Toutes les matières approuvées ✓"
+    "allApproved": "Toutes les matières approuvées ✓",
+    "headerCount": {
+      "one": "{{count}} évaluation avec vos matières",
+      "other": "{{count}} évaluations avec vos matières"
+    },
+    "noMatchFilter": "Aucune évaluation ne correspond au filtre « {{filter}} »",
+    "subjectsNeedMarks": {
+      "one": "Notes à saisir pour {{count}} matière",
+      "other": "Notes à saisir pour {{count}} matières"
+    },
+    "submissionsRejectedHint": {
+      "one": "{{count}} soumission rejetée — ressaisissez les notes",
+      "other": "{{count}} soumissions rejetées — ressaisissez les notes"
+    }
   },
   "teacherSubjects": {
     "title": "Mes classes et matières",

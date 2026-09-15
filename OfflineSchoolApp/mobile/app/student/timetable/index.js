@@ -64,7 +64,7 @@ const normDay = (raw) =>
 // DB LOADER — keeps student's SQLite logic intact
 // ─────────────────────────────────────────────────────────────
 
-const loadFullTimetable = async (db, classId) => {
+const loadFullTimetable = async (db, classId, t) => {
   if (!classId) return { slots: [], periods: [] };
 
   try {
@@ -208,7 +208,7 @@ const loadFullTimetable = async (db, classId) => {
       if (s.periodId && !periodMap.has(s.periodId)) {
         periodMap.set(s.periodId, {
           id:        s.periodId,
-          name:      s.periodName || `Period ${periodMap.size + 1}`,
+          name:      s.periodName || t("timetable.periodN", { n: periodMap.size + 1 }),
           startTime: s.startTime,
           endTime:   s.endTime,
           sortOrder: s.sortOrder,
@@ -235,7 +235,7 @@ const loadFullTimetable = async (db, classId) => {
         for (const p of pRows ?? []) {
           periodMap.set(String(p.id), {
             id:        String(p.id),
-            name:      p.name || `Period ${periodMap.size + 1}`,
+            name:      p.name || t("timetable.periodN", { n: periodMap.size + 1 }),
             startTime: p.startTime || null,
             endTime:   p.endTime   || null,
             sortOrder: p.sortOrder || 0,
@@ -315,7 +315,7 @@ export default function StudentTimetableScreen() {
       }
 
       // Load from local SQLite
-      const { slots, periods: loadedPeriods } = await loadFullTimetable(db, cid);
+      const { slots, periods: loadedPeriods } = await loadFullTimetable(db, cid, t);
       setSchedule(slots);
       setPeriods(loadedPeriods);
 
