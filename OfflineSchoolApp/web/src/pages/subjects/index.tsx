@@ -135,11 +135,12 @@ interface StatsBannerProps {
 }
 
 const StatsBanner = ({ total, assigned, unassigned }: StatsBannerProps) => {
+  const { t } = useTranslation();
   const items: StatItem[] = [
-    { label: "Total",      value: total,      color: "text-gray-900"    },
-    { label: "Assigned",   value: assigned,   color: "text-emerald-600" },
+    { label: t("common.total"),      value: total,      color: "text-gray-900"    },
+    { label: t("subjects.assigned"), value: assigned,   color: "text-emerald-600" },
     {
-      label: "Unassigned",
+      label: t("subjects.unassigned"),
       value: unassigned,
       color: unassigned > 0 ? "text-amber-600" : "text-gray-900",
     },
@@ -347,9 +348,7 @@ const DeleteDialog = ({
       </div>
       <h3 className="text-lg font-bold text-gray-900">{t("subjects.delete")}</h3>
       <p className="mt-2 text-sm text-gray-500">
-        Permanently delete{" "}
-        <span className="font-semibold text-gray-900">"{subject.name}"</span>{" "}
-        from {subject.className}?
+        {t("subjects.deleteBody", { name: subject.name, className: subject.className })}
       </p>
       <p className="mt-1 text-xs text-amber-700">
         {t("subjects.deleteWarning")}
@@ -367,7 +366,7 @@ const DeleteDialog = ({
           disabled={busy}
           className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
         >
-          {busy ? t("common.deleting") : "Delete"}
+          {busy ? t("common.deleting") : t("common.delete")}
         </button>
       </div>
     </div>
@@ -462,14 +461,14 @@ export default function AdminSubjectsPage() {
         (err as { response?: { data?: { message?: string } } })
           ?.response?.data?.message ??
         (err instanceof Error ? err.message : null) ??
-        "Failed to delete subject";
+        t("subjects.errDelete");
       setError(msg);
       setDeleteTarget(null);
       loadData(true);
     } finally {
       setDeleteBusy(false);
     }
-  }, [deleteTarget, loadData]);
+  }, [deleteTarget, loadData, t]);
 
   const stats = useMemo(() => {
     const assigned = subjects.filter((s) => !!s.teacherName).length;
@@ -533,7 +532,7 @@ export default function AdminSubjectsPage() {
               ? t("subjects.noneAssignedHint")
               : selectedClassId
                 ? t("subjects.noneInClass")
-                : "Add your first subject and link it to a class."
+                : t("subjects.firstOne")
           }
           // No "Add your first subject" for somebody who cannot add one. An
           // empty page that invites an action it will then refuse is the worst
@@ -610,8 +609,8 @@ export default function AdminSubjectsPage() {
         <div className="flex-1">
           <h1 className="text-xl font-bold text-gray-900">{t("subjects.title")}</h1>
           <p className="text-sm text-gray-500">
-            {stats.total} {stats.total === 1 ? "subject" : "subjects"}
-            {stats.unassigned > 0 ? ` • ${stats.unassigned} unassigned` : ""}
+            {t("academic.subjectCount", { count: stats.total })}
+            {stats.unassigned > 0 ? ` • ${t("subjects.unassignedCount", { count: stats.unassigned })}` : ""}
           </p>
         </div>
 
@@ -637,7 +636,7 @@ export default function AdminSubjectsPage() {
         <div className="border-b border-gray-100 bg-white">
           <div className="flex gap-2 overflow-x-auto px-6 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <FilterChip
-              label={`All Subjects (${stats.total})`}
+              label={t("subjects.allWithCount", { count: stats.total })}
               isActive={selectedClassId === null}
               onClick={() => setSelectedClassId(null)}
             />

@@ -350,7 +350,7 @@ export default function DashboardPage() {
           error={
             announcementsQ.isError
               ? ((announcementsQ.error as Error)?.message ??
-                  "Failed to load announcements")
+                  t("announcements.loadFailed"))
               : undefined
           }
         />

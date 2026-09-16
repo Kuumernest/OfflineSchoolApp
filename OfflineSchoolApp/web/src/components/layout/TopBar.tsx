@@ -376,7 +376,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                   {/* Count header */}
                   <div className="border-b border-line bg-surface-muted px-4 py-2">
                     <p className="text-xs text-ink-faint">
-                      {totalResults} result{totalResults !== 1 ? "s" : ""} for{" "}
+                      {t("search.resultsFor", { count: totalResults })}{" "}
                       <span className="font-medium text-ink-body">
                         "{searchQuery}"
                       </span>

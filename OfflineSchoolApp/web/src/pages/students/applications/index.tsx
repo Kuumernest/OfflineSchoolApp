@@ -212,13 +212,13 @@ const StudentApplicationsPage: React.FC = () => {
       } else {
         showToast(
           "success",
-          `${app?.name} approved and assigned to ${className}. Welcome email sent.`
+          t("applications.approvedToast", { name: app?.name, className })
         );
       }
 
       return result;
     },
-    [approve, closeReview, selectedApplication, classes, showToast]
+    [approve, closeReview, selectedApplication, classes, showToast, t]
   );
 
   // ── Reject handler ──────────────────────────────────────────────────────
@@ -249,7 +249,7 @@ const StudentApplicationsPage: React.FC = () => {
         <div className="flex flex-col items-center justify-center flex-1 gap-3">
           <Spinner size={40} color="#4F46E5" />
           <p className="text-sm text-gray-500 font-medium">
-            Loading applications…
+            {t("admissions.loading")}
           </p>
         </div>
       </div>
@@ -265,11 +265,7 @@ const StudentApplicationsPage: React.FC = () => {
         onBack={() => navigate(-1)}
         onRefresh={() => loadData(true)}
         refreshing={refreshing}
-        subtitle={`${applications.length} ${
-          applications.length === 1
-            ? "pending application"
-            : "pending applications"
-        }`}
+        subtitle={t("admissions.pendingCount", { count: applications.length })}
       />
 
       {/* ── Summary ── */}

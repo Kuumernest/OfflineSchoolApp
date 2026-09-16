@@ -260,7 +260,7 @@ export default function AdminSubjects() {
               await SubjectService.delete(subject.id);
               if (isMountedRef.current) {
                 setSubjects((prev) => prev.filter((s) => s.id !== subject.id));
-                Alert.alert(t("subjectsList.deletedTitle"), `"${subject.name}" has been removed.`);
+                Alert.alert(t("subjectsList.deletedTitle"), t("subjectsList.removedBody", { name: subject.name }));
               }
             } catch (err) {
               const message =
@@ -350,7 +350,7 @@ export default function AdminSubjects() {
             keyboardShouldPersistTaps="handled"
           >
             <FilterChip
-              label={`All Subjects (${stats.total})`}
+              label={t("subjectsList.allWithCount", { count: stats.total })}
               isActive={selectedClassId === null}
               onPress={() => setSelectedClassId(null)}
             />

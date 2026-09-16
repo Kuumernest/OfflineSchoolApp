@@ -366,7 +366,7 @@ export default function EditExamScreen() {
           e.classIds.map((cid) => ({ classId: String(cid), className: "Class" }))
         );
       } else if (e.classId) {
-        setSelectedClasses([{ classId: String(e.classId), className: e.className || "Class" }]);
+        setSelectedClasses([{ classId: String(e.classId), className: e.className || t("academic.class") }]);
       } else {
         setSelectedClasses([]);
       }

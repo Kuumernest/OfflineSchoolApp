@@ -222,7 +222,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
       </View>
 
       <Text style={cs.hint}>
-        {filtered.length} class{filtered.length !== 1 ? "es" : ""} · tap to mark attendance
+        {t("attAdmin.classCountHint", { count: filtered.length })}
       </Text>
 
       <ScrollView
@@ -420,10 +420,9 @@ const MarkAttendance = React.forwardRef(({
 
         Alert.alert(
           t("attAdmin.savedTitle"),
-          `Attendance saved for ${records.length} student(s).${
-            unmarked > 0 ? `\n${unmarked} student(s) not marked.` : ""
-          }`,
-          [{ text: "OK", onPress: onSaved }]
+          t("attAdmin.savedForStudents", { count: records.length }) +
+            (unmarked > 0 ? `\n${t("attTeacher.notMarked", { count: unmarked })}` : ""),
+          [{ text: t("common.ok"), onPress: onSaved }]
         );
       } catch (err) {
         Alert.alert(t("attAdmin.saveFailed"), errorText(t, err, "attAdmin.pleaseTryAgain"));
@@ -435,9 +434,9 @@ const MarkAttendance = React.forwardRef(({
     if (unmarked > 0) {
       Alert.alert(
         t("attAdmin.unmarkedStudentsTitle"),
-        `${unmarked} student(s) have not been marked. Save anyway?`,
+        t("attTeacher.unmarkedConfirm", { count: unmarked }),
         [
-          { text: "Cancel",      style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           { text: t("attAdmin.saveAnyway"), onPress: doSave  },
         ]
       );

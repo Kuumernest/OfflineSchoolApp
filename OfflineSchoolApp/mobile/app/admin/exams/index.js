@@ -370,7 +370,7 @@ export default function ExamsDashboardScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("examsDash.title")}</Text>
           <Text style={styles.headerSub}>
-            {safe(d.total, "0")} exam{d.total !== 1 ? "s" : ""} total
+            {t("examsDash.examTotal", { count: Number(d.total) || 0 })}
           </Text>
         </View>
         <TouchableOpacity

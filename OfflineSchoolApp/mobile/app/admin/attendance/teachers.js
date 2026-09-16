@@ -103,8 +103,8 @@ export default function MarkTeacherAttendanceScreen() {
 
       Alert.alert(
         t("attAdmin.savedTitle"),
-        `Attendance saved for ${records.length} teacher(s).`,
-        [{ text: "OK", onPress: () => router.back() }]
+        t("attAdmin.savedForTeachers", { count: records.length }),
+        [{ text: t("common.ok"), onPress: () => router.back() }]
       );
     } catch (err) {
       Alert.alert(t("attAdmin.saveFailed"), errorText(t, err, "attAdmin.pleaseTryAgain"));

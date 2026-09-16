@@ -56,7 +56,7 @@ export const useApproveSubmission = (examId: string) => {
       toast({ title: t("exams.toastApproved"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to approve submission", kind: "error" }),
+      toast({ title: e.message || t("exams.errApproveSubmission"), kind: "error" }),
   });
 };
 
@@ -79,7 +79,7 @@ export const useRejectSubmission = (examId: string) => {
       toast({ title: t("exams.toastRejected"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to reject submission", kind: "error" }),
+      toast({ title: e.message || t("exams.errRejectSubmission"), kind: "error" }),
   });
 };
 
@@ -119,7 +119,7 @@ export const useUpdateExamSubject = (examId: string) => {
       );
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to update subject", kind: "error" }),
+      toast({ title: e.message || t("exams.errUpdateSubject"), kind: "error" }),
   });
 };
 
@@ -161,6 +161,6 @@ export const useSaveBulkScores = () => {
       toast({ title: t("exams.toastScoresSaved"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to save scores", kind: "error" }),
+      toast({ title: e.message || t("exams.errSaveScores"), kind: "error" }),
   });
 };

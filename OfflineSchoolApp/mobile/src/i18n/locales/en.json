@@ -183,7 +183,23 @@
     "present": "Present",
     "absent": "Absent",
     "late": "Late",
-    "excused": "Excused"
+    "excused": "Excused",
+    "studentCount": {
+      "one": "{{count}} student",
+      "other": "{{count}} students"
+    },
+    "teacherCount": {
+      "one": "{{count}} teacher",
+      "other": "{{count}} teachers"
+    },
+    "subjectCount": {
+      "one": "{{count}} subject",
+      "other": "{{count}} subjects"
+    },
+    "classCount": {
+      "one": "{{count}} class",
+      "other": "{{count}} classes"
+    }
   },
   "results": {
     "published": "Published",
@@ -760,7 +776,10 @@
     "emailLabel": "Email Address",
     "emailHint": "Must be unique. Used for login and receiving credentials.",
     "discardGoBack": "Discard & Go Back",
-    "errEmailTaken": "This email is already registered. Check if the teacher already has an account or use a different email."
+    "errEmailTaken": "This email is already registered. Check if the teacher already has an account or use a different email.",
+    "errNameMax": "Name cannot exceed {{max}} characters.",
+    "addedEmailed": "“{{name}}” has been added. A welcome email with login instructions has been sent to {{email}}.",
+    "addedEmailFailed": "Teacher created, but the welcome email failed. Share the credentials below manually."
   },
   "teachersEdit": {
     "title": "Edit teacher",
@@ -836,7 +855,11 @@
     "errCoeffMax": "Coefficient cannot exceed 20.",
     "unknownError": "Unknown error",
     "submit": "Create Subject",
-    "coeffHint": "How much this subject counts toward the average. 1 is normal, 2 counts double. Leave blank for 1."
+    "coeffHint": "How much this subject counts toward the average. 1 is normal, 2 counts double. Leave blank for 1.",
+    "creatingIn": {
+      "one": "Creating in {{count}} class…",
+      "other": "Creating in {{count}} classes…"
+    }
   },
   "subjectsEdit": {
     "title": "Edit subject",
@@ -1558,7 +1581,8 @@
     "loadingMore": "Loading more…",
     "a11yRetry": "Retry loading schools",
     "a11ySearch": "Search schools",
-    "a11yClear": "Clear search"
+    "a11yClear": "Clear search",
+    "errLoad": "Failed to load schools ({{status}})"
   },
   "setPassword": {
     "changeTitle": "Change Password",
@@ -3097,7 +3121,11 @@
     "emptyBody": "Completed and published exams will appear here",
     "noFilteredExams": "No {{status}} exams",
     "switchToAllHint": "Try switching to \"All\" to see all exams",
-    "showAll": "Show All Exams"
+    "showAll": "Show All Exams",
+    "examsOf": {
+      "one": "{{shown}} of {{count}} exam",
+      "other": "{{shown}} of {{count}} exams"
+    }
   },
   "examsDash": {
     "title": "Exams & Results",
@@ -3134,6 +3162,10 @@
     "pendingResultsAlert": {
       "one": "%{count} completed exam with unpublished results",
       "other": "%{count} completed exams with unpublished results"
+    },
+    "examTotal": {
+      "one": "{{count}} exam total",
+      "other": "{{count}} exams total"
     }
   },
   "examType": {
@@ -3197,7 +3229,31 @@
     "examFallback": "Exam",
     "schoolFallback": "School",
     "generateCta": "Generate Reports",
-    "generatingCards": "Generating report cards"
+    "generatingCards": "Generating report cards",
+    "examLabel": "Exam: {{name}}",
+    "allStudents": {
+      "one": "All students ({{count}})",
+      "other": "All {{count}} students"
+    },
+    "uniqueLoaded": {
+      "one": "{{count}} unique student loaded",
+      "other": "{{count}} unique students loaded"
+    },
+    "builtinWithCustom": {
+      "one": "Built-in ({{count}} custom available)",
+      "other": "Built-in ({{count}} custom available)"
+    },
+    "generatedFor": "Report generated for {{name}}",
+    "generatedOf": "{{done}} of {{total}} reports generated",
+    "pdfsSaved": {
+      "one": "{{count}} PDF saved to device.",
+      "other": "{{count}} PDFs saved to device."
+    },
+    "generateFor": "Generate report for {{name}}",
+    "generateAll": {
+      "one": "Generate {{count}} report",
+      "other": "Generate all {{count}} reports"
+    }
   },
   "applyForm": {
     "title": "Apply",
@@ -3691,7 +3747,16 @@
     },
     "assignMore": "Assign More",
     "dupTitle": "ℹ️ Already Assigned",
-    "dupBody": "Some or all subjects were already assigned to this teacher."
+    "dupBody": "Some or all subjects were already assigned to this teacher.",
+    "stepOf": "Step {{step}} of {{total}}",
+    "currentlyAssigned": {
+      "one": "Currently assigned to {{count}} subject",
+      "other": "Currently assigned to {{count}} subjects"
+    },
+    "reviewSelection": {
+      "one": "Review {{count}} selection",
+      "other": "Review {{count}} selections"
+    }
   },
   "uploadNotes": {
     "typeSyllabus": "Syllabus",
@@ -4172,7 +4237,13 @@
     "teacherNone": "Not assigned",
     "teacherPick": "Choose class teacher",
     "teacherHint": "The teacher responsible for this class.",
-    "teacherEmpty": "No teachers have synced to this device yet."
+    "teacherEmpty": "No teachers have synced to this device yet.",
+    "errNameMax": "Class name cannot exceed {{max}} characters.",
+    "removedWithSubjects": {
+      "one": "“{{name}}” and {{count}} subject removed.",
+      "other": "“{{name}}” and {{count}} subjects removed."
+    },
+    "removed": "“{{name}}” has been removed."
   },
   "annAdmin": {
     "fieldTitle": "Title *",
@@ -4296,7 +4367,11 @@
     "daysAgo": "{{count}}d ago",
     "listTitle": "Announcements",
     "filterAll": "All",
-    "deleteFailed": "Failed to delete"
+    "deleteFailed": "Failed to delete",
+    "showingTeacherCount": {
+      "one": "Showing {{count}} teacher announcement",
+      "other": "Showing {{count}} teacher announcements"
+    }
   },
   "annTeacher": {
     "unreadCount": {
@@ -4604,7 +4679,15 @@
     "tryAgain": "Try Again",
     "noClassesFound": "No classes found",
     "allPeriods": "All periods",
-    "selectPeriod": "Select period"
+    "selectPeriod": "Select period",
+    "savedForTeachers": {
+      "one": "Attendance saved for {{count}} teacher.",
+      "other": "Attendance saved for {{count}} teachers."
+    },
+    "savedForStudents": {
+      "one": "Attendance saved for {{count}} student.",
+      "other": "Attendance saved for {{count}} students."
+    }
   },
   "rankTable": {
     "titleGrade": "Grade/Stream Rankings",
@@ -4715,6 +4798,10 @@
     "marksFailed": {
       "one": "1 mark failed to upload — tap Save to try again",
       "other": "{{count}} marks failed to upload — tap Save to try again"
+    },
+    "savedFor": {
+      "one": "Scores saved for {{count}} student.",
+      "other": "Scores saved for {{count}} students."
     }
   },
   "examMonitor": {
@@ -4823,7 +4910,8 @@
     "newPeriod": "New Period",
     "periodName": "Period Name",
     "saveChanges": "Save Changes",
-    "createPeriod": "Create Period"
+    "createPeriod": "Create Period",
+    "unnamedSubject": "Unnamed subject"
   },
   "periodsAdmin": {
     "title": "Periods",
@@ -4950,7 +5038,24 @@
     "rangeToday": "Today",
     "rangeThisMonth": "This Month",
     "rangeLastMonth": "Last Month",
-    "rangeLast3": "Last 3 Mo"
+    "rangeLast3": "Last 3 Mo",
+    "savedFor": {
+      "one": "Saved for {{count}} student.",
+      "other": "Saved for {{count}} students."
+    },
+    "notMarked": {
+      "one": "{{count}} student not marked.",
+      "other": "{{count}} students not marked."
+    },
+    "unmarkedConfirm": {
+      "one": "{{count}} student has not been marked.\nSave anyway?",
+      "other": "{{count}} students have not been marked.\nSave anyway?"
+    },
+    "classReport": "{{className}} report",
+    "myClassesToday": {
+      "one": "My Classes Today — {{count}} class",
+      "other": "My Classes Today — {{count}} classes"
+    }
   },
   "subjectsList": {
     "loading": "Loading subjects…",
@@ -4966,7 +5071,9 @@
     "delBody": "This may affect teacher assignments and timetable entries.",
     "deletedTitle": "Deleted",
     "errDelete": "Failed to delete subject",
-    "errTitle": "Error"
+    "errTitle": "Error",
+    "removedBody": "“{{name}}” has been removed.",
+    "allWithCount": "All subjects ({{count}})"
   },
   "templatesList": {
     "loading": "Loading templates…",
@@ -4988,11 +5095,21 @@
     "layoutPreview": "Layout Preview",
     "previewNote1": "Showing layout only — placeholders are still visible.",
     "previewNote2": "Open with a real student to see filled data.",
-    "setDefaultBody": "Use \"{{name}}\" as the default template for all reports?"
+    "setDefaultBody": "Use \"{{name}}\" as the default template for all reports?",
+    "deleteBody": "Delete “{{name}}”? This cannot be undone.",
+    "version": "Version {{version}}"
   },
   "teacherLayout": {
     "uploadsDone": "Uploads Complete",
-    "uploadsFailed": "Some Uploads Failed"
+    "uploadsFailed": "Some Uploads Failed",
+    "syncedCount": {
+      "one": "{{count}} queued upload synced successfully.",
+      "other": "{{count}} queued uploads synced successfully."
+    },
+    "failedCount": {
+      "one": "{{count}} upload could not be synced. It will retry next time.",
+      "other": "{{count}} uploads could not be synced. They will retry next time."
+    }
   },
   "syncScreens": {
     "listTitle": "Sync Overwrites",
@@ -5058,7 +5175,27 @@
     "kExamSubject": "Exam subject",
     "kExamStatus": "Exam status",
     "kMarksSubmission": "Marks submission",
-    "kChange": "Change"
+    "kChange": "Change",
+    "markAllSeenBody": {
+      "one": "Mark {{count}} overwrite as seen? This will clear the dashboard alert.",
+      "other": "Mark all {{count}} overwrites as seen? This will clear the dashboard alert."
+    },
+    "discardBody": "“{{label}}” will be permanently removed from the upload queue. The change stays on this device but will never reach the server.",
+    "attemptCount": {
+      "one": "{{count}} attempt",
+      "other": "{{count}} attempts"
+    },
+    "waitingCount": "{{count}} waiting",
+    "fileCount": {
+      "one": "{{count}} file",
+      "other": "{{count}} files"
+    },
+    "conflictCount": {
+      "one": "{{count}} conflict",
+      "other": "{{count}} conflicts"
+    },
+    "failedCount": "{{count}} failed",
+    "retryAll": "Retry all {{count}}"
   },
   "assignList": {
     "title": "Teacher Assignments",
@@ -5103,7 +5240,27 @@
     "detailEmptySub": "This teacher has no subject assignments yet",
     "detailLoadFailed": "Failed to load assignments. Pull down to retry.",
     "invalidTeacherId": "Invalid teacher ID. Please go back and try again.",
-    "errTitle": "Error"
+    "errTitle": "Error",
+    "removeBody": "Remove {{teacher}} from {{subject}} in {{class}}?",
+    "thisTeacher": "this teacher",
+    "thisSubject": "this subject",
+    "thisClass": "this class",
+    "subjectsAssignedCount": {
+      "one": "{{count}} subject assigned",
+      "other": "{{count}} subjects assigned"
+    },
+    "teachersAssignedCount": {
+      "one": "{{count}} teacher assigned",
+      "other": "{{count}} teachers assigned"
+    },
+    "unassignedTeacherCount": {
+      "one": "{{count}} teacher without any subject assignment",
+      "other": "{{count}} teachers without any subject assignment"
+    },
+    "assignmentCount": {
+      "one": "{{count}} assignment",
+      "other": "{{count}} assignments"
+    }
   },
   "studentQuiz": {
     "listTitle": "Quizzes",
@@ -5176,7 +5333,24 @@
     "correct": "Correct",
     "incorrect": "Incorrect",
     "review": "Review",
-    "hide": "Hide"
+    "hide": "Hide",
+    "passMarkValue": "Pass mark: {{value}}%",
+    "reviewAnswers": "Review answers",
+    "hideAnswers": "Hide answers",
+    "unansweredConfirm": {
+      "one": "You have {{count}} unanswered question. Are you sure you want to submit?",
+      "other": "You have {{count}} unanswered questions. Are you sure you want to submit?"
+    },
+    "pointCount": {
+      "one": "{{count}} pt",
+      "other": "{{count}} pts"
+    },
+    "attemptsLeft": {
+      "one": "{{count}} attempt left",
+      "other": "{{count}} attempts left"
+    },
+    "attemptN": "Attempt {{n}}",
+    "best": "Best: {{value}}%"
   },
   "studentHw": {
     "listTitle": "Homework",
@@ -5223,7 +5397,19 @@
     "tapClosed": "Deadline passed — no submissions",
     "viewArrow": "View →",
     "emptySub": "Your teacher hasn't assigned any homework yet",
-    "emptyFilterSub": "Check the other filters or pull to refresh"
+    "emptyFilterSub": "Check the other filters or pull to refresh",
+    "emptyNone": "No homework yet",
+    "emptyFiltered": "No homework matches this filter",
+    "submittedOn": "Submitted {{date}}",
+    "charCount": {
+      "one": "{{count}} character",
+      "other": "{{count}} characters"
+    },
+    "assignmentCount": {
+      "one": "{{count}} assignment",
+      "other": "{{count}} assignments"
+    },
+    "pendingSubmitted": "{{pending}} pending · {{submitted}} submitted"
   },
   "studentSubj": {
     "loading": "Loading content…",
@@ -5323,7 +5509,18 @@
     "stepOf": "Step {{current}} of {{total}} — {{name}}",
     "statusTitle": "{{action}} Content",
     "statusBody": "{{action}} \"{{title}}\"?",
-    "statusFailed": "Could not {{action}} this item."
+    "statusFailed": "Could not {{action}} this item.",
+    "fileCount": {
+      "one": "{{count}} file",
+      "other": "{{count}} files"
+    },
+    "itemCount": {
+      "one": "{{count}} item",
+      "other": "{{count}} items"
+    },
+    "forQuery": "for “{{query}}”",
+    "maxMb": "Max {{size}} MB",
+    "noResultsFor": "No results for “{{query}}”"
   },
   "teacherExams": {
     "title": "My Exams",
@@ -5460,7 +5657,28 @@
     "hPeriods": "Periods",
     "hNoTimetable": "No Timetable",
     "hConflicts": "Conflicts",
-    "hNoSubjects": "No Subjects"
+    "hNoSubjects": "No Subjects",
+    "alerts": "Alerts",
+    "alertStaleApps": {
+      "one": "{{count}} application pending over 3 days",
+      "other": "{{count}} applications pending over 3 days"
+    },
+    "alertUnassignedTeachers": {
+      "one": "{{count}} teacher not yet assigned",
+      "other": "{{count}} teachers not yet assigned"
+    },
+    "alertClassesNoSubjects": {
+      "one": "{{count}} class missing subjects",
+      "other": "{{count}} classes missing subjects"
+    },
+    "alertConflicts": {
+      "one": "{{count}} timetable conflict detected",
+      "other": "{{count}} timetable conflicts detected"
+    },
+    "alertNoTimetable": {
+      "one": "{{count}} class without timetable ({{pct}}%)",
+      "other": "{{count}} classes without timetable ({{pct}}%)"
+    }
   },
   "sync": {
     "offlineSession": "Signed in offline — sign in again while connected to upload",

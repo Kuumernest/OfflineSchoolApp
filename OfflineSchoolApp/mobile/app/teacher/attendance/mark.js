@@ -297,9 +297,9 @@ export default function TeacherMarkAttendanceScreen() {
 
         Alert.alert(
           t("attTeacher.savedTitle"),
-          `Saved for ${records.length} student${records.length !== 1 ? "s" : ""}.` +
+          t("attTeacher.savedFor", { count: records.length }) +
           (unmarked > 0
-            ? `\n${unmarked} student${unmarked !== 1 ? "s" : ""} not marked.`
+            ? `\n${t("attTeacher.notMarked", { count: unmarked })}`
             : ""),
           [{ text: "OK", onPress: () => router.back() }]
         );
@@ -313,7 +313,7 @@ export default function TeacherMarkAttendanceScreen() {
     if (unmarked > 0) {
       Alert.alert(
         t("attTeacher.unmarkedTitle"),
-        `${unmarked} student${unmarked !== 1 ? "s" : ""} have not been marked.\nSave anyway?`,
+        t("attTeacher.unmarkedConfirm", { count: unmarked }),
         [
           { text: t("common.cancel"),      style: "cancel" },
           { text: t("attTeacher.saveAnyway"), onPress: doSave  },

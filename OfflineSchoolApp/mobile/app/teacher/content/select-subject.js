@@ -342,8 +342,7 @@ function SelectSubjectPage() {
                 <Text
                   style={[styles.selectionChipText, { color: "#059669" }]}
                 >
-                  {selectedClasses.length} class
-                  {selectedClasses.length > 1 ? "es" : ""}
+                  {t("academic.classCount", { count: selectedClasses.length })}
                 </Text>
               </View>
             </>
@@ -382,7 +381,7 @@ function SelectSubjectPage() {
                 </View>
                 <Text style={styles.typeLabel}>{t(type.labelKey)}</Text>
                 <Text style={styles.typeHint}>{type.hint}</Text>
-                <Text style={styles.typeSize}>Max {type.maxMB} MB</Text>
+                <Text style={styles.typeSize}>{t("teacherContent.maxMb", { size: type.maxMB })}</Text>
                 <View
                   style={[styles.typeArrow, { backgroundColor: type.bg }]}
                 >
@@ -450,7 +449,7 @@ function SelectSubjectPage() {
               </Text>
               <Text style={styles.emptySubtitle}>
                 {subjectSearch
-                  ? `No results for "${subjectSearch}"`
+                  ? t("teacherContent.noResultsFor", { query: subjectSearch })
                   : t("teacherContent.noSubjectsSub")}
               </Text>
             </View>
@@ -461,8 +460,7 @@ function SelectSubjectPage() {
               keyboardShouldPersistTaps="handled"
             >
               <Text style={styles.listHeading}>
-                {filteredSubjects.length} subject
-                {filteredSubjects.length !== 1 ? "s" : ""} assigned
+                {t("assignList.subjectsAssignedCount", { count: filteredSubjects.length })}
               </Text>
 
               {filteredSubjects.map((subject) => (
@@ -480,8 +478,7 @@ function SelectSubjectPage() {
                       {subject.subjectName}
                     </Text>
                     <Text style={styles.subjectMeta}>
-                      {subject.classes?.length || 0} class
-                      {(subject.classes?.length || 0) !== 1 ? "es" : ""}
+                      {t("academic.classCount", { count: subject.classes?.length || 0 })}
                       {subject.classes?.length > 0
                         ? `  ·  ${subject.classes
                             .slice(0, 2)
@@ -569,7 +566,7 @@ function SelectSubjectPage() {
                   <Text style={styles.selectAllText}>
                     {allClassesSelected
                       ? t("teacherContent.deselectAll")
-                      : `Select all (${availableClasses.length})`}
+                      : t("assignWork.selectAll", { count: availableClasses.length })}
                   </Text>
                 </TouchableOpacity>
 
@@ -642,8 +639,7 @@ function SelectSubjectPage() {
                 <Text style={styles.continueInfoSub}>
                   {selectedType ? t(selectedType.labelKey) : ""}{"  ·  "}{selectedSubject?.subjectName}
                   {"\n"}
-                  {selectedClasses.length} class
-                  {selectedClasses.length > 1 ? "es" : ""} selected
+                  {t("announceCreate.classesSelected", { count: selectedClasses.length })}
                 </Text>
               </View>
               <TouchableOpacity

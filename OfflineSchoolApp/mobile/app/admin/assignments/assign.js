@@ -450,7 +450,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
           <Ionicons name={step.icon} size={22} color="#4F46E5" />
         </View>
         <View>
-          <Text style={styles.stepInfoLabel}>Step {step.id} of 4</Text>
+          <Text style={styles.stepInfoLabel}>{t("assignWork.stepOf", { step: step.id, total: 4 })}</Text>
           <Text style={styles.stepInfoTitle}>{t(step.titleKey)}</Text>
         </View>
       </View>
@@ -513,8 +513,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
         <View style={styles.existingBanner}>
           <Ionicons name="information-circle" size={18} color="#2563EB" />
           <Text style={styles.existingBannerText}>
-            Currently assigned to {existingAssignments.length} subject
-            {existingAssignments.length !== 1 ? "s" : ""}
+            {t("assignWork.currentlyAssigned", { count: existingAssignments.length })}
           </Text>
         </View>
       )}
@@ -613,7 +612,7 @@ const refreshExistingAssignments = useCallback(async (teacherId) => {
               activeOpacity={0.8}
             >
               <Text style={styles.proceedButtonText}>
-                Review {selectedSubjects.length} Selection{selectedSubjects.length !== 1 ? "s" : ""}
+                {t("assignWork.reviewSelection", { count: selectedSubjects.length })}
               </Text>
               <Ionicons name="arrow-forward" size={18} color="#FFFFFF" />
             </TouchableOpacity>

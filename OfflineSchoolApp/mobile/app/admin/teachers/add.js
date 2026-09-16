@@ -57,7 +57,7 @@ export default function AddTeacherScreen() {
     } else if (trimName.length < 2) {
       next.name = t("teachersAdd.errNameShort");
     } else if (trimName.length > MAX_NAME) {
-      next.name = `Name cannot exceed ${MAX_NAME} characters.`;
+      next.name = t("teachersAdd.errNameMax", { max: MAX_NAME });
     }
 
     if (!trimEmail) {
@@ -192,8 +192,8 @@ export default function AddTeacherScreen() {
             <Text style={styles.successMessage}>
               {success.emailSent
                 ? success.message ||
-                  `"${success.teacherName}" has been added. A welcome email with login instructions has been sent to ${success.teacherEmail}.`
-                : `Teacher created, but the welcome email failed. Share the credentials below manually.`
+                  t("teachersAdd.addedEmailed", { name: success.teacherName, email: success.teacherEmail })
+                : t("teachersAdd.addedEmailFailed")
               }
             </Text>
 
@@ -225,7 +225,7 @@ export default function AddTeacherScreen() {
                         color="#4F46E5"
                       />
                       <Text style={styles.credCopyText}>
-                        {copied ? t("teachersAdd.copied") : "Copy"}
+                        {copied ? t("teachersAdd.copied") : t("common.copy")}
                       </Text>
                     </TouchableOpacity>
                   </View>

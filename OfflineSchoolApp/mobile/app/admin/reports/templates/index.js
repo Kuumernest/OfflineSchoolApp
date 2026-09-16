@@ -135,7 +135,7 @@ export default function TemplatesScreen() {
     }
     Alert.alert(
       t("templatesList.deleteTitle"),
-      `Delete "${name}"? This cannot be undone.`,
+      t("templatesList.deleteBody", { name }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {
@@ -280,7 +280,7 @@ function TemplateCard({
             )}
           </View>
           <Text style={s.cardMeta}>
-            Version {item.version || 1}
+            {t("templatesList.version", { version: item.version || 1 })}
             {item.variables?.length
               ? `  •  ${item.variables.length} placeholders`
               : ""}

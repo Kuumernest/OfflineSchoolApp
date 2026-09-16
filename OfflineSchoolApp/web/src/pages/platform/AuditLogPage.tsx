@@ -5,6 +5,7 @@
 import { useState }             from "react";
 import { useQuery }             from "@tanstack/react-query";
 import { useTranslation }       from "react-i18next";
+import { roleLabel } from "@/utils/roleLabel";
 import { Link }                 from "react-router-dom";
 import { ScrollText }           from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
@@ -128,7 +129,7 @@ export default function AuditLogPage() {
                     </Td>
                     <Td>
                       <div>{e.actorName ?? e.actorId ?? "—"}</div>
-                      {e.actorRole ? <div className="text-xs text-ink-muted">{e.actorRole.replace("_", " ")}</div> : null}
+                      {e.actorRole ? <div className="text-xs text-ink-muted">{roleLabel(e.actorRole, t)}</div> : null}
                     </Td>
                     <Td><Details e={e} /></Td>
                   </Tr>

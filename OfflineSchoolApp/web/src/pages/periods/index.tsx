@@ -122,7 +122,7 @@ export default function PeriodsPage() {
         : createPeriod(payload);
     },
     onSuccess: () => {
-      toast({ title: editing ? t("periods.updated") : "Period added", kind: "success" });
+      toast({ title: editing ? t("periods.updated") : t("periods.added"), kind: "success" });
       closeModal();
       invalidate();
     },
@@ -188,11 +188,8 @@ export default function PeriodsPage() {
 
   const askRemove = async (p: Period) => {
     const ok = await confirm({
-      title:   `Remove "${p.name}"?`,
-      message:
-        "Any timetable lesson scheduled in this period will lose its slot. " +
-        "If you only want to take it out of use for now, hide it instead — " +
-        "that keeps the existing timetable intact.",
+      title:   t("periods.removeTitle", { name: p.name }),
+      message: t("periods.removeBody"),
       confirmLabel: t("periods.remove"),
       kind:         "danger",
     });
@@ -250,7 +247,7 @@ export default function PeriodsPage() {
               : <Eye className="w-4 h-4" />}
             onClick={() => setShowInactive((v) => !v)}
           >
-            {showInactive ? t("periods.hideInactive") : "Show inactive"}
+            {showInactive ? t("periods.hideInactive") : t("periods.showInactive")}
           </Button>
           <Button icon={<Plus className="w-4 h-4" />} onClick={openCreate}>
             {t("periods.add")}
@@ -350,7 +347,7 @@ export default function PeriodsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1.5">
                         <Badge
-                          label={p.isActive ? t("common.inUse") : "Hidden"}
+                          label={p.isActive ? t("common.inUse") : t("periods.hidden")}
                           variant={p.isActive ? "success" : "default"}
                         />
                         {p.isBreak && <Badge label={t("timetable.break")} variant="warning" />}
@@ -360,7 +357,7 @@ export default function PeriodsPage() {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
                         <IconAction
-                          title={p.isActive ? t("periods.hideFromTable") : "Put back in use"}
+                          title={p.isActive ? t("periods.hideFromTable") : t("periods.putBack")}
                           onClick={() => toggleMutation.mutate(p._id)}
                         >
                           {p.isActive
@@ -442,7 +439,7 @@ export default function PeriodsPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saveMutation.isPending}>
-              {editing ? t("common.saveChanges") : "Add period"}
+              {editing ? t("common.saveChanges") : t("periods.add")}
             </Button>
           </div>
         </form>

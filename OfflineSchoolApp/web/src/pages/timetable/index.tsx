@@ -178,9 +178,9 @@ export default function TimetablePage() {
     if (err instanceof TimetableConflictError) {
       const { kind, message } = err.conflict;
       toast({
-        title:   kind === "version" ? t("timetable.someoneElseFirst") : "That clashes",
+        title:   kind === "version" ? t("timetable.someoneElseFirst") : t("timetable.clashes"),
         message: kind === "version"
-          ? `${message} The grid has been refreshed with their version.`
+          ? t("timetable.refreshedWithTheirs", { message })
           : message,
         kind:    "warning",
       });
@@ -261,7 +261,7 @@ export default function TimetablePage() {
     if (slotAt(grid, day, periodId)) {
       toast({
         title:   t("timetable.periodTaken"),
-        message: "Remove the lesson already there first, then move this one in.",
+        message: t("timetable.periodTakenBody"),
         kind:    "warning",
       });
       return;
@@ -296,7 +296,7 @@ export default function TimetablePage() {
   }
 
   const classOptions = [
-    { value: "", label: "Choose a class…" },
+    { value: "", label: t("students.chooseClass") },
     ...classes.map((c) => ({
       value: c.id ?? c._id ?? "",
       label: [c.name, c.section].filter(Boolean).join(" "),

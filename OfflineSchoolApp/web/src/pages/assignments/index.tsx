@@ -167,12 +167,12 @@ export default function AssignmentsPage() {
             <p className="mt-3 text-sm font-medium text-gray-700">
               {summaries.length === 0
                 ? t("assignments.none")
-                : "No teacher matches that search"}
+                : t("assignments.noTeacherHit")}
             </p>
             <p className="mt-1 text-sm text-gray-500">
               {summaries.length === 0
                 ? t("assignments.firstOne")
-                : "Try a different name."}
+                : t("common.tryDifferent")}
             </p>
             {summaries.length === 0 && (
               <Button

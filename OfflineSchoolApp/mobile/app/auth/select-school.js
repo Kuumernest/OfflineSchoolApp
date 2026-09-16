@@ -264,7 +264,7 @@ export default function SelectSchoolScreen() {
           let   msg;
           try   { msg = JSON.parse(body)?.message; }
           catch { msg = body; }
-          throw new Error(msg || `Failed to load schools (${res.status})`);
+          throw new Error(msg || t("selectSchool.errLoad", { status: res.status }));
         }
 
         const data = await res.json();

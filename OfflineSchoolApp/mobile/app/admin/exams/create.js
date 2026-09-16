@@ -472,7 +472,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
 
   const handleSelectClass = useCallback((cls) => {
     const classId   = String(cls._id || cls.id);
-    const className = cls.name || cls.className || "Class";
+    const className = cls.name || cls.className || t("academic.class");
     setSelectedClass({ id: classId, name: className });
     setSearch("");
   }, []);
@@ -482,7 +482,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const classId   = selectedClass.id;
     const className = selectedClass.name;
     const subjectId = String(subject._id || subject.id);
-    const subName   = subject.name || subject.subjectName || "Subject";
+    const subName   = subject.name || subject.subjectName || t("academic.subject");
 
     setAssignments((prev) => {
       const clsEntry = prev[classId] || { className, subjects: {} };

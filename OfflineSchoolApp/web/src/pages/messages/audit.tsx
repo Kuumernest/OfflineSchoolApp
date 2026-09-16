@@ -31,6 +31,7 @@ import {
 } from "@/services/message.service";
 import { useUser } from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
+import { roleLabel } from "@/utils/roleLabel";
 
 import { cn } from "@/utils/cn";
 import { summariseParticipants, participantName } from "./participants";
@@ -168,7 +169,7 @@ export default function MessageAuditPage() {
                       {(m.sender ? participantName(m.sender, t) : "") || t("messages.unknownSender")}
                     </div>
                     <div className="text-xs text-gray-500">
-                      {m.sender?.role || m.sender?.kind}
+                      {m.sender?.role ? roleLabel(m.sender.role, t) : m.sender?.kind}
                     </div>
                   </td>
                   <td className="px-3 py-2 text-xs text-gray-500">

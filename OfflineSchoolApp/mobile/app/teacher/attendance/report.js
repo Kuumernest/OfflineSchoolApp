@@ -150,7 +150,7 @@ const SummaryBar = ({ students }) => {
     <View style={summaryS.card}>
       <View style={summaryS.header}>
         <Text style={summaryS.title}>
-          {students.length} Student{students.length !== 1 ? "s" : ""}
+          {t("academic.studentCount", { count: students.length })}
         </Text>
         <View style={[summaryS.badge, { backgroundColor: color + "15" }]}>
           <Text style={[summaryS.badgeText, { color }]}>
@@ -577,11 +577,10 @@ export default function TeacherAttendanceReportScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {className} Report
+            {t("attTeacher.classReport", { className })}
           </Text>
           <Text style={styles.headerSub}>
-            {selectedPreset.label} · {filtered.length} student
-            {filtered.length !== 1 ? "s" : ""}
+            {selectedPreset.label} · {t("academic.studentCount", { count: filtered.length })}
           </Text>
         </View>
 

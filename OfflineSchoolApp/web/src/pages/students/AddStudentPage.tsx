@@ -60,10 +60,12 @@ const EMPTY: FormState = {
   gender: "", dateOfBirth: "", address: "", guardianName: "", guardianPhone: "",
 };
 
+// Keys, not labels: this sits at module scope where there is no translator,
+// and the select reads it through t() at render time.
 const GENDERS = [
-  { value: "male",   label: "Male" },
-  { value: "female", label: "Female" },
-  { value: "other",  label: "Other" },
+  { value: "male",   labelKey: "common.male" },
+  { value: "female", labelKey: "common.female" },
+  { value: "other",  labelKey: "common.other" },
 ];
 
 interface EnrollResult {
@@ -164,12 +166,12 @@ export default function AddStudentPage() {
               <Check className="w-6 h-6 text-emerald-600" />
             </div>
             <h2 className="mt-4 text-base font-semibold text-gray-900">
-              {result.name} is enrolled
+              {t("students.isEnrolled", { name: result.name })}
             </h2>
             <p className="mt-1 text-sm text-gray-500">
               {result.emailSent
                 ? t("students.emailedThem")
-                : "No email was sent — pass these details on yourself."}
+                : t("students.noEmailSent")}
             </p>
           </div>
 
@@ -180,13 +182,13 @@ export default function AddStudentPage() {
               icon={IdCard}
               label={t("academic.enrollmentNo")}
               value={result.enrollmentNo}
-              hint="This is what they sign in with — not their email."
+              hint={t("students.enrollmentNoHint")}
             />
             <Credential
               icon={KeyRound}
               label={t("students.tempPassword")}
               value={result.tempPassword}
-              hint="They'll be asked to choose their own on first sign-in."
+              hint={t("students.tempPasswordHint")}
             />
           </div>
 
@@ -213,7 +215,7 @@ export default function AddStudentPage() {
                 ? result.warning
                 : result.emailSent
                   ? t("students.emailedThem2")
-                  : "Write these down before leaving this page — they are not shown again, and recovering them means resetting the account."}
+                  : t("students.writeDown")}
             </p>
           </div>
 
@@ -260,7 +262,7 @@ export default function AddStudentPage() {
         <div className="flex items-start gap-2.5 px-4 py-3 rounded-lg bg-amber-50 border border-amber-200">
           <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <p className="text-sm text-amber-800">
-            There are no active classes to enroll into.{" "}
+            {t("students.noActiveClassesEnroll")}{" "}
             <Link to="/classes" className="underline font-medium">{t("students.addAClass")}</Link>{" "}
             first.
           </p>
@@ -291,7 +293,7 @@ export default function AddStudentPage() {
             </FormField>
             <FormField label={t("common.gender")}>
               <SelectField
-                options={GENDERS}
+                options={GENDERS.map((g) => ({ value: g.value, label: t(g.labelKey) }))}
                 placeholder={t("common.preferNotToSay")}
                 value={form.gender}
                 onChange={set("gender")}

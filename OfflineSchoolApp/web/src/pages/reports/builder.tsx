@@ -219,7 +219,7 @@ const buildStarterHtml = (t: (key: string) => string) => `<div style="font-famil
 
   <!-- Attendance -->
   <h3 style="font-size: 13px; border-bottom: 1px solid #E5E7EB; padding-bottom: 4px; margin-bottom: 8px;">
-    Attendance
+    ${t("builder.tplAttendance")}
   </h3>
   <div style="display: flex; gap: 12px; margin-bottom: 16px;">
     <div style="flex: 1; background: #F9FAFB; border-radius: 6px; padding: 8px 12px; font-size: 12px;">
@@ -266,7 +266,7 @@ const buildStarterHtml = (t: (key: string) => string) => `<div style="font-famil
     <div>{{qr_code}}</div>
     <div style="text-align: right; font-size: 11px; color: #6B7280;">
       <p style="margin: 0;">${t("builder.tplNextTerm")} <strong>{{next_term_date}}</strong></p>
-      <p style="margin: 4px 0 0;">Report Generated: {{report_date}}</p>
+      <p style="margin: 4px 0 0;">${t("builder.tplGenerated")} {{report_date}}</p>
     </div>
   </div>
 

@@ -664,7 +664,7 @@ export default function ParentPortalPage() {
                             )}
                           </div>
                           <p className="text-sm font-medium text-ink truncate">
-                            {p.subjectName ?? "General"}
+                            {p.subjectName ?? t("portal.general")}
                           </p>
                         </div>
                         <Badge
@@ -704,7 +704,7 @@ export default function ParentPortalPage() {
                         <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-ink truncate">
-                              {s.subjectName ?? "General"}
+                              {s.subjectName ?? t("portal.general")}
                             </p>
                             <p className="text-[11px] text-ink-faint">
                               {s.present}P · {s.absent}A · {s.late}L · {s.excused}E

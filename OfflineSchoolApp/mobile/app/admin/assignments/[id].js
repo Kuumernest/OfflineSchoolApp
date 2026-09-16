@@ -340,8 +340,8 @@ export default function TeacherAssignmentDetail() {
             {teacherInfo?.name || fallbackTeacherName || t("assignList.teacher")}
           </Text>
           <Text style={styles.headerSubtitle}>
-            {assignments.length} assignment{assignments.length !== 1 ? "s" : ""}{" "}
-            · {classCount} class{classCount !== 1 ? "es" : ""}
+            {t("assignList.assignmentCount", { count: assignments.length })}{" "}
+            · {t("academic.classCount", { count: classCount })}
           </Text>
         </View>
         <TouchableOpacity

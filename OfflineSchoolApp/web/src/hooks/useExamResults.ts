@@ -95,7 +95,7 @@ export const useProcessResults = () => {
       toast({ title: t("results.toastCalculated"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to process results", kind: "error" }),
+      toast({ title: e.message || t("exams.errProcessResults"), kind: "error" }),
   });
 };
 
@@ -119,7 +119,7 @@ export const usePublishResults = () => {
       toast({ title: t("results.toastPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to publish results", kind: "error" }),
+      toast({ title: e.message || t("exams.errPublishResults"), kind: "error" }),
   });
 };
 
@@ -190,7 +190,7 @@ export const useComputeTermResults = () => {
       toast({ title: t("academicStructure.termComputed"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to compute term results", kind: "error" }),
+      toast({ title: e.message || t("exams.errComputeTerm"), kind: "error" }),
   });
 };
 
@@ -210,7 +210,7 @@ export const usePublishTermResults = () => {
       toast({ title: t("academicStructure.termPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to publish term results", kind: "error" }),
+      toast({ title: e.message || t("exams.errPublishTerm"), kind: "error" }),
   });
 };
 
@@ -252,7 +252,7 @@ export const useComputeAnnualResults = () => {
       toast({ title: t("academicStructure.annualComputed"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to compute annual results", kind: "error" }),
+      toast({ title: e.message || t("exams.errComputeAnnual"), kind: "error" }),
   });
 };
 
@@ -272,6 +272,6 @@ export const usePublishAnnualResults = () => {
       toast({ title: t("academicStructure.annualPublished"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to publish annual results", kind: "error" }),
+      toast({ title: e.message || t("exams.errPublishAnnual"), kind: "error" }),
   });
 };

@@ -497,7 +497,7 @@ export default function AddSubjectScreen() {
                           {cls.name}
                         </Text>
                         {cls.level && (
-                          <Text style={styles.classLevel}>Level {cls.level}</Text>
+                          <Text style={styles.classLevel}>{t("common.level")} {cls.level}</Text>
                         )}
                       </TouchableOpacity>
                     );
@@ -604,8 +604,7 @@ export default function AddSubjectScreen() {
               <>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={styles.submitText}>
-                  Creating in {form.classIds.length}{" "}
-                  {form.classIds.length === 1 ? "class" : "classes"}…
+                  {t("subjectsAdd.creatingIn", { count: form.classIds.length })}
                 </Text>
               </>
             ) : (

@@ -111,7 +111,13 @@
     "deleting": "Suppression…",
     "stale": "En attente depuis longtemps",
     "inUse": "Utilisé",
-    "removing": "Retrait…"
+    "removing": "Retrait…",
+    "other": "Autre",
+    "unknownDate": "Date inconnue",
+    "unknownError": "Erreur inconnue",
+    "notProvided": "Non renseigné",
+    "notSpecified": "Non précisé",
+    "send": "Envoyer"
   },
   "flow": {
     "title": "Déroulement des résultats",
@@ -228,7 +234,9 @@
     "absent": "Absent",
     "late": "En retard",
     "excused": "Excusé",
-    "dateOfBirthPh": "AAAA-MM-JJ"
+    "dateOfBirthPh": "AAAA-MM-JJ",
+    "subjectCount": "{{count}} matière",
+    "subjectCount_other": "{{count}} matières"
   },
   "results": {
     "published": "Publié",
@@ -475,7 +483,8 @@
     "copyright": "Système de gestion scolaire © {{year}}",
     "errIdentifierRequired": "L'adresse e-mail ou le matricule est requis",
     "errPasswordRequired": "Le mot de passe est requis",
-    "forgotten": "Mot de passe oublié ? Contactez votre administrateur système."
+    "forgotten": "Mot de passe oublié ? Contactez votre administrateur système.",
+    "forgottenStudent": "Mot de passe oublié ? Demandez à votre professeur principal ou à l'administrateur de l'établissement de le réinitialiser."
   },
   "changePassword": {
     "title": "Définir un nouveau mot de passe",
@@ -540,7 +549,15 @@
     "adjustFilters": "Essayez d'ajuster vos filtres",
     "directJoinHint": "Pour un élève inscrit directement. Les candidatures reçues via le formulaire public sont traitées dans",
     "noActiveClasses": "Aucune classe active. Créez une classe avant de valider.",
-    "generatedOnSave": "Un matricule et un mot de passe temporaire sont générés à l'enregistrement."
+    "generatedOnSave": "Un matricule et un mot de passe temporaire sont générés à l'enregistrement.",
+    "isEnrolled": "Inscription de {{name}} enregistrée",
+    "noEmailSent": "Aucun e-mail n'a été envoyé : transmettez ces informations vous-même.",
+    "enrollmentNoHint": "C'est avec ce numéro que l'élève se connecte, pas avec son e-mail.",
+    "tempPasswordHint": "Un mot de passe personnel sera demandé à la première connexion.",
+    "writeDown": "Notez ces informations avant de quitter la page : elles ne seront plus affichées, et les retrouver impose de réinitialiser le compte.",
+    "noActiveClassesEnroll": "Aucune classe active dans laquelle inscrire l'élève.",
+    "firstOne": "Ajoutez votre premier élève pour commencer",
+    "unassignedClass": "Sans classe"
   },
   "teachers": {
     "title": "Enseignants",
@@ -578,7 +595,9 @@
     "notFound": "Enseignant introuvable",
     "noId": "Aucun enseignant n'a été indiqué.",
     "none": "Aucun enseignant",
-    "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières."
+    "firstOne": "Ajoutez un enseignant pour lui créer un compte et lui affecter des matières.",
+    "noneMatch": "Aucun résultat pour cette recherche",
+    "searchPageOnly": "La recherche ne porte que sur la page affichée : essayez une autre page ou effacez le filtre."
   },
   "subjects": {
     "title": "Matières",
@@ -616,7 +635,13 @@
     "noneInClass": "Aucune matière dans cette classe. Ajoutez-en une pour commencer.",
     "deleteTitle": "Supprimer la matière",
     "searchPh": "Rechercher des matières…",
-    "multiClassHint": "Choisissez plusieurs classes pour créer cette matière dans toutes à la fois."
+    "multiClassHint": "Choisissez plusieurs classes pour créer cette matière dans toutes à la fois.",
+    "unassigned": "Non affectées",
+    "errDelete": "Échec de la suppression de la matière",
+    "unassignedCount": "{{count}} non affectée",
+    "unassignedCount_other": "{{count}} non affectées",
+    "allWithCount": "Toutes les matières ({{count}})",
+    "deleteBody": "Supprimer définitivement « {{name}} » de {{className}} ?"
   },
   "classes": {
     "classTeacher": "Professeur titulaire",
@@ -644,7 +669,11 @@
     "deleteTitle": "Supprimer la classe",
     "pageTitle": "Classes et matières",
     "pageBlurb": "Gérez les classes et les matières de votre établissement",
-    "searchPh": "Rechercher des classes…"
+    "searchPh": "Rechercher des classes…",
+    "noLongerOnStaff": "{{name}} (ne fait plus partie du personnel)",
+    "currentFormMaster": "Professeur principal actuel",
+    "deleteConfirmBody": "Voulez-vous vraiment supprimer « {{name}} » ?",
+    "viewSubjectsFor": "Voir les matières de {{name}}"
   },
   "attendance": {
     "title": "Assiduité",
@@ -683,7 +712,14 @@
     "partlySaved": "Enregistré en partie",
     "partlySavedBody": "{{saved}} enregistré(s), {{failed}} rejeté(s)",
     "noActiveStudents": "Cette classe n'a encore aucun élève actif.",
-    "markThenSave": "Faites l'appel, puis enregistrez. Rien n'est envoyé avant."
+    "markThenSave": "Faites l'appel, puis enregistrez. Rien n'est envoyé avant.",
+    "unsavedCount": "{{count}} modification non enregistrée",
+    "unsavedCount_other": "{{count}} modifications non enregistrées",
+    "noUnsaved": "Aucune modification non enregistrée",
+    "noActiveTeachers": "Aucun enseignant actif trouvé pour cet établissement.",
+    "ptsVsWeek": "{{delta}} pts vs semaine",
+    "onRoster": "{{count}} inscrit sur la liste",
+    "onRoster_other": "{{count}} inscrits sur la liste"
   },
   "announcements": {
     "title": "Communiqués",
@@ -715,7 +751,14 @@
     "noneMatch": "Aucun résultat pour ces filtres",
     "clearFilters": "Essayez de retirer les filtres.",
     "unpin": "Détacher",
-    "editOne": "Modifier le communiqué"
+    "editOne": "Modifier le communiqué",
+    "posted": "Communiqué publié",
+    "markedCount": "{{count}} communiqué marqué comme lu.",
+    "markedCount_other": "{{count}} communiqués marqués comme lus.",
+    "nothingUnread": "Il ne restait rien à lire.",
+    "removeBody": "« {{title}} » disparaîtra pour toutes les personnes qui le voient actuellement.",
+    "none": "Aucun communiqué pour le moment",
+    "noneHint": "Publiez-en un pour joindre le personnel, les élèves ou une classe en particulier."
   },
   "timetable": {
     "title": "Emploi du temps",
@@ -771,7 +814,10 @@
     "unknownSubject": "Matière inconnue",
     "unassigned": "Non assigné",
     "noSubjectsYet": "Cette classe n'a encore aucune matière. Ajoutez-les dans",
-    "noSubjectsAfter": "avant de construire son emploi du temps."
+    "noSubjectsAfter": "avant de construire son emploi du temps.",
+    "clashes": "Ça se chevauche",
+    "refreshedWithTheirs": "{{message}} La grille a été actualisée avec leur version.",
+    "periodTakenBody": "Retirez d'abord le cours déjà en place, puis déplacez celui-ci."
   },
   "periods": {
     "title": "La journée scolaire",
@@ -799,7 +845,13 @@
     "remove": "Retirer le créneau",
     "updated": "Créneau mis à jour",
     "hideInactive": "Masquer les inactifs",
-    "hideFromTable": "Masquer dans l'emploi du temps"
+    "hideFromTable": "Masquer dans l'emploi du temps",
+    "added": "Créneau ajouté",
+    "removeTitle": "Retirer « {{name}} » ?",
+    "removeBody": "Tout cours de l'emploi du temps prévu sur ce créneau perdra sa place. Si vous souhaitez seulement le mettre hors service pour l'instant, masquez-le plutôt : l'emploi du temps existant reste intact.",
+    "showInactive": "Afficher les inactifs",
+    "hidden": "Masqué",
+    "putBack": "Remettre en service"
   },
   "exams": {
     "title": "Évaluations et résultats",
@@ -959,7 +1011,21 @@
     "correctPublishedHint": "Ces résultats sont déjà publiés ; les parents ont pu les consulter. Indiquez le motif de la modification.",
     "changeReasonPlaceholder": "ex. : épreuve 2 recorrigée après recours",
     "changeReasonKept": "Conservé avec la modification aussi longtemps que le résultat existe.",
-    "saveWithReason": "Enregistrer la correction"
+    "saveWithReason": "Enregistrer la correction",
+    "errApproveSubmission": "Échec de la validation de la soumission",
+    "errRejectSubmission": "Échec du rejet de la soumission",
+    "errUpdateSubject": "Échec de la mise à jour de la matière",
+    "errSaveScores": "Échec de l'enregistrement des notes",
+    "errProcessResults": "Échec du calcul des résultats",
+    "errPublishResults": "Échec de la publication des résultats",
+    "errComputeTerm": "Échec du calcul des résultats du trimestre",
+    "errPublishTerm": "Échec de la publication des résultats du trimestre",
+    "errComputeAnnual": "Échec du calcul des résultats annuels",
+    "errPublishAnnual": "Échec de la publication des résultats annuels",
+    "errCreate": "Échec de la création de l'examen",
+    "errUpdateStatus": "Échec de la mise à jour du statut",
+    "errUpdate": "Échec de la mise à jour de l'examen",
+    "errDelete": "Échec de la suppression de l'examen"
   },
   "examCreate": {
     "title": "Créer une évaluation",
@@ -997,7 +1063,8 @@
     "sequenceRequired": "Choisissez la séquence à laquelle cet examen appartient",
     "promoSequenceHint": "* Les séquences 5 et 6 peuvent servir d’examens de passage",
     "createFailed": "Impossible de créer l’examen.",
-    "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite"
+    "pickClassesThenSubjects": "Choisissez les classes à gauche, puis cochez les matières à droite",
+    "noSubjectsWarning": "⚠️ Aucune matière affectée. Vous pourrez les ajouter plus tard depuis le détail de l'examen."
   },
   "reportCards": {
     "allStudents": "Les {{count}} élève",
@@ -1074,7 +1141,21 @@
     "rejectConfirm": "Rejeter la demande de {{name}} ? Cette action est irréversible.",
     "approvedNoEmail": "Validé — aucun e-mail envoyé",
     "approvedOffline": "Validé (hors ligne)",
-    "errSelectClass": "Veuillez choisir une classe avant de valider."
+    "errSelectClass": "Veuillez choisir une classe avant de valider.",
+    "noEmail": "Aucun e-mail fourni",
+    "noClassSelected": "Aucune classe choisie",
+    "noGuardian": "Aucun tuteur renseigné",
+    "attachedDocument": "Document joint",
+    "documentN": "Document {{n}}",
+    "approving": "Approbation…",
+    "theSelectedClass": "la classe sélectionnée",
+    "approvedBody": "La candidature de {{name}} a été approuvée et la classe {{className}} lui a été attribuée.",
+    "offlineNote": "Hors ligne : le compte élève sera créé lorsque l'appareil se reconnectera.",
+    "welcomeEmailSent": "Un e-mail de bienvenue avec les instructions de connexion a été envoyé.",
+    "rejectedBody": "La candidature de {{name}} a été refusée.",
+    "loading": "Chargement des candidatures…",
+    "pendingCount": "{{count}} candidature en attente",
+    "pendingCount_other": "{{count}} candidatures en attente"
   },
   "teachersAdd": {
     "title": "Ajouter un enseignant",
@@ -1117,7 +1198,10 @@
     "namePh": "ex. Marie Dupont",
     "emailPh": "ex. marie@ecole.com",
     "loading": "Chargement de l’enseignant…",
-    "subtitle": "Profil de l’enseignant et matières attribuées"
+    "subtitle": "Profil de l’enseignant et matières attribuées",
+    "subjectsAssignedCount": "{{count}} matière affectée",
+    "subjectsAssignedCount_other": "{{count}} matières affectées",
+    "assign": "Affecter"
   },
   "subjectsAdd": {
     "title": "Ajouter une matière",
@@ -1128,7 +1212,9 @@
     "noClasses": "Aucune classe. Créez d'abord une classe.",
     "examples": "Exemples :",
     "namePh": "ex. Mathématiques, Français",
-    "errClassAtLeastOne": "Veuillez choisir au moins une classe."
+    "errClassAtLeastOne": "Veuillez choisir au moins une classe.",
+    "classesHint": "Sélectionnez toutes les classes où cette matière sera enseignée.",
+    "teacherHint": "Facultatif : vous pourrez affecter un enseignant plus tard."
   },
   "subjectsEdit": {
     "title": "Modifier la matière",
@@ -1198,7 +1284,27 @@
     "loading": "Chargement des attributions…",
     "created": "Affectation créée",
     "noTeacherHit": "Aucun enseignant ne correspond à votre recherche.",
-    "firstOne": "Affectez un enseignant à une classe et à une matière pour commencer."
+    "firstOne": "Affectez un enseignant à une classe et à une matière pour commencer.",
+    "stepOf": "Étape {{step}} sur {{total}}",
+    "partialSuccess": "Succès partiel",
+    "assignedTo": "Affectée à",
+    "noTeachers": "Aucun enseignant trouvé.",
+    "currentlyAssigned": "{{count}} matière déjà affectée",
+    "currentlyAssigned_other": "{{count}} matières déjà affectées",
+    "countAssigned": "{{count}} affectée",
+    "countAssigned_other": "{{count}} affectées",
+    "selectAllCount": "Tout sélectionner ({{count}})",
+    "reviewSelection": "Vérifier {{count}} sélection",
+    "reviewSelection_other": "Vérifier {{count}} sélections",
+    "subjectsCount": "Matières ({{count}})",
+    "subjectsFailed": "{{count}} matière en échec",
+    "subjectsFailed_other": "{{count}} matières en échec",
+    "incompleteSelection": "Sélection incomplète",
+    "removeBody": "Retirer « {{subject}} » de « {{class}} » ?",
+    "thisSubject": "cette matière",
+    "thisClass": "cette classe",
+    "assignmentCount": "{{count}} affectation",
+    "assignmentCount_other": "{{count}} affectations"
   },
   "reports": {
     "title": "Rapports",
@@ -1233,7 +1339,10 @@
     "cannotDeleteDefault": "Impossible de supprimer le modèle par défaut. Définissez d'abord un autre modèle par défaut.",
     "setDefaultConfirm": "Définir ce modèle par défaut pour tous les bulletins ?",
     "deleteConfirm": "Supprimer « {{name}} » ? Cette action est irréversible.",
-    "firstOne": "Créez votre premier modèle de bulletin en collant la mise en page HTML de votre établissement et en utilisant des espaces réservés."
+    "firstOne": "Créez votre premier modèle de bulletin en collant la mise en page HTML de votre établissement et en utilisant des espaces réservés.",
+    "pasteHint": "Collez n'importe quelle mise en page HTML et insérez des champs à l'endroit où les données doivent apparaître, par exemple :",
+    "defaultHint": "Définissez un modèle par défaut : il sera utilisé automatiquement lors de la génération des bulletins.",
+    "version": "Version {{version}}"
   },
   "notifications": {
     "title": "Notifications",
@@ -1250,14 +1359,17 @@
     "viewAll": "Voir toutes les notifications",
     "filterAll": "Toutes",
     "filterUnread": "Non lues",
-    "filterAlerts": "Alertes"
+    "filterAlerts": "Alertes",
+    "alertCount": "{{count}} alerte",
+    "alertCount_other": "{{count}} alertes"
   },
   "applications": {
     "refresh": "Actualiser les demandes",
     "reviewApplication": "Examiner la demande",
     "allCaughtUp": "Tout est à jour !",
     "noActiveClasses": "Aucune classe active trouvée. Créez une classe avant de valider.",
-    "noPendingBody": "Aucune demande en attente pour le moment. Les nouvelles demandes apparaîtront ici pour examen."
+    "noPendingBody": "Aucune demande en attente pour le moment. Les nouvelles demandes apparaîtront ici pour examen.",
+    "approvedToast": "Candidature de {{name}} approuvée et classe {{className}} attribuée. E-mail de bienvenue envoyé."
   },
   "studentDetail": {
     "title": "Fiche de l'élève",
@@ -1451,7 +1563,9 @@
     "tplAverage": "Moyenne",
     "tplGrade": "Mention",
     "tplPosition": "Rang",
-    "tplStatus": "Statut"
+    "tplStatus": "Statut",
+    "tplAttendance": "Assiduité",
+    "tplGenerated": "Bulletin généré le :"
   },
   "settings": {
     "nextTermResumption": "Rentrée du prochain trimestre",
@@ -2496,7 +2610,6 @@
       }
     }
   },
-
   "portal": {
     "title": "Espace parents",
     "signIn": "Se connecter",
@@ -2569,7 +2682,8 @@
     "noticeStatus_pending": "En attente d'envoi",
     "noticeStatus_failed": "Envoi impossible",
     "unreadCount": "{{count}} non lu",
-    "unreadCount_other": "{{count}} non lus"
+    "unreadCount_other": "{{count}} non lus",
+    "general": "Général"
   },
   "codes": {
     "title": "Accès parents",
@@ -2793,7 +2907,9 @@
     "oneStudent": "Élève",
     "oneTeacher": "Enseignant",
     "oneClass": "Classe",
-    "oneSubject": "Matière"
+    "oneSubject": "Matière",
+    "resultsFor": "{{count}} résultat pour",
+    "resultsFor_other": "{{count}} résultats pour"
   },
   "alerts": {
     "appsPending": "{{count}} candidature en attente depuis plus de 3 jours",

@@ -53,7 +53,7 @@ export default function TemplatePreviewPage() {
         if (stale) return;
         const data = res.data;
         setHtml(data.renderedHtml);
-        setName(data.templateName || "Preview");
+        setName(data.templateName || t("common.preview"));
         setIsRaw(data.isRaw       || false);
       })
       .catch((err) => {
@@ -81,7 +81,7 @@ export default function TemplatePreviewPage() {
         <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-900 truncate">{name}</h1>
           <p className="text-xs text-gray-500">
-            {examId ? t("reports.livePreview") : "Layout Preview"}
+            {examId ? t("reports.livePreview") : t("builder.layoutPreview")}
           </p>
         </div>
         {templateId && (

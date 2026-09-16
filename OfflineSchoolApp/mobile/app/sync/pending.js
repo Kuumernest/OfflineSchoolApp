@@ -123,8 +123,7 @@ export default function PendingChangesScreen() {
     const label = labelKey ? t(labelKey) : (rawKind || t("syncScreens.kChange"));
     Alert.alert(
       t("syncScreens.discardTitle"),
-      `"${label}" will be permanently removed from the upload queue. ` +
-      `The change stays on this device but will never reach the server.`,
+      t("syncScreens.discardBody", { label }),
       [
         { text: t("syncScreens.keep"), style: "cancel" },
         {
@@ -158,7 +157,7 @@ export default function PendingChangesScreen() {
 
         <Text style={styles.meta}>
           {item.method} {item.endpoint}
-          {attempts > 0 ? `  ·  ${attempts} attempt${attempts === 1 ? "" : "s"}` : ""}
+          {attempts > 0 ? `  ·  ${t("syncScreens.attemptCount", { count: attempts })}` : ""}
         </Text>
 
         {!!item.error && (
@@ -209,10 +208,10 @@ export default function PendingChangesScreen() {
 
       <View style={styles.summary}>
         <Text style={styles.summaryText}>
-          {stats.pending + stats.retrying} waiting
-          {stats.uploads > 0 ? `  ·  ${stats.uploads} file${stats.uploads === 1 ? "" : "s"}` : ""}
-          {"  ·  "}{stats.conflict} conflict{stats.conflict === 1 ? "" : "s"}
-          {"  ·  "}{stats.failed} failed
+          {t("syncScreens.waitingCount", { count: stats.pending + stats.retrying })}
+          {stats.uploads > 0 ? `  ·  ${t("syncScreens.fileCount", { count: stats.uploads })}` : ""}
+          {"  ·  "}{t("syncScreens.conflictCount", { count: stats.conflict })}
+          {"  ·  "}{t("syncScreens.failedCount", { count: stats.failed })}
         </Text>
         <TouchableOpacity onPress={runSync} disabled={busy} style={styles.syncBtn}>
           {busy
@@ -253,7 +252,7 @@ export default function PendingChangesScreen() {
                 disabled={busy}
               >
                 <Ionicons name="refresh-circle-outline" size={18} color={C.primary} />
-                <Text style={styles.retryAllText}>Retry all {rows.length}</Text>
+                <Text style={styles.retryAllText}>{t("syncScreens.retryAll", { count: rows.length })}</Text>
               </TouchableOpacity>
             ) : null
           }

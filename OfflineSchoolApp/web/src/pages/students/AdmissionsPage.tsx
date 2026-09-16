@@ -29,6 +29,7 @@ import {
 } from "@/services/studentApplications.service";
 import { cn } from "@/utils/cn";
 import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { useToast }       from "@/components/ui/Toast";
 
 // ─────────────────────────────────────────────────────────
@@ -64,10 +65,10 @@ const isStaleApplication = (createdAt?: string | null): boolean => {
 };
 
 const formatDate = (value?: string | null): string => {
-  if (!value) return "Unknown date";
+  if (!value) return i18n.t("common.unknownDate");
   const d = new Date(value);
   return Number.isNaN(d.getTime())
-    ? "Unknown date"
+    ? i18n.t("common.unknownDate")
     : d.toLocaleDateString(undefined, {
         year:  "numeric",
         month: "short",
@@ -232,7 +233,7 @@ function ApplicationCard({
             {application.name}
           </p>
           <p className="truncate text-xs text-gray-400">
-            {application.email || "No email provided"}
+            {application.email || t("admissions.noEmail")}
           </p>
         </div>
 
@@ -244,18 +245,18 @@ function ApplicationCard({
               : "bg-amber-50 text-amber-700"
           )}
         >
-          {stale ? t("common.stale") : "Pending"}
+          {stale ? t("common.stale") : t("common.pending")}
         </span>
       </div>
 
       <div className="mt-3 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
         <div className="flex items-center gap-1.5">
           <School className="h-3.5 w-3.5 text-indigo-500" />
-          <span>{application.className || application.grade || "No class selected"}</span>
+          <span>{application.className || application.grade || t("admissions.noClassSelected")}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Users className="h-3.5 w-3.5 text-gray-500" />
-          <span>{application.guardianName || "No guardian provided"}</span>
+          <span>{application.guardianName || t("admissions.noGuardian")}</span>
         </div>
         <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5 text-gray-500" />
@@ -295,6 +296,7 @@ function DetailRow({
   label: string;
   value: string;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="flex items-start gap-3">
       <div className="mt-0.5 shrink-0">{icon}</div>
@@ -303,7 +305,7 @@ function DetailRow({
           {label}
         </p>
         <p className="mt-0.5 text-sm font-medium text-gray-900 whitespace-pre-line">
-          {value || "Not provided"}
+          {value || t("common.notProvided")}
         </p>
       </div>
     </div>
@@ -319,6 +321,7 @@ function DocumentCard({
   index: number;
   onOpen: (doc: ApplicationDocument) => void;
 }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={() => onOpen(doc)}
@@ -329,10 +332,10 @@ function DocumentCard({
       </div>
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold text-gray-900">
-          {doc.title || `Document ${index + 1}`}
+          {doc.title || t("admissions.documentN", { n: index + 1 })}
         </p>
         <p className="truncate text-xs text-gray-400">
-          {doc.type || "Attached document"}
+          {doc.type || t("admissions.attachedDocument")}
         </p>
       </div>
       <Eye className="h-4 w-4 shrink-0 text-gray-400" />
@@ -445,7 +448,7 @@ function ReviewSheet({
               <DetailRow
                 icon={<Mail className="h-4 w-4 text-indigo-600" />}
                 label={t("common.email")}
-                value={application.email || "No email provided"}
+                value={application.email || t("admissions.noEmail")}
               />
               <DetailRow
                 icon={<Phone className="h-4 w-4 text-emerald-600" />}
@@ -460,7 +463,7 @@ function ReviewSheet({
               <DetailRow
                 icon={<School className="h-4 w-4 text-purple-600" />}
                 label={t("admissions.appliedForClass")}
-                value={application.className || application.grade || "Not specified"}
+                value={application.className || application.grade || t("common.notSpecified")}
               />
               <DetailRow
                 icon={<Calendar className="h-4 w-4 text-indigo-600" />}
@@ -598,7 +601,7 @@ function ReviewSheet({
               {rejecting ? (
                 <>
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Rejecting…
+                  {t("exams.rejecting")}
                 </>
               ) : (
                 "Reject"
@@ -618,7 +621,7 @@ function ReviewSheet({
               {approving ? (
                 <>
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                  Approving…
+                  {t("admissions.approving")}
                 </>
               ) : (
                 "Approve"
@@ -735,16 +738,16 @@ export default function AdmissionsPage() {
       setRejectReason("");
       setShowClassPicker(false);
 
-      const className = selectedClass?.name ?? "the selected class";
-      const appName   = approved?.name ?? "Student";
+      const className = selectedClass?.name ?? t("admissions.theSelectedClass");
+      const appName   = approved?.name ?? t("academic.student");
       const appEmail  = approved?.email ?? "";
 
       if (result.warning) {
         setFlash({
           kind:    "warning",
-          title:   "Approved — No Email",
+          title:   t("admissions.approvedNoEmail"),
           message:
-            `${appName} has been approved and assigned to ${className}.\n\n${result.warning}`,
+            `${t("admissions.approvedBody", { name: appName, className })}\n\n${result.warning}`,
         });
       } else if (result.emailSent === false && result.tempPassword) {
         setFlash({
@@ -760,18 +763,18 @@ export default function AdmissionsPage() {
       } else if (result.synced === false) {
         setFlash({
           kind:    "warning",
-          title:   "Approved (Offline)",
+          title:   t("admissions.approvedOffline"),
           message:
-            `${appName} has been approved and assigned to ${className}.\n\n` +
-            `Offline — the student account will be created when the device reconnects.`,
+            `${t("admissions.approvedBody", { name: appName, className })}\n\n` +
+            t("admissions.offlineNote"),
         });
       } else {
         setFlash({
           kind:    "success",
-          title:   "Approved",
+          title:   t("approvals.approved"),
           message:
-            `${appName} has been approved and assigned to ${className}.\n\n` +
-            `A welcome email with login instructions has been sent.`,
+            `${t("admissions.approvedBody", { name: appName, className })}\n\n` +
+            t("admissions.welcomeEmailSent"),
         });
       }
 
@@ -805,8 +808,8 @@ export default function AdmissionsPage() {
 
       setFlash({
         kind:    "success",
-        title:   "Rejected",
-        message: `${rejected?.name ?? "The student"}'s application has been rejected.`,
+        title:   t("students.rejected"),
+        message: t("admissions.rejectedBody", { name: rejected?.name ?? t("students.theStudent") }),
       });
     },
     onError: (err: unknown) => {
@@ -885,7 +888,7 @@ export default function AdmissionsPage() {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 py-20">
         <div className="h-10 w-10 animate-spin rounded-full border-4 border-indigo-600 border-t-transparent" />
-        <p className="text-sm font-medium text-gray-400">Loading applications…</p>
+        <p className="text-sm font-medium text-gray-400">{t("admissions.loading")}</p>
       </div>
     );
   }
@@ -900,8 +903,7 @@ export default function AdmissionsPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">{t("admissions.applications")}</h1>
           <p className="mt-1 text-sm text-gray-500">
-            {applications.length}{" "}
-            {applications.length === 1 ? "pending application" : "pending applications"}
+            {t("admissions.pendingCount", { count: applications.length })}
           </p>
         </div>
 

@@ -133,7 +133,7 @@ export default function EditPeriod() {
   const handleDelete = useCallback(() => {
     Alert.alert(
       t("periodsAdmin.deleteTitle"),
-      `Delete "${name}"? This cannot be undone if the period is not used in any timetable.`,
+      t("periodsAdmin.deleteBody", { name }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {

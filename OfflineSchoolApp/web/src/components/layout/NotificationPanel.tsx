@@ -226,11 +226,11 @@ export default function NotificationPanel() {
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
                 {unreadCount > 0
-                  ? `${unreadCount} unread`
-                  : "All caught up!"}
+                  ? t("portal.unreadCount", { count: unreadCount })
+                  : t("notifications.allRead")}
                 {alertCount > 0 && (
                   <span className="text-red-500 ml-1">
-                    · {alertCount} alert{alertCount > 1 ? "s" : ""}
+                    · {t("notifications.alertCount", { count: alertCount })}
                   </span>
                 )}
               </p>

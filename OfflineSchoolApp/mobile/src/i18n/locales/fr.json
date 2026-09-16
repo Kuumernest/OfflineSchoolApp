@@ -183,7 +183,23 @@
     "present": "Présent",
     "absent": "Absent",
     "late": "En retard",
-    "excused": "Excusé"
+    "excused": "Excusé",
+    "studentCount": {
+      "one": "{{count}} élève",
+      "other": "{{count}} élèves"
+    },
+    "teacherCount": {
+      "one": "{{count}} enseignant",
+      "other": "{{count}} enseignants"
+    },
+    "subjectCount": {
+      "one": "{{count}} matière",
+      "other": "{{count}} matières"
+    },
+    "classCount": {
+      "one": "{{count}} classe",
+      "other": "{{count}} classes"
+    }
   },
   "results": {
     "published": "Publié",
@@ -760,7 +776,10 @@
     "emailLabel": "Adresse e-mail",
     "emailHint": "Doit être unique. Sert à la connexion et à l’envoi des identifiants.",
     "discardGoBack": "Abandonner et revenir",
-    "errEmailTaken": "Cette adresse e-mail est déjà enregistrée. Vérifiez si l’enseignant a déjà un compte ou utilisez une autre adresse."
+    "errEmailTaken": "Cette adresse e-mail est déjà enregistrée. Vérifiez si l’enseignant a déjà un compte ou utilisez une autre adresse.",
+    "errNameMax": "Le nom ne peut pas dépasser {{max}} caractères.",
+    "addedEmailed": "Le compte de {{name}} a été créé. Un e-mail de bienvenue avec les instructions de connexion a été envoyé à {{email}}.",
+    "addedEmailFailed": "Enseignant créé, mais l'e-mail de bienvenue a échoué. Transmettez les identifiants ci-dessous manuellement."
   },
   "teachersEdit": {
     "title": "Modifier l'enseignant",
@@ -836,7 +855,11 @@
     "errCoeffMax": "Le coefficient ne peut pas dépasser 20.",
     "unknownError": "Erreur inconnue",
     "submit": "Créer la matière",
-    "coeffHint": "Poids de cette matière dans la moyenne. 1 est normal, 2 compte double. Laissez vide pour 1."
+    "coeffHint": "Poids de cette matière dans la moyenne. 1 est normal, 2 compte double. Laissez vide pour 1.",
+    "creatingIn": {
+      "one": "Création dans {{count}} classe…",
+      "other": "Création dans {{count}} classes…"
+    }
   },
   "subjectsEdit": {
     "title": "Modifier la matière",
@@ -1558,7 +1581,8 @@
     "loadingMore": "Chargement…",
     "a11yRetry": "Réessayer le chargement des écoles",
     "a11ySearch": "Rechercher une école",
-    "a11yClear": "Effacer la recherche"
+    "a11yClear": "Effacer la recherche",
+    "errLoad": "Impossible de charger les établissements ({{status}})"
   },
   "setPassword": {
     "changeTitle": "Changer le mot de passe",
@@ -3097,7 +3121,11 @@
     "emptyBody": "Les évaluations terminées et publiées apparaîtront ici",
     "noFilteredExams": "Aucune évaluation {{status}}",
     "switchToAllHint": "Choisissez « Toutes » pour voir toutes les évaluations",
-    "showAll": "Voir toutes les évaluations"
+    "showAll": "Voir toutes les évaluations",
+    "examsOf": {
+      "one": "{{shown}} sur {{count}} examen",
+      "other": "{{shown}} sur {{count}} examens"
+    }
   },
   "examsDash": {
     "title": "Évaluations et résultats",
@@ -3134,6 +3162,10 @@
     "pendingResultsAlert": {
       "one": "%{count} examen terminé dont les résultats ne sont pas publiés",
       "other": "%{count} examens terminés dont les résultats ne sont pas publiés"
+    },
+    "examTotal": {
+      "one": "{{count}} examen au total",
+      "other": "{{count}} examens au total"
     }
   },
   "examType": {
@@ -3197,7 +3229,31 @@
     "examFallback": "Évaluation",
     "schoolFallback": "École",
     "generateCta": "Générer les bulletins",
-    "generatingCards": "Génération des bulletins"
+    "generatingCards": "Génération des bulletins",
+    "examLabel": "Examen : {{name}}",
+    "allStudents": {
+      "one": "Tous les élèves ({{count}})",
+      "other": "Tous les {{count}} élèves"
+    },
+    "uniqueLoaded": {
+      "one": "{{count}} élève unique chargé",
+      "other": "{{count}} élèves uniques chargés"
+    },
+    "builtinWithCustom": {
+      "one": "Modèle intégré ({{count}} modèle personnalisé disponible)",
+      "other": "Modèle intégré ({{count}} modèles personnalisés disponibles)"
+    },
+    "generatedFor": "Bulletin généré pour {{name}}",
+    "generatedOf": "{{done}} bulletins générés sur {{total}}",
+    "pdfsSaved": {
+      "one": "{{count}} PDF enregistré sur l'appareil.",
+      "other": "{{count}} PDF enregistrés sur l'appareil."
+    },
+    "generateFor": "Générer le bulletin de {{name}}",
+    "generateAll": {
+      "one": "Générer {{count}} bulletin",
+      "other": "Générer les {{count}} bulletins"
+    }
   },
   "applyForm": {
     "title": "Candidater",
@@ -3691,7 +3747,16 @@
     },
     "assignMore": "Attribuer encore",
     "dupTitle": "ℹ️ Déjà attribuée",
-    "dupBody": "Certaines ou toutes les matières étaient déjà attribuées à cet enseignant."
+    "dupBody": "Certaines ou toutes les matières étaient déjà attribuées à cet enseignant.",
+    "stepOf": "Étape {{step}} sur {{total}}",
+    "currentlyAssigned": {
+      "one": "{{count}} matière déjà affectée",
+      "other": "{{count}} matières déjà affectées"
+    },
+    "reviewSelection": {
+      "one": "Vérifier {{count}} sélection",
+      "other": "Vérifier {{count}} sélections"
+    }
   },
   "uploadNotes": {
     "typeSyllabus": "Programme",
@@ -4172,7 +4237,13 @@
     "teacherNone": "Non attribué",
     "teacherPick": "Choisir l'enseignant titulaire",
     "teacherHint": "L'enseignant responsable de cette classe.",
-    "teacherEmpty": "Aucun enseignant n'a encore été synchronisé sur cet appareil."
+    "teacherEmpty": "Aucun enseignant n'a encore été synchronisé sur cet appareil.",
+    "errNameMax": "Le nom de la classe ne peut pas dépasser {{max}} caractères.",
+    "removedWithSubjects": {
+      "one": "« {{name}} » et {{count}} matière ont été supprimés.",
+      "other": "« {{name}} » et {{count}} matières ont été supprimés."
+    },
+    "removed": "« {{name}} » a été supprimée."
   },
   "annAdmin": {
     "fieldTitle": "Titre *",
@@ -4296,7 +4367,11 @@
     "daysAgo": "il y a {{count}} j",
     "listTitle": "Annonces",
     "filterAll": "Toutes",
-    "deleteFailed": "Échec de la suppression"
+    "deleteFailed": "Échec de la suppression",
+    "showingTeacherCount": {
+      "one": "{{count}} communiqué d'enseignant affiché",
+      "other": "{{count}} communiqués d'enseignants affichés"
+    }
   },
   "annTeacher": {
     "unreadCount": {
@@ -4604,7 +4679,15 @@
     "tryAgain": "Réessayer",
     "noClassesFound": "Aucune classe trouvée",
     "allPeriods": "Toutes les périodes",
-    "selectPeriod": "Sélectionner la période"
+    "selectPeriod": "Sélectionner la période",
+    "savedForTeachers": {
+      "one": "Présence enregistrée pour {{count}} enseignant.",
+      "other": "Présence enregistrée pour {{count}} enseignants."
+    },
+    "savedForStudents": {
+      "one": "Présence enregistrée pour {{count}} élève.",
+      "other": "Présence enregistrée pour {{count}} élèves."
+    }
   },
   "rankTable": {
     "titleGrade": "Classement du niveau/série",
@@ -4715,6 +4798,10 @@
     "marksFailed": {
       "one": "1 note n’a pas pu être envoyée — appuyez sur Enregistrer pour réessayer",
       "other": "{{count}} notes n’ont pas pu être envoyées — appuyez sur Enregistrer pour réessayer"
+    },
+    "savedFor": {
+      "one": "Notes enregistrées pour {{count}} élève.",
+      "other": "Notes enregistrées pour {{count}} élèves."
     }
   },
   "examMonitor": {
@@ -4823,7 +4910,8 @@
     "newPeriod": "Nouveau créneau",
     "periodName": "Nom du créneau",
     "saveChanges": "Enregistrer les modifications",
-    "createPeriod": "Créer le créneau"
+    "createPeriod": "Créer le créneau",
+    "unnamedSubject": "Matière sans nom"
   },
   "periodsAdmin": {
     "title": "Créneaux",
@@ -4950,7 +5038,24 @@
     "rangeToday": "Aujourd’hui",
     "rangeThisMonth": "Ce mois",
     "rangeLastMonth": "Mois dernier",
-    "rangeLast3": "3 derniers mois"
+    "rangeLast3": "3 derniers mois",
+    "savedFor": {
+      "one": "Enregistré pour {{count}} élève.",
+      "other": "Enregistré pour {{count}} élèves."
+    },
+    "notMarked": {
+      "one": "{{count}} élève non pointé.",
+      "other": "{{count}} élèves non pointés."
+    },
+    "unmarkedConfirm": {
+      "one": "{{count}} élève n'a pas été pointé.\nEnregistrer quand même ?",
+      "other": "{{count}} élèves n'ont pas été pointés.\nEnregistrer quand même ?"
+    },
+    "classReport": "Rapport – {{className}}",
+    "myClassesToday": {
+      "one": "Mes classes aujourd'hui – {{count}} classe",
+      "other": "Mes classes aujourd'hui – {{count}} classes"
+    }
   },
   "subjectsList": {
     "loading": "Chargement des matières…",
@@ -4966,7 +5071,9 @@
     "delBody": "Cela peut affecter les attributions d’enseignants et l’emploi du temps.",
     "deletedTitle": "Supprimée",
     "errDelete": "Échec de la suppression de la matière",
-    "errTitle": "Erreur"
+    "errTitle": "Erreur",
+    "removedBody": "« {{name}} » a été supprimée.",
+    "allWithCount": "Toutes les matières ({{count}})"
   },
   "templatesList": {
     "loading": "Chargement des modèles…",
@@ -4988,11 +5095,21 @@
     "layoutPreview": "Aperçu de la mise en page",
     "previewNote1": "Mise en page seule — les champs sont encore visibles.",
     "previewNote2": "Ouvrez avec un vrai élève pour voir les données remplies.",
-    "setDefaultBody": "Utiliser « {{name}} » comme modèle par défaut pour tous les bulletins ?"
+    "setDefaultBody": "Utiliser « {{name}} » comme modèle par défaut pour tous les bulletins ?",
+    "deleteBody": "Supprimer « {{name}} » ? Cette action est irréversible.",
+    "version": "Version {{version}}"
   },
   "teacherLayout": {
     "uploadsDone": "Téléversements terminés",
-    "uploadsFailed": "Certains téléversements ont échoué"
+    "uploadsFailed": "Certains téléversements ont échoué",
+    "syncedCount": {
+      "one": "{{count}} envoi en attente synchronisé.",
+      "other": "{{count}} envois en attente synchronisés."
+    },
+    "failedCount": {
+      "one": "{{count}} envoi n'a pas pu être synchronisé. Nouvel essai la prochaine fois.",
+      "other": "{{count}} envois n'ont pas pu être synchronisés. Nouvel essai la prochaine fois."
+    }
   },
   "syncScreens": {
     "listTitle": "Modifications écrasées",
@@ -5058,7 +5175,27 @@
     "kExamSubject": "Matière d’évaluation",
     "kExamStatus": "Statut d’évaluation",
     "kMarksSubmission": "Soumission des notes",
-    "kChange": "Modification"
+    "kChange": "Modification",
+    "markAllSeenBody": {
+      "one": "Marquer {{count}} écrasement comme vu ? L'alerte du tableau de bord disparaîtra.",
+      "other": "Marquer les {{count}} écrasements comme vus ? L'alerte du tableau de bord disparaîtra."
+    },
+    "discardBody": "« {{label}} » sera définitivement retiré de la file d'envoi. La modification reste sur cet appareil mais n'atteindra jamais le serveur.",
+    "attemptCount": {
+      "one": "{{count}} tentative",
+      "other": "{{count}} tentatives"
+    },
+    "waitingCount": "{{count}} en attente",
+    "fileCount": {
+      "one": "{{count}} fichier",
+      "other": "{{count}} fichiers"
+    },
+    "conflictCount": {
+      "one": "{{count}} conflit",
+      "other": "{{count}} conflits"
+    },
+    "failedCount": "{{count}} en échec",
+    "retryAll": "Tout réessayer ({{count}})"
   },
   "assignList": {
     "title": "Attributions",
@@ -5103,7 +5240,27 @@
     "detailEmptySub": "Cet enseignant n’a encore aucune matière attribuée",
     "detailLoadFailed": "Échec du chargement des attributions. Tirez pour réessayer.",
     "invalidTeacherId": "Identifiant d’enseignant invalide. Revenez en arrière et réessayez.",
-    "errTitle": "Erreur"
+    "errTitle": "Erreur",
+    "removeBody": "Retirer {{teacher}} de {{subject}} en {{class}} ?",
+    "thisTeacher": "cet enseignant",
+    "thisSubject": "cette matière",
+    "thisClass": "cette classe",
+    "subjectsAssignedCount": {
+      "one": "{{count}} matière affectée",
+      "other": "{{count}} matières affectées"
+    },
+    "teachersAssignedCount": {
+      "one": "{{count}} enseignant affecté",
+      "other": "{{count}} enseignants affectés"
+    },
+    "unassignedTeacherCount": {
+      "one": "{{count}} enseignant sans aucune matière affectée",
+      "other": "{{count}} enseignants sans aucune matière affectée"
+    },
+    "assignmentCount": {
+      "one": "{{count}} affectation",
+      "other": "{{count}} affectations"
+    }
   },
   "studentQuiz": {
     "listTitle": "Quiz",
@@ -5176,7 +5333,24 @@
     "correct": "Correctes",
     "incorrect": "Incorrectes",
     "review": "Revoir",
-    "hide": "Masquer"
+    "hide": "Masquer",
+    "passMarkValue": "Note de passage : {{value}} %",
+    "reviewAnswers": "Voir les réponses",
+    "hideAnswers": "Masquer les réponses",
+    "unansweredConfirm": {
+      "one": "Il vous reste {{count}} question sans réponse. Voulez-vous vraiment soumettre ?",
+      "other": "Il vous reste {{count}} questions sans réponse. Voulez-vous vraiment soumettre ?"
+    },
+    "pointCount": {
+      "one": "{{count}} pt",
+      "other": "{{count}} pts"
+    },
+    "attemptsLeft": {
+      "one": "{{count}} tentative restante",
+      "other": "{{count}} tentatives restantes"
+    },
+    "attemptN": "Tentative {{n}}",
+    "best": "Meilleur : {{value}} %"
   },
   "studentHw": {
     "listTitle": "Devoirs",
@@ -5223,7 +5397,19 @@
     "tapClosed": "Date limite dépassée — aucune remise",
     "viewArrow": "Voir →",
     "emptySub": "Votre enseignant n’a encore donné aucun devoir",
-    "emptyFilterSub": "Essayez les autres filtres ou tirez pour actualiser"
+    "emptyFilterSub": "Essayez les autres filtres ou tirez pour actualiser",
+    "emptyNone": "Aucun devoir pour le moment",
+    "emptyFiltered": "Aucun devoir ne correspond à ce filtre",
+    "submittedOn": "Remis le {{date}}",
+    "charCount": {
+      "one": "{{count}} caractère",
+      "other": "{{count}} caractères"
+    },
+    "assignmentCount": {
+      "one": "{{count}} devoir",
+      "other": "{{count}} devoirs"
+    },
+    "pendingSubmitted": "{{pending}} à faire · {{submitted}} remis"
   },
   "studentSubj": {
     "loading": "Chargement du contenu…",
@@ -5323,7 +5509,18 @@
     "stepOf": "Étape {{current}} sur {{total}} — {{name}}",
     "statusTitle": "{{action}} le contenu",
     "statusBody": "{{action}} « {{title}} » ?",
-    "statusFailed": "Impossible de {{action}} cet élément."
+    "statusFailed": "Impossible de {{action}} cet élément.",
+    "fileCount": {
+      "one": "{{count}} fichier",
+      "other": "{{count}} fichiers"
+    },
+    "itemCount": {
+      "one": "{{count}} élément",
+      "other": "{{count}} éléments"
+    },
+    "forQuery": "pour « {{query}} »",
+    "maxMb": "Max {{size}} Mo",
+    "noResultsFor": "Aucun résultat pour « {{query}} »"
   },
   "teacherExams": {
     "title": "Mes évaluations",
@@ -5460,7 +5657,28 @@
     "hPeriods": "Périodes",
     "hNoTimetable": "Sans emploi du temps",
     "hConflicts": "Conflits",
-    "hNoSubjects": "Sans matières"
+    "hNoSubjects": "Sans matières",
+    "alerts": "Alertes",
+    "alertStaleApps": {
+      "one": "{{count}} candidature en attente depuis plus de 3 jours",
+      "other": "{{count}} candidatures en attente depuis plus de 3 jours"
+    },
+    "alertUnassignedTeachers": {
+      "one": "{{count}} enseignant pas encore affecté",
+      "other": "{{count}} enseignants pas encore affectés"
+    },
+    "alertClassesNoSubjects": {
+      "one": "{{count}} classe sans matières",
+      "other": "{{count}} classes sans matières"
+    },
+    "alertConflicts": {
+      "one": "{{count}} conflit d'emploi du temps détecté",
+      "other": "{{count}} conflits d'emploi du temps détectés"
+    },
+    "alertNoTimetable": {
+      "one": "{{count}} classe sans emploi du temps ({{pct}} %)",
+      "other": "{{count}} classes sans emploi du temps ({{pct}} %)"
+    }
   },
   "sync": {
     "offlineSession": "Connecté hors ligne — reconnectez-vous en ligne pour envoyer",

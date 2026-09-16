@@ -62,7 +62,7 @@ const C = {
 const STATUS_FILTERS = [
   {
     key:   "all",
-    label: "All",
+    labelKey: "common.all",
     icon:  "people-outline",
     color: C.primary,
     bg:    C.primaryBg,
@@ -182,7 +182,9 @@ const fetchAllStudents = async (statusKey = "all") => {
 // STATUS FILTER TABS  — mirrors web <Select> for status
 // ─────────────────────────────────────────────────────────
 
-const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => (
+const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => {
+  const { t } = useTranslation();
+  return (
   <ScrollView
     horizontal
     showsHorizontalScrollIndicator={false}
@@ -209,7 +211,7 @@ const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => (
             color={isActive ? C.white : filter.color}
           />
           <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
-            {filter.label}
+            {filter.labelKey ? t(filter.labelKey) : filter.label}
           </Text>
           {/* Count badge — only show when > 0 */}
           {count > 0 && (
@@ -233,7 +235,8 @@ const StatusFilterTabs = React.memo(({ activeKey, counts, onChange }) => (
       );
     })}
   </ScrollView>
-));
+  );
+});
 
 // ─────────────────────────────────────────────────────────
 // CLASS FILTER PILLS  — mirrors web <Select> for classId
@@ -633,7 +636,7 @@ export default function ApprovedStudents() {
           <Text style={styles.headerSubtitle}>
             {countLabel}
             {visibleClasses > 0
-              ? ` · ${visibleClasses} class${visibleClasses !== 1 ? "es" : ""}`
+              ? ` · ${t("academic.classCount", { count: visibleClasses })}`
               : ""}
           </Text>
         </View>

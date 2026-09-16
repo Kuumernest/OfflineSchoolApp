@@ -217,7 +217,7 @@ export default function SubmissionMonitorScreen() {
 
   const [exams,         setExams]         = useState([]);
   const [selectedExam,  setSelectedExam]  = useState(
-    examId ? { _id: examId, name: examName || "Exam" } : null
+    examId ? { _id: examId, name: examName || t("academic.exam") } : null
   );
   const [submissions,   setSubmissions]   = useState([]);
   const [loading,       setLoading]       = useState(true);
@@ -287,7 +287,7 @@ export default function SubmissionMonitorScreen() {
   const handleApprove = useCallback(async (subject) => {
     Alert.alert(
       t("examMonitor.approveTitle"),
-      `Approve marks for ${subject.subjectName}?`,
+      t("examMonitor.approveBody", { subject: subject.subjectName }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {
@@ -531,7 +531,7 @@ export default function SubmissionMonitorScreen() {
               <View style={s.empty}>
                 <Ionicons name="cloud-upload-outline" size={48} color={C.gray200} />
                 <Text style={s.emptyTitle}>
-                  {filter === "all" ? t("examMonitor.noneYet") : `No ${filter} submissions`}
+                  {filter === "all" ? t("examMonitor.noneYet") : t("examMonitor.noneForFilter")}
                 </Text>
                 <Text style={s.emptyText}>
                   {filter === "all"
@@ -585,17 +585,18 @@ export default function SubmissionMonitorScreen() {
                     <View style={s.rejectBox}>
                       <Ionicons name="alert-circle-outline" size={14} color={C.error} />
                       <Text style={s.rejectBoxText}>
-                        Reason: {item.rejectReason}
+                        {t("examMonitor.reasonLabel", { reason: item.rejectReason })}
                       </Text>
                     </View>
                   )}
 
                   {item.submittedAt && (
                     <Text style={s.timestamp}>
-                      Submitted:{" "}
-                      {new Date(item.submittedAt).toLocaleDateString("en-GB", {
-                        day: "numeric", month: "short", year: "numeric",
-                        hour: "2-digit", minute: "2-digit",
+                      {t("examMonitor.submittedAt", {
+                        date: new Date(item.submittedAt).toLocaleDateString("en-GB", {
+                          day: "numeric", month: "short", year: "numeric",
+                          hour: "2-digit", minute: "2-digit",
+                        }),
                       })}
                     </Text>
                   )}

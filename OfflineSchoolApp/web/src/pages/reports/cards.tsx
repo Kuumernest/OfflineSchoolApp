@@ -673,7 +673,7 @@ export default function ReportCardsPage() {
                     {t("reportCards.allStudents", { count: students.length })}
                   </button>
                   {students.map((s) => {
-                    const name = s.studentName || s.name || "Unknown";
+                    const name = s.studentName || s.name || t("common.unknown");
                     return (
                       <button
                         key={s._id}

@@ -4,6 +4,7 @@ import {
   Calendar, Save, Loader2, AlertCircle, ChevronDown, ChevronUp,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import { useToast } from "@/components/ui/Toast";
 import api from "@/services/api";
 import { cn } from "@/utils/cn";
@@ -83,7 +84,7 @@ const ASSESSMENT_TYPES = ["test", "practical", "promotion_exam"] as const;
 const extractMessage = (err: unknown): string =>
   (err as { response?: { data?: { message?: string } } })
     ?.response?.data?.message ??
-  (err instanceof Error ? err.message : "Something went wrong");
+  (err instanceof Error ? err.message : i18n.t("settings.somethingWrong"));
 
 /** Ensure a structure matches current schema defaults (migration-safe). */
 function normalise(raw: AcademicStructure): AcademicStructure {

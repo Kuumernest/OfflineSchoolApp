@@ -130,7 +130,7 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           <Text style={cardS.name}>{cls.name}</Text>
           {!!cls.sub && <Text style={cardS.sub}>{cls.sub}</Text>}
           <Text style={cardS.meta}>
-            {summary?.marked ?? 0} of {summary?.total ?? 0} marked today
+            {t("attAdmin.markedOfTotalToday", { marked: summary?.marked ?? 0, total: summary?.total ?? 0 })}
           </Text>
         </View>
 
@@ -413,8 +413,7 @@ export default function TeacherAttendanceScreen() {
         {classes.length > 0 && (
           <View style={styles.overallCard}>
             <Text style={styles.overallTitle}>
-              My Classes Today — {classes.length} class
-              {classes.length !== 1 ? "es" : ""}
+              {t("attTeacher.myClassesToday", { count: classes.length })}
             </Text>
 
             <View style={styles.overallPills}>

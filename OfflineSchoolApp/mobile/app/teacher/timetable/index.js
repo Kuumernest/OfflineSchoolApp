@@ -417,7 +417,7 @@ export default function TeacherTimetable() {
         <View style={{ flex: 1 }}>
           <Text style={styles.pageTitle}>{t("ttTeacher.title")}</Text>
           <Text style={styles.pageSub}>
-            {schedule.length} slot{schedule.length !== 1 ? "s" : ""} this week
+            {t("ttTeacher.slotsThisWeek", { count: schedule.length })}
           </Text>
         </View>
       </View>

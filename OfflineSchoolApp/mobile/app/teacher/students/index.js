@@ -501,6 +501,7 @@ export default function TeacherStudentsScreen() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function Header({ title, count }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.header}>
       <TouchableOpacity
@@ -514,7 +515,7 @@ function Header({ title, count }) {
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
         {count != null && (
           <Text style={styles.headerSub}>
-            {count} student{count !== 1 ? "s" : ""}
+            {t("academic.studentCount", { count })}
           </Text>
         )}
       </View>

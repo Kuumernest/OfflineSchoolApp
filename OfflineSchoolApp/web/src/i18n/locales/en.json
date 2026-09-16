@@ -111,7 +111,13 @@
     "deleting": "Deleting…",
     "stale": "Stale",
     "inUse": "In use",
-    "removing": "Removing…"
+    "removing": "Removing…",
+    "other": "Other",
+    "unknownDate": "Unknown date",
+    "unknownError": "Unknown error",
+    "notProvided": "Not provided",
+    "notSpecified": "Not specified",
+    "send": "Send"
   },
   "flow": {
     "title": "Results workflow",
@@ -228,7 +234,9 @@
     "absent": "Absent",
     "late": "Late",
     "excused": "Excused",
-    "dateOfBirthPh": "YYYY-MM-DD"
+    "dateOfBirthPh": "YYYY-MM-DD",
+    "subjectCount": "{{count}} subject",
+    "subjectCount_other": "{{count}} subjects"
   },
   "results": {
     "published": "Published",
@@ -475,7 +483,8 @@
     "copyright": "School Management System © {{year}}",
     "errIdentifierRequired": "Email or enrolment number is required",
     "errPasswordRequired": "Password is required",
-    "forgotten": "Forgotten your password? Contact your system administrator."
+    "forgotten": "Forgotten your password? Contact your system administrator.",
+    "forgottenStudent": "Forgotten your password? Ask your class teacher or school admin to reset it."
   },
   "changePassword": {
     "title": "Set a new password",
@@ -540,7 +549,15 @@
     "adjustFilters": "Try adjusting your filters",
     "directJoinHint": "For a student joining directly. Applications that came through the public form are handled under",
     "noActiveClasses": "No active classes found. Create a class before approving.",
-    "generatedOnSave": "An enrolment number and temporary password are generated on save."
+    "generatedOnSave": "An enrolment number and temporary password are generated on save.",
+    "isEnrolled": "{{name}} is enrolled",
+    "noEmailSent": "No email was sent — pass these details on yourself.",
+    "enrollmentNoHint": "This is what they sign in with — not their email.",
+    "tempPasswordHint": "They'll be asked to choose their own on first sign-in.",
+    "writeDown": "Write these down before leaving this page — they are not shown again, and recovering them means resetting the account.",
+    "noActiveClassesEnroll": "There are no active classes to enroll into.",
+    "firstOne": "Add your first student to get started",
+    "unassignedClass": "Unassigned"
   },
   "teachers": {
     "title": "Teachers",
@@ -578,7 +595,9 @@
     "notFound": "Teacher not found",
     "noId": "No teacher was specified.",
     "none": "No teachers yet",
-    "firstOne": "Add a teacher to give them an account and assign them subjects."
+    "firstOne": "Add a teacher to give them an account and assign them subjects.",
+    "noneMatch": "Nothing matches that search",
+    "searchPageOnly": "Search only covers the current page — try another page or clear the filter."
   },
   "subjects": {
     "title": "Subjects",
@@ -616,7 +635,13 @@
     "noneInClass": "No subjects in this class yet. Add one to get started.",
     "deleteTitle": "Delete subject",
     "searchPh": "Search subjects…",
-    "multiClassHint": "Select multiple classes to create this subject in all of them at once."
+    "multiClassHint": "Select multiple classes to create this subject in all of them at once.",
+    "unassigned": "Unassigned",
+    "errDelete": "Failed to delete subject",
+    "unassignedCount": "{{count}} unassigned",
+    "unassignedCount_other": "{{count}} unassigned",
+    "allWithCount": "All subjects ({{count}})",
+    "deleteBody": "Permanently delete “{{name}}” from {{className}}?"
   },
   "classes": {
     "classTeacher": "Class teacher (form master)",
@@ -644,7 +669,11 @@
     "deleteTitle": "Delete class",
     "pageTitle": "Classes & subjects",
     "pageBlurb": "Manage your school's classes and subjects",
-    "searchPh": "Search classes…"
+    "searchPh": "Search classes…",
+    "noLongerOnStaff": "{{name}} (no longer on staff)",
+    "currentFormMaster": "Current form master",
+    "deleteConfirmBody": "Are you sure you want to delete “{{name}}”?",
+    "viewSubjectsFor": "View subjects for {{name}}"
   },
   "attendance": {
     "title": "Attendance",
@@ -683,7 +712,14 @@
     "partlySaved": "Partly saved",
     "partlySavedBody": "{{saved}} saved, {{failed}} rejected",
     "noActiveStudents": "This class has no active students yet.",
-    "markThenSave": "Mark the register, then save. Nothing is sent until you do."
+    "markThenSave": "Mark the register, then save. Nothing is sent until you do.",
+    "unsavedCount": "{{count}} unsaved change",
+    "unsavedCount_other": "{{count}} unsaved changes",
+    "noUnsaved": "No unsaved changes",
+    "noActiveTeachers": "No active teachers found for this school.",
+    "ptsVsWeek": "{{delta}} pts vs week",
+    "onRoster": "{{count}} on the roster",
+    "onRoster_other": "{{count}} on the roster"
   },
   "announcements": {
     "title": "Announcements",
@@ -715,7 +751,14 @@
     "noneMatch": "Nothing matches those filters",
     "clearFilters": "Try clearing the filters.",
     "unpin": "Unpin",
-    "editOne": "Edit announcement"
+    "editOne": "Edit announcement",
+    "posted": "Announcement posted",
+    "markedCount": "{{count}} announcement marked as read.",
+    "markedCount_other": "{{count}} announcements marked as read.",
+    "nothingUnread": "Nothing was left unread.",
+    "removeBody": "“{{title}}” will disappear for everyone who can currently see it.",
+    "none": "No announcements yet",
+    "noneHint": "Post one to reach staff, students, or a particular class."
   },
   "timetable": {
     "title": "Timetable",
@@ -771,7 +814,10 @@
     "unknownSubject": "Unknown subject",
     "unassigned": "Unassigned",
     "noSubjectsYet": "This class has no subjects yet. Add them under",
-    "noSubjectsAfter": "before building its timetable."
+    "noSubjectsAfter": "before building its timetable.",
+    "clashes": "That clashes",
+    "refreshedWithTheirs": "{{message}} The grid has been refreshed with their version.",
+    "periodTakenBody": "Remove the lesson already there first, then move this one in."
   },
   "periods": {
     "title": "The school day",
@@ -799,7 +845,13 @@
     "remove": "Remove period",
     "updated": "Period updated",
     "hideInactive": "Hide inactive",
-    "hideFromTable": "Hide from timetable"
+    "hideFromTable": "Hide from timetable",
+    "added": "Period added",
+    "removeTitle": "Remove “{{name}}”?",
+    "removeBody": "Any timetable lesson scheduled in this period will lose its slot. If you only want to take it out of use for now, hide it instead — that keeps the existing timetable intact.",
+    "showInactive": "Show inactive",
+    "hidden": "Hidden",
+    "putBack": "Put back in use"
   },
   "exams": {
     "title": "Exams & results",
@@ -959,7 +1011,21 @@
     "correctPublishedHint": "These results have already been published, so parents may have seen them. Record why you are changing them.",
     "changeReasonPlaceholder": "e.g. Paper 2 remarked after appeal",
     "changeReasonKept": "Kept with the change for as long as the result exists.",
-    "saveWithReason": "Save correction"
+    "saveWithReason": "Save correction",
+    "errApproveSubmission": "Failed to approve submission",
+    "errRejectSubmission": "Failed to reject submission",
+    "errUpdateSubject": "Failed to update subject",
+    "errSaveScores": "Failed to save scores",
+    "errProcessResults": "Failed to process results",
+    "errPublishResults": "Failed to publish results",
+    "errComputeTerm": "Failed to compute term results",
+    "errPublishTerm": "Failed to publish term results",
+    "errComputeAnnual": "Failed to compute annual results",
+    "errPublishAnnual": "Failed to publish annual results",
+    "errCreate": "Failed to create exam",
+    "errUpdateStatus": "Failed to update status",
+    "errUpdate": "Failed to update exam",
+    "errDelete": "Failed to delete exam"
   },
   "examCreate": {
     "title": "Create exam",
@@ -997,7 +1063,8 @@
     "sequenceRequired": "Choose the sequence this exam belongs to",
     "promoSequenceHint": "* Sequences 5 and 6 can be configured as promotion exams",
     "createFailed": "Could not create the exam.",
-    "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right"
+    "pickClassesThenSubjects": "Select classes on the left, then tick subjects on the right",
+    "noSubjectsWarning": "⚠️ No subjects assigned. You can add them later from the exam detail."
   },
   "reportCards": {
     "allStudents": "All {{count}} pupil",
@@ -1074,7 +1141,21 @@
     "rejectConfirm": "Reject {{name}}’s application? This cannot be undone.",
     "approvedNoEmail": "Approved — no email sent",
     "approvedOffline": "Approved (offline)",
-    "errSelectClass": "Please choose a class before approving."
+    "errSelectClass": "Please choose a class before approving.",
+    "noEmail": "No email provided",
+    "noClassSelected": "No class selected",
+    "noGuardian": "No guardian provided",
+    "attachedDocument": "Attached document",
+    "documentN": "Document {{n}}",
+    "approving": "Approving…",
+    "theSelectedClass": "the selected class",
+    "approvedBody": "{{name}} has been approved and assigned to {{className}}.",
+    "offlineNote": "Offline — the student account will be created when the device reconnects.",
+    "welcomeEmailSent": "A welcome email with login instructions has been sent.",
+    "rejectedBody": "{{name}}'s application has been rejected.",
+    "loading": "Loading applications…",
+    "pendingCount": "{{count}} pending application",
+    "pendingCount_other": "{{count}} pending applications"
   },
   "teachersAdd": {
     "title": "Add teacher",
@@ -1117,7 +1198,10 @@
     "namePh": "e.g. Jane Smith",
     "emailPh": "e.g. jane@school.com",
     "loading": "Loading teacher...",
-    "subtitle": "Teacher profile & subject assignments"
+    "subtitle": "Teacher profile & subject assignments",
+    "subjectsAssignedCount": "{{count}} subject assigned",
+    "subjectsAssignedCount_other": "{{count}} subjects assigned",
+    "assign": "Assign"
   },
   "subjectsAdd": {
     "title": "Add subject",
@@ -1128,7 +1212,9 @@
     "noClasses": "No classes found. Create a class first.",
     "examples": "Examples:",
     "namePh": "e.g. Mathematics, English Language",
-    "errClassAtLeastOne": "Please select at least one class."
+    "errClassAtLeastOne": "Please select at least one class.",
+    "classesHint": "Select all classes that will teach this subject.",
+    "teacherHint": "Optional — you can assign a teacher later."
   },
   "subjectsEdit": {
     "title": "Edit subject",
@@ -1198,7 +1284,27 @@
     "loading": "Loading assignments...",
     "created": "Assignment created",
     "noTeacherHit": "No teachers match your search.",
-    "firstOne": "Assign a teacher to a class and subject to get started."
+    "firstOne": "Assign a teacher to a class and subject to get started.",
+    "stepOf": "Step {{step}} of {{total}}",
+    "partialSuccess": "Partial success",
+    "assignedTo": "Assigned to",
+    "noTeachers": "No teachers found.",
+    "currentlyAssigned": "Currently assigned to {{count}} subject",
+    "currentlyAssigned_other": "Currently assigned to {{count}} subjects",
+    "countAssigned": "{{count}} assigned",
+    "countAssigned_other": "{{count}} assigned",
+    "selectAllCount": "Select all ({{count}})",
+    "reviewSelection": "Review {{count}} selection",
+    "reviewSelection_other": "Review {{count}} selections",
+    "subjectsCount": "Subjects ({{count}})",
+    "subjectsFailed": "{{count}} subject failed",
+    "subjectsFailed_other": "{{count}} subjects failed",
+    "incompleteSelection": "Incomplete selection",
+    "removeBody": "Remove “{{subject}}” from “{{class}}”?",
+    "thisSubject": "this subject",
+    "thisClass": "this class",
+    "assignmentCount": "{{count}} assignment",
+    "assignmentCount_other": "{{count}} assignments"
   },
   "reports": {
     "title": "Reports",
@@ -1233,7 +1339,10 @@
     "cannotDeleteDefault": "Cannot delete the default template. Set another as default first.",
     "setDefaultConfirm": "Set this template as the default for all reports?",
     "deleteConfirm": "Delete “{{name}}”? This cannot be undone.",
-    "firstOne": "Create your first report card template by pasting your school's HTML layout and using placeholders."
+    "firstOne": "Create your first report card template by pasting your school's HTML layout and using placeholders.",
+    "pasteHint": "Paste any HTML layout and insert placeholders where the data should go, for example:",
+    "defaultHint": "Set one template as the default and it will be used automatically when generating reports.",
+    "version": "Version {{version}}"
   },
   "notifications": {
     "title": "Notifications",
@@ -1250,14 +1359,17 @@
     "viewAll": "View all notifications",
     "filterAll": "All",
     "filterUnread": "Unread",
-    "filterAlerts": "Alerts"
+    "filterAlerts": "Alerts",
+    "alertCount": "{{count}} alert",
+    "alertCount_other": "{{count}} alerts"
   },
   "applications": {
     "refresh": "Refresh applications",
     "reviewApplication": "Review application",
     "allCaughtUp": "All caught up!",
     "noActiveClasses": "No active classes found. Create a class before approving.",
-    "noPendingBody": "No pending applications right now. New submissions will appear here for review."
+    "noPendingBody": "No pending applications right now. New submissions will appear here for review.",
+    "approvedToast": "{{name}} approved and assigned to {{className}}. Welcome email sent."
   },
   "studentDetail": {
     "title": "Student detail",
@@ -1451,7 +1563,9 @@
     "tplAverage": "Average",
     "tplGrade": "Grade",
     "tplPosition": "Position",
-    "tplStatus": "Status"
+    "tplStatus": "Status",
+    "tplAttendance": "Attendance",
+    "tplGenerated": "Report Generated:"
   },
   "settings": {
     "nextTermResumption": "Next term resumes",
@@ -2496,7 +2610,6 @@
       }
     }
   },
-
   "portal": {
     "title": "Parent portal",
     "signIn": "Sign in",
@@ -2569,7 +2682,8 @@
     "noticeStatus_pending": "Queued — not sent yet",
     "noticeStatus_failed": "Could not be delivered",
     "unreadCount": "{{count}} unread",
-    "unreadCount_other": "{{count}} unread"
+    "unreadCount_other": "{{count}} unread",
+    "general": "General"
   },
   "codes": {
     "title": "Portal access",
@@ -2793,7 +2907,9 @@
     "oneStudent": "Student",
     "oneTeacher": "Teacher",
     "oneClass": "Class",
-    "oneSubject": "Subject"
+    "oneSubject": "Subject",
+    "resultsFor": "{{count}} result for",
+    "resultsFor_other": "{{count}} results for"
   },
   "alerts": {
     "appsPending": "{{count}} application pending over 3 days",

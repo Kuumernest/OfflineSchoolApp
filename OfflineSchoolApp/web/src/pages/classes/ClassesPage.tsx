@@ -311,7 +311,7 @@ export default function ClassesPage() {
   }));
 
   const teacherOptions: SelectOption[] = [
-    { value: "", label: "No teacher assigned" },
+    { value: "", label: t("subjects.noTeacher") },
     ...teachers.map((t) => ({
       value: t._id,
       label: resolveTeacherDisplayName(t),
@@ -332,8 +332,8 @@ export default function ClassesPage() {
     teacherOptions.splice(1, 0, {
       value: String(editingClass.classTeacherId),
       label: editingClass.classTeacherName
-        ? `${editingClass.classTeacherName} (no longer on staff)`
-        : "Current form master",
+        ? t("classes.noLongerOnStaff", { name: editingClass.classTeacherName })
+        : t("classes.currentFormMaster"),
     });
   }
 
@@ -687,11 +687,7 @@ export default function ClassesPage() {
       >
         <div className="space-y-4">
           <p className="text-sm text-gray-600">
-            Are you sure you want to delete{" "}
-            <span className="font-semibold text-gray-900">
-              {deleteConfirm?.name}
-            </span>
-            ?{" "}
+            {t("classes.deleteConfirmBody", { name: deleteConfirm?.name })}{" "}
             {deleteConfirm?.type === "class" &&
               t("classes.deleteWarning") + " "}
             {t("common.cannotUndo")}
@@ -769,10 +765,10 @@ function ClassCard({
           </h3>
           <div className="flex gap-2 mt-1 flex-wrap">
             {cls.level && (
-              <Badge variant="secondary">Level {cls.level}</Badge>
+              <Badge variant="secondary">{t("common.level")} {cls.level}</Badge>
             )}
             {cls.section && (
-              <Badge variant="secondary">Section {cls.section}</Badge>
+              <Badge variant="secondary">{t("common.section")} {cls.section}</Badge>
             )}
           </div>
         </div>
@@ -812,11 +808,11 @@ function ClassCard({
           hover:text-primary-600 transition-colors text-left
         "
         onClick={() => onViewSubjects(cls)}
-        aria-label={`View subjects for ${cls.name}`}
+        aria-label={t("classes.viewSubjectsFor", { name: cls.name })}
       >
         <BookOpen className="h-4 w-4 flex-shrink-0" />
         <span>
-          {subjectCount} subject{subjectCount !== 1 ? "s" : ""}
+          {t("academic.subjectCount", { count: subjectCount })}
         </span>
       </button>
     </div>

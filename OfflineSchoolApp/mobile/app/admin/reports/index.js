@@ -444,8 +444,7 @@ export default function ExamReportsScreen() {
       {allExams.length > 0 && (
         <View style={styles.countBar}>
           <Text style={styles.countText}>
-            {exams.length} of {allExams.length} exam
-            {allExams.length !== 1 ? "s" : ""}
+            {t("reportList.examsOf", { shown: exams.length, count: allExams.length })}
           </Text>
           <TouchableOpacity
             style={styles.countBarAction}

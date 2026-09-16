@@ -625,7 +625,7 @@ export default function MessagesPage() {
                       {sendMutation.isPending
                         ? <Loader2 size={15} className="animate-spin" />
                         : <Send size={15} />}
-                      Send
+                      {t("common.send")}
                     </button>
                   </div>
                 </div>

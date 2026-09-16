@@ -52,7 +52,7 @@ export default function AddClass() {
     if (!trimmed) return t("classesAdmin.errNameRequired");
     if (trimmed.length < 2) return t("classesAdmin.errNameShort");
     if (trimmed.length > MAX_CLASS_NAME_LENGTH) {
-      return `Class name cannot exceed ${MAX_CLASS_NAME_LENGTH} characters.`;
+      return t("classesAdmin.errNameMax", { max: MAX_CLASS_NAME_LENGTH });
     }
     if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";
@@ -98,7 +98,7 @@ export default function AddClass() {
             inputRef.current?.focus();
           },
         },
-        { text: "Done", style: "default", onPress: () => router.back() },
+        { text: t("common.done"), style: "default", onPress: () => router.back() },
       ]);
     } catch (err) {
       if (!isMountedRef.current) return;

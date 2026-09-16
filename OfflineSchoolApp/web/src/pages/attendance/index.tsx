@@ -265,7 +265,7 @@ export default function AttendancePage() {
 
   const classes = classesQ.data ?? [];
   const classOptions = [
-    { value: "", label: "Choose a class…" },
+    { value: "", label: t("students.chooseClass") },
     ...classes.map((c) => ({
       value: c.id ?? c._id ?? "",
       label: [c.name, c.section].filter(Boolean).join(" "),
@@ -424,7 +424,7 @@ export default function AttendancePage() {
           <p className="mt-1 text-sm text-gray-500">
             {subject === "students"
               ? t("attendance.noActiveStudents")
-              : "No active teachers found for this school."}
+              : t("attendance.noActiveTeachers")}
           </p>
         </Card>
       ) : (
@@ -456,8 +456,8 @@ export default function AttendancePage() {
                 title={`${roster.length} on the register`}
                 subtitle={
                   dirtyCount > 0
-                    ? `${dirtyCount} unsaved ${dirtyCount === 1 ? "change" : "changes"}`
-                    : "No unsaved changes"
+                    ? t("attendance.unsavedCount", { count: dirtyCount })
+                    : t("attendance.noUnsaved")
                 }
                 action={
                   <SearchInput

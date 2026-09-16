@@ -658,8 +658,7 @@ const ClassSubjectPicker = ({
         <Ionicons name="school-outline" size={48} color="#D1D5DB" />
         <Text style={cs.emptyTitle}>{t("marksEntry.noSubjectsTitle")}</Text>
         <Text style={cs.emptyText}>
-          This exam has no subjects assigned to a class yet.{"\n"}
-          Add subjects from the exam detail screen.
+          {t("marksEntry.noSubjectsBody")}
         </Text>
       </View>
     );
@@ -711,8 +710,7 @@ const ClassSubjectPicker = ({
               <View style={cs.classHeaderText}>
                 <Text style={cs.className}>{sc.className}</Text>
                 <Text style={cs.classMeta}>
-                  {sc.subjects.length} subject
-                  {sc.subjects.length !== 1 ? "s" : ""}
+                  {t("academic.subjectCount", { count: sc.subjects.length })}
                 </Text>
               </View>
             </View>
@@ -1019,7 +1017,7 @@ Check: ${names}${invalid.length > 3 ? " …" : ""}` : "")
         setDirty(false);
         Alert.alert(
           saveRes?.queued ? t("marksEntry.savedOffline") : t("marksEntry.saved"),
-          `Scores saved for ${records.length} student(s).` +
+          t("marksEntry.savedFor", { count: records.length }) +
           (saveRes?.queued
             ? "\n\nStored on this device — they will upload automatically when you're back online."
             : ""),

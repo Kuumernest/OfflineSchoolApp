@@ -1,6 +1,7 @@
 // web/src/components/applications/DetailRow.tsx
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 interface DetailRowProps {
   icon:   React.ReactNode;
@@ -12,7 +13,9 @@ export const DetailRow: React.FC<DetailRowProps> = ({
   icon,
   label,
   value,
-}) => (
+}) => {
+  const { t } = useTranslation();
+  return (
   <div className="flex items-start gap-3 mb-4 last:mb-0">
     <span className="flex-shrink-0 mt-0.5">{icon}</span>
     <div className="flex-1 min-w-0">
@@ -20,8 +23,9 @@ export const DetailRow: React.FC<DetailRowProps> = ({
         {label}
       </p>
       <p className="text-sm font-semibold text-gray-900 mt-0.5 break-words">
-        {value || "Not provided"}
+        {value || t("common.notProvided")}
       </p>
     </div>
   </div>
-);
+  );
+};
