@@ -67,7 +67,7 @@ const strip = (s) => s
   .replace(/\/\*[\s\S]*?\*\//g, "")
   .replace(/(^|[^:"'`\\])\/\/[^\n]*/g, "$1")
   // A log statement, including one whose text runs onto the next lines.
-  .replace(/console\.(?:log|warn|error|info|debug)\((?:[^()]|\([^()]*\))*\)/g, "");
+  .replace(/console\.(?:log|warn|error|info|debug)\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/g, "");
 const literals = ["Currently assigned to {", "Step {step.id} of 4", "Review {selectedSubjects.length} Selection", "this teacher\"", " subject(s)", " student(s)", " teacher(s)"];
 const found = [], plurals = [];
 for (const f of files) {
