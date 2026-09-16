@@ -295,10 +295,14 @@
     "setupHealth": "État de la configuration",
     "healthy": "Configuration complète",
     "actionNeeded": "Action requise",
-    "itemsNeedAttention": "{{count}} élément requiert votre attention",
-    "itemsNeedAttention_other": "{{count}} éléments requièrent votre attention",
-    "pendingApplications": "{{count}} demande d'inscription",
-    "pendingApplications_other": "{{count}} demandes d'inscription",
+    "itemsNeedAttention": {
+      "one": "{{count}} élément requiert votre attention",
+      "other": "{{count}} éléments requièrent votre attention"
+    },
+    "pendingApplications": {
+      "one": "{{count}} demande d'inscription",
+      "other": "{{count}} demandes d'inscription"
+    },
     "awaitingReview": "en attente d'examen",
     "review": "Examiner",
     "statsFailed": "Certaines statistiques n'ont pas pu être chargées.",
@@ -546,8 +550,10 @@
     "assignedOnly": "Seuls les enseignants affectés à cette matière dans cette classe.",
     "noTeacherAssigned": "Aucun enseignant n'est affecté à cette matière dans cette classe. Affectez-en un d'abord.",
     "chooseSubjectFirst": "Choisissez d'abord une matière",
-    "teachersBusy": "{{count}} enseignant enseigne déjà à cette période.",
-    "teachersBusy_other": "{{count}} enseignants enseignent déjà à cette période.",
+    "teachersBusy": {
+      "one": "{{count}} enseignant enseigne déjà à cette période.",
+      "other": "{{count}} enseignants enseignent déjà à cette période."
+    },
     "syncError": "Actualisation impossible — emploi du temps en cache",
     "loading": "Chargement de l'emploi du temps…",
     "noClassTitle": "Aucune classe attribuée",
@@ -1041,8 +1047,10 @@
     "blurb": "Ce qui a été facturé à chaque élève, et ce qu'il a payé.",
     "outstanding": "Frais impayés",
     "totalOutstanding": "Total des impayés",
-    "studentsOwing": "{{count}} élève doit des frais",
-    "studentsOwing_other": "{{count}} élèves doivent des frais",
+    "studentsOwing": {
+      "one": "{{count}} élève doit des frais",
+      "other": "{{count}} élèves doivent des frais"
+    },
     "noneOwing": "Aucun impayé",
     "noneOwingHint": "Tous les élèves de cette sélection sont à jour.",
     "charged": "Facturé",
@@ -1110,8 +1118,10 @@
     "noClassesYet": "Aucune classe — créez-en une d'abord",
     "classesLabel": "Classes facturées",
     "classesHint": "Ne sélectionnez aucune classe pour facturer tout l'établissement.",
-    "selectedCount": "{{count}} classe sélectionnée",
-    "selectedCount_other": "{{count}} classes sélectionnées",
+    "selectedCount": {
+      "one": "{{count}} classe sélectionnée",
+      "other": "{{count}} classes sélectionnées"
+    },
     "selectAll": "Tout sélectionner",
     "clearSelection": "Effacer"
   },
@@ -1173,8 +1183,10 @@
     "month": "Mois",
     "none": "Aucune paie générée",
     "noneHint": "Générez un mois pour produire des bulletins provisoires.",
-    "staffCount": "{{count}} membre du personnel",
-    "staffCount_other": "{{count}} membres du personnel",
+    "staffCount": {
+      "one": "{{count}} membre du personnel",
+      "other": "{{count}} membres du personnel"
+    },
     "draft": "Provisoire",
     "confirmed": "Confirmée",
     "reversed": "Annulée",
@@ -1209,8 +1221,10 @@
     "surplus": "Excédent",
     "deficit": "Déficit",
     "feesCollected": "Frais encaissés",
-    "paymentCount": "{{count}} paiement",
-    "paymentCount_other": "{{count}} paiements",
+    "paymentCount": {
+      "one": "{{count}} paiement",
+      "other": "{{count}} paiements"
+    },
     "period": "Période",
     "from": "Du",
     "to": "Au",
@@ -1240,8 +1254,10 @@
     "finalYear": "Dernière année",
     "finalYearHint": "Les élèves de cette classe partent en fin d'année.",
     "notSet": "Non défini",
-    "incomplete": "{{count}} classe sans destination",
-    "incomplete_other": "{{count}} classes sans destination",
+    "incomplete": {
+      "one": "{{count}} classe sans destination",
+      "other": "{{count}} classes sans destination"
+    },
     "incompleteHint": "Leurs élèves ne pourront pas passer tant que ce n'est pas défini.",
     "complete": "Chaque classe a une destination",
     "saved": "Progression enregistrée"
@@ -1352,8 +1368,10 @@
     "blurb": "Téléchargez les registres au format Excel. Les écritures annulées sont incluses et signalées, afin qu'un fichier concorde avec le système au lieu de le contredire.",
     "download": "Télécharger",
     "downloading": "Préparation…",
-    "downloaded": "{{count}} ligne exportée",
-    "downloaded_other": "{{count}} lignes exportées",
+    "downloaded": {
+      "one": "{{count}} ligne exportée",
+      "other": "{{count}} lignes exportées"
+    },
     "empty": "Rien à exporter pour cette sélection",
     "failed": "Impossible de générer l'export",
     "filters": "Affiner",
@@ -1503,8 +1521,10 @@
     "newAccess": "Nouveau code tuteur",
     "noAccess2": "Aucun code tuteur",
     "noAccessHint": "Générez-en un pour qu'un parent puisse consulter les frais, résultats et présences de ses enfants.",
-    "selectedCount": "{{count}} enfant sélectionné",
-    "selectedCount_other": "{{count}} enfants sélectionnés",
+    "selectedCount": {
+      "one": "{{count}} enfant sélectionné",
+      "other": "{{count}} enfants sélectionnés"
+    },
     "covers": "Couvre",
     "searchChild": "Rechercher par nom ou matricule"
   },
@@ -1512,10 +1532,14 @@
     "title": "Cartes d'identité",
     "hint": "Dix par feuille A4, prêtes à découper et plastifier.",
     "blank": "Les cartes s'impriment avec un cadre photo vide lorsqu'aucune photo n'est enregistrée — la méthode habituelle.",
-    "skipped": "{{count}} élève sans matricule est exclu",
-    "skipped_other": "{{count}} élèves sans matricule sont exclus",
-    "cardCount": "{{count}} carte",
-    "cardCount_other": "{{count}} cartes"
+    "skipped": {
+      "one": "{{count}} élève sans matricule est exclu",
+      "other": "{{count}} élèves sans matricule sont exclus"
+    },
+    "cardCount": {
+      "one": "{{count}} carte",
+      "other": "{{count}} cartes"
+    }
   },
   "photo": {
     "title": "Photo de la carte",
@@ -1645,8 +1669,10 @@
       "title": "Mes élèves",
       "allClasses": "Toutes mes classes",
       "classList": "Élèves de {{className}}",
-      "classSummary": "{{count}} élève dans {{className}}",
-      "classSummary_other": "{{count}} élèves dans {{className}}",
+      "classSummary": {
+        "one": "{{count}} élève dans {{className}}",
+        "other": "{{count}} élèves dans {{className}}"
+      },
       "searchPlaceholder": "Rechercher des élèves…",
       "noResults": "Aucun élève trouvé",
       "noResultsHint": "Essayez un autre nom ou numéro d'admission.",
@@ -1678,18 +1704,24 @@
       "summaryClasses": "Classes",
       "summarySubjects": "Matières",
       "summaryStudents": "Élèves",
-      "subjectCount": "{{count}} matière",
-      "subjectCount_other": "{{count}} matières",
-      "studentCount": "{{count}} élève",
-      "studentCount_other": "{{count}} élèves"
+      "subjectCount": {
+        "one": "{{count}} matière",
+        "other": "{{count}} matières"
+      },
+      "studentCount": {
+        "one": "{{count}} élève",
+        "other": "{{count}} élèves"
+      }
     },
     "timetable": {
       "title": "Mon emploi du temps",
       "time": "Heure",
       "break": "Pause",
       "free": "Libre",
-      "slotsThisWeek": "{{count}} créneau cette semaine",
-      "slotsThisWeek_other": "{{count}} créneaux cette semaine",
+      "slotsThisWeek": {
+        "one": "{{count}} créneau cette semaine",
+        "other": "{{count}} créneaux cette semaine"
+      },
       "viewingOffline": "Affichage de l'horaire en cache hors ligne",
       "days": {
         "mon": "Lundi",
@@ -1783,7 +1815,7 @@
     "title": "Paramètres",
     "adminFallback": "Administrateur",
     "roleSuperAdmin": "Super administrateur",
-    "roleSchoolAdmin": "Administrateur d'école",
+    "roleSchoolAdmin": "Administrateur de l'établissement",
     "roleAdmin": "Administrateur",
     "roleTeacher": "Enseignant",
     "typePrimary": "Primaire",
@@ -4291,7 +4323,7 @@
     "announcement": "Communiqué",
     "fromTeacher": "D'un enseignant",
     "roleSuperAdmin": "Super administrateur",
-    "roleSchoolAdmin": "Administrateur de l'école",
+    "roleSchoolAdmin": "Administrateur de l'établissement",
     "roleAdmin": "Administrateur",
     "roleTeacher": "Enseignant",
     "roleStaff": "Personnel",
@@ -4428,7 +4460,7 @@
     "from": "De",
     "roleLabel": "Rôle",
     "roleSuperAdmin": "Super administrateur",
-    "roleSchoolAdmin": "Administrateur de l'école",
+    "roleSchoolAdmin": "Administrateur de l'établissement",
     "roleTeacher": "Enseignant",
     "sent": "Envoyé le",
     "expires": "Expire le",

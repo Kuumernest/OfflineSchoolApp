@@ -52,6 +52,16 @@ await i18next.init({
   returnNull: false,
 });
 const T = (lng, key, opts) => i18next.getFixedT(lng)(key, opts);
+const frFlatAll = () => {
+  const out = {};
+  (function walk(o, p = "") {
+    for (const [k, v] of Object.entries(o)) {
+      const key = p ? `${p}.${k}` : k;
+      if (v && typeof v === "object") walk(v, key); else out[key] = v;
+    }
+  })(fr);
+  return out;
+};
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- the assignment wizard, in both languages ---");
@@ -89,6 +99,21 @@ check("en: Super admin",   T("en", "settings.roleSuperAdmin"), "Super admin");
 check("fr: Super admin",   T("fr", "settings.roleSuperAdmin"), "Super administrateur");
 check("en: Bursar",        T("en", "settings.roleBursar"),     "Bursar");
 check("fr: Bursar",        T("fr", "settings.roleBursar"),     "Économe");
+
+// One French name for the role, wherever it is a label. The platform pages had
+// their own key for it and their own wording; the wording is now the same.
+check("fr: the platform's label for the role is the same one",
+  T("fr", "platform.schools.roleAdmin"), "Administrateur de l'établissement");
+const roleVariants = Object.entries(frFlatAll())
+  .filter(([, v]) => /^Administrateur (d['’]|de l['’])(école|établissement)$/i.test(String(v)))
+  .filter(([, v]) => v !== "Administrateur de l'établissement")
+  .map(([k, v]) => `${k}=${v}`);
+check("and no other spelling of it survives in French", roleVariants, []);
+
+// The register toggle on the attendance page said "students" / "teachers" in
+// every language: the stored value, capitalised by CSS.
+check("en: the register toggle", T("en", "academic.student", { count: 2 }), "Students");
+check("fr: the register toggle", T("fr", "academic.teacher", { count: 2 }), "Enseignants");
 
 // Every role the label map names renders in both languages.
 const util = read("src/utils/roleLabel.ts");
@@ -178,6 +203,8 @@ const LITERALS = [
   `"Nothing matches that search"`, "All Subjects (${", " subject(s)", " class(es)",
   `label: "Assigned"`, `label: "Unassigned"`, `label: "Total"`, `"Approving…"`,
   `>Level {`, `>Section {`, "Version {template", `"Announcement posted"`,
+  // The attendance register toggle rendering its stored value.
+  `capitalize transition-colors",\n                      subject === s\n                        ? "bg-primary-600 text-white"\n                        : "bg-white text-gray-600 hover:bg-gray-50",\n                    )}\n                  >\n                    {s}`,
 ];
 const found = [];
 for (const [file, text] of sources) {

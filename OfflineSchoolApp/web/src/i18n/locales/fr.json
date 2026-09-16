@@ -2546,7 +2546,7 @@
       "appointTitle": "Nommer un administrateur pour {{name}}",
       "appointBody": "Un mot de passe temporaire est généré et envoyé par e-mail. La personne devra le changer à la première connexion.",
       "role": "Rôle",
-      "roleAdmin": "Administrateur d'établissement",
+      "roleAdmin": "Administrateur de l'établissement",
       "roleBursar": "Économe",
       "appointed": "Compte créé",
       "restored": "Compte restauré",

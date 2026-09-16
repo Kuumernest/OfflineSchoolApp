@@ -295,10 +295,14 @@
     "setupHealth": "Setup health",
     "healthy": "Everything configured",
     "actionNeeded": "Action needed",
-    "itemsNeedAttention": "{{count}} item needs attention",
-    "itemsNeedAttention_other": "{{count}} items need attention",
-    "pendingApplications": "{{count}} student application",
-    "pendingApplications_other": "{{count}} student applications",
+    "itemsNeedAttention": {
+      "one": "{{count}} item needs attention",
+      "other": "{{count}} items need attention"
+    },
+    "pendingApplications": {
+      "one": "{{count}} student application",
+      "other": "{{count}} student applications"
+    },
     "awaitingReview": "awaiting review",
     "review": "Review",
     "statsFailed": "Some dashboard stats could not be loaded.",
@@ -546,8 +550,10 @@
     "assignedOnly": "Only teachers assigned to this subject in this class.",
     "noTeacherAssigned": "No teacher is assigned to this subject in this class. Assign one first.",
     "chooseSubjectFirst": "Choose a subject first",
-    "teachersBusy": "{{count}} teacher is already teaching in this period.",
-    "teachersBusy_other": "{{count}} teachers are already teaching in this period.",
+    "teachersBusy": {
+      "one": "{{count}} teacher is already teaching in this period.",
+      "other": "{{count}} teachers are already teaching in this period."
+    },
     "syncError": "Could not refresh — showing cached timetable",
     "loading": "Loading timetable…",
     "noClassTitle": "No class assigned",
@@ -1041,8 +1047,10 @@
     "blurb": "What each student has been billed, and what they have paid.",
     "outstanding": "Outstanding fees",
     "totalOutstanding": "Total outstanding",
-    "studentsOwing": "{{count}} student owes fees",
-    "studentsOwing_other": "{{count}} students owe fees",
+    "studentsOwing": {
+      "one": "{{count}} student owes fees",
+      "other": "{{count}} students owe fees"
+    },
     "noneOwing": "Nobody owes fees",
     "noneOwingHint": "Every student in this selection has settled their account.",
     "charged": "Charged",
@@ -1110,8 +1118,10 @@
     "noClassesYet": "No classes yet — create one first",
     "classesLabel": "Classes billed",
     "classesHint": "Select none to bill every class in the school.",
-    "selectedCount": "{{count}} class selected",
-    "selectedCount_other": "{{count}} classes selected",
+    "selectedCount": {
+      "one": "{{count}} class selected",
+      "other": "{{count}} classes selected"
+    },
     "selectAll": "Select all",
     "clearSelection": "Clear"
   },
@@ -1173,8 +1183,10 @@
     "month": "Month",
     "none": "No payroll runs yet",
     "noneHint": "Generate a month to produce draft payslips.",
-    "staffCount": "{{count}} staff member",
-    "staffCount_other": "{{count}} staff members",
+    "staffCount": {
+      "one": "{{count}} staff member",
+      "other": "{{count}} staff members"
+    },
     "draft": "Draft",
     "confirmed": "Confirmed",
     "reversed": "Reversed",
@@ -1209,8 +1221,10 @@
     "surplus": "Surplus",
     "deficit": "Deficit",
     "feesCollected": "Fees collected",
-    "paymentCount": "{{count}} payment",
-    "paymentCount_other": "{{count}} payments",
+    "paymentCount": {
+      "one": "{{count}} payment",
+      "other": "{{count}} payments"
+    },
     "period": "Period",
     "from": "From",
     "to": "To",
@@ -1240,8 +1254,10 @@
     "finalYear": "Final year",
     "finalYearHint": "Students here leave at the end of the year.",
     "notSet": "Not set",
-    "incomplete": "{{count}} class has no destination",
-    "incomplete_other": "{{count}} classes have no destination",
+    "incomplete": {
+      "one": "{{count}} class has no destination",
+      "other": "{{count}} classes have no destination"
+    },
     "incompleteHint": "Their students cannot be promoted until this is set.",
     "complete": "Every class has a destination",
     "saved": "Progression saved"
@@ -1352,8 +1368,10 @@
     "blurb": "Download the books as Excel files. Voided and reversed entries are included and marked, so a file reconciles against the system rather than disagreeing with it.",
     "download": "Download",
     "downloading": "Preparing…",
-    "downloaded": "{{count}} row exported",
-    "downloaded_other": "{{count}} rows exported",
+    "downloaded": {
+      "one": "{{count}} row exported",
+      "other": "{{count}} rows exported"
+    },
     "empty": "Nothing to export for that selection",
     "failed": "Could not build the export",
     "filters": "Narrow it down",
@@ -1503,8 +1521,10 @@
     "newAccess": "New guardian code",
     "noAccess2": "No guardian codes yet",
     "noAccessHint": "Issue one so a parent can see their children's fees, results and attendance.",
-    "selectedCount": "{{count}} child selected",
-    "selectedCount_other": "{{count}} children selected",
+    "selectedCount": {
+      "one": "{{count}} child selected",
+      "other": "{{count}} children selected"
+    },
     "covers": "Covers",
     "searchChild": "Search by name or admission number"
   },
@@ -1512,10 +1532,14 @@
     "title": "ID cards",
     "hint": "Ten to an A4 sheet, ready to cut and laminate.",
     "blank": "Cards print with a blank photo box where no photo is on file — the usual way these are made.",
-    "skipped": "{{count}} student has no admission number and is left out",
-    "skipped_other": "{{count}} students have no admission number and are left out",
-    "cardCount": "{{count}} card",
-    "cardCount_other": "{{count}} cards"
+    "skipped": {
+      "one": "{{count}} student has no admission number and is left out",
+      "other": "{{count}} students have no admission number and are left out"
+    },
+    "cardCount": {
+      "one": "{{count}} card",
+      "other": "{{count}} cards"
+    }
   },
   "photo": {
     "title": "ID card photo",
@@ -1645,8 +1669,10 @@
       "title": "My Students",
       "allClasses": "All My Classes",
       "classList": "Students in {{className}}",
-      "classSummary": "{{count}} student in {{className}}",
-      "classSummary_other": "{{count}} students in {{className}}",
+      "classSummary": {
+        "one": "{{count}} student in {{className}}",
+        "other": "{{count}} students in {{className}}"
+      },
       "searchPlaceholder": "Search students…",
       "noResults": "No students found",
       "noResultsHint": "Try a different name or admission number.",
@@ -1678,18 +1704,24 @@
       "summaryClasses": "Classes",
       "summarySubjects": "Subjects",
       "summaryStudents": "Students",
-      "subjectCount": "{{count}} subject",
-      "subjectCount_other": "{{count}} subjects",
-      "studentCount": "{{count}} student",
-      "studentCount_other": "{{count}} students"
+      "subjectCount": {
+        "one": "{{count}} subject",
+        "other": "{{count}} subjects"
+      },
+      "studentCount": {
+        "one": "{{count}} student",
+        "other": "{{count}} students"
+      }
     },
     "timetable": {
       "title": "My Teaching Schedule",
       "time": "Time",
       "break": "Break",
       "free": "Free",
-      "slotsThisWeek": "{{count}} slot this week",
-      "slotsThisWeek_other": "{{count}} slots this week",
+      "slotsThisWeek": {
+        "one": "{{count}} slot this week",
+        "other": "{{count}} slots this week"
+      },
       "viewingOffline": "Viewing offline cached schedule",
       "days": {
         "mon": "Monday",

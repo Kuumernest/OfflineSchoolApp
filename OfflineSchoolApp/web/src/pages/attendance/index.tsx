@@ -313,7 +313,7 @@ export default function AttendancePage() {
                         : "bg-white text-gray-600 hover:bg-gray-50",
                     )}
                   >
-                    {s}
+                    {t(s === "students" ? "academic.student" : "academic.teacher", { count: 2 })}
                   </button>
                 ))}
               </div>

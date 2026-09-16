@@ -80,18 +80,22 @@ check("every stored role has a label",
   ["super_admin", "school_admin", "bursar", "teacher", "student"]
     .filter((r) => !ROLE_KEYS[r]), []);
 
-// 4. One French translation for the role, not two. The settings page and the
-//    two rails all read the same key, so this is asserted by construction —
-//    and asserted here in case somebody adds a second key with the same words.
-const frValues = [];
+// 4. One French wording for the role. The settings page and the two rails read
+//    settings.schoolAdmin; the platform pages, which appoint the role, keep
+//    their own key but say the same thing. Any third spelling — "d'école",
+//    "de l'école", "d'établissement" — is what this catches.
+const frValues = [], variants = [];
 (function walk(obj, prefix = "") {
   for (const [k, v] of Object.entries(obj)) {
     const key = prefix ? `${prefix}.${k}` : k;
     if (v && typeof v === "object") walk(v, key);
     else if (/^Administrateur de l['’]établissement$/.test(String(v))) frValues.push(key);
+    else if (/^Administrateur (d['’]|de l['’])(école|établissement)$/i.test(String(v))) variants.push(`${key}=${v}`);
   }
 })(fr);
-check("the French label for the role lives under exactly one key", frValues, [KEY]);
+check("the French label for the role lives under the two keys that name it",
+  frValues, [KEY, "platform.schools.roleAdmin"]);
+check("and under no other spelling", variants, []);
 
 console.log("--- every surface reads the map ---");
 
