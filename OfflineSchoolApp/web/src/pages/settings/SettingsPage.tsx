@@ -16,6 +16,7 @@ import { cn }                    from "@/utils/cn";
 import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
+import { roleLabel }             from "@/utils/roleLabel";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -149,30 +150,16 @@ const DAYS_OF_WEEK = [
   { value: "Saturday",  labelKey: "settings.daySat" },
 ];
 
-// "admin" is kept in both maps below, and only in the maps. It is not a role
-// the API will store — see backend/src/config/roles.js — but a school whose
-// database predates the enum could still hold a row saying it, and a badge
-// reading "admin" is better than one reading nothing.
+// "admin" is kept here, and in the label map in utils/roleLabel. It is not a
+// role the API will store — see backend/src/config/roles.js — but a school
+// whose database predates the enum could still hold a row saying it, and a
+// badge reading "admin" is better than one reading nothing.
 const ROLE_COLORS: Record<string, string> = {
   super_admin:  "bg-red-100 text-red-700",
   school_admin: "bg-purple-100 text-purple-700",
   bursar:       "bg-amber-100 text-amber-700",
   admin:        "bg-indigo-100 text-indigo-700",
   teacher:      "bg-emerald-100 text-emerald-700",
-};
-
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  super_admin:  "settings.roleSuperAdmin",
-  school_admin: "settings.schoolAdmin",
-  bursar:       "settings.roleBursar",
-  admin:        "settings.roleAdmin",
-  teacher:      "academic.teacher",
-};
-
-/** The visible name for a role, falling back to the raw value we were sent. */
-const roleLabel = (role: string | undefined, t: TFunction): string => {
-  const key = ROLE_LABEL_KEYS[role ?? ""];
-  return key ? t(key) : (role ?? "");
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -179,6 +179,81 @@ const esc = (str) =>
     .replace(/"/g, "&quot;");
 
 /**
+ * The school's logo, faint and centred, behind everything on the page.
+ *
+ * ── What it is ─────────────────────────────────────────────────────────────
+ *
+ * A report card is a document a family keeps and a school is asked to vouch
+ * for years later. Its crest behind the marks is the same thing a letterhead
+ * does: it says whose paper this is at a glance, and it makes a card that was
+ * simply photocopied off another look like what it is. The header already
+ * carries the logo at full strength; this is the second, quiet impression of
+ * the same image, and nothing else — no second field, no second upload. It
+ * reads the logo the header reads.
+ *
+ * ── Why it is drawn this way ───────────────────────────────────────────────
+ *
+ *   An <img>, not a CSS background. Browsers drop background images when
+ *   they print unless the reader finds the "background graphics" checkbox,
+ *   and the card is printed far more often than it is looked at on a screen.
+ *   An image element prints.
+ *
+ *   position: fixed, so it sits in the middle of the sheet — and of every
+ *   sheet, should a card ever run to two — rather than in the middle of a
+ *   scrolling document. z-index: -1 puts it under the flow of the page; the
+ *   canvas is white beneath it, so it shows through the paper and not through
+ *   the marks. pointer-events: none so a reader's cursor never lands on it.
+ *
+ *   object-fit: contain inside a box that is a fraction of the page: a
+ *   square crest and a wide banner both scale to fit without either being
+ *   stretched. The opacity is low enough that a figure printed over it is as
+ *   legible as one printed over blank paper.
+ *
+ * A school with no logo gets an empty string, not a placeholder: the header
+ * already says NO LOGO once, and a broken image behind the marks would say it
+ * a second time, worse.
+ *
+ * The same rules serve the built-in layout and a school's own template. The
+ * template's CSS is appended after these, so a school that wants its mark
+ * larger, fainter or gone can say so in its own stylesheet.
+ *
+ * @param {object} school  The school as loadSchoolForCard shapes it: `logo` is
+ *                         an absolute URL or a data URI; `logoBase64` a bare
+ *                         payload, which the template preview path may send.
+ * @returns {{ css: string, html: string }}
+ */
+function schoolWatermark(school) {
+  const raw = school?.logo || school?.logoBase64 || null;
+  const src = !raw ? null
+    : /^(https?:|data:|\/)/i.test(String(raw))
+      ? String(raw)
+      : `data:image/png;base64,${raw}`;
+
+  const css = `
+    /* ── The school's mark behind the page ─────────────────────────────
+       An image element, not a background, because backgrounds do not
+       print by default and this card is printed. Fixed and centred so
+       it is in the middle of the sheet; z-index -1 so it is under the
+       marks; object-fit so a crest of any shape keeps its shape. */
+    .school-watermark { position: fixed; inset: 0; z-index: -1;
+                        display: flex; align-items: center;
+                        justify-content: center; overflow: hidden;
+                        pointer-events: none; }
+    .school-watermark img { width: 60%; max-width: 420px; max-height: 60%;
+                            height: auto; object-fit: contain;
+                            opacity: 0.07; display: block; }
+    @media print {
+      .school-watermark { position: fixed; }
+    }`;
+
+  const html = src
+    ? `<div class="school-watermark" aria-hidden="true"><img src="${esc(src)}" alt=""></div>`
+    : "";
+
+  return { css, html };
+}
+
+/**
  * Render the canonical printable report card.
  *
  * @param {object} payload  Report card payload (see header comment)
@@ -355,6 +430,8 @@ function renderReportCardHtml(payload, opts = {}) {
   // School branding pulled from the school's settings, never hard-coded.
   const schoolLogo = school.logo || null;
   const schoolMotto = school.motto || null;
+  // The same logo a second time, faint, behind the whole card.
+  const watermark = schoolWatermark(school);
 
   // ── The official header ──────────────────────────────────────────────────
   //
@@ -535,6 +612,7 @@ function renderReportCardHtml(payload, opts = {}) {
        The break rules are the other half: a block split down the fold is
        how a signature ends up alone at the top of a second sheet. */
     @page { size: A4; margin: 9mm; }
+${watermark.css}
 
     @media print {
       body { padding: 0; font-size: 10.5px; max-width: none; }
@@ -588,6 +666,7 @@ function renderReportCardHtml(payload, opts = {}) {
   </style>
 </head>
 <body>
+  ${watermark.html}
   <header class="report-header">
     <div class="report-header-top">
       ${ministryColumn("en")}
@@ -936,8 +1015,13 @@ function toTemplateData(payload, opts = {}) {
 /**
  * Wrap a rendered template fragment into a standalone printable document.
  * The template's own CSS goes last so it can override these defaults.
+ *
+ * The school's logo goes behind the template too, on the same terms as the
+ * built-in layout — see schoolWatermark. A template author who does not want
+ * it hides .school-watermark in their own CSS, which is appended after it.
  */
-function wrapTemplateHtml(body, css, { lang, title }) {
+function wrapTemplateHtml(body, css, { lang, title, school }) {
+  const watermark = schoolWatermark(school);
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -964,10 +1048,11 @@ function wrapTemplateHtml(body, css, { lang, title }) {
       thead { display: table-header-group; }
       tr { break-inside: avoid; page-break-inside: avoid; }
     }
+${watermark.css}
     ${css || ""}
   </style>
 </head>
-<body>${body}</body>
+<body>${watermark.html}${body}</body>
 </html>`;
 }
 
@@ -1013,7 +1098,8 @@ function renderReportCard(payload, opts = {}) {
 
       const html = wrapTemplateHtml(body, tpl.css, {
         lang,
-        title: `${LABELS[lang].title} — ${payload.studentName || ""}`,
+        title:  `${LABELS[lang].title} — ${payload.studentName || ""}`,
+        school: opts.school,
       });
 
       // Tokens the engine did not recognise survive as literal text. The

@@ -490,5 +490,122 @@ check("and one that lost it is not",
 check("a sequence of 6 still counts",
   reportTypeFor({ type: "test", term: 3, sequenceNumber: 6 }), "sequence");
 
+console.log("--- the school's mark behind the card ---");
+
+/**
+ * The header carried the logo; the page behind the marks carried nothing.
+ * The watermark is the same image a second time, faint and centred, and
+ * these pin the four things that make it a watermark rather than a
+ * decoration: it is the school's own logo, it is under the content, it is
+ * faint, and a school with no logo gets a plain card and not a broken image.
+ */
+const WM_LOGO = SCHOOL.school.logo;
+const watermarkOf = (html) => {
+  const m = html.match(
+    /<div class="school-watermark"[^>]*>\s*<img src="([^"]*)"[^>]*>\s*<\/div>/);
+  return m ? { src: m[1], at: m.index } : null;
+};
+const wmCard = render();
+const wm     = watermarkOf(wmCard);
+
+check("a school with a logo gets a watermark", wm !== null, true);
+check("and it is the school's own logo, not a second one", wm?.src, WM_LOGO);
+check("the header logo is still there, unchanged",
+  /<div class="school-head">\s*<img src="https:\/\/example\.test\/logo\.png" alt="">/
+    .test(wmCard), true);
+check("so the logo is on the card exactly twice: header and watermark",
+  wmCard.split(WM_LOGO).length - 1, 2);
+check("the watermark is laid down before the header, so it is under it",
+  wm !== null && wm.at < wmCard.indexOf('<header class="report-header">'), true);
+
+// The rules, read from the stylesheet rather than trusted from the markup.
+const wmRule  = (wmCard.match(/\.school-watermark\s*\{([^}]*)\}/)     || [])[1] || "";
+const wmImg   = (wmCard.match(/\.school-watermark img\s*\{([^}]*)\}/) || [])[1] || "";
+const opacity = Number((wmImg.match(/opacity:\s*([\d.]+)/) || [])[1]);
+
+check("it sits behind the flow of the page", /z-index:\s*-1/.test(wmRule), true);
+check("centred on the sheet",
+  /position:\s*fixed/.test(wmRule) && /align-items:\s*center/.test(wmRule)
+    && /justify-content:\s*center/.test(wmRule), true);
+check("and cannot be clicked", /pointer-events:\s*none/.test(wmRule), true);
+check("faint enough to read a mark through", opacity > 0 && opacity <= 0.15, true);
+check("and the logo keeps its shape whatever its proportions",
+  /object-fit:\s*contain/.test(wmImg) && /height:\s*auto/.test(wmImg), true);
+check("it is an image element, which prints — not a background, which does not",
+  /\.school-watermark[^{]*\{[^}]*background/.test(wmCard), false);
+check("and it is drawn for print as well as for the screen",
+  /@media print\s*\{[^}]*\.school-watermark/.test(wmCard), true);
+
+// The card is still the card.
+for (const [what, needle] of [
+  ["the student's name",  "Ada Ngu"],
+  ["a mark",              "18"],
+  ["a remark",            "Below Average"],
+  ["the class position",  "5"],
+  ["the school's name",   "Government Bilingual High School"],
+  ["the promotion rule",  "PROMOTED"],
+]) check(`with the watermark, the card still shows ${what}: ${needle !== "PROMOTED"}`,
+    wmCard.includes(needle), needle !== "PROMOTED");
+
+// In both languages.
+const wmFr = renderReportCardHtml(bilingual(), { ...SCHOOL, lang: "fr" });
+check("the French card carries it too", watermarkOf(wmFr)?.src, WM_LOGO);
+check("and is still French",
+  wmFr.includes('lang="fr"') && wmFr.includes("Observation")
+    && wmFr.includes("Au-dessus de la moyenne"), true);
+check("the English card is still English",
+  wmCard.includes('lang="en"') && headerCols(wmCard).includes("Subject")
+    && wmCard.includes("ACADEMIC REPORT CARD"), true);
+
+// The verification strip is untouched, and the mark is under it too.
+const wmVerified = renderReportCardHtml(payload(), {
+  ...SCHOOL,
+  verify: { code: "GBH-7A21-4C9F", url: "https://school.example.com/r/7a21",
+            qrSvg: "<svg data-qr></svg>" },
+});
+check("the verification strip is intact",
+  wmVerified.includes("GBH-7A21-4C9F") && wmVerified.includes("data-qr")
+    && wmVerified.includes("school.example.com/r/7a21"), true);
+check("and the watermark is before the strip, not over it",
+  watermarkOf(wmVerified).at < wmVerified.indexOf('class="verify"'), true);
+
+// A school that has not uploaded a logo.
+const NO_LOGO = { school: { name: "Government Bilingual High School",
+                            motto: "Knowledge and Service" } };
+const plain = renderReportCardHtml(payload(), NO_LOGO);
+check("a school with no logo still gets its card",
+  plain.includes("Ada Ngu") && plain.includes("Below Average"), true);
+check("with no watermark layer at all", /class="school-watermark"/.test(plain), false);
+check("no image pointing at nothing",
+  /<img[^>]*src="(|null|undefined|data:image\/png;base64,)"/.test(plain), false);
+check("and the header says NO LOGO once, as it always did",
+  plain.split("NO LOGO").length - 1, 1);
+for (const bad of ["", null, undefined]) {
+  const c = renderReportCardHtml(payload(), { school: { ...NO_LOGO.school, logo: bad } });
+  check(`a logo of ${String(bad)} is no logo`, /class="school-watermark"/.test(c), false);
+}
+
+// A school's own template gets the same mark, on the same terms.
+const tplWm = renderReportCard(payload(), tplOpts).html;
+check("a school's own template carries the watermark",
+  watermarkOf(tplWm)?.src, tplOpts.school.logo);
+check("under the template's content",
+  watermarkOf(tplWm).at < tplWm.indexOf('class="report-wrapper"'), true);
+check("and the template's own header logo is unchanged",
+  /<img\s+src="https:\/\/school\.example\.com\/uploads\/logos\/x\.jpg"\s+class="school-logo"/
+    .test(tplWm), true);
+check("the template's own CSS comes after the watermark's, so it can override it",
+  tplWm.indexOf(".school-watermark {") < tplWm.indexOf(".report-wrapper {"), true);
+check("a template for a school with no logo has no watermark",
+  /class="school-watermark"/.test(
+    renderReportCard(payload(), { ...tplOpts, school: { name: "GBHS Molyko" } }).html),
+  false);
+// The preview route sends a bare base64 payload under logoBase64; the header
+// wraps it and so must the watermark, or the two would disagree.
+check("a bare base64 logo is wrapped the way the header wraps it",
+  watermarkOf(renderReportCard(payload(),
+    { ...tplOpts, school: { name: "GBHS Molyko", logoBase64: "AAAA" } }).html)?.src,
+  "data:image/png;base64,AAAA");
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

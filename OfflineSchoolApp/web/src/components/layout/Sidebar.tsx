@@ -7,6 +7,7 @@ import { NAV_ITEMS, type NavItem }      from "@/config/navigation";
 import { sectionForPath, NAV_GROUPS, groupIndexFor } from "@/config/sections";
 import { useUser, useActiveSchool }     from "@/store/auth.store";
 import { cn }                           from "@/utils/cn";
+import { roleLabel }                    from "@/utils/roleLabel";
 import { type UserRole }                from "@/types";
 
 // ─────────────────────────────────────────────────────────
@@ -316,8 +317,12 @@ export default function Sidebar({ isOpen, onClose }: SidebarProps) {
               <p className="truncate text-[13px] font-medium text-nav-text-active">
                 {user?.name}
               </p>
-              <p className="truncate text-[11px] capitalize text-nav-text">
-                {role.replace("_", " ")}
+              {/* The role in the reader's language — not the stored value with
+                  its underscore swapped out, which read "School Admin" on a
+                  French console. No CSS capitalize either: it would turn
+                  "de l'établissement" into "De L'établissement". */}
+              <p className="truncate text-[11px] text-nav-text">
+                {roleLabel(role, t)}
               </p>
             </div>
           </div>

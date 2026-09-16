@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "i18n:check": "node scripts/check-i18n.mjs",
     "api:check": "node scripts/check-api-paths.mjs",
-    "check:normalisers": "node scripts/check-normalisers.mjs"
+    "check:normalisers": "node scripts/check-normalisers.mjs",
+    "check:roles": "node scripts/check-role-labels.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

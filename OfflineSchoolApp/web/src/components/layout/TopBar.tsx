@@ -8,6 +8,7 @@ import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
 import { useAuthStore, useUser }                    from "@/store/auth.store";
 import { cn }                                       from "@/utils/cn";
+import { roleLabel }                                from "@/utils/roleLabel";
 import {
   globalSearch,
   clearSearchCache,
@@ -551,8 +552,8 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 <p className="truncate text-xs text-ink-muted">
                   {user?.email}
                 </p>
-                <p className="mt-1 text-[11px] capitalize text-ink-faint">
-                  {user?.role?.replace("_", " ")}
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  {roleLabel(user?.role, t)}
                 </p>
               </div>
               <button
