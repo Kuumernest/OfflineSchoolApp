@@ -1,6 +1,7 @@
 "use strict";
 
-const Homework = require("../db/models/Homework");
+const Homework          = require("../db/models/Homework");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
 const { z } = require("zod");
 
 // homework.manage defaults to TEACHING_ROLES, which is exactly what this
@@ -21,6 +22,34 @@ const assertManager = async (req) => {
 };
 const schoolIdFor = (req, supplied) =>
   String(req.user?.role === "super_admin" && supplied ? supplied : req.user?.schoolId || supplied || "");
+
+const actorId   = (req) => String(req.user?._id || req.user?.id || "");
+const isTeacher = (req) => req.user?.role === "teacher";
+
+/**
+ * Does this teacher teach this subject in this class?
+ *
+ * The question the whole feature turns on, and the one the controller never
+ * asked. It checked that a teacher's homework named the teacher as its author
+ * and stopped there, so a teacher of Mathematics in Form 3A could set Physics
+ * homework for Form 4B: the app's pickers would not offer it, but the API
+ * would take it. The answer comes from TeacherAssignment — the same rows that
+ * /api/teacher/my-subjects builds the pickers from — as a PAIR, not two sets:
+ * teaching Physics somewhere and teaching Form 3A something is not teaching
+ * Physics to Form 3A. (The teacher scope on /api/teacher also probes the
+ * Subject document for a teacher field; the Subject schema declares none, so
+ * that probe can never match and is not repeated here.)
+ */
+const teacherTeaches = async ({ teacherId, schoolId, classId, subjectId }) => {
+  const scope = schoolId ? { schoolId: String(schoolId) } : {};
+  return Boolean(await TeacherAssignment.exists({
+    ...scope,
+    teacher:  String(teacherId),
+    class:    String(classId),
+    subject:  String(subjectId),
+    isActive: { $ne: false },
+  }));
+};
 
 const bodyToDocument = (body, schoolId) => ({
   _id: body.id || body._id,
@@ -74,6 +103,9 @@ exports.list = async (req, res, next) => {
   try {
     const schoolId = schoolIdFor(req, req.query.schoolId);
     const query = { schoolId, deletedAt: null };
+    // A teacher manages the homework they set. Their list is theirs; a
+    // colleague's homework is not something to edit, so not something to list.
+    if (isTeacher(req)) query.createdBy = actorId(req);
     if (req.query.classId) query.classId = req.query.classId;
     if (req.query.subjectId) query.subjectId = req.query.subjectId;
     const homework = await Homework.find(query).sort({ dueDate: 1, createdAt: -1 }).lean();
@@ -88,11 +120,20 @@ exports.upsert = async (req, res, next) => {
     if (!parsed.success) return res.status(422).json({ success: false, error: "Invalid homework", details: parsed.error.issues });
     req.body = parsed.data;
     const data = bodyToDocument(req.body, schoolIdFor(req, req.body.schoolId));
-    if (req.user.role === "teacher" && data.createdBy !== String(req.user._id || req.user.id)) {
-      return res.status(403).json({ message: "Teachers may create homework only for themselves" });
-    }
+    // The author is the token, not the body. A teacher used to be refused for
+    // naming someone else; now they simply cannot.
+    if (isTeacher(req)) data.createdBy = actorId(req);
     if (!data.schoolId || !data.classId || !data.subjectId || !data.createdBy || !data.title) {
       return res.status(400).json({ message: "schoolId, classId, subjectId, createdBy and title are required" });
+    }
+    if (isTeacher(req) && !(await teacherTeaches({
+      teacherId: data.createdBy, schoolId: data.schoolId,
+      classId: data.classId, subjectId: data.subjectId,
+    }))) {
+      return res.status(403).json({
+        success: false, code: "NOT_ASSIGNED",
+        message: "You are not assigned to teach this subject in this class",
+      });
     }
     const id = data._id;
     delete data._id;
@@ -121,7 +162,8 @@ exports.upsert = async (req, res, next) => {
 exports.remove = async (req, res, next) => {
   try {
     await assertManager(req);
-    const existing = await Homework.findOne({ _id: req.params.id, schoolId: schoolIdFor(req, req.query.schoolId || req.body.schoolId) }).lean();
+    const schoolId = schoolIdFor(req, req.query.schoolId || req.body?.schoolId);
+    const existing = await Homework.findOne({ _id: req.params.id, schoolId }).lean();
     if (existing && req.user.role === "teacher" && existing.createdBy !== String(req.user._id || req.user.id)) {
       return res.status(403).json({ message: "You do not own this homework" });
     }
@@ -129,7 +171,7 @@ exports.remove = async (req, res, next) => {
       return res.status(412).json({ success: false, code: "VERSION_CONFLICT", current: existing });
     }
     const homework = await Homework.findOneAndUpdate(
-      { _id: req.params.id, schoolId: schoolIdFor(req, req.query.schoolId || req.body.schoolId) },
+      { _id: req.params.id, schoolId },
       { $set: { deletedAt: new Date() }, $inc: { version: 1 } },
       { returnDocument: 'after' }
     ).lean();

@@ -1092,6 +1092,7 @@ class SyncManagerClass {
       if (this._isUnauthenticated()) return;
       SyncProgress.step("quizzes");
       await this.syncQuizData();
+      await this.syncHomeworkData();
 
       console.log("[SyncManager] Sync completed at", this.lastSync);
       // A completed cycle clears the backoff outright. No slow climb back
@@ -2415,6 +2416,102 @@ class SyncManagerClass {
   // queued by the backfill sweep and sent by drainOutbox() like every other
   // mutation. What remains is repair plus pull.
   // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * Homework, from the server into the phone's homework tables.
+   *
+   * For a teacher the server answers with the homework they set; for a pupil,
+   * with their school's. Rows the phone has changed and not yet sent
+   * (_synced = 0) are left alone — the outbox owns them until they land — and
+   * everything else is overwritten with the server's copy, so a deletion or
+   * an edit made in the office reaches the phone. Submissions ride along as
+   * subdocuments and are stored beside the homework the same way.
+   */
+  async syncHomeworkData() {
+    if (this._isUnauthenticated()) return;
+    if (!(this.isTeacher() || this.isStudent())) return;
+    const schoolId = await this.getSchoolId();
+    if (!schoolId) return;
+
+    try {
+      const { ensureHomeworkTables } = require("./homework.service");
+      await ensureHomeworkTables();
+      const response = await this._withRetry(
+        "pullHomework",
+        () => api.get(API.homework.list, { params: { schoolId } })
+      );
+      const rows = Array.isArray(response.data?.homework) ? response.data.homework : [];
+      const db = await getDatabase();
+      const ts = new Date().toISOString();
+      let ok = 0, fail = 0;
+
+      await withTransaction(db, async () => {
+        for (const h of rows) {
+          try {
+            const id = String(h._id || h.id || "");
+            if (!id) continue;
+            const iso = (v) => (v ? new Date(v).toISOString() : null);
+            await db.runAsync(
+              `INSERT INTO homework
+                 (id, schoolId, class_id, subject_id, created_by, title, description, instructions,
+                  due_date, max_score, allow_late, late_penalty, attachment_url, attachment_name,
+                  attachment_type, is_published, _synced, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 schoolId = excluded.schoolId, class_id = excluded.class_id,
+                 subject_id = excluded.subject_id, created_by = excluded.created_by,
+                 title = excluded.title, description = excluded.description,
+                 instructions = excluded.instructions, due_date = excluded.due_date,
+                 max_score = excluded.max_score, allow_late = excluded.allow_late,
+                 late_penalty = excluded.late_penalty, attachment_url = excluded.attachment_url,
+                 attachment_name = excluded.attachment_name, attachment_type = excluded.attachment_type,
+                 is_published = excluded.is_published, _synced = 1,
+                 updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+               WHERE homework._synced = 1 OR homework._synced IS NULL`,
+              [
+                id, String(h.schoolId ?? schoolId), String(h.classId ?? ""), String(h.subjectId ?? ""),
+                String(h.createdBy ?? ""), h.title ?? "", h.description ?? null, h.instructions ?? null,
+                h.dueDate ?? null, Number(h.maxScore ?? 100), h.allowLate === false ? 0 : 1,
+                Number(h.latePenalty ?? 0), h.attachmentUrl ?? null, h.attachmentName ?? null,
+                h.attachmentType ?? null, h.isPublished ? 1 : 0,
+                iso(h.createdAt) ?? ts, iso(h.updatedAt) ?? ts, iso(h.deletedAt),
+              ]
+            );
+            for (const s of Array.isArray(h.submissions) ? h.submissions : []) {
+              const sid = String(s._id || s.id || "");
+              if (!sid) continue;
+              await db.runAsync(
+                `INSERT INTO homework_submissions
+                   (id, homework_id, student_id, submission_text, attachment_url, score, feedback,
+                    graded_by, graded_at, status, _synced, submitted_at, updated_at, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   submission_text = excluded.submission_text, attachment_url = excluded.attachment_url,
+                   score = excluded.score, feedback = excluded.feedback, graded_by = excluded.graded_by,
+                   graded_at = excluded.graded_at, status = excluded.status, _synced = 1,
+                   submitted_at = excluded.submitted_at, updated_at = excluded.updated_at
+                 WHERE homework_submissions._synced = 1 OR homework_submissions._synced IS NULL`,
+                [
+                  sid, id, String(s.studentId ?? ""), s.text ?? null, s.attachmentUrl ?? null,
+                  s.score ?? null, s.feedback ?? null, s.gradedBy ?? null, iso(s.gradedAt),
+                  s.score != null ? "graded" : "submitted", iso(s.submittedAt) ?? ts, ts, iso(s.submittedAt) ?? ts,
+                ]
+              );
+            }
+            ok++;
+          } catch (rowErr) {
+            fail++;
+            console.warn("[SyncManager] homework row skipped:", rowErr.message);
+          }
+        }
+      });
+      console.log(`[SyncManager] Homework pull complete: ${ok} stored, ${fail} skipped`);
+    } catch (err) {
+      // A failed pull is reported, not swallowed: the caller logs it and the
+      // cycle's other steps still run.
+      console.warn("[SyncManager] pullHomework failed:", err.message);
+    }
+  }
 
   async syncQuizData() {
     if (this._isUnauthenticated()) return;
