@@ -259,6 +259,20 @@ const readPersistedSchool = (): ActiveSchool | null => {
   }
 };
 
+/**
+ * A super_admin's user object, with the school they are inside mirrored in.
+ *
+ * The account itself has no school and never gets one; the mirror is what the
+ * pages read. Any user object that arrives from the server — a refresh, a
+ * restored session — has to be re-mirrored or the pages lose their school
+ * while the layout still believes it is inside one. Everyone else is returned
+ * untouched.
+ */
+const withActiveSchool = (user: AuthUser, school: ActiveSchool | null): AuthUser => {
+  if (user.role !== "super_admin" || !school) return user;
+  return { ...user, schoolId: school._id, schoolName: school.name, school: { name: school.name } };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STORE
 // ─────────────────────────────────────────────────────────────────────────────
@@ -363,7 +377,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (!parsed?._id && !parsed?.id) {
           throw new Error("Stored user object is missing an id");
         }
-        const user = normaliseAuthUser(parsed);
+        // The stored user normally carries the mirror already; this covers a
+        // user persisted by a refresh that ran before the mirror was kept.
+        const user = withActiveSchool(normaliseAuthUser(parsed), get().activeSchool);
         set({
           user,
           token,
@@ -468,7 +484,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           "/auth/refresh",
           currentRefreshToken ? { refreshToken: currentRefreshToken } : {},
         );
-        const { token, refreshToken, user } = extractAuthPayload(response.data);
+        const { token, refreshToken, user: fresh } = extractAuthPayload(response.data);
+
+        // The server's copy of a super_admin has no school — schoolId is null
+        // on the account, by design. The school they are working inside lives
+        // only in this store, mirrored into user.schoolId, which is where every
+        // page reads its school from. Taking the server's user as-is here wiped
+        // that mirror on every token refresh: activeSchool stayed set, so the
+        // page stayed inside the school, but every query gated on user.schoolId
+        // went quiet and the dashboard read as an empty school.
+        const user = withActiveSchool(fresh, get().activeSchool);
 
         persistAuth(user, token, refreshToken);
         set({

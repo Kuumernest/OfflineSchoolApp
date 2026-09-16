@@ -122,11 +122,27 @@ const getUpload = () => {
   return _upload;
 };
 
-/** Resolve the caller, or answer 401. */
+/**
+ * Resolve the caller, or answer.
+ *
+ * Nobody signed in is a 401. Somebody signed in with no school to speak from
+ * — a super_admin who has not stepped into a school — is not: their token is
+ * good, and answering 401 sent the web client to refresh it and try again,
+ * forever. That is a 400 naming what is missing, and the same rule as every
+ * school-scoped admin route, which reads the school from the request.
+ */
 const requirePrincipal = (req, res) => {
   const me = svc.principalFromRequest(req);
-  if (!me || !me.schoolId) {
+  if (!me) {
     res.status(401).json({ success: false, error: "Not authenticated" });
+    return null;
+  }
+  if (!me.schoolId) {
+    res.status(400).json({
+      success: false,
+      code:    "SCHOOL_CONTEXT_REQUIRED",
+      error:   "Name the school this request is about (schoolId).",
+    });
     return null;
   }
   return me;
