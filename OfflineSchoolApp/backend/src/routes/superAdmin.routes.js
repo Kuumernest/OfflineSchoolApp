@@ -16,6 +16,7 @@ const { isValidEmail }      = require("../utils/email");
 const { passwordPolicyError }  = require("../utils/passwordPolicy");
 const { generateTempPassword } = require("../utils/tempPassword");
 const { sendEmail }            = require("../services/email.service");
+const mail                     = require("../services/email.transport");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
@@ -400,7 +401,9 @@ const cleanName = (raw) => {
 router.get("/admins", canAdmins, asyncHandler(async (_req, res) => {
   const rows = await User.find({ role: ROLES.SUPER_ADMIN })
     .select(ADMIN_SELECT).sort({ createdAt: 1 }).lean();
-  return sendSuccess(res, { admins: rows.map(shapeAdmin), total: rows.length });
+  // Whether the platform can email a temporary password at all decides which
+  // reset the operator is offered. A platform-level fact, told to operators only.
+  return sendSuccess(res, { admins: rows.map(shapeAdmin), total: rows.length, emailConfigured: mail.isConfigured() });
 }));
 
 /**
@@ -529,21 +532,62 @@ router.patch("/admins/:id", canAdmins, asyncHandler(async (req, res) => {
 }));
 
 /**
- * POST /admins/:id/reset-password — a temporary password the person must
- * change at their next sign-in. The same shape as a school administrator's
- * reset: generated, hashed by the model, emailed when the mail is configured,
- * and handed back once so it can be passed on by hand when it is not.
+ * POST /admins/:id/reset-password — a new password for another operator,
+ * which they must change at their next sign-in.
+ *
+ * Two ways, and the password leaves the server by exactly one route in each:
+ *
+ *   With newPassword + confirmPassword in the body, the caller SETS it. It is
+ *   checked against the same policy sign-in enforces, hashed by the model, and
+ *   the response says only that it was done.
+ *
+ *   With an empty body, a temporary password is generated and EMAILED. The
+ *   email goes first and the hash is written only once it has gone: an
+ *   operator locked out by a reset nobody received is worse than no reset.
+ *   Where the platform cannot send mail at all, this is refused up front and
+ *   the caller is told to set the password instead — a password nobody can
+ *   deliver is not generated.
+ *
+ * Nothing here returns a password, logs one, or writes one anywhere but the
+ * hash field. The previous shape handed the temporary password back in the
+ * response when mail was down; it does not any more.
  */
 router.post("/admins/:id/reset-password", canAdmins, asyncHandler(async (req, res) => {
   const admin = await findAdmin(req.params.id);
   if (!admin) return sendError(res, 404, "Super admin not found");
 
-  const tempPassword      = generateTempPassword();
-  admin.password          = tempPassword;
-  admin.mustResetPassword = true;
-  await admin.save();
+  const body = req.body ?? {};
+  const settingDirectly = "newPassword" in body || "confirmPassword" in body;
 
-  let emailSent = false;
+  if (settingDirectly) {
+    const { newPassword, confirmPassword } = body;
+    if (!newPassword || !confirmPassword) {
+      return sendError(res, 400, "newPassword and confirmPassword are required");
+    }
+    if (newPassword !== confirmPassword) return sendError(res, 400, "Passwords do not match");
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) return sendError(res, 400, policyError);
+
+    admin.password          = newPassword;
+    admin.mustResetPassword = true;
+    await admin.save();
+
+    await recordAudit(req, {
+      action:   "superAdmin.passwordReset",
+      resource: { type: "user", id: admin._id, label: admin.email },
+      reason:   "set by an operator",
+    });
+    return sendSuccess(res, { message: "Password set. They must change it at their next sign-in." });
+  }
+
+  if (!mail.isConfigured()) {
+    return sendError(res, 409,
+      "Email delivery is not configured on this platform. Set the new password directly.",
+      { code: "EMAIL_NOT_CONFIGURED" });
+  }
+
+  const tempPassword = generateTempPassword();
+  let sent = false;
   try {
     const result = await sendEmail({
       to: admin.email, template: "adminWelcome",
@@ -553,23 +597,26 @@ router.post("/admins/:id/reset-password", canAdmins, asyncHandler(async (req, re
         loginUrl: process.env.APP_LOGIN_URL || null,
       },
     });
-    emailSent = result?.success !== false;
+    sent = result?.success !== false;
   } catch (err) {
+    // The provider's message, never the payload.
     console.warn("sendEmail failed [superAdmin reset]:", err.message);
   }
+  if (!sent) {
+    return sendError(res, 502, "The reset email could not be sent. Nothing was changed.",
+      { code: "EMAIL_FAILED" });
+  }
+
+  admin.password          = tempPassword;
+  admin.mustResetPassword = true;
+  await admin.save();
 
   await recordAudit(req, {
     action:   "superAdmin.passwordReset",
     resource: { type: "user", id: admin._id, label: admin.email },
+    reason:   "temporary password emailed",
   });
-
-  return sendSuccess(res, {
-    emailSent,
-    tempPassword,
-    message: emailSent
-      ? `Password reset. New credentials emailed to ${admin.email}.`
-      : "Password reset. The email could not be sent; share the temporary password yourself.",
-  });
+  return sendSuccess(res, { message: "Password reset instructions have been sent." });
 }));
 
 // ─────────────────────────────────────────────────────────────────────────────

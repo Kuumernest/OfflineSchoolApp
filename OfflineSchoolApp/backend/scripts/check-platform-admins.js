@@ -78,6 +78,20 @@ const check = (label, actual, expected) => {
     console[m] = (...args) => { logLines.push(args.map(String).join(" ")); orig(...args); };
   }
 
+  // The mail service, stubbed before the router binds to it: "off" behaves as
+  // an unconfigured platform does, "ok" records what would have been sent so
+  // the temporary password can be checked against the database, "fail" is a
+  // provider that refuses. No mail leaves this process.
+  const emailStub = { mode: "off", sent: [] };
+  const emailService = require(path.join(SRC, "services/email.service"));
+  emailService.sendEmail = async (msg) => {
+    if (emailStub.mode === "ok")   { emailStub.sent.push(msg); return { success: true }; }
+    if (emailStub.mode === "fail") { return { success: false, error: "provider refused" }; }
+    return { success: false, error: "No email provider is configured.", code: "CHANNEL_NOT_CONFIGURED" };
+  };
+  delete process.env.BREVO_API_KEY; delete process.env.BREVO_SENDER_EMAIL;
+  delete process.env.SMTP_HOST; delete process.env.SMTP_USER; delete process.env.SMTP_PASS;
+
   const auth = require(path.join(ROOT, "middleware", "auth"));
   const app  = express();
   app.use(express.json());
@@ -219,9 +233,84 @@ const check = (label, actual, expected) => {
   check("a school admin's id is not a platform administrator",
     (await root.patch("/super-admin/admins/admin-a", { name: "x" })).status, 404);
 
-  const reset = await root.post("/super-admin/admins/" + thirdId + "/reset-password", {});
-  check("a password reset issues a temporary password the person must change",
-    [reset.status, typeof reset.body.tempPassword, (await User.findById(thirdId).lean()).mustResetPassword], [200, "string", true]);
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- resetting another operator's password ---");
+
+  // The password leaves the server by one route: the person's inbox, or the
+  // operator's own typing. Never the response, never the log.
+  const noPasswordIn = (body) => !["password", "tempPassword", "temporaryPassword", "newPassword"].some((k) => k in body);
+
+  // 11. No mail on this platform: a temporary password nobody could receive is
+  //     not generated, and nothing about the account changes.
+  const logMark = logLines.length;
+  const noMail = await root.post("/super-admin/admins/" + thirdId + "/reset-password", {});
+  check("with no email configured, an emailed reset is refused up front",
+    [noMail.status, noMail.body.code, noPasswordIn(noMail.body)], [409, "EMAIL_NOT_CONFIGURED", true]);
+  // Checked against the stored hash rather than by signing in: sign-in is
+  // rate-limited per address, and this suite signs in often enough to hit it.
+  const stillHas = async (id, pw) => bcrypt.compare(pw, (await User.findById(id).select("+password").lean()).password);
+  check("    and the account still has its current password",
+    [await stillHas(thirdId, NEW_PASSWORD), (await User.findById(thirdId).lean()).mustResetPassword], [true, false]);
+
+  // 12. The explicit set-password flow.
+  const SET = "Set-By-Operator-2027";
+  const mismatch = await root.post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: SET, confirmPassword: SET + "x" });
+  check("7. a confirmation that does not match is refused", mismatch.status, 400);
+  const weak = await root.post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: "short", confirmPassword: "short" });
+  check("6. the shared password policy is enforced", [weak.status, weak.body.message], [400, "Password must be at least 8 characters"]);
+  const half = await root.post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: SET });
+  check("   both fields are required", half.status, 400);
+  for (const [label, who] of [["a school admin", adminA], ["a teacher", teacherA], ["a bursar", bursarA]]) {
+    check(`8. ${label} cannot set an operator's password`,
+      (await who.post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: SET, confirmPassword: SET })).status, 403);
+  }
+  check("9. a token claiming super_admin for a school admin's id cannot either",
+    (await as(sign("admin-a", "super_admin", null)).post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: SET, confirmPassword: SET })).status, 403);
+  check("   the refusals changed nothing", await stillHas(thirdId, NEW_PASSWORD), true);
+
+  const setRes = await root.post("/super-admin/admins/" + thirdId + "/reset-password", { newPassword: SET, confirmPassword: SET });
+  check("12. an operator sets another's password", [setRes.status, setRes.body.success], [200, true]);
+  check("1.  and the response carries no password, only a message",
+    [noPasswordIn(setRes.body), typeof setRes.body.message], [true, "string"]);
+  const setDoc = await User.findById(thirdId).select("+password").lean();
+  check("3.  what is stored is a bcrypt hash of it",
+    setDoc.password !== SET && /^\$2[aby]\$12\$/.test(setDoc.password) && await bcrypt.compare(SET, setDoc.password), true);
+  check("    with passwordChangedAt stamped and a change required at next sign-in",
+    [setDoc.passwordChangedAt instanceof Date, setDoc.mustResetPassword], [true, true]);
+  check("4.  the new password signs in",
+    (await call("POST", "/auth/login", { body: { email: "third@example.test", password: SET } })).status, 200);
+  check("5.  the old one no longer does",
+    (await call("POST", "/auth/login", { body: { email: "third@example.test", password: NEW_PASSWORD } })).status, 401);
+  check("2.  nothing written to the console since carries the password",
+    logLines.slice(logMark).some((l) => l.includes(SET)), false);
+
+  // Mail configured, and the send succeeds: a temporary password is emailed
+  // and only then stored. The response says so and nothing more.
+  emailStub.mode = "ok";
+  process.env.BREVO_API_KEY = "test-key"; process.env.BREVO_SENDER_EMAIL = "noreply@example.test";
+  const listMail = await root.get("/super-admin/admins");
+  check("the list tells the operator mail is available", listMail.body.emailConfigured, true);
+  const mailed = await root.post("/super-admin/admins/" + thirdId + "/reset-password", {});
+  check("an emailed reset answers with a message only",
+    [mailed.status, noPasswordIn(mailed.body), mailed.body.message], [200, true, "Password reset instructions have been sent."]);
+  check("    the temporary password went to the person's address, and nowhere else",
+    [emailStub.sent.length, emailStub.sent[0]?.to, typeof emailStub.sent[0]?.data?.tempPassword], [1, "third@example.test", "string"]);
+  const mailedTemp = emailStub.sent[0].data.tempPassword;
+  check("    and is what now signs them in",
+    (await call("POST", "/auth/login", { body: { email: "third@example.test", password: mailedTemp } })).status, 200);
+  check("    the operator-set password no longer does",
+    (await call("POST", "/auth/login", { body: { email: "third@example.test", password: SET } })).status, 401);
+  check("    it never reached the console", logLines.some((l) => l.includes(mailedTemp)), false);
+
+  // Mail configured but the send fails: nothing changes.
+  emailStub.mode = "fail";
+  const failed = await root.post("/super-admin/admins/" + thirdId + "/reset-password", {});
+  check("a reset whose email cannot be sent changes nothing",
+    [failed.status, failed.body.code, noPasswordIn(failed.body)], [502, "EMAIL_FAILED", true]);
+  check("    the previous temporary password is still the one stored", await stillHas(thirdId, mailedTemp), true);
+  emailStub.mode = "off";
+  delete process.env.BREVO_API_KEY; delete process.env.BREVO_SENDER_EMAIL;
+  check("and with mail gone again, the list says so", (await root.get("/super-admin/admins")).body.emailConfigured, false);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 14. a school's own staff management is unchanged ---");
@@ -272,10 +361,14 @@ const check = (label, actual, expected) => {
   check("every action was recorded, in order",
     trail.map((e) => e.action),
     ["superAdmin.created", "superAdmin.created", "superAdmin.deactivated", "superAdmin.deactivated",
-     "superAdmin.activated", "superAdmin.updated", "superAdmin.passwordReset"]);
+     "superAdmin.activated", "superAdmin.updated", "superAdmin.passwordReset", "superAdmin.passwordReset"]);
   check("by the operator who did it", new Set(trail.map((e) => e.actorId)).size === 1 && trail[0].actorId === "root", true);
-  check("naming the account, not its password",
-    JSON.stringify(trail).includes(NEW_PASSWORD) || JSON.stringify(trail).includes(reset.body.tempPassword), false);
+  check("10. each reset names the account and how it was done, never the password",
+    trail.filter((e) => e.action === "superAdmin.passwordReset").map((e) => [e.resourceLabel, e.reason]),
+    [["third@example.test", "set by an operator"], ["third@example.test", "temporary password emailed"]]);
+  const trailText = JSON.stringify(trail);
+  check("    no password of any kind is in the trail",
+    [NEW_PASSWORD, SET, mailedTemp, CHANGED].some((p) => trailText.includes(p)), false);
   // The password change above invalidated the token root signed in with — the
   // staleness gate at the door — so the trail is read with the new one.
   const audited = await as(changed.body.token).get("/super-admin/audit?action=superAdmin.created");

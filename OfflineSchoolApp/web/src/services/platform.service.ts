@@ -247,9 +247,11 @@ export interface PlatformAdmin {
   updatedAt:         string | null;
 }
 
-export async function fetchPlatformAdmins(): Promise<PlatformAdmin[]> {
+export interface PlatformAdminList { admins: PlatformAdmin[]; emailConfigured: boolean; }
+
+export async function fetchPlatformAdmins(): Promise<PlatformAdminList> {
   const { data } = await api.get(`${BASE}/admins`);
-  return data.admins ?? [];
+  return { admins: data.admins ?? [], emailConfigured: Boolean(data.emailConfigured) };
 }
 
 export async function createPlatformAdmin(input: {
@@ -266,11 +268,17 @@ export async function updatePlatformAdmin(adminId: string, patch: {
   return data.admin;
 }
 
-export async function resetPlatformAdminPassword(adminId: string): Promise<{
-  tempPassword?: string; emailSent?: boolean; message?: string;
-}> {
-  const { data } = await api.post(`${BASE}/admins/${adminId}/reset-password`, {});
-  return data;
+/**
+ * Two shapes, one route. With a password pair the caller sets it; with none a
+ * temporary password is emailed. Either way the answer is a message — the
+ * password itself never comes back.
+ */
+export async function resetPlatformAdminPassword(
+  adminId: string,
+  input: { newPassword: string; confirmPassword: string } | undefined = undefined,
+): Promise<{ message?: string }> {
+  const { data } = await api.post(`${BASE}/admins/${adminId}/reset-password`, input ?? {});
+  return { message: data.message };
 }
 
 /**

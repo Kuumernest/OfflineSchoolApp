@@ -2668,12 +2668,17 @@
       "lastAdminHint": "The last active Super Admin cannot be deactivated.",
       "selfHint": "You cannot deactivate your own account.",
       "resetPassword": "Reset password",
-      "resetConfirm": "Issue a new temporary password to {{email}}? They will be asked to change it at their next sign-in.",
       "passwordReset": "Password reset",
       "resetFailed": "Could not reset the password",
-      "tempPassword": "Temporary password",
-      "tempPasswordHint": "Shown once. Share it with the person yourself.",
-      "mustReset": "Must change password"
+      "mustReset": "Must change password",
+      "setPassword": "Set new password",
+      "sendReset": "Send reset instructions",
+      "orSetInstead": "Set a password instead",
+      "resetBody": "Email {{email}} a temporary password to change at their next sign-in, or set one yourself.",
+      "setBody": "The person must change this password at their next sign-in. It is not shown again.",
+      "emailUnavailable": "Email delivery is not configured on this platform, so the new password is set here and passed on by you.",
+      "resetSent": "Password reset instructions have been sent.",
+      "passwordSet": "Password set. They must change it at their next sign-in."
     }
   },
   "portal": {

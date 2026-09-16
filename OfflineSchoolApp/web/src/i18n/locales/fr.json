@@ -2668,12 +2668,17 @@
       "lastAdminHint": "Le dernier super administrateur actif ne peut pas être désactivé.",
       "selfHint": "Vous ne pouvez pas désactiver votre propre compte.",
       "resetPassword": "Réinitialiser le mot de passe",
-      "resetConfirm": "Générer un nouveau mot de passe temporaire pour {{email}} ? Il devra être changé à la prochaine connexion.",
       "passwordReset": "Mot de passe réinitialisé",
       "resetFailed": "Impossible de réinitialiser le mot de passe",
-      "tempPassword": "Mot de passe temporaire",
-      "tempPasswordHint": "Affiché une seule fois. Transmettez-le vous-même à la personne.",
-      "mustReset": "Doit changer de mot de passe"
+      "mustReset": "Doit changer de mot de passe",
+      "setPassword": "Définir un nouveau mot de passe",
+      "sendReset": "Envoyer les instructions de réinitialisation",
+      "orSetInstead": "Définir un mot de passe à la place",
+      "resetBody": "Envoyer à {{email}} un mot de passe temporaire à changer à la prochaine connexion, ou en définir un vous-même.",
+      "setBody": "La personne devra changer ce mot de passe à sa prochaine connexion. Il ne sera plus affiché.",
+      "emailUnavailable": "L'envoi d'e-mails n'est pas configuré sur cette plateforme : le nouveau mot de passe se définit ici et vous le transmettez vous-même.",
+      "resetSent": "Les instructions de réinitialisation ont été envoyées.",
+      "passwordSet": "Mot de passe défini. Il devra être changé à la prochaine connexion."
     }
   },
   "portal": {

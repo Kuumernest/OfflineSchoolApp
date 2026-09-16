@@ -178,8 +178,6 @@ function ProfileSection({ s }: { s: S }) {
 // SUPER ADMINS
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface Credentials { email: string; tempPassword?: string; emailSent?: boolean; }
-
 function AdminsSection({ s }: { s: S }) {
   const { t } = useTranslation();
   const fmt   = useFormat();
@@ -188,14 +186,15 @@ function AdminsSection({ s }: { s: S }) {
   const { toast, confirm } = useToast();
 
   const listQ = useQuery({ queryKey: ["platform", "admins"], queryFn: fetchPlatformAdmins, retry: false });
-  const admins = listQ.data ?? [];
+  const admins = listQ.data?.admins ?? [];
+  const emailConfigured = listQ.data?.emailConfigured ?? false;
   const activeCount = admins.filter((a) => a.isActive).length;
   const invalidate = () => qc.invalidateQueries({ queryKey: ["platform", "admins"] });
 
-  const [adding,  setAdding]  = useState(false);
-  const [editing, setEditing] = useState<PlatformAdmin | null>(null);
-  const [busyId,  setBusyId]  = useState<string | null>(null);
-  const [credentials, setCredentials] = useState<Credentials | null>(null);
+  const [adding,    setAdding]    = useState(false);
+  const [editing,   setEditing]   = useState<PlatformAdmin | null>(null);
+  const [resetting, setResetting] = useState<PlatformAdmin | null>(null);
+  const [busyId,    setBusyId]    = useState<string | null>(null);
 
   const setActive = async (a: PlatformAdmin, isActive: boolean) => {
     if (!isActive) {
@@ -212,25 +211,6 @@ function AdminsSection({ s }: { s: S }) {
       invalidate();
     } catch (err) {
       toast({ title: s("adminUpdateFailed"), message: errorMessage(err) ?? undefined, kind: "error" });
-    } finally {
-      setBusyId(null);
-    }
-  };
-
-  const resetPassword = async (a: PlatformAdmin) => {
-    const okay = await confirm({
-      title: s("resetPassword"), message: s("resetConfirm", { email: a.email }),
-      confirmLabel: s("resetPassword"), kind: "warning",
-    });
-    if (!okay) return;
-    setBusyId(a._id);
-    try {
-      const res = await resetPlatformAdminPassword(a._id);
-      setCredentials({ email: a.email, tempPassword: res.tempPassword, emailSent: res.emailSent });
-      toast({ title: s("passwordReset"), kind: "success" });
-      invalidate();
-    } catch (err) {
-      toast({ title: s("resetFailed"), message: errorMessage(err) ?? undefined, kind: "error" });
     } finally {
       setBusyId(null);
     }
@@ -284,7 +264,7 @@ function AdminsSection({ s }: { s: S }) {
                           {t("common.edit")}
                         </Button>
                         <Button size="sm" variant="ghost" icon={<KeyRound className="h-4 w-4" />}
-                          loading={busyId === a._id} onClick={() => resetPassword(a)}>
+                          onClick={() => setResetting(a)}>
                           {s("resetPassword")}
                         </Button>
                         {a.isActive ? (
@@ -310,24 +290,99 @@ function AdminsSection({ s }: { s: S }) {
         )}
       </Card>
 
-      {credentials && (
-        <Card>
-          <CardHeader title={s("tempPassword")} subtitle={credentials.emailSent ? t("platform.schools.emailSent") : s("tempPasswordHint")} />
-          <dl className="mt-2 text-sm">
-            <div className="flex justify-between gap-2"><dt className="text-ink-muted">{t("common.email")}</dt><dd className="font-medium">{credentials.email}</dd></div>
-            {credentials.tempPassword ? (
-              <div className="flex justify-between gap-2"><dt className="text-ink-muted">{s("tempPassword")}</dt><dd className="font-mono font-medium">{credentials.tempPassword}</dd></div>
-            ) : null}
-          </dl>
-          <div className="mt-3 flex justify-end">
-            <Button size="sm" variant="ghost" onClick={() => setCredentials(null)}>{t("common.close")}</Button>
-          </div>
-        </Card>
-      )}
-
       <AddAdminModal s={s} open={adding} onClose={() => setAdding(false)} onDone={invalidate} />
       <EditAdminModal s={s} admin={editing} onClose={() => setEditing(null)} onDone={invalidate} />
+      <ResetPasswordModal s={s} admin={resetting} emailConfigured={emailConfigured}
+        onClose={() => setResetting(null)} onDone={invalidate} />
     </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RESET / SET PASSWORD
+//
+// The password never comes back from the server, so there is nothing here to
+// show afterwards: either the person is emailed a temporary one, or the
+// operator types the new one in and passes it on themself. Which of the two is
+// offered follows what the platform can actually do — with no mail configured,
+// only the second is.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ResetPasswordModal({ s, admin, emailConfigured, onClose, onDone }: {
+  s: S; admin: PlatformAdmin | null; emailConfigured: boolean; onClose: () => void; onDone: () => void;
+}) {
+  return admin
+    ? <ResetPasswordForm key={admin._id} s={s} admin={admin} emailConfigured={emailConfigured} onClose={onClose} onDone={onDone} />
+    : null;
+}
+
+function ResetPasswordForm({ s, admin, emailConfigured, onClose, onDone }: {
+  s: S; admin: PlatformAdmin; emailConfigured: boolean; onClose: () => void; onDone: () => void;
+}) {
+  const { t } = useTranslation();
+  const { toast } = useToast();
+  const [setting, setSetting] = useState(!emailConfigured);
+  const [next,    setNext]    = useState("");
+  const [confirm, setConfirm] = useState("");
+  const [busy,    setBusy]    = useState(false);
+
+  const finish = (title: string) => { toast({ title, kind: "success" }); onDone(); onClose(); };
+
+  const sendEmail = async () => {
+    setBusy(true);
+    try {
+      await resetPlatformAdminPassword(admin._id);
+      finish(s("resetSent"));
+    } catch (err) {
+      toast({ title: s("resetFailed"), message: errorMessage(err) ?? undefined, kind: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const setPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (next !== confirm) { toast({ title: s("passwordMismatch"), kind: "error" }); return; }
+    setBusy(true);
+    try {
+      await resetPlatformAdminPassword(admin._id, { newPassword: next, confirmPassword: confirm });
+      setNext(""); setConfirm("");
+      finish(s("passwordSet"));
+    } catch (err) {
+      toast({ title: s("resetFailed"), message: errorMessage(err) ?? undefined, kind: "error" });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal open onClose={onClose} title={setting ? s("setPassword") : s("resetPassword")} size="sm">
+      {setting ? (
+        <form onSubmit={setPassword} className="space-y-3">
+          <p className="text-sm text-ink-muted">{emailConfigured ? s("setBody") : s("emailUnavailable")}</p>
+          <p className="text-sm font-medium">{admin.email}</p>
+          <FormField label={s("newPassword")} required hint={s("passwordRules")}>
+            <Input type="password" autoComplete="new-password" value={next} onChange={(e) => setNext(e.target.value)} autoFocus />
+          </FormField>
+          <FormField label={s("confirmPassword")} required>
+            <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </FormField>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button type="submit" loading={busy} icon={<KeyRound className="h-4 w-4" />}>{s("setPassword")}</Button>
+          </div>
+        </form>
+      ) : (
+        <div className="space-y-3">
+          <p className="text-sm text-ink-muted">{s("resetBody", { email: admin.email })}</p>
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
+            <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
+            <Button type="button" variant="secondary" onClick={() => setSetting(true)}>{s("orSetInstead")}</Button>
+            <Button type="button" loading={busy} onClick={sendEmail}>{s("sendReset")}</Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
