@@ -10,8 +10,12 @@ const Student  = require("../db/models/Student");
 const User     = require("../db/models/User");
 
 const { requirePermission } = require("../../middleware/permissions");
+const { authorize }         = require("../../middleware/auth");
 const { ROLES }             = require("../config/roles");
 const { isValidEmail }      = require("../utils/email");
+const { passwordPolicyError }  = require("../utils/passwordPolicy");
+const { generateTempPassword } = require("../utils/tempPassword");
+const { sendEmail }            = require("../services/email.service");
 const { invalidateSchool, looksLikeSchoolId } = require("../utils/schoolContext");
 const { recordAudit, diff: auditDiff, listAudit, ACTIONS } =
   require("../services/audit.service");
@@ -54,6 +58,9 @@ const canView   = requirePermission("platform.schools");
 const canManage = requirePermission("platform.manageSchools");
 const canReport = requirePermission("platform.dashboard");
 const canAudit  = requirePermission("platform.audit");
+// The platform's own accounts: the role itself, then the locked capability.
+// Belt and braces on purpose — this is the one place a new operator is made.
+const canAdmins = [authorize(ROLES.SUPER_ADMIN), requirePermission("platform.manageAdmins")];
 
 // ─────────────────────────────────────────────────────────────────────────────
 // SHARED
@@ -355,6 +362,213 @@ router.post("/schools/:schoolId/enter", canView, asyncHandler(async (req, res) =
       academicYear: school.settings?.academicYear ?? null,
       currentTerm:  school.settings?.currentTerm  ?? null,
     },
+  });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM ADMINISTRATORS
+//
+// The operator accounts themselves. They belong to no school — schoolId stays
+// null, always — so nothing here resolves a school, and nothing here can be
+// reached by a school administrator: the guard above is the role, then the
+// capability no school may grant. The same User model, the same pre-save hook
+// that hashes the password, the same audit trail.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const ADMIN_SELECT = "_id name email role schoolId isActive mustResetPassword createdAt updatedAt";
+
+const shapeAdmin = (u) => ({
+  _id:               String(u._id),
+  name:              u.name,
+  email:             u.email,
+  role:              ROLES.SUPER_ADMIN,
+  schoolId:          null,
+  isActive:          u.isActive !== false,
+  mustResetPassword: Boolean(u.mustResetPassword),
+  createdAt:         u.createdAt ?? null,
+  updatedAt:         u.updatedAt ?? null,
+});
+
+const findAdmin = (id) => User.findOne({ _id: String(id ?? "").trim(), role: ROLES.SUPER_ADMIN });
+
+const cleanName = (raw) => {
+  const value = raw == null ? "" : String(raw).trim();
+  return value.length >= 2 && value.length <= 200 ? value : null;
+};
+
+/** GET /admins — every platform administrator, active or not. */
+router.get("/admins", canAdmins, asyncHandler(async (_req, res) => {
+  const rows = await User.find({ role: ROLES.SUPER_ADMIN })
+    .select(ADMIN_SELECT).sort({ createdAt: 1 }).lean();
+  return sendSuccess(res, { admins: rows.map(shapeAdmin), total: rows.length });
+}));
+
+/**
+ * POST /admins — create a platform administrator.
+ *
+ * The password is set here and hashed by the model; it is never logged and
+ * never echoed. The role is not read from the body: this route makes one
+ * kind of account, and a request that wants a school administrator has
+ * POST /admin/settings/admins with a school named.
+ */
+router.post("/admins", canAdmins, asyncHandler(async (req, res) => {
+  const body = req.body ?? {};
+  const name = cleanName(body.name);
+  if (!name) return sendError(res, 400, "name must be between 2 and 200 characters");
+
+  const email = String(body.email ?? "").toLowerCase().trim();
+  if (!email || !isValidEmail(email)) return sendError(res, 400, "A valid email is required");
+
+  const password = body.password, confirm = body.confirmPassword;
+  if (!password || !confirm) return sendError(res, 400, "password and confirmPassword are required");
+  if (password !== confirm)  return sendError(res, 400, "Passwords do not match");
+  const policyError = passwordPolicyError(password);
+  if (policyError) return sendError(res, 400, policyError);
+
+  // Any account at all, not only staff: an address a pupil signs in with is
+  // not one the platform should also hand to an operator.
+  if (await User.exists({ email })) {
+    return sendError(res, 409, "Email already in use", { code: "EMAIL_TAKEN" });
+  }
+
+  let created;
+  try {
+    created = await User.create({
+      name, email, password,
+      role:              ROLES.SUPER_ADMIN,
+      schoolId:          null,
+      isActive:          true,
+      mustResetPassword: false,
+    });
+  } catch (err) {
+    if (err?.code === 11000) return sendError(res, 409, "Email already in use", { code: "EMAIL_TAKEN" });
+    if (err?.name === "ValidationError") return sendError(res, 400, err.message);
+    throw err;
+  }
+
+  await recordAudit(req, {
+    action:   "superAdmin.created",
+    resource: { type: "user", id: created._id, label: created.email },
+    after:    { name: created.name, email: created.email, isActive: true },
+  });
+
+  return sendSuccess(res, { admin: shapeAdmin(created) }, 201);
+}));
+
+/**
+ * PATCH /admins/:id — name, email, or the active flag.
+ *
+ * Two refusals keep the platform reachable: nobody deactivates themself, and
+ * nobody deactivates the last active operator. Both are 409s that say so.
+ */
+router.patch("/admins/:id", canAdmins, asyncHandler(async (req, res) => {
+  const admin = await findAdmin(req.params.id);
+  if (!admin) return sendError(res, 404, "Super admin not found");
+
+  const body   = req.body ?? {};
+  const before = shapeAdmin(admin);
+
+  if ("name" in body) {
+    const name = cleanName(body.name);
+    if (!name) return sendError(res, 400, "name must be between 2 and 200 characters");
+    admin.name = name;
+  }
+  if ("email" in body) {
+    const email = String(body.email ?? "").toLowerCase().trim();
+    if (!email || !isValidEmail(email)) return sendError(res, 400, "A valid email is required");
+    if (await User.exists({ email, _id: { $ne: admin._id } })) {
+      return sendError(res, 409, "Email already in use", { code: "EMAIL_TAKEN" });
+    }
+    admin.email = email;
+  }
+
+  let statusAction = null;
+  if (typeof body.isActive === "boolean" && body.isActive !== (admin.isActive !== false)) {
+    if (!body.isActive) {
+      const active = await User.countDocuments({ role: ROLES.SUPER_ADMIN, isActive: true });
+      if (active <= 1) {
+        return sendError(res, 409, "The last active super admin cannot be deactivated",
+          { code: "LAST_SUPER_ADMIN" });
+      }
+      if (String(admin._id) === String(req.user._id)) {
+        return sendError(res, 409, "You cannot deactivate your own account",
+          { code: "CANNOT_DEACTIVATE_SELF" });
+      }
+    }
+    admin.isActive = body.isActive;
+    statusAction   = body.isActive ? "superAdmin.activated" : "superAdmin.deactivated";
+  }
+
+  try {
+    await admin.save();
+  } catch (err) {
+    if (err?.code === 11000 || err?.statusCode === 409) {
+      return sendError(res, 409, "Email already in use", { code: "EMAIL_TAKEN" });
+    }
+    if (err?.name === "ValidationError") return sendError(res, 400, err.message);
+    throw err;
+  }
+
+  const after   = shapeAdmin(admin);
+  const changed = auditDiff(before, after, ["name", "email"]);
+  if (changed.changed.length) {
+    await recordAudit(req, {
+      action:   "superAdmin.updated",
+      resource: { type: "user", id: admin._id, label: admin.email },
+      before:   changed.before, after: changed.after,
+    });
+  }
+  if (statusAction) {
+    await recordAudit(req, {
+      action:   statusAction,
+      resource: { type: "user", id: admin._id, label: admin.email },
+    });
+  }
+
+  return sendSuccess(res, { admin: after });
+}));
+
+/**
+ * POST /admins/:id/reset-password — a temporary password the person must
+ * change at their next sign-in. The same shape as a school administrator's
+ * reset: generated, hashed by the model, emailed when the mail is configured,
+ * and handed back once so it can be passed on by hand when it is not.
+ */
+router.post("/admins/:id/reset-password", canAdmins, asyncHandler(async (req, res) => {
+  const admin = await findAdmin(req.params.id);
+  if (!admin) return sendError(res, 404, "Super admin not found");
+
+  const tempPassword      = generateTempPassword();
+  admin.password          = tempPassword;
+  admin.mustResetPassword = true;
+  await admin.save();
+
+  let emailSent = false;
+  try {
+    const result = await sendEmail({
+      to: admin.email, template: "adminWelcome",
+      data: {
+        adminName: admin.name, email: admin.email, tempPassword,
+        role: admin.role, schoolName: "Platform",
+        loginUrl: process.env.APP_LOGIN_URL || null,
+      },
+    });
+    emailSent = result?.success !== false;
+  } catch (err) {
+    console.warn("sendEmail failed [superAdmin reset]:", err.message);
+  }
+
+  await recordAudit(req, {
+    action:   "superAdmin.passwordReset",
+    resource: { type: "user", id: admin._id, label: admin.email },
+  });
+
+  return sendSuccess(res, {
+    emailSent,
+    tempPassword,
+    message: emailSent
+      ? `Password reset. New credentials emailed to ${admin.email}.`
+      : "Password reset. The email could not be sent; share the temporary password yourself.",
   });
 }));
 

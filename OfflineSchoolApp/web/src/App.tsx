@@ -105,6 +105,7 @@ const PlatformSchoolDetail = lazy(() => import("@/pages/platform/SchoolDetailPag
 const PlatformPerformance  = lazy(() => import("@/pages/platform/PerformancePage"));
 const PlatformReports      = lazy(() => import("@/pages/platform/ReportsPage"));
 const PlatformAudit        = lazy(() => import("@/pages/platform/AuditLogPage"));
+const PlatformSettings     = lazy(() => import("@/pages/platform/PlatformSettingsPage"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
@@ -239,6 +240,7 @@ export default function App() {
             <Route path="/platform/performance"       element={page(<PlatformPerformance />)} />
             <Route path="/platform/reports"           element={page(<PlatformReports />)} />
             <Route path="/platform/audit"             element={page(<PlatformAudit />)} />
+            <Route path="/platform/settings"          element={page(<PlatformSettings />)} />
           </Route>
 
           {/* Every member of staff has a dashboard; which one is by role. */}

@@ -7,6 +7,7 @@ const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
 const User     = require("../db/models/User");
+const { passwordPolicyError } = require("../utils/passwordPolicy");
 const { isSchoolClosedFor } = require("../utils/schoolContext");
 const { authenticate } = require("../../middleware/auth");
 const {
@@ -372,29 +373,11 @@ router.post("/change-password", authenticate, async (req, res) => {
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: "Passwords do not match" });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 8 characters",
-      });
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one uppercase letter",
-      });
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one lowercase letter",
-      });
-    }
-    if (!/\d/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number",
-      });
+    // The four rules live in utils/passwordPolicy.js, which the platform's
+    // account creation reads too, so the two cannot drift apart.
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) {
+      return res.status(400).json({ success: false, message: policyError });
     }
 
     const userId = req.user.id || req.user._id;

@@ -31,6 +31,11 @@ const AUDIT_ACTIONS = [
   "admin.restored",
   "admin.passwordReset",
   "admin.removed",
+  "superAdmin.created",
+  "superAdmin.updated",
+  "superAdmin.activated",
+  "superAdmin.deactivated",
+  "superAdmin.passwordReset",
 ];
 
 const auditLogSchema = new mongoose.Schema(

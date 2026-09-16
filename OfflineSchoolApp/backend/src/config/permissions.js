@@ -330,6 +330,8 @@ const PERMISSION_DEFS = [
     "Figures aggregated across schools: enrolment, attendance, results, fees."),
   p("platform.audit",         "platform", PLATFORM_ROLES, false,
     "Read the record of what platform administrators did, and to which school."),
+  p("platform.manageAdmins",  "platform", PLATFORM_ROLES, false,
+    "Create, edit, switch on or off the platform's own administrator accounts."),
 ];
 
 const PERMISSION_KEYS = PERMISSION_DEFS.map((d) => d.key);

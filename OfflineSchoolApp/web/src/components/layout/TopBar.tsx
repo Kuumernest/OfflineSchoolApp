@@ -6,7 +6,7 @@ import {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
-import { useAuthStore, useUser }                    from "@/store/auth.store";
+import { useAuthStore, useUser, useActiveSchool }   from "@/store/auth.store";
 import { cn }                                       from "@/utils/cn";
 import { roleLabel }                                from "@/utils/roleLabel";
 import {
@@ -97,6 +97,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
 export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const { t }      = useTranslation();
   const user       = useUser();
+  const activeSchool = useActiveSchool();
   const { logout } = useAuthStore();
   const navigate   = useNavigate();
 
@@ -560,7 +561,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  navigate("/settings");
+                  navigate(user?.role === "super_admin" && !activeSchool ? "/platform/settings" : "/settings");
                   setDropdownOpen(false);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-body hover:bg-canvas"

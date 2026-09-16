@@ -95,7 +95,7 @@ console.log("--- the roles ---");
 
 check("en: School Admin",  T("en", "settings.schoolAdmin"),    "School Admin");
 check("fr: School Admin",  T("fr", "settings.schoolAdmin"),    "Administrateur de l'établissement");
-check("en: Super admin",   T("en", "settings.roleSuperAdmin"), "Super admin");
+check("en: Super Admin",   T("en", "settings.roleSuperAdmin"), "Super Admin");
 check("fr: Super admin",   T("fr", "settings.roleSuperAdmin"), "Super administrateur");
 check("en: Bursar",        T("en", "settings.roleBursar"),     "Bursar");
 check("fr: Bursar",        T("fr", "settings.roleBursar"),     "Économe");
@@ -122,6 +122,39 @@ check("the label map names at least five roles", roleKeys.length >= 5, true);
 for (const key of roleKeys) {
   check(`fr renders ${key}, not the key or the English`,
     T("fr", key) !== key && T("fr", key) !== T("en", key), true);
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the platform's settings page ---");
+
+// The operator's settings live under platform.settings; every label the page
+// reads must exist in both languages, and the two must differ, or a
+// francophone operator reads English on the one page that manages who runs
+// the platform.
+const platformSettings = Object.keys(frFlatAll()).filter((k) => k.startsWith("platform.settings."));
+check("the page has its labels", platformSettings.length >= 40, true);
+check("every one of them renders in French and differs from English",
+  platformSettings.filter((k) => {
+    const e = T("en", k), f = T("fr", k);
+    return f === k || (e === f && /[a-z]{3}/i.test(e) && !/^(Version|Max|Total|Section|Document)/.test(e));
+  }), []);
+for (const [key, en, fr] of [
+  ["platform.settings.title",          "Settings",          "Paramètres"],
+  ["platform.settings.tabProfile",     "My Profile",        "Mon profil"],
+  ["platform.settings.tabAdmins",      "Super Admins",      "Super administrateurs"],
+  ["platform.settings.addAdmin",       "Add Super Admin",   "Ajouter un super administrateur"],
+  ["platform.settings.active",         "Active",            "Actif"],
+  ["platform.settings.inactive",       "Inactive",          "Inactif"],
+  ["platform.settings.changePassword", "Change Password",   "Modifier le mot de passe"],
+  ["nav.platformSettings",             "Platform settings", "Paramètres de la plateforme"],
+]) {
+  check(`en ${key}`, T("en", key), en);
+  check(`fr ${key}`, T("fr", key), fr);
+}
+check("the role reads Super Admin", T("en", "settings.roleSuperAdmin"), "Super Admin");
+for (const a of ["created", "updated", "activated", "deactivated", "passwordReset"]) {
+  check(`the audit trail can name superAdmin.${a} in French`,
+    T("fr", `platform.audit.actions.superAdmin.${a}`) !== `platform.audit.actions.superAdmin.${a}`, true);
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

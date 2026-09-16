@@ -135,6 +135,17 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ["super_admin"],
     platform: true,
   },
+  // The operator's own account and the platform's other administrators. Not
+  // /settings: that page is a school's, and an operator outside a school is
+  // sent back to the platform before it can render.
+  {
+    label: "Platform settings",
+    labelKey: "nav.platformSettings",
+    path:  "/platform/settings",
+    icon:  Settings,
+    roles: ["super_admin"],
+    platform: true,
+  },
 
   // ── Dashboard ───────────────────────────────────────────
   // One path, two pages. /dashboard resolves by role in App.tsx: an admin gets

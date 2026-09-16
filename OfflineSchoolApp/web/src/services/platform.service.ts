@@ -232,6 +232,58 @@ export async function resetSchoolAdminPassword(schoolId: string, adminId: string
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PLATFORM ADMINISTRATORS — the operator accounts themselves. No school.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface PlatformAdmin {
+  _id:               string;
+  name:              string;
+  email:             string;
+  role:              "super_admin";
+  schoolId:          null;
+  isActive:          boolean;
+  mustResetPassword: boolean;
+  createdAt:         string | null;
+  updatedAt:         string | null;
+}
+
+export async function fetchPlatformAdmins(): Promise<PlatformAdmin[]> {
+  const { data } = await api.get(`${BASE}/admins`);
+  return data.admins ?? [];
+}
+
+export async function createPlatformAdmin(input: {
+  name: string; email: string; password: string; confirmPassword: string;
+}): Promise<PlatformAdmin> {
+  const { data } = await api.post(`${BASE}/admins`, input);
+  return data.admin;
+}
+
+export async function updatePlatformAdmin(adminId: string, patch: {
+  name?: string; email?: string; isActive?: boolean;
+}): Promise<PlatformAdmin> {
+  const { data } = await api.patch(`${BASE}/admins/${adminId}`, patch);
+  return data.admin;
+}
+
+export async function resetPlatformAdminPassword(adminId: string): Promise<{
+  tempPassword?: string; emailSent?: boolean; message?: string;
+}> {
+  const { data } = await api.post(`${BASE}/admins/${adminId}/reset-password`, {});
+  return data;
+}
+
+/**
+ * The operator's own name and email, through the same profile route every
+ * member of staff uses. It reads the caller from the token, so it needs no
+ * school — which a super_admin has none of.
+ */
+export async function updateMyProfile(input: { name: string; email: string }): Promise<{ name: string; email: string }> {
+  const { data } = await api.put("/admin/settings/profile", input);
+  return data.profile;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // ACROSS SCHOOLS
 // ─────────────────────────────────────────────────────────────────────────────
 
