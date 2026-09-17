@@ -371,8 +371,12 @@ const getTeacherScope = async (teacherId, schoolId) => {
   const tid        = String(teacherId);
 
   try {
+    // Active rows of this school only; both spellings of the fields are read,
+    // for rows written by older code paths.
     const rows = await TeacherAssignment.find({
       $or: [{ teacher: tid }, { teacherId: tid }],
+      isActive: { $ne: false },
+      ...(schoolId ? { schoolId: String(schoolId) } : {}),
     })
       .select("subject subjectId subject_id class classId class_id")
       .lean();
@@ -1468,6 +1472,30 @@ router.get("/my-exams", asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * The exam is this school's and one of this teacher's classes, or the marks
+ * routes answer 404 / 403.
+ *
+ * Exam has no subjectId field, so the old comparison against exam.subjectId
+ * never matched — and when the exam was not found at all the check was skipped
+ * and marks were written under whatever examId string arrived. Scoped to the
+ * caller's school and asked at CLASS level, because ExamMark carries no
+ * subject.
+ */
+const refuseUnlessExamIsTheirs = async (req, E, examId, teacherId) => {
+  const schoolId = req.user?.schoolId || null;
+  const exam = await E.findOne({
+    _id: String(examId), ...(schoolId ? { schoolId } : {}),
+  }).select("_id classId classIds").lean();
+  if (!exam) return { status: 404, message: "Exam not found" };
+  const { classIds } = await getTeacherScope(teacherId, schoolId);
+  const examClassIds = [String(exam.classId || ""), ...(exam.classIds || []).map(String)].filter(Boolean);
+  if (!examClassIds.some((c) => classIds.includes(c))) {
+    return { status: 403, message: "You are not assigned to this exam's class" };
+  }
+  return null;
+};
+
 router.get("/exams/:examId/marks", asyncHandler(async (req, res) => {
   const teacherId = resolveTeacherId(req);
   const EM        = getExamMark();
@@ -1478,12 +1506,8 @@ router.get("/exams/:examId/marks", asyncHandler(async (req, res) => {
   const E          = getExam();
 
   if (E) {
-    const exam           = await E.findById(examId).lean();
-    const schoolId       = req.user?.schoolId || null;
-    const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-    if (exam && !subjectIds.includes(String(exam.subjectId))) {
-      return res.status(403).json({ message: "You are not assigned to this exam's subject" });
-    }
+    const refused = await refuseUnlessExamIsTheirs(req, E, examId, teacherId);
+    if (refused) return res.status(refused.status).json({ message: refused.message });
   }
 
   const marks = await EM.find({ examId: String(examId), teacherId: String(teacherId) })
@@ -1508,12 +1532,8 @@ router.post("/exams/:examId/marks", asyncHandler(async (req, res) => {
 
   const E = getExam();
   if (E) {
-    const exam           = await E.findById(examId).lean();
-    const schoolId       = req.user?.schoolId || null;
-    const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-    if (exam && !subjectIds.includes(String(exam.subjectId))) {
-      return res.status(403).json({ message: "You are not assigned to this exam's subject" });
-    }
+    const refused = await refuseUnlessExamIsTheirs(req, E, examId, teacherId);
+    if (refused) return res.status(refused.status).json({ message: refused.message });
   }
 
   const saved = [], failed = [];

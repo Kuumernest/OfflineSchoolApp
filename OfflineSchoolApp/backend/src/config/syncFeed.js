@@ -65,9 +65,14 @@ const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
 
   const teacherId = String(req.user._id ?? req.user.id);
+  // Active rows only, as utils/teacherScope.js asks on every write: an
+  // assignment the office switched off is a class whose roster the device
+  // must stop mirroring at its next sync. Both spellings of the fields are
+  // read, for rows written by older code paths.
   const assignments = await models.TeacherAssignment.find({
     schoolId: req.user.schoolId,
     $or: [{ teacher: teacherId }, { teacherId }],
+    isActive: { $ne: false },
     deletedAt: null,
   }).select("class classId").lean();
 

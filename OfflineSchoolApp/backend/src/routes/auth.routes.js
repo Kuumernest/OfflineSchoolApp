@@ -152,7 +152,9 @@ const serializeUser = (user, permissions = []) => ({
 
 const buildTokenResponse = async (user) => {
   const token        = signAccessToken(user);
-  const refreshToken = signRefreshToken(user);
+  // A temporary password buys a fifteen-minute session and nothing that can
+  // renew it: a ninety-day refresh token beside it made the ceiling nominal.
+  const refreshToken = user.mustResetPassword ? null : signRefreshToken(user);
   return {
     success: true,
     token,
@@ -196,10 +198,11 @@ router.post("/login", loginLimiter, async (req, res) => {
         return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
       if (user.role === "student") {
-        return res.status(401).json({
-          success: false,
-          message: "Students must log in with their enrollment number",
-        });
+        // Same answer and the same cost as an unknown address. A distinct
+        // message here confirmed that the email belongs to an active pupil,
+        // which is the oracle DUMMY_HASH exists to close.
+        await bcrypt.compare(password, DUMMY_HASH);
+        return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
     } else {
       const cleanNo = enrollmentNo.trim().toUpperCase();

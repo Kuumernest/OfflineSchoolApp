@@ -3,6 +3,30 @@
 
 const express = require("express");
 const router  = express.Router();
+// Brute-force protection on the guardian sign-in. The per-row lockout in
+// portal.service.js protects one child's access record; this protects the
+// ROUTE, which is what an attacker needs to work through a list of admission
+// numbers — and what an unauthenticated caller has no other limit on. The
+// admission numbers are sequential (SCH-2026-0004), so the route is the
+// guessable half of the credential and it is the half that had no ceiling.
+const rateLimit = require("express-rate-limit");
+
+// Same shape and the same opt-out as the staff login limiter in auth.routes.js:
+// the verification harness signs in dozens of times from 127.0.0.1 in a few
+// seconds, which is indistinguishable from the attack this stops. Only
+// scripts/ sets the flag; production never does.
+const portalLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15,                  // per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code:    "RATE_LIMITED",
+    message: "Too many sign-in attempts. Please try again later.",
+  },
+  skip: () => process.env.DISABLE_LOGIN_RATE_LIMIT === "1",
+});
 
 const School        = require("../db/models/School");
 const Class         = require("../db/models/Class");
@@ -102,7 +126,7 @@ const resolvePublicSchool = async (provided) => {
 // SIGN IN  (public)
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.post("/login", asyncHandler(async (req, res) => {
+router.post("/login", portalLoginLimiter, asyncHandler(async (req, res) => {
   try {
     const schoolId = await resolvePublicSchool(req.body.schoolId);
     const result = await portal.login({
@@ -294,7 +318,9 @@ router.get("/me", asyncHandler(async (req, res) => {
 router.get("/fees", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
   const filter = { schoolId, studentId, deletedAt: null };
-  if (req.query.academicYear) filter.academicYear = req.query.academicYear;
+  // String(), because the extended query parser turns ?academicYear[$ne]=x
+  // into an object, and an operator in a filter is not a year.
+  if (req.query.academicYear) filter.academicYear = String(req.query.academicYear);
 
   const [charges, payments] = await Promise.all([
     FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1 }).lean(),

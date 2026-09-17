@@ -97,6 +97,10 @@ const bad = (label, detail) => {
     password: "check-only-password", role: "teacher", schoolId: SCHOOL, isActive: true,
   });
   await Class.create({ _id: "cls-1", schoolId: SCHOOL, name: "Form 1" });
+  // The register is written by a teacher ASSIGNED to the class (docs/20 N7).
+  await mongoose.model("TeacherAssignment").create({
+    schoolId: SCHOOL, teacher: TEACHER, class: "cls-1", subject: "sub-any",
+  });
 
   // No guardianEmail and no guardianPhone, which is the reported school's
   // actual state and the case the whole audit turns on: there is no address to

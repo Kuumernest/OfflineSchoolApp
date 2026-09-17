@@ -47,6 +47,9 @@ const DAY = 86_400_000;
 
 (async () => {
   process.env.JWT_SECRET = process.env.JWT_SECRET || "test-only-secret";
+  // The guardian sign-in is rate-limited per IP (portal.routes.js); this suite
+  // signs in dozens of times from 127.0.0.1, which is the attack it stops.
+  process.env.DISABLE_LOGIN_RATE_LIMIT = "1";
 
   const { MongoMemoryServer } = require("mongodb-memory-server");
   const mongo = await MongoMemoryServer.create({ instance: { launchTimeout: 180000 } });

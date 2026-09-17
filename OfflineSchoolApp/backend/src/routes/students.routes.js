@@ -23,6 +23,9 @@ const Student       = require("../db/models/Student");
 const User          = require("../db/models/User");
 const Class         = require("../db/models/Class");
 const Announcement  = require("../db/models/Announcement");
+// The school-scoped announcement lookup, shared with announcement.routes.js and
+// the read/acknowledge handlers in server.js.
+const { findAnnouncementById } = require("../utils/announcementScope");
 const Content       = require("../db/models/Content");
 const SyncOverwrite = require("../db/models/SyncOverwrite");
 const StudentChangeLog = require("../db/models/StudentChangeLog");
@@ -310,6 +313,32 @@ const normaliseStudent = (s) => {
   };
 };
 
+// ─── ROSTER PROJECTION ───────────────────────────────────────────────────────
+//
+// A roster read (a name, a class, a photo, a status) is not a record read.
+// normaliseStudent is a compatibility shim that copies everything it is given,
+// so a caller that must not hand out the rest of the document uses this pick
+// instead. What it keeps out, deliberately: guardian contacts and email (the
+// office's students.viewFull business), medical conditions, blood group,
+// national id, documents[] (arbitrary stored URLs), notes, reviewedBy and the
+// gate token — the QR value printed on the ID card, which is an identifier the
+// gate scanner trusts a person to accompany, not roster data.
+const ROSTER_FIELDS = [
+  "_id", "id", "schoolId", "classId", "className", "class_name", "grade",
+  "enrollmentNo", "admissionNo", "admissionNumber",
+  "firstName", "lastName", "studentName", "name",
+  "gender", "dateOfBirth", "status", "isActive",
+  "photoUrl", "photo", "enrolledAt", "createdAt",
+];
+const pickRoster = (s) => {
+  if (!s) return null;
+  const out = {};
+  for (const k of ROSTER_FIELDS) {
+    if (s[k] !== undefined) out[k] = s[k];
+  }
+  return out;
+};
+
 const enrichWithClassNames = async (rows) => {
   const list = Array.isArray(rows) ? rows : [];
   if (!list.length) return [];
@@ -408,6 +437,7 @@ const getPagination = (req) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 const { requirePermission } = require("../../middleware/permissions");
+const permissions           = require("../services/permissions.service");
 
 /**
  * One "admin only" guard used to cover five different decisions, and they are
@@ -639,6 +669,35 @@ router.post("/apply", asyncHandler(async (req, res) => {
 
   if (!schoolId) return sendError(res, 400, "schoolId is required");
 
+  // The application endpoint is public, so nothing here is taken at its word:
+  // the school must exist and be open, and any class named must belong to it.
+  // Without these checks a stray or hostile submission could file itself into
+  // a school that does not exist, or carry a class id from another school.
+  const SchoolModel = getSchoolModel();
+  if (!SchoolModel) return sendError(res, 503, "School lookup unavailable");
+  const school = await SchoolModel.findById(String(schoolId))
+    .select("_id isActive deletedAt applicationsOpen")
+    .lean();
+  if (!school || school.deletedAt) {
+    return sendError(res, 404, "School not found");
+  }
+  // applicationsOpen is the switch the school's administrator throws to close
+  // admissions; until now nothing on the intake path read it.
+  if (school.isActive === false || school.applicationsOpen === false) {
+    return sendError(res, 403, "This school is not currently accepting applications");
+  }
+
+  let applicationClassId = null;
+  if (classId) {
+    const klass = await Class.findOne({
+      _id: String(classId), schoolId, deletedAt: null,
+    }).select("_id").lean();
+    if (!klass) {
+      return sendError(res, 400, "classId is not a class of this school");
+    }
+    applicationClassId = String(klass._id);
+  }
+
   const displayName = name?.trim() ||
     [firstName, lastName].filter(Boolean).join(" ").trim();
   if (!displayName) return sendError(res, 400, "Student name is required");
@@ -668,13 +727,23 @@ router.post("/apply", asyncHandler(async (req, res) => {
 
   const normalisedDocs = (Array.isArray(documents) ? documents : [])
     .filter(Boolean)
-    .map((doc, i) => ({
-      title:    doc.title    || doc.name    || `Document ${i + 1}`,
-      url:      doc.url      || doc.uri     || doc.fileUrl || null,
-      type:     doc.type     || "document",
-      size:     doc.size     || null,
-      mimeType: doc.mimeType || null,
-    }));
+    .map((doc, i) => {
+      const raw = doc.url || doc.uri || doc.fileUrl || null;
+      // These URLs are rendered to office staff on the pending screen, and
+      // this endpoint is unauthenticated. Only relative paths under the
+      // server's own upload area are stored; an absolute URL of any kind is
+      // dropped, so a submitted href cannot become a stored link aimed at the
+      // people who review applications.
+      const url =
+        typeof raw === "string" && raw.startsWith("/uploads/") ? raw : null;
+      return {
+        title:    doc.title    || doc.name    || `Document ${i + 1}`,
+        url,
+        type:     doc.type     || "document",
+        size:     doc.size     || null,
+        mimeType: doc.mimeType || null,
+      };
+    });
 
   const student = await Student.create({
     _id:           uuidv4(),
@@ -690,7 +759,7 @@ router.post("/apply", asyncHandler(async (req, res) => {
     guardianPhone: guardianPhone?.trim() || null,
     guardianEmail: (guardianEmail || "").toLowerCase().trim() || undefined,
     schoolId,
-    classId:       classId               || null,
+    classId:       applicationClassId,
     documents:     normalisedDocs,
     status:        "pending",
   });
@@ -731,11 +800,22 @@ const resolveAssignedClassIds = async (req, schoolId) => {
   const TeacherAssignment = getTeacherAssignment();
   if (!TeacherAssignment) return [];
   try {
+    // Active rows only: an assignment the office switched off is a class the
+    // teacher no longer sees. Both spellings of the fields are read, for rows
+    // written by older code paths.
+    //
+    // $and, not a spread: NOT_DELETED is itself an $or, and spreading it next
+    // to the teacher $or left ONE $or in the object — the deleted-at one — so
+    // the query matched every assignment in the school and any teacher was
+    // handed every assigned class. That is how F1 leaked in the first place.
     const assignments = await TeacherAssignment.find({
-      $or: [{ teacherId: req.user._id }, { teacher: req.user._id }],
       schoolId,
-      ...NOT_DELETED,
-    }).select("classId class").lean();
+      isActive: { $ne: false },
+      $and: [
+        { $or: [{ teacher: String(req.user._id) }, { teacherId: String(req.user._id) }] },
+        NOT_DELETED,
+      ],
+    }).select("class classId").lean();
 
     return [
       ...new Set(
@@ -758,15 +838,28 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
   const and = [NOT_DELETED, { schoolId: String(schoolId) }, APPROVED_STATUS];
 
   if (classId) {
-    and.push({ classId: String(classId).trim() });
+    const wanted = String(classId).trim();
+    // The assignment check is a CONSTRAINT, not a default. The old code took
+    // an explicit classId at its word — the TeacherAssignment lookup above was
+    // discarded whenever the query named a class — so a teacher could walk the
+    // whole school's roster class by class, with full guardian and medical
+    // fields on every row. A teacher may only narrow to a class they were
+    // actually assigned; admins (teacherOrAdmin) may name any class of their
+    // own school, which the schoolId filter already bounds.
+    if (req.user?.role === "teacher" && !assignedClassIds.includes(wanted)) {
+      return sendError(res, 403, "You are not assigned to this class");
+    }
+    and.push({ classId: wanted });
   } else if (assignedClassIds.length > 0) {
     and.push({ classId: { $in: assignedClassIds } });
   } else {
     return sendSuccess(res, { count: 0, students: [], data: [] });
   }
 
-  const students   = await Student.find({ $and: and }).sort({ name: 1, firstName: 1 }).lean();
-  const normalised = await enrichWithClassNames(students);
+  const students = await Student.find({ $and: and }).sort({ name: 1, firstName: 1 }).lean();
+  // Roster projection: a teacher's class list is names, classes and statuses —
+  // not guardian contacts, medical conditions, documents or gate tokens.
+  const normalised = (await enrichWithClassNames(students)).map(pickRoster);
 
   return sendSuccess(res, { count: normalised.length, students: normalised, data: normalised });
 });
@@ -1042,12 +1135,6 @@ router.put(
     if (address           !== undefined) allowedUpdate.address           = address?.trim()           || null;
     if (city              !== undefined) allowedUpdate.city              = city?.trim()              || null;
     if (state             !== undefined) allowedUpdate.state             = state?.trim()             || null;
-    if (guardianName      !== undefined) allowedUpdate.guardianName      = guardianName?.trim()      || null;
-    if (guardianPhone     !== undefined) allowedUpdate.guardianPhone     = guardianPhone?.trim()     || null;
-    if (guardianRelation  !== undefined) allowedUpdate.guardianRelation  = guardianRelation          || null;
-    if (guardianEmail     !== undefined) {
-      allowedUpdate.guardianEmail = guardianEmail?.trim()?.toLowerCase() || null;
-    }
     if (bloodGroup        !== undefined) allowedUpdate.bloodGroup        = bloodGroup                || null;
     if (medicalConditions !== undefined) allowedUpdate.medicalConditions = medicalConditions?.trim() || null;
     if (bio               !== undefined) allowedUpdate.bio               = bio?.trim()               || null;
@@ -1084,6 +1171,21 @@ router.put(
     fillIfEmpty("firstName",   firstName);
     fillIfEmpty("lastName",    lastName);
     fillIfEmpty("dateOfBirth", dateOfBirth);
+
+    // Guardian contact follows the same fill-only rule as identity. Fee
+    // reminders, absence notices and gate alerts are delivered to the guardian
+    // phone/email held on the record, so a pupil able to REWRITE them could
+    // point the school's messages at themselves — or nowhere. An empty field
+    // stays fillable, because completing an unrecorded guardian number is the
+    // first-run wizard's job; overwriting the school's is not. Corrections go
+    // through PATCH /:id, which is the office's surface.
+    fillIfEmpty("guardianName",     guardianName);
+    fillIfEmpty("guardianPhone",    guardianPhone);
+    fillIfEmpty("guardianRelation", guardianRelation);
+    fillIfEmpty(
+      "guardianEmail",
+      typeof guardianEmail === "string" ? guardianEmail.trim().toLowerCase() : guardianEmail
+    );
     if (gender !== undefined && !String(current?.gender ?? "").trim()) {
       const g = String(gender ?? "").trim().toLowerCase();
       if (["male", "female", "other"].includes(g)) allowedUpdate.gender = g;
@@ -1187,16 +1289,27 @@ router.get(
     const userId   = req.user._id?.toString();
     const student  = await resolveStudentRecord(userId, schoolId);
 
-    if (student?.classId && classId) {
-      if (String(student.classId) !== String(classId)) {
-        return sendError(res, 403, "You are not enrolled in the requested class");
-      }
+    // The class is the caller's own record, never the query string. A student
+    // without a class placement (newly approved, not yet placed, or with no
+    // record resolvable) has no class content to read. The old behaviour
+    // accepted a client-supplied classId precisely when the student was
+    // unplaced, and the query carried no schoolId — so any classId/subjectId
+    // pair from any school walked straight through. The /timetable route
+    // already ignored the query for the same reason.
+    if (!student?.classId) {
+      return sendSuccess(res, {
+        items:   [],
+        summary: { total: 0, syllabus: 0, notes: 0, video: 0, audio: 0, document: 0, image: 0 },
+      });
     }
 
-    const filter = { subjectId, status: "active" };
-    if (classId)               filter.classId = classId;
-    else if (student?.classId) filter.classId = student.classId;
-    if (type && type !== "all") filter.type   = type.toLowerCase();
+    const filter = {
+      schoolId,
+      subjectId,
+      classId: String(student.classId),
+      status:  "active",
+    };
+    if (type && type !== "all") filter.type = type.toLowerCase();
 
     let items = await Content.find(filter)
       .populate("subjectId", "name code")
@@ -1284,9 +1397,11 @@ router.post(
   "/announcements/:id/read",
   authenticate, studentOnly,
   asyncHandler(async (req, res) => {
-    // findByAnyId, not findById: mobile-created announcements have nanoid _ids,
-    // which findById CastErrors on — and this is the route the phone calls.
-    const announcement = await Announcement.findByAnyId(req.params.id);
+    // findByAnyId (inside the helper), not findById: mobile-created
+    // announcements have nanoid _ids, which findById CastErrors on — and this is
+    // the route the phone calls. The helper also applies the school filter, so a
+    // receipt goes only into the caller's own school's rows.
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) return sendError(res, 404, "Announcement not found");
 
     // Atomic and idempotent — the phone replays this from its offline queue,
@@ -1307,7 +1422,7 @@ router.post(
   "/announcements/:id/acknowledge",
   authenticate, studentOnly,
   asyncHandler(async (req, res) => {
-    const announcement = await Announcement.findById(req.params.id);
+    const announcement = await findAnnouncementById(req.params.id, req);
     if (!announcement) return sendError(res, 404, "Announcement not found");
 
     const userId     = req.user._id;
@@ -1451,8 +1566,14 @@ router.get("/pending", authenticate, canAdmit, asyncHandler(async (req, res) => 
     _source:      "StudentApplication",   // used by approve/reject to route correctly
   });
 
-  const normalisedApps     = appResults.map(normaliseApp);
-  const normalisedStudents = await enrichWithClassNames(studentResults);
+  const normalisedApps = appResults.map(normaliseApp);
+  const enrichedStudents = await enrichWithClassNames(studentResults);
+  // Same boundary as GET /: a pending student is roster data to whichever
+  // office desk is reviewing applications.
+  const canSeeFull = await permissions.can(req.user, "students.viewFull");
+  const normalisedStudents = canSeeFull
+    ? enrichedStudents
+    : enrichedStudents.map(pickRoster);
 
   // ── 4. Merge and deduplicate ───────────────────────────────────────────────
   const seen   = new Set();
@@ -1484,26 +1605,28 @@ router.get("/pending", authenticate, canAdmit, asyncHandler(async (req, res) => 
 }));
 
 // ─── DEBUG ROUTE — remove after confirming counts match ───────────────────────
+// School-scoped, and restricted to governance roles. The old version answered
+// Student.countDocuments({}) — every school's rows, a platform-wide head-count
+// — to any students.manage holder, which a delegation to a bursar or teacher
+// would have exposed.
 router.get("/debug-count", authenticate, canManage, asyncHandler(async (req, res) => {
+  if (!["super_admin", "school_admin"].includes(req.user?.role)) {
+    return sendError(res, 403, "Access denied");
+  }
   const schoolId   = resolveSchoolId(req);
   const StudentApp = getStudentApp();
 
   const [
-    rawStudentTotal,
-    withSchoolId,
+    schoolStudentTotal,
     notDeleted,
     statusBreakdown,
     appCount,
     appStatusBreakdown,
   ] = await Promise.all([
-    Student.countDocuments({}),
     Student.countDocuments({ schoolId: String(schoolId) }),
     Student.countDocuments({
       schoolId: String(schoolId),
-      $or: [
-        { deletedAt: { $exists: false } }, { deletedAt: null },
-        { deletedAt: "" }, { deletedAt: 0 }, { deletedAt: false },
-      ],
+      ...NOT_DELETED,
     }),
     Student.aggregate([
       { $match: { schoolId: String(schoolId) } },
@@ -1521,7 +1644,7 @@ router.get("/debug-count", authenticate, canManage, asyncHandler(async (req, res
   ]);
 
   return res.json({
-    student: { rawStudentTotal, withSchoolId, notDeleted, statusBreakdown },
+    student: { schoolStudentTotal, notDeleted, statusBreakdown },
     studentApplication: { appCount, appStatusBreakdown },
   });
 }));
@@ -1539,7 +1662,13 @@ router.get("/", authenticate, officeRead, asyncHandler(async (req, res) => {
     Student.countDocuments(filter),
   ]);
 
-  const normalised = await enrichWithClassNames(students);
+  const enriched = await enrichWithClassNames(students);
+  // students.view is the roster capability; students.viewFull is what opens
+  // the rest of the record — medical fields, national id, documents, the gate
+  // token. The old response spread the whole lean document to every office
+  // caller, which nullified the boundary the permission registry describes.
+  const canSeeFull = await permissions.can(req.user, "students.viewFull");
+  const normalised = canSeeFull ? enriched : enriched.map(pickRoster);
 
   return sendSuccess(res, {
     count:      normalised.length,
@@ -1578,10 +1707,21 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
   // enrollment that carries no email (the only duplicate guard below) would
   // silently create a duplicate student.
   if (id) {
-    const existing = await Student.findById(String(id)).lean();
+    // Tenancy: the dedup guard is scoped to the caller's school. The old
+    // unscoped findById answered another school's Student record — guardian
+    // contacts, medical fields, national id, gate token — to anybody holding
+    // students.manage who supplied that school's id. A foreign id is simply
+    // "not found here"; the create below catches the id collision and answers
+    // 409 without showing the row.
+    const existing = await Student.findOne({
+      _id: String(id),
+      ...(schoolId ? { schoolId } : {}),
+    }).lean();
     if (existing) {
       return sendSuccess(res, {
-        student:       normaliseStudent(existing),
+        // Reduced shape: an idempotency replay needs identity, class and
+        // enrolment number — not the document the office keeps.
+        student:       pickRoster(normaliseStudent(existing)),
         enrollmentNo:  existing.enrollmentNo || null,
         deduplicated:  true,
         message:       `${displayName} is already enrolled.`,
@@ -1650,7 +1790,9 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
       emailRaw: emailClean,
     });
 
-  const student = await Student.create({
+  let student;
+  try {
+    student = await Student.create({
     _id:           studentId,
     userId:        userAccount._id,
     enrollmentNo,
@@ -1678,6 +1820,15 @@ router.post("/", authenticate, canManage, asyncHandler(async (req, res) => {
     approvedAt:    now,
     enrolledAt:    now,
   });
+  } catch (err) {
+    // A client-supplied id that the scoped dedup above did not find belongs to
+    // a row in another school (or a stale device row). The duplicate key says
+    // so; the answer names nothing but the conflict.
+    if (err?.code === 11000 && String(err?.keyValue?._id ?? "") === String(studentId)) {
+      return sendError(res, 409, "A student with this id already exists");
+    }
+    throw err;
+  }
 
   let emailResult = { success: false };
   if (emailClean) {
@@ -1804,13 +1955,21 @@ const handleApprove = asyncHandler(async (req, res) => {
   let   appRecord  = null;
 
   if (StudentApp) {
-    appRecord = await StudentApp.findById(id).lean().catch(() => null);
+    // Tenancy: a foreign application id is not found here, and answers the
+    // same 404 as an id that does not exist. The old fetch-then-403 not only
+    // confirmed that the row existed in some other school, it would have
+    // created the Student under `appRecord.schoolId` — the OTHER school — had
+    // the check been reached in a different order.
+    appRecord = await StudentApp.findOne({
+      _id: id,
+      ...(schoolId ? { schoolId } : {}),
+    }).lean().catch(() => null);
   }
 
   if (appRecord) {
     // Found in StudentApplication
     if (!canAccess(req, appRecord, schoolId)) {
-      return sendError(res, 403, "Access denied");
+      return sendError(res, 404, "Student application not found");
     }
     if (appRecord.status !== "pending") {
       return sendError(res, 409, `Application is already ${appRecord.status}`);
@@ -1916,9 +2075,14 @@ const handleApprove = asyncHandler(async (req, res) => {
   }
 
   // ── 2. Fall through to Student collection (direct enrollments) ────────────
-  const student = await Student.findById(id);
+  // Tenancy: the lookup carries the school, so a foreign id answers the same
+  // 404 as an id that does not exist. Fetching first and then answering 403
+  // confirmed to the caller that the row existed in some other school.
+  const student = await Student.findOne({
+    _id: id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student)  return sendError(res, 404, "Student application not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status !== "pending") {
     return sendError(res, 409, `Application is already ${student.status}`);
   }
@@ -2001,10 +2165,15 @@ const handleReject = asyncHandler(async (req, res) => {
   // ── 1. Check StudentApplication first ─────────────────────────────────────
   const StudentApp = getStudentApp();
   if (StudentApp) {
-    const appRecord = await StudentApp.findById(id).lean().catch(() => null);
+    // Tenancy, as in handleApprove: the school is part of the query, so a
+    // foreign application id answers 404 instead of confirming it exists.
+    const appRecord = await StudentApp.findOne({
+      _id: id,
+      ...(schoolId ? { schoolId } : {}),
+    }).lean().catch(() => null);
     if (appRecord) {
       if (!canAccess(req, appRecord, schoolId)) {
-        return sendError(res, 403, "Access denied");
+        return sendError(res, 404, "Student application not found");
       }
       if (appRecord.status !== "pending") {
         return sendError(res, 409, `Application is already ${appRecord.status}`);
@@ -2042,9 +2211,13 @@ const handleReject = asyncHandler(async (req, res) => {
   }
 
   // ── 2. Fall through to Student collection ─────────────────────────────────
-  const student = await Student.findById(id);
+  // Same tenancy rule as approve: a foreign id is "not found here", not
+  // "found elsewhere but forbidden".
+  const student = await Student.findOne({
+    _id: id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student)  return sendError(res, 404, "Student application not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status !== "pending") {
     return sendError(res, 409, `Application is already ${student.status}`);
   }
@@ -2095,9 +2268,11 @@ router.get("/:id/history", authenticate, canViewFull, asyncHandler(async (req, r
   const schoolId = resolveSchoolId(req);
   if (!schoolId) return sendError(res, 400, "No school on this session");
 
-  const student = await Student.findById(req.params.id).select("_id schoolId").lean();
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  }).select("_id schoolId").lean();
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 100, 1), 500);
 
@@ -2253,9 +2428,11 @@ router.get("/:id/editable", authenticate, canManage, asyncHandler(async (req, re
   const schoolId = resolveSchoolId(req);
   if (!schoolId) return sendError(res, 400, "No school on this session");
 
-  const student = await Student.findById(req.params.id).lean();
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  }).lean();
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   const editable = {};
   for (const field of Object.keys(EDITABLE_FIELDS)) {
@@ -2283,9 +2460,11 @@ router.patch("/:id", authenticate, canManage, asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  const student = await Student.findById(req.params.id);
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   // ── Read the submitted fields ──────────────────────────────────────────────
   const updates = {};
@@ -2426,9 +2605,11 @@ router.delete("/:id", authenticate, canDelete, asyncHandler(async (req, res) => 
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  const student = await Student.findById(req.params.id);
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   const overwrote = await logOverwriteIfNeeded({
     entityType: "student", student, baseUpdatedAt, currentUser: req.user, action: "delete",
@@ -2449,9 +2630,11 @@ router.patch("/:id/suspend", authenticate, canManage, asyncHandler(async (req, r
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  const student = await Student.findById(req.params.id);
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status === "suspended") return sendError(res, 409, "Student is already suspended");
 
   const overwrote = await logOverwriteIfNeeded({
@@ -2481,9 +2664,11 @@ router.patch("/:id/restore", authenticate, canManage, asyncHandler(async (req, r
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  const student = await Student.findById(req.params.id);
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
   if (student.status === "approved") return sendError(res, 409, "Student is already active");
 
   const overwrote = await logOverwriteIfNeeded({
@@ -2516,9 +2701,11 @@ router.patch("/:id/move", authenticate, canManage, asyncHandler(async (req, res)
   const schoolId      = resolveSchoolId(req);
   const baseUpdatedAt = req.query.baseUpdatedAt || req.body?.baseUpdatedAt || null;
 
-  const student = await Student.findById(req.params.id);
+  const student = await Student.findOne({
+    _id: req.params.id,
+    ...(schoolId ? { schoolId } : {}),
+  });
   if (!student) return sendError(res, 404, "Student not found");
-  if (!canAccess(req, student, schoolId)) return sendError(res, 403, "Access denied");
 
   const targetClass = await Class.findById(String(classId).trim()).lean();
   if (!targetClass) return sendError(res, 404, "Target class not found");
@@ -2573,7 +2760,10 @@ router.get("/:id", authenticate, officeRead, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req);
   const { id }   = req.params;
 
-  let record = await Student.findById(id).lean();
+  let record = await Student.findOne({
+    _id: id,
+    ...(schoolId ? { schoolId } : {}),
+  }).lean();
 
   if (!record) {
     const App = getStudentApp();
@@ -2601,9 +2791,15 @@ router.get("/:id", authenticate, officeRead, asyncHandler(async (req, res) => {
     }
   }
 
+  // Full record for students.viewFull; roster projection for plain students.view.
+  const canSeeFull = await permissions.can(req.user, "students.viewFull");
+  const body = canSeeFull
+    ? { ...normalised, mustResetPassword }
+    : { ...pickRoster(normalised), mustResetPassword };
+
   return sendSuccess(res, {
-    student: { ...normalised, mustResetPassword },
-    data:    { ...normalised, mustResetPassword },
+    student: body,
+    data:    body,
   });
 }));
 

@@ -410,6 +410,28 @@ app.use("/api/portal", loadRoute("./routes/portal.routes"));
 // STUDENT ANNOUNCEMENT ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The student audience, stated once.
+ *
+ * /api/students/announcements/* is the STUDENT surface of the announcement
+ * feature: the mobile client picks it by role (see announcement.service.js,
+ * `isStudent(user) ? /students/announcements/… : /announcements/…`), and the
+ * students router guards its own copies with the same `studentOnly` test. These
+ * inline copies predate that guard and carried authentication only, so any
+ * staff account — of any school — could post a read receipt onto an
+ * announcement it had nothing to do with. Tenancy now bounds the row; the role
+ * belongs here too, matching the router.
+ */
+const studentOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "student") {
+    return res.status(403).json({
+      success: false,
+      message: `Students only. Your role "${req.user?.role}" is not permitted.`,
+    });
+  }
+  next();
+};
+
 app.get(
   "/api/students/announcements",
   auth.authenticate,
@@ -421,17 +443,22 @@ app.post(
   "/api/students/announcements/:id/read",
   auth.authenticate,
   noCache,
+  studentOnly,
   async (req, res) => {
     try {
-      const Announcement = require("./db/models/Announcement");
-      // findByAnyId, not findById: this route is registered ahead of the
-      // students router and handles the phone's nanoid announcement ids.
-      const announcement = await Announcement.findByAnyId(req.params.id);
+      const { findAnnouncementById } = require("./utils/announcementScope");
+      // findByAnyId inside the helper, not findById: this route is registered
+      // ahead of the students router and handles the phone's nanoid
+      // announcement ids. The helper also applies the school filter — a receipt
+      // goes only into the caller's own school's rows, and another school's id
+      // answers 404 rather than confirming it exists.
+      const announcement = await findAnnouncementById(req.params.id, req);
       if (!announcement) {
         return res.status(404).json({ message: "Announcement not found" });
       }
 
       const userId = req.user._id?.toString();
+      const Announcement = require("./db/models/Announcement");
       const result = await Announcement.updateOne(
         { _id: announcement._id, "readBy.user": { $ne: userId } },
         { $push: { readBy: { user: userId, readAt: new Date() } } }
@@ -453,13 +480,15 @@ app.post(
   "/api/students/announcements/:id/acknowledge",
   auth.authenticate,
   noCache,
+  studentOnly,
   async (req, res) => {
     try {
-      const Announcement = require("./db/models/Announcement");
-      const announcement = await Announcement.findById(req.params.id);
+      const { findAnnouncementById } = require("./utils/announcementScope");
+      const announcement = await findAnnouncementById(req.params.id, req);
       if (!announcement) {
         return res.status(404).json({ message: "Announcement not found" });
       }
+
       const userId     = req.user._id?.toString();
       const alreadyAck = (announcement.acknowledgedBy || []).some(
         (r) => r.user?.toString() === userId
@@ -508,16 +537,24 @@ app.post(
       const User           = require("./db/models/User");
       const { v4: uuidv4 } = require("uuid");
 
-      const student = await Student.findById(req.params.id).lean();
+      // ── Tenancy ─────────────────────────────────────────────────────────
+      // A school-scoped caller may only provision logins for their OWN
+      // students, and the login belongs to the STUDENT's school — not to
+      // whoever the caller is or whatever the body named. The old
+      // caller-first fallback let a students.manage holder point a brand-new
+      // User at another school's Student record and walk away with a working
+      // login for it. The lookup answers 404 for a foreign id, exactly as
+      // GET /api/users/:id does.
+      const callerSchoolId = req.user?.schoolId ? String(req.user.schoolId) : null;
+      const student = await Student.findOne({
+        _id: req.params.id,
+        ...(callerSchoolId ? { schoolId: callerSchoolId } : {}),
+      }).lean();
       if (!student) {
         return res.status(404).json({ success: false, message: "Student not found" });
       }
 
-      const schoolId =
-        req.user?.schoolId ||
-        req.body?.schoolId ||
-        student.schoolId   ||
-        null;
+      const schoolId = student.schoolId || null;
 
       let userDoc = student.userId
         ? await User.findById(student.userId)
@@ -525,7 +562,15 @@ app.post(
 
       if (!userDoc && (student.email || student.studentEmail)) {
         const email = (student.email || student.studentEmail || "").toLowerCase();
-        if (email) userDoc = await User.findOne({ email, role: "student" });
+        if (email) {
+          userDoc = await User.findOne({
+            email,
+            role:    "student",
+            // The existing login must belong to the student's own school. A
+            // same-named account at another school is that school's business.
+            ...(schoolId ? { schoolId } : {}),
+          });
+        }
       }
 
       if (userDoc?.enrollmentNo) {
@@ -563,7 +608,13 @@ app.post(
       // trusted: a code like "G.V.A" would otherwise build a regex whose dot
       // matches anything and could read another school's sequence.
       const last = await User.findOne(
-        { enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` }, role: "student" },
+        {
+          enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` },
+          role:         "student",
+          // The sequence is the school's own: without this clause the highest
+          // number across EVERY school was read.
+          ...(schoolId ? { schoolId } : {}),
+        },
         { enrollmentNo: 1 },
         { sort: { enrollmentNo: -1 } }
       ).lean();
@@ -1105,8 +1156,8 @@ async function startServer() {
       console.log("  STATIC   ANY  /uploads/*           ← express.static");
       console.log("  ─────────────────────────────────");
       console.log("  AUTH+NC  GET  /api/students/announcements      ← FIRST");
-      console.log("  AUTH+NC  POST /api/students/announcements/:id/read");
-      console.log("  AUTH+NC  POST /api/students/announcements/:id/acknowledge");
+      console.log("  AUTH+NC+STU POST /api/students/announcements/:id/read");
+      console.log("  AUTH+NC+STU POST /api/students/announcements/:id/acknowledge");
       console.log("  AUTH     POST /api/students/:id/enrollment-number");
       console.log("  ─────────────────────────────────");
       console.log("  OPT-AUTH ANY  /api/students/*");

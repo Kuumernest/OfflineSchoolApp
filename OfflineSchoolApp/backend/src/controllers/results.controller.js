@@ -18,6 +18,9 @@ const {
 const Student = require("../db/models/Student");
 const Class   = require("../db/models/Class");
 const AcademicStructure = require("../db/models/AcademicStructure");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const Subject           = require("../db/models/Subject");
+const { teacherAssigned } = require("../utils/teacherScope");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const resultsService = require("../services/results.service");
@@ -48,6 +51,32 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 const isAdmin = (role) =>
   ["super_admin", "school_admin", "admin"].includes(role);
+
+/**
+ * The exam this request is about, IN THE CALLER'S SCHOOL.
+ *
+ * Every per-student read and write in this controller used to start from
+ * Exam.findById(examId) or from a { examId, studentId } filter with no school
+ * in it, so a results.view holder in one school who knew an exam and pupil id
+ * from another read that pupil's marks, positions and report card — and the
+ * write routes minted rows into the other school's pipeline. The exam is the
+ * anchor: it is loaded scoped, and its school is the scope for everything
+ * that follows.
+ *
+ * A super_admin who named no school is the one caller allowed to look across
+ * schools (docs/20 Info-A); for them the exam's own school becomes the scope,
+ * so the sub-queries still stay within one school.
+ *
+ * @returns {Promise<{exam: object, schoolId: string}|null>} null = not this school's
+ */
+const loadScopedExam = async (req, examId, provided, select = null) => {
+  const schoolId = req ? resolveSchoolId(req, provided) : null;
+  const q = Exam.findOne({ _id: String(examId ?? ""), ...(schoolId ? { schoolId } : {}) });
+  if (select) q.select(select);
+  const exam = await q.lean();
+  if (!exam) return null;
+  return { exam, schoolId: schoolId ? String(schoolId) : String(exam.schoolId) };
+};
 
 // ─────────────────────────────────────────────────────────
 // GET /api/results/:examId
@@ -254,7 +283,15 @@ const getExamRankings = asyncHandler(async (req, res) => {
   const scope = ["class", "grade", "school"].includes(rankBy)
     ? rankBy : "class";
 
-  let rankings = await getRankings(examId, scope, classId || null);
+  // Tenancy: a ranking is one school's table. The service filtered on examId
+  // alone, so a foreign examId answered another school's positions, names and
+  // admission numbers.
+  const scoped = await loadScopedExam(req, examId, req.query.schoolId, "_id schoolId");
+  if (!scoped) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
+  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId);
   rankings     = rankings.slice(0, Number(limit));
 
   return res.json({
@@ -277,9 +314,20 @@ const getStudentResult = asyncHandler(async (req, res) => {
   //    ResultSummary / StudentScore). Consumers got an empty summary and the
   //    web batch print silently fell back to blank marks. Response shape is
   //    unchanged: { summary, scores }.
+  // Tenancy: the exam anchors the read. Without it a results.view holder in
+  // one school read another school's pupil by (examId, studentId).
+  const scoped = await loadScopedExam(req, examId, req.query.schoolId, "_id schoolId");
+  if (!scoped) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result found for this student in this exam",
+    });
+  }
+  const { schoolId } = scoped;
+
   const [summary, scores] = await Promise.all([
-    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
 
   if (!summary && !scores.length) {
@@ -330,11 +378,19 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   //    ResultSummary, written by processResults) instead of ExamResult/ExamScore.
   //    Payload shape is unchanged — the mobile ReportCard (admin + student
   //    views), the web batch print and the shared HTML renderer consume it.
-  const [scores, examSubjects, summary, exam] = await Promise.all([
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
-    ExamSubject.find({ examId, deletedAt: null }).lean(),
-    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
-    Exam.findById(examId).lean(),
+  // Tenancy: the exam is loaded in the caller's school first, and its school
+  // scopes every read below. The card, the verification code it mints and the
+  // archive it writes are therefore always this school's — a foreign examId
+  // used to build another school's card, mint a public code for that pupil
+  // and freeze the card into THIS school's GeneratedReports.
+  const scoped = await loadScopedExam(req, examId, req?.query?.schoolId ?? req?.body?.schoolId);
+  if (!scoped) return { ok: false };
+  const { exam, schoolId } = scoped;
+
+  const [scores, examSubjects, summary] = await Promise.all([
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    ExamSubject.find({ examId, schoolId, deletedAt: null }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
 
   /*
@@ -359,14 +415,14 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
    */
   const cardClassId = summary?.classId || scores[0]?.classId || exam?.classId || null;
   const classTeacherName = cardClassId
-    ? (await Class.findOne({ _id: String(cardClassId) })
+    ? (await Class.findOne({ _id: String(cardClassId), schoolId })
         .select("classTeacherName").lean().catch(() => null))?.classTeacherName || null
     : null;
 
   // ── Student info + school grading settings (requirements §1, §3) ──────────
   const [student, gradingConfig, allExamScores] = await Promise.all([
     // gender / dateOfBirth live on the Student document, not the summary
-    Student.findOne({ _id: studentId })
+    Student.findOne({ _id: studentId, schoolId })
       .select("gender dateOfBirth studentName enrollmentNo admissionNo photoUrl")
       .lean()
       .catch(() => null),
@@ -377,7 +433,7 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
           .catch(() => null)
       : Promise.resolve(null),
     // Every score for this exam — needed to rank the student per subject (§5)
-    StudentScore.find({ examId, deletedAt: null })
+    StudentScore.find({ examId, schoolId, deletedAt: null })
       .select("studentId examSubjectId subjectId score maxScore isAbsent isExempt")
       .lean(),
   ]);
@@ -937,7 +993,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
  */
 const reissueStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const schoolId = req.user?.schoolId;
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
 
   if (!schoolId) {
     return res.status(400).json({ success: false, error: "schoolId is required" });
@@ -948,8 +1004,11 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
   // deleted a reprint quietly no-ops against the dead row and the unique index
   // blocks a fresh insert — leaving the card unrecoverable. Reissue is the
   // explicit admin action, so it is the thing that may revive one.
+  // Scoped to the caller's school: the (examId, studentId) pair is unique
+  // across the platform, so without schoolId a foreign pair reissued — and
+  // overwrote — another school's frozen card.
   const existing = await GeneratedReport.findOne({
-    examId, studentId,
+    examId, studentId, schoolId,
   }).select("_id templateVersion deletedAt").lean();
 
   if (!existing) {
@@ -1037,14 +1096,50 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  const schoolId = req.user?.schoolId;
-  const out      = Number(outOf)    || 20;
-  const pass     = Number(passMark) || 10;
+  const out  = Number(outOf)    || 20;
+  const pass = Number(passMark) || 10;
 
-  const [exam, gradingConfig] = await Promise.all([
-    Exam.findById(examId).lean(),
-    GradingConfig.findOne({ schoolId }).lean(),
-  ]);
+  // Tenancy: the exam anchors the write. Exam.findById plus an unscoped
+  // { examId, studentId } lookup let a results.edit holder rewrite another
+  // school's summary from body numbers.
+  const scoped = await loadScopedExam(req, examId, req.body.schoolId);
+  if (!scoped) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+  const { exam, schoolId } = scoped;
+
+  if (!(await Student.exists({ _id: String(studentId), schoolId }))) {
+    return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // A teacher recomputes the summaries of the classes they teach and no
+  // other — the class-level question, because a summary spans every subject.
+  // Admins pass. Same boundary as the register.
+  if (req.user?.role === "teacher") {
+    const summaryClassId =
+      (await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null })
+        .select("classId").lean())?.classId ||
+      (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null })
+        .select("classId").lean())?.classId ||
+      exam.classId || null;
+    const ok = summaryClassId && await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id, schoolId, classId: summaryClassId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false, code: "CLASS_NOT_ASSIGNED",
+        error: "You are not assigned to this student's class",
+      });
+    }
+  }
+
+  // Lock and publication apply to a recomputed summary exactly as to a mark:
+  // a published card is not rewritten from body numbers without a recorded
+  // reason, and never by a teacher. This route had no guard.
+  const audit = await guardResultWrite(req, res, { examId, schoolId, studentId });
+  if (!audit) return;
+
+  const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
 
   let totalWeightedScore = 0;
   let totalCoefficients  = 0;
@@ -1169,7 +1264,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
   };
 
   const existing = await ResultSummary.findOne({
-    examId, studentId, deletedAt: null,
+    examId, studentId, schoolId, deletedAt: null,
   });
 
   let summary;
@@ -1184,7 +1279,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     // are schema-required; take them from the student's score rows, falling
     // back to the exam.
     const firstScore = await StudentScore.findOne({
-      examId, studentId, deletedAt: null,
+      examId, studentId, schoolId, deletedAt: null,
     })
       .select("classId schoolId studentName admissionNo className academicYear term")
       .lean();
@@ -1213,6 +1308,15 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     });
     summary = created.toObject ? created.toObject() : created;
   }
+
+  await logResultChange(audit, {
+    entity:   "summary",
+    entityId: String(summary._id),
+    action:   existing ? "updated" : "created",
+    field:    "average",
+    oldValue: existing?.average ?? null,
+    newValue: average,
+  });
 
   console.log(
     `✅ Report card: student=${studentId}`,
@@ -1285,8 +1389,23 @@ const publishResults = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
   const { classId } = req.body;
 
+  // ── Tenancy: publishing is per school, and the school is named ──────────
+  // The old filter matched { examId } across every school, so a foreign
+  // examId published another school's report cards, and the summary route
+  // below could retract one. A platform write names its school or nothing
+  // happens.
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const exam = await Exam.findOne({ _id: examId, schoolId }).select("_id").lean();
+  if (!exam) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
   // Publish all ResultSummary records for this exam
-  const filter = { examId, deletedAt: null };
+  const filter = { examId, schoolId, deletedAt: null };
   if (classId) filter.classId = classId;
 
   const result = await ResultSummary.updateMany(filter, {
@@ -1297,14 +1416,17 @@ const publishResults = asyncHandler(async (req, res) => {
   });
 
   // Also update the Exam status
-  await Exam.findByIdAndUpdate(examId, {
-    $set: {
-      status: "published",
-      resultsPublished: true,
-      resultsPublishedAt: new Date(),
-      publishedBy: req.user?._id || null,
-    },
-  });
+  await Exam.findOneAndUpdate(
+    { _id: examId, schoolId },
+    {
+      $set: {
+        status: "published",
+        resultsPublished: true,
+        resultsPublishedAt: new Date(),
+        publishedBy: req.user?._id || null,
+      },
+    }
+  );
 
   return res.json({
     success:   true,
@@ -1321,7 +1443,15 @@ const publishResult = asyncHandler(async (req, res) => {
   const { summaryId }      = req.params;
   const { publish = true } = req.body;
 
-  const summary = await ResultSummary.findById(summaryId);
+  // Tenancy: a summary id without a school names nothing. The old
+  // findById(summaryId) let a foreign id publish or retract another school's
+  // report card under a family that already holds it.
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const summary = await ResultSummary.findOne({ _id: summaryId, schoolId });
 
   if (!summary) {
     return res.status(404).json({
@@ -1394,15 +1524,101 @@ const upsertScore = asyncHandler(async (req, res) => {
     score, maxScore, isAbsent, isExempt, teacherRemark,
   } = req.body;
 
+  // ── Tenancy: the exam anchors the write ──────────────────────────────────
+  // The row's schoolId field is what the write RECORDS, not what authorises
+  // it. Without an in-school exam check, a results.edit holder could supply
+  // another school's exam/student/subject ids and mint a mark that feeds that
+  // school's pipeline; without the assignment check below, any teacher could
+  // do it to any class of their own school.
+  const callerSchoolId = resolveSchoolId(req, schoolId);
+  if (!callerSchoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const exam = await Exam.findOne({ _id: examId, schoolId: callerSchoolId })
+    .select("_id schoolId type")
+    .lean();
+  if (!exam) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
+  if (!studentId || !subjectId) {
+    return res.status(400).json({ success: false, error: "studentId and subjectId are required" });
+  }
+  if (!(await Student.exists({ _id: String(studentId), schoolId: callerSchoolId }))) {
+    return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // ── The class and subject come from the exam, not the request ───────────
+  // The ExamSubject row is the exam's own statement of which class sits which
+  // subject. When one exists it decides the class (and the examSubjectId the
+  // row records); the body's classId is only consulted for an exam that
+  // carries no ExamSubject rows, and even then the class and the subject must
+  // both be this school's.
+  const examSubjectBase = {
+    examId, schoolId: callerSchoolId, subjectId: String(subjectId), deletedAt: null,
+  };
+  let examSubject = await ExamSubject.findOne({
+    ...examSubjectBase,
+    ...(examSubjectId ? { _id: String(examSubjectId) } : {}),
+    ...(!examSubjectId && classId ? { classId: String(classId) } : {}),
+  }).select("_id classId subjectId").lean();
+  if (!examSubject && !examSubjectId && classId) {
+    // The body named a class the exam does not sit this subject in; the
+    // exam's own row for the subject decides, if it has one.
+    examSubject = await ExamSubject.findOne(examSubjectBase)
+      .select("_id classId subjectId").lean();
+  }
+  if (examSubjectId && !examSubject) {
+    return res.status(404).json({ success: false, error: "Exam subject not found" });
+  }
+
+  const existing = await StudentScore.findOne({
+    examId, studentId, subjectId, schoolId: callerSchoolId,
+  });
+
+  const effectiveClassId = examSubject?.classId
+    ? String(examSubject.classId)
+    : String(classId || existing?.classId || "");
+  if (!effectiveClassId) {
+    return res.status(400).json({ success: false, error: "classId is required" });
+  }
+  if (!examSubject) {
+    const [classOk, subjectOk] = await Promise.all([
+      Class.exists({ _id: effectiveClassId, schoolId: callerSchoolId }),
+      Subject.exists({ _id: String(subjectId), schoolId: callerSchoolId }),
+    ]);
+    if (!classOk)   return res.status(404).json({ success: false, error: "Class not found" });
+    if (!subjectOk) return res.status(404).json({ success: false, error: "Subject not found" });
+  }
+
+  // The relationship, not just the capability — the same rule as the exam
+  // router's bulk sheet, quiz authoring and homework: a teacher writes marks
+  // for the (class, subject) pairs they are assigned, and for no other. Asked
+  // of the pair the exam names, before anything is written.
+  if (req.user?.role === "teacher") {
+    const ok = await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id,
+      schoolId:  callerSchoolId,
+      classId:   effectiveClassId,
+      subjectId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false,
+        code:    "SUBJECT_NOT_ASSIGNED",
+        error:   "You are not assigned to this class and subject",
+      });
+    }
+  }
+
   const audit = await guardResultWrite(req, res, {
     examId,
-    schoolId: schoolId || req.user?.schoolId,
+    schoolId: callerSchoolId,
     studentId,
     subjectId,
   });
   if (!audit) return;
-
-  const existing = await StudentScore.findOne({ examId, studentId, subjectId });
 
   if (existing) {
     // Snapshot before Object.assign mutates the document in place.
@@ -1456,8 +1672,8 @@ const upsertScore = asyncHandler(async (req, res) => {
   }
 
   const newScore = await StudentScore.create({
-    examId, examSubjectId, studentId,
-    subjectId, classId, schoolId,
+    examId, examSubjectId: examSubject?._id ?? examSubjectId ?? null, studentId,
+    subjectId, classId: effectiveClassId, schoolId: callerSchoolId,
     score,
     maxScore:      maxScore      ?? 100,
     isAbsent:      isAbsent      ?? false,
@@ -1489,7 +1705,14 @@ const upsertScore = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 const deleteScore = asyncHandler(async (req, res) => {
-  const score = await StudentScore.findById(req.params.scoreId);
+  // Tenancy: scoped to the CALLER's school. The old lookup trusted the row's
+  // own schoolId — which is exactly what it then handed to the guard — so a
+  // foreign score id deleted another school's mark.
+  const callerSchoolId = resolveSchoolId(req);
+  const score = await StudentScore.findOne({
+    _id: req.params.scoreId,
+    ...(callerSchoolId ? { schoolId: callerSchoolId } : {}),
+  });
 
   if (!score) {
     return res.status(404).json({

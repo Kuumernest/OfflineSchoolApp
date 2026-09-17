@@ -1262,6 +1262,14 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
     if (!isValidEmail(emailClean)) {
       return sendError(res, 400, "A valid email is required");
     }
+    // findOneAndUpdate skips the pre("save") uniqueness hook, so the rule is
+    // applied here: one active staff account per address, platform-wide.
+    // Without it a teacher could be given another school's staff address and
+    // that account's sign-in became a coin toss.
+    const holder = await User.findOne({
+      email: emailClean, role: { $ne: ROLES.STUDENT }, _id: { $ne: String(req.params.id) },
+    }).select("_id").lean();
+    if (holder) return sendError(res, 409, "Email already registered");
     updateFields.email = emailClean;
   }
   if (req.user?.role === "super_admin" && schoolId) {
@@ -1389,7 +1397,15 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
   // Re-POSTing an id that already exists returns it rather than failing, which
   // is what makes the offline outbox safe to retry.
   if (id) {
-    const already = await Class.findById(String(id).trim()).lean();
+    // Scoped: the unscoped findById answered another school's class to whoever
+    // supplied its id. A foreign id is a conflict, not a row.
+    const dedupSchool = resolveSchoolId(req, schoolId);
+    const already = await Class.findOne({
+      _id: String(id).trim(), ...(dedupSchool ? { schoolId: dedupSchool } : {}),
+    }).lean();
+    if (!already && await Class.exists({ _id: String(id).trim() })) {
+      return sendError(res, 409, "A class with this id already exists");
+    }
     if (already) {
       return sendSuccess(res, {
         class:        already,
@@ -1645,7 +1661,14 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
   // can supply the id it already stored — see POST /classes above for why the
   // mirror needs this, and POST /exams for the original of the pattern.
   if (id) {
-    const already = await Subject.findById(String(id).trim()).lean();
+    // Scoped, as for POST /classes.
+    const dedupSchool = resolveSchoolId(req, schoolId);
+    const already = await Subject.findOne({
+      _id: String(id).trim(), ...(dedupSchool ? { schoolId: dedupSchool } : {}),
+    }).lean();
+    if (!already && await Subject.exists({ _id: String(id).trim() })) {
+      return sendError(res, 409, "A subject with this id already exists");
+    }
     if (already) {
       return sendSuccess(res, {
         subject:      normaliseSubject(already),
@@ -2104,7 +2127,9 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
   }
 
   // ── Validate class ────────────────────────────────────────────────────────
-  const cls = await Class.findById(classId).lean();
+  // Tenant query, as PATCH /students/:id/move already does: findById let an
+  // approval bind a pupil to another school's class and copy its name.
+  const cls = await Class.findOne(getTenantQuery(req, classId)).lean();
   if (!cls) return sendError(res, 400, "Class not found");
 
   const now              = new Date();
@@ -2231,25 +2256,34 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
 
   // 2. By enrollmentNo (handles idempotent re-approval of same student)
   if (!user && enrollmentNo) {
-    user = await User.findOne({ enrollmentNo }).catch(() => null);
+    // Within this school: enrolment numbers are prefixed by school code and
+    // codes are not guaranteed unique, so an unscoped match could adopt —
+    // rename, re-password and re-home — another school's pupil account.
+    user = await User.findOne({ enrollmentNo, schoolId: resolvedSchoolId }).catch(() => null);
     if (user) {
       console.log(`[approve] Found user by enrollmentNo: ${user._id}`);
     }
   }
 
   if (user) {
-    // Existing user found — update credentials only
-    await User.findByIdAndUpdate(user._id, {
-      name:              studentName,
-      enrollmentNo,
-      password:          tempPassword,
-      mustResetPassword: true,
-      isActive:          true,
-      schoolId:          resolvedSchoolId,
-      classId,
-    }).catch((err) => {
+    // Existing user found — update credentials only.
+    //
+    // save(), not findByIdAndUpdate: the pre("save") hook is what hashes the
+    // password. The update form stored the temporary password in clear text
+    // on every re-approval — and, since bcrypt then rejected it, locked the
+    // pupil out until the next reset.
+    try {
+      user.name              = studentName;
+      user.enrollmentNo      = enrollmentNo;
+      user.password          = tempPassword;
+      user.mustResetPassword = true;
+      user.isActive          = true;
+      user.schoolId          = resolvedSchoolId;
+      user.classId           = classId;
+      await user.save();
+    } catch (err) {
       console.warn("[approve] User update failed:", err.message);
-    });
+    }
     console.log(`[approve] Updated existing student user: ${user._id}`);
 
   } else {
@@ -2332,6 +2366,7 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
       // Check if a Student record already exists for THIS specific student
       // (not by email — that would match siblings)
       const existingStudent = await S.findOne({
+        schoolId: resolvedSchoolId,
         $or: [
           { applicationId: studentId        },
           { userId:        String(user._id) },
@@ -2595,8 +2630,8 @@ router.delete("/students/:id", requirePermission("students.delete"), asyncHandle
   }
 
   if (!deleted && App) {
-    const result = await App.findByIdAndUpdate(
-      id, { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
+    const result = await App.findOneAndUpdate(
+      getTenantQuery(req, id), { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
     ).catch(() => null);
     if (result) deleted = true;
   }
@@ -2875,19 +2910,33 @@ const handleCreateAssignment = asyncHandler(async (req, res) => {
   // As with POST /classes and POST /subjects: a client that made this
   // assignment offline supplies the id it already stored, and replaying it
   // returns the existing row instead of a second one.
+  const schoolId = resolveSchoolId(req, bodySchool);
+
   if (id) {
-    const already = await TeacherAssignment.findById(String(id).trim()).lean();
+    // Tenancy: the replay guard is scoped to the caller's school. The old
+    // unscoped findById answered another school's assignment row — its
+    // teacher, class and subject ids — to whoever supplied the id. A dedup
+    // hit carries only what an outbox needs to reconcile.
+    const already = await TeacherAssignment.findOne({
+      _id: String(id).trim(),
+      ...(schoolId ? { schoolId } : {}),
+    }).lean();
     if (already) {
       return sendSuccess(res, {
-        assignment:   already,
+        assignment: {
+          _id:       String(already._id),
+          id:        String(already._id),
+          schoolId:  already.schoolId ?? null,
+          teacherId: already.teacher ? String(already.teacher) : null,
+          classId:   already.class   ? String(already.class)   : null,
+          subjectId: already.subject ? String(already.subject) : null,
+        },
         serverId:     String(already._id),
         clientId:     String(id).trim(),
         deduplicated: true,
       });
     }
   }
-
-  const schoolId = resolveSchoolId(req, bodySchool);
 
   const [teacher, cls, subject] = await Promise.all([
     User.findOne({

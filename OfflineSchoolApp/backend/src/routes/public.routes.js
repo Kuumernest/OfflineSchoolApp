@@ -147,13 +147,33 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
 ]);
 
+/**
+ * The stored extension follows the declared type, never the client's filename.
+ *
+ * Files land under /uploads/applications, which express.static serves with a
+ * Content-Type taken from the extension. Keeping path.extname(originalname)
+ * meant a body of { name: "x.html", mimeType: "image/png" } was stored as
+ * x.html and served as a page from the API's own origin. A type outside the
+ * table is stored as .bin and served as an octet-stream.
+ */
+const EXTENSION_BY_MIME = {
+  "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+  "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif",
+  "application/pdf": ".pdf",
+};
+const extensionFor = (mime) =>
+  EXTENSION_BY_MIME[String(mime || "").trim().toLowerCase()] || ".bin";
+
+/** A search term is a literal, not a pattern. */
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ── Multer (multipart/form-data fallback) ─────────────────────────────────────
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename:    (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext    = path.extname(file.originalname).toLowerCase() || ".bin";
+    const ext    = extensionFor(file.mimetype);
     cb(null, `${unique}${ext}`);
   },
 });
@@ -226,7 +246,7 @@ const validateBase64File = (f, index) => {
  * a document metadata object compatible with the StudentApplication schema.
  */
 const saveBase64File = (f) => {
-  const ext      = path.extname(f.name).toLowerCase() || ".bin";
+  const ext      = extensionFor(f.mimeType);
   const unique   = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   const filename = `${unique}${ext}`;
   const filePath = path.join(UPLOAD_DIR, filename);
@@ -298,7 +318,7 @@ router.get(
     const page   = Math.max(1, parseInt(req.query.page  ?? "1",  10));
     const limit  = Math.max(1, Math.min(100, parseInt(req.query.limit ?? "20", 10)));
     const skip   = (page - 1) * limit;
-    const search = String(req.query.search || "").trim();
+    const search = escapeRegex(String(req.query.search || "").trim().slice(0, 100));
 
     const schoolAndClauses = buildAndClauses(
       search ? {
@@ -522,8 +542,10 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
   // ── Verify school ───────────────────────────────────────────────────────────
   const School = getSchool();
   if (School) {
+    // applicationsOpen is the switch the school's administrator throws to
+    // close admissions; the message below always claimed to honour it.
     const school = await School.findOne({
-      $and: buildAndClauses({ _id: schoolId.trim() }),
+      $and: buildAndClauses({ _id: schoolId.trim(), applicationsOpen: { $ne: false } }),
     }).lean();
 
     if (!school) {

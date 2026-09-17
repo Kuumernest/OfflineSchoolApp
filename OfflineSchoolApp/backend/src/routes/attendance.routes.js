@@ -8,6 +8,8 @@ const { StudentAttendance, TeacherAttendance } =
   require("../db/models/Attendance");
 const User    = require("../db/models/User");
 const Student = require("../db/models/Student");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const { teacherAssigned } = require("../utils/teacherScope");
 
 // What a register entry used to say, for the one record type where
 // last-write-wins used to leave no trace at all.
@@ -470,6 +472,25 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
     const resolvedPeriodId = periodId || null;
     const validStatuses    = STUDENT_STATUSES;
 
+    // ── The register belongs to the classes a teacher is assigned to ───────
+    // CLASS-level, by audit decision — same rule as the single-mark route,
+    // and for the same reason: the capability alone let any teacher holding
+    // attendance.mark rewrite any class's register in their school.
+    if (req.user?.role === "teacher") {
+      const ok = await teacherAssigned(TeacherAssignment, {
+        teacherId: req.user._id || req.user.id,
+        schoolId:  resolvedSchoolId,
+        classId,
+      });
+      if (!ok) {
+        return res.status(403).json({
+          success: false,
+          code:    "CLASS_NOT_ASSIGNED",
+          message: "You are not assigned to this class",
+        });
+      }
+    }
+
     // ── Verify the students actually exist in this class ─────────────────────
     // Previously the only check was `!row.studentId`, a truthiness test, so any
     // string was accepted and upserted. A replayed request or a client bug
@@ -725,6 +746,27 @@ router.post("/students", teachingOnly, async (req, res) => {
     const resolvedSchoolId = schoolId || req.user?.schoolId;
     const resolvedDate     = dateStr(date);
     const resolvedPeriodId = periodId || null;
+
+    // ── The register belongs to the classes a teacher is assigned to ───────
+    // CLASS-level, by audit decision: a form master takes the whole class,
+    // not one subject in it. The capability alone let any teacher holding
+    // attendance.mark rewrite any class's register in their school. Admins
+    // and a super_admin pass; the schoolId here is the caller's own for
+    // everybody but a super_admin (the auth door refuses a foreign one).
+    if (req.user?.role === "teacher") {
+      const ok = await teacherAssigned(TeacherAssignment, {
+        teacherId: req.user._id || req.user.id,
+        schoolId:  resolvedSchoolId,
+        classId,
+      });
+      if (!ok) {
+        return res.status(403).json({
+          success: false,
+          code:    "CLASS_NOT_ASSIGNED",
+          message: "You are not assigned to this class",
+        });
+      }
+    }
 
     // Same gap as the bulk route had: the upsert would happily create a row for
     // a studentId that belongs to nobody, and there is no DELETE route to undo

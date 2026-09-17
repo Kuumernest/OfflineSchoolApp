@@ -40,16 +40,9 @@ const isTeacher = (req) => req.user?.role === "teacher";
  * Subject document for a teacher field; the Subject schema declares none, so
  * that probe can never match and is not repeated here.)
  */
-const teacherTeaches = async ({ teacherId, schoolId, classId, subjectId }) => {
-  const scope = schoolId ? { schoolId: String(schoolId) } : {};
-  return Boolean(await TeacherAssignment.exists({
-    ...scope,
-    teacher:  String(teacherId),
-    class:    String(classId),
-    subject:  String(subjectId),
-    isActive: { $ne: false },
-  }));
-};
+const { teacherAssigned } = require("../utils/teacherScope");
+const teacherTeaches = ({ teacherId, schoolId, classId, subjectId }) =>
+  teacherAssigned(TeacherAssignment, { teacherId, schoolId, classId, subjectId });
 
 const bodyToDocument = (body, schoolId) => ({
   _id: body.id || body._id,

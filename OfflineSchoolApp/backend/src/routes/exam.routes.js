@@ -16,6 +16,9 @@ const sequenceAssessment = require("../services/sequenceAssessment.service");
 const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const StudentRoster = require("../db/models/Student");
+const { teacherAssigned } = require("../utils/teacherScope");
 const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
@@ -67,7 +70,7 @@ const resolveClassIdsFromBody = (body) => {
   return [];
 };
 
-const resolveClassData = async (classIdArray) => {
+const resolveClassData = async (classIdArray, schoolId) => {
   if (!classIdArray || classIdArray.length === 0) {
     return {
       primaryClassId:   null,
@@ -76,7 +79,11 @@ const resolveClassData = async (classIdArray) => {
       classNames:       null,
     };
   }
-  const classRecords = await Class.find({ _id: { $in: classIdArray } }).lean();
+  // Scoped: an exam bound to another school's class would carry that class's
+  // name into this school's records and count its pupils in the other's.
+  const classRecords = await Class.find({
+    _id: { $in: classIdArray }, ...(schoolId ? { schoolId } : {}),
+  }).lean();
   const classNameMap = new Map(classRecords.map((c) => [String(c._id), c.name]));
   const orderedIds   = classIdArray.filter((cid) => classNameMap.has(cid));
   const orderedNames = orderedIds.map((cid) => classNameMap.get(cid));
@@ -695,7 +702,7 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   }
 
   const resolvedIds = resolveClassIdsFromBody(req.body);
-  const classData   = await resolveClassData(resolvedIds);
+  const classData   = await resolveClassData(resolvedIds, schoolId);
 
   const exam = await Exam.create({
     _id:          examId,
@@ -731,9 +738,15 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   if (Array.isArray(subjects) && subjects.length > 0) {
     for (const s of subjects) {
       if (!s.subjectId) continue;
-      const subjectDoc = await Subject.findById(s.subjectId).lean();
+      const subjectDoc = await Subject.findOne({ _id: String(s.subjectId), schoolId }).lean();
       const teacherDoc = s.teacherId
-        ? await User.findById(s.teacherId).lean() : null;
+        ? await User.findOne({ _id: String(s.teacherId), schoolId }).lean() : null;
+      if (!subjectDoc) {
+        return res.status(400).json({ message: "subjectId " + s.subjectId + " is not a subject of this school" });
+      }
+      if (s.teacherId && !teacherDoc) {
+        return res.status(400).json({ message: "teacherId " + s.teacherId + " is not a member of this school" });
+      }
       const es = await ExamSubject.create({
         _id:              uuidv4(),
         examId:           exam._id,
@@ -826,7 +839,7 @@ router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
 
   const resolvedIds = resolveClassIdsFromBody(req.body);
   const classData   = resolvedIds.length > 0
-    ? await resolveClassData(resolvedIds) : null;
+    ? await resolveClassData(resolvedIds, schoolId) : null;
 
   const updates = {
     ...(name         !== undefined && { name: name.trim() }),
@@ -983,9 +996,14 @@ router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
 
   if (!subjectId) return res.status(400).json({ message: "subjectId is required" });
 
-  const subjectDoc      = await Subject.findById(subjectId).lean();
-  const teacherDoc      = teacherId ? await User.findById(teacherId).lean() : null;
+  const subjectDoc      = await Subject.findOne({ _id: String(subjectId), schoolId }).lean();
+  const teacherDoc      = teacherId ? await User.findOne({ _id: String(teacherId), schoolId }).lean() : null;
+  if (!subjectDoc) return res.status(400).json({ message: "subjectId is not a subject of this school" });
+  if (teacherId && !teacherDoc) return res.status(400).json({ message: "teacherId is not a member of this school" });
   const resolvedClassId = classId || exam.classId;
+  if (resolvedClassId && !(await Class.exists({ _id: String(resolvedClassId), schoolId }))) {
+    return res.status(400).json({ message: "classId is not a class of this school" });
+  }
 
   /**
    * ── The id, and the two ways a repeat arrives ────────────────────────────
@@ -1100,8 +1118,11 @@ router.put(
       updates[key] = n;
     }
     if (teacherId !== undefined) {
-      updates.teacherId = teacherId || null;
-      const teacherDoc = teacherId ? await User.findById(teacherId).lean() : null;
+      const teacherDoc = teacherId ? await User.findOne({ _id: String(teacherId), schoolId }).lean() : null;
+      if (teacherId && !teacherDoc) {
+        return res.status(400).json({ message: "teacherId is not a member of this school" });
+      }
+      updates.teacherId   = teacherId || null;
       updates.teacherName = teacherDoc?.name || null;
     }
     if (isPractical !== undefined) updates.isPractical = Boolean(isPractical);
@@ -1134,8 +1155,12 @@ router.put(
   })
 );
 
+// adminOnly: this was the one route in the file with no guard of its own, so
+// any signed-in account of the school — a pupil included — could soft-delete a
+// subject out of an exam. Its sibling PUT is admin-only for a lesser change.
 router.delete(
   "/:examId/subjects/:subjectId",
+  adminOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.query.schoolId);
     const es = await ExamSubject.findOneAndUpdate(
@@ -1176,9 +1201,9 @@ router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
 router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
-  const { classId, subjectId, examSubjectId, scores } = req.body;
+  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId, scores } = req.body;
 
-  if (!classId || !subjectId || !Array.isArray(scores)) {
+  if (!bodyClassId || !bodySubjectId || !Array.isArray(scores)) {
     return res.status(400).json({
       message: "classId, subjectId, and scores[] are required",
     });
@@ -1187,17 +1212,75 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   const exam = await Exam.findOne({ _id: examId, schoolId }).lean();
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
+  // ── The class and subject come from the exam, not the request ───────────
+  // The ExamSubject row is the exam's own statement of which class sits which
+  // subject. When one exists it decides both — the body is only allowed to
+  // NAME it — and it must be this exam's and this school's: the old
+  // ExamSubject.findById(examSubjectId) took any school's row, whose maxScore
+  // then validated the sheet and whose submission status was flipped below.
+  // Where an exam carries no ExamSubject rows the body's pair is used, but
+  // the class and the subject must both be this school's.
+  const examSubject = examSubjectId
+    ? await ExamSubject.findOne({
+        _id: String(examSubjectId), examId, schoolId, deletedAt: null,
+      }).lean()
+    : await ExamSubject.findOne({
+        examId, subjectId: String(bodySubjectId), classId: String(bodyClassId),
+        schoolId, deletedAt: null,
+      }).lean();
+  if (examSubjectId && !examSubject) {
+    return res.status(404).json({ message: "Exam subject not found" });
+  }
+  const classId   = String(examSubject?.classId   ?? bodyClassId);
+  const subjectId = String(examSubject?.subjectId ?? bodySubjectId);
+  if (!examSubject) {
+    const [classOk, subjectOk] = await Promise.all([
+      Class.exists({ _id: classId, schoolId }),
+      Subject.exists({ _id: subjectId, schoolId }),
+    ]);
+    if (!classOk)   return res.status(404).json({ message: "Class not found" });
+    if (!subjectOk) return res.status(404).json({ message: "Subject not found" });
+  }
+
+  // ── The assignment is the boundary, not the capability ───────────────────
+  // exams.view says "you may work with marks"; the TeacherAssignment row says
+  // whose. Quiz authoring and homework already refuse an unassigned teacher
+  // with SUBJECT_NOT_ASSIGNED, and the registry's own note says assignment is
+  // what decides "who can enter the marks of whom". Without this check any
+  // teacher could rewrite any class's sheet in their school. Asked of the
+  // PAIR the exam itself names, never of the pair the request claimed.
+  if (req.user?.role === "teacher") {
+    const ok = await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id,
+      schoolId,
+      classId,
+      subjectId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false,
+        code:    "SUBJECT_NOT_ASSIGNED",
+        message: "You are not assigned to this class and subject",
+      });
+    }
+  }
+
   // Nothing checked isLocked or isPublished here, so a published report card
   // could be rewritten under a parent who had already read it. An admin may
   // still correct a mistake, but only with a reason that gets recorded.
   const audit = await guardResultWrite(req, res, { examId, schoolId, subjectId });
   if (!audit) return;
 
-  const examSubject = examSubjectId
-    ? await ExamSubject.findById(examSubjectId).lean()
-    : await ExamSubject.findOne({
-        examId, subjectId, classId, deletedAt: null,
-      }).lean();
+  // Every pupil on the sheet is one of this school's. A studentId from
+  // elsewhere would otherwise mint a row in this school's pipeline that
+  // points at another school's child.
+  const sheetStudentIds = [...new Set(
+    scores.map((s) => (s?.studentId ? String(s.studentId) : null)).filter(Boolean)
+  )];
+  const knownStudents = new Set(
+    (await StudentRoster.find({ _id: { $in: sheetStudentIds }, schoolId })
+      .select("_id").lean()).map((s) => String(s._id))
+  );
 
   // A mark of 23/20 (or a blank cell on a present student) silently corrupts
   // every average and grade computed from it, so the sheet is validated before
@@ -1265,6 +1348,10 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
       const { studentId, score, teacherRemark, isAbsent, isExempt } = row;
       if (!studentId) {
         failed.push({ ...row, reason: "Missing studentId" });
+        continue;
+      }
+      if (!knownStudents.has(String(studentId))) {
+        failed.push({ ...row, reason: "Student not found in this school" });
         continue;
       }
 

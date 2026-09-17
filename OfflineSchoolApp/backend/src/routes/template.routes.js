@@ -364,11 +364,20 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
   const ExamSubject   = require("../db/models/ExamSubject");
   const Exam          = require("../db/models/Exam");
 
-  const [scores, examSubjects, summary, exam] = await Promise.all([
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
-    ExamSubject.find({  examId, deletedAt: null            }).lean(),
-    ResultSummary.findOne({ examId, studentId }).lean(),
-    Exam.findById(examId).lean(),
+  // Tenancy: the exam is this school's, or the preview has nothing to show.
+  // The old Exam.findById plus unscoped { examId, studentId } reads rendered
+  // another school's pupil into this school's template.
+  const exam = await Exam.findOne({ _id: String(examId), schoolId }).lean();
+  if (!exam) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result data found for this student in this exam",
+    });
+  }
+  const [scores, examSubjects, summary] = await Promise.all([
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    ExamSubject.find({  examId, schoolId, deletedAt: null  }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId }).lean(),
   ]);
 
   if (!scores.length && !summary) {

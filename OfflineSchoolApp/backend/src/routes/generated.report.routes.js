@@ -75,9 +75,24 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
     });
   }
 
-  // Upsert — one record per student per exam
+  // The exam and the pupil are this school's. The unique index on
+  // (examId, studentId) spans the platform, so the old filter { examId,
+  // studentId } MATCHED another school's row when given its ids — and the
+  // $set below then re-parented that row to this school with new HTML.
+  {
+    const Exam    = require("../db/models/Exam");
+    const Student = require("../db/models/Student");
+    const [examOk, studentOk] = await Promise.all([
+      examId ? Exam.exists({ _id: String(examId), schoolId: resolvedSchoolId }) : Promise.resolve(true),
+      Student.exists({ _id: String(studentId), schoolId: resolvedSchoolId }),
+    ]);
+    if (!examOk)    return res.status(404).json({ success: false, error: "Exam not found" });
+    if (!studentOk) return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // Upsert — one record per student per exam, within this school
   const filter = examId
-    ? { examId, studentId }
+    ? { examId, studentId, schoolId: resolvedSchoolId }
     : { studentId, term, academicYear, schoolId: resolvedSchoolId };
 
   const update = {
@@ -100,11 +115,21 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
     },
   };
 
-  const report = await GeneratedReport.findOneAndUpdate(
-    filter,
-    update,
-    { upsert: true, returnDocument: 'after' }
-  ).lean();
+  let report;
+  try {
+    report = await GeneratedReport.findOneAndUpdate(
+      filter,
+      update,
+      { upsert: true, returnDocument: 'after' }
+    ).lean();
+  } catch (err) {
+    // The scoped filter found nothing, the insert hit the platform-wide unique
+    // index: the pair belongs to a row this school may not touch.
+    if (err?.code === 11000) {
+      return res.status(409).json({ success: false, code: "REPORT_EXISTS", error: "A report card for this exam and student already exists" });
+    }
+    throw err;
+  }
 
   console.log(
     `📄 GeneratedReport saved: student=${studentId}`,

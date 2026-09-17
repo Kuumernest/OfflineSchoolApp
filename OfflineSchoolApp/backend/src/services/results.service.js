@@ -495,8 +495,10 @@ async function getExamResults(examId, classId = null, options = {}) {
 
 // ─── Get Rankings ─────────────────────────────────────────────────────────
 
-async function getRankings(examId, scope = "class", classId = null) {
-  const filter = { examId, deletedAt: null };
+async function getRankings(examId, scope = "class", classId = null, schoolId = null) {
+  // schoolId is the caller's; the controller resolves it and checks the exam
+  // belongs to it first. The filter used to be examId alone.
+  const filter = { examId, deletedAt: null, ...(schoolId ? { schoolId: String(schoolId) } : {}) };
 
   if (scope === "class") {
     filter.classPosition  = { $ne: null };
@@ -544,7 +546,7 @@ async function backfillRankingNames(results) {
   const schoolIds = [...new Set(incomplete.map((r) => r.schoolId).filter(Boolean))];
 
   const [students, classes] = await Promise.all([
-    Student.find({ _id: { $in: sIds } })
+    Student.find({ _id: { $in: sIds }, ...(schoolIds.length ? { schoolId: { $in: schoolIds } } : {}) })
       .select("_id studentName firstName lastName enrollmentNo admissionNo classId")
       .lean(),
     Class.find({ schoolId: { $in: schoolIds } }).select("_id name").lean(),

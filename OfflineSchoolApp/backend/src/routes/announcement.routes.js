@@ -101,19 +101,12 @@ const extractUserId = (req) =>
  * announcements exists.
  *
  * A super_admin still crosses schools, which is what that role is for.
+ *
+ * Moved to utils/announcementScope.js when the student read-receipt copies in
+ * server.js and students.routes.js were found doing the same lookup unscoped.
+ * One implementation, three callers.
  */
-const findAnnouncementById = async (id, req) => {
-  const doc = await Announcement.findByAnyId(id);
-  if (!doc) return null;
-
-  if (req?.user?.role === "super_admin") return doc;
-
-  const callerSchool = req?.user?.schoolId;
-  if (!callerSchool) return null;
-  if (String(doc.schoolId ?? "") !== String(callerSchool)) return null;
-
-  return doc;
-};
+const { findAnnouncementById } = require("../utils/announcementScope");
 
 const resolveStudentClassId = async (userId, schoolId) => {
   try {
