@@ -2446,7 +2446,11 @@
     "classFallback": "Class",
     "roomLabel": "Room {{room}}",
     "settingsShortcut": "Settings & Profile",
-    "logout": "Logout"
+    "logout": "Logout",
+    "attendanceReminderPast": "{{className}} · {{subjectName}}: attendance not marked (class ended {{time}})",
+    "attendanceReminderCurrent": "{{className}} · {{subjectName}}: attendance not marked (class in progress)",
+    "attendanceReminderUpcoming": "{{className}} · {{subjectName}}: attendance not yet marked (starts {{time}})",
+    "attendanceReminderNoTime": "{{className}} · {{subjectName}}: attendance not marked today"
   },
   "studentHome": {
     "greetingMorning": "Good Morning",
@@ -5087,7 +5091,15 @@
     "myClassesToday": {
       "one": "My Classes Today — {{count}} class",
       "other": "My Classes Today — {{count}} classes"
-    }
+    },
+    "notAssignedTitle": "Not one of your classes",
+    "notAssignedBody": "You are not currently assigned to this class, so its register cannot be opened here. Choose a class from your attendance list instead.",
+    "noClassTitle": "No class selected",
+    "noClassBody": "Open the register from your attendance list, where each class is shown.",
+    "backToClasses": "Back to my classes",
+    "offlineNoRosterTitle": "Class list not available offline",
+    "offlineNoRosterBody": "This class's students have not been downloaded to this phone yet. Connect once and the register will work offline afterwards.",
+    "offlineRoster": "Offline — showing the saved class list"
   },
   "subjectsList": {
     "loading": "Loading subjects…",

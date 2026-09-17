@@ -323,7 +323,12 @@ router.get("/students/today", staffRead, async (req, res) => {
     const schoolId = resolveSchoolId(req);
     const classId  = req.query.classId;
     const periodId = req.query.periodId || null;
-    const today    = todayStr();
+    // An optional ?date=YYYY-MM-DD opens another day's register: a reminder
+    // tapped in the evening for the morning's class still names today, but a
+    // reminder the phone kept from an offline day names that day, and it is
+    // not silently moved. Anything that is not a date is today.
+    const asked = String(req.query.date ?? "");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : todayStr();
 
     const query = { schoolId, date: today };
     if (classId)  query.classId  = classId;

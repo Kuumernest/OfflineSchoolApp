@@ -28,6 +28,7 @@ import { isTeacherProfileComplete } from "./profile/setup";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { toDisplayUri }        from "../../src/utils/logoUri";
 import { useTranslation }      from "../../src/i18n/useTranslation";
+import { reminderMessageKey, reminderRoute } from "../../src/utils/attendanceReminders";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
@@ -332,7 +333,29 @@ export default function TeacherDashboard() {
       if (stats.pendingGrading > 0)        list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: t("teacherHome.alertPendingGrading", { count: stats.pendingGrading }),                                                             route: "/teacher/results"                    });
       if (stats.upcomingDeadlines > 0)     list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: t("teacherHome.alertDeadlines", { count: stats.upcomingDeadlines }),                                                         route: "/teacher/homework"                   });
       if (stats.upcomingExams > 0)         list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: t("teacherHome.alertUpcomingExams", { count: stats.upcomingExams }),                                                                route: "/teacher/exams"                      });
-      if (stats.todayAttendanceMissing > 0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: t("teacherHome.alertMissingAttendance", { count: stats.todayAttendanceMissing }),                                         route: "/teacher/attendance/mark"            });
+      // One reminder per class without a register, each opening THAT class's
+      // register for the day. The single count used to open the register
+      // screen with no class — an empty screen headed "Class".
+      const reminders = Array.isArray(stats.todayAttendanceReminders) ? stats.todayAttendanceReminders : [];
+      for (const r of reminders) {
+        const time = r.status === "past" ? (r.endTime || "") : (r.startTime || "");
+        list.push({
+          id:      `attendance-${r.classId}-${r.date}`,
+          type:    r.status === "upcoming" ? "warning" : "danger",
+          icon:    "alert-circle-outline",
+          message: t(time ? reminderMessageKey(r.status) : "teacherHome.attendanceReminderNoTime", {
+            className:   r.className   || t("teacherHome.classFallback"),
+            subjectName: r.subjectName || t("teacherHome.subjectFallback"),
+            time,
+          }),
+          route: reminderRoute(r),
+        });
+      }
+      // A count with no classes behind it (an older server, no timetable on
+      // the phone): the list of classes, where each can be chosen.
+      if (!reminders.length && stats.todayAttendanceMissing > 0) {
+        list.push({ id: "missing-attendance", type: "danger", icon: "alert-circle-outline", message: t("teacherHome.alertMissingAttendance", { count: stats.todayAttendanceMissing }), route: "/teacher/attendance" });
+      }
       if (stats.newSubmissions > 0)        list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: t("teacherHome.alertNewSubmissions", { count: stats.newSubmissions }),           route: "/teacher/homework"                   });
     }
 

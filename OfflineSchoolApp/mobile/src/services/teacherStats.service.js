@@ -28,6 +28,7 @@ import { resolveColumns, COL }             from "../db/schemaUtils";
 import { isAuthenticated, getCurrentAuth } from "../utils/authHelpers";
 import { API }                             from "./apiEndpoints";
 import api                                 from "./api";
+import { buildAttendanceReminders }        from "../utils/attendanceReminders";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — SCHEMA
@@ -222,12 +223,19 @@ const fetchTodayClassesFromLocal = async (db, teacherId) => {
   const dayCandidates = getTodayDayCandidates();
   const todayDayIndex = new Date().getDay();
 
+  // The ids travel with the names. The dashboard's attendance reminder used
+  // to know only how many classes lacked a register; it now names each one
+  // and opens its register, which needs the class id and the period.
   const buildSlotItem = (r) => {
     const startTime = formatTime(r.startTime);
     const endTime   = formatTime(r.endTime);
     return {
-      subjectName: r.subjectName || "Unknown Subject",
-      className:   r.className   || "Unknown Class",
+      slotId:      r.id ? String(r.id) : null,
+      classId:     r.classId   ? String(r.classId)   : null,
+      subjectId:   r.subjectId ? String(r.subjectId) : null,
+      periodId:    r.periodId  ? String(r.periodId)  : null,
+      subjectName: r.subjectName || null,
+      className:   r.className   || null,
       startTime,
       endTime,
       status: computeSlotStatus(startTime, endTime),
@@ -238,16 +246,20 @@ const fetchTodayClassesFromLocal = async (db, teacherId) => {
     const slotCols = await getTableColumns(db, "timetable_slots");
     const tidCol   = slotCols.includes("teacherId") ? "teacherId" : "teacher_id";
 
+    // The day may be stored as the server's code ("MON"), a name, or the
+    // weekday index an older build wrote; all three are asked.
+    const { clause: dayIn, params: dayParams } = buildInClause(dayCandidates, "ts.dayOfWeek");
     const rows = await db.getAllAsync(
-      `SELECT ts.id, s.name AS subjectName, c.name AS className,
+      `SELECT ts.id, ts.classId, ts.subjectId, ts.periodId,
+              s.name AS subjectName, c.name AS className,
               p.starttime AS startTime, p.endtime AS endTime
        FROM   timetable_slots ts
        LEFT JOIN subjects s ON s.id = ts.subjectId
        LEFT JOIN classes  c ON c.id = ts.classId
        LEFT JOIN periods  p ON p.id = ts.periodId
-       WHERE  ts.${tidCol} = ? AND ts.dayOfWeek = ?
+       WHERE  ts.${tidCol} = ? AND (ts.dayOfWeek = ? OR ${dayIn})
          AND  (ts.deletedat IS NULL OR ts.deletedat = '')`,
-      [teacherId, todayDayIndex]
+      [teacherId, todayDayIndex, ...dayParams]
     ).catch(() => []);
 
     if (rows.length > 0) {
@@ -263,14 +275,21 @@ const fetchTodayClassesFromLocal = async (db, teacherId) => {
     const { clause: dayClause, params: dayParams } =
       buildInClause(dayCandidates, "t.day_of_week");
 
+    // The timetable table (written by timetableService from the server's
+    // schedule) holds no times of its own: the period does. The old query
+    // read t.starttime, a column the table never had, and answered nothing.
     const rows = await db.getAllAsync(
-      `SELECT t.starttime AS startTime, t.endtime AS endTime,
+      `SELECT t._id AS id, t.class_id AS classId, t.subject_id AS subjectId,
+              t.period_id AS periodId,
+              p.starttime AS startTime, p.endtime AS endTime,
               s.name AS subjectName, c.name AS className
        FROM   timetable t
        LEFT JOIN subjects s ON s.id = t.subject_id
        LEFT JOIN classes  c ON c.id = t.class_id
+       LEFT JOIN periods  p ON p.id = t.period_id
        WHERE  t.${tidCol} = ? AND ${dayClause}
-       ORDER  BY t.starttime ASC`,
+         AND  (t.deleted_at IS NULL OR t.deleted_at = '')
+       ORDER  BY p.sortorder ASC, p.starttime ASC`,
       [teacherId, ...dayParams]
     ).catch(() => []);
 
@@ -285,6 +304,42 @@ const fetchTodayClassesFromLocal = async (db, teacherId) => {
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 6 — ATTENDANCE GAP
 // ═════════════════════════════════════════════════════════════════════════════
+
+/**
+ * The reminders: one per class on today's timetable that has no register yet.
+ *
+ * "Has a register" is what this app has always meant by it — at least one
+ * attendance row for the class on the date, on the phone (which the sync
+ * fills from the server) or, when the server built the day's list, its own
+ * attendanceMarked flag. Each reminder carries the class id, the names, the
+ * period and the date, so the dashboard can open THAT register.
+ *
+ * Falls back to the old count when the day's classes carry no ids at all
+ * (a server that predates the field, with no local timetable to read).
+ */
+const getTodayAttendanceReminders = async (db, teacherId, today, todayClasses) => {
+  const withIds = (todayClasses ?? []).filter((c) => c?.classId);
+  if (!withIds.length) {
+    const count = await getTodayAttendanceMissing(db, teacherId, today);
+    return { count, classes: [] };
+  }
+
+  let markedClassIds = [];
+  if (await tableExists(db, "attendance")) {
+    const attCols  = await getTableColumns(db, "attendance");
+    const classCol = attCols.includes("classId") ? "classId" : "class_id";
+    const ids      = [...new Set(withIds.map((c) => String(c.classId)))];
+    const { clause, params } = buildInClause(ids, classCol);
+    const rows = await db.getAllAsync(
+      `SELECT DISTINCT ${classCol} AS classId FROM attendance WHERE date = ? AND ${clause}`,
+      [today, ...params]
+    ).catch(() => []);
+    markedClassIds = rows.map((r) => r.classId).filter(Boolean);
+  }
+
+  const classes = buildAttendanceReminders({ todayClasses: withIds, markedClassIds, date: today });
+  return { count: classes.length, classes };
+};
 
 const getTodayAttendanceMissing = async (db, teacherId, today) => {
   if (!(await tableExists(db, "attendance"))) return 0;
@@ -607,6 +662,7 @@ const EMPTY_STATS = Object.freeze({
   newSubmissions:         0,
   upcomingExams:          0,
   todayAttendanceMissing: 0,
+  todayAttendanceReminders: [],
   pendingMarksEntry:      0,
   rejectedSubmissions:    0,
   activeExams:            0,
@@ -674,7 +730,7 @@ export const getTeacherStats = async (rawTeacherId) => {
       questionBankSize,
       quizAttemptsPending,
       contentUploads,
-      todayAttendanceMissing,
+      attendanceReminders,
       homeworkStats,
       examStats,
     ] = await Promise.all([
@@ -684,7 +740,7 @@ export const getTeacherStats = async (rawTeacherId) => {
       getQuestionBankSize(db, teacherId),
       getPendingQuizGrading(db, teacherId),
       getContentUploads(db, teacherId),
-      getTodayAttendanceMissing(db, teacherId, today),
+      getTodayAttendanceReminders(db, teacherId, today, todayClasses),
       getHomeworkStats(db, teacherId, today, sevenDaysStr),
       getExamStats(db, teacherId, subjectIds, today, sevenDaysStr),
     ]);
@@ -699,7 +755,8 @@ export const getTeacherStats = async (rawTeacherId) => {
       totalQuizzes,
       questionBankSize,
       quizAttemptsPending,
-      todayAttendanceMissing,
+      todayAttendanceMissing:   attendanceReminders.count,
+      todayAttendanceReminders: attendanceReminders.classes,
       todayClasses,
       activeHomework:    homeworkStats.activeHomework,
       pendingGrading:    homeworkStats.pendingGrading,

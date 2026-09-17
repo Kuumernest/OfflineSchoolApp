@@ -463,9 +463,29 @@ export const pushUnsyncedAttendance = async () => {
 export const AttendanceService = {
 
   async getStudentAttendanceToday(classId, schoolId, periodId = null) {
+    return this.getStudentAttendanceForDate(classId, schoolId, todayStr(), periodId);
+  },
+
+  /**
+   * The register of one class for one date: the roster with each pupil's
+   * mark, or without one.
+   *
+   * Online, the server builds it (and it may be asked for a day other than
+   * today — a reminder tapped for a class whose date the phone knows). Offline,
+   * the phone builds the same shape from its own students table and
+   * attendance rows. The old offline answer was the attendance rows alone,
+   * with no roster at all, so the register screen drew an empty class and
+   * called it one with no pupils.
+   *
+   * `rosterKnown` tells the two apart: false means the phone holds no pupils
+   * for this school at all, so an empty roster says nothing about the class.
+   */
+  async getStudentAttendanceForDate(classId, schoolId, date, periodId = null) {
+    const day = /^\d{4}-\d{2}-\d{2}$/.test(String(date ?? "")) ? String(date) : todayStr();
+
     if (_isConnected) {
       try {
-        const params = { classId, schoolId };
+        const params = { classId, schoolId, date: day };
         if (periodId) params.periodId = periodId;
         const response = await api.get("/attendance/students/today", { params });
 
@@ -475,13 +495,78 @@ export const AttendanceService = {
           (Array.isArray(response.data) ? response.data : []);
 
         if (records.length) await this._cacheStudentAttendance(records, schoolId);
-        return response.data;
+        return { ...response.data, source: "api", rosterKnown: true };
       } catch (err) {
-        console.warn("[attendance] getStudentAttendanceToday API failed:", err?.message);
+        console.warn("[attendance] getStudentAttendanceForDate API failed:", err?.message);
       }
     }
 
-    return this._getStudentAttendanceLocal({ classId, schoolId, date: todayStr(), periodId });
+    return this._getRosterLocal({ classId, schoolId, date: day, periodId });
+  },
+
+  /** The server's register shape, from the phone's own tables. */
+  async _getRosterLocal({ classId, schoolId, date, periodId }) {
+    const db = await getDatabase();
+    await ensureSchema(db);
+
+    const sid = schoolId ? String(schoolId) : null;
+    const cid = String(classId);
+
+    // Both spellings of the class and school columns have been written over
+    // the table's life; a pupil is in the class under either.
+    const students = await db.getAllAsync(
+      `SELECT * FROM students
+       WHERE (class_id = ? OR classId = ?)
+         ${sid ? "AND (school_id = ? OR schoolId = ?)" : ""}
+         AND (deleted_at IS NULL OR deleted_at = '')
+         AND (is_active IS NULL OR is_active != 0)
+         AND (status IS NULL OR status NOT IN ('rejected', 'pending'))
+       ORDER BY studentName ASC`,
+      sid ? [cid, cid, sid, sid] : [cid, cid]
+    ).catch(() => []);
+
+    const anyForSchool = sid
+      ? await db.getFirstAsync(
+          `SELECT 1 AS one FROM students WHERE (school_id = ? OR schoolId = ?) LIMIT 1`, [sid, sid]
+        ).catch(() => null)
+      : await db.getFirstAsync(`SELECT 1 AS one FROM students LIMIT 1`).catch(() => null);
+
+    const { records } = await this._getStudentAttendanceLocal({ classId: cid, schoolId: sid, date, periodId });
+    const bySid = new Map();
+    for (const r of records ?? []) {
+      const key = String(r[_studentIdCol] ?? r.student_id ?? r.studentId ?? "");
+      if (key && !bySid.has(key)) bySid.set(key, { ...r, studentId: key, classId: r[_classIdCol] ?? r.classId ?? cid });
+    }
+
+    const roster = (students ?? []).map((s) => {
+      const id = String(s.id ?? s._id ?? "");
+      return {
+        student: {
+          _id:         id,
+          studentName: s.studentName || s.name || [s.firstName, s.lastName].filter(Boolean).join(" ") || null,
+          email:       s.email || null,
+          admissionNo: s.admissionNo || s.admissionNumber || s.enrollmentNo || null,
+        },
+        attendance: bySid.get(id) || null,
+      };
+    });
+
+    const marked = roster.filter((r) => r.attendance).length;
+    const by = (status) => roster.filter((r) => r.attendance?.status === status).length;
+
+    return {
+      success:     true,
+      date,
+      periodId:    periodId || null,
+      records:     records ?? [],
+      roster,
+      summary: {
+        total: roster.length, marked,
+        present: by("present"), absent: by("absent"), late: by("late"), excused: by("excused"),
+      },
+      source:      "local",
+      rosterKnown: Boolean(anyForSchool),
+    };
   },
 
   async getStudentAttendance(params = {}) {

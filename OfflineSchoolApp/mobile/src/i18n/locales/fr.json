@@ -2446,7 +2446,11 @@
     "classFallback": "Classe",
     "roomLabel": "Salle {{room}}",
     "settingsShortcut": "Paramètres et profil",
-    "logout": "Déconnexion"
+    "logout": "Déconnexion",
+    "attendanceReminderPast": "{{className}} · {{subjectName}} : présence non faite (cours terminé à {{time}})",
+    "attendanceReminderCurrent": "{{className}} · {{subjectName}} : présence non faite (cours en cours)",
+    "attendanceReminderUpcoming": "{{className}} · {{subjectName}} : présence pas encore faite (début à {{time}})",
+    "attendanceReminderNoTime": "{{className}} · {{subjectName}} : présence non faite aujourd'hui"
   },
   "studentHome": {
     "greetingMorning": "Bonjour",
@@ -5087,7 +5091,15 @@
     "myClassesToday": {
       "one": "Mes classes aujourd'hui – {{count}} classe",
       "other": "Mes classes aujourd'hui – {{count}} classes"
-    }
+    },
+    "notAssignedTitle": "Classe non attribuée",
+    "notAssignedBody": "Vous n'êtes pas affecté à cette classe actuellement ; son registre ne peut pas s'ouvrir ici. Choisissez une classe dans votre liste de présences.",
+    "noClassTitle": "Aucune classe sélectionnée",
+    "noClassBody": "Ouvrez le registre depuis votre liste de présences, où chaque classe est affichée.",
+    "backToClasses": "Retour à mes classes",
+    "offlineNoRosterTitle": "Liste de classe indisponible hors ligne",
+    "offlineNoRosterBody": "Les élèves de cette classe n'ont pas encore été téléchargés sur ce téléphone. Connectez-vous une fois et le registre fonctionnera ensuite hors ligne.",
+    "offlineRoster": "Hors ligne — liste de classe enregistrée"
   },
   "subjectsList": {
     "loading": "Chargement des matières…",

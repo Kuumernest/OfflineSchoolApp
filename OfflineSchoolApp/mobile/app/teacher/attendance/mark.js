@@ -24,6 +24,8 @@ import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { PeriodsService }    from "../../../src/services/periods.service";
+import { fetchTeacherScope } from "../../../src/services/teacherScope.service";
+import { resolveRegisterTarget } from "../../../src/utils/attendanceReminders";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -180,9 +182,43 @@ export default function TeacherMarkAttendanceScreen() {
   const user   = useAuthStore((s) => s.user);
 
   const schoolId  = user?.schoolId;
-  const classId   = params.classId;
-  const className = params.className || t("attTeacher.klass");
+  const teacherId = user?._id || user?.id || user?.userId;
   const today     = useMemo(() => todayStr(), []);
+
+  // ── Which register this screen opens ──────────────────────────────────────
+  // Decided once, in order: the route's parameters → the teacher's canonical
+  // scope (teacherScope.service, the server's assignments, cached for
+  // offline) → the class this teacher may open, on the date the route named.
+  // Nothing below loads a roster until this is settled, so the screen cannot
+  // run its query with no class and then never recover. A teacher whose scope
+  // does not list the class — a stale reminder, a route typed by hand — is
+  // shown a safe state; the server would refuse the save regardless.
+  const [target, setTarget] = useState(null);
+  const paramClassId   = params.classId   ? String(params.classId)   : null;
+  const paramClassName = params.className ? String(params.className) : null;
+  const paramDate      = params.date      ? String(params.date)      : null;
+  const paramPeriodId  = params.periodId  ? String(params.periodId)  : null;
+
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      let scope = null;
+      if (teacherId) {
+        try { scope = await fetchTeacherScope({ teacherId, schoolId }); }
+        catch (err) { console.warn("[TeacherMark] scope failed:", err?.message); }
+      }
+      if (!live) return;
+      setTarget(resolveRegisterTarget({
+        params: { classId: paramClassId, className: paramClassName, date: paramDate, periodId: paramPeriodId },
+        scope, role: user?.role, today,
+      }));
+    })();
+    return () => { live = false; };
+  }, [paramClassId, paramClassName, paramDate, paramPeriodId, teacherId, schoolId, user?.role, today]);
+
+  const classId   = target?.authorized ? target.classId : null;
+  const className = target?.className || paramClassName || t("attTeacher.klass");
+  const date      = target?.date || today;
 
   const [roster,     setRoster]     = useState([]);
   const [attendance, setAttendance] = useState({});
@@ -193,21 +229,30 @@ export default function TeacherMarkAttendanceScreen() {
   const [error,      setError]      = useState(null);
   const [periods,    setPeriods]    = useState([]);
   const [selectedPeriod, setSelectedPeriod] = useState(null);
+  const [rosterSource, setRosterSource] = useState(null);   // "api" | "local"
+  const [rosterKnown,  setRosterKnown]  = useState(true);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
         const data = await PeriodsService.getAll();
-        if (!cancelled) setPeriods(data || []);
+        if (cancelled) return;
+        setPeriods(data || []);
+        // A reminder names the period its class sat; preselect it when the
+        // school's periods include it.
+        if (paramPeriodId && (data || []).some((p) => String(p.id) === paramPeriodId)) {
+          setSelectedPeriod(paramPeriodId);
+        }
       } catch (err) {
         console.warn("Failed to load periods:", err.message);
       }
     })();
     return () => { cancelled = true; };
-  }, []);
+  }, [paramPeriodId]);
 
   const loadRoster = useCallback(async (isRefresh = false) => {
+    if (!target) return;                       // still resolving the class
     if (!classId || !schoolId) {
       setLoading(false);
       return;
@@ -218,18 +263,16 @@ export default function TeacherMarkAttendanceScreen() {
       else           setLoading(true);
       setError(null);
 
-      const data = await AttendanceService.getStudentAttendanceToday(
+      const data = await AttendanceService.getStudentAttendanceForDate(
         classId,
         schoolId,
+        date,
         selectedPeriod
       );
 
       const rosterData = data?.roster || [];
-
-      if (rosterData.length === 0) {
-        console.log("[TeacherMark] Roster is empty for class:", classId);
-      }
-
+      setRosterSource(data?.source || "api");
+      setRosterKnown(data?.rosterKnown !== false);
       setRoster(rosterData);
 
       const existing = {};
@@ -246,7 +289,7 @@ export default function TeacherMarkAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [classId, schoolId, selectedPeriod, t]);
+  }, [target, classId, schoolId, date, selectedPeriod, t]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
 
@@ -291,7 +334,7 @@ export default function TeacherMarkAttendanceScreen() {
           schoolId,
           classId,
           periodId: selectedPeriod || undefined,
-          date:    today,
+          date,
           records,
         });
 
@@ -322,7 +365,7 @@ export default function TeacherMarkAttendanceScreen() {
     } else {
       doSave();
     }
-  }, [attendance, roster.length, t, schoolId, classId, selectedPeriod, today, router]);
+  }, [attendance, roster.length, t, schoolId, classId, selectedPeriod, date, router]);
 
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -353,6 +396,43 @@ export default function TeacherMarkAttendanceScreen() {
     );
   }
 
+  // The class the route named is not one this teacher may open — or the
+  // route named none. A safe state, not a register the server would refuse.
+  if (target && !target.authorized) {
+    const noClass = target.reason === "no_class";
+    return (
+      <View style={styles.container}>
+        <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
+        <View style={styles.header}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()} activeOpacity={0.7}>
+            <Ionicons name="arrow-back" size={24} color="#111827" />
+          </TouchableOpacity>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle} numberOfLines={1}>{className}</Text>
+            <Text style={styles.headerSub}>{formatDate(date)}</Text>
+          </View>
+          <View style={{ width: 64 }} />
+        </View>
+        <View style={styles.empty}>
+          <Ionicons name={noClass ? "school-outline" : "lock-closed-outline"} size={48} color="#D1D5DB" />
+          <Text style={styles.emptyTitle}>
+            {t(noClass ? "attTeacher.noClassTitle" : "attTeacher.notAssignedTitle")}
+          </Text>
+          <Text style={styles.emptySub}>
+            {t(noClass ? "attTeacher.noClassBody" : "attTeacher.notAssignedBody")}
+          </Text>
+          <TouchableOpacity
+            style={[styles.saveBtn, { marginTop: 16 }]}
+            onPress={() => router.replace("/teacher/attendance")}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.saveBtnText}>{t("attTeacher.backToClasses")}</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F9FAFB" />
@@ -371,7 +451,7 @@ export default function TeacherMarkAttendanceScreen() {
           <Text style={styles.headerTitle} numberOfLines={1}>
             {className}
           </Text>
-          <Text style={styles.headerSub}>{formatDate(today)}</Text>
+          <Text style={styles.headerSub}>{formatDate(date)}</Text>
         </View>
 
         <TouchableOpacity
@@ -538,18 +618,28 @@ export default function TeacherMarkAttendanceScreen() {
         )}
         ItemSeparatorComponent={() => <View style={{ height: 6 }} />}
         ListEmptyComponent={
+          // A roster the phone does not hold is not a class with no pupils.
+          // Offline with no students for this school downloaded, the screen
+          // says so, instead of "no students enrolled".
           <View style={styles.empty}>
-            <Ionicons name="people-outline" size={48} color="#D1D5DB" />
+            <Ionicons
+              name={!error && !search && rosterSource === "local" && !rosterKnown ? "cloud-offline-outline" : "people-outline"}
+              size={48} color="#D1D5DB"
+            />
             <Text style={styles.emptyTitle}>
               {error
                 ? t("attTeacher.loadStudentsFailed")
                 : search
                 ? t("attTeacher.noStudentMatch")
+                : rosterSource === "local" && !rosterKnown
+                ? t("attTeacher.offlineNoRosterTitle")
                 : t("attTeacher.noStudents")}
             </Text>
             {!error && !search && (
               <Text style={styles.emptySub}>
-                {t("attTeacher.enrolFirst")}
+                {rosterSource === "local" && !rosterKnown
+                  ? t("attTeacher.offlineNoRosterBody")
+                  : t("attTeacher.enrolFirst")}
               </Text>
             )}
           </View>

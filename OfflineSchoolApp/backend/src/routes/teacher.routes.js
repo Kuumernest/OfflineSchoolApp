@@ -953,6 +953,69 @@ router.get("/assignments", asyncHandler(async (req, res) => {
 // GET /teacher/stats/summary
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * The teacher's classes for today, from their own timetable slots in their own
+ * school, with the ids a reminder needs to open a register — classId,
+ * subjectId, periodId, the date — and whether the class already has a
+ * register for the day.
+ *
+ * The dashboard's attendance reminder used to receive only names and a count,
+ * so tapping it opened the register screen with no class. "Has a register" is
+ * what the app has always meant: at least one StudentAttendance row for the
+ * class on the date, whoever marked it. (The old count compared against a
+ * teacherId field StudentAttendance does not have, so nothing ever counted as
+ * marked and the count was the number of classes.)
+ */
+const buildTodayClasses = async (teacherId, schoolId) => {
+  const T = getTimetableSlot();
+  if (!T) return [];
+
+  const today   = todayISO();
+  const rawSlots = await T.find({
+    teacherId: String(teacherId),
+    dayOfWeek: getTodayDayNameQuery(),
+    deletedAt: null,
+    ...(schoolId ? { schoolId: String(schoolId) } : {}),
+  }).lean();
+  if (!rawSlots.length) return [];
+
+  const enriched = await enrichTimetableSlots(rawSlots);
+  sortSlotsByTime(enriched);
+
+  let markedClassIds = new Set();
+  try {
+    const Att = getAttendance();
+    if (Att) {
+      const classIds = [...new Set(enriched.map((s) => String(s.classId)).filter(Boolean))];
+      const marked = await Att.distinct("classId", {
+        ...(schoolId ? { schoolId: String(schoolId) } : {}),
+        classId: { $in: classIds },
+        date:    today,
+      });
+      markedClassIds = new Set(marked.map(String));
+    }
+  } catch (e) {
+    console.warn("buildTodayClasses attendance error:", e.message);
+  }
+
+  return enriched.map((s) => ({
+    slotId:           s._id,
+    classId:          s.classId  ? String(s.classId)  : null,
+    subjectId:        s.subjectId ? String(s.subjectId) : null,
+    periodId:         s.periodId ? String(s.periodId) : null,
+    dayOfWeek:        s.dayOfWeek,
+    date:             today,
+    subjectName:      s.subjectName,
+    className:        s.className,
+    periodName:       s.periodName,
+    startTime:        s.startTime,
+    endTime:          s.endTime,
+    room:             s.room,
+    status:           computeSlotStatus(s.startTime, s.endTime),
+    attendanceMarked: s.classId ? markedClassIds.has(String(s.classId)) : false,
+  }));
+};
+
 router.get("/stats/summary", asyncHandler(async (req, res) => {
   const teacherId = resolveTeacherId(req);
   if (!teacherId)
@@ -976,7 +1039,7 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
     pendingGrading,
     upcomingDeadlines,
     upcomingExams,
-    todayAttendanceMissing,
+    _attendanceMissingPlaceholder,
     newSubmissions,
     activeExams,
     pendingMarksEntry,
@@ -1036,18 +1099,8 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
         return E ? await E.countDocuments({ teacherId: String(teacherId), examDate: { $gte: new Date(today), $lte: new Date(weekEnd) } }) : 0;
       } catch { return 0; }
     })(),
-    (async () => {
-      try {
-        const T   = getTimetableSlot();
-        const Att = getAttendance();
-        if (!T || !Att) return 0;
-        const slots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).select("classId").lean();
-        if (!slots.length) return 0;
-        const slotClassIds = [...new Set(slots.map((s) => String(s.classId)))];
-        const markedCount  = await Att.countDocuments({ teacherId: String(teacherId), date: today, classId: { $in: slotClassIds } });
-        return Math.max(0, slotClassIds.length - markedCount);
-      } catch { return 0; }
-    })(),
+    // Computed from todayClasses below — see buildTodayClasses.
+    Promise.resolve(null),
     (async () => {
       try {
         const Sub = getSubmission();
@@ -1094,25 +1147,14 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
 
   let todayClasses = [];
   try {
-    const T = getTimetableSlot();
-    if (T) {
-      const rawSlots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).lean();
-      const enriched = await enrichTimetableSlots(rawSlots);
-      sortSlotsByTime(enriched);
-      todayClasses = enriched.map((s) => ({
-        slotId:      s._id,
-        subjectName: s.subjectName,
-        className:   s.className,
-        periodName:  s.periodName,
-        startTime:   s.startTime,
-        endTime:     s.endTime,
-        room:        s.room,
-        status:      computeSlotStatus(s.startTime, s.endTime),
-      }));
-    }
+    todayClasses = await buildTodayClasses(teacherId, schoolId);
   } catch (e) {
     console.warn("stats/summary timetable error:", e.message);
   }
+  // One per class, not per slot: two periods of one class are one register.
+  const todayAttendanceMissing = new Set(
+    todayClasses.filter((c) => c.classId && !c.attendanceMarked).map((c) => c.classId)
+  ).size;
 
   const stats = {
     assignedSubjects: subjectIds.length,
@@ -1152,22 +1194,7 @@ router.get("/my-workload", asyncHandler(async (req, res) => {
 
   let todayClasses = [];
   try {
-    const T = getTimetableSlot();
-    if (T) {
-      const rawSlots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).lean();
-      const enriched = await enrichTimetableSlots(rawSlots);
-      sortSlotsByTime(enriched);
-      todayClasses = enriched.map((s) => ({
-        slotId:      s._id,
-        subjectName: s.subjectName,
-        className:   s.className,
-        periodName:  s.periodName,
-        startTime:   s.startTime,
-        endTime:     s.endTime,
-        room:        s.room,
-        status:      computeSlotStatus(s.startTime, s.endTime),
-      }));
-    }
+    todayClasses = await buildTodayClasses(teacherId, schoolId);
   } catch (e) {
     console.warn("my-workload timetable error:", e.message);
   }

@@ -21,6 +21,7 @@ import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { getDatabase }       from "../../../src/db/database";
+import { getTeacherClasses } from "../../../src/services/teacherScope.service";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -39,7 +40,29 @@ const formatDate = (d) => {
 // FETCH TEACHER'S ASSIGNED CLASSES FROM SQLITE
 // ─────────────────────────────────────────────────────────────
 
+// The classes this teacher teaches, from the one place that knows: the
+// server's TeacherAssignment rows through teacherScope.service, cached for
+// offline. The mirror's teacher_assignments ⋈ classes join below is what this
+// screen used to read; a teacher's mirror does not receive those rows (the
+// sync feed excludes them for the role), so offline it listed nothing. It is
+// kept as the last resort for a phone never online since the scope shipped.
 const getTeacherAssignedClasses = async (teacherId, schoolId, t) => {
+  try {
+    const classes = await getTeacherClasses(teacherId, schoolId);
+    if (classes.length) {
+      return classes.map((c) => ({
+        id:   String(c.id),
+        name: c.name || t("attTeacher.unnamedClass"),
+        sub:  [c.level, c.section].filter(Boolean).join(" · "),
+      }));
+    }
+  } catch (err) {
+    console.warn("[getTeacherAssignedClasses] scope failed:", err?.message);
+  }
+  return getTeacherAssignedClassesFromMirror(teacherId, schoolId, t);
+};
+
+const getTeacherAssignedClassesFromMirror = async (teacherId, schoolId, t) => {
   try {
     const db = await getDatabase();
 
