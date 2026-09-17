@@ -617,6 +617,12 @@ assigned classes is a product decision that has not been taken, and this pass
 does not take it. The sync feed's `student` collection alone is class-scoped
 for teachers, by the capability `students.viewTaught`.
 
+Pinned by `scripts/check-teacher-read-scope.js` (wired as `check:readscope`):
+school-wide reads of another class's scores, results and register succeed;
+Beta's exam, pupil, ranking, class register and sync rows are never answered
+to an Alpha teacher; writes to the class they read but do not teach are refused
+with `SUBJECT_NOT_ASSIGNED` / `CLASS_NOT_ASSIGNED`.
+
 ### 11.8 Re-verification of §5, §6 and §6b
 
 Each finding's implementation was re-read against its boundary (school, role,
