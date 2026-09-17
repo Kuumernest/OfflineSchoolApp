@@ -309,6 +309,15 @@ export const classifyError = (error, method) => {
 
   if (status === 412 || status === 409) return "conflict";
 
+  // The SESSION failed, not the row. A 401 here means the interceptor could
+  // not refresh the token (sync routes never auto-logout), and 403
+  // PASSWORD_CHANGE_REQUIRED means the account must choose a password first.
+  // Neither says anything about the queued work; parking it as "failed"
+  // stranded a day's registers behind a manual retry after the next sign-in.
+  // The desktop engine already stops with "unauthenticated" and keeps its rows.
+  if (status === 401) return "unauthenticated";
+  if (status === 403 && code === "PASSWORD_CHANGE_REQUIRED") return "unauthenticated";
+
   return "permanent";
 };
 
@@ -364,7 +373,7 @@ export class MutationQueue {
       [now, limit]
     );
 
-    const summary = { synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0 };
+    const summary = { synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0, unauthenticated: 0, stopped: null };
 
     // Indexed, and reported at the TOP of each iteration.
     //
@@ -405,6 +414,19 @@ export class MutationQueue {
         summary.synced++;
       } catch (error) {
         const kind = classifyError(error, row.method);
+
+        if (kind === "unauthenticated") {
+          // Back to pending, untouched, and the drain stops: every row after
+          // this one would meet the same door. The next drain after sign-in
+          // sends them in the order the person did things.
+          await db.runAsync(
+            `UPDATE ${TABLE} SET status = 'pending', error = ? WHERE id = ?`,
+            [error.message, row.id]
+          );
+          summary.unauthenticated = queued - i;
+          summary.stopped = "unauthenticated";
+          break;
+        }
 
         if (kind === "resolved") {
           await this._settle(db, row, payload, error.response, onSuccess);
