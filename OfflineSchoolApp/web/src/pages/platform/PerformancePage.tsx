@@ -7,13 +7,16 @@ import { useMemo, useState }    from "react";
 import { useQuery }             from "@tanstack/react-query";
 import { useTranslation }       from "react-i18next";
 import { Link }                 from "react-router-dom";
-import { Download, ArrowUpDown, BarChart3 } from "lucide-react";
+import {
+  Download, ArrowUpDown, BarChart3, GraduationCap, Users, CalendarCheck, Award, TrendingUp, Percent,
+} from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
 import { Card }                 from "@/components/ui/Card";
 import { Button }               from "@/components/ui/Button";
 import { Badge }                from "@/components/ui/Badge";
 import { Table, THead, Th, TBody, Tr, Td, EmptyTable } from "@/components/ui/DataTable";
 import FiltersBar               from "@/components/platform/FiltersBar";
+import { MetricTile, MetricGrid, MetricNote } from "@/components/platform/MetricTile";
 import { downloadCsv }          from "@/components/platform/csv";
 import { useFormat }            from "@/i18n/format";
 import {
@@ -65,6 +68,8 @@ export default function PerformancePage() {
     return list;
   }, [perfQ.data, sortKey, desc]);
 
+  const totals = perfQ.data?.totals;
+
   const sortBy = (k: SortKey) => {
     if (k === sortKey) setDesc((v) => !v);
     else { setSortKey(k); setDesc(k !== "name"); }
@@ -109,12 +114,35 @@ export default function PerformancePage() {
         <FiltersBar value={filters} onChange={setFilters} options={optionsQ.data} showSchool={false} showWindow />
       </Card>
 
+      {/* The totals row of the table, as tiles, so the figures every school
+          is being compared against are readable without scrolling an
+          eleven-column table sideways. */}
+      <MetricGrid className="xl:grid-cols-3 2xl:grid-cols-6">
+        <MetricTile tone="students" icon={GraduationCap} loading={perfQ.isLoading}
+          label={d("students")} value={totals ? fmt.number(totals.students) : "—"}
+          hint={t("platform.performance.allSchools")} />
+        <MetricTile tone="teachers" icon={Users} loading={perfQ.isLoading}
+          label={d("teachers")} value={totals ? fmt.number(totals.teachers) : "—"}
+          hint={t("platform.performance.allSchools")} />
+        <MetricTile tone="attendance" icon={CalendarCheck} loading={perfQ.isLoading}
+          label={d("attendance")} value={totals ? pctText(totals.attendance.rate) : "—"}
+          hint={totals ? d("marked") + ": " + fmt.number(totals.attendance.marked) : undefined} />
+        <MetricTile tone="reports" icon={Award} loading={perfQ.isLoading}
+          label={d("passRate")} value={totals ? pctText(totals.academics.passRate) : "—"}
+          hint={totals ? d("results") + ": " + fmt.number(totals.academics.results) : undefined} />
+        <MetricTile tone="exams" icon={TrendingUp} loading={perfQ.isLoading}
+          label={d("promotionRate")} value={totals ? pctText(totals.promotion.rate) : "—"}
+          hint={totals ? d("decided") + ": " + fmt.number(totals.promotion.decided) : undefined} />
+        <MetricTile tone="finance" icon={Percent} loading={perfQ.isLoading}
+          label={d("collectionRate")} value={totals ? pctText(totals.fees.collectionRate) : "—"}
+          hint={totals ? d("paid") + ": " + fmt.money(totals.fees.paid) : undefined} />
+      </MetricGrid>
+
       <Card padding={false}>
         {!perfQ.isLoading && rows.length === 0 ? (
           <EmptyTable icon={<BarChart3 className="h-8 w-8" />} title={t("platform.performance.empty")} />
         ) : (
-          <div className="overflow-x-auto">
-            <Table>
+          <Table>
               <THead>
                 {columns.map((c) => (
                   <Th key={c.key} numeric={c.numeric}>
@@ -129,7 +157,7 @@ export default function PerformancePage() {
               <TBody>
                 {rows.map((r) => (
                   <Tr key={r.schoolId}>
-                    <Td>
+                    <Td className="min-w-[12rem] max-w-sm whitespace-normal">
                       <Link to={`/platform/schools/${r.schoolId}`} className="font-medium text-ink hover:underline">{r.name}</Link>
                       {!r.isActive ? <Badge variant="danger" className="ml-2">{t("platform.schools.statusInactive")}</Badge> : null}
                     </Td>
@@ -162,10 +190,9 @@ export default function PerformancePage() {
                 )}
               </TBody>
             </Table>
-          </div>
         )}
       </Card>
-      <p className="text-xs text-ink-muted">{d("attendanceHint")} {t("platform.filters.termNote")}</p>
+      <MetricNote>{d("attendanceHint")} {t("platform.filters.termNote")}</MetricNote>
     </div>
   );
 }

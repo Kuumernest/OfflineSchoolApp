@@ -23,8 +23,18 @@ export default function FiltersBar({
   const { t } = useTranslation();
   const set = (patch: Partial<PlatformFilters>) => onChange({ ...value, ...patch });
 
+  // One row of fields, however many there are. With five fields in a
+  // four-column grid the last date box sat alone on a second row, under a
+  // column of nothing.
+  const fields = [showSchool, true, showTerm, showWindow, showWindow].filter(Boolean).length;
+  const columns =
+    fields >= 5 ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" :
+    fields === 4 ? "sm:grid-cols-2 lg:grid-cols-4" :
+    fields === 3 ? "sm:grid-cols-3" :
+                   "sm:grid-cols-2";
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className={`grid gap-3 ${columns}`}>
       {showSchool && (
         <FormField label={t("platform.filters.school")}>
           <SelectField
@@ -48,7 +58,7 @@ export default function FiltersBar({
         />
       </FormField>
       {showTerm && (
-        <FormField label={t("platform.filters.term")} hint={t("platform.filters.termNote")}>
+        <FormField label={t("platform.filters.term")}>
           <SelectField
             value={value.term != null ? String(value.term) : ""}
             onChange={(e) => set({ term: e.target.value ? Number(e.target.value) : null })}

@@ -30,6 +30,7 @@ import {
 import { generateUUID }      from "../utils/idHelpers";
 import NetInfo               from "@react-native-community/netinfo";
 import { MutationQueue }     from "./mutationQueue.service";
+import { fetchScheduledTeachersLocal } from "./teacherStats.service";
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 1 — CONNECTIVITY TRACKING
@@ -896,6 +897,101 @@ export const AttendanceService = {
       `SELECT id, name, email FROM teacher_profiles WHERE schoolId = ?`,
       [schoolId]
     ).catch(() => []);
+  },
+
+  /**
+   * The school's periods, for the staff register's period picker: the synced
+   * table first, the server when the phone has none and is online.
+   */
+  async getPeriods(schoolId) {
+    try {
+      const db = await getDatabase();
+      const rows = await db.getAllAsync(
+        `SELECT id, name, starttime AS startTime, endtime AS endTime,
+                COALESCE(sortorder, 0) AS sortOrder, COALESCE(isbreak, 0) AS isBreak
+         FROM periods
+         WHERE (schoolId = ? OR schoolId IS NULL)
+           AND (isactive IS NULL OR isactive = 1)
+           AND (deletedat IS NULL OR deletedat = '')
+         ORDER BY sortOrder ASC, startTime ASC`,
+        [schoolId],
+      ).catch(() => []);
+      const local = rows.filter((p) => !Number(p.isBreak)).map((p) => ({ ...p, id: String(p.id) }));
+      if (local.length) return local;
+    } catch (err) {
+      console.warn("[attendance] local periods failed:", err?.message);
+    }
+    if (!_isConnected) return [];
+    try {
+      const response = await api.get("/admin/periods", { params: { schoolId } });
+      const raw = response.data?.periods || response.data?.data || (Array.isArray(response.data) ? response.data : []);
+      return raw
+        .filter((p) => p.isActive !== false && !p.isBreak)
+        .map((p) => ({
+          id: String(p._id || p.id), name: p.name, startTime: p.startTime, endTime: p.endTime,
+          sortOrder: Number(p.sortOrder ?? 0), isBreak: false,
+        }))
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+    } catch (err) {
+      console.warn("[attendance] getPeriods API failed:", err?.message);
+      return [];
+    }
+  },
+
+  /**
+   * The staff register for one date and period: who is timetabled to teach
+   * then, each with their mark for the day or null.
+   *
+   * Online the server decides both halves — /attendance/teachers/roster with
+   * the date and period lists the timetabled staff; /attendance/teachers with
+   * the date gives the marks. Offline the phone applies the same rule to the
+   * timetable it holds (fetchScheduledTeachersLocal), and says when it holds
+   * none: `available: false` is "the timetable is not on this phone", which
+   * is not "nobody is scheduled" and must never be shown as such.
+   */
+  async getTeacherRegister({ schoolId, date, periodId } = {}) {
+    const day = date || todayStr();
+    const params = { schoolId, date: day, ...(periodId ? { periodId } : {}) };
+
+    if (_isConnected) {
+      try {
+        const [rosterRes, recordsRes] = await Promise.all([
+          api.get("/attendance/teachers/roster", { params }),
+          api.get("/attendance/teachers", { params: { schoolId, date: day } }),
+        ]);
+        const teachers = rosterRes.data?.teachers ?? [];
+        const records  = recordsRes.data?.records ?? [];
+        if (records.length) await this._cacheTeacherAttendance(records, schoolId);
+        await this._cacheTeacherProfiles(
+          teachers.map((t) => ({ id: String(t._id || t.id || ""), name: t.name || "", email: t.email || "" })).filter((t) => t.id),
+          schoolId,
+        );
+        const byTeacher = new Map(records.map((r) => [String(r.teacherId), r]));
+        return {
+          source: "server", available: true, date: day, periodId: periodId || null,
+          dayOfWeek: rosterRes.data?.dayOfWeek ?? null, period: rosterRes.data?.period ?? null,
+          roster: teachers.map((t) => ({
+            teacher:    { _id: String(t._id), name: t.name, email: t.email, slots: t.slots ?? [] },
+            attendance: byTeacher.get(String(t._id)) ?? null,
+          })),
+        };
+      } catch (err) {
+        console.warn("[attendance] getTeacherRegister API failed:", err?.message);
+      }
+    }
+
+    const db = await getDatabase();
+    await ensureSchema(db);
+    const local = await fetchScheduledTeachersLocal(db, { schoolId, date: day, periodId });
+    const { records } = await this._getTeacherAttendanceLocal({ schoolId, date: day });
+    const byTeacher = new Map((records ?? []).map((r) => [String(r.teacherId), r]));
+    return {
+      source: "local", available: local.available, date: day, periodId: periodId || null,
+      roster: local.teachers.map((t) => ({
+        teacher:    { _id: t._id, name: t.name, email: t.email, slots: t.slots },
+        attendance: byTeacher.get(t._id) ?? null,
+      })),
+    };
   },
 
   async getTeacherAttendanceToday(schoolId) {

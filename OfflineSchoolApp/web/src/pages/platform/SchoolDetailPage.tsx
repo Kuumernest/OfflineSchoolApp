@@ -10,6 +10,7 @@ import { useTranslation }        from "react-i18next";
 import { Link, useParams }       from "react-router-dom";
 import {
   ArrowLeft, LogIn, Power, PowerOff, UserPlus, KeyRound, Save, AlertTriangle, Building2,
+  GraduationCap, Users, ShieldCheck, CalendarDays,
 } from "lucide-react";
 import { PageHeader }            from "@/components/ui/PageHeader";
 import { Card, CardHeader }      from "@/components/ui/Card";
@@ -22,6 +23,7 @@ import { Table, THead, Th, TBody, Tr, Td, EmptyTable } from "@/components/ui/Dat
 import { useToast }              from "@/components/ui/Toast";
 import { useFormat }             from "@/i18n/format";
 import { useEnterSchool, errorMessage } from "@/components/platform/useEnterSchool";
+import { MetricTile, MetricGrid } from "@/components/platform/MetricTile";
 import {
   fetchSchool, updateSchool, activateSchool, deactivateSchool,
   appointSchoolAdmin, resetSchoolAdminPassword,
@@ -211,16 +213,17 @@ export default function SchoolDetailPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {(["students", "teachers", "admins"] as const).map((k) => (
-          <Card key={k}>
-            <p className="text-sm text-ink-muted">{s(k)}</p>
-            <p className="text-2xl font-semibold tabular-nums">{fmt.number(school.counts[k])}</p>
-          </Card>
-        ))}
-      </div>
+      <MetricGrid className="lg:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-4">
+        <MetricTile tone="students" icon={GraduationCap} label={s("students")} value={fmt.number(school.counts.students)} />
+        <MetricTile tone="teachers" icon={Users}         label={s("teachers")} value={fmt.number(school.counts.teachers)} />
+        <MetricTile tone="schools"  icon={ShieldCheck}   label={s("admins")}   value={fmt.number(school.counts.admins)} />
+        <MetricTile tone="neutral"  icon={CalendarDays}  label={s("academicYear")}
+          value={school.settings?.academicYear || "—"} hint={school.settings?.currentTerm || undefined} />
+      </MetricGrid>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* Side by side from 1280px; at 1024px two half-width panels left the
+          staff and activity tables scrolling inside their cards. */}
+      <div className="grid gap-6 xl:grid-cols-2">
         {/* ── Identity ─────────────────────────────────────────────────── */}
         <Card>
           <CardHeader title={s("identity")} />
@@ -288,9 +291,9 @@ export default function SchoolDetailPage() {
             <Card>
               <CardHeader title={s("tempPassword")} subtitle={credentials.emailSent ? s("emailSent") : s("emailNotSent")} />
               <dl className="mt-2 text-sm">
-                <div className="flex justify-between gap-2"><dt className="text-ink-muted">{s("email")}</dt><dd className="font-medium">{credentials.email}</dd></div>
+                <div className="flex flex-wrap justify-between gap-x-2"><dt className="text-ink-muted">{s("email")}</dt><dd className="min-w-0 break-all font-medium">{credentials.email}</dd></div>
                 {credentials.tempPassword ? (
-                  <div className="flex justify-between gap-2"><dt className="text-ink-muted">{s("tempPassword")}</dt><dd className="font-mono font-medium">{credentials.tempPassword}</dd></div>
+                  <div className="flex flex-wrap justify-between gap-x-2"><dt className="text-ink-muted">{s("tempPassword")}</dt><dd className="min-w-0 break-all font-mono font-medium">{credentials.tempPassword}</dd></div>
                 ) : null}
               </dl>
               <div className="mt-3 flex justify-end">

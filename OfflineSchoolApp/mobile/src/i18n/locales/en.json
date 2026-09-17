@@ -4723,7 +4723,10 @@
     "savedForStudents": {
       "one": "Attendance saved for {{count}} student.",
       "other": "Attendance saved for {{count}} students."
-    }
+    },
+    "noTeachersScheduled": "No teacher is timetabled to teach in this period today.",
+    "noTeachersScheduledToday": "No teacher is timetabled to teach today.",
+    "timetableUnavailableOffline": "The timetable has not been downloaded to this phone. Connect once to load it, then try again."
   },
   "rankTable": {
     "titleGrade": "Grade/Stream Rankings",

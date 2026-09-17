@@ -491,10 +491,11 @@ const sevenDaysFromNow = () => {
   return d.toISOString().split("T")[0];
 };
 
-const getTodayDayName = () => {
-  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-  return days[new Date().getDay()];
-};
+// One reading of the week for the whole application: the staff register
+// matches an attendance date to timetable slots with the same function
+// (shared/timetable.js), so "today" here and "Monday" there cannot disagree.
+const { dayCodeFor } = require("../../../shared/timetable");
+const getTodayDayName = () => dayCodeFor(new Date());
 
 const getTodayDayNameQuery = () => {
   const codes = {

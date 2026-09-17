@@ -63,18 +63,41 @@ const ensureSchema = (db) =>
 // SECTION 2 — TIME HELPERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-const getTodayDayCandidates = () => {
-  const map = {
-    0: ["SUN", "Sunday",    "sun", "sunday"],
-    1: ["MON", "Monday",    "mon", "monday"],
-    2: ["TUE", "Tuesday",   "tue", "tuesday"],
-    3: ["WED", "Wednesday", "wed", "wednesday"],
-    4: ["THU", "Thursday",  "thu", "thursday"],
-    5: ["FRI", "Friday",    "fri", "friday"],
-    6: ["SAT", "Saturday",  "sat", "saturday"],
-  };
-  return map[new Date().getDay()] ?? [];
+const DAY_CANDIDATES = {
+  0: ["SUN", "Sunday",    "sun", "sunday"],
+  1: ["MON", "Monday",    "mon", "monday"],
+  2: ["TUE", "Tuesday",   "tue", "tuesday"],
+  3: ["WED", "Wednesday", "wed", "wednesday"],
+  4: ["THU", "Thursday",  "thu", "thursday"],
+  5: ["FRI", "Friday",    "fri", "friday"],
+  6: ["SAT", "Saturday",  "sat", "saturday"],
 };
+
+/**
+ * A calendar day as a local Date. "YYYY-MM-DD" is read as that day at local
+ * midnight — parsed as an instant it would be the evening before, west of
+ * Greenwich, and the register would look at the wrong weekday.
+ */
+const toLocalDate = (value) => {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(value));
+  const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+/**
+ * Every spelling of a weekday the timetable tables have been known to hold,
+ * for the given date (today when none is given). The same list the dashboard
+ * uses for "today", so the staff register and the reminders read the week
+ * alike.
+ */
+export const getDayCandidates = (date) => {
+  const d = toLocalDate(date) ?? new Date();
+  return DAY_CANDIDATES[d.getDay()] ?? [];
+};
+
+const getTodayDayCandidates = () => getDayCandidates(new Date());
 
 const formatTime = (time24) => {
   if (!time24) return "";
@@ -339,6 +362,169 @@ const getTodayAttendanceReminders = async (db, teacherId, today, todayClasses) =
 
   const classes = buildAttendanceReminders({ todayClasses: withIds, markedClassIds, date: today });
   return { count: classes.length, classes };
+};
+
+/**
+ * Who is timetabled to teach — the phone's copy of the server rule
+ * (backend/src/utils/teacherSchedule.js), over the tables the phone holds:
+ *
+ *   an undeleted timetable row of this school on the weekday of the date, in
+ *   the period (or any period), whose class is active and undeleted, whose
+ *   period is active and undeleted, and whose teacher is an active teacher
+ *   account of this school. One entry per teacher, carrying every slot.
+ *
+ * The phone can also NOT KNOW. With no timetable rows for the school it cannot
+ * tell "nobody is scheduled" from "the timetable was never downloaded", and it
+ * says so with available: false rather than an empty list — the two are
+ * different facts and the screen shows them differently.
+ *
+ * The teacher's name comes from the synced users table; the roster profiles
+ * the attendance screen caches are only a fallback for an id the users table
+ * has never seen. An account the users table knows to be inactive is excluded
+ * and is NOT looked up in the fallback.
+ */
+export const fetchScheduledTeachersLocal = async (db, { schoolId, date, periodId } = {}) => {
+  const hasSlots     = await tableExists(db, "timetable_slots");
+  const hasTimetable = await tableExists(db, "timetable");
+  if (!hasSlots && !hasTimetable) return { available: false, teachers: [] };
+
+  const when          = toLocalDate(date) ?? new Date();
+  const dayCandidates = getDayCandidates(when);
+  const dayIndex      = when.getDay();
+  const wanted        = periodId ? String(periodId) : null;
+
+  const rows = [];
+  let stored = 0;
+
+  if (hasSlots) {
+    const cols   = await getTableColumns(db, "timetable_slots");
+    const tid    = cols.includes("teacherId") ? "teacherId" : "teacher_id";
+    const sch    = cols.includes("schoolId") ? "schoolId" : cols.includes("school_id") ? "school_id" : null;
+    const schoolClause = sch ? `AND ts.${sch} = ?` : "";
+    const schoolParams = sch ? [schoolId] : [];
+    const total = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM timetable_slots ts WHERE 1=1 ${schoolClause}`, schoolParams,
+    ).catch(() => null);
+    stored += Number(total?.n ?? 0);
+
+    const { clause: dayIn, params: dayParams } = buildInClause(dayCandidates, "ts.dayOfWeek");
+    const found = await db.getAllAsync(
+      `SELECT ts.${tid} AS teacherId, ts.classId AS classId, ts.periodId AS periodId
+       FROM   timetable_slots ts
+       WHERE  1=1 ${schoolClause}
+         AND  (ts.dayOfWeek = ? OR ${dayIn})
+         ${wanted ? "AND ts.periodId = ?" : ""}
+         AND  (ts.deletedat IS NULL OR ts.deletedat = '')`,
+      [...schoolParams, dayIndex, ...dayParams, ...(wanted ? [wanted] : [])],
+    ).catch(() => []);
+    rows.push(...found);
+  }
+
+  if (hasTimetable) {
+    const cols   = await getTableColumns(db, "timetable");
+    const tid    = cols.includes("teacher_id") ? "teacher_id" : "_id";
+    const sch    = cols.includes("school_id") ? "school_id" : cols.includes("schoolId") ? "schoolId" : null;
+    const schoolClause = sch ? `AND t.${sch} = ?` : "";
+    const schoolParams = sch ? [schoolId] : [];
+    const total = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM timetable t WHERE 1=1 ${schoolClause}`, schoolParams,
+    ).catch(() => null);
+    stored += Number(total?.n ?? 0);
+
+    const { clause: dayIn, params: dayParams } = buildInClause(dayCandidates, "t.day_of_week");
+    const found = await db.getAllAsync(
+      `SELECT t.${tid} AS teacherId, t.class_id AS classId, t.period_id AS periodId
+       FROM   timetable t
+       WHERE  1=1 ${schoolClause}
+         AND  ${dayIn}
+         ${wanted ? "AND t.period_id = ?" : ""}
+         AND  (t.deleted_at IS NULL OR t.deleted_at = '')`,
+      [...schoolParams, ...dayParams, ...(wanted ? [wanted] : [])],
+    ).catch(() => []);
+    rows.push(...found);
+  }
+
+  if (stored === 0) return { available: false, teachers: [] };
+
+  // The class must still exist, switched on.
+  const classIds   = [...new Set(rows.map((r) => String(r.classId ?? "")).filter(Boolean))];
+  const classNames = new Map();
+  if (classIds.length && (await tableExists(db, "classes"))) {
+    const cCols  = await getTableColumns(db, "classes");
+    const active = cCols.includes("is_active")  ? "AND (c.is_active IS NULL OR c.is_active = 1)" : "";
+    const alive  = cCols.includes("deleted_at") ? "AND (c.deleted_at IS NULL OR c.deleted_at = '')" : "";
+    const { clause, params } = buildInClause(classIds, "c.id");
+    const cls = await db.getAllAsync(
+      `SELECT c.id, c.name FROM classes c WHERE ${clause} ${active} ${alive}`, params,
+    ).catch(() => []);
+    for (const c of cls) classNames.set(String(c.id), c.name ?? null);
+  }
+  const live = rows.filter((r) => classNames.has(String(r.classId)));
+
+  // The period must be one of the school's, switched on.
+  const periodNames = new Map();
+  let periodKnown = false;
+  if (await tableExists(db, "periods")) {
+    const pCols  = await getTableColumns(db, "periods");
+    const active = pCols.includes("isactive")  ? "AND (p.isactive IS NULL OR p.isactive = 1)" : "";
+    const alive  = pCols.includes("deletedat") ? "AND (p.deletedat IS NULL OR p.deletedat = '')" : "";
+    const ps = await db.getAllAsync(`SELECT p.id, p.name FROM periods p WHERE 1=1 ${active} ${alive}`).catch(() => []);
+    for (const p of ps) periodNames.set(String(p.id), p.name ?? null);
+    periodKnown = ps.length > 0;
+  }
+  if (wanted && periodKnown && !periodNames.has(wanted)) return { available: true, teachers: [] };
+  const eligible = periodKnown ? live.filter((r) => periodNames.has(String(r.periodId))) : live;
+
+  const teacherIds = [...new Set(eligible.map((r) => String(r.teacherId ?? "")).filter(Boolean))];
+  if (!teacherIds.length) return { available: true, teachers: [] };
+
+  // Who they are: the synced accounts first, the cached roster only for an id
+  // the accounts table has never seen.
+  const people = new Map();
+  const seen   = new Set();
+  if (await tableExists(db, "users")) {
+    const uCols = await getTableColumns(db, "users");
+    const { clause, params } = buildInClause(teacherIds, "u.id");
+    const us = await db.getAllAsync(
+      `SELECT u.id, u.name, u.email, u.role,
+              ${uCols.includes("is_active")  ? "u.is_active"  : "1"}  AS isActive,
+              ${uCols.includes("deleted_at") ? "u.deleted_at" : "NULL"} AS deletedAt
+       FROM users u WHERE ${clause}`, params,
+    ).catch(() => []);
+    for (const u of us) {
+      const id = String(u.id);
+      seen.add(id);
+      const active = u.isActive === null || u.isActive === undefined || Number(u.isActive) === 1;
+      const alive  = !u.deletedAt;
+      const role   = String(u.role ?? "teacher").toLowerCase();
+      if (active && alive && role === "teacher") people.set(id, { name: u.name ?? "", email: u.email ?? "" });
+    }
+  }
+  const unseen = teacherIds.filter((id) => !seen.has(id));
+  if (unseen.length && (await tableExists(db, "teacher_profiles"))) {
+    const { clause, params } = buildInClause(unseen, "id");
+    const ps = await db.getAllAsync(`SELECT id, name, email FROM teacher_profiles WHERE ${clause}`, params).catch(() => []);
+    for (const p of ps) people.set(String(p.id), { name: p.name ?? "", email: p.email ?? "" });
+  }
+
+  const teachers = teacherIds
+    .filter((id) => people.has(id))
+    .map((id) => ({
+      _id:   id,
+      name:  people.get(id).name,
+      email: people.get(id).email,
+      slots: eligible
+        .filter((r) => String(r.teacherId) === id)
+        .map((r) => ({
+          classId:    String(r.classId),
+          className:  classNames.get(String(r.classId)) ?? null,
+          periodId:   r.periodId ? String(r.periodId) : null,
+          periodName: periodNames.get(String(r.periodId)) ?? null,
+        })),
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a._id.localeCompare(b._id));
+
+  return { available: true, teachers };
 };
 
 const getTodayAttendanceMissing = async (db, teacherId, today) => {

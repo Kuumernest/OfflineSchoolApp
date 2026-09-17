@@ -13,6 +13,7 @@ import { Card, CardHeader }     from "@/components/ui/Card";
 import { Button }               from "@/components/ui/Button";
 import { Table, THead, Th, TBody, Tr, Td, EmptyTable } from "@/components/ui/DataTable";
 import FiltersBar               from "@/components/platform/FiltersBar";
+import { MetricNote }           from "@/components/platform/MetricTile";
 import { downloadCsv }          from "@/components/platform/csv";
 import { useFormat }            from "@/i18n/format";
 import {
@@ -90,6 +91,8 @@ export default function ReportsPage() {
           {filters.term ? ` · ${t("platform.filters.termN", { n: filters.term })}` : ""}
         </p>
       </Card>
+
+      <MetricNote>{d("attendanceHint")} {t("platform.filters.termNote")} {d("feesHint")}</MetricNote>
 
       {specs.map((spec) => (
         <Card key={spec.key} padding={false}>

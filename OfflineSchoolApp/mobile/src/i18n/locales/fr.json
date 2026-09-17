@@ -4723,7 +4723,10 @@
     "savedForStudents": {
       "one": "Présence enregistrée pour {{count}} élève.",
       "other": "Présence enregistrée pour {{count}} élèves."
-    }
+    },
+    "noTeachersScheduled": "Aucun enseignant n'a de cours à cette période aujourd'hui.",
+    "noTeachersScheduledToday": "Aucun enseignant n'a de cours aujourd'hui.",
+    "timetableUnavailableOffline": "L'emploi du temps n'a pas été téléchargé sur ce téléphone. Connectez-vous une fois pour le charger, puis réessayez."
   },
   "rankTable": {
     "titleGrade": "Classement du niveau/série",

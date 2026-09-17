@@ -10,6 +10,7 @@ const User    = require("../db/models/User");
 const Student = require("../db/models/Student");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 const { teacherAssigned } = require("../utils/teacherScope");
+const { scheduledTeachers } = require("../utils/teacherSchedule");
 
 // What a register entry used to say, for the one record type where
 // last-write-wins used to leave no trace at all.
@@ -896,13 +897,45 @@ router.get("/teachers/me", staffRead, async (req, res) => {
 });
 
 // ── GET /api/attendance/teachers/roster ──────────────────────────────────────
-// Used by admins to get the list of all teachers in a school.
+// Used by admins to get the list of teachers in a school.
+//
+// With ?date (and optionally ?periodId) the list is the staff TIMETABLED that
+// day, in that period — see utils/teacherSchedule.js for the rule. That is
+// the register the office marks: a teacher with no class in the period has
+// nothing to be present for, and one with two classes in it is one person.
+// The answer names the date, its weekday and the period it resolved so the
+// screen never has to work the timetable out for itself.
+//
+// Without a date the endpoint answers as it always has — every active
+// teacher — because the phone's reports read this list for names, and a
+// report about last term must be able to name a teacher who has no class
+// this morning.
 router.get("/teachers/roster", staffRead, async (req, res) => {
   try {
     const schoolId = resolveSchoolId(req);
 
     if (!schoolId) {
       return res.status(400).json({ message: "schoolId is required" });
+    }
+
+    if (req.query.date || req.query.periodId) {
+      const scheduled = await scheduledTeachers({
+        schoolId, date: req.query.date, periodId: req.query.periodId,
+      });
+      console.log(
+        `👩‍🏫 Teacher roster: ${scheduled.teachers.length} timetabled for school=${schoolId} ` +
+        `${scheduled.date} (${scheduled.dayOfWeek}) period=${scheduled.periodId ?? "any"}`
+      );
+      return res.json({
+        success:   true,
+        teachers:  scheduled.teachers,
+        count:     scheduled.teachers.length,
+        scheduled: true,
+        date:      scheduled.date,
+        dayOfWeek: scheduled.dayOfWeek,
+        periodId:  scheduled.periodId,
+        period:    scheduled.period,
+      });
     }
 
     const teachers = await User.find({

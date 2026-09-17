@@ -3117,6 +3117,96 @@ const main = async () => {
     check("and the same count", localRoster.length, serverRoster.length);
   }
 
+  // ── The roster for a date and a period: the timetable decides ──────────
+  //
+  // With ?date (and ?periodId) both sides answer from the timetable —
+  // utils/teacherSchedule.js on the server, scheduledFromMirror in the
+  // desktop handler — and the whole envelope must agree: who, in what order,
+  // with which slots, and the date, weekday and period it resolved.
+  //
+  // Before the mirror holds any timetable for the school it must not answer
+  // at all: an empty list from a timetable that was never downloaded would
+  // read as "nobody is scheduled", so the request goes to the network.
+  {
+    const TIMETABLE_MON = "2025-10-06";   // a Monday; STAFF_DAY is the Tuesday after
+    const TIMETABLE_SUN = "2025-10-05";
+
+    check("with no timetable in the mirror, a dated roster is declined, not answered empty",
+      api.handle({
+        method: "GET", path: "/api/attendance/teachers/roster",
+        query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" },
+      }, staffCtx),
+      null);
+
+    const PeriodModel        = require("../src/db/models/Period");
+    const TimetableSlotModel = require("../src/db/models/TimetableSlot");
+    await Promise.all([PeriodModel.init(), TimetableSlotModel.init()]);
+    await PeriodModel.collection.insertMany([
+      { _id: "p1", schoolId: SCHOOL, name: "Period 1", startTime: "08:00", endTime: "09:00", sortOrder: 1, isActive: true,  deletedAt: null, updatedAt: new Date() },
+      { _id: "p2", schoolId: SCHOOL, name: "Period 2", startTime: "10:00", endTime: "11:00", sortOrder: 2, isActive: true,  deletedAt: null, updatedAt: new Date() },
+      { _id: "p3", schoolId: SCHOOL, name: "Period 3", startTime: "12:00", endTime: "13:00", sortOrder: 3, isActive: false, deletedAt: null, updatedAt: new Date() },
+      { _id: "p9", schoolId: "other-school", name: "Period 1", startTime: "08:00", endTime: "09:00", sortOrder: 1, isActive: true, deletedAt: null, updatedAt: new Date() },
+    ]);
+    await TimetableSlotModel.collection.insertMany([
+      { _id: "ts-1", schoolId: SCHOOL, classId: "cls-1", subjectId: "sub-1", teacherId: "t1", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-2", schoolId: SCHOOL, classId: "cls-3", subjectId: "sub-1", teacherId: "t2", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-3", schoolId: SCHOOL, classId: "cls-1", subjectId: "sub-1", teacherId: "t2", periodId: "p2", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-4", schoolId: SCHOOL, classId: "cls-6", subjectId: "sub-1", teacherId: "t1", periodId: "p2", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },  // class switched off
+      { _id: "ts-5", schoolId: SCHOOL, classId: "cls-7", subjectId: "sub-1", teacherId: "t1", periodId: "p1", dayOfWeek: "TUE", deletedAt: null, version: 1, updatedAt: new Date() },  // class removed
+      { _id: "ts-6", schoolId: SCHOOL, classId: "cls-4", subjectId: "sub-1", teacherId: "t1", periodId: "p3", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },  // period switched off
+      { _id: "ts-7", schoolId: SCHOOL, classId: "cls-5", subjectId: "sub-1", teacherId: "t2", periodId: "p1", dayOfWeek: "MON", deletedAt: new Date(), version: 1, updatedAt: new Date() }, // deleted slot
+      { _id: "ts-8", schoolId: SCHOOL, classId: "cls-4", subjectId: "sub-1", teacherId: "nobody", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() }, // stale teacher
+      { _id: "ts-9", schoolId: "other-school", classId: "cls-9", subjectId: "sub-1", teacherId: "t1", periodId: "p9", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+    ]);
+    docs.putMany("period",        JSON.parse(JSON.stringify(await PeriodModel.find({}).lean())));
+    docs.putMany("timetableSlot", JSON.parse(JSON.stringify(await TimetableSlotModel.find({}).lean())));
+
+    const asStaff = { token, session: staffSession };
+    await parity("staff timetabled on Monday, Period 1",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p1`, asStaff);
+    await parity("staff timetabled on Monday, Period 2",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p2`, asStaff);
+    await parity("a period switched off: nobody, on both sides",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p3`, asStaff);
+    await parity("the other school's period id: nobody, on both sides",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p9`, asStaff);
+    await parity("the whole Monday, every period",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}`, asStaff);
+    await parity("a Sunday: an empty register, not everybody",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_SUN}`, asStaff);
+
+    const monday = api.handle({
+      method: "GET", path: "/api/attendance/teachers/roster",
+      query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" },
+    }, staffCtx).data;
+    check("Monday, Period 1 lists the two timetabled teachers, in name order",
+      monday.teachers.map((t) => t._id), ["t2", "t1"]);
+    check("  each carrying the class that put them there",
+      monday.teachers.map((t) => t.slots.map((s) => s.className).join("+")), ["Form 2", "Form 1"]);
+    check("  and the envelope names what it resolved",
+      [monday.scheduled, monday.date, monday.dayOfWeek, monday.periodId, monday.period?.name],
+      [true, TIMETABLE_MON, "MON", "p1", "Period 1"]);
+
+    // The periods section further down seeds and counts its own periods for
+    // this school; these four are taken back out on both sides so it sees
+    // exactly what it expects. The slots stay: nothing below reads them.
+    const seededPeriods = ["p1", "p2", "p3", "p9"];
+    await PeriodModel.collection.deleteMany({ _id: { $in: seededPeriods } });
+    for (const id of seededPeriods) {
+      const row = docs.get("period", id);
+      if (row) docs.put("period", { ...row, deletedAt: new Date().toISOString() });
+    }
+    check("the dated roster is empty again once the periods are gone from both sides",
+      [
+        api.handle({ method: "GET", path: "/api/attendance/teachers/roster",
+          query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" } }, staffCtx).data.count,
+        (await (await fetch(
+          `http://127.0.0.1:${port}/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p1`,
+          { headers: { authorization: "Bearer " + token } })).json()).count,
+      ],
+      [0, 0]);
+  }
+
   // ── Marking them ───────────────────────────────────────────────────────
   const staffMarked = api.handle({
     method: "POST", path: "/api/attendance/teachers/bulk", query: {},

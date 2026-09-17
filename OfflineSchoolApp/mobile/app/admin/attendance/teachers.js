@@ -16,6 +16,7 @@ import {
   Alert,
   StatusBar,
   RefreshControl,
+  ScrollView,
 } from "react-native";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -43,15 +44,24 @@ export default function MarkTeacherAttendanceScreen() {
   const [loading,     setLoading]     = useState(true);
   const [saving,      setSaving]      = useState(false);
   const [refreshing,  setRefreshing]  = useState(false);
+  // The register is the timetable's: who is listed follows the period chosen.
+  // "" is every period of the day. `available` is false when the phone is
+  // offline and holds no timetable — a different fact from an empty list.
+  const [periods,     setPeriods]     = useState([]);
+  const [periodId,    setPeriodId]    = useState("");
+  const [available,   setAvailable]   = useState(true);
 
   const loadRoster = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) setRefreshing(true);
       else           setLoading(true);
 
-      const data = await AttendanceService.getTeacherAttendanceToday(schoolId);
+      const data = await AttendanceService.getTeacherRegister({
+        schoolId, date: today, periodId: periodId || null,
+      });
 
       setRoster(data.roster || []);
+      setAvailable(data.available !== false);
 
       const existing = {};
       for (const row of (data.roster || [])) {
@@ -66,9 +76,17 @@ export default function MarkTeacherAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [schoolId, t]);
+  }, [schoolId, today, periodId, t]);
 
   useEffect(() => { loadRoster(); }, [loadRoster]);
+
+  useEffect(() => {
+    let alive = true;
+    AttendanceService.getPeriods(schoolId)
+      .then((list) => { if (alive) setPeriods(list || []); })
+      .catch(() => { if (alive) setPeriods([]); });
+    return () => { alive = false; };
+  }, [schoolId]);
 
   const markAll = useCallback((status) => {
     const all = {};
@@ -139,7 +157,7 @@ export default function MarkTeacherAttendanceScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("attAdmin.teacherAttendanceTitle")}</Text>
           <Text style={styles.headerSub}>
-            {markedCount} of {roster.length} marked
+            {t("attAdmin.markedOfTotal", { marked: markedCount, total: roster.length })}
           </Text>
         </View>
         <TouchableOpacity
@@ -155,6 +173,31 @@ export default function MarkTeacherAttendanceScreen() {
           )}
         </TouchableOpacity>
       </View>
+
+      {periods.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.periodRow}
+          contentContainerStyle={styles.periodRowContent}
+        >
+          {[{ id: "", name: t("attAdmin.allPeriods") }, ...periods].map((p) => {
+            const active = periodId === p.id;
+            return (
+              <TouchableOpacity
+                key={p.id || "all"}
+                style={[styles.periodChip, active && styles.periodChipActive]}
+                onPress={() => setPeriodId(p.id)}
+                activeOpacity={0.7}
+              >
+                <Text style={[styles.periodChipText, active && styles.periodChipTextActive]}>
+                  {p.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      )}
 
       <View style={styles.markAllRow}>
         <Text style={styles.markAllLabel}>{t("attAdmin.markAllAsColon")}</Text>
@@ -201,7 +244,10 @@ export default function MarkTeacherAttendanceScreen() {
               <View style={styles.teacherInfo}>
                 <Text style={styles.teacherName}>{item.teacher.name}</Text>
                 <Text style={styles.teacherEmail} numberOfLines={1}>
-                  {item.teacher.email}
+                  {(item.teacher.slots ?? [])
+                    .map((s) => s.className)
+                    .filter((name, i, all) => name && all.indexOf(name) === i)
+                    .join(" · ") || item.teacher.email}
                 </Text>
               </View>
 
@@ -240,7 +286,13 @@ export default function MarkTeacherAttendanceScreen() {
         ListEmptyComponent={
           <View style={styles.empty}>
             <Ionicons name="people-outline" size={40} color="#D1D5DB" />
-            <Text style={styles.emptyText}>{t("attAdmin.noTeachers")}</Text>
+            <Text style={styles.emptyText}>
+              {!available
+                ? t("attAdmin.timetableUnavailableOffline")
+                : periodId
+                  ? t("attAdmin.noTeachersScheduled")
+                  : t("attAdmin.noTeachersScheduledToday")}
+            </Text>
           </View>
         }
       />
@@ -284,6 +336,15 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: "#FFF", fontWeight: "700", fontSize: 14 },
 
+  periodRow:        { flexGrow: 0, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" },
+  periodRowContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
+  periodChip: {
+    paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999,
+    borderWidth: 1, borderColor: "#E5E7EB", backgroundColor: "#FFF",
+  },
+  periodChipActive:     { backgroundColor: "#059669", borderColor: "#059669" },
+  periodChipText:       { fontSize: 13, fontWeight: "500", color: "#374151" },
+  periodChipTextActive: { color: "#FFF" },
   markAllRow: {
     flexDirection:     "row",
     alignItems:        "center",

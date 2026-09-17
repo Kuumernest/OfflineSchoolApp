@@ -44,6 +44,85 @@ const ok = (payload) => ({ status: 200, data: { success: true, ...payload } });
  * would disagree about who was in the room with nothing to show why.
  */
 const { dateStr, lastSevenDays } = require("../../../../../shared/attendance");
+const { dayCodeFor }             = require("../../../../../shared/timetable");
+
+/**
+ * Who is timetabled to teach — the mirror's copy of utils/teacherSchedule.js.
+ *
+ * The same rule, over the same collections the feed mirrors: an undeleted
+ * timetableSlot of this school on the weekday of the date, in the period (or
+ * any period), whose class is active and undeleted, whose period is active and
+ * undeleted, and whose teacher is an active account of this school with role
+ * "teacher". One row per teacher, carrying every slot that put them there.
+ */
+const scheduledFromMirror = (docs, { schoolId, date, periodId }) => {
+  const day       = dateStr(date);
+  const dayOfWeek = dayCodeFor(day);
+  const wanted    = periodId ? String(periodId).trim() : null;
+  const envelope  = (teachers, period) => ({
+    teachers, count: teachers.length, scheduled: true,
+    date: day, dayOfWeek, periodId: wanted || null, period,
+  });
+  if (!dayOfWeek) return envelope([], null);
+
+  const periodById = new Map(
+    docs.find("period", { schoolId })
+      .filter((p) => p.isActive !== false && !p.deletedAt)
+      .map((p) => [String(p._id), p]),
+  );
+  let period = null;
+  if (wanted) {
+    const p = periodById.get(wanted);
+    if (!p) return envelope([], null);
+    period = { _id: String(p._id), name: p.name, startTime: p.startTime, endTime: p.endTime };
+  }
+
+  const slotFilter = { schoolId, dayOfWeek, deletedAt: null };
+  if (wanted) slotFilter.periodId = wanted;
+  const slots = docs.find("timetableSlot", slotFilter)
+    .filter((s) => periodById.has(String(s.periodId)));
+
+  const classById = new Map(
+    docs.find("class", { schoolId })
+      .filter((c) => c.isActive !== false && !c.deletedAt)
+      .map((c) => [String(c._id), c]),
+  );
+  const live = slots.filter((s) => classById.has(String(s.classId)));
+
+  const teacherById = new Map(
+    docs.find("user", { schoolId, role: "teacher", isActive: true }).map((u) => [String(u._id), u]),
+  );
+
+  const slotsByTeacher = new Map();
+  for (const s of live) {
+    const key = String(s.teacherId ?? "");
+    if (!key) continue;
+    if (!slotsByTeacher.has(key)) slotsByTeacher.set(key, []);
+    slotsByTeacher.get(key).push({
+      classId:    String(s.classId),
+      className:  classById.get(String(s.classId))?.name ?? null,
+      subjectId:  s.subjectId ? String(s.subjectId) : null,
+      periodId:   String(s.periodId),
+      periodName: periodById.get(String(s.periodId))?.name ?? null,
+    });
+  }
+  const slotOrder = (a, b) =>
+    ((periodById.get(a.periodId)?.sortOrder ?? 0) - (periodById.get(b.periodId)?.sortOrder ?? 0)) ||
+    String(a.className ?? "").localeCompare(String(b.className ?? "")) ||
+    a.classId.localeCompare(b.classId);
+
+  const teachers = [...slotsByTeacher.keys()]
+    .filter((id) => teacherById.has(id))
+    .map((id) => {
+      const u = teacherById.get(id);
+      return { _id: id, name: u.name, email: u.email, role: u.role, slots: slotsByTeacher.get(id).sort(slotOrder) };
+    })
+    .sort((a, b) => {
+      const an = String(a.name ?? ""), bn = String(b.name ?? "");
+      return an === bn ? a._id.localeCompare(b._id) : an.localeCompare(bn);
+    });
+  return envelope(teachers, period);
+};
 
 /**
  * A calendar-day filter, as both teacher and pupil queries build it.
@@ -370,9 +449,23 @@ module.exports = [
      * sorts by name so the desktop at least shows a stable one — a list that
      * reshuffles between reads is its own kind of wrong.
      */
-    handler: ({ query }, { docs, session }) => {
+    handler: ({ query }, { docs, session, state }) => {
       const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
       if (!schoolId) return null;
+
+      // ── With a date or period: the staff timetabled, from the mirror ─────
+      //
+      // Unless the mirror has no timetable for this school and has never
+      // pulled the collection. Then it cannot tell "nobody is scheduled" from
+      // "the timetable has not been downloaded", and the two must not look the
+      // same on the screen — so it declines, and the request goes to the
+      // network, which answers or fails as offline. An empty list is only ever
+      // said from a timetable that was actually fetched.
+      if (query.date || query.periodId) {
+        const pulled = state?.cursorFor?.("timetableSlot") ?? null;
+        if (!pulled && docs.count("timetableSlot", { schoolId }) === 0) return null;
+        return ok(scheduledFromMirror(docs, { schoolId, date: query.date, periodId: query.periodId }));
+      }
 
       const teachers = docs
         .find("user", { schoolId, role: "teacher", isActive: true })

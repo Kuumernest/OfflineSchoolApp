@@ -4,20 +4,25 @@
 // school's own dashboard already shows, grouped by school on the server
 // (platformStats.service.js) rather than filtered to one — nothing here is a
 // number a school could not see about itself.
+//
+// Twelve tiles, then the table. The tiles used to be four stat cards over four
+// panels of two- and three-column lists, and a money figure in a third of a
+// half-width panel had nowhere to go but out of it. One grid of equal tiles,
+// each sized to its own figure, is what stopped that.
 import { useState }        from "react";
 import { useQuery }        from "@tanstack/react-query";
 import { useTranslation }  from "react-i18next";
 import { Link }            from "react-router-dom";
 import {
-  Building2, Users, GraduationCap, CheckSquare, BookOpen, TrendingUp, Wallet,
-  AlertCircle, LogIn,
+  Building2, Users, GraduationCap, CalendarCheck, ClipboardList, BarChart3, Award,
+  TrendingUp, Banknote, Wallet, CircleDollarSign, Percent, AlertCircle, LogIn,
 } from "lucide-react";
 import { PageHeader }           from "@/components/ui/PageHeader";
 import { Card, CardHeader }     from "@/components/ui/Card";
 import { Button }               from "@/components/ui/Button";
 import { Badge }                from "@/components/ui/Badge";
 import { Table, THead, Th, TBody, Tr, Td, EmptyTable } from "@/components/ui/DataTable";
-import StatCard                 from "@/components/dashboard/StatCard";
+import { MetricTile, MetricGrid, MetricNote } from "@/components/platform/MetricTile";
 import FiltersBar               from "@/components/platform/FiltersBar";
 import { useEnterSchool }       from "@/components/platform/useEnterSchool";
 import { useFormat }            from "@/i18n/format";
@@ -26,34 +31,6 @@ import {
 } from "@/services/platform.service";
 
 const pctText = (v: number | null | undefined) => (v == null ? "—" : `${v}%`);
-
-function FigureCard({
-  title, hint, headline, headlineLabel, rows,
-}: {
-  title:         string;
-  hint:          string;
-  headline:      string;
-  headlineLabel: string;
-  rows:          [string, string][];
-}) {
-  return (
-    <Card>
-      <CardHeader title={title} subtitle={hint} />
-      <div className="mt-3 flex items-baseline gap-2">
-        <span className="text-3xl font-semibold tabular-nums text-ink">{headline}</span>
-        <span className="text-sm text-ink-muted">{headlineLabel}</span>
-      </div>
-      <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-3">
-        {rows.map(([k, v]) => (
-          <div key={k} className="flex justify-between gap-2 border-t border-line pt-1">
-            <dt className="text-ink-muted">{k}</dt>
-            <dd className="font-medium tabular-nums">{v}</dd>
-          </div>
-        ))}
-      </dl>
-    </Card>
-  );
-}
 
 export default function PlatformDashboardPage() {
   const { t } = useTranslation();
@@ -70,6 +47,14 @@ export default function PlatformDashboardPage() {
   const totals  = statsQ.data?.totals;
   const rows    = statsQ.data?.schools ?? [];
   const d       = (k: string) => t(`platform.dashboard.${k}`);
+  const loading = statsQ.isLoading;
+
+  // "Label: figure · Label: figure" — the breakdown a tile carries under its
+  // headline. Built here so every hint reads the same way.
+  const pair  = (k: string, v: string) => `${d(k)}: ${v}`;
+  const join  = (...parts: string[]) => parts.join(" · ");
+  const n     = (v: number | null | undefined) => (v == null ? "—" : fmt.number(v));
+  const money = (v: number | null | undefined) => (v == null ? "—" : fmt.money(v));
 
   return (
     <div className="space-y-6">
@@ -96,58 +81,56 @@ export default function PlatformDashboardPage() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard title={d("schools")} value={totals ? fmt.number(totals.schools) : "—"}
-          subtitle={totals ? `${d("activeSchools")}: ${fmt.number(totals.activeSchools)}` : undefined}
-          icon={Building2} href="/platform/schools" loading={statsQ.isLoading} />
-        <StatCard title={d("students")} value={totals ? fmt.number(totals.students) : "—"}
-          subtitle={d("studentsHint")} icon={GraduationCap} loading={statsQ.isLoading} />
-        <StatCard title={d("teachers")} value={totals ? fmt.number(totals.teachers) : "—"}
-          subtitle={d("teachersHint")} icon={Users} loading={statsQ.isLoading} />
-        <StatCard title={d("collectionRate")} value={totals ? pctText(totals.fees.collectionRate) : "—"}
-          subtitle={totals ? `${d("paid")}: ${fmt.money(totals.fees.paid)}` : undefined}
-          icon={Wallet} loading={statsQ.isLoading} />
-      </div>
+      <MetricGrid>
+        <MetricTile tone="schools" icon={Building2} loading={loading} href="/platform/schools"
+          label={d("schools")} value={n(totals?.schools)}
+          hint={totals ? pair("activeSchools", n(totals.activeSchools)) : undefined} />
+        <MetricTile tone="students" icon={GraduationCap} loading={loading}
+          label={d("students")} value={n(totals?.students)} hint={d("studentsHint")} />
+        <MetricTile tone="teachers" icon={Users} loading={loading}
+          label={d("teachers")} value={n(totals?.teachers)} hint={d("teachersHint")} />
+        <MetricTile tone="attendance" icon={CalendarCheck} loading={loading}
+          label={d("attendance")} value={pctText(totals?.attendance.rate)}
+          hint={totals ? join(
+            pair("present", n(totals.attendance.present)),
+            pair("late",    n(totals.attendance.late)),
+            pair("absent",  n(totals.attendance.absent)),
+            pair("excused", n(totals.attendance.excused)),
+          ) : undefined} />
+        <MetricTile tone="academic" icon={ClipboardList} loading={loading}
+          label={d("results")} value={n(totals?.academics.results)}
+          hint={totals ? pair("published", n(totals.academics.published)) : undefined} />
+        <MetricTile tone="academic" icon={BarChart3} loading={loading}
+          label={d("average")}
+          value={totals?.academics.average == null ? "—" : fmt.decimal(totals.academics.average, 1)}
+          hint={d("academicsHint")} />
+        <MetricTile tone="reports" icon={Award} loading={loading}
+          label={d("passRate")} value={pctText(totals?.academics.passRate)} />
+        <MetricTile tone="exams" icon={TrendingUp} loading={loading}
+          label={d("promotionRate")} value={pctText(totals?.promotion.rate)}
+          hint={totals ? join(
+            pair("decided",  n(totals.promotion.decided)),
+            pair("promoted", n(totals.promotion.promoted)),
+            pair("repeated", n(totals.promotion.repeated)),
+            pair("pending",  n(totals.promotion.pending)),
+          ) : undefined} />
+        <MetricTile tone="finance" icon={Banknote} loading={loading}
+          label={d("billed")} value={money(totals?.fees.billed)}
+          hint={totals ? join(
+            pair("charged", money(totals.fees.charged)),
+            pair("waived",  money(totals.fees.waived)),
+          ) : undefined} />
+        <MetricTile tone="attendance" icon={Wallet} loading={loading}
+          label={d("paid")} value={money(totals?.fees.paid)} />
+        <MetricTile tone="reports" icon={CircleDollarSign} loading={loading}
+          label={d("balance")} value={money(totals?.fees.balance)} />
+        <MetricTile tone="schools" icon={Percent} loading={loading}
+          label={d("collectionRate")} value={pctText(totals?.fees.collectionRate)} />
+      </MetricGrid>
 
-      {totals && (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <FigureCard title={d("attendance")} hint={d("attendanceHint")}
-            headline={pctText(totals.attendance.rate)} headlineLabel={d("present")}
-            rows={[
-              [d("marked"),  fmt.number(totals.attendance.marked)],
-              [d("present"), fmt.number(totals.attendance.present)],
-              [d("late"),    fmt.number(totals.attendance.late)],
-              [d("absent"),  fmt.number(totals.attendance.absent)],
-              [d("excused"), fmt.number(totals.attendance.excused)],
-            ]} />
-          <FigureCard title={d("academics")} hint={d("academicsHint")}
-            headline={pctText(totals.academics.passRate)} headlineLabel={d("passRate")}
-            rows={[
-              [d("results"),   fmt.number(totals.academics.results)],
-              [d("published"), fmt.number(totals.academics.published)],
-              [d("average"),   totals.academics.average == null ? "—" : fmt.decimal(totals.academics.average, 1)],
-            ]} />
-          <FigureCard title={d("promotion")} hint={d("promotionHint")}
-            headline={pctText(totals.promotion.rate)} headlineLabel={d("promotionRate")}
-            rows={[
-              [d("decided"),     fmt.number(totals.promotion.decided)],
-              [d("promoted"),    fmt.number(totals.promotion.promoted)],
-              [d("repeated"),    fmt.number(totals.promotion.repeated)],
-              [d("conditional"), fmt.number(totals.promotion.conditional)],
-              [d("graduated"),   fmt.number(totals.promotion.graduated)],
-              [d("pending"),     fmt.number(totals.promotion.pending)],
-            ]} />
-          <FigureCard title={d("fees")} hint={d("feesHint")}
-            headline={pctText(totals.fees.collectionRate)} headlineLabel={d("collectionRate")}
-            rows={[
-              [d("charged"), fmt.money(totals.fees.charged)],
-              [d("waived"),  fmt.money(totals.fees.waived)],
-              [d("billed"),  fmt.money(totals.fees.billed)],
-              [d("paid"),    fmt.money(totals.fees.paid)],
-              [d("balance"), fmt.money(totals.fees.balance)],
-            ]} />
-        </div>
-      )}
+      <MetricNote>
+        {d("attendanceHint")} {t("platform.filters.termNote")} {d("promotionHint")} {d("feesHint")}
+      </MetricNote>
 
       <Card padding={false}>
         <div className="px-5 pt-4">
@@ -170,7 +153,7 @@ export default function PlatformDashboardPage() {
             <TBody>
               {rows.map((r) => (
                 <Tr key={r.schoolId}>
-                  <Td>
+                  <Td className="min-w-[12rem] max-w-sm whitespace-normal">
                     <Link to={`/platform/schools/${r.schoolId}`} className="font-medium text-ink hover:underline">
                       {r.name}
                     </Link>
@@ -195,11 +178,6 @@ export default function PlatformDashboardPage() {
           </Table>
         )}
       </Card>
-      <p className="flex items-center gap-1 text-xs text-ink-muted">
-        <CheckSquare className="h-3.5 w-3.5" aria-hidden="true" />{d("attendanceHint")}
-        <BookOpen className="ml-3 h-3.5 w-3.5" aria-hidden="true" />{t("platform.filters.termNote")}
-        <TrendingUp className="ml-3 h-3.5 w-3.5" aria-hidden="true" />{d("promotionHint")}
-      </p>
     </div>
   );
 }

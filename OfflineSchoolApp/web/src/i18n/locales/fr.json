@@ -720,7 +720,9 @@
     "noActiveTeachers": "Aucun enseignant actif trouvé pour cet établissement.",
     "ptsVsWeek": "{{delta}} pts vs semaine",
     "onRoster": "{{count}} inscrit sur la liste",
-    "onRoster_other": "{{count}} inscrits sur la liste"
+    "onRoster_other": "{{count}} inscrits sur la liste",
+    "noScheduledTeachers": "Aucun enseignant n'a de cours à cette période ce jour-là.",
+    "noScheduledTeachersDay": "Aucun enseignant n'a de cours ce jour-là."
   },
   "announcements": {
     "title": "Communiqués",

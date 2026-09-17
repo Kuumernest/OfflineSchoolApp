@@ -238,7 +238,7 @@ const registerHandlers = () => {
    * today the way it behaves in a browser.
    */
   ipcMain.handle("api:request", (_e, req) => {
-    const result = localApi.handle(req, { docs, meta: metaBag, queue, session });
+    const result = localApi.handle(req, { docs, meta: metaBag, queue, session, state: syncState });
 
     // Something was queued: try to send it immediately rather than waiting for
     // the interval. Online this makes an offline-capable write indistinguishable

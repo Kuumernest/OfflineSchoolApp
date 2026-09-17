@@ -720,7 +720,9 @@
     "noActiveTeachers": "No active teachers found for this school.",
     "ptsVsWeek": "{{delta}} pts vs week",
     "onRoster": "{{count}} on the roster",
-    "onRoster_other": "{{count}} on the roster"
+    "onRoster_other": "{{count}} on the roster",
+    "noScheduledTeachers": "No teacher is timetabled to teach in this period on this day.",
+    "noScheduledTeachersDay": "No teacher is timetabled to teach on this day."
   },
   "announcements": {
     "title": "Announcements",

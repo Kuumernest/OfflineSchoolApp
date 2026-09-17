@@ -31,17 +31,17 @@ function Details({ e }: { e: AuditEntry }) {
   const { t } = useTranslation();
   const changed = e.after && typeof e.after === "object" ? Object.keys(e.after) : [];
   return (
-    <div className="space-y-1 text-xs text-ink-muted">
-      {e.resourceLabel && e.resourceType === "user" ? <div>{e.resourceLabel}</div> : null}
-      {e.reason ? <div><span className="font-medium">{t("platform.audit.reason")}:</span> {e.reason}</div> : null}
+    <div className="space-y-1 text-xs leading-relaxed text-ink-muted">
+      {e.resourceLabel && e.resourceType === "user" ? <div className="break-words">{e.resourceLabel}</div> : null}
+      {e.reason ? <div className="break-words"><span className="font-medium">{t("platform.audit.reason")}:</span> {e.reason}</div> : null}
       {changed.length > 0 && e.action !== "school.created" ? (
-        <div>
-          <span className="font-medium">{t("platform.audit.changed")}:</span>{" "}
+        <div className="flex flex-wrap gap-x-2 gap-y-0.5">
+          <span className="font-medium">{t("platform.audit.changed")}:</span>
           {changed.map((k) => {
             const before = e.before?.[k];
             const after  = e.after?.[k];
             const show = (v: unknown) => (v == null || v === "" ? "—" : typeof v === "object" ? JSON.stringify(v) : String(v));
-            return <span key={k} className="mr-2">{k}: {show(before)} → {show(after)}</span>;
+            return <span key={k} className="break-all">{k}: {show(before)} → {show(after)}</span>;
           })}
         </div>
       ) : null}
@@ -115,14 +115,14 @@ export default function AuditLogPage() {
               </THead>
               <TBody>
                 {entries.map((e) => (
-                  <Tr key={e._id}>
+                  <Tr key={e._id} className="align-top">
                     <Td className="whitespace-nowrap">{fmt.dateTime(e.at)}</Td>
                     <Td>
                       <Badge variant={ACTION_VARIANT(e.action)}>
                         {t(`platform.audit.actions.${e.action}`, { defaultValue: e.action })}
                       </Badge>
                     </Td>
-                    <Td>
+                    <Td className="max-w-xs whitespace-normal">
                       {e.schoolId ? (
                         <Link to={`/platform/schools/${e.schoolId}`} className="hover:underline">{e.schoolName ?? e.schoolId}</Link>
                       ) : "—"}
@@ -131,7 +131,9 @@ export default function AuditLogPage() {
                       <div>{e.actorName ?? e.actorId ?? "—"}</div>
                       {e.actorRole ? <div className="text-xs text-ink-muted">{roleLabel(e.actorRole, t)}</div> : null}
                     </Td>
-                    <Td><Details e={e} /></Td>
+                    <Td className="min-w-[14rem] max-w-md whitespace-normal">
+                      <Details e={e} />
+                    </Td>
                   </Tr>
                 ))}
               </TBody>
