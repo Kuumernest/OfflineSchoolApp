@@ -2038,6 +2038,53 @@ router.get("/students", requirePermission("students.view"), asyncHandler(async (
 
   query = addNotDeleted(query);
 
+  // ── Pagination, in the database when a page is asked for ─────────────────
+  //
+  // Measured (scripts/perf-critical-paths.js, 1,200 pupils, 8 concurrent): the
+  // list answered a 50-row page in 1.1 s median and 6.2 s at p95, because it
+  // fetched every pupil of the school, sorted them in memory and sliced. That
+  // cost grows with the school, and this is the console's most-opened list.
+  //
+  // A paged caller now gets a pipeline: the same filter, the same order (the
+  // name the roster shows, lower-cased, under an English collation so accents
+  // sort as localeCompare did) and a skip/limit, with the total counted
+  // alongside. The unpaged path below is unchanged for callers that send no
+  // limit — the parity script and older clients want the whole list. The
+  // application-collection fallback only applies when the school has no
+  // Student rows at all, so a zero total hands the request to that path.
+  const pageNo  = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageLim = Math.min(Math.max(parseInt(req.query.limit, 10) || 0, 0), 200);
+  if (pageLim > 0) {
+    const S = getStudent();
+    if (S) {
+      const sortName = {
+        $toLower: { $ifNull: ["$studentName", { $ifNull: ["$name", { $ifNull: ["$firstName", ""] }] }] },
+      };
+      const [pageDocs, total] = await Promise.all([
+        S.aggregate([
+          { $match: query },
+          { $addFields: { _sortName: sortName } },
+          { $sort: { _sortName: 1, _id: 1 } },
+          { $skip: (pageNo - 1) * pageLim },
+          { $limit: pageLim },
+          { $project: { _sortName: 0 } },
+        ]).collation({ locale: "en", strength: 2 }),
+        S.countDocuments(query),
+      ]);
+      if (total > 0) {
+        const slice = await withClassNames(pageDocs.map(normaliseStudentDoc).filter(Boolean));
+        return sendSuccess(res, {
+          count:    slice.length,
+          total,
+          page:     pageNo,
+          pages:    Math.max(1, Math.ceil(total / pageLim)),
+          students: slice,
+          data:     slice,
+        });
+      }
+    }
+  }
+
   const students   = await fetchAllStudents(query);
   const sorted     = students.sort((a, b) => {
     const nameA =
