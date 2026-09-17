@@ -10,6 +10,31 @@ const SCHOOL_INACTIVE_MESSAGE =
   "This school has been deactivated. Contact the platform operator.";
 const SCHOOL_ACCESS_DENIED_MESSAGE =
   "You may only act within your own school.";
+const PASSWORD_CHANGE_REQUIRED_MESSAGE =
+  "Choose a password before continuing.";
+
+/**
+ * What an account still on a temporary password may reach.
+ *
+ * Changing the password, reading its own profile (both spellings the clients
+ * use) and signing out. Nothing else: not the roster, not the register, not a
+ * refresh. A temporary password is something read aloud across an office or
+ * pasted into a chat; the fifteen-minute token it buys used to open every
+ * protected route for those fifteen minutes, and the access-token refresh
+ * mode minted another fifteen on request, so the ceiling was nominal.
+ *
+ * Matched on the path without its query string, and on the method, so a
+ * POST to /api/auth/me is not a way through.
+ */
+const PASSWORD_CHANGE_ROUTES = new Set([
+  "POST /api/auth/change-password",
+  "GET /api/auth/me",
+  "GET /api/users/me",
+  "POST /api/auth/logout",
+]);
+
+const routeKey = (req) =>
+  `${req.method} ${String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "")}`;
 
 const authenticate = async (req, res, next) => {
   try {
@@ -81,6 +106,25 @@ const authenticate = async (req, res, next) => {
           code:    "TOKEN_STALE",
         });
       }
+    }
+
+    // ── A temporary password opens one door ────────────────────────────────
+    //
+    // The lifecycle this enforces (docs/22-release-readiness.md, X21):
+    //
+    //   temporary password → sign in → RESTRICTED: change-password, own
+    //   profile, logout only → password changed (pre-save stamps
+    //   passwordChangedAt, which kills this token) → ordinary token and
+    //   refresh token → ordinary refresh lifecycle.
+    //
+    // 403, not 401: the token is valid and the account is known; what is
+    // missing is an action the person must take. Clients route on the code.
+    if (user.mustResetPassword && !PASSWORD_CHANGE_ROUTES.has(routeKey(req))) {
+      return res.status(403).json({
+        success: false,
+        code:    "PASSWORD_CHANGE_REQUIRED",
+        message: PASSWORD_CHANGE_REQUIRED_MESSAGE,
+      });
     }
 
     // Every guard downstream compares req.user.role against the canonical
@@ -222,4 +266,5 @@ const authorize = (...roles) => {
 module.exports = {
   authenticate, authorize,
   SCHOOL_INACTIVE_MESSAGE, SCHOOL_ACCESS_DENIED_MESSAGE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE, PASSWORD_CHANGE_ROUTES,
 };

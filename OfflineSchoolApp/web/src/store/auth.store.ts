@@ -79,6 +79,9 @@ export interface PublicAuthState {
   activeSchool:   ActiveSchool | null;
   logout:         () => void;
   refreshSession: () => Promise<boolean>;
+  // Exposed for the axios interceptor: a 403 PASSWORD_CHANGE_REQUIRED marks the
+  // stored user so the route guard sends them to /change-password.
+  setUser:        (updates: Partial<AuthUser>) => void;
 }
 
 interface AuthState {

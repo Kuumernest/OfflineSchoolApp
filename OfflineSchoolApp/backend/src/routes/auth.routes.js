@@ -6,7 +6,7 @@ const router   = express.Router();
 const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
-const User     = require("../db/models/User");
+const User     = require("../db/models/User");
 const { passwordPolicyError } = require("../utils/passwordPolicy");
 const { isSchoolClosedFor } = require("../utils/schoolContext");
 const { authenticate } = require("../../middleware/auth");
@@ -329,6 +329,19 @@ router.post("/refresh", async (req, res, next) => {
         success: false,
         message: "Session ended when your password changed — please log in again",
         code:    "REFRESH_STALE",
+      });
+    }
+
+    // A flagged account holds no refresh token — login withholds it — but a
+    // token minted before an administrator's reset survives on the device
+    // until passwordChangedAt catches it above, and nothing else should ever
+    // turn a temporary password into a renewable session. The door applies
+    // the same rule to the access-token mode (middleware/auth.js).
+    if (user.mustResetPassword) {
+      return res.status(403).json({
+        success: false,
+        code:    "PASSWORD_CHANGE_REQUIRED",
+        message: "Choose a password before continuing.",
       });
     }
 

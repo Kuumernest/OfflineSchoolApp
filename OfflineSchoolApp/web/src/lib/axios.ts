@@ -195,6 +195,20 @@ api.interceptors.response.use(
     // avoids recursion on /auth/refresh itself failing.
     const isAuthEndpoint = url.includes("/auth/");
 
+    // The server admits an account on a temporary password to the password
+    // change and nothing else (403 PASSWORD_CHANGE_REQUIRED). StaffOnly already
+    // sends a flagged user to /change-password; this covers a stored session
+    // whose flag the server set since — an administrator's reset — by marking
+    // the user and letting the guard route.
+    const code = (err?.response?.data as { code?: string } | undefined)?.code;
+    if (status === 403 && code === "PASSWORD_CHANGE_REQUIRED") {
+      try { getAuthState().setUser({ mustResetPassword: true }); } catch { /* store not ready */ }
+      if (typeof window !== "undefined" && window.location.pathname !== "/change-password") {
+        window.location.replace("/change-password");
+      }
+      return Promise.reject(err);
+    }
+
     if (status === 401 && !isAuthEndpoint && !originalRequest._retry) {
       // ── Case A: refresh already in progress ──────────────────────────────
       // Hold this request in the queue; it will be retried once the
