@@ -119,6 +119,12 @@ if (process.env.NODE_ENV === "production") {
 
 // `dev` is colourised and writes a line per request including 304s. Production
 // gets the Apache combined format, which is what log collectors parse.
+// The URL as logged, with any ?sig= (a signed media or document link — a
+// capability that opens a file for an hour) reduced to its name. A log line
+// is read by more people, for longer, than the link was meant for.
+morgan.token("url", (req) =>
+  String(req.originalUrl || req.url || "").replace(/([?&]sig=)[^&]+/g, "$1[redacted]")
+);
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 app.use(cors({

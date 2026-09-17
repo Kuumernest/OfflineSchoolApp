@@ -38,9 +38,15 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // A status the code chose (err.statusCode) comes with a message the code
+  // wrote, and that is for the caller. An unexpected exception has neither:
+  // its message is a driver's, a library's, or a stack frame's, and in
+  // production it names models, fields and paths to whoever sent the request.
+  const chosen = Number(err.statusCode) >= 400 && Number(err.statusCode) < 500;
+  const generic = process.env.NODE_ENV === "production" && !chosen;
   res.status(err.statusCode || 500).json({
     success: false,
-    error:   err.message || "Internal Server Error",
+    error:   generic ? "Internal Server Error" : (err.message || "Internal Server Error"),
   });
 }
 

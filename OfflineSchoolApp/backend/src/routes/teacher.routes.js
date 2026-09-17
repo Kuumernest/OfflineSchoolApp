@@ -1761,9 +1761,12 @@ router.get("/my-content", asyncHandler(async (req, res) => {
   if (req.query.subjectId)                        filter.subjectId = req.query.subjectId;
   if (req.query.classId)                          filter.classId   = req.query.classId;
   if (req.query.search) {
+    // A search term is a literal, not a pattern: unescaped, "(a+)+$" is a
+    // regular expression the database evaluates on the caller's behalf.
+    const term = String(req.query.search).slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.$or = [
-      { title:       { $regex: req.query.search, $options: "i" } },
-      { description: { $regex: req.query.search, $options: "i" } },
+      { title:       { $regex: term, $options: "i" } },
+      { description: { $regex: term, $options: "i" } },
     ];
   }
 
