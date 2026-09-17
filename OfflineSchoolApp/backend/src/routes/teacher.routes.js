@@ -5,6 +5,7 @@ const express = require("express");
 const router  = express.Router();
 const path    = require("path");
 const fs      = require("fs");
+const { v4: uuidv4 } = require("uuid");
 
 const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
@@ -262,7 +263,11 @@ const lazyModel = (modulePath, label) => {
 const getStudent       = lazyModel("../db/models/Student",       "Student");
 const getTimetableSlot = lazyModel("../db/models/TimetableSlot", "TimetableSlot");
 const getPeriod        = lazyModel("../db/models/Period",        "Period");
-const getAttendance    = lazyModel("../db/models/Attendance",    "Attendance");
+// Attendance.js exports { StudentAttendance, TeacherAttendance }, not a model.
+// The plain lazyModel handed back that object, and the register route called
+// bulkWrite on it — a 500 after the assignment check had passed.
+const getAttendanceModule = lazyModel("../db/models/Attendance", "Attendance");
+const getAttendance       = () => getAttendanceModule()?.StudentAttendance ?? null;
 const getSubmission    = lazyModel("../db/models/Submission",    "Submission");
 const getAssignment    = lazyModel("../db/models/Assignment",    "Assignment");
 const getQuiz          = lazyModel("../db/models/Quiz",          "Quiz");
@@ -1340,7 +1345,11 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
   const { classIds } = await getTeacherScope(teacherId, schoolId);
   const resolvedIds  = await resolveClassIds(String(classId).trim());
 
-  if (!isAssignedToClass(resolvedIds, classIds)) {
+  // CLASS-level, active assignments only (getTeacherScope) — the same rule
+  // as /api/attendance. An administrator holds attendance.mark for the whole
+  // school and is assigned to no class; the gate is the teacher's.
+  const isAdminRole = ["super_admin", "school_admin"].includes(req.user?.role);
+  if (!isAdminRole && !isAssignedToClass(resolvedIds, classIds)) {
     return res.status(403).json({ message: "You are not assigned to this class" });
   }
 
@@ -1348,31 +1357,52 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
   const dateStr    = String(date).split("T")[0];
   const saved      = [], failed = [];
 
+  // The rows this writes are StudentAttendance rows — the same collection the
+  // /api/attendance register writes, with its natural key (school, class,
+  // pupil, subject, period, date) and its required markedBy. The old body
+  // wrote a teacherId field the schema does not have and no markedBy, which
+  // the schema requires, so nothing it wrote could be read back by anything.
+  // A daily mark, as this route has always taken: no subject, no period.
+  if (!schoolId) return res.status(400).json({ message: "No school on this session" });
+
+  // Every pupil is one of this class, in this school. The modern route checks
+  // the same thing; a studentId from elsewhere used to be written as given.
+  const S = getStudent();
+  const wanted = [...new Set(records.map((r) => String(r?.studentId ?? "")).filter(Boolean))];
+  const known  = S
+    ? new Set((await S.find({ _id: { $in: wanted }, schoolId, classId: classIdStr }).select("_id").lean())
+        .map((s) => String(s._id)))
+    : new Set(wanted);
+
+  const STATUSES = new Set(["present", "absent", "late", "excused"]);
+
   // One write for the register, then one read to answer with the ids.
-  //
-  // This awaited an upsert per pupil, which on a class of forty is forty
-  // sequential round trips while the teacher waits at the end of a lesson.
-  // The read afterwards is needed because an upsert reports ids only for the
-  // rows it inserted, and the response has always returned every id —
-  // re-marking a register updates rather than inserts, so upsertedIds alone
-  // would answer with a shrinking list as the day went on.
   const ops        = [];
   const studentIds = [];
 
   for (const r of records) {
-    const sid = String(r.studentId);
+    const sid    = String(r?.studentId ?? "");
+    const status = String(r?.status ?? "present").toLowerCase();
+    if (!sid || !known.has(sid)) {
+      failed.push({ studentId: sid || null, reason: "Student not found in this class" });
+      continue;
+    }
+    if (!STATUSES.has(status)) {
+      failed.push({ studentId: sid, reason: `Invalid status "${r?.status}"` });
+      continue;
+    }
     studentIds.push(sid);
     ops.push({
       updateOne: {
         filter: {
-          teacherId: String(teacherId), classId: classIdStr,
-          studentId: sid, date: dateStr,
+          schoolId, classId: classIdStr, studentId: sid,
+          subjectId: null, periodId: null, date: dateStr,
         },
         update: {
-          $set: {
-            teacherId: String(teacherId), classId: classIdStr,
-            studentId: sid, date: dateStr,
-            status: r.status || "present", schoolId,
+          $set:         { status, markedBy: String(teacherId), markedAt: new Date() },
+          $setOnInsert: {
+            _id: uuidv4(), schoolId, classId: classIdStr, studentId: sid,
+            subjectId: null, periodId: null, date: dateStr,
           },
         },
         upsert: true,
@@ -1400,7 +1430,8 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
 
   if (studentIds.length) {
     const rows = await Att.find({
-      teacherId: String(teacherId), classId: classIdStr, date: dateStr,
+      schoolId, classId: classIdStr, date: dateStr,
+      subjectId: null, periodId: null,
       studentId: { $in: studentIds },
     }).select("_id").lean();
     for (const row of rows) saved.push(row._id);
@@ -1426,10 +1457,12 @@ router.get("/attendance/status", asyncHandler(async (req, res) => {
     return res.status(403).json({ message: "You are not assigned to this class" });
   }
 
+  // The class's register for the day, in this school. teacherId is not a
+  // field of the schema, so the old filter matched nothing.
   const records = await Att.find({
-    teacherId: String(teacherId),
-    classId:   String(classId).trim(),
-    date:      String(date).split("T")[0],
+    ...(schoolId ? { schoolId } : {}),
+    classId: String(classId).trim(),
+    date:    String(date).split("T")[0],
   }).lean();
 
   return res.json({ success: true, records });

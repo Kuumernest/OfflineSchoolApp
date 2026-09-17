@@ -160,6 +160,16 @@ app.get(BROWSER_AUTO_REQUESTS, (_req, res) => res.status(204).end());
 // ✅ Fixed: /*path → /{*path} for Node 24 compatibility
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ── Applicant documents are never served from here ──────────────────────────
+// Birth certificates and ID scans a family attached to an admission
+// application land under uploads/applications. They are reached through
+// GET /api/students/applications/:id/documents/:key, which authorises the
+// caller (or a link minted for one) — see utils/applicationDocuments.js. Both
+// the streaming handler below and express.static after it would otherwise hand
+// the file to anyone holding the URL, so the prefix is closed ahead of both.
+// A uniform 404, because "forbidden" would confirm the file exists.
+app.use("/uploads/applications", require("./utils/applicationDocuments").blockPublicApplicationsPath);
+
 app.get("/uploads/{*path}", (req, res, next) => {
   const rawParam = req.params.path || req.params[0] || "";
 

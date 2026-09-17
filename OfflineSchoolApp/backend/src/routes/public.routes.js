@@ -315,8 +315,8 @@ router.get(
       });
     }
 
-    const page   = Math.max(1, parseInt(req.query.page  ?? "1",  10));
-    const limit  = Math.max(1, Math.min(100, parseInt(req.query.limit ?? "20", 10)));
+    const page   = Math.max(1, parseInt(req.query.page  ?? "1",  10) || 1);
+    const limit  = Math.max(1, Math.min(100, parseInt(req.query.limit ?? "20", 10) || 20));
     const skip   = (page - 1) * limit;
     const search = escapeRegex(String(req.query.search || "").trim().slice(0, 100));
 
@@ -425,6 +425,12 @@ router.get(
 
     const School = getSchool();
     if (!School) return sendError(res, 404, "School not found");
+
+    // A value that could never be a school id is a 404, not a cast error
+    // surfacing as a 500 with the model's name in it.
+    if (!/^[a-f\d]{24}$/i.test(String(req.params.id))) {
+      return sendError(res, 404, "School not found");
+    }
 
     const school = await School.findOne({
       $and: buildAndClauses({ _id: req.params.id }),
@@ -640,32 +646,23 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
 
   if (existing) {
 
-    if (existing.status === "approved") {
-      // This exact student is already enrolled
+    // ── One answer for every duplicate ─────────────────────────────────────
+    // This endpoint is public. "Already enrolled" and "already under review"
+    // told anyone who typed a child's name and a parent's email whether that
+    // child is at this school, and the pending branch handed over the
+    // application's id. Both now answer exactly as a new application does.
+    // Nothing is created either way. A pending application keeps its id (the
+    // family already holds it); an enrolled pupil's answer carries an id that
+    // resolves to nothing, so it cannot be traded for an enrolment number.
+    if (existing.status === "approved" || existing.status === "pending") {
       if (!isJson) cleanupFiles(req.files);
       cleanupFiles(savedDocs.map((d) => ({ path: d.path })));
-      return sendError(
-        res, 409,
-        "This student is already enrolled at this school. " +
-        "Please log in with your enrollment number.",
-        { status: "approved", detail: "already_enrolled" }
-      );
-    }
-
-    if (existing.status === "pending") {
-      // Application already under review
-      if (!isJson) cleanupFiles(req.files);
-      cleanupFiles(savedDocs.map((d) => ({ path: d.path })));
-      return sendError(
-        res, 409,
-        "An application for this student is already under review. " +
-        "You will be notified once it is processed.",
-        {
-          status:        "pending",
-          applicationId: String(existing._id),
-          detail:        "already_pending",
-        }
-      );
+      return sendSuccess(res, {
+        message:       "Application submitted successfully",
+        applicationId: existing.status === "pending"
+          ? String(existing._id)
+          : require("crypto").randomUUID(),
+      }, 201);
     }
 
     // status === "rejected" — re-application allowed
@@ -705,8 +702,9 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
       `[${docsToAdd.length} new doc(s), ${mergedDocs.length} total]`
     );
 
+    // Same words as a first submission — see the duplicate note above.
     return sendSuccess(res, {
-      message:       "Application re-submitted successfully",
+      message:       "Application submitted successfully",
       applicationId: String(existing._id),
     }, 201);
   }
@@ -772,10 +770,19 @@ router.post(
 router.use((err, req, res, _next) => {
   console.error("Unhandled error in public.routes.js:", err);
   cleanupFiles(req.files);
+  // The message stays in the log. Every caller here is anonymous, and
+  // err.message carried Mongoose cast errors — model and field names — and
+  // whatever an exception happened to say. A malformed value is the caller's
+  // to fix (400); anything else is ours (500), and neither says more than that.
+  const malformed =
+    err?.name === "CastError" || err?.name === "ValidationError" ||
+    err?.name === "BSONError" || err?.type === "entity.parse.failed";
   return sendError(
     res,
-    500,
-    err.message || "An unexpected error occurred. Please try again.",
+    malformed ? 400 : 500,
+    malformed
+      ? "The request contains an invalid value. Please check the form and try again."
+      : "An unexpected error occurred. Please try again.",
     process.env.NODE_ENV === "development" ? { stack: err.stack } : {}
   );
 });

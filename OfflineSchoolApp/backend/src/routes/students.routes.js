@@ -16,6 +16,8 @@
 const express        = require("express");
 const router         = express.Router();
 const { v4: uuidv4 } = require("uuid");
+const fs   = require("fs");
+const path = require("path");
 
 const { authenticate } = require("../../middleware/auth");
 
@@ -43,8 +45,14 @@ const {
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
+// Documents inside any payload leave as their presentation — title, type and
+// a signed, short-lived link — never as the path on disk or the raw filename.
+// Done here so a response site nobody thought of cannot leak one.
 const sendSuccess = (res, data, status = 200) =>
-  res.status(status).json({ success: true, ...data });
+  res.status(status).json({
+    success: true,
+    ...applicationDocuments.redactDocumentsDeep(res.req, data),
+  });
 
 const sendError = (res, status, message, extra = {}) =>
   res.status(status).json({ success: false, message, ...extra });
@@ -438,6 +446,7 @@ const getPagination = (req) => {
 
 const { requirePermission } = require("../../middleware/permissions");
 const permissions           = require("../services/permissions.service");
+const applicationDocuments  = require("../utils/applicationDocuments");
 
 /**
  * One "admin only" guard used to cover five different decisions, and they are
@@ -716,12 +725,20 @@ router.post("/apply", asyncHandler(async (req, res) => {
     });
 
     if (duplicate) {
-      return sendError(
-        res, 409,
-        duplicate.status === "pending"
-          ? `An application for "${displayName}" is already pending review.`
-          : `"${displayName}" is already enrolled at this school.`
-      );
+      // The same answer as a new application, on purpose. This endpoint is
+      // public, and "already pending" / "already enrolled" told anyone who
+      // typed a child's name and a parent's email whether that child is at
+      // this school. Nothing is created; a pending application keeps its id
+      // (the family already holds it), an enrolled pupil's answer carries an
+      // id that resolves to nothing.
+      return sendSuccess(res, {
+        message: "Application submitted successfully. You will be notified once reviewed.",
+        data: {
+          id:     duplicate.status === "pending" ? duplicate._id : uuidv4(),
+          name:   displayName,
+          status: "pending",
+        },
+      }, 201);
     }
   }
 
@@ -863,6 +880,69 @@ const handleTeacherStudents = asyncHandler(async (req, res) => {
 
   return sendSuccess(res, { count: normalised.length, students: normalised, data: normalised });
 });
+
+// ─── APPLICANT DOCUMENTS ─────────────────────────────────────────────────────
+//
+// GET /applications/:applicationId/documents/:key
+//
+// The only way to a file under uploads/applications (server.js closes the
+// static path). Two ways in, decided in this order:
+//
+//   1. A signed link, minted by applicationDocuments.presentDocument in the
+//      answer to an authorised, school-scoped read — bound to this
+//      application and this key, and expired after LINK_HOURS. The admin
+//      console opens documents in a new tab and the phone in the system
+//      browser; neither carries a token.
+//   2. A signed-in caller holding students.admit or students.viewFull, for an
+//      application (or the pupil record it became) in their own school.
+//
+// Everything else — no token and no link, another school, another role, a
+// key the application does not list, a file that is gone — is one 404, so
+// the answer never says whether the document exists.
+router.get("/applications/:applicationId/documents/:key", asyncHandler(async (req, res) => {
+  const applicationId = String(req.params.applicationId || "");
+  let key;
+  try { key = path.basename(decodeURIComponent(String(req.params.key || ""))); }
+  catch { return sendError(res, 404, "Document not found"); }
+  if (!applicationId || !key) return sendError(res, 404, "Document not found");
+
+  let scope = null;
+  if (applicationDocuments.verifyDocumentSignature(applicationId, key, req.query.sig)) {
+    scope = {};
+  } else if (req.user) {
+    const allowed =
+      (await permissions.can(req.user, "students.admit")) ||
+      (await permissions.can(req.user, "students.viewFull"));
+    if (!allowed) return sendError(res, 403, "Access denied");
+    const schoolId = resolveSchoolId(req);
+    if (!schoolId && req.user.role !== "super_admin") return sendError(res, 403, "No school on this session");
+    scope = schoolId ? { schoolId } : {};
+  } else {
+    return sendError(res, 401, "Sign in, or open the document from the application.", { code: "DOCUMENT_LINK_REQUIRED" });
+  }
+
+  const App = getStudentApp();
+  const record =
+    (App ? await App.findOne({ _id: applicationId, ...scope }).select("documents").lean().catch(() => null) : null) ||
+    await Student.findOne({ _id: applicationId, ...scope, ...NOT_DELETED }).select("documents").lean();
+  if (!record) return sendError(res, 404, "Document not found");
+
+  const doc = (record.documents || []).find((d) => applicationDocuments.documentKey(d) === key);
+  if (!doc) return sendError(res, 404, "Document not found");
+
+  const file = applicationDocuments.resolveDocumentFile(key);
+  if (!file) return sendError(res, 404, "Document not found");
+
+  res.set({
+    "Content-Type":           file.contentType,
+    "Content-Disposition":    `inline; filename="${applicationDocuments.safeDownloadName(doc.title, key)}"`,
+    "Cache-Control":          "private, no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  const stream = fs.createReadStream(file.filePath);
+  stream.on("error", () => { if (!res.headersSent) sendError(res, 404, "Document not found"); else res.end(); });
+  stream.pipe(res);
+}));
 
 router.get("/teacher/students",    authenticate, teacherOrAdmin, handleTeacherStudents);
 router.get("/teacher/my-students", authenticate, teacherOrAdmin, handleTeacherStudents);

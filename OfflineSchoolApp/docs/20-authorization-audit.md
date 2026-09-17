@@ -466,3 +466,189 @@ way `check-login-response.js` opts out of the staff one.
 - Web: `tsc -b` clean; ESLint 0 errors, 1 pre-existing warning;
   `check:normalisers` and `check:roles` pass.
 - Desktop `npm run check`: all suites pass.
+
+
+---
+
+## 11. Continuation from `e4284fc`
+
+This section records the second pass, taken from commit `e4284fc` as the
+baseline. It supersedes the rows of §10 it names; every other row of §10
+stands as written.
+
+### 11.1 What was inherited, and from whom
+
+- **Cline** implemented the code for F1–F11, N1–N5 and N7: the shared
+  `teacherScope` and `announcementScope` helpers, the pair check on both mark
+  routes, the class check on both attendance routes, the scoped
+  publish/delete, the roster projection and 404-uniform student routes, the
+  guardian fill-only fields, the portal login limiter, the application
+  validation and the enrollment-number handler.
+- **Claude Code** (first review, `e4284fc`) verified that work, kept its shape,
+  and corrected what was incomplete: the active-row filter in the helper, class
+  and subject derived from the exam's `ExamSubject` rather than the body, the
+  `$or` collision in the roster resolver, the missing `School` model reference
+  that 500'd the public application route, the twelve sub-audit findings X1–X16
+  and X18–X21 that the first draft of this document had omitted, the regression
+  suites, and the fixtures the new policies broke.
+- **This pass** (Claude Code, continuation) closed X17, X22, X23 and X25,
+  re-verified the rest, and left the tree clean.
+
+### 11.2 X17 — applicant documents (closed)
+
+*Before:* files under `src/uploads/applications` were served by the media
+handler and `express.static` to anyone with the URL; the record stored the
+absolute path on disk and returned it, with the public URL, to every client
+that read an application.
+
+*Now* (`utils/applicationDocuments.js`, `server.js`, `students.routes.js`):
+
+- `/uploads/applications/*` answers a uniform 404 to everybody, mounted ahead
+  of both the streaming handler and `express.static`. nginx proxies `/uploads/`
+  to the backend (docker-compose), so this closes the directory in deployment
+  too. The files stay in the mounted volume.
+- The one door is `GET /api/students/applications/:applicationId/documents/:key`,
+  `:key` being the stored filename. It opens for (a) a signed-in holder of
+  `students.admit` or `students.viewFull` whose school owns the application
+  (or the pupil record it became; `super_admin` names the school), or (b) a
+  link carrying a signature minted by `presentDocument` — bound to that
+  application and that key, one hour, keyed with `JWT_SECRET`. The signed form
+  exists because the admin console opens documents in a new tab and the phone
+  in the system browser, neither of which sends a token; a signature is only
+  ever minted in the answer to an authorised, school-scoped read.
+- The application must LIST the key: a file that exists but belongs to another
+  application is 404. Another school, another role without the capability,
+  an unknown application, a traversal in the key, a tampered or transplanted
+  signature: 404 / 401 / 403 as the suite pins, and never the bytes.
+- Every response the students router sends passes through
+  `redactDocumentsDeep`: documents leave as `{ title, type, size, mimeType,
+  url }` with an absolute signed `url`; `path` and `filename` never leave.
+- Served with `Content-Disposition: inline`, `Cache-Control: private,
+  no-store`, `X-Content-Type-Options: nosniff`, a content type from the
+  extension table (`.bin` otherwise).
+
+Client impact: none required. Both consoles already open `doc.url`; the URL is
+now absolute and signed. The dead `applyDocs` endpoint constant in both
+clients points at a route that never existed and is untouched.
+
+### 11.3 X25 — legacy `/api/teacher/attendance/mark` (closed)
+
+*Cause:* `lazyModel("../db/models/Attendance")` returned the module object
+`{ StudentAttendance, TeacherAttendance }`, and the route called `bulkWrite`
+on it — a `TypeError` after the assignment check had passed. The rows it
+would have written carried a `teacherId` field the schema does not have and no
+`markedBy`, which the schema requires.
+
+*Now:* the getter resolves `StudentAttendance`; the route writes the same rows
+`/api/attendance/students/bulk` writes — natural key (school, class, pupil,
+subject `null`, period `null`, date), `markedBy` = the caller, status from the
+schema's enum — and verifies every pupil is one of the class in the caller's
+school. Authorisation is unchanged and class-level: an active assignment to
+the target class for any subject (`getTeacherScope`, active rows only);
+administrators pass as they do on the modern route; a teacher of another
+school is refused before anything is read. `/api/teacher/attendance/status`
+reads by school, class and date (its old `teacherId` filter matched nothing).
+
+### 11.4 X22 — the public form as an oracle (closed)
+
+*Before:* `POST /api/public/students/apply` answered a duplicate with 409
+`already_enrolled` or 409 `already_pending` (the latter carrying the
+application id); `POST /api/students/apply` answered "already pending" /
+"already enrolled" with the child's name. Anyone who typed a child's name and
+a parent's email learned whether that child is at the school.
+
+*Now:* every duplicate answers exactly as a new application does — same
+status, same message. Nothing is created. A pending application keeps its id
+in the answer (the family already holds it); an enrolled pupil's answer carries
+a fresh id that resolves to nothing, so it cannot be traded through
+`application-status` for an enrolment number. Re-application after rejection
+still updates the rejected record (product behaviour) and now answers with the
+same words as a first submission.
+
+*Residual, recorded:* a re-application after rejection can still be filed by
+anyone holding the name and guardian email, and it replaces guardian name and
+phone on the rejected record. Closing that needs a token mailed to the
+applicant; it is a product decision and is not made here.
+
+### 11.5 X23 — exception text to anonymous callers (closed)
+
+The public router's error handler now logs the exception and answers a fixed
+sentence: 400 for a malformed value (`CastError`, `ValidationError`,
+`BSONError`, a JSON parse failure), 500 otherwise. `GET /public/schools/:id`
+refuses a value that cannot be a school id with 404 before any query runs, and
+garbage paging falls back to defaults. The multer messages ("file type … not
+allowed", "exceeds the 5 MB limit") are user-facing and kept.
+
+### 11.6 N6 — the super admin across schools (verified, intentional)
+
+Verified in `middleware/auth.js`, `utils/tenant.js`, `utils/schoolContext.js`
+and by `check-school-scope`, `check-school-context`, `check-super-admin`:
+
+- Only `super_admin` may name a school in query, body or path; every other
+  role naming another school is refused at the door (403
+  `SCHOOL_ACCESS_DENIED`), a ghost or malformed id included.
+- A `super_admin` who names a school gets that school and nothing else; the
+  name is checked — an unknown or deleted school is 404 `SCHOOL_NOT_FOUND`,
+  never a silent fall-through to another school. A deactivated school is
+  still reachable to them, flagged on `req.schoolContext`, because switching
+  it back on is done from inside.
+- A `super_admin` who names NO school is the one caller allowed to read across
+  schools on list and by-id routes; the per-student routes anchor on the
+  exam's own school so their sub-queries still stay within one school.
+  Platform-wide statistics and the audit trail are explicitly platform
+  capabilities (`platform.*`, non-delegable).
+- Writes that need a school (`publishResults`, `publishResult`, `upsertScore`,
+  reissue, generated-report upsert) refuse a `super_admin` who named none with
+  400 rather than guessing.
+- No `schoolId` is ever assigned to a `super_admin` account.
+
+This is platform behaviour, and it is not a capability any school role can
+reach.
+
+### 11.7 Teacher READ scope — policy preserved
+
+Restated from §7b, verified again this pass: teachers' reads of marks,
+results, rankings, registers, class lists and the sync feed's `studentScore`,
+`resultSummary`, `studentAttendance`, `exam`, `examSubject` and `homework`
+collections remain **school-wide**, because `results.view` / `attendance.view`
+/ `exams.view` are defined that way. Every one of those reads is school-scoped
+(no cross-school path was found); none is class-scoped. Confining them to
+assigned classes is a product decision that has not been taken, and this pass
+does not take it. The sync feed's `student` collection alone is class-scoped
+for teachers, by the capability `students.viewTaught`.
+
+### 11.8 Re-verification of §5, §6 and §6b
+
+Each finding's implementation was re-read against its boundary (school, role,
+relationship, direct id) and its suite re-run: F1–F11 and N1 by
+`check-tenant-ids`; N2–N5, X1–X8, X24 by `check-marks-scope`; N7 and X25 by
+`check-register-scope`; X9–X15, X19–X21 by `check-tenant-ids`; X17, X22, X23
+by `check-application-documents`; X16 and X18 by reading. No previously
+"Fixed" row was found incomplete. `teacherScope.teacherAssigned` was checked
+against the model's real fields (`teacher`, `class`, `subject`, `schoolId`,
+`isActive`): its `$and` of per-field `$or` pairs (schema spelling or legacy
+`teacherId`/`classId`/`subjectId` spelling) cannot broaden scope — every
+clause must hold — and `isActive: { $ne: false }` applies to all of them.
+
+### 11.9 Status changes to §10
+
+| Finding | Was | Now |
+|---|---|---|
+| X17 | Open | **Fixed** — `check-application-documents` |
+| X22 | Open | **Fixed** (residual re-application overwrite recorded) — `check-application-documents` |
+| X23 | Open | **Fixed** — `check-application-documents` |
+| X25 | Open | **Fixed** — `check-register-scope` |
+| N6 | Open (documented) | **Intentional platform behaviour, verified** (§11.6) |
+| Teacher READ scope | Open policy | **Unchanged by decision** (§11.7) |
+
+### 11.10 Validation, this pass
+
+- Backend `npm run check:all`: 55 suites, 3,810 assertions, 0 failures, exit 0
+  (includes the new `check:appdocs` — 45 assertions — and `check-register-scope`
+  at 26 with the X25 cases).
+- Mobile `npm run check`: all suites pass, i18n 5,200 keys parity, ESLint
+  0 errors / 49 pre-existing warnings, TypeScript clean, exit 0.
+- Web: `tsc -b` exit 0, ESLint exit 0 (1 pre-existing warning), `vite build`
+  exit 0, `check:normalisers` and `check:roles` exit 0.
+- Desktop `npm run check`: all six suites pass, exit 0.
+- `git diff --check`: clean. Working tree after commit: clean.

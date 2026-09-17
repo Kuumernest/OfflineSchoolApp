@@ -153,17 +153,25 @@ const check = (label, actual, expected) => {
   r = await single(idle, "form3a", "st-a1");
   check("inactive assignment → 403", r.status, 403);
 
-  console.log("\n--- the legacy teacher route refuses the same ---");
-  // Its write path is out of scope here: the route's lazy model getter resolves
-  // the Attendance MODULE rather than a model and 500s after authorisation
-  // (pre-existing; docs/20 §10). What this suite pins is that the refusals
-  // come first.
+  console.log("\n--- the legacy teacher route answers the same (X25) ---");
+  // Its lazy model getter used to hand back the Attendance MODULE and the
+  // route 500'd after authorisation; it now writes StudentAttendance rows
+  // with the schema's key and markedBy, like /api/attendance does.
   r = await legacy(physics, "form3a", "st-a1");
-  check("assigned → not refused", [403, 404].includes(r.status), false);
+  check("assigned → 200, one row saved", [r.status, r.body?.saved?.length], [200, 1]);
+  check("  the row is the school's, marked by the teacher",
+    (await Register.findOne({ classId: "form3a", studentId: "st-a1", date: DAY, subjectId: null, periodId: null }).lean())?.markedBy, "physics-a");
   r = await legacy(idle, "form3a", "st-a1");
-  check("not assigned → 403", r.status, 403);
+  check("not assigned (inactive row) → 403", r.status, 403);
   r = await legacy(physics, "form4b", "st-a3");
   check("another class → 403", r.status, 403);
+  check("  nothing written for 4B by them", await Register.countDocuments({ classId: "form4b", markedBy: "physics-a" }), 0);
+  r = await legacy(beta, "form3a", "st-a1");
+  check("another school's teacher → 403", r.status, 403);
+  r = await legacy(physics, "form3a", "st-b1");
+  check("a pupil of another school on the list → not saved", [r.status, r.body?.saved?.length, r.body?.failed?.length], [200, 0, 1]);
+  r = await legacy(admin, "form4b", "st-a3");
+  check("the school's admin → 200 through the legacy route too", [r.status, r.body?.saved?.length], [200, 1]);
 
   console.log("\n--- administrators are unchanged ---");
   r = await bulk(admin, "form3a", "st-a1");
