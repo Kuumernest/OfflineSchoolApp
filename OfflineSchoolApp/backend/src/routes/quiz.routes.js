@@ -323,12 +323,34 @@ router.post("/questions", authoring, asyncHandler(async (req, res) => {
     });
   }
 
-  const question = await Question.create({
-    ...req.body,
-    schoolId,
-    subject_id: subjectId,
-    created_by: String(req.user?._id || req.user?.id),
-  });
+  // The phone sends the id it stored the question under, and retries the
+  // request until it hears back. Remembering that id (client_id, unique per
+  // school) and answering a repeat with the question it already made is what
+  // stops a lost response becoming a second question. The key itself stays
+  // the server's: these models are ObjectId-keyed.
+  const clientId = req.body.id ? String(req.body.id).trim() : null;
+  if (clientId) {
+    const prior = await Question.findOne({ schoolId, client_id: clientId }).lean();
+    if (prior) return res.status(200).json({ success: true, replay: true, question: prior });
+  }
+
+  let question;
+  try {
+    question = await Question.create({
+      ...req.body,
+      client_id: clientId,
+      schoolId,
+      subject_id: subjectId,
+      created_by: String(req.user?._id || req.user?.id),
+    });
+  } catch (err) {
+    // Two retries raced: the other one won the unique index. Answer with it.
+    if (err?.code === 11000 && clientId) {
+      const prior = await Question.findOne({ schoolId, client_id: clientId }).lean();
+      if (prior) return res.status(200).json({ success: true, replay: true, question: prior });
+    }
+    throw err;
+  }
   res.status(201).json({ success: true, question });
 }));
 
@@ -366,7 +388,7 @@ const ownScope = (req) =>
  * tenancy, authorship, soft-delete and mongoose's own bookkeeping.
  */
 const NEVER_FROM_CLIENT = new Set([
-  "_id", "schoolId", "created_by", "deleted_at",
+  "_id", "schoolId", "created_by", "deleted_at", "client_id",
   "createdAt", "updatedAt", "__v",
 ]);
 
@@ -471,14 +493,32 @@ router.post("/quizzes", authoring, asyncHandler(async (req, res) => {
     }
   }
 
-  const quiz = await Quiz.create({
-    ...req.body,
-    schoolId,
-    class_id,
-    subject_id,
-    is_published: false,
-    created_by,
-  });
+  // As for questions: the client's id (client_id, unique per school) makes a
+  // retried create a replay of the quiz it already made.
+  const clientId = req.body.id ? String(req.body.id).trim() : null;
+  if (clientId) {
+    const prior = await Quiz.findOne({ schoolId, client_id: clientId }).lean();
+    if (prior) return res.status(200).json({ success: true, replay: true, quiz: prior });
+  }
+
+  let quiz;
+  try {
+    quiz = await Quiz.create({
+      ...req.body,
+      client_id: clientId,
+      schoolId,
+      class_id,
+      subject_id,
+      is_published: false,
+      created_by,
+    });
+  } catch (err) {
+    if (err?.code === 11000 && clientId) {
+      const prior = await Quiz.findOne({ schoolId, client_id: clientId }).lean();
+      if (prior) return res.status(200).json({ success: true, replay: true, quiz: prior });
+    }
+    throw err;
+  }
 
   await QuizAnalytics.findOneAndUpdate(
     { quiz_id: quiz._id },

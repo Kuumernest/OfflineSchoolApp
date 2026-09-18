@@ -117,6 +117,14 @@ const makeLoader = (stubs, pkgStubs) => {
     [path.join(MOBILE, "src/db/dbService"),         { DB: { query: async (sql, p = []) => raw.prepare(sql).all(...(p ?? [])), queryFirst: async (sql, p = []) => raw.prepare(sql).get(...(p ?? [])) ?? null } }],
     [path.join(MOBILE, "src/services/api"),         { default: fakeApi, __esModule: true, API_URL: "http://stub" }],
     [path.join(MOBILE, "src/services/content.service"), { processPendingUploads: async () => ({ succeeded: 0, failed: 0 }) }],
+    // A drain only ever runs for a signed-in account, and a queued row belongs
+    // to the account that queued it (check-sync-reliability covers the switch
+    // and the ownerless cases). This suite is about the drain itself, so one
+    // teacher is signed in throughout.
+    [path.join(MOBILE, "src/utils/authHelpers"), {
+      isAuthenticated: () => true,
+      getCurrentAuth:  () => ({ user: { _id: "teacher-a", role: "teacher", schoolId: "school-a" }, token: "t", role: "teacher", schoolId: "school-a" }),
+    }],
   ]);
   const pkgStubs = new Map([
     ["@react-native-community/netinfo", { __esModule: true, default: { addEventListener: () => () => {}, fetch: async () => ({ isConnected: true }) } }],

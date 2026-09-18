@@ -52,6 +52,7 @@ import { getDatabase } from "../db/database";
 import { ensureTableSchema } from "../db/schemaManager";
 import { generateUUID } from "../utils/idHelpers";
 import { remapPayload } from "./idMap";
+import { getCurrentAuth } from "../utils/authHelpers";
 
 const TABLE = "mutation_outbox";
 const ID_MAP = "sync_id_map";
@@ -87,6 +88,15 @@ const ensureSchema = (db) => ensureTableSchema(TABLE, async (database) => {
   await database.execAsync(
     `ALTER TABLE ${TABLE} ADD COLUMN silent INTEGER NOT NULL DEFAULT 0`
   ).catch(() => {});
+  // The account that queued the row. A drain sends only the signed-in
+  // account's rows; another account signing in on the same phone must not
+  // send them under its own token. NULL is a row from before this column
+  // existed: nobody can say whose it is, so it is never sent and never
+  // stamped with whoever signs in next — it is held, counted, and left for
+  // a person to recover or discard.
+  await database.execAsync(
+    `ALTER TABLE ${TABLE} ADD COLUMN owner_id TEXT`
+  ).catch(() => {});
 
   await database.execAsync(`CREATE TABLE IF NOT EXISTS ${ID_MAP} (
     local_id   TEXT PRIMARY KEY,
@@ -98,6 +108,24 @@ const ensureSchema = (db) => ensureTableSchema(TABLE, async (database) => {
 
 const json = (value) => JSON.stringify(value ?? {});
 const parse = (value) => { try { return JSON.parse(value || "{}"); } catch { return {}; } };
+
+/** The signed-in account's id, or null when nobody is (or the store is unavailable). */
+const currentOwner = () => {
+  try {
+    const id = getCurrentAuth()?.user?._id ?? getCurrentAuth()?.user?.id ?? null;
+    return id ? String(id) : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * Rows this account may send: its own. An ownerless row (queued before
+ * owner_id existed) matches no account — OWNERLESS QUEUED MUTATIONS MUST
+ * NEVER BE EXECUTED UNDER A DIFFERENT ACCOUNT, and there is no way to tell
+ * whether the signed-in account is the one that queued it.
+ */
+const OWNED = "owner_id = ?";
 
 /** Strips client-only metadata so it never reaches the server. */
 const wireBody = (payload) => {
@@ -237,6 +265,16 @@ const sendWithFallback = async ({ method, endpoint, fallbacks, data, headers }) 
     .filter(Boolean)
     .filter((v, i, a) => a.indexOf(v) === i);
 
+  // A row with no endpoint at all used to fall out of the loop below with
+  // lastError undefined; the drain then threw reading its message, and the
+  // row — and every row queued after it — stayed stuck behind that throw.
+  // It is a permanent refusal of this row alone.
+  if (!candidates.length) {
+    const err = new Error("Mutation has no endpoint");
+    err.response = { status: 400, data: { code: "NO_ENDPOINT", message: err.message } };
+    throw err;
+  }
+
   let lastError;
   for (const url of candidates) {
     try {
@@ -331,17 +369,32 @@ export class MutationQueue {
    *                               its counts, so a failed read-receipt never
    *                               reads as "your work didn't save"
    */
-  static async enqueue({ entityKey, method, endpoint, payload, baseVersion = null, silent = false }) {
+  static async enqueue({ entityKey, method, endpoint, payload, baseVersion = null, silent = false, ownerId }) {
     if (!entityKey || !method || !endpoint) throw new Error("Mutation requires entityKey, method and endpoint");
     const db = await getDatabase();
     await ensureSchema(db);
     const now = new Date().toISOString();
     const id = generateUUID();
+    // The signed-in account, unless the caller knows better — the legacy
+    // queue migration passes null: those rows were queued by nobody it can
+    // name, and must not be stamped with whoever is signed in now.
+    const owner = ownerId === undefined ? currentOwner() : ownerId;
 
     // Coalesce unsent edits to an entity, while preserving the original
     // idempotency key and ordering.  Deletes deliberately replace updates.
+    //
+    // Only onto a row that has NEVER been attempted. A row that was sent once
+    // and got no answer may have been committed: the server remembers its
+    // Idempotency-Key and answers the retry from memory. Merging a later edit
+    // onto that row reused the key, so the retry carried the new payload and
+    // was answered with the old result — the correction vanished. A new row
+    // instead, queued behind it: the first attempt settles from memory, then
+    // the correction lands as its own operation.
     const existing = await db.getFirstAsync(
-      `SELECT id FROM ${TABLE} WHERE entity_key = ? AND status IN ('pending', 'retrying') ORDER BY created_at ASC LIMIT 1`,
+      `SELECT id FROM ${TABLE}
+        WHERE entity_key = ? AND status IN ('pending', 'retrying')
+          AND retry_count = 0 AND last_attempt_at IS NULL
+        ORDER BY created_at ASC LIMIT 1`,
       [entityKey]
     );
     if (existing?.id) {
@@ -353,9 +406,9 @@ export class MutationQueue {
       return existing.id;
     }
     await db.runAsync(
-      `INSERT INTO ${TABLE} (id, entity_key, method, endpoint, payload, base_version, status, retry_count, created_at, silent)
-       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
-      [id, entityKey, method.toUpperCase(), endpoint, json(payload), baseVersion, now, silent ? 1 : 0]
+      `INSERT INTO ${TABLE} (id, entity_key, method, endpoint, payload, base_version, status, retry_count, created_at, silent, owner_id)
+       VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?, ?)`,
+      [id, entityKey, method.toUpperCase(), endpoint, json(payload), baseVersion, now, silent ? 1 : 0, owner]
     );
     return id;
   }
@@ -365,15 +418,36 @@ export class MutationQueue {
     await ensureSchema(db);
     const now = new Date().toISOString();
 
+    const owner = currentOwner() ?? "";
     const rows = await db.getAllAsync(
       `SELECT * FROM ${TABLE}
        WHERE status IN ('pending', 'retrying')
          AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+         AND ${OWNED}
        ORDER BY created_at ASC LIMIT ?`,
-      [now, limit]
+      [now, owner, limit]
     );
 
-    const summary = { synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0, unauthenticated: 0, stopped: null };
+    // Work that is due but not this account's, left exactly as it is: another
+    // account's, or nobody's (queued before ownership was recorded). Reported
+    // so a sync screen can say it is there rather than let it look like
+    // nothing is.
+    const held = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM ${TABLE}
+       WHERE status IN ('pending', 'retrying')
+         AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+         AND owner_id IS NOT NULL AND owner_id != ?`,
+      [now, owner]
+    ).catch(() => null);
+    const ownerless = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM ${TABLE}
+       WHERE status IN ('pending', 'retrying') AND owner_id IS NULL`
+    ).catch(() => null);
+
+    const summary = {
+      synced: 0, retried: 0, conflicts: 0, failed: 0, deferred: 0, unauthenticated: 0,
+      heldForOtherUser: held?.n ?? 0, heldOwnerless: ownerless?.n ?? 0, stopped: null,
+    };
 
     // Indexed, and reported at the TOP of each iteration.
     //
@@ -413,7 +487,8 @@ export class MutationQueue {
         await this._settle(db, row, resolved.payload, response, onSuccess);
         summary.synced++;
       } catch (error) {
-        const kind = classifyError(error, row.method);
+        const kind    = classifyError(error, row.method);
+        const message = error?.message ?? String(error);
 
         if (kind === "unauthenticated") {
           // Back to pending, untouched, and the drain stops: every row after
@@ -421,7 +496,7 @@ export class MutationQueue {
           // sends them in the order the person did things.
           await db.runAsync(
             `UPDATE ${TABLE} SET status = 'pending', error = ? WHERE id = ?`,
-            [error.message, row.id]
+            [message, row.id]
           );
           summary.unauthenticated = queued - i;
           summary.stopped = "unauthenticated";
@@ -437,7 +512,7 @@ export class MutationQueue {
         if (kind === "conflict") {
           await db.runAsync(
             `UPDATE ${TABLE} SET status = 'conflict', conflict = ?, error = ? WHERE id = ?`,
-            [json(error.response?.data), error.message, row.id]
+            [json(error?.response?.data), message, row.id]
           );
           summary.conflicts++;
           continue;
@@ -446,7 +521,7 @@ export class MutationQueue {
         if (kind === "permanent") {
           await db.runAsync(
             `UPDATE ${TABLE} SET status = 'failed', retry_count = ?, error = ? WHERE id = ?`,
-            [(row.retry_count || 0) + 1, error.message, row.id]
+            [(row.retry_count || 0) + 1, message, row.id]
           );
           summary.failed++;
           continue;
@@ -461,7 +536,7 @@ export class MutationQueue {
 
         await db.runAsync(
           `UPDATE ${TABLE} SET status = ?, retry_count = ?, error = ?, next_attempt_at = ? WHERE id = ?`,
-          [exhausted ? "failed" : "retrying", retries, error.message, nextAt, row.id]
+          [exhausted ? "failed" : "retrying", retries, message, nextAt, row.id]
         );
         if (exhausted) summary.failed++;
         else summary.retried++;
@@ -596,13 +671,22 @@ export class MutationQueue {
     await ensureSchema(db);
     const rows = await db.getAllAsync(
       `SELECT status, COUNT(*) AS n FROM ${TABLE}
-       WHERE status != 'synced' AND COALESCE(silent, 0) = 0 GROUP BY status`
+       WHERE status != 'synced' AND COALESCE(silent, 0) = 0 AND ${OWNED} GROUP BY status`,
+      [currentOwner() ?? ""]
     ).catch(() => []);
 
-    const stats = { pending: 0, retrying: 0, conflict: 0, failed: 0, uploads: 0, unsent: 0 };
+    const stats = { pending: 0, retrying: 0, conflict: 0, failed: 0, uploads: 0, unsent: 0, ownerless: 0 };
     for (const r of rows ?? []) {
       if (r.status in stats) stats[r.status] = r.n;
     }
+
+    // Rows nobody can claim, from before ownership was recorded. Not this
+    // account's unsent work, but not nothing either: named so a person can
+    // find and deal with them.
+    const orphaned = await db.getFirstAsync(
+      `SELECT COUNT(*) AS n FROM ${TABLE} WHERE status != 'synced' AND owner_id IS NULL`
+    ).catch(() => null);
+    stats.ownerless = orphaned?.n ?? 0;
 
     const up = await db.getFirstAsync(
       `SELECT COUNT(*) AS n FROM upload_queue WHERE status IN ('pending', 'failed', 'uploading')`
@@ -786,6 +870,9 @@ export class MutationQueue {
             method: "POST",
             endpoint,
             payload: parse(r.payload),
+            // Queued by an account this table never recorded. Held, not
+            // handed to whoever happens to be signed in at migration time.
+            ownerId: null,
           });
           migrated++;
         }
@@ -810,9 +897,9 @@ export class MutationQueue {
     await ensureSchema(db);
     const rows = await db.getAllAsync(
       `SELECT * FROM ${TABLE}
-       WHERE status IN ('conflict', 'failed') AND COALESCE(silent, 0) = 0
+       WHERE status IN ('conflict', 'failed') AND COALESCE(silent, 0) = 0 AND ${OWNED}
        ORDER BY last_attempt_at DESC, created_at DESC LIMIT ?`,
-      [limit]
+      [currentOwner() ?? "", limit]
     ).catch(() => []);
     return (rows ?? []).map((r) => ({
       ...r,

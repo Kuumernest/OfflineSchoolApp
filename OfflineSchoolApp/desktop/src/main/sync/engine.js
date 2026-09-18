@@ -45,7 +45,7 @@ const MAX_PAGES_PER_CYCLE = 40;
 /**
  * @param feedCollections  Optional. Leave it out — see the note in pull().
  */
-const engine = ({ docs, queue, state, client, feedCollections = null, onChange = () => {} }) => {
+const engine = ({ docs, queue, state, client, feedCollections = null, onChange = () => {}, currentUser = () => null }) => {
   let running  = false;
   let timer    = null;
   let stopped  = false;
@@ -79,7 +79,8 @@ const engine = ({ docs, queue, state, client, feedCollections = null, onChange =
     // entry and a failure may block the queue, so the batch after this one is a
     // different batch.
     for (;;) {
-      const batch = queue.nextBatch(1);
+      // Only the signed-in account's requests. See migration 4 in db/schema.js.
+      const batch = queue.nextBatch(1, { userId: currentUser() });
       if (!batch.length) return { sent, stopped: null };
 
       const item = batch[0];

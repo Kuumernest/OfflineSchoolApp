@@ -211,6 +211,19 @@ router.post("/", asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: "html is required" });
   }
 
+  // The desktop queues this request with the id it stored the template under
+  // and retries it until it hears back, exactly as for POST /:id/duplicate
+  // below. A repeat of an id this school already holds answers with that
+  // template; an id another school holds is refused.
+  const templateId = req.body._id ? String(req.body._id).trim() : uuidv4();
+  const prior = req.body._id ? await ReportTemplate.findById(templateId).lean() : null;
+  if (prior) {
+    if (String(prior.schoolId) !== String(schoolId)) {
+      return res.status(409).json({ success: false, code: "TEMPLATE_ID_TAKEN", error: "That template id already belongs to another school" });
+    }
+    return res.status(200).json({ success: true, replay: true, template: prior });
+  }
+
   if (isDefault) {
     await ReportTemplate.updateMany(
       { schoolId, deletedAt: null },
@@ -219,7 +232,7 @@ router.post("/", asyncHandler(async (req, res) => {
   }
 
   const template = await ReportTemplate.create({
-    _id:       uuidv4(),
+    _id:       templateId,
     schoolId,
     name:      name.trim(),
     html,

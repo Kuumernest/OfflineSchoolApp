@@ -87,6 +87,15 @@ const check = (label, actual, expected) => {
   ]);
   const DAY   = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"][new Date().getDay()];
   const OTHER = DAY === "MON" ? "TUE" : "MON";
+  // teacher-a holds Form 3A and Form 4B in the same period on purpose: the
+  // reminder for two slots of one class must be one card, and a slot in a
+  // second class must be another. The collection's unique
+  // (teacher, day, period) index forbids writing that today, so the index is
+  // dropped first — the rows stand for data written before it existed, which
+  // is exactly what the register and the reminders must cope with. Without
+  // this the seed raced the index build and failed whenever the build won.
+  await TimetableSlot.init();
+  await TimetableSlot.collection.dropIndex("unique_teacher_day_period").catch(() => {});
   await TimetableSlot.create([
     { _id: "68d100000000000000000001", schoolId: A, classId: "form3a", subjectId: "maths-3a",   teacherId: "teacher-a", periodId: "p1", dayOfWeek: DAY },
     { _id: "68d100000000000000000002", schoolId: A, classId: "form3a", subjectId: "maths-3a",   teacherId: "teacher-a", periodId: "p2", dayOfWeek: DAY },

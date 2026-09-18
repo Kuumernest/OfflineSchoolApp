@@ -115,6 +115,8 @@ const openDatabase = () => {
     api  = client({ meta: metaBag });
     sync = engine({
       docs, queue, state: syncState, client: api,
+      // The engine sends only the signed-in account's queued requests.
+      currentUser: () => session?.userId ?? null,
       // No collection list: the server decides what this caller may mirror, so
       // the desktop holds no copy of the feed table to drift from it.
       onChange: (status) => {
