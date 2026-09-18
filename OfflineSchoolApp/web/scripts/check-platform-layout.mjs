@@ -52,6 +52,8 @@ check("Th does not force nowrap on headings (French headings wrap instead of wid
 
 check("a card can shrink below its content when it is a grid or flex item",
   /"min-w-0 rounded-card border border-line shadow-card"/.test(shared.Card));
+check("the card header wraps its action under a long title and names the full title on hover",
+  /flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2/.test(shared.Card) && /title=\{title\}>\{title\}<\/h3>/.test(shared.Card));
 
 console.log("--- pagination, modals, filters, tiles ---");
 check("pagination wraps its two halves", /flex flex-wrap items-center justify-between/.test(shared.Pagination));
@@ -81,6 +83,12 @@ for (const [file, src] of platformPages) {
   // lines tall the moment the table is squeezed; actions stay on one line.
   const cellActionWrap = /<Td[^>]*>\s*<div className="flex flex-wrap/.test(src);
   check(`${short}: no flex-wrap button row inside a table cell`, !cellActionWrap);
+  // A header with an action beside it is CardHeader's action slot, not a row
+  // hand-rolled around it; and a Table brings its own scroll container.
+  check(`${short}: no hand-rolled card header row (use CardHeader action)`,
+    !/justify-between gap-x-4 gap-y-2 px-5 pt-4/.test(src));
+  check(`${short}: no scroll container wrapped around a Table`,
+    !/overflow-x-auto[^\n]*>\s*\n\s*<Table>/.test(src));
   // Every modal footer may wrap — French labels are longer.
   const footers = src.match(/className="[^"]*justify-end gap-2[^"]*"/g) || [];
   const rigid = footers.filter((f) => !/flex-wrap/.test(f));

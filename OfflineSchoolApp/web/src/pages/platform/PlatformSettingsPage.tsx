@@ -221,10 +221,12 @@ function AdminsSection({ s }: { s: S }) {
   return (
     <div className="space-y-5">
       <Card padding={false}>
-        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-4">
-          <CardHeader title={s("adminsTitle")} subtitle={s("adminsSubtitle")} />
-          <Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>{s("addAdmin")}</Button>
-        </div>
+        <CardHeader
+          title={s("adminsTitle")}
+          subtitle={s("adminsSubtitle")}
+          className="px-5 pt-4"
+          action={<Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>{s("addAdmin")}</Button>}
+        />
         {listQ.isError ? (
           <EmptyTable title={s("loadFailed")} />
         ) : admins.length === 0 ? (

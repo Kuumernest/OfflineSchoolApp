@@ -96,22 +96,24 @@ export default function ReportsPage() {
 
       {specs.map((spec) => (
         <Card key={spec.key} padding={false}>
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 pt-4">
-            <CardHeader title={spec.title} />
-            <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} disabled={!rows.length}
-              onClick={() => downloadCsv(
-                `platform-${spec.key}`,
-                spec.columns,
-                [...rows.map(spec.row), ...(totals ? [spec.totals(totals)] : [])],
-              )}>
-              {r("download")}
-            </Button>
-          </div>
+          <CardHeader
+            title={spec.title}
+            className="px-5 pt-4"
+            action={
+              <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} disabled={!rows.length}
+                onClick={() => downloadCsv(
+                  `platform-${spec.key}`,
+                  spec.columns,
+                  [...rows.map(spec.row), ...(totals ? [spec.totals(totals)] : [])],
+                )}>
+                {r("download")}
+              </Button>
+            }
+          />
           {!dataQ.isLoading && rows.length === 0 ? (
             <EmptyTable icon={<FileSpreadsheet className="h-8 w-8" />} title={d("noData")} />
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
+            <Table>
                 <THead>
                   {spec.columns.map((c, i) => <Th key={c} numeric={i > 0}>{c}</Th>)}
                 </THead>
@@ -130,7 +132,6 @@ export default function ReportsPage() {
                   )}
                 </TBody>
               </Table>
-            </div>
           )}
         </Card>
       ))}

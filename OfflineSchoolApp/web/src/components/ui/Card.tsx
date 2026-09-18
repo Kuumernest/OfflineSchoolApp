@@ -63,7 +63,9 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-4 flex min-w-0 items-start justify-between gap-4", className)}>
+    // flex-wrap: an action beside a long title (longer still in French) drops
+    // under it on a narrow card instead of squeezing the title to nothing.
+    <div className={cn("mb-4 flex min-w-0 flex-wrap items-start justify-between gap-x-4 gap-y-2", className)}>
       <div className="flex min-w-0 items-start gap-2.5">
         {/* A 2px accent stub against the title. One small deliberate mark per
             panel is what separates a designed header from a bold paragraph —
@@ -79,7 +81,7 @@ export function CardHeader({
           aria-hidden="true"
         />
         <div className="min-w-0">
-          <h3 className="truncate text-base font-semibold text-ink">{title}</h3>
+          <h3 className="truncate text-base font-semibold text-ink" title={title}>{title}</h3>
           {subtitle && (
             <p className="mt-0.5 text-xs text-ink-muted">{subtitle}</p>
           )}

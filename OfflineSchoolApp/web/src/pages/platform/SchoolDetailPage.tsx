@@ -251,12 +251,15 @@ export default function SchoolDetailPage() {
         {/* ── Staff ────────────────────────────────────────────────────── */}
         <div className="min-w-0 space-y-6">
           <Card padding={false}>
-            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 pt-4">
-              <CardHeader title={s("staff")} />
-              <Button size="sm" variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAppointing(true)}>
-                {s("appoint")}
-              </Button>
-            </div>
+            <CardHeader
+              title={s("staff")}
+              className="px-5 pt-4"
+              action={
+                <Button size="sm" variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAppointing(true)}>
+                  {s("appoint")}
+                </Button>
+              }
+            />
             {admins.length === 0 ? (
               <EmptyTable title={s("noStaff")} />
             ) : (
