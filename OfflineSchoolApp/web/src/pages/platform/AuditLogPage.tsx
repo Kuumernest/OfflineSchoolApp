@@ -122,7 +122,7 @@ export default function AuditLogPage() {
                         {t(`platform.audit.actions.${e.action}`, { defaultValue: e.action })}
                       </Badge>
                     </Td>
-                    <Td className="max-w-xs whitespace-normal">
+                    <Td wrap className="max-w-xs">
                       {e.schoolId ? (
                         <Link to={`/platform/schools/${e.schoolId}`} className="hover:underline">{e.schoolName ?? e.schoolId}</Link>
                       ) : "—"}
@@ -131,7 +131,7 @@ export default function AuditLogPage() {
                       <div>{e.actorName ?? e.actorId ?? "—"}</div>
                       {e.actorRole ? <div className="text-xs text-ink-muted">{roleLabel(e.actorRole, t)}</div> : null}
                     </Td>
-                    <Td className="min-w-[14rem] max-w-md whitespace-normal">
+                    <Td wrap className="min-w-[14rem] max-w-md">
                       <Details e={e} />
                     </Td>
                   </Tr>

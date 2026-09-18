@@ -213,7 +213,7 @@ export default function SchoolDetailPage() {
         </div>
       )}
 
-      <MetricGrid className="lg:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-4">
+      <MetricGrid className="sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-4">
         <MetricTile tone="students" icon={GraduationCap} label={s("students")} value={fmt.number(school.counts.students)} />
         <MetricTile tone="teachers" icon={Users}         label={s("teachers")} value={fmt.number(school.counts.teachers)} />
         <MetricTile tone="schools"  icon={ShieldCheck}   label={s("admins")}   value={fmt.number(school.counts.admins)} />
@@ -249,9 +249,9 @@ export default function SchoolDetailPage() {
         </Card>
 
         {/* ── Staff ────────────────────────────────────────────────────── */}
-        <div className="space-y-6">
+        <div className="min-w-0 space-y-6">
           <Card padding={false}>
-            <div className="flex items-center justify-between px-5 pt-4">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 pt-4">
               <CardHeader title={s("staff")} />
               <Button size="sm" variant="secondary" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAppointing(true)}>
                 {s("appoint")}
@@ -265,9 +265,9 @@ export default function SchoolDetailPage() {
                 <TBody>
                   {admins.map((a) => (
                     <Tr key={a._id}>
-                      <Td>
-                        <div className="font-medium">{a.name}</div>
-                        <div className="text-xs text-ink-muted">{a.email}</div>
+                      <Td className="max-w-[16rem]">
+                        <div className="truncate font-medium" title={a.name}>{a.name}</div>
+                        <div className="truncate text-xs text-ink-muted" title={a.email}>{a.email}</div>
                       </Td>
                       <Td>
                         <Badge variant={a.role === "school_admin" ? "primary" : "info"}>
@@ -313,7 +313,7 @@ export default function SchoolDetailPage() {
                   {recent.map((e: AuditEntry) => (
                     <Tr key={e._id}>
                       <Td>{fmt.dateTime(e.at)}</Td>
-                      <Td>
+                      <Td wrap className="min-w-[10rem] max-w-xs">
                         {t(`platform.audit.actions.${e.action}`, { defaultValue: e.action })}
                         {e.resourceLabel && e.resourceType === "user" ? <span className="ml-1 text-ink-muted">· {e.resourceLabel}</span> : null}
                       </Td>
@@ -333,7 +333,7 @@ export default function SchoolDetailPage() {
         <FormField label={s("reason")} required className="mt-3">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
         </FormField>
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeactivating(false)}>{t("common.cancel")}</Button>
           <Button variant="danger" loading={statusBusy} onClick={() => setActive(false)}>{s("deactivate")}</Button>
         </div>
@@ -349,7 +349,7 @@ export default function SchoolDetailPage() {
             <SelectField value={staffRole} onChange={(e) => setStaffRole(e.target.value as "school_admin" | "bursar")}
               options={[{ value: "school_admin", label: s("roleAdmin") }, { value: "bursar", label: s("roleBursar") }]} />
           </FormField>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setAppointing(false)}>{t("common.cancel")}</Button>
             <Button type="submit" loading={staffBusy}>{s("appoint")}</Button>
           </div>

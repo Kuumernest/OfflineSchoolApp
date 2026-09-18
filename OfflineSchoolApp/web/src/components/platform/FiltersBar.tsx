@@ -28,7 +28,7 @@ export default function FiltersBar({
   // column of nothing.
   const fields = [showSchool, true, showTerm, showWindow, showWindow].filter(Boolean).length;
   const columns =
-    fields >= 5 ? "sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5" :
+    fields >= 5 ? "sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-5" :
     fields === 4 ? "sm:grid-cols-2 lg:grid-cols-4" :
     fields === 3 ? "sm:grid-cols-3" :
                    "sm:grid-cols-2";

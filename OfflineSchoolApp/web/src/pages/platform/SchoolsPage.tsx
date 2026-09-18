@@ -162,14 +162,14 @@ export default function SchoolsPage() {
               <TBody>
                 {items.map((sc) => (
                   <Tr key={sc._id}>
-                    <Td>
+                    <Td wrap className="min-w-[14rem] max-w-md">
                       <Link to={`/platform/schools/${sc._id}`} className="font-medium text-ink hover:underline">{sc.name}</Link>
                       {sc.code ? <span className="ml-1 text-ink-muted">({sc.code})</span> : null}
                       {sc.settings?.academicYear ? (
                         <div className="text-xs text-ink-muted">{sc.settings.academicYear}{sc.settings.currentTerm ? ` · ${sc.settings.currentTerm}` : ""}</div>
                       ) : null}
                     </Td>
-                    <Td>{[sc.city, sc.country].filter(Boolean).join(", ") || "—"}</Td>
+                    <Td wrap className="max-w-[12rem]">{[sc.city, sc.country].filter(Boolean).join(", ") || "—"}</Td>
                     <Td numeric>{fmt.number(sc.counts.students)}</Td>
                     <Td numeric>{fmt.number(sc.counts.teachers)}</Td>
                     <Td numeric>{fmt.number(sc.counts.admins)}</Td>
@@ -179,7 +179,7 @@ export default function SchoolsPage() {
                       </Badge>
                     </Td>
                     <Td>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex items-center gap-1">
                         <Link to={`/platform/schools/${sc._id}`}>
                           <Button size="sm" variant="ghost" icon={<Eye className="h-4 w-4" />}>{s("view")}</Button>
                         </Link>
@@ -240,7 +240,7 @@ export default function SchoolsPage() {
             </FormField>
           </div>
           {formError && <p role="alert" className="text-sm text-danger">{formError}</p>}
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={() => setCreating(false)}>{t("common.cancel")}</Button>
             <Button type="submit" loading={saving}>{s("create")}</Button>
           </div>
@@ -254,7 +254,7 @@ export default function SchoolsPage() {
         <FormField label={s("reason")} required className="mt-3">
           <Textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} />
         </FormField>
-        <div className="mt-4 flex justify-end gap-2">
+        <div className="mt-4 flex flex-wrap justify-end gap-2">
           <Button variant="secondary" onClick={() => setDeactivating(null)}>{t("common.cancel")}</Button>
           <Button variant="danger" loading={Boolean(deactivating && busyId === deactivating._id)}
             onClick={() => deactivating && setActive(deactivating, false)}>

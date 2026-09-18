@@ -221,7 +221,7 @@ function AdminsSection({ s }: { s: S }) {
   return (
     <div className="space-y-5">
       <Card padding={false}>
-        <div className="flex items-start justify-between gap-3 px-5 pt-4">
+        <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pt-4">
           <CardHeader title={s("adminsTitle")} subtitle={s("adminsSubtitle")} />
           <Button size="sm" icon={<UserPlus className="h-4 w-4" />} onClick={() => setAdding(true)}>{s("addAdmin")}</Button>
         </div>
@@ -245,12 +245,12 @@ function AdminsSection({ s }: { s: S }) {
                 const cannotDeactivate = isMe || lastActive;
                 return (
                   <Tr key={a._id}>
-                    <Td>
-                      <div className="font-medium">
-                        {a.name}
-                        {isMe ? <Badge variant="secondary" className="ml-2">{s("you")}</Badge> : null}
+                    <Td className="max-w-[18rem]">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate font-medium" title={a.name}>{a.name}</span>
+                        {isMe ? <Badge variant="secondary" className="shrink-0">{s("you")}</Badge> : null}
                       </div>
-                      <div className="text-xs text-ink-muted">{a.email}</div>
+                      <div className="truncate text-xs text-ink-muted" title={a.email}>{a.email}</div>
                     </Td>
                     <Td>
                       <Badge variant={a.isActive ? "success" : "danger"}>{s(a.isActive ? "active" : "inactive")}</Badge>
@@ -259,7 +259,7 @@ function AdminsSection({ s }: { s: S }) {
                     <Td>{fmt.dateTime(a.createdAt)}</Td>
                     <Td>{fmt.dateTime(a.updatedAt)}</Td>
                     <Td>
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex items-center gap-1">
                         <Button size="sm" variant="ghost" icon={<Pencil className="h-4 w-4" />} onClick={() => setEditing(a)}>
                           {t("common.edit")}
                         </Button>
@@ -367,7 +367,7 @@ function ResetPasswordForm({ s, admin, emailConfigured, onClose, onDone }: {
           <FormField label={s("confirmPassword")} required>
             <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
           </FormField>
-          <div className="flex justify-end gap-2 pt-2">
+          <div className="flex flex-wrap justify-end gap-2 pt-2">
             <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
             <Button type="submit" loading={busy} icon={<KeyRound className="h-4 w-4" />}>{s("setPassword")}</Button>
           </div>
@@ -429,7 +429,7 @@ function AddAdminModal({ s, open, onClose, onDone }: { s: S; open: boolean; onCl
         <FormField label={s("confirmPassword")} required>
           <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </FormField>
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
           <Button type="submit" loading={busy}>{s("addAdmin")}</Button>
         </div>
@@ -476,7 +476,7 @@ function EditAdminForm({ s, t, toast, admin, onClose, onDone }: {
       <form onSubmit={submit} className="space-y-3">
         <FormField label={t("common.fullName")} required><Input value={name} onChange={(e) => setName(e.target.value)} autoFocus /></FormField>
         <FormField label={t("common.email")} required><Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></FormField>
-        <div className="flex justify-end gap-2 pt-2">
+        <div className="flex flex-wrap justify-end gap-2 pt-2">
           <Button type="button" variant="secondary" onClick={onClose}>{t("common.cancel")}</Button>
           <Button type="submit" loading={busy} icon={<Save className="h-4 w-4" />}>{t("common.save")}</Button>
         </div>

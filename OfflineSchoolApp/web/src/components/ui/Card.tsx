@@ -30,7 +30,10 @@ export function Card({
         // as a surface lit from above rather than a flat fill; it is the same
         // treatment the dashboard tiles use, so panels and tiles look cut from
         // one material instead of merely sharing a border colour.
-        "rounded-card border border-line shadow-card",
+        // min-w-0: as a grid or flex item a card must be allowed to shrink below
+        // its content. Without it a table inside the card sets the column's
+        // minimum width, and on a phone the whole page grows to fit the table.
+        "min-w-0 rounded-card border border-line shadow-card",
         "bg-gradient-to-b from-surface to-[#fcfcfe]",
         padding && "p-5",
         className
@@ -60,7 +63,7 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("mb-4 flex items-start justify-between gap-4", className)}>
+    <div className={cn("mb-4 flex min-w-0 items-start justify-between gap-4", className)}>
       <div className="flex min-w-0 items-start gap-2.5">
         {/* A 2px accent stub against the title. One small deliberate mark per
             panel is what separates a designed header from a bold paragraph —

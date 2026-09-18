@@ -153,7 +153,7 @@ export default function PlatformDashboardPage() {
             <TBody>
               {rows.map((r) => (
                 <Tr key={r.schoolId}>
-                  <Td className="min-w-[12rem] max-w-sm whitespace-normal">
+                  <Td wrap className="min-w-[12rem] max-w-sm">
                     <Link to={`/platform/schools/${r.schoolId}`} className="font-medium text-ink hover:underline">
                       {r.name}
                     </Link>

@@ -127,7 +127,9 @@ export function MetricTile({
 }
 
 /**
- * The grid the tiles sit in. Two across on a phone, three from a tablet up,
+ * The grid the tiles sit in. One across on a phone narrower than 420px (two
+ * across left each figure 90px, and an amount broke inside its digits), two
+ * from there, three from a tablet up,
  * four once the content column passes about a thousand pixels, six on a wide
  * monitor. Four across at 1024px beside the sidebar left each tile 85px for
  * its figure, and FCFA amounts broke across three lines; three across is the
@@ -135,7 +137,7 @@ export function MetricTile({
  */
 export function MetricGrid({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={cn("grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6", className)}>
+    <div className={cn("grid grid-cols-1 gap-3 min-[420px]:grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6", className)}>
       {children}
     </div>
   );

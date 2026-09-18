@@ -12,7 +12,8 @@
     "api:check": "node scripts/check-api-paths.mjs",
     "check:normalisers": "node scripts/check-normalisers.mjs",
     "check:roles": "node scripts/check-role-labels.mjs",
-    "check:l10n": "node scripts/check-localization.mjs"
+    "check:l10n": "node scripts/check-localization.mjs",
+    "check:layout": "node scripts/check-platform-layout.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",

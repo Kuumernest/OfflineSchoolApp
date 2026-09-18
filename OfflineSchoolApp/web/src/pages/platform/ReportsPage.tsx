@@ -96,7 +96,7 @@ export default function ReportsPage() {
 
       {specs.map((spec) => (
         <Card key={spec.key} padding={false}>
-          <div className="flex items-center justify-between px-5 pt-4">
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-5 pt-4">
             <CardHeader title={spec.title} />
             <Button size="sm" variant="secondary" icon={<Download className="h-4 w-4" />} disabled={!rows.length}
               onClick={() => downloadCsv(
@@ -118,7 +118,9 @@ export default function ReportsPage() {
                 <TBody>
                   {rows.map((s) => (
                     <Tr key={s.schoolId}>
-                      {spec.render(spec.row(s)).map((v, i) => <Td key={i} numeric={i > 0}>{v}</Td>)}
+                      {spec.render(spec.row(s)).map((v, i) => (
+                        <Td key={i} numeric={i > 0} wrap={i === 0} className={i === 0 ? "min-w-[12rem] max-w-sm" : undefined}>{v}</Td>
+                      ))}
                     </Tr>
                   ))}
                   {totals && rows.length > 1 && (
