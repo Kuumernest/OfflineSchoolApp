@@ -166,106 +166,16 @@ const getExamStats = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
   const { classId, schoolId: qSchoolId } = req.query;
 
-  const schoolId = resolveSchoolId(req, qSchoolId);
-
-  const filter = { examId, deletedAt: null };
-  if (schoolId) filter.schoolId = schoolId;
-  if (classId)  filter.classId  = classId;
-
-  const results = await ResultSummary.find(filter).lean();
-
-  const totalStudents = results.length;
-  const passed = results.filter((r) => r.isPassing).length;
-  const failed = totalStudents - passed;
-
-  // Average / highest / lowest use each student's overall percentage (0-100),
-  // not the /20 average stored on the summary. r.average mixes scales when
-  // subjects have different maxScore, so a 12/20 average must not render as 12%.
-  const percentages = results
-    .map((r) => r.percentage)
-    .filter((p) => p != null && Number.isFinite(Number(p)))
-    .map(Number);
-  const average = percentages.length
-    ? Math.round((percentages.reduce((s, v) => s + v, 0) / percentages.length) * 100) / 100
-    : 0;
-  const highest = percentages.length ? Math.max(...percentages) : 0;
-  const lowest  = percentages.length ? Math.min(...percentages) : 0;
-  const passRate = totalStudents > 0
-    ? Math.round((passed / totalStudents) * 10000) / 100
-    : 0;
-
-  const gpas = results
-    .map((r) => r.gpa)
-    .filter((g) => g != null && Number.isFinite(Number(g)))
-    .map(Number);
-  const averageGpa = gpas.length
-    ? Math.round((gpas.reduce((s, v) => s + v, 0) / gpas.length) * 100) / 100
-    : 0;
-
-  const gradeDistribution = {};
-  for (const r of results) {
-    const g = r.overallGrade || "N/A";
-    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
-  }
-
-  // Subject analysis — aggregate per-subject numbers from every student's
-  // subjectBreakdown. Averages / highs / lows are percentages so the UI can
-  // render them alongside the pass rate without mixing scales.
-  const subjectAgg = new Map();
-  for (const r of results) {
-    for (const s of r.subjectBreakdown || []) {
-      if (s.isAbsent || s.isExempt || s.score == null) continue;
-      const key = String(s.subjectId || s.subjectName || "");
-      if (!key) continue;
-      if (!subjectAgg.has(key)) {
-        subjectAgg.set(key, {
-          subjectId:   s.subjectId || key,
-          subjectName: s.subjectName || key,
-          total:       0,
-          sum:         0,
-          highest:     -Infinity,
-          lowest:      Infinity,
-          passed:      0,
-        });
-      }
-      const agg = subjectAgg.get(key);
-      agg.total += 1;
-      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
-        ? Number(s.percentage)
-        : s.maxScore > 0
-          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
-          : 0;
-      agg.sum += pct;
-      if (pct > agg.highest) agg.highest = pct;
-      if (pct < agg.lowest)  agg.lowest  = pct;
-      if (s.isPassing) agg.passed += 1;
-    }
-  }
-  const subjectStats = [...subjectAgg.values()].map((a) => ({
-    subjectId:   a.subjectId,
-    subjectName: a.subjectName,
-    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
-    highest:     a.total > 0 ? a.highest : 0,
-    lowest:      a.total > 0 ? a.lowest  : 0,
-    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
-    total:       a.total,
-  }));
-
-  return res.json({
-    success: true,
-    data: {
-      totalStudents,
-      passed,
-      failed,
-      average,
-      highest,
-      lowest,
-      passRate,
-      averageGpa,
-      gradeDistribution,
-      subjectStats,
-    },
+  // The arithmetic lives in services/classStats.service.js, where the report
+  // card reads it too. It moved there unchanged: same filter, same percentage
+  // scale, same zeroes on an empty class, same subject breakdown.
+  const data = await classStats.examStatistics({
+    schoolId: resolveSchoolId(req, qSchoolId),
+    examId,
+    classId,
   });
+
+  return res.json({ success: true, data });
 });
 
 // ─────────────────────────────────────────────────────────
@@ -417,6 +327,16 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   const classTeacherName = cardClassId
     ? (await Class.findOne({ _id: String(cardClassId), schoolId })
         .select("classTeacherName").lean().catch(() => null))?.classTeacherName || null
+    : null;
+
+  /*
+   * How the class did: the same function GET /:examId/stats answers with,
+   * never a second implementation, and scoped to this exam's school — which
+   * loadScopedExam settled above — so a card can no more reach another
+   * school's marks than the pages that show them can.
+   */
+  const cardClassStats = cardClassId
+    ? await classStats.sequenceClassStats({ schoolId, examId, classId: cardClassId })
     : null;
 
   // ── Student info + school grading settings (requirements §1, §3) ──────────
@@ -660,6 +580,27 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     };
   });
 
+  /*
+   * Who teaches each subject.
+   *
+   * The exam subject names a teacher when whoever set the exam up said so,
+   * and most of the time nobody did — so the card fell back to nothing. The
+   * assignment register (TeacherAssignment, the same rows the permission
+   * layer reads) is the authority on who teaches a subject to a class, and
+   * it fills the gaps. Two queries for the whole card; see subjectTeachers.
+   */
+  const assignedTeachers = await subjectTeachers({
+    schoolId,
+    classId:    cardClassId,
+    subjectIds: subjectRows.map((r) => r.subjectId),
+  });
+  for (const r of subjectRows) {
+    r.teacherName = r.teacherName || assignedTeachers.get(String(r.subjectId)) || null;
+  }
+  // A sequence card's own columns are the CA and the paper it was marked
+  // from — they are already on each row (caScore / testScore) and the
+  // renderer shows them when the school marks both ways.
+
   const activeRows    = subjectRows.filter(
     (r) => !r.isAbsent && !r.isExempt && r.score != null
   );
@@ -783,12 +724,24 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
         : null,
       computed: {
         totalCoefficients: totalCoeff,
+        // What the coefficients were applied to: the sum the average above
+        // is divided by them from. Exposed rather than recomputed anywhere
+        // else, so the table's last row and the average cannot disagree.
+        totalWeighted:     Math.round(totalWeighted * 100) / 100,
         weightedAverage,
         outOf: 20,
       },
+      // The class this pupil sat in, on the scale the exam statistics use
+      // (percentages — see services/classStats.service.js). Null where there
+      // is nothing to say; never a zero standing in for an unknown.
+      classStats:  cardClassStats,
 };
 
-  return { ok: true, data };
+  // The school this card belongs to — the scoped exam's, resolved above. The
+  // HTML route loads the letterhead, template, verification code and archive
+  // by it; a super_admin's token names no school, so reading the token there
+  // printed "SCHOOL" with no logo, no template, no code, and archived nothing.
+  return { ok: true, data, schoolId };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -834,7 +787,8 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // annual cards reach the same one — see the note there.
 const { coefficientFromWeight } = require("../services/subjectCoefficient.service");
 const { cardVerification } = require("../services/reportCardData.service");
-const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl } =
+const classStats = require("../services/classStats.service");
+const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers } =
   require("../services/reportCardData.service");
 
 /**
@@ -908,10 +862,15 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     });
   }
 
+  // The scoped exam's school, not the token's: the same school every read
+  // above was scoped to, and the only one a super_admin acting on a selected
+  // school actually has. For a school user the two are the same id.
+  const schoolId = built.schoolId;
+
   // Logo, motto and the official header's delegations come from the school's
   // settings (§2) — never hard-coded, and loaded by the one function all three
   // card routes share so they cannot select different fields from each other.
-  const letterhead = await loadSchoolForCard(req.user?.schoolId, req);
+  const letterhead = await loadSchoolForCard(schoolId, req);
   const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
 
   /**
@@ -925,7 +884,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
    */
   const verify = await cardVerification({
     data:        built.data,
-    schoolId:    req.user?.schoolId,
+    schoolId,
     studentId,
     documentKey: examId,
     req,
@@ -934,7 +893,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // Per-school template drives the layout when the school has one; the
   // built-in layout is the fallback, including when a template fails to render.
   const template = await loadReportTemplate(
-    req.user?.schoolId,
+    schoolId,
     req.query.templateId
   );
 
@@ -948,7 +907,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   });
 
   archiveGeneratedReport({
-    schoolId:  req.user?.schoolId,
+    schoolId,
     examId,
     studentId,
     data:      built.data,

@@ -15,6 +15,8 @@ const { scheduledTeachers } = require("../utils/teacherSchedule");
 // What a register entry used to say, for the one record type where
 // last-write-wins used to leave no trace at all.
 const AttendanceChangeLog = require("../db/models/AttendanceChangeLog");
+const { summariseStudentAttendance } =
+  require("../services/attendanceSummary.service");
 
 const notify = require("../services/notification");
 
@@ -1591,11 +1593,19 @@ router.get("/report/student/:studentId", staffRead, async (req, res) => {
       if (r.status in byDate[r.date]) byDate[r.date][r.status] += 1;
     }
 
-    const totalPresent = records.filter((r) => r.status === "present").length;
-    const totalLate    = records.filter((r) => r.status === "late").length;
-    const totalExcused = records.filter((r) => r.status === "excused").length;
-    const totalAbsent  = records.filter((r) => r.status === "absent").length;
-    const totalRecords = records.length;
+    // The same counting the report card does, from the same place, so a
+    // bulletin and this report never disagree about how much school a pupil
+    // missed. Row counts here as before — a register is marked per period —
+    // with the per-day figures beside them for anything that says "days".
+    const summaries = await summariseStudentAttendance({
+      schoolId, studentIds: [studentId], from: startDate, to: endDate,
+    });
+    const counted = summaries.get(String(studentId));
+    const totalPresent = counted?.records.present ?? 0;
+    const totalLate    = counted?.records.late    ?? 0;
+    const totalExcused = counted?.records.excused ?? 0;
+    const totalAbsent  = counted?.records.absent  ?? 0;
+    const totalRecords = counted?.records.total   ?? 0;
 
     return res.json({
       success: true,
@@ -1611,6 +1621,9 @@ router.get("/report/student/:studentId", staffRead, async (req, res) => {
         rate:      totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : null,
         lateCount: totalLate,
         excusedCount: totalExcused,
+        // Distinct calendar days, for a reader who wants days rather than
+        // periods. The row counts above are unchanged.
+        days:      counted?.days ?? { present: 0, absent: 0, late: 0, excused: 0, away: 0 },
       },
       byPeriod:  Object.values(byPeriod),
       bySubject: Object.values(bySubject),

@@ -275,123 +275,224 @@ const VERIFY_BLOCK_CSS = `
 `;
 
 /**
- * The outcome card: the figures and the verdict that summarises them.
+ * What the staff wrote, at the foot of the document where it is signed.
  *
- * Exported for the same reason the header is — the templates schools already
- * saved carry their own copy of the markup, and the repair has to be able to
- * put the identical block into them.
+ * These were two panels in the middle of the card, beside the absences,
+ * which put a teacher's sentence between the marks and the totals they
+ * summarise. They belong at the end: marks, totals, decision, then what the
+ * people responsible for the pupil have to say, then the code that proves
+ * the document.
+ *
+ * The head's box is deliberately empty — nothing in this application records
+ * it — with a rule to write and sign on.
  */
-/**
- * The rules that keep each card on ONE row, appendable on their own.
- *
- * The templates schools saved already carry the folded cards; what they carry
- * with them is the first version of these rules, which wrapped. A flex-basis
- * wide enough to be refused — 340px for the figures, 240 for the verdict, 200
- * per remark panel — is a wrap instruction in disguise, so the verdict dropped
- * below the figures and the second remark below the first. Each "one card" was
- * two or three rows in a box.
- *
- * Appended rather than edited into place: CSS of equal specificity later in the
- * sheet wins, so adding these overrides the earlier ones without the repair
- * having to find and rewrite rules inside a school's stylesheet.
- */
-const ONE_ROW_CSS = `
-  /* ── One row per card ──────────────────────────────────
-     Basis zero, no wrap: the cells divide the width they have instead of
-     asking for a width the panel cannot give them. */
-  .summary-section { flex-wrap: nowrap; gap: 10px; }
-  .summary-figures { display: flex; flex-wrap: nowrap; gap: 8px;
-                     flex: 1 1 0; min-width: 0; }
-  .summary-figures .summary-item { flex: 1 1 0; min-width: 0; }
-  .summary-verdict { flex-wrap: nowrap; gap: 8px; flex: 0 1 auto;
-                     max-width: 46%; min-width: 0; padding-left: 10px; }
+const REMARKS_BLOCK_HTML = `  <!-- What the staff said, immediately before the verification strip. -->
+  <div class="remarks">
+    <div class="remark-box">
+      <div class="remark-head">{{label_teacher_remark}}</div>
+      <div class="remark-body">{{teacher_comment}}</div>
+      <div class="remark-sign">{{class_teacher}}</div>
+    </div>
+    <div class="remark-box">
+      <div class="remark-head">{{label_principal_remark}}</div>
+      <div class="remark-body">{{principal_comment}}</div>
+      <div class="remark-sign">{{principal_name}}</div>
+    </div>
+  </div>`;
 
-  .closing-section { flex-wrap: nowrap; gap: 10px; }
-  .closing-absences { flex: 0 0 86px; }
-  .closing-section .remarks-section { flex: 1 1 0; min-width: 0; }
+/** The remarks' own rules: two boxes on a row, each with a rule to sign on. */
+const REMARKS_BLOCK_CSS = `
+  /* ── The remarks, above the verification strip ─────────
+     Short on purpose: a box a teacher can write two lines in, not a page of
+     empty paper between the marks and the code that proves them. */
+  .remarks {
+    display:           flex;
+    gap:               10px;
+    margin-bottom:     12px;
+    page-break-inside: avoid;
+    break-inside:      avoid;
+  }
+
+  .remark-box {
+    flex:          1 1 0;
+    min-width:     0;
+    border:        1px solid #e5e7eb;
+    border-radius: 6px;
+    padding:       8px 10px;
+  }
+
+  .remark-head {
+    font-size:      9.5px;
+    font-weight:    bold;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color:          #374151;
+    margin-bottom:  4px;
+  }
+
+  .remark-body {
+    font-size:   10.5px;
+    color:       #374151;
+    line-height: 1.45;
+    min-height:  30px;
+  }
+
+  .remark-sign {
+    margin-top:  10px;
+    border-top:  1px solid #d1d5db;
+    padding-top: 3px;
+    font-size:   9px;
+    color:       #9ca3af;
+  }
+
+  /* The teacher of each subject, and the totals the table ends with. */
+  .subjects-table .teacher-cell { color: #4b5563; font-size: 10.5px; }
+  .subjects-table tfoot td { border-top: 1px solid #d1d5db; background: #f9fafb;
+                             font-weight: bold; }
+  .subjects-table .status-pass { color: #059669; }
+  .subjects-table .status-fail { color: #dc2626; }
+
+  @media screen and (max-width: 560px) {
+    .remarks { flex-direction: column; }
+  }
 
   @media print {
-    .summary-section   { gap: 8px; }
-    .summary-figures   { gap: 6px; }
-    .summary-verdict   { max-width: 44%; padding-left: 8px; }
-    .closing-section   { gap: 8px; }
-    .closing-absences  { flex: 0 0 70px; }
+    .remarks     { gap: 8px; margin-bottom: 8px; }
+    .remark-box  { padding: 6px 8px; }
+    .remark-head { font-size: 8px; margin-bottom: 3px; }
+    .remark-body { font-size: 9.5px; min-height: 24px; line-height: 1.35; }
+    .remark-sign { margin-top: 8px; font-size: 8px; }
+    .subjects-table .teacher-cell { font-size: 9px; }
   }
 `;
 
-const OUTCOME_BLOCK_HTML = `  <!-- The outcome, in one card.
-
-       Average, position, grade, class size and the verdict all answer the same
-       question — how did this pupil do — and they were spread over two blocks
-       with a gap between them, which read as two unrelated things and cost a
-       band of the page. The verdict sits to the right of the figures it
-       summarises.
-
-       Pass/fail is NOT a promotion: a pupil passing this exam has not been
-       promoted, and saying so on a sequence card tells a family something no
-       council has decided. The promotion decision keeps its own block below
-       and appears on the annual card alone. -->
-  <div class="summary-section">
-    <div class="summary-figures">
-      <div class="summary-item">
-        <div class="val">{{average}}</div>
-        <div class="lbl">Average /20</div>
-      </div>
-      <div class="summary-item">
-        <div class="val">{{position}}</div>
-        <div class="lbl">Position</div>
-      </div>
-      <div class="summary-item">
-        <div class="val">{{grade}}</div>
-        <div class="lbl">Grade</div>
-      </div>
-      <div class="summary-item">
-        <div class="val">{{total_students}}</div>
-        <div class="lbl">In Class</div>
-      </div>
-    </div>
-
-    <div class="summary-verdict">
-      {{if isPassing}}
-        <div class="verdict-pill pass">✓ PASSED</div>
-      {{else}}
-        <div class="verdict-pill fail">✗ NOT PASSED</div>
+/**
+ * The information panel: the block the printed form carries under the marks.
+ *
+ * Four sections — what the pupil did, what the class did, how much school the
+ * pupil missed, and the conduct the class teacher fills in by hand. Every
+ * figure is a token the card's data builder fills; nothing here is computed,
+ * and nothing here is invented. The conduct rows are deliberately empty: this
+ * application records no conduct, and a printed box to tick is the truthful
+ * way to carry a section it cannot fill.
+ *
+ * Exported on its own so the repair can put it into the templates schools
+ * saved before it existed.
+ */
+const INFO_PANEL_HTML = `  <!-- What the pupil did, what the class did, what the register says, and
+       the conduct the class teacher completes by hand. -->
+  <div class="info-panel">
+    <div class="panel-col">
+      <div class="panel-head">{{label_performance}}</div>
+      <div class="panel-row"><span class="panel-lbl">{{label_rank}}</span><span class="panel-val">{{position}} / {{total_students}}</span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_average}}</span><span class="panel-val">{{average}} / 20</span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_grade}}</span><span class="panel-val">{{grade}}</span></div>
+      {{if is_annual}}
+        {{if promotion_status}}
+          <div class="panel-row"><span class="panel-lbl">{{label_decision}}</span><span class="panel-val">{{promotion_status}}</span></div>
+        {{endif}}
       {{endif}}
-      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}
+    </div>
+    <div class="panel-col">
+      <div class="panel-head">{{label_class_profile}}</div>
+      <div class="panel-row"><span class="panel-lbl">{{label_class_average}}</span><span class="panel-val">{{class_average}}</span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_best}}</span><span class="panel-val">{{class_best}}</span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_lowest}}</span><span class="panel-val">{{class_lowest}}</span></div>
+    </div>
+    <div class="panel-col">
+      <div class="panel-head">{{label_conduct}}</div>
+      <div class="panel-row"><span class="panel-lbl">{{label_work}}</span><span class="panel-write"></span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_behaviour}}</span><span class="panel-write"></span></div>
+      <div class="panel-row"><span class="panel-lbl">{{label_observation}}</span><span class="panel-write"></span></div>
+      <div class="panel-note">{{label_fill_by_hand}}</div>
     </div>
   </div>`;
 
-/** Absences and the two staff remarks, which used to be three bands. */
-const CLOSING_BLOCK_HTML = `  <!-- Absences and what the staff said, in one card.
+/** The panel's rules, in the card's own borders and type. */
+const INFO_PANEL_CSS = `
+  /* ── The information panel ─────────────────────────────
+     A grid rather than a table, so a long French label wraps inside its own
+     cell instead of widening the column and pushing the panel past the
+     sheet. One border around the four, hairlines between them. */
+  .info-panel {
+    display:               grid;
+    grid-template-columns: repeat(3, 1fr);
+    border:                1px solid #e5e7eb;
+    border-radius:         6px;
+    overflow:              hidden;
+    margin-bottom:         12px;
+    page-break-inside:     avoid;
+    break-inside:          avoid;
+  }
 
-       Attendance was four figures — days open, present, absent, rate — and
-       three of them are arithmetic on the fourth. A parent reads a report card
-       to learn how many days their child missed; the school's opening count
-       and a percentage derived from it belong on an attendance report, not
-       here. So: absences, and the two remarks that used to sit in a separate
-       band below with a heading and a gap of their own. -->
-  <div class="closing-section">
-    <div class="closing-absences">
-      <div class="val">{{days_absent}}</div>
-      <div class="lbl">Days absent</div>
-    </div>
+  .panel-col {
+    border-right: 1px solid #e5e7eb;
+    padding:      8px 10px;
+    min-width:    0;
+  }
 
-    <div class="remarks-section">
-      <h4>CLASS TEACHER'S REMARK</h4>
-      <p>{{teacher_comment}}</p>
-      <div class="signature-row">
-        <span class="signature-line">{{class_teacher}}</span>
-      </div>
-    </div>
+  .panel-col:last-child { border-right: 0; }
 
-    <div class="remarks-section">
-      <h4>PRINCIPAL'S REMARK</h4>
-      <p>{{principal_comment}}</p>
-      <div class="signature-row">
-        <span class="signature-line">{{principal_name}}</span>
-      </div>
-    </div>
-  </div>`;
+  .panel-head {
+    font-size:      9.5px;
+    font-weight:    bold;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color:          #374151;
+    text-align:     center;
+    border-bottom:  1px solid #e5e7eb;
+    padding-bottom: 4px;
+    margin-bottom:  6px;
+  }
+
+  .panel-row {
+    display:         flex;
+    align-items:     baseline;
+    justify-content: space-between;
+    gap:             8px;
+    font-size:       10px;
+    line-height:     1.45;
+  }
+
+  .panel-row + .panel-row { margin-top: 3px; }
+  .panel-lbl { color: #6b7280; min-width: 0; }
+  .panel-val { color: #111827; font-weight: bold; white-space: nowrap; }
+
+  /* Filled in by hand on the printed card: an empty ruled box the size of a
+     tick, rather than a blank that reads as missing data. */
+  .panel-write {
+    flex:          none;
+    width:         34px;
+    height:        13px;
+    border:        1px solid #9ca3af;
+    border-radius: 2px;
+    background:    #fff;
+  }
+
+  .panel-note {
+    margin-top:  6px;
+    font-size:   8px;
+    color:       #9ca3af;
+    font-style:  italic;
+    line-height: 1.3;
+  }
+
+  @media screen and (max-width: 560px) {
+    .info-panel { grid-template-columns: 1fr; }
+    .panel-col            { border-right: 0; border-bottom: 1px solid #e5e7eb; }
+    .panel-col:last-child { border-bottom: 0; }
+  }
+
+  /* Carried with the rules rather than in the print block, so a sheet that
+     already has @page — every template repaired before today — gets them. */
+  @media print {
+    .info-panel { margin-bottom: 8px; }
+    .panel-col   { padding: 5px 7px; }
+    .panel-head  { font-size: 8px; padding-bottom: 3px; margin-bottom: 4px; }
+    .panel-row   { font-size: 8.5px; line-height: 1.3; }
+    .panel-note  { font-size: 7px; }
+  }
+`;
 
 const OFFICIAL_HEADER_HTML = `  <!-- The official header: English margin, school, French margin. -->
   <div class="school-header">
@@ -550,210 +651,9 @@ ${OFFICIAL_HEADER_CSS}
     background: #f9fafb;
   }
 
-  /* ── The outcome card ──────────────────────────────────
-     ONE ROW: average, position, grade, class size, verdict.
+${INFO_PANEL_CSS}
 
-     This wrapped. The figures took a flex-basis of 340px and the verdict 240,
-     which at any ordinary card width is wider than the panel — so the verdict
-     dropped onto a second line and the "one card" was two rows in a box.
-     nowrap, and a basis of zero so the five cells divide the width they have
-     instead of asking for a width they cannot get. */
-  .summary-section {
-    display:       flex;
-    align-items:   center;
-    flex-wrap:     nowrap;
-    gap:           10px;
-    background:    #f0f4ff;
-    border-radius: 6px;
-    padding:       10px;
-    margin-bottom: 12px;
-  }
-
-  .summary-figures {
-    display:     flex;
-    flex-wrap:   nowrap;
-    text-align:  center;
-    gap:         8px;
-    flex:        1 1 0;
-    min-width:   0;
-  }
-
-  .summary-figures .summary-item {
-    flex:      1 1 0;
-    min-width: 0;
-  }
-
-  .summary-verdict {
-    display:      flex;
-    align-items:  center;
-    flex-wrap:    nowrap;
-    gap:          8px;
-    flex:         0 1 auto;
-    max-width:    46%;
-    min-width:    0;
-    padding-left: 10px;
-    border-left:  1px solid #d7ddf0;
-  }
-
-  /* ── The closing card ──────────────────────────────────
-     ONE ROW: days absent, class teacher's remark, principal's remark.
-
-     Same fault as above — the remark panels asked for 200px each beside the
-     absences box, so the second one wrapped underneath. */
-  .closing-section {
-    display:       flex;
-    align-items:   stretch;
-    flex-wrap:     nowrap;
-    gap:           10px;
-    margin-bottom: 12px;
-  }
-
-  .closing-absences {
-    flex:          0 0 86px;
-    text-align:    center;
-    background:    #f9fafb;
-    border:        1px solid #e5e7eb;
-    border-radius: 6px;
-    padding:       10px 6px;
-  }
-
-  .closing-absences .val {
-    font-size:   22px;
-    font-weight: bold;
-    color:       #b45309;
-    line-height: 1.1;
-  }
-
-  .closing-absences .lbl {
-    font-size:  10px;
-    color:      #6b7280;
-    margin-top: 3px;
-  }
-
-  .closing-section .remarks-section {
-    flex:          1 1 0;
-    min-width:     0;
-    margin-bottom: 0;
-  }
-
-  .summary-item .val {
-    font-size:   20px;
-    font-weight: bold;
-    color:       #2563EB;
-  }
-
-  .summary-item .lbl {
-    font-size:  10px;
-    color:      #6b7280;
-    margin-top: 2px;
-  }
-
-  /* ── Pass / fail banner ────────────────────────────── */
-  .pass-banner {
-    text-align:    center;
-    font-size:     16px;
-    font-weight:   bold;
-    padding:       10px;
-    border-radius: 6px;
-    margin-bottom: 14px;
-  }
-
-  .pass-banner.pass {
-    background: #d1fae5;
-    color:      #059669;
-  }
-
-  .pass-banner.fail {
-    background: #fee2e2;
-    color:      #dc2626;
-  }
-
-  /* ── Verdict and remark, on one row ────────────────────
-     The verdict used to be a full-width band with the remark inside it, which
-     wrapped to two and three lines on any remark longer than a few words. That
-     block plus the summary boxes above it was enough height to push the
-     verification block, and the code a registrar types to check the card, off
-     the foot of the page. A short pill and the remark beside it says the same
-     thing in one line. */
-  .verdict {
-    display:       flex;
-    align-items:   center;
-    gap:           10px;
-    flex-wrap:     wrap;
-    margin-bottom: 12px;
-  }
-
-  .verdict-pill {
-    flex:          none;
-    padding:       6px 12px;
-    border-radius: 999px;
-    font-size:     12px;
-    font-weight:   bold;
-    white-space:   nowrap;
-  }
-
-  .verdict-pill.pass { background: #d1fae5; color: #059669; }
-  .verdict-pill.fail { background: #fee2e2; color: #dc2626; }
-
-  .verdict-remark {
-    flex:        1;
-    min-width:   220px;
-    font-size:   11px;
-    font-style:  italic;
-    color:       #4b5563;
-    line-height: 1.5;
-  }
-
-  /* ── Remarks sections ──────────────────────────────── */
-  .remarks-section {
-    border:        1px solid #e5e7eb;
-    border-radius: 6px;
-    padding:       12px;
-    margin-bottom: 12px;
-  }
-
-  .remarks-section h4 {
-    margin:    0 0 6px;
-    font-size: 12px;
-    color:     #374151;
-  }
-
-  .remarks-section p {
-    font-size:   12px;
-    color:       #374151;
-    line-height: 1.5;
-  }
-
-  .signature-row { margin-top: 14px; }
-
-  .signature-line {
-    margin-top:  20px;
-    border-top:  1px solid #333;
-    padding-top: 4px;
-    font-size:   10px;
-    color:       #9ca3af;
-    display:     inline-block;
-  }
-
-  /* ── Attendance table ──────────────────────────────── */
-  .attendance-table {
-    width:           100%;
-    border-collapse: collapse;
-    margin-bottom:   16px;
-    font-size:       11px;
-  }
-
-  .attendance-table th,
-  .attendance-table td {
-    border:      1px solid #e5e7eb;
-    padding:     5px 8px;
-    text-align:  center;
-  }
-
-  .attendance-table thead {
-    background: #f3f4f6;
-    font-weight: bold;
-  }
+${REMARKS_BLOCK_CSS}
 
   /* ── Footer ────────────────────────────────────────── */
   .footer {
@@ -815,18 +715,9 @@ ${OFFICIAL_HEADER_HTML}
 
   {{subjects_table}}
 
-${OUTCOME_BLOCK_HTML}
+${INFO_PANEL_HTML}
 
-  <!-- The promotion decision: the final annual report card only. -->
-  {{if is_annual}}
-    {{if promotion_status}}
-      <div class="pass-banner pass">
-        {{promotion_status}}
-      </div>
-    {{endif}}
-  {{endif}}
-
-${CLOSING_BLOCK_HTML}
+${REMARKS_BLOCK_HTML}
 
   <!-- Footer -->
   <div class="footer">
@@ -845,6 +736,6 @@ module.exports = {
   DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS,
   OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
   VERIFY_BLOCK_HTML, VERIFY_BLOCK_CSS,
-  OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML, ONE_ROW_CSS,
+  INFO_PANEL_HTML, INFO_PANEL_CSS, REMARKS_BLOCK_HTML, REMARKS_BLOCK_CSS,
   PRINT_CSS,
 };

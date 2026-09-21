@@ -357,6 +357,65 @@ const check = (label, actual, expected) => {
   r = await maths.post("/teacher/exams/ex-a/marks", { marks: [{ studentId: "st-a1", marksObtained: 15, totalMarks: 20 }] });
   check("a teacher of the class → 200", r.status, 200);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- the printable card is the scoped exam's school, whoever asks ---");
+  //
+  // A super_admin's token names no school; the console sends the selected one
+  // as ?schoolId. The marks already followed it (loadScopedExam), but the
+  // letterhead, template, verification code and archive read the token and so
+  // printed "SCHOOL", no logo, the built-in layout, no code — and archived
+  // nothing. Fixtures: Alpha has a name and, below, a default template; the
+  // seeded schools carry no logo, so the logo itself is not asserted.
+  const DocumentVerification = mongoose.model("DocumentVerification");
+  await ResultSummary.create({
+    _id: "sum-a3", examId: "ex-a4", studentId: "st-a3", classId: "form4b", schoolId: A,
+    average: 12, classPosition: 1, isPublished: true, subjects: [],
+  });
+  await ReportTemplate.create({
+    _id: "tpl-a", schoolId: A, name: "Alpha layout", isDefault: true, css: "",
+    html: '<div class="alpha-layout">{{school_name}} — {{student_name}}</div>',
+  });
+  const archived = async (examId, studentId) => {
+    // The archive is fire-and-forget; give it a moment.
+    for (let i = 0; i < 20; i++) {
+      const row = await GeneratedReport.findOne({ examId, studentId }).lean();
+      if (row) return row;
+      await new Promise((res) => setTimeout(res, 50));
+    }
+    return null;
+  };
+
+  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}&templateId=builtin`);
+  check("the super admin, naming Alpha, gets the built-in card → 200", [r.status, r.body?.data?.source], [200, "builtin"]);
+  let html = r.body?.data?.html ?? "";
+  check("  headed and footed with Alpha's name, not the placeholder",
+    [html.includes("Alpha Academy"), html.includes(">School<"), html.includes("School — Official")], [true, false, false]);
+  const dv = await DocumentVerification.findOne({ examId: "ex-a4", studentId: "st-a3" }).lean();
+  check("  a verification code was issued as Alpha's and printed on the card",
+    [dv?.schoolId, Boolean(dv?.code), html.includes("verify-code")], [A, true, true]);
+  let frozen = await archived("ex-a4", "st-a3");
+  check("  the archived copy belongs to Alpha", [frozen?.schoolId, frozen?.templateId], [A, null]);
+
+  await GeneratedReport.deleteOne({ examId: "ex-a4", studentId: "st-a3" });
+  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${A}`);
+  html = r.body?.data?.html ?? "";
+  check("naming Alpha without a template id → Alpha's default template", [r.status, r.body?.data?.source, r.body?.data?.templateId], [200, "template", "tpl-a"]);
+  check("  rendered with Alpha's name inside Alpha's layout", [html.includes("alpha-layout"), html.includes("Alpha Academy")], [true, true]);
+  frozen = await archived("ex-a4", "st-a3");
+  check("  archived as Alpha's, from that template", [frozen?.schoolId, frozen?.templateId], [A, "tpl-a"]);
+  check("  one verification record, still Alpha's", (await DocumentVerification.find({ examId: "ex-a4", studentId: "st-a3" }).lean()).map((d) => d.schoolId), [A]);
+
+  r = await root.get(`/results/ex-a4/student/st-a3/reportcard/html?schoolId=${B}`);
+  check("naming Beta for Alpha's exam → 404, nothing rendered as Beta's", [r.status, (r.body?.data?.html ?? "").includes("Beta")], [404, false]);
+  r = await adminB.get("/results/ex-a4/student/st-a3/reportcard/html");
+  check("Beta's admin → 404", r.status, 404);
+  r = await root.get("/results/ex-a4/student/st-a3/reportcard/html");
+  check("the super admin naming no school: the exam's own school scopes the card",
+    [r.status, r.body?.data?.templateId, (r.body?.data?.html ?? "").includes("Alpha Academy")], [200, "tpl-a", true]);
+  r = await adminA.get("/results/ex-a4/student/st-a3/reportcard/html");
+  check("Alpha's own admin, as before", [r.status, r.body?.data?.templateId, (r.body?.data?.html ?? "").includes("Alpha Academy")], [200, "tpl-a", true]);
+  check("  and still one archive row, Alpha's", (await GeneratedReport.find({ examId: "ex-a4", studentId: "st-a3" }).lean()).map((g) => g.schoolId), [A]);
+
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);
 

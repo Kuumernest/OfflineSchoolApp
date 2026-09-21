@@ -62,9 +62,9 @@ const fs       = require("fs");
 const ReportTemplate = require("../src/db/models/ReportTemplate");
 const { OFFICIAL_HEADER_HTML, OFFICIAL_HEADER_CSS,
         VERIFY_BLOCK_HTML,  VERIFY_BLOCK_CSS,
-        OUTCOME_BLOCK_HTML, CLOSING_BLOCK_HTML, ONE_ROW_CSS,
-        PRINT_CSS } =
-  require("../src/print/defaultReportTemplate");
+        INFO_PANEL_HTML,    INFO_PANEL_CSS,
+        REMARKS_BLOCK_HTML, REMARKS_BLOCK_CSS,
+        PRINT_CSS } = require("../src/print/defaultReportTemplate");
 const { renderReportCard } = require("../src/services/reportHtml.service");
 
 const APPLY  = process.argv.includes("--apply");
@@ -113,154 +113,6 @@ const findIsPassingBlock = (html) => {
     }
   }
   return null;
-};
-
-/** The annual-only promotion block, matching the current seed. */
-const PROMOTION_BLOCK = `
-
-  <!-- The promotion decision: the final annual report card only. -->
-  {{if is_annual}}
-    {{if promotion_status}}
-      <div class="pass-banner pass">
-        {{promotion_status}}
-      </div>
-    {{endif}}
-  {{endif}}`;
-
-/**
- * @returns {{ status: string, html?: string, note?: string }}
- *   repaired      | the banner was rewritten and the promotion block added
- *   already-fixed | it gates on is_annual already; nothing to do
- *   no-banner     | no {{if isPassing}} block; not ours to touch
- *   no-promotion  | it has the block, but says nothing about promotion
- *   unbalanced    | the block does not close; reported, never guessed at
- */
-const promotionPass = (html) => {
-  if (html.includes("{{if is_annual}}")) {
-    return { status: "already-fixed" };
-  }
-
-  const block = findIsPassingBlock(html);
-  if (!block) {
-    return html.includes("{{if isPassing}}")
-      ? { status: "unbalanced", note: "{{if isPassing}} has no matching {{endif}}" }
-      : { status: "no-banner" };
-  }
-  if (!/PROMOTED/i.test(block.body)) {
-    return { status: "no-promotion", note: "the banner does not mention promotion" };
-  }
-
-  // Only inside the block. "NOT PROMOTED" becomes "NOT PASSED" by the same
-  // replacement, which is why it is not handled separately.
-  const fixedBody = block.body.replace(/PROMOTED/g, "PASSED");
-
-  return {
-    status: "repaired",
-    html: html.slice(0, block.start) + fixedBody + PROMOTION_BLOCK + html.slice(block.end),
-  };
-};
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SECOND PASS: THE VERDICT OFF ITS OWN ROW
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** The rules the rearranged markup needs, appended to a template's own CSS. */
-const LAYOUT_CSS = `
-
-  /* ── Verdict and remark, on one row ────────────────────
-     Added by scripts/repair-report-templates.js. The verdict used to be a
-     full-width band with the remark inside it: it wrapped to several lines and
-     pushed the verification code off the foot of the page. */
-  .verdict {
-    display:       flex;
-    align-items:   center;
-    gap:           10px;
-    flex-wrap:     wrap;
-    margin-bottom: 12px;
-  }
-
-  .verdict-pill {
-    flex:          none;
-    padding:       6px 12px;
-    border-radius: 999px;
-    font-size:     12px;
-    font-weight:   bold;
-    white-space:   nowrap;
-  }
-
-  .verdict-pill.pass { background: #d1fae5; color: #059669; }
-  .verdict-pill.fail { background: #fee2e2; color: #dc2626; }
-
-  .verdict-remark {
-    flex:        1;
-    min-width:   220px;
-    font-size:   11px;
-    font-style:  italic;
-    color:       #4b5563;
-    line-height: 1.5;
-  }`;
-
-/**
- * A pass/fail band, and only one that has no markup of its own inside it.
- *
- * A school that put a table or a nested div in its banner gets left alone: the
- * indentation and the structure are then its own design, and rebuilding the
- * block would be rewriting the document rather than repairing it.
- */
-const BANNER_RE =
-  /([ \t]*)<div class="pass-banner (pass|fail)"\s*>([\s\S]*?)<\/div>/g;
-
-/** Only a real dash divides the verdict from the remark. Never a hyphen: a
- *  remark may well contain one, and splitting on it would cut a sentence. */
-const DASH_RE = /\s*(?:&mdash;|&#8212;|&ndash;|—|–)\s*/;
-
-/**
- * Move the remark out of the band and put it beside a pill.
- *
- * @returns {{ status: string, html?: string, count?: number, note?: string }}
- *   repaired      | at least one band was rearranged
- *   already-fixed | it is a pill already, or its band holds no remark to move
- *   no-banner     | there is no {{if isPassing}} block here
- *   unbalanced    | the block does not close
- */
-const layoutPass = (html) => {
-  const block = findIsPassingBlock(html);
-  if (!block) {
-    return html.includes("{{if isPassing}}")
-      ? { status: "unbalanced", note: "{{if isPassing}} has no matching {{endif}}" }
-      : { status: "no-banner" };
-  }
-  if (block.body.includes("verdict-pill")) return { status: "already-fixed" };
-
-  // The template's own line endings, not this file's: these rows came out of a
-  // database and may well be LF inside a CRLF repository.
-  const eol = block.body.includes("\r\n") ? "\r\n" : "\n";
-
-  let count = 0;
-  const body = block.body.replace(BANNER_RE, (match, indent, cls, inner) => {
-    if (inner.includes("<")) return match;              // markup of its own
-    const parts   = inner.split(DASH_RE);
-    const verdict = (parts[0] || "").trim();
-    const remark  = parts.slice(1).join(" ").trim();
-
-    // Nothing to unstack unless the band really is carrying the remark.
-    if (!verdict || !remark.includes("{{remark}}")) return match;
-
-    count += 1;
-    return [
-      `${indent}<div class="verdict">`,
-      `${indent}  <div class="verdict-pill ${cls}">${verdict}</div>`,
-      `${indent}  {{if remark}}<div class="verdict-remark">${remark}</div>{{endif}}`,
-      `${indent}</div>`,
-    ].join(eol);
-  });
-
-  if (!count) return { status: "already-fixed" };
-  return {
-    status: "repaired",
-    count,
-    html: html.slice(0, block.start) + body + html.slice(block.end),
-  };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,10 +190,6 @@ const verifyStripPass = (html) => {
   };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SIXTH PASS: TWO CARDS INSTEAD OF FIVE BANDS
-// ─────────────────────────────────────────────────────────────────────────────
-
 /**
  * Fold the outcome into one card, and the closing block into another.
  *
@@ -372,80 +220,6 @@ const verifyStripPass = (html) => {
  * drift apart.
  */
 
-const SUMMARY_OPEN = '<div class="summary-section">';
-
-/**
- * The seeded summary grid through the end of the verdict conditional.
- *
- * Found by counting {{if}} depth rather than by a regex, for the reason the
- * promotion pass learned first: the verdict block contains {{if remark}}, so a
- * non-greedy match for {{endif}} stops at the INNER one and leaves the
- * {{else}} branch — and a second verdict band — behind. The first version of
- * this pass did exactly that.
- *
- * @returns {{start: number, end: number}|null}
- */
-const outcomeRegion = (html) => {
-  const start = html.indexOf(SUMMARY_OPEN);
-  if (start === -1) return null;
-
-  const block = findIsPassingBlock(html);
-  if (!block || block.start < start) return null;
-
-  // The verdict has to be what follows the figures, not something further down
-  // the document that happens to be a conditional.
-  const between = html.slice(start + SUMMARY_OPEN.length, block.start);
-  if (between.includes("summary-section")) return null;
-  if (between.length > 1200) return null;
-
-  return { start, end: block.end };
-};
-
-/** The Attendance heading through the end of the remarks row. */
-const CLOSING_REGION_RE = new RegExp(
-  [
-    String.raw`<h3[^>]*>[\s]*Attendance[\s]*</h3>`,
-    String.raw`[\s\S]*?\{\{attendance_table\}\}`,
-    String.raw`[\s\S]*?class="remarks-row"`,
-    String.raw`[\s\S]*?\{\{principal_name\}\}`,
-    String.raw`[\s\S]*?</div>[\s]*</div>[\s]*</div>`,
-  ].join(""),
-  ""
-);
-
-/**
- * @returns {{ status: string, html?: string, note?: string }}
- *   repaired      | one or both regions were folded into a card
- *   already-fixed | it carries the cards
- *   no-region     | not the shape this seeded; the school's own arrangement
- */
-const layoutCardsPass = (html) => {
-  if (html.includes("summary-verdict") || html.includes("closing-absences")) {
-    return { status: "already-fixed" };
-  }
-
-  let out = html, changed = 0;
-
-  const region = outcomeRegion(out);
-  if (region) {
-    out = out.slice(0, region.start) + OUTCOME_BLOCK_HTML.trim() + out.slice(region.end);
-    changed += 1;
-  }
-  if (CLOSING_REGION_RE.test(out)) {
-    out = out.replace(CLOSING_REGION_RE, () => CLOSING_BLOCK_HTML.trim());
-    changed += 1;
-  }
-
-  if (!changed) {
-    return { status: "no-region", note: "not the seeded arrangement" };
-  }
-  // Half a fold is not a fold: if only one region matched, the card would carry
-  // one new block and one old band, which is worse than leaving both alone.
-  if (changed < 2) {
-    return { status: "no-region", note: "only one of the two regions matched" };
-  }
-  return { status: "repaired", html: out };
-};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // FIFTH PASS: ONE SHEET OF A4
@@ -521,21 +295,250 @@ const printClassPass = (html) => {
 };
 
 /**
- * The template's CSS with the one-row rules appended, or null if it has them.
+ * One element, from its opening tag to the `</div>` that closes it.
  *
- * CSS-only, which is what makes it reachable at all: the templates that already
- * carry the folded cards carry the first version of their rules with them, and
- * those wrapped. Appending overrides them — later rules of equal specificity
- * win — so the repair does not have to find and rewrite declarations inside a
- * school's own stylesheet.
+ * Counted rather than matched: a regex for "the next </div>" stops at the
+ * first child's, and a block with four columns in it has plenty of those.
+ *
+ * @returns {{ start: number, end: number } | null}
  */
-const repairOneRowCss = (css) => {
+const elementAt = (html, openingTag) => {
+  const start = html.indexOf(openingTag);
+  if (start < 0) return null;
+  const re = /<div\b[^>]*>|<\/div>/g;
+  re.lastIndex = start;
+  let depth = 0, m;
+  while ((m = re.exec(html))) {
+    depth += m[0] === "</div>" ? -1 : 1;
+    if (depth === 0) return { start, end: m.index + m[0].length };
+  }
+  return null;
+};
+
+/**
+ * The band of figures over the marks, taken off.
+ *
+ * Passed, the average, the rank and the remark were stated twice: once in a
+ * band across the top of the card and again in the table and panel beneath
+ * it. The table is the summary now, so the band goes — in whichever shape a
+ * school's copy carries it: the folded card, the verdict row that preceded
+ * it, or the original pass/fail banner. The promotion banner goes with them;
+ * the decision has its own row in the table.
+ *
+ * Nothing is inserted in its place, and nothing outside the band is touched.
+ */
+const removeBannerPass = (html) => {
+  let out = html, removed = 0;
+
+  for (const tag of [`<div class="summary-section"`, `<div class="verdict"`]) {
+    let found;
+    while ((found = elementAt(out, tag))) {
+      out = (out.slice(0, found.start) + out.slice(found.end)).replace(/\n\s*\n\s*\n/g, "\n\n");
+      removed += 1;
+    }
+  }
+
+  // The original banner, and the annual promotion block that followed it.
+  for (const opening of ["{{if isPassing}}", "{{if is_annual}}"]) {
+    const at = out.indexOf(opening);
+    if (at === -1) continue;
+    const block = opening === "{{if isPassing}}"
+      ? findIsPassingBlock(out)
+      : findBlockFrom(out, at);
+    if (!block) continue;
+    // Only a banner. The information panel states the same decision in a
+    // row of its own, gated on the same {{if is_annual}} — so the test is
+    // the banner's own markup, not the token it prints.
+    if (!/pass-banner|verdict-pill|class="verdict"/.test(block.body)) continue;
+    if (block.body.length > 900 || /\{\{subjects_table\}\}|<table/.test(block.body)) continue;
+    out = (out.slice(0, block.start) + out.slice(block.end)).replace(/\n\s*\n\s*\n/g, "\n\n");
+    removed += 1;
+  }
+
+  return removed
+    ? { status: "repaired", html: out }
+    : { status: "already-fixed" };
+};
+
+/** A {{if ...}} … {{endif}} block starting at `at`, depth-counted. */
+const findBlockFrom = (html, at) => {
+  const OPEN_RE = /\{\{if\s+[^}]+\}\}/g;
+  const opening = html.slice(at).match(/^\{\{if\s+[^}]+\}\}/);
+  if (!opening) return null;
+  let depth = 1, cursor = at + opening[0].length;
+  while (cursor < html.length) {
+    OPEN_RE.lastIndex = cursor;
+    const nextOpen  = OPEN_RE.exec(html);
+    const nextClose = html.indexOf("{{endif}}", cursor);
+    if (nextClose === -1) return null;
+    if (nextOpen && nextOpen.index < nextClose) {
+      depth += 1; cursor = nextOpen.index + nextOpen[0].length; continue;
+    }
+    depth -= 1; cursor = nextClose + "{{endif}}".length;
+    if (depth === 0) return { start: at, end: cursor, body: html.slice(at, cursor) };
+  }
+  return null;
+};
+
+/**
+ * The attendance and the remark panels that sat in the middle, taken off.
+ *
+ * Attendance is not part of a report card in this application any more, and
+ * the two remark panels move to the foot of the document where they are
+ * signed (see remarksBlockPass).
+ *
+ * Every shape this project ever wrote is removed by naming the block rather
+ * than by matching a run of markup between two landmarks: the folded closing
+ * card, the remarks row and the attendance figures it was folded from, and
+ * the attendance heading with its table token. A sequence-matching regex
+ * over that region worked until a template had one fewer closing tag than it
+ * expected, and then it took a neighbouring block with it.
+ */
+const removeClosingPass = (html) => {
+  let out = html, removed = 0;
+
+  for (const tag of [`<div class="closing-section"`, `<div class="remarks-row"`,
+                     `<div class="stat-row"`]) {
+    let found;
+    while ((found = elementAt(out, tag))) {
+      out = out.slice(0, found.start) + out.slice(found.end);
+      removed += 1;
+    }
+  }
+
+  // The heading over the attendance table, in either language, and the token
+  // the table itself was printed from.
+  const heading = out.match(/[ \t]*<h3[^>]*>\s*(?:Attendance|Assiduit[ée])\s*<\/h3>\s*/i);
+  if (heading) { out = out.replace(heading[0], ""); removed += 1; }
+  if (out.includes("{{attendance_table}}")) {
+    out = out.replace(/[ \t]*\{\{attendance_table\}\}[ \t]*\n?/g, "");
+    removed += 1;
+  }
+
+  return removed
+    ? { status: "repaired", html: out.replace(/\n\s*\n\s*\n/g, "\n\n") }
+    : { status: "already-fixed" };
+};
+
+/**
+ * What the staff wrote, put where it is signed: immediately before the
+ * verification strip, after the panel. Same rules as the panel — inserted
+ * where there is none, refreshed where an older copy sits, and left alone
+ * when it is already current, so running the repair twice changes nothing.
+ */
+const remarksBlockPass = (html) => {
+  const block  = REMARKS_BLOCK_HTML.trim();
+  const markup = REMARKS_BLOCK_HTML
+    .slice(REMARKS_BLOCK_HTML.indexOf(`<div class="remarks">`)).trim();
+  const same   = (a, b) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+
+  const existing = elementAt(html, `<div class="remarks"`);
+  if (existing) {
+    if (same(html.slice(existing.start, existing.end), markup)) return { status: "already-fixed" };
+    return {
+      status: "repaired",
+      html: html.slice(0, existing.start) + markup + html.slice(existing.end),
+    };
+  }
+
+  const anchors = [`<div class="footer"`, `<div class="verify-strip"`, `{{qr_code}}`];
+  const anchor = anchors.find((a) => html.includes(a));
+  if (!anchor) return { status: "no-region", note: "no footer or verification strip to sit above" };
+
+  const at = html.indexOf(anchor);
+  const lineStart = html.lastIndexOf("\n", at) + 1;
+  return {
+    status: "repaired",
+    html: html.slice(0, lineStart) + block + "\n\n  " + html.slice(lineStart),
+  };
+};
+
+/** The template's CSS with the remarks' rules appended, or null if it has them. */
+const repairRemarksCss = (css) => {
   if (typeof css !== "string") return null;
-  // Tested by the declaration, not by a comment: the seeded stylesheet writes
-  // these rules itself with its own wording, and matching a marker string
-  // meant appending a redundant copy to the very sheet that defined them.
-  if (/\.summary-section[^}]*flex-wrap:\s*nowrap/.test(css)) return null;
-  return css + nlJoin(ONE_ROW_CSS);
+  if (/\.remark-box\b/.test(css)) return null;
+  return css + nlJoin(REMARKS_BLOCK_CSS);
+};
+
+/**
+ * The information panel, added above the verification strip.
+ *
+ * Where it goes: immediately before the footer, which is where the seeded
+ * card carries the strip. A template whose footer a school has renamed or
+ * rebuilt is matched on the strip itself, and one with neither is left alone
+ * rather than guessed at.
+ *
+ * @returns {{ status: string, html?: string, note?: string }}
+ *   repaired      | the panel was inserted
+ *   already-fixed | the template carries it
+ *   no-region     | nowhere identifiable to put it
+ */
+const infoPanelPass = (html) => {
+  // The block as it goes in the first time (with the comment that introduces
+  // it) and the element alone, which is what an existing panel is compared
+  // against — a school's copy carries the comment already.
+  const panel  = INFO_PANEL_HTML.trim();
+  const markup = INFO_PANEL_HTML
+    .slice(INFO_PANEL_HTML.indexOf(`<div class="info-panel">`)).trim();
+  const same   = (a, b) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
+
+  // A panel this project put there before, which may be an older shape of it.
+  // Replaced rather than left alone, so a correction to the block reaches the
+  // schools that already have one; identical markup is left untouched, which
+  // is what makes running the repair twice a no-op.
+  const existing = elementAt(html, `<div class="info-panel"`);
+  if (existing) {
+    if (same(html.slice(existing.start, existing.end), markup)) return { status: "already-fixed" };
+    return {
+      status: "repaired",
+      html: html.slice(0, existing.start) + markup + html.slice(existing.end),
+    };
+  }
+
+  // In order of preference: the footer that holds the strip, the strip
+  // itself, or the bare QR token a template from before the strip carries.
+  const anchors = [`<div class="footer"`, `<div class="verify-strip"`, `{{qr_code}}`];
+  const anchor = anchors.find((a) => html.includes(a));
+  if (!anchor) return { status: "no-region", note: "no footer or verification strip to sit above" };
+
+  const at = html.indexOf(anchor);
+  // Back to the start of the anchor's own line, so the panel is inserted
+  // between lines rather than into the middle of one.
+  const lineStart = html.lastIndexOf("\n", at) + 1;
+  return {
+    status: "repaired",
+    html: html.slice(0, lineStart) + panel + "\n\n  " + html.slice(lineStart),
+  };
+};
+
+/**
+ * The template's CSS with the panel's rules on it, or null if they are
+ * already the current ones.
+ *
+ * Unlike the other CSS repairs this one can REPLACE an earlier copy of its
+ * own block rather than only append. The first version of these rules named
+ * the panel's cells info-row / info-lbl / info-val, which is what the seeded
+ * card's own student header is built from — so they restyled the header as
+ * well as the panel. Appending the corrected rules would not undo that; the
+ * stale block has to go.
+ *
+ * Only this project's own block is touched, matched by the comment it is
+ * written with, and only up to the next top-level section comment.
+ */
+const PANEL_CSS_MARK = "/* ── The information panel ──";
+
+const repairInfoPanelCss = (css) => {
+  if (typeof css !== "string") return null;
+  // The marker for the current rules: a class only they define.
+  if (/\.panel-write\b/.test(css)) return null;
+
+  let out = css;
+  const at = out.indexOf(PANEL_CSS_MARK);
+  if (at > -1) {
+    const nextSection = out.indexOf("/* ──", at + PANEL_CSS_MARK.length);
+    out = (out.slice(0, at) + (nextSection > -1 ? out.slice(nextSection) : "")).trimEnd();
+  }
+  return out + nlJoin(INFO_PANEL_CSS);
 };
 
 /** The template's CSS with the print rules appended, or null if it has them. */
@@ -565,13 +568,6 @@ const nlJoin = (block) => `
 ${block.trim()}
 `;
 
-/** The template's CSS with the new rules appended, or null if it has them. */
-const repairCss = (css) => {
-  if (typeof css !== "string") return null;
-  if (/\.verdict\b/.test(css)) return null;
-  return css + LAYOUT_CSS;
-};
-
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -592,11 +588,14 @@ const repairHtml = (html, css) => {
   const changes = [];
   let out = html;
 
-  const promo = promotionPass(out);
-  if (promo.html) { out = promo.html; changes.push("promotion"); }
+  // First the blocks that are leaving: the band over the marks and the
+  // attendance-and-remarks card under them. The passes below rebuild those
+  // regions when they find them, so they have to be gone before they run.
+  const banner = removeBannerPass(out);
+  if (banner.html) { out = banner.html; changes.push("banner-removed"); }
 
-  const layout = layoutPass(out);
-  if (layout.html) { out = layout.html; changes.push("layout"); }
+  const closing = removeClosingPass(out);
+  if (closing.html) { out = closing.html; changes.push("attendance-removed"); }
 
   const header = headerPass(out);
   if (header.html) { out = header.html; changes.push("header"); }
@@ -607,32 +606,37 @@ const repairHtml = (html, css) => {
   const printable = printClassPass(out);
   if (printable.html) { out = printable.html; changes.push("print"); }
 
-  // Last, because it consumes the blocks the passes above have already
-  // corrected — the verdict pill the layout pass built, and the classes the
-  // print pass added to the rows it replaces.
-  const cards = layoutCardsPass(out);
-  if (cards.html) { out = cards.html; changes.push("cards"); }
+  const panel = infoPanelPass(out);
+  if (panel.html) { out = panel.html; changes.push("panel"); }
+
+  // Last, so it lands after the panel and immediately before the strip.
+  const remarks = remarksBlockPass(out);
+  if (remarks.html) { out = remarks.html; changes.push("remarks"); }
 
   if (!changes.length) {
-    const note = promo.note || layout.note || header.note || strip.note;
-    let cssOnly = repairPrintCss(typeof css === "string" ? css : null);
-    cssOnly = repairOneRowCss(cssOnly ?? (typeof css === "string" ? css : null)) ?? cssOnly;
-    // The print rules are CSS only, so a template whose markup is already
-    // classed still needs them if its stylesheet has no @page.
-    if (cssOnly) {
-      return { status: "repaired", changes: ["print"], html: out, css: cssOnly };
+    const note = banner.note || closing.note || header.note || strip.note;
+    // These rules are CSS only, so a template whose markup is already
+    // classed still needs them if its stylesheet lacks them.
+    const cssChanges = [];
+    let cssOnly = typeof css === "string" ? css : null;
+    for (const [name, fix] of [["print", repairPrintCss], ["panel", repairInfoPanelCss], ["remarks", repairRemarksCss]]) {
+      const next = fix(cssOnly);
+      if (next) { cssOnly = next; cssChanges.push(name); }
     }
-    return { status: promo.status, ...(note ? { note } : {}) };
+    if (cssChanges.length) {
+      return { status: "repaired", changes: cssChanges, html: out, css: cssOnly };
+    }
+    return { status: "already-fixed", ...(note ? { note } : {}) };
   }
 
   // Each pass brings its own rules, and each declines if the stylesheet has
   // them already. Applied in order so the second sees the first's work.
   let nextCss = typeof css === "string" ? css : null;
-  if (changes.includes("layout")) nextCss = repairCss(nextCss) ?? nextCss;
   if (changes.includes("header")) nextCss = repairHeaderCss(nextCss) ?? nextCss;
   if (changes.includes("verify")) nextCss = repairVerifyCss(nextCss) ?? nextCss;
   nextCss = repairPrintCss(nextCss) ?? nextCss;
-  nextCss = repairOneRowCss(nextCss) ?? nextCss;
+  nextCss = repairInfoPanelCss(nextCss) ?? nextCss;
+  nextCss = repairRemarksCss(nextCss) ?? nextCss;
 
   return {
     status: "repaired",
@@ -708,17 +712,32 @@ const verify = (html, css, opts = {}) => {
   // renderReportCard falls back to the built-in layout when a template fails to
   // parse, so a "template" source is the proof that the repair is still valid.
   if (annual.source !== "template")   problems.push("the repaired template no longer parses");
-  if (!/PROMOTED TO THE NEXT CLASS/.test(annual.html)) {
-    problems.push("the annual card lost its promotion decision");
-  }
+
+  /*
+   * The facts the card must still state after a migration.
+   *
+   * Each is checked only where the template carries the block that states
+   * it: a school's card that never printed the marks is its own business,
+   * and the repair is answerable for what it changed, not for what was
+   * never there. What it is always answerable for is the promotion, which
+   * belongs to the annual card alone.
+   */
   if (/PROMOTED TO THE NEXT CLASS/.test(sequence.html)) {
-    problems.push("the sequence card still shows a promotion");
+    problems.push("the sequence card shows a promotion it has not been given");
   }
-  if (!/PASSED/.test(sequence.html)) {
-    problems.push("the sequence card lost its pass/fail banner");
+  if (html.includes("{{subjects_table}}")) {
+    if (!/PROMOTED TO THE NEXT CLASS/.test(annual.html)) {
+      problems.push("the annual card lost its promotion decision");
+    }
+    if (!/PASSED/.test(sequence.html)) {
+      problems.push("the card no longer states whether the pupil passed");
+    }
+    if (!/subjects-table/.test(sequence.html)) {
+      problems.push("the card lost its marks");
+    }
   }
-  if (opts.expectRemark && !/Steady and careful work/.test(sequence.html)) {
-    problems.push("the rearranged row dropped the remark");
+  if (html.includes("remark-box") && !/Steady and careful work/.test(sequence.html)) {
+    problems.push("the card lost the teacher's remark");
   }
 
   // A rebuilt verification strip has to carry the code as well as the square:
@@ -789,7 +808,7 @@ const main = async () => {
     }
 
     const problems = verify(result.html, result.css ?? row.css, {
-      expectRemark: result.changes.includes("layout"),
+      expectRemark: result.changes.includes("layout") || result.changes.includes("figures"),
       expectHeader: result.changes.includes("header"),
       expectVerify: result.changes.includes("verify"),
     });
@@ -847,12 +866,14 @@ const main = async () => {
 // the verification without a database. Only connects when run directly, so
 // requiring this file costs nothing.
 module.exports = {
-  repairHtml, findIsPassingBlock, verify, PROMOTION_BLOCK,
-  promotionPass, layoutPass, repairCss, LAYOUT_CSS,
+  repairHtml, findIsPassingBlock, verify,
   headerPass, repairHeaderCss, OLD_HEADER_RE,
   verifyStripPass, repairVerifyCss, BARE_QR_RE,
-  printClassPass, repairPrintCss, repairOneRowCss,
-  layoutCardsPass, outcomeRegion, CLOSING_REGION_RE,
+  printClassPass, repairPrintCss,
+  removeBannerPass, removeClosingPass,
+  infoPanelPass, repairInfoPanelCss,
+  remarksBlockPass, repairRemarksCss,
+  PRINT_CSS,
 };
 
 if (require.main === module) {

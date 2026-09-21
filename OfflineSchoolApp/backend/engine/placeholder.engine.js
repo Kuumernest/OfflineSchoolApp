@@ -250,10 +250,14 @@ function renderTemplate(html, data) {
 
 // ── Formatters ────────────────────────────────────────────────────────────
 
-function formatPosition(pos) {
+function formatPosition(pos, lang = "en") {
   if (pos == null || pos === "") return "—";
   const n   = Number(pos);
   if (isNaN(n)) return "—";
+  // A French card says 46ᵉ, not 46th. The built-in layout has always written
+  // its ordinals this way; a school's template got the English suffix in both
+  // languages because this one did not know which it was printing.
+  if (lang === "fr") return `${n}ᵉ`;
   const mod = n % 100;
   const sfx = ["th", "st", "nd", "rd"];
   return `${n}${mod >= 11 && mod <= 13 ? "th" : sfx[n % 10 < 4 ? n % 10 : 0]}`;
@@ -286,7 +290,14 @@ function buildReplacementMap(data) {
     attendance  = {},
     performance = {},
     header      = {},
+    classStats  = {},
+    labels      = {},
   } = data;
+
+  // Which language this card is being printed in, for the ordinals. The
+  // labels above are already resolved; this is the one thing the engine
+  // formats for itself.
+  const lang = data.lang === "fr" ? "fr" : "en";
 
   return {
     // Student
@@ -303,14 +314,19 @@ function buildReplacementMap(data) {
     academic_year:      data.academicYear         || "",
 
     // Attendance
+    //
+    // A count or a dash: the card can now tell a pupil who missed nothing
+    // from a period nobody kept a register for, and 0 is the first of those,
+    // not both. days_present and days_open are unchanged — no card route
+    // supplies them.
     days_present:       String(attendance.daysPresent ?? 0),
-    days_absent:        String(attendance.daysAbsent  ?? 0),
+    days_absent:        countOrDash(attendance.daysAbsent),
     days_open:          String(attendance.daysOpen    ?? 0),
     attendance_percent: formatAttendance(attendance),
 
     // Performance
     average:            Number(performance.average ?? 0).toFixed(1),
-    position:           formatPosition(performance.position),
+    position:           formatPosition(performance.position, lang),
     total_students:     String(performance.totalStudents ?? 0),
     grade:              performance.grade            || "",
     remark:             performance.remark           || "",
@@ -323,7 +339,7 @@ function buildReplacementMap(data) {
     term_grade:             performance.termGrade            || "",
     term_remark:            performance.termRemark           || "",
     term_class_position:    performance.termClassPosition != null
-                              ? formatPosition(performance.termClassPosition)
+                              ? formatPosition(performance.termClassPosition, lang)
                               : "",
     term_total_in_class:    String(performance.termTotalInClass ?? ""),
     sequence_1_average:     performance.sequence1Average != null
@@ -352,7 +368,7 @@ function buildReplacementMap(data) {
     annual_grade:           performance.annualGrade            || "",
     annual_remark:          performance.annualRemark           || "",
     annual_class_position:  performance.annualClassPosition != null
-                              ? formatPosition(performance.annualClassPosition)
+                              ? formatPosition(performance.annualClassPosition, lang)
                               : "",
     annual_total_in_class:  String(performance.annualTotalInClass ?? ""),
     term_1_average:         performance.term1Average != null
@@ -396,6 +412,52 @@ function buildReplacementMap(data) {
     verification_code:  data.verify?.code     || "",
     verification_url:   data.verify?.url      || "",
 
+    // The table's last row, for a template that lays the table out itself.
+    total_coefficient:  performance.totalCoefficients != null
+                          ? String(performance.totalCoefficients) : "—",
+    total_marks:        performance.totalWeighted != null
+                          ? Number(performance.totalWeighted).toFixed(2) : "—",
+    // The stored decision, in the reader's language.
+    result_status:      (performance.isPassing ?? ((performance.average ?? 0) >= 10))
+                          ? (labels.passed || "PASSED")
+                          : (labels.failed || "FAILED"),
+
+    label_teacher:       labels.teacher       || "",
+    label_total:         labels.total         || "",
+    label_status:        labels.status        || "",
+    label_teacher_remark:   labels.teacherRemark   || "",
+    label_principal_remark: labels.principalRemark || "",
+
+    // The class this pupil sat in, already formatted with its own unit by
+    // the card's data builder.
+    class_average:      classStats.average    || "",
+    class_best:         classStats.best       || "",
+    class_lowest:       classStats.lowest     || "",
+    class_size:         String(classStats.count ?? 0),
+
+    // The panel's wording in the reader's language — see the `labels` block
+    // in reportHtml.service.js. Empty when a caller built the data without
+    // them, so an older template prints nothing rather than a raw token.
+    label_performance:   labels.perfPanel     || "",
+    label_class_profile: labels.classPanel    || "",
+    label_attendance:    labels.attendPanel   || "",
+    label_conduct:       labels.conductPanel  || "",
+    label_rank:          labels.rank          || "",
+    label_average:       labels.average       || "",
+    label_grade:         labels.grade         || "",
+    label_decision:      labels.decision      || "",
+    label_class_average: labels.classAverage  || "",
+    label_best:          labels.best          || "",
+    label_lowest:        labels.lowest        || "",
+    label_absences:      labels.absences      || "",
+    label_excused:       labels.excused       || "",
+    label_unexcused:     labels.unexcused     || "",
+    label_late_coming:   labels.lateComing    || "",
+    label_work:          labels.work          || "",
+    label_behaviour:     labels.behaviour     || "",
+    label_observation:   labels.observation   || "",
+    label_fill_by_hand:  labels.fillByHand    || "",
+
     // School
     school_name:        school.name           || "",
     school_motto:       school.motto          || "",
@@ -414,8 +476,10 @@ function buildReplacementMap(data) {
                           ? formatDate(data.nextTermDate)
                           : "To be announced",
 
-    // Booleans for conditionals
-    isPassing:          (performance.average ?? 0) >= 10,
+    // Booleans for conditionals. The stored decision when the card carries
+    // one — a threshold applied here would be a second opinion on something
+    // the results pipeline has already settled.
+    isPassing:          performance.isPassing ?? ((performance.average ?? 0) >= 10),
 
     // Which of the three cards this is, so a template can gate on it.
     // The seeded layout printed "PROMOTED" whenever a pupil was passing,
@@ -473,47 +537,111 @@ function buildReplacementMap(data) {
  * data, so a school template addressing subject.caScore or subject.total in its
  * own {{each subjects}} block keeps working.
  */
+/**
+ * A register count for a token: the number, or the card's dash when there is
+ * no figure at all. Zero is a real answer and prints as 0.
+ */
+function countOrDash(value) {
+  return value == null || !Number.isFinite(Number(value)) ? "—" : String(Number(value));
+}
+
 function resolveSubjectsTable(html, data) {
   if (!html.includes("{{subjects_table}}")) return html;
+
+  // The columns this card's level has — see reportHtml.service.js.
+  const seqCols      = data.sequenceColumns || [];
+  const showRawScore = data.showRawScore !== false && !seqCols.length;
 
   const rows = (data.subjects || []).map((s) => {
     const absent = s.isAbsent || s.isExempt;
     const flag   = s.isAbsent ? "ABS" : s.isExempt ? "EXEMPT" : "";
+    // The mark, the /20 and the grade in the colour of the outcome — grey for
+    // a pupil who did not sit, red for a fail, green otherwise — as the
+    // built-in layout has always printed them. A school's own template got
+    // the same figures in plain black and the two cards read as different
+    // documents.
+    const color  = absent ? "#9CA3AF"
+                 : s.isPassing === false ? "#DC2626"
+                 : "#059669";
+    const sequenceCells = seqCols.map((col) => {
+      const got  = (s.sequenceMarks || []).find((m) => m.number === col.number);
+      const mark = got?.mark;
+      return `<td style="text-align:center">${
+        absent ? flag : mark == null ? "—" : Number(mark).toFixed(2)
+      }</td>`;
+    }).join("");
+
     return `
     <tr>
       <td>${escapeHtml(s.subjectName || s.name || "")}</td>
-      <td style="text-align:center"><strong>${
+      <td class="teacher-cell">${s.teacherName ? escapeHtml(s.teacherName) : "—"}</td>
+      ${sequenceCells}
+      ${showRawScore ? `<td style="text-align:center;color:${color}"><strong>${
         absent ? flag : s.examScore != null ? s.examScore : "—"
-      }</strong></td>
-      <td style="text-align:center">${
+      }</strong></td>` : ""}
+      <td style="text-align:center;color:${color}">${
         s.normalizedMark != null && !absent
           ? Number(s.normalizedMark).toFixed(2)
           : "—"
       }</td>
       <td style="text-align:center">${s.coefficient != null ? s.coefficient : 1}</td>
-      <td style="text-align:center">${escapeHtml(s.grade  || "—")}</td>
+      <td style="text-align:center;font-weight:bold;color:${color}">${escapeHtml(s.grade  || "—")}</td>
       <td style="text-align:center">${escapeHtml(s.remark || "—")}</td>
-      <td style="text-align:center">${formatPosition(s.position)}</td>
+      <td style="text-align:center">${formatPosition(s.position, data.lang)}</td>
     </tr>
   `;
   }).join("");
+
+  // The labels this table prints, in the reader's language. Defaults for a
+  // caller that built the data before the panel existed.
+  const L = data.labels || {};
+  const lbl = (key, fallback) => escapeHtml(L[key] || fallback);
+
+  const perf = data.performance || {};
+  const columnCount = 7 + (showRawScore ? 1 : 0) + seqCols.length;
+  const totals = perf.totalCoefficients != null || perf.totalWeighted != null
+    ? `
+      <tfoot>
+        <tr class="total-row">
+          <td colspan="${2 + (showRawScore ? 1 : 0) + seqCols.length}">${lbl("total", "TOTAL")}</td>
+          <td style="text-align:center">${
+            perf.totalWeighted != null ? Number(perf.totalWeighted).toFixed(2) : "—"
+          }</td>
+          <td style="text-align:center">${
+            perf.totalCoefficients != null ? Number(perf.totalCoefficients) : "—"
+          }</td>
+          <td colspan="3"></td>
+        </tr>
+        <tr class="status-row">
+          <td colspan="${columnCount - 1}">${lbl("status", "Status")}</td>
+          <td style="text-align:center" class="${
+            (perf.isPassing ?? ((perf.average ?? 0) >= 10)) ? "status-pass" : "status-fail"
+          }">${
+            (perf.isPassing ?? ((perf.average ?? 0) >= 10))
+              ? lbl("passed", "PASSED") : lbl("failed", "FAILED")
+          }</td>
+        </tr>
+      </tfoot>`
+    : "";
 
   const table = `
     <table class="subjects-table" style="width:100%;border-collapse:collapse">
       <thead>
         <tr>
-          <th style="text-align:left">Subject</th>
-          <th style="text-align:center">Score</th>
-          <th style="text-align:center">/20</th>
-          <th style="text-align:center">Coeff</th>
-          <th style="text-align:center">Grade</th>
-          <th style="text-align:center">Remark</th>
-          <th style="text-align:center">Position</th>
+          <th style="text-align:left">${lbl("subject", "Subject")}</th>
+          <th style="text-align:left">${lbl("teacher", "Teacher")}</th>
+          ${seqCols.map((c) => `<th style="text-align:center">${escapeHtml(c.name)}</th>`).join("")}
+          ${showRawScore ? `<th style="text-align:center">${lbl("score", "Score")}</th>` : ""}
+          <th style="text-align:center">${lbl("result", "/20")}</th>
+          <th style="text-align:center">${lbl("coeff", "Coeff")}</th>
+          <th style="text-align:center">${lbl("gradeCol", "Grade")}</th>
+          <th style="text-align:center">${lbl("remarkCol", "Remark")}</th>
+          <th style="text-align:center">${lbl("positionCol", "Position")}</th>
         </tr>
       </thead>
       <tbody>
-        ${rows || "<tr><td colspan='7' style='text-align:center'>No subjects</td></tr>"}
-      </tbody>
+        ${rows || `<tr><td colspan='${columnCount}' style='text-align:center'>No subjects</td></tr>`}
+      </tbody>${totals}
     </table>
   `;
 
@@ -636,8 +764,18 @@ function resolveQrCode(html, data) {
   // A real verification QR when the caller passed one (the report card route
   // does), otherwise the inert placeholder box so a template preview still
   // shows where the code will sit.
-  const qrHtml = data.verify?.qrSvg
-    ? `<div class="qr-code" style="width:64px;height:64px">${data.verify.qrSvg}</div>`
+  // The SVG arrives with its own width and height (120px); left as they are
+  // it overflowed the 64px box, over the words beside it and the foot of the
+  // card. Sized by the box instead, as the built-in layout sizes its own.
+  const fitted = data.verify?.qrSvg
+    ? String(data.verify.qrSvg).replace(
+        /<svg\b([^>]*)>/,
+        (_m, attrs) => `<svg${attrs.replace(/\s(?:width|height)="[^"]*"/g, "")} ` +
+                       `style="width:100%;height:100%;display:block">`
+      )
+    : null;
+  const qrHtml = fitted
+    ? `<div class="qr-code" style="width:64px;height:64px;flex:none">${fitted}</div>`
     : `
     <div
       class="qr-placeholder"

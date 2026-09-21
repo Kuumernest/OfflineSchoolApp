@@ -31,7 +31,7 @@
  */
 
 const { officialHeader, reportTitle } = require("../../../shared/officialHeader");
-const { periodName }                  = require("../../../shared/reportCard");
+const { periodName, averageOutOf20 }  = require("../../../shared/reportCard");
 
 const LABELS = {
   en: {
@@ -78,6 +78,37 @@ const LABELS = {
     generatedOn:  "Generated on",
     official:     "Official Academic Report",
     noScores:     "No scores recorded for this student.",
+    // ── The information panel under the marks ────────────────────────────
+    // The sections of the printed form this card follows: what the pupil
+    // did, what the class did, how much school they missed, and the conduct
+    // the class teacher fills in by hand.
+    teacherCol:   "Teacher",
+    sequenceResult: "Sequence Result",
+    termResult:   "Term Result",
+    annualResult: "Annual Result",
+    totalRow:     "TOTAL",
+    totalMarks:   "Total Marks",
+    status:       "Status",
+    principalRemark: "Principal's Remark",
+    perfPanel:    "Student Performance",
+    classPanel:   "Class Profile",
+    attendPanel:  "Attendance",
+    conductPanel: "Conduct",
+    rank:         "Rank",
+    termAverage:  "Term Average",
+    annualAverage: "Annual Average",
+    classAverage: "Class Average",
+    best:         "Best",
+    lowest:       "Lowest",
+    absences:     "Absences",
+    excused:      "Excused",
+    unexcused:    "Unexcused",
+    lateComing:   "Late Coming",
+    work:         "Work",
+    behaviour:    "Behaviour",
+    observation:  "Observation",
+    fillByHand:   "To be completed by the class teacher",
+    notRecorded:  "—",
     verifyTitle:  "Verify this document",
     verifyHint:   "Scan the code, or enter",
     locale:       "en-GB",
@@ -123,6 +154,34 @@ const LABELS = {
     generatedOn:  "Généré le",
     official:     "Bulletin officiel",
     noScores:     "Aucune note enregistrée pour cet élève.",
+    // ── Le tableau sous les notes ────────────────────────────────────────
+    teacherCol:   "Enseignant",
+    sequenceResult: "Résultat de la séquence",
+    termResult:   "Résultat du trimestre",
+    annualResult: "Résultat annuel",
+    totalRow:     "TOTAL",
+    totalMarks:   "Total des points",
+    status:       "Décision",
+    principalRemark: "Observation du chef d'établissement",
+    perfPanel:    "Performance de l'élève",
+    classPanel:   "Profil de la classe",
+    attendPanel:  "Assiduité",
+    conductPanel: "Conduite",
+    rank:         "Rang",
+    termAverage:  "Moyenne du trimestre",
+    annualAverage: "Moyenne annuelle",
+    classAverage: "Moyenne de la classe",
+    best:         "Plus forte moyenne",
+    lowest:       "Plus faible moyenne",
+    absences:     "Absences",
+    excused:      "Excusées",
+    unexcused:    "Non excusées",
+    lateComing:   "Retards",
+    work:         "Travail",
+    behaviour:    "Comportement",
+    observation:  "Observation",
+    fillByHand:   "À remplir par le professeur principal",
+    notRecorded:  "—",
     verifyTitle:  "Vérifier ce document",
     verifyHint:   "Scannez le code, ou saisissez",
     locale:       "fr-FR",
@@ -165,10 +224,9 @@ function resolveAverage20(payload) {
   if (computed.weightedAverage != null) return Number(computed.weightedAverage);
   if (summary?.average == null) return null;
 
-  const stored = Number(summary.average);
-  return payload.reportType === "term" || payload.reportType === "annual"
-    ? stored
-    : Math.round(stored * 5 * 100) / 100;
+  // The one rule, in shared/reportCard.js: a sequence average is GPA points
+  // and a term or annual average is already out of twenty.
+  return averageOutOf20(summary.average, payload.reportType);
 }
 
 const esc = (str) =>
@@ -334,6 +392,36 @@ function renderReportCardHtml(payload, opts = {}) {
     return `${n}th`;
   };
 
+  /*
+   * The columns this card's table has, which depend on what it is a card OF.
+   *
+   *   sequence  CA and the paper it was marked from, then the mark they
+   *             combine to — the level below is what a sequence is made of.
+   *   term      the term's sequences, then the result they combine to. Not
+   *             CA and paper: those belong to the sequence card, and a term
+   *             card repeating them states the same marks one level too low.
+   *   annual    the year's result for each subject, as the annual
+   *             aggregation already computes it.
+   *
+   * The mark itself is /20 on every card; only a sequence card also shows
+   * the raw score out of whatever the paper was marked over.
+   */
+  const sequenceColumns = payload.reportType === "term"
+    ? (payload.sequenceColumns || []) : [];
+  const showRawScore    = payload.reportType === "sequence";
+  const resultHeading   = payload.reportType === "term"   ? t.termResult
+                        : payload.reportType === "annual" ? t.annualResult
+                        : t.outOf20;
+
+  /** One cell per sequence of the term, in the order the school defines. */
+  const sequenceCells = (s, absent, flag) =>
+    sequenceColumns.map((col) => {
+      const got = (s.sequenceMarks || []).find((m) => m.number === col.number);
+      const mark = got?.mark;
+      return `<td style="text-align:center;color:${absent ? "#9CA3AF" : "#374151"}">` +
+             `${absent ? flag : mark == null ? "—" : Number(mark).toFixed(2)}</td>`;
+    }).join("");
+
   // ── Subject rows ──────────────────────────────────────────────────────────
   const rows = subjects.map((s) => {
     const absent = s.isAbsent || s.isExempt;
@@ -378,11 +466,11 @@ function renderReportCardHtml(payload, opts = {}) {
 
     return `
       <tr>
-        <td>${esc(s.subjectName || "—")}
-          ${s.teacherName ? `<div class="teacher">${esc(s.teacherName)}</div>` : ""}
-        </td>
+        <td>${esc(s.subjectName || "—")}</td>
+        <td class="teacher-cell">${s.teacherName ? esc(s.teacherName) : "—"}</td>
         ${caCells}
-        <td style="text-align:center;color:${color}">${esc(scoreCell)}</td>
+        ${sequenceCells(s, absent, flag)}
+        ${showRawScore ? `<td style="text-align:center;color:${color}">${esc(scoreCell)}</td>` : ""}
         <td style="text-align:center;color:${color}">${norm}</td>
         <td style="text-align:center">${s.coefficient ?? 1}</td>
         ${showGrades
@@ -406,26 +494,131 @@ function renderReportCardHtml(payload, opts = {}) {
 
   const isPassing = summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
 
-  // ── Summary boxes ─────────────────────────────────────────────────────────
-  const boxes = [];
-  if (avg20 != null) {
-    boxes.push(`<div class="box"><div class="box-val">${avg20.toFixed(2)}</div><div class="box-lbl">${t.average} ${t.outOf20}</div></div>`);
-  }
-  if (pct != null) {
-    boxes.push(`<div class="box"><div class="box-val">${Number(pct).toFixed(1)}%</div><div class="box-lbl">${t.percentage}</div></div>`);
-  }
-  if (summary?.overallGrade) {
-    boxes.push(`<div class="box"><div class="box-val">${esc(summary.overallGrade)}</div><div class="box-lbl">${t.overallGrade}</div></div>`);
-  }
-  if (summary?.classPosition != null) {
-    const total = summary.totalInClass != null ? ` / ${summary.totalInClass}` : "";
-    boxes.push(`<div class="box"><div class="box-val">${summary.classPosition}${total}</div><div class="box-lbl">${t.classPos}</div></div>`);
-  }
-
   // The promotion decision appears ONLY on the final annual report card —
-  // never on sequence or intermediate term reports (see requirements §8).
-  const isAnnual   = payload.reportType === "annual";
+  // never on sequence or intermediate term reports (see requirements section 8).
+  const isAnnual    = payload.reportType === "annual";
   const promoStatus = isAnnual ? summary?.promotionStatus || null : null;
+
+  /*
+   * The table's last two rows.
+   *
+   * The totals are the ones the card already computed to get its average —
+   * exposed rather than added up again here, so the row under the marks and
+   * the average beside them cannot disagree. A subject the pupil did not sit
+   * is in neither, which is the existing rule: an absence is not a zero.
+   *
+   * The decision is the stored one. Nothing here decides whether a pupil
+   * passed; `summary.isPassing` does, wherever it was written, and the
+   * promotion decision keeps its own line on the annual card because passing
+   * an exam and being promoted are different things a council decides.
+   */
+  const columnCount = 7 + (showRawScore ? 1 : 0) + (showGrades ? 1 : 0) +
+                      (showCa ? 2 : 0) + sequenceColumns.length;
+  const totalCoeff  = computed.totalCoefficients;
+  const totalMarks  = computed.totalWeighted;
+  const hasTotals   = subjects.length > 0 &&
+    (totalCoeff != null || totalMarks != null);
+
+  // The foot carries whichever of the two it has. A card with no marks still
+  // states the decision the results pipeline stored for it, and a card with
+  // marks but no decision still totals them.
+  const totalRow = (hasTotals || isPassing != null || promoStatus) ? `
+    <tfoot>
+      ${!hasTotals ? "" : `<tr class="total-row">
+        <td colspan="${2 + (showRawScore ? 1 : 0) + (showCa ? 2 : 0) + sequenceColumns.length}">${t.totalRow}</td>
+        <td style="text-align:center">${totalMarks != null ? Number(totalMarks).toFixed(2) : "—"}</td>
+        <td style="text-align:center">${totalCoeff != null ? Number(totalCoeff) : "—"}</td>
+        <td colspan="${3 + (showGrades ? 1 : 0)}"></td>
+      </tr>`}
+      ${isPassing == null ? "" : `
+      <tr class="status-row">
+        <td colspan="${columnCount - 1}">${t.status}</td>
+        <td class="${isPassing ? "status-pass" : "status-fail"}" style="text-align:center">
+          ${isPassing ? t.passed : t.failed}
+        </td>
+      </tr>`}
+      ${promoStatus ? `
+      <tr class="status-row">
+        <td colspan="${columnCount - 1}">${t.decision}</td>
+        <td class="status-pass" style="text-align:center">${esc(promoStatus)}</td>
+      </tr>` : ""}
+    </tfoot>` : "";
+  const statusRow = "";
+
+  /*
+   * What the staff wrote, at the foot of the document where it is signed.
+   *
+   * The teacher's line falls back to the grading band's remark, which is the
+   * convention the school templates have always used for {{teacher_comment}};
+   * the head's is left blank to be written on, with a rule under each for the
+   * signature. Nothing is generated and nothing is invented.
+   */
+  const remarkBox = (heading, text, signature) => `
+      <div class="remark-box">
+        <div class="remark-head">${heading}</div>
+        <div class="remark-body">${text ? esc(text) : ""}</div>
+        <div class="remark-sign">${signature ? esc(signature) : ""}</div>
+      </div>`;
+  const remarksBlock = `<div class="remarks">
+      ${remarkBox(t.remark, opts.teacherComment || overallRemarkText, payload.classTeacher)}
+      ${remarkBox(t.principalRemark, opts.principalComment, school.principalName)}
+    </div>`;
+
+  // ── The information panel ────────────────────────────────────────────────
+  //
+  // The block the printed form carries under the marks: what the pupil did,
+  // what the class did, how much school the pupil missed, and the conduct the
+  // class teacher writes in by hand. Every figure comes from the payload —
+  // the class ones from the same function the statistics page answers with,
+  // the register from the pupil's own attendance over this period's days.
+  const stats  = payload.classStats || null;
+  const row    = (label, value) =>
+    `<div class="panel-row"><span class="panel-lbl">${label}</span>` +
+    `<span class="panel-val">${value}</span></div>`;
+  const writeIn = (label) =>
+    `<div class="panel-row"><span class="panel-lbl">${label}</span>` +
+    `<span class="panel-write"></span></div>`;
+
+  // "Term average" on a term card, "Annual average" on an annual one, and
+  // plain "Average" on a sequence card, which is neither.
+  const averageLabel = payload.reportType === "term"   ? t.termAverage
+                     : payload.reportType === "annual" ? t.annualAverage
+                     : t.average;
+
+  const perfRows = [
+    summary?.classPosition != null
+      ? row(t.rank, `${summary.classPosition}${summary.totalInClass != null ? ` / ${summary.totalInClass}` : ""}`)
+      : "",
+    avg20 != null ? row(averageLabel, `${avg20.toFixed(2)} ${t.outOf20}`) : "",
+    summary?.overallGrade ? row(t.overallGrade, esc(summary.overallGrade)) : "",
+    // The council's decision belongs to the annual card alone (§8); promoStatus
+    // is already null on every other kind.
+    promoStatus ? row(t.decision, esc(promoStatus)) : "",
+  ].filter(Boolean).join("");
+
+  const classRows = [
+    row(t.classAverage, classFigure(stats?.average, stats?.scale, t)),
+    row(t.best,         classFigure(stats?.highest, stats?.scale, t)),
+    row(t.lowest,       classFigure(stats?.lowest,  stats?.scale, t)),
+  ].join("");
+
+  const conductRows = [writeIn(t.work), writeIn(t.behaviour), writeIn(t.observation)].join("");
+
+  const infoPanel = `<div class="info-panel">
+    <div class="panel-col">
+      <div class="panel-head">${t.perfPanel}</div>
+      ${perfRows}
+    </div>
+    <div class="panel-col">
+      <div class="panel-head">${t.classPanel}</div>
+      ${classRows}
+    </div>
+    <div class="panel-col">
+      <div class="panel-head">${t.conductPanel}</div>
+      ${conductRows}
+      <div class="panel-note">${t.fillByHand}</div>
+    </div>
+  </div>`;
 
   // School branding pulled from the school's settings, never hard-coded.
   const schoolLogo = school.logo || null;
@@ -551,45 +744,73 @@ function renderReportCardHtml(payload, opts = {}) {
     /* How the sequence mark was made. Small, under the table, and
        printed only when the school marks a sequence both ways. */
     .ca-note { font-size: 9.5px; color: #6b7280; margin: 4px 0 0; text-align: right; }
-    /* The outcome card, on ONE row: the figures, then the verdict.
-       A flex-basis wide enough to be refused is a wrap instruction in
-       disguise — these ask for zero and divide what the panel has. */
-    .outcome { display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
-               background: #f0f4ff; border: 1px solid #e0e6f8;
-               border-radius: 8px; padding: 10px; margin-bottom: 12px; }
-    .outcome-verdict { display: flex; align-items: center; flex-wrap: nowrap;
-                       gap: 8px; flex: 0 1 auto; max-width: 46%; min-width: 0;
-                       padding-left: 10px; border-left: 1px solid #d7ddf0; }
-    .boxes { display: flex; gap: 8px; flex-wrap: nowrap;
-             flex: 1 1 0; min-width: 0; }
-    .boxes .box { flex: 1 1 0; min-width: 0; max-width: none; }
-    .box { flex: 1; min-width: 110px; max-width: 170px; text-align: center;
-           border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 4px; }
-    .box-val { font-size: 18px; font-weight: 800; color: #111827; }
-    .box-lbl { font-size: 10px; color: #6b7280; margin-top: 2px; }
-    .banner { text-align: center; padding: 10px; border-radius: 8px;
-              font-weight: bold; font-size: 15px; margin-bottom: 12px; }
-    .pass-banner { background: #d1fae5; color: #059669; }
-    .fail-banner { background: #fee2e2; color: #dc2626; }
+    /* The teacher of each subject, in its own column: a name, or the card's
+       dash. Allowed to wrap — some are long — while the marks beside them
+       stay on one line. */
+    .teacher-cell { color: #4b5563; font-size: 10.5px; }
 
-    /* The verdict and the remark share one row.
-       They were two full-width blocks stacked, each with its own margin — a
-       one-word verdict taking a whole band across the page and the remark
-       taking another. Together with the boxes above them that was enough
-       vertical space to push the verification block, and the code a registrar
-       types to check the document, off the foot of the page. */
-    .verdict { display: flex; align-items: center; gap: 10px;
-               margin-bottom: 12px; flex-wrap: wrap; }
-    .verdict-pill { flex: none; padding: 6px 12px; border-radius: 999px;
-                    font-weight: bold; font-size: 12px; white-space: nowrap; }
-    .verdict-remark { flex: 1; min-width: 220px; font-style: italic;
-                      font-size: 11px; color: #4b5563; line-height: 1.5; }
-    /* Kept for a school template that still places the remark token on a
-       line of its own. Written out rather than shown, because a literal
-       token in a comment trips every check that scans a rendered card for
-       placeholders the engine failed to resolve — and one did. */
-    .remark { font-style: italic; color: #4b5563; line-height: 1.6;
-              margin-bottom: 12px; }
+    /* The table's last rows. A tfoot so a table that breaks across two
+       sheets carries its totals on the sheet its last subject is on. */
+    tfoot td { border-top: 1px solid #d1d5db; background: #f9fafb;
+               font-weight: bold; padding: 6px 8px; }
+    .total-row td { font-size: 11px; }
+    .status-row td { font-size: 11px; font-weight: bold; }
+    .status-pass { color: #059669; }
+    .status-fail { color: #dc2626; }
+
+    /* ── The remarks, above the verification strip ──────────────────────
+       Two boxes on one row, each with a rule to sign on. Deliberately not
+       tall: a box a teacher can write two lines in, not a page of empty
+       paper between the marks and the code that proves them. */
+    .remarks { display: flex; gap: 10px; margin-bottom: 12px;
+               page-break-inside: avoid; break-inside: avoid; }
+    .remark-box { flex: 1 1 0; min-width: 0; border: 1px solid #e5e7eb;
+                  border-radius: 8px; padding: 8px 10px; }
+    .remark-head { font-size: 9.5px; font-weight: bold; text-transform: uppercase;
+                   letter-spacing: .04em; color: #374151; margin-bottom: 4px; }
+    .remark-body { font-size: 10.5px; color: #374151; line-height: 1.45;
+                   min-height: 30px; }
+    .remark-sign { margin-top: 10px; border-top: 1px solid #d1d5db; padding-top: 3px;
+                   font-size: 9px; color: #9ca3af; }
+
+    @media screen and (max-width: 560px) {
+      .remarks { flex-direction: column; }
+    }
+
+    /* ── The information panel ─────────────────────────────────────────
+       The four sections of the printed form, in the card's own border and
+       type. A grid rather than a table so a long French label wraps inside
+       its own cell instead of widening the column and pushing the panel
+       past the sheet. */
+    .info-panel { display: grid; grid-template-columns: repeat(3, 1fr);
+                  gap: 0; border: 1px solid #e5e7eb; border-radius: 8px;
+                  overflow: hidden; margin-bottom: 14px;
+                  page-break-inside: avoid; break-inside: avoid; }
+    .panel-col { border-right: 1px solid #e5e7eb; padding: 8px 10px; min-width: 0; }
+    .panel-col:last-child { border-right: 0; }
+    .panel-head { font-size: 9.5px; font-weight: bold; text-transform: uppercase;
+                 letter-spacing: .04em; color: #374151; text-align: center;
+                 border-bottom: 1px solid #e5e7eb; padding-bottom: 4px;
+                 margin-bottom: 6px; }
+    .panel-row { display: flex; align-items: baseline; justify-content: space-between;
+                gap: 8px; font-size: 10px; line-height: 1.45; }
+    .panel-row + .panel-row { margin-top: 3px; }
+    .panel-lbl { color: #6b7280; min-width: 0; }
+    .panel-val { color: #111827; font-weight: bold; white-space: nowrap; }
+    /* The conduct rows are filled in by hand on the printed card. An empty
+       ruled box, the size of a tick, rather than a blank that reads as
+       missing data. */
+    .panel-write { flex: none; width: 34px; height: 13px; border: 1px solid #9ca3af;
+                  border-radius: 2px; background: #fff; }
+    .panel-note { margin-top: 6px; font-size: 8px; color: #9ca3af;
+                 font-style: italic; line-height: 1.3; }
+
+    @media screen and (max-width: 560px) {
+      .info-panel { grid-template-columns: 1fr; }
+      .panel-col { border-right: 0; border-bottom: 1px solid #e5e7eb; }
+      .panel-col:last-child { border-bottom: 0; }
+    }
+
     .verify { display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
               border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 10px;
               background: #f9fafb; page-break-inside: avoid; }
@@ -634,17 +855,21 @@ ${watermark.css}
       th, td             { padding: 3px 6px; }
       thead th           { font-size: 9.5px; }
 
-      .outcome           { padding: 6px; margin-bottom: 8px; gap: 10px; }
-      .outcome-verdict   { padding-left: 10px; gap: 8px; }
-      .boxes             { gap: 6px; }
-      .box               { padding: 5px 3px; }
-      .box-val           { font-size: 14px; }
-      .box-lbl           { font-size: 8px; }
+      .teacher-cell      { font-size: 9px; }
+      tfoot td           { padding: 3px 6px; }
+      .total-row td,
+      .status-row td     { font-size: 9.5px; }
+      .remarks           { gap: 8px; margin-bottom: 8px; }
+      .remark-box        { padding: 6px 8px; }
+      .remark-head       { font-size: 8px; margin-bottom: 3px; }
+      .remark-body       { font-size: 9.5px; min-height: 24px; line-height: 1.35; }
+      .remark-sign       { margin-top: 8px; font-size: 8px; }
 
-      .banner            { padding: 6px; font-size: 12px; margin-bottom: 8px; }
-      .verdict           { margin-bottom: 8px; gap: 8px; }
-      .verdict-pill      { padding: 3px 9px; font-size: 10px; }
-      .verdict-remark    { font-size: 9.5px; min-width: 160px; }
+      .info-panel        { margin-bottom: 8px; }
+      .panel-col          { padding: 5px 7px; }
+      .panel-head         { font-size: 8px; padding-bottom: 3px; margin-bottom: 4px; }
+      .panel-row          { font-size: 8.5px; line-height: 1.3; }
+      .panel-note         { font-size: 7px; }
 
       .verify            { margin-bottom: 8px; padding: 6px 8px; gap: 7px; }
       .verify-qr         { width: 52px; height: 52px; }
@@ -654,8 +879,8 @@ ${watermark.css}
 
       .report-header,
       .info-grid,
-      .outcome,
-      .boxes,
+      .info-panel,
+      .remarks,
       .verdict,
       .banner,
       .verify,
@@ -705,10 +930,12 @@ ${watermark.css}
     <thead>
       <tr>
         <th>${t.subject}</th>
+        <th>${t.teacherCol}</th>
         ${showCa ? `<th style="text-align:center">${t.caCol}</th>
         <th style="text-align:center">${t.testCol}</th>` : ""}
-        <th style="text-align:center">${t.score}</th>
-        <th style="text-align:center">${t.outOf20}</th>
+        ${sequenceColumns.map((c) => `<th style="text-align:center">${esc(c.name)}</th>`).join("")}
+        ${showRawScore ? `<th style="text-align:center">${t.score}</th>` : ""}
+        <th style="text-align:center">${resultHeading}</th>
         <th style="text-align:center">${t.coeff}</th>
         ${showGrades ? `<th style="text-align:center">${t.grade}</th>` : ""}
         <th style="text-align:center">${t.remarkCol}</th>
@@ -717,49 +944,14 @@ ${watermark.css}
       </tr>
     </thead>
     <tbody>${rows ||
-      `<tr><td colspan="${(showGrades ? 8 : 7) + (showCa ? 2 : 0)}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
+      `<tr><td colspan="${columnCount}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
+    ${totalRow}${statusRow}
   </table>
   ${caNote}
 
-  ${(avg20 != null || pct != null || summary?.overallGrade || summary?.classPosition != null)
-    || isPassing != null || overallRemarkText
-    /*
-     * One card for the outcome.
-     *
-     * Average, position, grade, class size and the verdict all answer the same
-     * question — how did this pupil do — and they sat in two blocks with a gap
-     * between them, reading as two unrelated things and costing a band of the
-     * page. The verdict is now to the right of the figures it summarises,
-     * separated by a rule rather than by whitespace.
-     */
-    ? `<div class="outcome">
-         ${boxes.length ? `<div class="boxes">${boxes.join("")}</div>` : ""}
-         ${(isPassing != null || overallRemarkText)
-           ? `<div class="outcome-verdict">
-                ${isPassing != null
-                  ? `<div class="verdict-pill ${isPassing ? "pass-banner" : "fail-banner"}">
-                       ${isPassing ? `✔ ${t.passed}` : `✘ ${t.failed}`}
-                     </div>`
-                  : ""}
-                ${overallRemarkText
-                  ? `<div class="verdict-remark">
-                       <strong>${t.remark}:</strong> ${esc(overallRemarkText)}
-                     </div>`
-                  : ""}
-              </div>`
-           : ""}
-       </div>`
-    : ""}
+  ${infoPanel}
 
-  ${
-    // §8: the promotion decision is rendered ONLY here, and only when the
-    // controller has marked this as the final annual report.
-    promoStatus
-      ? `<div class="banner ${summary.isPassing === false ? "fail-banner" : "pass-banner"}">
-           ${esc(promoStatus)}
-         </div>`
-      : ""
-  }
+  ${remarksBlock}
 
   ${opts.verify
     ? `<div class="verify">
@@ -814,12 +1006,27 @@ function toTemplateData(payload, opts = {}) {
   // A school's own template renders in the reader's language too, so the remark
   // it substitutes has to be picked the same way the built-in layout picks it.
   const lang     = opts.lang === "fr" ? "fr" : "en";
+  // The same label table the built-in layout reads. A school's template gets
+  // the panel's wording through {{label_*}} tokens rather than in English.
+  const t        = LABELS[lang];
   const remarkOf = (row) =>
     (lang === "fr" ? (row?.remarkFr || row?.remark) : row?.remark) || "";
 
   const avg20 = resolveAverage20(payload);
 
   return {
+    // The language the card is printed in: the labels above are resolved
+    // already, and this lets the engine format its ordinals to match.
+    lang,
+
+    /*
+     * The level this card is for, so the table the engine draws has the
+     * same columns the built-in layout gives it: a sequence's raw score
+     * beside its /20, a term's two sequences and the result they combine
+     * to, a year's own result. See the built-in renderer for why.
+     */
+    sequenceColumns: payload.reportType === "term" ? (payload.sequenceColumns || []) : [],
+    showRawScore:    payload.reportType === "sequence",
     reportId: `${payload.studentId || ""}_${payload.examId || ""}`,
 
     // Which of the three cards this is. The engine turns it into the
@@ -882,9 +1089,67 @@ function toTemplateData(payload, opts = {}) {
     term:         payload.term         || "",
     academicYear: payload.academicYear || "",
 
-    // Attendance is not part of the result payload; a caller that has it can
-    // pass it in, otherwise the tokens render as zeros rather than breaking.
-    attendance: opts.attendance || { daysPresent: 0, daysAbsent: 0, daysOpen: 0 },
+    // Attendance is not part of a report card any more. The tokens stay for
+    // a template that still prints them and a caller that still has the
+    // figures; nothing on the card path fills them in.
+    attendance: opts.attendance || { daysPresent: 0, daysAbsent: null, daysOpen: 0 },
+
+    // What the class did, ready to print: "59.30%" for a sequence card, whose
+    // statistics are percentages, "11.87 /20" for a term or annual one, whose
+    // records are out of twenty. The dash where there is nothing to report.
+    classStats: {
+      available: Boolean(payload.classStats?.count),
+      count:     payload.classStats?.count ?? 0,
+      average:   classFigure(payload.classStats?.average, payload.classStats?.scale, t),
+      best:      classFigure(payload.classStats?.highest, payload.classStats?.scale, t),
+      lowest:    classFigure(payload.classStats?.lowest,  payload.classStats?.scale, t),
+    },
+
+    // The panel's own wording, in the reader's language. A school template
+    // prints {{label_rank}} rather than the word "Rank", exactly as its
+    // header prints {{header_ministry_fr}} rather than the ministry's name:
+    // one card, two languages, no second template to keep in step.
+    labels: {
+      perfPanel:    t.perfPanel,
+      classPanel:   t.classPanel,
+      attendPanel:  t.attendPanel,
+      conductPanel: t.conductPanel,
+      rank:         t.rank,
+      average:      payload.reportType === "term"   ? t.termAverage
+                  : payload.reportType === "annual" ? t.annualAverage
+                  : t.average,
+      grade:        t.overallGrade,
+      decision:     t.decision,
+      classAverage: t.classAverage,
+      best:         t.best,
+      lowest:       t.lowest,
+      absences:     t.absences,
+      excused:      t.excused,
+      unexcused:    t.unexcused,
+      lateComing:   t.lateComing,
+      // The engine draws the subject table itself; these are its headings.
+      subject:      t.subject,
+      result:       payload.reportType === "term"   ? t.termResult
+                  : payload.reportType === "annual" ? t.annualResult
+                  : t.outOf20,
+      score:        t.score,
+      outOf20:      t.outOf20,
+      coeff:        t.coeff,
+      gradeCol:     t.grade,
+      remarkCol:    t.remarkCol,
+      positionCol:  t.positionCol,
+      teacher:      t.teacherCol,
+      total:        t.totalRow,
+      status:       t.status,
+      passed:       t.passed,
+      failed:       t.failed,
+      teacherRemark:   t.remark,
+      principalRemark: t.principalRemark,
+      work:         t.work,
+      behaviour:    t.behaviour,
+      observation:  t.observation,
+      fillByHand:   t.fillByHand,
+    },
 
     performance: {
       // Engine tokens {{average}} / {{weighted_average}} and its {{if
@@ -892,6 +1157,14 @@ function toTemplateData(payload, opts = {}) {
       average:           avg20 ?? 0,
       percentage:        summary?.percentage      ?? null,
       totalScore:        summary?.totalScore      ?? null,
+      // The stored decision, never a threshold applied here. The engine's
+      // own `average >= 10` stays as the fallback for a payload that has no
+      // flag, which is what it was before anything stored one.
+      isPassing:         summary?.isPassing       ?? null,
+      // What the table's last row states: the coefficients the card counted
+      // and the marks weighted by them, as the card computed them.
+      totalCoefficients: computed.totalCoefficients ?? null,
+      totalWeighted:     computed.totalWeighted     ?? null,
       position:          summary?.classPosition   ?? null,
       totalStudents:     summary?.totalInClass    ?? null,
       grade:             summary?.overallGrade    || "",
@@ -992,6 +1265,9 @@ function toTemplateData(payload, opts = {}) {
       position:       r.subjectPosition ?? r.position ?? null,
       subjectTotal:   r.subjectTotal   ?? null,
       isPassing:      r.isPassing      ?? false,
+      // A term card's per-sequence marks, in the order the school's academic
+      // structure defines them.
+      sequenceMarks:  r.sequenceMarks   || [],
       isAbsent:       r.isAbsent       ?? false,
       isExempt:       r.isExempt       ?? false,
     })),
@@ -1010,6 +1286,37 @@ function toTemplateData(payload, opts = {}) {
     // Lets {{qr_code}} emit the real verification QR instead of a placeholder.
     verify: opts.verify || null,
   };
+}
+
+/**
+ * A class figure, on the scale its own records are kept in.
+ *
+ * The exam statistics are percentages and the term and annual results are out
+ * of twenty (see services/classStats.service.js). Rather than convert one
+ * into the other — which would state a number no record holds — each prints
+ * with the unit it is in, beside the pupil's own figure on the same scale.
+ *
+ * Nothing to report prints the card's own "not recorded" mark, never 0.00:
+ * a class with no published results has no average, and a zero there says
+ * something false about every pupil in it.
+ */
+function classFigure(value, scale, t) {
+  if (value == null || !Number.isFinite(Number(value))) return t.notRecorded;
+  // Marks, on the scale the rest of the card is marked in. A percentage
+  // here would be a second scale on one document and nothing to compare the
+  // pupil's own average against.
+  return `${Number(value).toFixed(2)} ${t.outOf20}`;
+}
+
+/**
+ * A register count, or the "not recorded" mark when there was no period to
+ * count over. Zero is a real answer here — a pupil who missed nothing — and
+ * is printed as 0, which is why the unavailable case has to be its own.
+ */
+function attendanceFigure(value, t) {
+  return value == null || !Number.isFinite(Number(value))
+    ? t.notRecorded
+    : String(Number(value));
 }
 
 /**
@@ -1033,7 +1340,13 @@ function wrapTemplateHtml(body, css, { lang, title, school }) {
            color: #111827; padding: 24px; max-width: 800px; margin: 0 auto; }
     .subjects-table { width: 100%; border-collapse: collapse; margin: 10px 0; }
     .subjects-table th, .subjects-table td { border: 1px solid #333; padding: 6px 8px; }
-    .subjects-table th { background: #f0f0f0; font-weight: bold; }
+    /* The default head tint goes on the row group, not the cells: a th
+       background paints over a thead background whatever the order of the
+       sheets, so with it on the cells a template that coloured its thead
+       (the seeded one does, blue with white text) got white text on this
+       grey — an invisible header. */
+    .subjects-table th { font-weight: bold; }
+    .subjects-table thead { background: #f0f0f0; }
     .student-photo { width: 80px; height: 100px; object-fit: cover; }
     .school-logo { max-height: 80px; max-width: 200px; }
 

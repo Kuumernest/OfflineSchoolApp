@@ -389,6 +389,174 @@ check("a school template prints the verification code", verified.includes("GBH-7
 check("and where to enter it", verified.includes("school.example.com/r/7a21"), true);
 check("beside the square, not instead of it", verified.includes("data-qr"), true);
 
+// The square arrives with its own 120px width and height, and printed at
+// them — over the words beside it and past the foot of the card. It is sized
+// by its 64px box, as the built-in layout sizes its own.
+const sizedQr = renderReportCard(payload(), {
+  ...tplOpts,
+  verify: { code: "GBH-7A21-4C9F", url: "https://school.example.com/r/7a21",
+            qrSvg: '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 25 25"><path d="M0 0h1v1H0z"/></svg>' },
+}).html;
+check("the square is sized by its box, not by the SVG's own 120px",
+  [/<svg[^>]*\swidth="120"/.test(sizedQr), /<svg[^>]*style="width:100%;height:100%;display:block"/.test(sizedQr)],
+  [false, true]);
+check("  and keeps its drawing", sizedQr.includes('viewBox="0 0 25 25"'), true);
+
+// ── The subjects table on the template path, coloured as the built-in one ──
+//
+// The same pupil printed by the built-in layout had every mark in the colour
+// of its outcome; the school's template had them in plain black, and a family
+// holding one of each saw two different documents. The engine's table now
+// colours the mark, the /20 and the grade — red for a fail, green otherwise.
+const tplCard = onTemplate("sequence");
+const tplRow = (subject) =>
+  (tplCard.match(new RegExp(`<tr>\\s*<td>${subject}</td>[\\s\\S]*?</tr>`)) || [""])[0];
+check("a passed subject's mark, /20 and grade are green on a school template",
+  (tplRow("Mathematics").match(/color:#059669/g) || []).length, 3);
+check("a failed subject's are red",
+  (tplRow("Physics").match(/color:#DC2626/g) || []).length, 3);
+check("  and the grade is bold, as on the built-in card",
+  tplRow("Physics").includes("font-weight:bold;color:#DC2626"), true);
+
+// ── The table is the summary: no banner above it ──────────────────────────
+//
+// Passed, the average, the rank and the remark used to sit in a band over the
+// marks and again in the table under them. The band is gone; what it said is
+// in the table and in the panel beneath, once each.
+const PANELLED = {
+  // Marks out of twenty, like every other figure on the card: a percentage
+  // beside a pupil's 13.50 /20 is a second scale on one document.
+  classStats: { scale: "20", count: 35, average: 11.86, highest: 17.6, lowest: 4.2 },
+};
+const cellOf = (html, label) => {
+  const m = html.match(new RegExp(`<span class="panel-lbl">${label}</span><span class="panel-val">([^<]*)</span>`));
+  return m ? m[1].trim() : null;
+};
+const tableOf = (html) => html.slice(html.indexOf("<table>"), html.indexOf("</table>") + 8);
+
+const panelCard = render(PANELLED);
+check("no band of figures stands over the marks",
+  [/class="outcome/.test(panelCard), /verdict-pill/.test(panelCard),
+   /class="perf-grade"/.test(panelCard)], [false, false, false]);
+check("the pupil's standing is stated once, in the panel",
+  [cellOf(panelCard, "Rank"), cellOf(panelCard, "Average"), cellOf(panelCard, "Overall Grade")],
+  ["5 / 35", "13.50 /20", "B"]);
+
+// ── The teacher of each subject, in its own column ────────────────────────
+const taughtCard = render({ ...PANELLED, subjects: [
+  { ...SUBJECTS[0], teacherName: "Mr Rolland" },
+  SUBJECTS[1],
+] });
+const taughtTable = tableOf(taughtCard);
+check("the table has a Teacher column, after the subject",
+  /<th>Subject<\/th>\s*<th>Teacher<\/th>/.test(taughtTable), true);
+check("  each subject naming its own teacher",
+  /<td>Mathematics<\/td>\s*<td class="teacher-cell">Mr Rolland<\/td>/.test(taughtTable), true);
+check("  and a subject nobody is assigned to showing the card's dash",
+  /<td>Physics<\/td>\s*<td class="teacher-cell">—<\/td>/.test(taughtTable), true);
+
+// ── The totals, and the decision, at the foot of the table ────────────────
+const totalled = render({ ...PANELLED, subjects: [
+  { ...SUBJECTS[0], coefficient: 4 },   // 18 x 4
+  { ...SUBJECTS[1], coefficient: 3 },   //  9 x 3
+], computed: { totalCoefficients: 7, totalWeighted: 99, weightedAverage: 14.14, outOf: 20 } });
+const foot = totalled.slice(totalled.indexOf("<tfoot>"), totalled.indexOf("</tfoot>") + 8);
+check("the table ends with a total row, inside the table",
+  [foot.includes("TOTAL"), tableOf(totalled).includes("<tfoot>")], [true, true]);
+check("  the coefficients it carries, and the marks weighted by them",
+  [/<td style="text-align:center">99.00<\/td>/.test(foot), /<td style="text-align:center">7<\/td>/.test(foot)],
+  [true, true]);
+check("  which are the card's own figures, not a second sum",
+  [99 === 18 * 4 + 9 * 3, 7 === 4 + 3], [true, true]);
+check("the decision is a row of the table, not a banner",
+  /<tr class="status-row">[\s\S]*?Status[\s\S]*?status-pass[^>]*>\s*PASSED/.test(foot), true);
+const failedFoot = render({ ...PANELLED,
+  summary: { ...payload().summary, isPassing: false } });
+check("  and says so plainly when the pupil did not pass",
+  /status-fail[^>]*>\s*FAILED/.test(failedFoot), true);
+check("the council's decision keeps its own row on the annual card",
+  /<tr class="status-row">[\s\S]*?Council Decision[\s\S]*?PROMOTED TO FORM 4/.test(
+    render({ ...PANELLED, reportType: "annual" })), true);
+check("  and appears on no other card",
+  render(PANELLED).includes("Council Decision"), false);
+
+// ── Attendance is no longer on the card ───────────────────────────────────
+check("the card carries no attendance section",
+  ["Days absent", ">Absences<", "Late Coming", "Unexcused"].some((w) => panelCard.includes(w)), false);
+
+// ── The panel: performance, the class, and conduct to be filled in ────────
+check("the panel has three sections",
+  ["Student Performance", "Class Profile", "Conduct"]
+    .every((head) => panelCard.includes(`<div class="panel-head">${head}</div>`)), true);
+check("  the class on the scale its statistics are kept in",
+  [cellOf(panelCard, "Class Average"), cellOf(panelCard, "Best"), cellOf(panelCard, "Lowest")],
+  ["11.86 /20", "17.60 /20", "4.20 /20"]);
+check("  with no percentage anywhere among them",
+  /(Class Average|Best|Lowest)<\/span><span class="panel-val">[^<]*%/.test(panelCard), false);
+check("  with nothing recorded printing the card's dash, never a zero",
+  cellOf(render({ classStats: null }), "Class Average"), "—");
+check("  and conduct as three empty boxes with a line saying who fills them",
+  [(panelCard.match(/class="panel-write"/g) || []).length,
+   panelCard.includes("To be completed by the class teacher")], [3, true]);
+
+// ── The remarks, immediately before the verification strip ────────────────
+const remarked = render(PANELLED);
+check("the teacher's and the head's remarks are the last thing before the strip",
+  [remarked.indexOf('<div class="remarks">') > remarked.indexOf('<div class="info-panel">'),
+   remarked.indexOf('<div class="remarks">') < remarked.indexOf("</body>")], [true, true]);
+check("  each labelled, and the head's left blank to be written on",
+  [remarked.includes(">Teacher&#39;s Remark</div>") || remarked.includes(">Teacher's Remark</div>"),
+   remarked.includes(">Principal&#39;s Remark</div>") || remarked.includes(">Principal's Remark</div>")],
+  [true, true]);
+check("  the teacher's carrying what the card already had, and no invented text",
+  /<div class="remark-body">Fair<\/div>/.test(remarked), true);
+check("  with a rule to sign over",
+  (remarked.match(/class="remark-sign"/g) || []).length, 2);
+
+// ── French ────────────────────────────────────────────────────────────────
+const frPanelCard = renderReportCardHtml(payload(PANELLED), { ...SCHOOL, lang: "fr" });
+check("the French card labels the new parts in French",
+  ["Enseignant", "TOTAL", "Décision", "Profil de la classe",
+   "Observation du chef d&#39;établissement"].every((w) => frPanelCard.includes(w)) ||
+  ["Enseignant", "TOTAL", "Décision", "Profil de la classe"].every((w) => frPanelCard.includes(w)), true);
+check("  and leaves no English label in them",
+  ["Teacher</th>", ">Status<", "Principal&#39;s Remark", "Class Average"]
+    .some((w) => frPanelCard.includes(w)), false);
+// The engine draws the school-template table itself, so its headings are
+// localised from the same place the built-in card's are.
+const frTemplate = renderReportCard(payload(PANELLED), { ...tplOpts, lang: "fr" }).html;
+check("a school template's own table is headed in French too",
+  ["Matière", "Enseignant", "Coef", "Mention", "Observation", "Rang"]
+    .every((w) => frTemplate.includes(w)), true);
+check("  with none of the English headings left",
+  [">Subject<", ">Teacher<", ">Coeff<", ">Position<"].some((w) => frTemplate.includes(w)), false);
+
+// ── The same on a school template ─────────────────────────────────────────
+const tplWithPanel = renderReportCard(payload(PANELLED), tplOpts).html;
+check("a school template gets the teacher column and the totals from the engine",
+  [/<th[^>]*>Teacher<\/th>/.test(tplWithPanel), tplWithPanel.includes("TOTAL")], [true, true]);
+check("  the same class figures",
+  [cellOf(tplWithPanel, "Class Average"), cellOf(tplWithPanel, "Best")], ["11.86 /20", "17.60 /20"]);
+check("  no band over its marks",
+  // The markup: the print block still carries rules for the bands a template
+  // that has not been migrated yet still has.
+  [/<div class="summary-section"/.test(tplWithPanel),
+   /<div class="verdict/.test(tplWithPanel)], [false, false]);
+check("  its remarks before the footer, not beside the marks",
+  // The markup, not the stylesheet, which is in the head above everything.
+  [tplWithPanel.indexOf('<div class="remark-box">') > tplWithPanel.indexOf("</table>"),
+   tplWithPanel.indexOf('<div class="remark-box">') < tplWithPanel.indexOf('class="verify-strip"')], [true, true]);
+check("  and no attendance panel",
+  ["Days absent", "Late Coming"].some((w) => tplWithPanel.includes(w)), false);
+
+// The wrapper's default head tint sits on the row group, so the seeded
+// template's blue thead with white text is not painted over by a grey th —
+// which is what made the header row unreadable.
+const wrapperCss = (tplCard.match(/<style>([\s\S]*?)<\/style>/) || ["", ""])[1];
+check("the wrapper tints the thead, not the cells",
+  [/\.subjects-table th \{[^}]*background/.test(wrapperCss), /\.subjects-table thead \{[^}]*background: #f0f0f0/.test(wrapperCss)],
+  [false, true]);
+
 // Gated: a card printed with no verification shows no empty label.
 const unverified = onTemplate("sequence");
 check("a card printed without verification shows no strip",

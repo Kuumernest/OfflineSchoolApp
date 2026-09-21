@@ -1254,6 +1254,10 @@ const main = async () => {
       // The index is not partial either, so a soft-deleted row still occupies
       // its pupil's place — which is why res-gone below has its own.
       studentId: `stu-${i + 1}`, totalScore: 100 - i, classPosition: i + 1,
+      // Enough of a result for the card to state one: the decision and the
+      // average it is drawn from, which the report-card route prints in the
+      // table and the panel.
+      average: 14, percentage: 70, isPassing: true, overallGrade: "B",
       isPublished: true, deletedAt: null, updatedAt: new Date(),
     })),
     { _id: "res-unranked", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
@@ -1304,7 +1308,16 @@ const main = async () => {
     (cardHtml.match(/\{\{[^}]+\}\}/g) || []), []);
   // The route builds the payload the renderer needs; these are the pieces the
   // controller is responsible for assembling.
-  check("carrying the outcome card", /class="(outcome|summary-verdict)"/.test(cardHtml), true);
+  // The card's own summary: the table states the decision and the totals, and
+  // the panel under it the rank, the average and the class. There is no band
+  // over the marks any more — see docs and the report-card suites.
+  check("carrying the table's decision row and the panel under it",
+    [/class="status-row"/.test(cardHtml), /class="info-panel"/.test(cardHtml)], [true, true]);
+  // The markup, not the stylesheet: the rules for both are in the head.
+  check("and the remarks at the foot, between the panel and the strip",
+    [cardHtml.indexOf('<div class="remarks">') > cardHtml.indexOf('<div class="info-panel">'),
+     cardHtml.indexOf('<div class="remarks">') < cardHtml.indexOf('<div class="verify">')],
+    [true, true]);
   check("and the school's name", cardHtml.includes("Parity College"), true);
 
   // A pupil with neither marks nor a summary is a 404 with a reason, not a 500.

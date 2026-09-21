@@ -310,8 +310,10 @@ const main = async () => {
    * corrected — disagreed with the paper.
    */
   const avgOnCard = (html) => {
-    const box = html.match(/class="box-val">([^<]*)</);
-    return box ? box[1].trim() : null;
+    // The average is stated once, in the panel under the marks: there is no
+    // band over the table any more, and the figure is not repeated.
+    const m = html.match(/(?:Average|Term Average|Annual Average)<\/span><span class="panel-val">([\d.]+)/);
+    return m ? m[1] : null;
   };
   check("the term card headlines its term average, not five times it",
     avgOnCard(th), "15.00");
@@ -350,11 +352,24 @@ const main = async () => {
     ...opts, template: { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
   }).html;
   const headers = [...tplHtml.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1].trim());
-  check("seven columns, not nine", headers.length, 7);
+  // A term card's columns are the term's own level: its two sequences and
+  // the result they combine to, never the CA and the paper each sequence was
+  // marked from — those belong to the sequence card one level below.
   check("in this order",
-    headers, ["Subject", "Score", "/20", "Coeff", "Grade", "Remark", "Position"]);
+    headers, ["Subject", "Teacher", "Sequence 1", "Sequence 2", "Term Result",
+              "Coeff", "Grade", "Remark", "Position"]);
   check("the always-empty CA column is gone", headers.includes("CA"), false);
   check("and Total, which duplicated Exam", headers.includes("Total"), false);
+  check("and the raw score column, which repeated the term result",
+    headers.includes("Score"), false);
+
+  // The annual card keeps its own level: one result for the year.
+  const annualHeaders = [...renderReportCard(annual, {
+    ...opts, template: { html: DEFAULT_TEMPLATE_HTML, css: DEFAULT_TEMPLATE_CSS },
+  }).html.matchAll(/<th[^>]*>([^<]*)<\/th>/g)].map((m) => m[1].trim());
+  check("an annual card states the year's result, not a term's sequences",
+    annualHeaders, ["Subject", "Teacher", "Annual Result", "Coeff", "Grade",
+                    "Remark", "Position"]);
   // The data keeps the fields, so a school template reading them still works.
   check("the fields survive for a template that addresses them",
     Object.prototype.hasOwnProperty.call(
