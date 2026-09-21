@@ -664,6 +664,23 @@ const st = StyleSheet.create({
   row:         { flexDirection: "row" },
 
   // ── Corner cell ───────────────────────────────────────────
+  /*
+   * ── The frame's colours ───────────────────────────────────────────────
+   *
+   * One indigo family, read in the order the grid is read:
+   *
+   *   period column   #3730A3  the deepest, and the anchor down the side
+   *   weekday headers #4338CA  a step lighter, across the top
+   *   today           #4F46E5  one step lighter again, and nothing else
+   *   secondary text  #E0E7FF  on all three
+   *
+   * Everything below the frame is neutral (#F8FAFC cells, #E2E8F0 rules)
+   * with green kept for the one thing it means: a lesson. Before this the
+   * headers ran from near-black to bright violet, the period column was the
+   * same saturated purple as the selected day, and the empty cells were
+   * lavender — a grid where four different things competed to be the
+   * brightest. Nothing but colour changed.
+   */
   cornerCell: {
     backgroundColor: "#3730A3",
     justifyContent:  "center",
@@ -672,7 +689,7 @@ const st = StyleSheet.create({
   cornerText: {
     fontSize:      10,
     fontWeight:    "700",
-    color:         "#C7D2FE",
+    color:         "#E0E7FF",
     marginTop:     2,
     letterSpacing: 0.5,
   },
@@ -686,12 +703,14 @@ const st = StyleSheet.create({
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  2,
-    borderRightColor:  "#3730A3",
+    borderRightColor:  "#312E81",
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255,255,255,0.1)",
+    borderBottomColor: "rgba(255,255,255,0.12)",
   },
-  timeCellEven: { backgroundColor: "#4F46E5" },
-  timeCellOdd:  { backgroundColor: "#4338CA" },
+  // One ground, not a stripe: the hairline between rows is enough to
+  // follow a period across the grid.
+  timeCellEven: { backgroundColor: "#3730A3" },
+  timeCellOdd:  { backgroundColor: "#3730A3" },
 
   periodLabel: {
     fontSize:      11,
@@ -702,19 +721,21 @@ const st = StyleSheet.create({
   },
   timeStart: {
     fontSize:   11,
-    color:      "#C7D2FE",
+    color:      "#E0E7FF",
     marginTop:  4,
     fontWeight: "600",
   },
   timeEnd: {
     fontSize:  10,
-    color:     "#A5B4FC",
+    color:     "#C7D2FE",
     marginTop: 1,
   },
 
   // ── Break row ─────────────────────────────────────────────
   breakTimeCell: {
-    backgroundColor: "#F59E0B",
+    // A break is not a period: slate rather than indigo says so without
+    // bringing a third hue onto the page.
+    backgroundColor: "#64748B",
   },
   breakLabel: {
     fontSize:   11,
@@ -724,20 +745,20 @@ const st = StyleSheet.create({
   },
   breakTime: {
     fontSize:   10,
-    color:      "#FEF3C7",
+    color:      "#E2E8F0",
     marginTop:  2,
     fontWeight: "600",
   },
   breakCell: {
     width:             104,
     minHeight:         48,
-    backgroundColor:   "#FFFBEB",
+    backgroundColor:   "#F1F5F9",
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  1,
-    borderRightColor:  "#FDE68A",
+    borderRightColor:  "#E2E8F0",
     borderBottomWidth: 1,
-    borderBottomColor: "#FDE68A",
+    borderBottomColor: "#E2E8F0",
   },
   breakCellText: { fontSize: 16 },
 
@@ -745,25 +766,29 @@ const st = StyleSheet.create({
   dayHeaderCell: {
     width:             104,
     paddingVertical:   10,
-    backgroundColor:   "#231c81",
+    backgroundColor:   "#4338CA",
     justifyContent:    "center",
     alignItems:        "center",
     borderRightWidth:  1,
-    borderRightColor:  "#312E81",
+    // A hairline of light between the days, rather than another indigo:
+    // the columns separate without a second colour to reconcile.
+    borderRightColor:  "rgba(255,255,255,0.14)",
     borderBottomWidth: 2,
-    borderBottomColor: "#4F46E5",
+    borderBottomColor: "#3730A3",
     gap:               2,
   },
+  // One step lighter than the row it sits in — enough to find today at a
+  // glance, not enough to make its column the subject of the page.
   dayHeaderCellToday: { backgroundColor: "#4F46E5" },
   dayShort: {
-    color:         "#A5B4FC",
+    color:         "#FFFFFF",
     fontWeight:    "800",
     fontSize:      12,
     letterSpacing: 1,
   },
-  dayShortToday: { color: "#FFF" },
+  dayShortToday: { color: "#FFFFFF" },
   dayFull: {
-    color:      "#6366F1",
+    color:      "#E0E7FF",
     fontSize:   9,
     fontWeight: "500",
   },
@@ -782,20 +807,24 @@ const st = StyleSheet.create({
     minHeight:         72,
     padding:           8,
     borderRightWidth:  1,
-    borderRightColor:  "#E5E7EB",
+    borderRightColor:  "#E2E8F0",
     borderBottomWidth: 1,
-    borderBottomColor: "#E5E7EB",
+    borderBottomColor: "#E2E8F0",
     justifyContent:    "center",
     alignItems:        "center",
     position:          "relative",
   },
-  slotFilled:      { backgroundColor: "#F0FDF4" },
-  slotEmpty:       { backgroundColor: "#FAFAFA" },
-  slotToday:       { backgroundColor: "#F5F3FF" },
+  slotFilled:      { backgroundColor: "#ECFDF5" },
+  slotEmpty:       { backgroundColor: "#F8FAFC" },
+  // Today's own column is a shade of the same neutral, not a colour of its
+  // own: the header names the day, and the grid stays quiet.
+  slotToday:       { backgroundColor: "#F1F5F9" },
   slotFilledToday: {
-    backgroundColor: "#EDE9FE",
+    backgroundColor: "#ECFDF5",
     borderWidth:     1,
-    borderColor:     "#A78BFA",
+    // The ring stays, in the lesson's own family rather than violet: a
+    // lesson today is still a lesson, marked once more rather than twice.
+    borderColor:     "#A7F3D0",
   },
   slotAccent: {
     position:        "absolute",
@@ -821,12 +850,12 @@ const st = StyleSheet.create({
   },
   roomName: {
     fontSize:  9,
-    color:     "#6B7280",
+    color:     "#64748B",
     marginTop: 1,
     textAlign: "center",
   },
   freeText: {
-    color:      "#D1D5DB",
+    color:      "#CBD5E1",
     fontSize:   18,
     fontWeight: "300",
   },
@@ -840,7 +869,7 @@ const st = StyleSheet.create({
     marginHorizontal: 16,
     paddingVertical:  14,
     borderTopWidth:   1,
-    borderTopColor:   "#E5E7EB",
+    borderTopColor:   "#E2E8F0",
     backgroundColor:  "#FFF",
     borderRadius:     12,
   },
@@ -856,7 +885,7 @@ const st = StyleSheet.create({
   },
   legendText: {
     fontSize:   12,
-    color:      "#6B7280",
+    color:      "#64748B",
     fontWeight: "500",
   },
 });

@@ -630,6 +630,20 @@ const styles = StyleSheet.create({
   gridWrapper: { padding: 16 },
   row:         { flexDirection: "row" },
 
+  /*
+   * ── The frame's colours ───────────────────────────────────────────────
+   *
+   * The same palette the student's timetable uses, for the same reason:
+   * one indigo family read in the order the grid is read.
+   *
+   *   period column   #3730A3  the deepest, and the anchor down the side
+   *   weekday headers #4338CA  a step lighter, across the top
+   *   today           #4F46E5  one step lighter again, and nothing else
+   *   secondary text  #E0E7FF
+   *
+   * Below the frame everything is neutral (#F8FAFC cells, #E2E8F0 rules)
+   * with green kept for the one thing it means: a lesson.
+   */
   cornerCell: {
     backgroundColor: "#3730A3",
     justifyContent: "center", alignItems: "center",
@@ -638,39 +652,45 @@ const styles = StyleSheet.create({
     width: 88, minHeight: 72,
     paddingVertical: 10, paddingHorizontal: 8,
     justifyContent: "center", alignItems: "center",
-    borderRightWidth: 2, borderRightColor: "#3730A3",
-    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.1)",
+    borderRightWidth: 2, borderRightColor: "#312E81",
+    borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.12)",
   },
-  timeCellEven: { backgroundColor: "#4F46E5" },
-  timeCellOdd:  { backgroundColor: "#4338CA" },
+  // One ground, not a stripe: the hairline between rows is enough to
+  // follow a period across the grid.
+  timeCellEven: { backgroundColor: "#3730A3" },
+  timeCellOdd:  { backgroundColor: "#3730A3" },
   periodLabel: {
     fontSize: 11, fontWeight: "800", color: "#FFFFFF",
     textAlign: "center", letterSpacing: 0.3,
   },
-  timeStart: { fontSize: 11, color: "#C7D2FE", marginTop: 4, fontWeight: "600" },
-  timeEnd:   { fontSize: 10, color: "#A5B4FC", marginTop: 1 },
+  timeStart: { fontSize: 11, color: "#E0E7FF", marginTop: 4, fontWeight: "600" },
+  timeEnd:   { fontSize: 10, color: "#C7D2FE", marginTop: 1 },
 
-  breakTimeCell: { backgroundColor: "#F59E0B" },
+  // A break is not a period: slate rather than indigo says so without
+  // bringing a third hue onto the page.
+  breakTimeCell: { backgroundColor: "#64748B" },
   breakLabel: { fontSize: 11, fontWeight: "800", color: "#FFFFFF", textAlign: "center" },
-  breakTime:  { fontSize: 10, color: "#FEF3C7", marginTop: 2, fontWeight: "600" },
+  breakTime:  { fontSize: 10, color: "#E2E8F0", marginTop: 2, fontWeight: "600" },
   breakCell: {
-    width: 104, minHeight: 48, backgroundColor: "#FFFBEB",
+    width: 104, minHeight: 48, backgroundColor: "#F1F5F9",
     justifyContent: "center", alignItems: "center",
-    borderRightWidth: 1, borderRightColor: "#FDE68A",
-    borderBottomWidth: 1, borderBottomColor: "#FDE68A",
+    borderRightWidth: 1, borderRightColor: "#E2E8F0",
+    borderBottomWidth: 1, borderBottomColor: "#E2E8F0",
   },
   breakCellText: { fontSize: 16 },
 
   dayHeaderCell: {
-    width: 104, paddingVertical: 10, backgroundColor: "#231c81",
+    width: 104, paddingVertical: 10, backgroundColor: "#4338CA",
     justifyContent: "center", alignItems: "center",
-    borderRightWidth: 1, borderRightColor: "#312E81",
-    borderBottomWidth: 2, borderBottomColor: "#4F46E5", gap: 2,
+    borderRightWidth: 1, borderRightColor: "rgba(255,255,255,0.14)",
+    borderBottomWidth: 2, borderBottomColor: "#3730A3", gap: 2,
   },
+  // One step lighter than the row it sits in — enough to find today at a
+  // glance, not enough to make its column the subject of the page.
   dayHeaderCellToday: { backgroundColor: "#4F46E5" },
-  dayShort: { color: "#A5B4FC", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
-  dayShortToday: { color: "#FFF" },
-  dayFull: { color: "#6366F1", fontSize: 9, fontWeight: "500" },
+  dayShort: { color: "#FFFFFF", fontWeight: "800", fontSize: 12, letterSpacing: 1 },
+  dayShortToday: { color: "#FFFFFF" },
+  dayFull: { color: "#E0E7FF", fontSize: 9, fontWeight: "500" },
   dayFullToday: { color: "#E0E7FF" },
   todayDot: {
     width: 5, height: 5, borderRadius: 3,
@@ -679,33 +699,35 @@ const styles = StyleSheet.create({
 
   slotCell: {
     width: 104, minHeight: 72, padding: 8,
-    borderRightWidth: 1, borderRightColor: "#E5E7EB",
-    borderBottomWidth: 1, borderBottomColor: "#E5E7EB",
+    borderRightWidth: 1, borderRightColor: "#E2E8F0",
+    borderBottomWidth: 1, borderBottomColor: "#E2E8F0",
     justifyContent: "center", alignItems: "center",
     position: "relative",
   },
-  slotFilled:      { backgroundColor: "#F0FDF4" },
-  slotEmpty:       { backgroundColor: "#FAFAFA" },
-  slotToday:       { backgroundColor: "#F5F3FF" },
-  slotFilledToday: { backgroundColor: "#EDE9FE", borderWidth: 1, borderColor: "#A78BFA" },
+  slotFilled:      { backgroundColor: "#ECFDF5" },
+  slotEmpty:       { backgroundColor: "#F8FAFC" },
+  // Today's own column is a shade of the same neutral, not a colour of its
+  // own: the header names the day, and the grid stays quiet.
+  slotToday:       { backgroundColor: "#F1F5F9" },
+  slotFilledToday: { backgroundColor: "#ECFDF5", borderWidth: 1, borderColor: "#A7F3D0" },
   slotAccent: {
     position: "absolute", left: 0, top: 8, bottom: 8,
     width: 3, borderRadius: 2, backgroundColor: "#22C55E",
   },
   subjectName: { fontSize: 11, fontWeight: "700", color: "#166534", textAlign: "center" },
   className:   { fontSize: 10, color: "#15803D", marginTop: 3, textAlign: "center", fontWeight: "500" },
-  roomName:    { fontSize: 9, color: "#6B7280", marginTop: 1, textAlign: "center" },
-  freeText:    { color: "#D1D5DB", fontSize: 18, fontWeight: "300" },
-  cornerText:  { fontSize: 10, fontWeight: "700", color: "#C7D2FE", marginTop: 2, letterSpacing: 0.5 },
+  roomName:    { fontSize: 9, color: "#64748B", marginTop: 1, textAlign: "center" },
+  freeText:    { color: "#CBD5E1", fontSize: 18, fontWeight: "300" },
+  cornerText:  { fontSize: 10, fontWeight: "700", color: "#E0E7FF", marginTop: 2, letterSpacing: 0.5 },
 
   legend: {
     flexDirection: "row", justifyContent: "center", gap: 20,
     marginTop: 8, marginHorizontal: 16, paddingVertical: 14,
-    borderTopWidth: 1, borderTopColor: "#E5E7EB",
+    borderTopWidth: 1, borderTopColor: "#E2E8F0",
     backgroundColor: "#FFF", borderRadius: 12,
   },
   legendItem:  { flexDirection: "row", alignItems: "center", gap: 6 },
   legendSwatch:{ width: 14, height: 14, borderRadius: 4 },
-  legendText:  { fontSize: 12, color: "#6B7280", fontWeight: "500" },
+  legendText:  { fontSize: 12, color: "#64748B", fontWeight: "500" },
 });
 import { useTranslation } from "../../../src/i18n/useTranslation";
