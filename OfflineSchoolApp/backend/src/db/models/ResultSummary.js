@@ -42,6 +42,28 @@ const subjectBreakdownSchema = new mongoose.Schema(
     remark:         { type: String,  default: null   },
     isPassing:      { type: Boolean, default: false  },
     isAbsent:       { type: Boolean, default: false  },
+
+    /*
+     * Exempt, which is not the same fact as absent and was being thrown away.
+     *
+     * grading.service.calculateOverallResult has always built this row with
+     * `isExempt` on it — it is what decides the "EX" grade and the "Exempt"
+     * remark two lines above — but the path was missing here, so Mongoose
+     * stripped the field on every write. The state survived only as the grade
+     * STRING, which is a school-configurable label and not something a reader
+     * can safely test against.
+     *
+     * Anything reading the breakdown therefore saw an exempt subject as
+     * isExempt: undefined with normalizedMark: 0, and an exemption is emphatically
+     * not a zero: a pupil excused from a subject did not fail it. The student
+     * intelligence layer was averaging those zeros into the subject's trend.
+     *
+     * Additive and it changes no calculation: the flag was already being
+     * computed and is now stored. Rows written before this keep reading as
+     * undefined, which is why readers also treat a null `score` as "no mark
+     * behind this row" — see intelligence/subjectInsights.service.js.
+     */
+    isExempt:       { type: Boolean, default: false  },
   },
   { _id: false }
 );

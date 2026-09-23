@@ -24,6 +24,7 @@ import {
   FileSpreadsheet,
   KeyRound,
   Eye,
+  Lightbulb,
   MessageSquare,
   ShieldAlert,
   ShieldCheck,
@@ -173,6 +174,22 @@ export const NAV_ITEMS: NavItem[] = [
     path:  "/watchlist",
     icon:  Eye,
     roles: ["super_admin", "school_admin", "bursar"],
+  },
+
+  // ── Class intelligence ───────────────────────────────────
+  // The staffroom's counterpart to the watch list above, and the reason
+  // teachers can have this one: it is computed from marks alone. No balance,
+  // no arrears, no fee ledger anywhere in the module that answers it.
+  //
+  // The bursar is absent for the mirror-image reason — subject strengths and
+  // support plans for a named child are staffroom and office knowledge, and
+  // holding the school's money is not a reason to read them.
+  {
+    label: "Class intelligence",
+    labelKey: "nav.classIntelligence",
+    path:  "/class-intelligence",
+    icon:  Lightbulb,
+    roles: ["super_admin", "school_admin", "teacher"],
   },
 
   // ── Students ─────────────────────────────────────────────

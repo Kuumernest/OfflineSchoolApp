@@ -36,6 +36,7 @@ const ChangePassword   = lazy(() => import("@/pages/auth/ChangePasswordPage"));
 const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPage"));
 const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
+const ClassIntelPage   = lazy(() => import("@/pages/insights/class-intelligence"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
@@ -269,6 +270,8 @@ export default function App() {
             {/* Named by fee arrears, so teachers are out and the bursar is in.
                 Read-only — the endpoint has no write route at all. */}
             <Route path="/watchlist" element={page(<WatchlistPage />)} />
+            {/* The teacher loop: evidence → guidance → action → outcome. */}
+            <Route path="/class-intelligence" element={page(<ClassIntelPage />)} />
           </Route>
 
           {/* ── The ledger ─────────────────────────────────────────────── */}

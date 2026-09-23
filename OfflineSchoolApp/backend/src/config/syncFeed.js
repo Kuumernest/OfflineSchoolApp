@@ -252,6 +252,8 @@ const FEED = [
   },
   { collection: "grade",        model: "Grade",        permission: "results.view" },
   { collection: "homework",     model: "Homework",     permission: "homework.view" },
+  { collection: "intervention", model: "Intervention", permission: ["interventions.view", "interventions.viewTaught"], scope: taughtStudentsOnly,
+    why: "Teachers mirror only actions for taught pupils; finance roles have no intervention capability." },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },
   { collection: "enrollment",   model: "Enrollment",   permission: ["students.view", "students.viewTaught"] },
   { collection: "promotionRun",      model: "PromotionRun",      permission: "promotion.run" },

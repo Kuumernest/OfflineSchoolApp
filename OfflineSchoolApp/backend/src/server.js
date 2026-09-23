@@ -889,6 +889,7 @@ app.use("/api/insights",
   auth.authenticate,
   loadRoute("./routes/insights.routes")
 );
+app.use("/api/interventions", auth.authenticate, loadRoute("./routes/interventions.routes"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER ROUTES

@@ -1521,12 +1521,12 @@ const upsertScore = asyncHandler(async (req, res) => {
     ...examSubjectBase,
     ...(examSubjectId ? { _id: String(examSubjectId) } : {}),
     ...(!examSubjectId && classId ? { classId: String(classId) } : {}),
-  }).select("_id classId subjectId").lean();
+  }).select("_id classId subjectId maxScore").lean();
   if (!examSubject && !examSubjectId && classId) {
     // The body named a class the exam does not sit this subject in; the
     // exam's own row for the subject decides, if it has one.
     examSubject = await ExamSubject.findOne(examSubjectBase)
-      .select("_id classId subjectId").lean();
+      .select("_id classId subjectId maxScore").lean();
   }
   if (examSubjectId && !examSubject) {
     return res.status(404).json({ success: false, error: "Exam subject not found" });
@@ -1567,6 +1567,41 @@ const upsertScore = asyncHandler(async (req, res) => {
         success: false,
         code:    "SUBJECT_NOT_ASSIGNED",
         error:   "You are not assigned to this class and subject",
+      });
+    }
+  }
+
+  /*
+   * ── A present pupil needs a real mark ───────────────────────────────────
+   *
+   * The same rule the bulk sheet applies, and for the same reason it gives:
+   * "a blank cell on a present student silently corrupts every average and
+   * grade computed from it". This route had no such guard, so a body with no
+   * `score` stored score: null with isAbsent false — and processResults turns
+   * that into a genuine ZERO in ResultSummary.subjectBreakdown
+   * (`score: effectiveScore ?? 0`), where nothing downstream can tell it from
+   * a mark the pupil actually earned. The report card prints it, the term
+   * average counts it, and the student intelligence layer reads it as a real
+   * collapse in the subject.
+   *
+   * Closed here, at the door, rather than by teaching every reader to guess
+   * what a zero meant. A pupil with no mark is recorded as absent or exempt,
+   * which the whole system already understands; the fallback below it stays
+   * as it is, now genuinely unreachable from either write path.
+   *
+   * After authorisation on purpose: somebody who may not write this mark
+   * learns that and nothing else.
+   */
+  const ceiling = Number(maxScore ?? examSubject?.maxScore ?? 100);
+  if (!isAbsent && !isExempt) {
+    const blank = score === null || score === undefined || score === "";
+    const value = Number(score);
+    if (blank || !Number.isFinite(value) || value < 0 || value > ceiling) {
+      return res.status(400).json({
+        success: false,
+        code:    "SCORE_REQUIRED",
+        error:   `A present student needs a mark between 0 and ${ceiling}. ` +
+                 `Record the student as absent or exempt if there is no mark.`,
       });
     }
   }

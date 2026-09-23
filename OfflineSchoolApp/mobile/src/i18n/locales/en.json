@@ -2450,7 +2450,9 @@
     "attendanceReminderPast": "{{className}} · {{subjectName}}: attendance not marked (class ended {{time}})",
     "attendanceReminderCurrent": "{{className}} · {{subjectName}}: attendance not marked (class in progress)",
     "attendanceReminderUpcoming": "{{className}} · {{subjectName}}: attendance not yet marked (starts {{time}})",
-    "attendanceReminderNoTime": "{{className}} · {{subjectName}}: attendance not marked today"
+    "attendanceReminderNoTime": "{{className}} · {{subjectName}}: attendance not marked today",
+    "modIntelligenceTitle": "Class intelligence",
+    "modIntelligenceDesc": "Evidence, guidance and support actions"
   },
   "studentHome": {
     "greetingMorning": "Good Morning",
@@ -6014,5 +6016,60 @@
     "late": "Late",
     "notGraded": "Not graded",
     "score": "{{score}}/{{max}}"
+  },
+  "classIntel": {
+    "title": "Class intelligence",
+    "blurb": "What the marks on record say, and what you chose to do about it.",
+    "empty": "No approved pupils in this class yet.",
+    "nothingToNote": "Nothing to note from the marks on record.",
+    "offline": "No connection. Guidance will load when you are back online.",
+    "staleAt": "Last updated {{time}}. May not be current.",
+    "recordedTitle": "Action recorded",
+    "recordedBody": "Saved on this device. It will sync when you are back online.",
+    "recordFailed": "The action could not be recorded."
+  },
+  "guidance": {
+    "RECENT_DECLINE": "Recent performance has declined",
+    "SUDDEN_PERFORMANCE_CHANGE": "A recent performance change was observed",
+    "PERSISTENT_UNDERPERFORMANCE": "Performance has stayed below the pass mark",
+    "SUBJECT_STRENGTH": "A subject strength is emerging",
+    "SUSTAINED_IMPROVEMENT": "Sustained improvement was observed",
+    "CONSISTENT_STRENGTH": "Consistent strong performance",
+    "INSUFFICIENT_ACADEMIC_EVIDENCE": "Not enough academic evidence yet",
+    "REVIEW_RECENT_ASSESSMENTS": "Review recent assessments",
+    "IDENTIFY_REPEATED_ERRORS": "Identify repeated errors",
+    "TARGETED_PRACTICE": "Provide targeted practice",
+    "ADDITIONAL_SUPPORT": "Provide additional support",
+    "MONITOR_NEXT_SEQUENCE": "Monitor the next sequence",
+    "ENRICHMENT_ACTIVITY": "Offer an enrichment activity",
+    "ADVANCED_PROBLEM_SOLVING": "Offer advanced problem solving",
+    "EXPLORE_RELATED_LEARNING": "Explore related learning"
+  },
+  "evidence": {
+    "observations": "Assessments seen",
+    "recent_average": "Recent average",
+    "previous_average": "Earlier average",
+    "overall_average": "Overall average",
+    "latest_mark": "Latest mark",
+    "consistency": "Consistency",
+    "change": "Change",
+    "latest_change": "Latest change",
+    "largest_single_drop": "Largest single fall",
+    "largest_single_gain": "Largest single rise",
+    "spread": "Spread",
+    "marks_below_pass": "Marks below the pass mark",
+    "pass_mark": "Pass mark",
+    "strong_mark_threshold": "Strength threshold",
+    "marks_at_or_above_threshold": "Marks at or above it",
+    "observed_sequences": "Sequences on record",
+    "observed_subjects": "Subjects on record"
+  },
+  "intervention": {
+    "status": {
+      "planned": "Planned",
+      "active": "In progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    }
   }
 }

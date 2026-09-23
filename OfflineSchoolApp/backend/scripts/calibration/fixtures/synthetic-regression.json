@@ -1,0 +1,1113 @@
+{
+  "provenance": {
+    "kind": "synthetic",
+    "note": "Constructed by hand to exercise the calibration tooling across every pattern the review categories name. Not a real school. Not evidence about any pupil. Validates nothing about a threshold."
+  },
+  "engineVersion": "1.0.0",
+  "cases": [
+    {
+      "caseId": "absence_heavy-22",
+      "category": "absence_heavy",
+      "studentId": "S09",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [],
+        "guidance": [],
+        "metrics": {
+          "recentAverage": 11,
+          "priorAverage": 12,
+          "overallAverage": 11.5,
+          "delta": -1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": -1,
+          "belowPass": 0,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "borderline_threshold-2",
+      "category": "borderline_threshold",
+      "studentId": "S01",
+      "subjectId": "ENG",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "strong"
+          },
+          {
+            "code": "consistency_strength",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "moderate"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "CONSISTENT_STRENGTH",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 16,
+          "priorAverage": 17,
+          "overallAverage": 16.7,
+          "delta": -1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": -1,
+          "belowPass": 0,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "borderline_threshold-4",
+      "category": "borderline_threshold",
+      "studentId": "S01",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "strong"
+          },
+          {
+            "code": "consistency_strength",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "moderate"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "CONSISTENT_STRENGTH",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 17,
+          "priorAverage": 16,
+          "overallAverage": 16.7,
+          "delta": 1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 0,
+          "belowPass": 0,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "borderline_threshold-10",
+      "category": "borderline_threshold",
+      "studentId": "S03",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 6,
+          "priorAverage": 7,
+          "overallAverage": 7,
+          "delta": -1,
+          "spread": 2,
+          "consistency": "high",
+          "latestStep": -2,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "declining-5",
+      "category": "declining",
+      "studentId": "S02",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9.5,
+          "priorAverage": 15.5,
+          "overallAverage": 12.5,
+          "delta": -6,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -1,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "declining-21",
+      "category": "declining",
+      "studentId": "S08",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 11,
+          "priorAverage": 13,
+          "overallAverage": 12,
+          "delta": -2,
+          "spread": 4,
+          "consistency": "moderate",
+          "latestStep": -2,
+          "belowPass": 0,
+          "strongMarks": 1
+        }
+      }
+    },
+    {
+      "caseId": "declining-32",
+      "category": "declining",
+      "studentId": "S14",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          },
+          {
+            "code": "sudden_performance_change",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          },
+          {
+            "type": "academic_support",
+            "rationaleCode": "SUDDEN_PERFORMANCE_CHANGE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 12.5,
+          "priorAverage": 16,
+          "overallAverage": 14.3,
+          "delta": -3.5,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -7,
+          "belowPass": 1,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "emerging_strength-14",
+      "category": "emerging_strength",
+      "studentId": "S05",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "emerging"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "low"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 18,
+          "priorAverage": 18,
+          "overallAverage": 15,
+          "delta": 0,
+          "spread": 9,
+          "consistency": "variable",
+          "latestStep": 9,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "emerging_strength-16",
+      "category": "emerging_strength",
+      "studentId": "S06",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "emerging"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "low"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 16,
+          "priorAverage": 15,
+          "overallAverage": 15.5,
+          "delta": 1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 1,
+          "belowPass": 0,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "insufficient_evidence-18",
+      "category": "insufficient_evidence",
+      "studentId": "S07",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [],
+        "guidance": [],
+        "metrics": {
+          "recentAverage": 13,
+          "priorAverage": null,
+          "overallAverage": 13,
+          "delta": null,
+          "spread": 0,
+          "consistency": null,
+          "latestStep": null,
+          "belowPass": 0,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "insufficient_evidence-19",
+      "category": "insufficient_evidence",
+      "studentId": "S07",
+      "subjectId": null,
+      "expected": {
+        "classifications": [],
+        "guidance": [
+          {
+            "type": "monitoring",
+            "rationaleCode": "INSUFFICIENT_ACADEMIC_EVIDENCE",
+            "priority": "low"
+          }
+        ],
+        "metrics": null
+      }
+    },
+    {
+      "caseId": "insufficient_evidence-29",
+      "category": "insufficient_evidence",
+      "studentId": "S12",
+      "subjectId": null,
+      "expected": {
+        "classifications": [],
+        "guidance": [
+          {
+            "type": "monitoring",
+            "rationaleCode": "INSUFFICIENT_ACADEMIC_EVIDENCE",
+            "priority": "low"
+          }
+        ],
+        "metrics": null
+      }
+    },
+    {
+      "caseId": "mixed_assessment-28",
+      "category": "mixed_assessment",
+      "studentId": "S11",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [],
+        "guidance": [],
+        "metrics": {
+          "recentAverage": 13,
+          "priorAverage": 12,
+          "overallAverage": 12.5,
+          "delta": 1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 1,
+          "belowPass": 0,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "strong_and_stable-1",
+      "category": "strong_and_stable",
+      "studentId": "S01",
+      "subjectId": "ENG",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "strong"
+          },
+          {
+            "code": "consistency_strength",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "moderate"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "CONSISTENT_STRENGTH",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 16,
+          "priorAverage": 17,
+          "overallAverage": 16.7,
+          "delta": -1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": -1,
+          "belowPass": 0,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "strong_and_stable-3",
+      "category": "strong_and_stable",
+      "studentId": "S01",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "strong"
+          },
+          {
+            "code": "consistency_strength",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "moderate"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "CONSISTENT_STRENGTH",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 17,
+          "priorAverage": 16,
+          "overallAverage": 16.7,
+          "delta": 1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 0,
+          "belowPass": 0,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "strong_and_stable-30",
+      "category": "strong_and_stable",
+      "studentId": "S13",
+      "subjectId": "ENG",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "strong"
+          },
+          {
+            "code": "consistency_strength",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "moderate"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "CONSISTENT_STRENGTH",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 14.5,
+          "priorAverage": 14.5,
+          "overallAverage": 14.5,
+          "delta": 0,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 1,
+          "belowPass": 0,
+          "strongMarks": 4
+        }
+      }
+    },
+    {
+      "caseId": "strong_but_recent-17",
+      "category": "strong_but_recent",
+      "studentId": "S06",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "emerging"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "low"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 16,
+          "priorAverage": 15,
+          "overallAverage": 15.5,
+          "delta": 1,
+          "spread": 1,
+          "consistency": "high",
+          "latestStep": 1,
+          "belowPass": 0,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "sudden_change-33",
+      "category": "sudden_change",
+      "studentId": "S14",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          },
+          {
+            "code": "sudden_performance_change",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          },
+          {
+            "type": "academic_support",
+            "rationaleCode": "SUDDEN_PERFORMANCE_CHANGE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 12.5,
+          "priorAverage": 16,
+          "overallAverage": 14.3,
+          "delta": -3.5,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -7,
+          "belowPass": 1,
+          "strongMarks": 3
+        }
+      }
+    },
+    {
+      "caseId": "trend_on_variable_subject-7",
+      "category": "trend_on_variable_subject",
+      "studentId": "S02",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9.5,
+          "priorAverage": 15.5,
+          "overallAverage": 12.5,
+          "delta": -6,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -1,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "trend_on_variable_subject-26",
+      "category": "trend_on_variable_subject",
+      "studentId": "S10",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 5,
+          "priorAverage": 0,
+          "overallAverage": 1.7,
+          "delta": 5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 5,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "trend_on_variable_subject-31",
+      "category": "trend_on_variable_subject",
+      "studentId": "S13",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 12.5,
+          "priorAverage": 9,
+          "overallAverage": 10.8,
+          "delta": 3.5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 1,
+          "belowPass": 1,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "volatile-6",
+      "category": "volatile",
+      "studentId": "S02",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9.5,
+          "priorAverage": 15.5,
+          "overallAverage": 12.5,
+          "delta": -6,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -1,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "volatile-15",
+      "category": "volatile",
+      "studentId": "S05",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "subject_strength",
+            "confidence": "emerging"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUBJECT_STRENGTH",
+            "priority": "low"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 18,
+          "priorAverage": 18,
+          "overallAverage": 15,
+          "delta": 0,
+          "spread": 9,
+          "consistency": "variable",
+          "latestStep": 9,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "volatile-25",
+      "category": "volatile",
+      "studentId": "S10",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 5,
+          "priorAverage": 0,
+          "overallAverage": 1.7,
+          "delta": 5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 5,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "weak_and_persistent-9",
+      "category": "weak_and_persistent",
+      "studentId": "S03",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 6,
+          "priorAverage": 7,
+          "overallAverage": 7,
+          "delta": -1,
+          "spread": 2,
+          "consistency": "high",
+          "latestStep": -2,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "weak_and_persistent-12",
+      "category": "weak_and_persistent",
+      "studentId": "S04",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9,
+          "priorAverage": 6.5,
+          "overallAverage": 7.8,
+          "delta": 2.5,
+          "spread": 3,
+          "consistency": "moderate",
+          "latestStep": 0,
+          "belowPass": 4,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "weak_and_persistent-23",
+      "category": "weak_and_persistent",
+      "studentId": "S10",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 5,
+          "priorAverage": 0,
+          "overallAverage": 1.7,
+          "delta": 5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 5,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "weak_but_improving-13",
+      "category": "weak_but_improving",
+      "studentId": "S04",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9,
+          "priorAverage": 6.5,
+          "overallAverage": 7.8,
+          "delta": 2.5,
+          "spread": 3,
+          "consistency": "moderate",
+          "latestStep": 0,
+          "belowPass": 4,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "weak_but_improving-24",
+      "category": "weak_but_improving",
+      "studentId": "S10",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 5,
+          "priorAverage": 0,
+          "overallAverage": 1.7,
+          "delta": 5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 5,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "with_intervention-8",
+      "category": "with_intervention",
+      "studentId": "S02",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "academic_decline",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "RECENT_DECLINE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 9.5,
+          "priorAverage": 15.5,
+          "overallAverage": 12.5,
+          "delta": -6,
+          "spread": 7,
+          "consistency": "variable",
+          "latestStep": -1,
+          "belowPass": 1,
+          "strongMarks": 2
+        }
+      }
+    },
+    {
+      "caseId": "with_intervention-11",
+      "category": "with_intervention",
+      "studentId": "S03",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 6,
+          "priorAverage": 7,
+          "overallAverage": 7,
+          "delta": -1,
+          "spread": 2,
+          "consistency": "high",
+          "latestStep": -2,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    },
+    {
+      "caseId": "with_intervention-20",
+      "category": "with_intervention",
+      "studentId": "S07",
+      "subjectId": null,
+      "expected": {
+        "classifications": [],
+        "guidance": [
+          {
+            "type": "monitoring",
+            "rationaleCode": "INSUFFICIENT_ACADEMIC_EVIDENCE",
+            "priority": "low"
+          }
+        ],
+        "metrics": null
+      }
+    },
+    {
+      "caseId": "zero_heavy-27",
+      "category": "zero_heavy",
+      "studentId": "S10",
+      "subjectId": "MAT",
+      "expected": {
+        "classifications": [
+          {
+            "code": "persistent_underperformance",
+            "confidence": "strong"
+          },
+          {
+            "code": "sustained_improvement",
+            "confidence": "strong"
+          }
+        ],
+        "guidance": [
+          {
+            "type": "academic_support",
+            "rationaleCode": "PERSISTENT_UNDERPERFORMANCE",
+            "priority": "high"
+          },
+          {
+            "type": "strength_development",
+            "rationaleCode": "SUSTAINED_IMPROVEMENT",
+            "priority": "moderate"
+          }
+        ],
+        "metrics": {
+          "recentAverage": 5,
+          "priorAverage": 0,
+          "overallAverage": 1.7,
+          "delta": 5,
+          "spread": 5,
+          "consistency": "variable",
+          "latestStep": 5,
+          "belowPass": 3,
+          "strongMarks": 0
+        }
+      }
+    }
+  ]
+}

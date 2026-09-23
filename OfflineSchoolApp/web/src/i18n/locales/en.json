@@ -195,7 +195,8 @@
     "messages": "Messages",
     "messageAudit": "Message audit",
     "approvals": "Approvals",
-    "platformSettings": "Platform settings"
+    "platformSettings": "Platform settings",
+    "classIntelligence": "Class intelligence"
   },
   "academic": {
     "student": "Student",
@@ -1793,6 +1794,7 @@
       "announcements": "Announcements",
       "messages": "Messages",
       "insights": "Students to watch",
+      "interventions": "Student support",
       "homework": "Homework",
       "quiz": "Quizzes",
       "permissions": "Permissions",
@@ -1852,6 +1854,11 @@
       "announcements.manage": "Manage all announcements",
       "messages.audit": "Read other people's messages",
       "insights.view": "See the watch list",
+      "insights.viewTaught": "See subject strengths and risks for the classes you teach",
+      "interventions.view": "See student support actions across the school",
+      "interventions.viewTaught": "See support actions for the classes you teach",
+      "interventions.create": "Record a support action for a pupil you teach",
+      "interventions.manage": "Manage support actions and record their outcomes",
       "homework.view": "See homework",
       "homework.manage": "Set and grade homework",
       "quiz.author": "Write quizzes and questions",
@@ -3179,9 +3186,112 @@
     "emptyValue": "(empty)",
     "edit": "Correct details"
   },
+  "guidance": {
+    "RECENT_DECLINE": "Recent academic performance has declined.",
+    "SUDDEN_PERFORMANCE_CHANGE": "A recent performance change was observed.",
+    "PERSISTENT_UNDERPERFORMANCE": "Performance has remained below the school's pass mark.",
+    "SUBJECT_STRENGTH": "A subject strength is emerging.",
+    "SUSTAINED_IMPROVEMENT": "Sustained improvement was observed.",
+    "CONSISTENT_STRENGTH": "Consistent strong performance was observed.",
+    "INSUFFICIENT_ACADEMIC_EVIDENCE": "There is not yet enough academic evidence.",
+    "REVIEW_RECENT_ASSESSMENTS": "Review recent assessments",
+    "IDENTIFY_REPEATED_ERRORS": "Identify repeated errors",
+    "TARGETED_PRACTICE": "Provide targeted practice",
+    "ADDITIONAL_SUPPORT": "Provide additional support",
+    "MONITOR_NEXT_SEQUENCE": "Monitor the next sequence",
+    "ENRICHMENT_ACTIVITY": "Offer an enrichment activity",
+    "ADVANCED_PROBLEM_SOLVING": "Offer advanced problem-solving activities",
+    "EXPLORE_RELATED_LEARNING": "Explore related learning opportunities"
+  },
   "reportCard": {
     "ca": "CA",
     "test": "Test",
     "caFull": "Continuous Assessment"
+  },
+  "classIntel": {
+    "title": "Class intelligence",
+    "blurb": "What the marks already on record say about each pupil, and what you chose to do about it.",
+    "class": "Class",
+    "review": "Review",
+    "noClasses": "You are not assigned to any class yet.",
+    "empty": "No approved pupils in this class yet.",
+    "stale": "Showing the last information this device received. It may not be up to date.",
+    "nothingToNote": "Nothing to note from the marks on record.",
+    "evidenceHeading": "Why this pupil is listed",
+    "countStudents": "{{n}} pupils",
+    "countAttention": "{{n}} needing attention",
+    "countStrength": "{{n}} with a strength"
+  },
+  "confidence": {
+    "strong": "Established evidence",
+    "emerging": "Emerging evidence",
+    "insufficient": "Not enough evidence yet"
+  },
+  "evidence": {
+    "observations": "Assessments seen",
+    "recent_average": "Recent average",
+    "previous_average": "Earlier average",
+    "overall_average": "Overall average",
+    "latest_mark": "Latest mark",
+    "consistency": "Consistency",
+    "change": "Change",
+    "latest_change": "Latest change",
+    "largest_single_drop": "Largest single fall",
+    "largest_single_gain": "Largest single rise",
+    "spread": "Spread",
+    "marks_below_pass": "Marks below the pass mark",
+    "pass_mark": "Pass mark",
+    "strong_mark_threshold": "Strength threshold",
+    "marks_at_or_above_threshold": "Marks at or above it",
+    "strong_subjects": "Strong subjects",
+    "strong_subjects_with_established_evidence": "With established evidence",
+    "observed_sequences": "Sequences on record",
+    "observed_subjects": "Subjects on record",
+    "before": "Before",
+    "after": "After",
+    "notCausal": "This is an observed change over time. It does not establish that the action caused it.",
+    "value": {
+      "high": "High",
+      "moderate": "Moderate",
+      "variable": "Variable"
+    },
+    "reading": {
+      "INCREASED_AFTER": "Performance increased after the action was recorded.",
+      "DECREASED_AFTER": "Performance decreased after the action was recorded.",
+      "NO_CHANGE_OBSERVED": "No measurable change was observed in the available window.",
+      "AWAITING_POST_EVIDENCE": "No assessment has been published since this action started.",
+      "NO_PRIOR_EVIDENCE": "There is no assessment on record from before this action started.",
+      "NO_COMPARABLE_EVIDENCE": "There are no comparable assessments on record.",
+      "NOT_SUBJECT_SPECIFIC": "This action names no subject, so no subject comparison is shown."
+    }
+  },
+  "intervention": {
+    "heading": "What was done",
+    "none": "Nothing recorded yet.",
+    "created": "Action recorded",
+    "createFailed": "The action could not be recorded",
+    "updated": "Action updated",
+    "conflict": "Someone else updated this first. Showing the current version.",
+    "from": "from {{reason}}",
+    "showEvidence": "Before and after",
+    "outcomePrompt": "What did you observe afterwards?",
+    "outcomeRecorded": "Recorded outcome: {{outcome}}",
+    "status": {
+      "planned": "Planned",
+      "active": "In progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "move": {
+      "active": "Start",
+      "completed": "Mark complete",
+      "cancelled": "Cancel"
+    },
+    "outcome": {
+      "improved": "Improved",
+      "no_change": "No change",
+      "further_support": "Needs more support",
+      "not_assessed": "Not assessed yet"
+    }
   }
 }

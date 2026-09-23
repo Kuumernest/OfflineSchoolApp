@@ -154,6 +154,27 @@ module.exports = [
 ];
 
 module.exports.push({
+  route: "POST /api/interventions",
+  handler: ({ body }, { docs }) => {
+    const student = docs.get("student", String(body.studentId ?? ""));
+    if (!student || student.deletedAt || !body.actionCode) return null;
+    const now = new Date().toISOString(); const _id = body._id ? String(body._id) : randomUUID();
+    const doc = { _id, schoolId: student.schoolId, studentId: String(student._id), classId: student.classId, createdBy: null, updatedBy: null, assignedTo: body.assignedTo ?? null, sourceType: body.sourceType ?? "other", sourceCode: body.sourceCode ?? null, actionCode: body.actionCode, notes: body.notes ?? null, status: "planned", outcomeCode: null, outcomeNotes: null, startedAt: null, completedAt: null, cancelledAt: null, deletedAt: null, statusHistory: [], version: 1, createdAt: now, updatedAt: now };
+    return { collection: "intervention", doc, request: { method: "POST", path: "/api/interventions", body: { ...body, _id } }, response: { status: 201, data: { success: true, data: doc } } };
+  },
+});
+
+module.exports.push({
+  route: "PATCH /api/interventions/:id",
+  handler: ({ params, body }, { docs }) => {
+    const current = docs.get("intervention", String(params.id)); if (!current || current.deletedAt || body.version !== current.version) return null;
+    const next = { ...current, ...["assignedTo", "notes", "outcomeCode", "outcomeNotes"].reduce((out, k) => (k in body ? { ...out, [k]: body[k] } : out), {}), updatedAt: new Date().toISOString(), version: current.version + 1 };
+    if (body.status) { const valid = { planned: ["active", "cancelled"], active: ["completed", "cancelled"], completed: [], cancelled: [] }; if (!valid[current.status]?.includes(body.status)) return null; next.status = body.status; }
+    return { collection: "intervention", doc: next, request: { method: "PATCH", path: `/api/interventions/${current._id}`, body: { ...body, version: current.version } }, response: { status: 200, data: { success: true, data: next } } };
+  },
+});
+
+module.exports.push({
   route: "POST /api/finance/expenses",
 
   /**

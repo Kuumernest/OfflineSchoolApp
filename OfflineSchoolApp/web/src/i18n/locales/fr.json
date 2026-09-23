@@ -195,7 +195,8 @@
     "messages": "Messages",
     "messageAudit": "Audit des messages",
     "approvals": "Validations",
-    "platformSettings": "Paramètres de la plateforme"
+    "platformSettings": "Paramètres de la plateforme",
+    "classIntelligence": "Intelligence de classe"
   },
   "academic": {
     "student": "Élève",
@@ -1793,6 +1794,7 @@
       "announcements": "Communiqués",
       "messages": "Messages",
       "insights": "Élèves à surveiller",
+      "interventions": "Accompagnement des élèves",
       "homework": "Devoirs",
       "quiz": "Quiz",
       "permissions": "Droits",
@@ -1852,6 +1854,11 @@
       "announcements.manage": "Gérer tous les communiqués",
       "messages.audit": "Lire les messages des autres",
       "insights.view": "Consulter la liste de surveillance",
+      "insights.viewTaught": "Consulter les forces et les risques par matière pour vos classes",
+      "interventions.view": "Consulter les actions de soutien de tout l’établissement",
+      "interventions.viewTaught": "Consulter les actions de soutien de vos classes",
+      "interventions.create": "Enregistrer une action de soutien pour un élève que vous enseignez",
+      "interventions.manage": "Gérer les actions de soutien et enregistrer leurs résultats",
       "homework.view": "Consulter les devoirs",
       "homework.manage": "Donner et noter les devoirs",
       "quiz.author": "Rédiger quiz et questions",
@@ -3179,9 +3186,112 @@
     "emptyValue": "(vide)",
     "edit": "Corriger la fiche"
   },
+  "guidance": {
+    "RECENT_DECLINE": "Les résultats scolaires récents ont diminué.",
+    "SUDDEN_PERFORMANCE_CHANGE": "Un changement récent de résultats a été observé.",
+    "PERSISTENT_UNDERPERFORMANCE": "Les résultats restent inférieurs au seuil de réussite de l'école.",
+    "SUBJECT_STRENGTH": "Une force dans une matière se dégage.",
+    "SUSTAINED_IMPROVEMENT": "Une amélioration durable a été observée.",
+    "CONSISTENT_STRENGTH": "Des résultats constamment solides ont été observés.",
+    "INSUFFICIENT_ACADEMIC_EVIDENCE": "Les éléments scolaires sont encore insuffisants.",
+    "REVIEW_RECENT_ASSESSMENTS": "Examiner les évaluations récentes",
+    "IDENTIFY_REPEATED_ERRORS": "Identifier les erreurs répétées",
+    "TARGETED_PRACTICE": "Proposer des exercices ciblés",
+    "ADDITIONAL_SUPPORT": "Prévoir un soutien complémentaire",
+    "MONITOR_NEXT_SEQUENCE": "Suivre la prochaine séquence",
+    "ENRICHMENT_ACTIVITY": "Proposer une activité d'enrichissement",
+    "ADVANCED_PROBLEM_SOLVING": "Proposer des activités avancées de résolution de problèmes",
+    "EXPLORE_RELATED_LEARNING": "Explorer des possibilités d'apprentissage connexes"
+  },
   "reportCard": {
     "ca": "CC",
     "test": "Épreuve",
     "caFull": "Contrôle Continu"
+  },
+  "classIntel": {
+    "title": "Intelligence de classe",
+    "blurb": "Ce que les notes déjà enregistrées indiquent pour chaque élève, et ce que vous avez décidé de faire.",
+    "class": "Classe",
+    "review": "Examiner",
+    "noClasses": "Aucune classe ne vous est encore attribuée.",
+    "empty": "Aucun élève approuvé dans cette classe.",
+    "stale": "Affichage des dernières informations reçues par cet appareil. Elles peuvent ne plus être à jour.",
+    "nothingToNote": "Rien à signaler à partir des notes enregistrées.",
+    "evidenceHeading": "Pourquoi cet élève apparaît ici",
+    "countStudents": "{{n}} élèves",
+    "countAttention": "{{n}} à surveiller",
+    "countStrength": "{{n}} avec un point fort"
+  },
+  "confidence": {
+    "strong": "Preuves établies",
+    "emerging": "Preuves émergentes",
+    "insufficient": "Preuves encore insuffisantes"
+  },
+  "evidence": {
+    "observations": "Évaluations observées",
+    "recent_average": "Moyenne récente",
+    "previous_average": "Moyenne antérieure",
+    "overall_average": "Moyenne générale",
+    "latest_mark": "Dernière note",
+    "consistency": "Régularité",
+    "change": "Évolution",
+    "latest_change": "Dernière évolution",
+    "largest_single_drop": "Plus forte baisse",
+    "largest_single_gain": "Plus forte hausse",
+    "spread": "Écart",
+    "marks_below_pass": "Notes sous la moyenne",
+    "pass_mark": "Note de passage",
+    "strong_mark_threshold": "Seuil de réussite marquée",
+    "marks_at_or_above_threshold": "Notes égales ou supérieures",
+    "strong_subjects": "Matières fortes",
+    "strong_subjects_with_established_evidence": "Avec preuves établies",
+    "observed_sequences": "Séquences enregistrées",
+    "observed_subjects": "Matières enregistrées",
+    "before": "Avant",
+    "after": "Après",
+    "notCausal": "Il s’agit d’une évolution observée dans le temps. Cela n’établit pas que l’action en soit la cause.",
+    "value": {
+      "high": "Élevée",
+      "moderate": "Moyenne",
+      "variable": "Variable"
+    },
+    "reading": {
+      "INCREASED_AFTER": "Les résultats ont augmenté après l’enregistrement de l’action.",
+      "DECREASED_AFTER": "Les résultats ont diminué après l’enregistrement de l’action.",
+      "NO_CHANGE_OBSERVED": "Aucune évolution mesurable n’a été observée sur la période disponible.",
+      "AWAITING_POST_EVIDENCE": "Aucune évaluation n’a été publiée depuis le début de cette action.",
+      "NO_PRIOR_EVIDENCE": "Aucune évaluation antérieure au début de cette action n’est enregistrée.",
+      "NO_COMPARABLE_EVIDENCE": "Aucune évaluation comparable n’est enregistrée.",
+      "NOT_SUBJECT_SPECIFIC": "Cette action ne vise aucune matière ; aucune comparaison par matière n’est affichée."
+    }
+  },
+  "intervention": {
+    "heading": "Ce qui a été fait",
+    "none": "Rien d’enregistré pour le moment.",
+    "created": "Action enregistrée",
+    "createFailed": "L’action n’a pas pu être enregistrée",
+    "updated": "Action mise à jour",
+    "conflict": "Quelqu’un a modifié cette action avant vous. Version actuelle affichée.",
+    "from": "à partir de {{reason}}",
+    "showEvidence": "Avant et après",
+    "outcomePrompt": "Qu’avez-vous observé ensuite ?",
+    "outcomeRecorded": "Résultat enregistré : {{outcome}}",
+    "status": {
+      "planned": "Prévue",
+      "active": "En cours",
+      "completed": "Terminée",
+      "cancelled": "Annulée"
+    },
+    "move": {
+      "active": "Démarrer",
+      "completed": "Marquer terminée",
+      "cancelled": "Annuler"
+    },
+    "outcome": {
+      "improved": "Amélioration",
+      "no_change": "Aucun changement",
+      "further_support": "Soutien supplémentaire nécessaire",
+      "not_assessed": "Pas encore évalué"
+    }
   }
 }

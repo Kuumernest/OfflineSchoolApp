@@ -1,0 +1,1096 @@
+{
+  "format": "osa-intelligence-cohort",
+  "formatVersion": 1,
+  "provenance": {
+    "kind": "synthetic",
+    "note": "Constructed by hand to exercise the calibration tooling across every pattern the review categories name. Not a real school. Not evidence about any pupil. Validates nothing about a threshold."
+  },
+  "grading": {
+    "passMark": 10,
+    "grades": []
+  },
+  "academicStructure": {
+    "passMark": 10
+  },
+  "exams": [
+    {
+      "examId": "X1",
+      "type": "test",
+      "academicYear": "2026-2027",
+      "term": 1,
+      "sequenceNumber": 1,
+      "startDate": "2026-10-05"
+    },
+    {
+      "examId": "X1CA",
+      "type": "ca",
+      "academicYear": "2026-2027",
+      "term": 1,
+      "sequenceNumber": 1,
+      "startDate": "2026-10-01",
+      "parentExamId": "X1"
+    },
+    {
+      "examId": "X2",
+      "type": "test",
+      "academicYear": "2026-2027",
+      "term": 1,
+      "sequenceNumber": 2,
+      "startDate": "2026-11-20"
+    },
+    {
+      "examId": "X3",
+      "type": "test",
+      "academicYear": "2026-2027",
+      "term": 2,
+      "sequenceNumber": 1,
+      "startDate": "2027-02-10"
+    },
+    {
+      "examId": "X4",
+      "type": "test",
+      "academicYear": "2026-2027",
+      "term": 2,
+      "sequenceNumber": 2,
+      "startDate": "2027-03-20"
+    },
+    {
+      "examId": "X5",
+      "type": "test",
+      "academicYear": "2026-2027",
+      "term": 3,
+      "sequenceNumber": 1,
+      "startDate": "2027-05-10"
+    }
+  ],
+  "students": [
+    {
+      "studentId": "S01",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S02",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S03",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S04",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S05",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S06",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S07",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S08",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S09",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S10",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S11",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S12",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S13",
+      "classId": "C1"
+    },
+    {
+      "studentId": "S14",
+      "classId": "C1"
+    }
+  ],
+  "results": [
+    {
+      "resultId": "S01-X1",
+      "studentId": "S01",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 17,
+          "score": 17,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S01-X2",
+      "studentId": "S01",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 17,
+          "score": 17,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 17,
+          "score": 17,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S01-X3",
+      "studentId": "S01",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 17,
+          "score": 17,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S02-X1",
+      "studentId": "S02",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S02-X2",
+      "studentId": "S02",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 15,
+          "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S02-X3",
+      "studentId": "S02",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 10,
+          "score": 10,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S02-X4",
+      "studentId": "S02",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 9,
+          "score": 9,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S03-X1",
+      "studentId": "S03",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 7,
+          "score": 7,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S03-X2",
+      "studentId": "S03",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 8,
+          "score": 8,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S03-X3",
+      "studentId": "S03",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 6,
+          "score": 6,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S04-X1",
+      "studentId": "S04",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 6,
+          "score": 6,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S04-X2",
+      "studentId": "S04",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 7,
+          "score": 7,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S04-X3",
+      "studentId": "S04",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 9,
+          "score": 9,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S04-X4",
+      "studentId": "S04",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 9,
+          "score": 9,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S05-X1",
+      "studentId": "S05",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 18,
+          "score": 18,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S05-X2",
+      "studentId": "S05",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 9,
+          "score": 9,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S05-X3",
+      "studentId": "S05",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 18,
+          "score": 18,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S06-X3",
+      "studentId": "S06",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 15,
+          "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S06-X4",
+      "studentId": "S06",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S07-X1",
+      "studentId": "S07",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 13,
+          "score": 13,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S08-X1",
+      "studentId": "S08",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 14,
+          "score": 14,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S08-X2",
+      "studentId": "S08",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 12,
+          "score": 12,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S08-X3",
+      "studentId": "S08",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 12,
+          "score": 12,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S08-X4",
+      "studentId": "S08",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 10,
+          "score": 10,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S09-X1",
+      "studentId": "S09",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 12,
+          "score": 12,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S09-X2",
+      "studentId": "S09",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": null,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": true,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S09-X3",
+      "studentId": "S09",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": null,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": true,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S09-X4",
+      "studentId": "S09",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 11,
+          "score": 11,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S10-X1",
+      "studentId": "S10",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": 0,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S10-X2",
+      "studentId": "S10",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": 0,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S10-X3",
+      "studentId": "S10",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 5,
+          "score": 5,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S11-X1",
+      "studentId": "S11",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 12,
+          "score": 12,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S11-X1CA",
+      "studentId": "S11",
+      "classId": "C1",
+      "examId": "X1CA",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 20,
+          "score": 20,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S11-X2",
+      "studentId": "S11",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": null,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": true
+        }
+      ]
+    },
+    {
+      "resultId": "S11-X3",
+      "studentId": "S11",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 0,
+          "score": null,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S11-X4",
+      "studentId": "S11",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 13,
+          "score": 13,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S12-X1",
+      "studentId": "S12",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": false,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 19,
+          "score": 19,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S12-X2",
+      "studentId": "S12",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": false,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 19,
+          "score": 19,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S13-X1",
+      "studentId": "S13",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 8,
+          "score": 8,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 14,
+          "score": 14,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S13-X2",
+      "studentId": "S13",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 10,
+          "score": 10,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 15,
+          "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S13-X3",
+      "studentId": "S13",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 12,
+          "score": 12,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 14,
+          "score": 14,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S13-X4",
+      "studentId": "S13",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 13,
+          "score": 13,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        },
+        {
+          "subjectId": "ENG",
+          "subjectName": "English",
+          "normalizedMark": 15,
+          "score": 15,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S14-X1",
+      "studentId": "S14",
+      "classId": "C1",
+      "examId": "X1",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S14-X2",
+      "studentId": "S14",
+      "classId": "C1",
+      "examId": "X2",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S14-X3",
+      "studentId": "S14",
+      "classId": "C1",
+      "examId": "X3",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 16,
+          "score": 16,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    },
+    {
+      "resultId": "S14-X4",
+      "studentId": "S14",
+      "classId": "C1",
+      "examId": "X4",
+      "isPublished": true,
+      "subjects": [
+        {
+          "subjectId": "MAT",
+          "subjectName": "Mathematics",
+          "normalizedMark": 9,
+          "score": 9,
+          "maxScore": 20,
+          "coefficient": 1,
+          "isAbsent": false,
+          "isExempt": false
+        }
+      ]
+    }
+  ],
+  "interventions": [
+    {
+      "interventionId": "IV1",
+      "studentId": "S02",
+      "subjectId": "MAT",
+      "status": "completed",
+      "createdAt": "2027-01-10T00:00:00.000Z",
+      "startedAt": "2027-01-15T00:00:00.000Z"
+    },
+    {
+      "interventionId": "IV2",
+      "studentId": "S03",
+      "subjectId": "MAT",
+      "status": "active",
+      "createdAt": "2027-04-01T00:00:00.000Z",
+      "startedAt": "2027-04-02T00:00:00.000Z"
+    },
+    {
+      "interventionId": "IV3",
+      "studentId": "S07",
+      "subjectId": null,
+      "status": "planned",
+      "createdAt": "2027-01-10T00:00:00.000Z",
+      "startedAt": null
+    }
+  ]
+}

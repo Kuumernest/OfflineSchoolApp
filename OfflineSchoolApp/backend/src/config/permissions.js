@@ -285,6 +285,19 @@ const PERMISSION_DEFS = [
   // ── Cross-cutting reads ───────────────────────────────────────────────────
   p("insights.view",    "insights", OFFICE_ROLES, true,
     "The watch list. Names children by fee arrears, so teachers are out."),
+  // A second capability rather than widening the first, because the two answer
+  // different questions from different rooms. insights.view is the office's
+  // list and it carries the fee ledger; this is the staffroom's, and the
+  // endpoints behind it compute from marks alone — no balance, no charge, no
+  // payment, enforced by the module boundary rather than by a filter. Teachers
+  // are scoped to the classes they hold an assignment for, through the same
+  // utils/teacherScope.js the register and the mark sheet already ask.
+  p("insights.viewTaught", "insights", TEACHING_ROLES, true,
+    "Subject strengths and risks for the pupils a teacher takes. No money."),
+  p("interventions.view", "interventions", ADMIN_ROLES, true, "School-wide student-support interventions; bursars are excluded."),
+  p("interventions.viewTaught", "interventions", TEACHING_ROLES, true, "Interventions for pupils a teacher teaches."),
+  p("interventions.create", "interventions", TEACHING_ROLES, true, "Human-created support actions for taught pupils."),
+  p("interventions.manage", "interventions", ADMIN_ROLES, true, "Manage school interventions and outcomes."),
 
   // ── Coursework ────────────────────────────────────────────────────────────
   p("homework.view",    "homework", TEACHING_ROLES, true,

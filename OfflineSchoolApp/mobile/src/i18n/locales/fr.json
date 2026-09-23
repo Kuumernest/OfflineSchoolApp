@@ -2450,7 +2450,9 @@
     "attendanceReminderPast": "{{className}} · {{subjectName}} : présence non faite (cours terminé à {{time}})",
     "attendanceReminderCurrent": "{{className}} · {{subjectName}} : présence non faite (cours en cours)",
     "attendanceReminderUpcoming": "{{className}} · {{subjectName}} : présence pas encore faite (début à {{time}})",
-    "attendanceReminderNoTime": "{{className}} · {{subjectName}} : présence non faite aujourd'hui"
+    "attendanceReminderNoTime": "{{className}} · {{subjectName}} : présence non faite aujourd'hui",
+    "modIntelligenceTitle": "Intelligence de classe",
+    "modIntelligenceDesc": "Preuves, recommandations et actions de soutien"
   },
   "studentHome": {
     "greetingMorning": "Bonjour",
@@ -6014,5 +6016,60 @@
     "late": "En retard",
     "notGraded": "Non notée",
     "score": "{{score}}/{{max}}"
+  },
+  "classIntel": {
+    "title": "Intelligence de classe",
+    "blurb": "Ce que disent les notes enregistrées, et ce que vous avez décidé de faire.",
+    "empty": "Aucun élève approuvé dans cette classe.",
+    "nothingToNote": "Rien à signaler à partir des notes enregistrées.",
+    "offline": "Pas de connexion. Les recommandations se chargeront une fois en ligne.",
+    "staleAt": "Dernière mise à jour {{time}}. Peut ne plus être à jour.",
+    "recordedTitle": "Action enregistrée",
+    "recordedBody": "Enregistrée sur cet appareil. Elle sera synchronisée une fois en ligne.",
+    "recordFailed": "L’action n’a pas pu être enregistrée."
+  },
+  "guidance": {
+    "RECENT_DECLINE": "Les résultats récents ont diminué",
+    "SUDDEN_PERFORMANCE_CHANGE": "Un changement récent de résultats a été observé",
+    "PERSISTENT_UNDERPERFORMANCE": "Les résultats restent sous la note de passage",
+    "SUBJECT_STRENGTH": "Un point fort se dessine dans cette matière",
+    "SUSTAINED_IMPROVEMENT": "Une amélioration durable a été observée",
+    "CONSISTENT_STRENGTH": "Résultats élevés et réguliers",
+    "INSUFFICIENT_ACADEMIC_EVIDENCE": "Preuves scolaires encore insuffisantes",
+    "REVIEW_RECENT_ASSESSMENTS": "Revoir les évaluations récentes",
+    "IDENTIFY_REPEATED_ERRORS": "Identifier les erreurs répétées",
+    "TARGETED_PRACTICE": "Proposer des exercices ciblés",
+    "ADDITIONAL_SUPPORT": "Apporter un soutien supplémentaire",
+    "MONITOR_NEXT_SEQUENCE": "Surveiller la prochaine séquence",
+    "ENRICHMENT_ACTIVITY": "Proposer une activité d’enrichissement",
+    "ADVANCED_PROBLEM_SOLVING": "Proposer des problèmes avancés",
+    "EXPLORE_RELATED_LEARNING": "Explorer des apprentissages connexes"
+  },
+  "evidence": {
+    "observations": "Évaluations observées",
+    "recent_average": "Moyenne récente",
+    "previous_average": "Moyenne antérieure",
+    "overall_average": "Moyenne générale",
+    "latest_mark": "Dernière note",
+    "consistency": "Régularité",
+    "change": "Évolution",
+    "latest_change": "Dernière évolution",
+    "largest_single_drop": "Plus forte baisse",
+    "largest_single_gain": "Plus forte hausse",
+    "spread": "Écart",
+    "marks_below_pass": "Notes sous la moyenne",
+    "pass_mark": "Note de passage",
+    "strong_mark_threshold": "Seuil de réussite marquée",
+    "marks_at_or_above_threshold": "Notes égales ou supérieures",
+    "observed_sequences": "Séquences enregistrées",
+    "observed_subjects": "Matières enregistrées"
+  },
+  "intervention": {
+    "status": {
+      "planned": "Prévue",
+      "active": "En cours",
+      "completed": "Terminée",
+      "cancelled": "Annulée"
+    }
   }
 }

@@ -313,6 +313,30 @@ const ONLINE_ONLY = [
       "answer here names a child as at risk who is not, or misses one who is.",
   },
 
+  /*
+   * ── The student intelligence stack is NOT here any more ─────────────────
+   *
+   * GET /insights/class/:id, GET /insights/student/:id/guidance and
+   * GET /interventions/:id/evidence were listed here as online-only, with the
+   * reason that the rows were mirrored but the ENGINE was not — and a second
+   * copy of the sequence ordering, the CA exclusion, the absence and exemption
+   * rules and the school's grade-band threshold would eventually disagree with
+   * the report card about the same child.
+   *
+   * The engine moved to shared/intelligence/, which is what that note asked
+   * for. handlers/intelligence.js now answers all three from the mirror by
+   * calling the identical functions the server calls, so there is no second
+   * implementation to drift. scripts/check-shared-intelligence.js asserts the
+   * identity rather than the resemblance.
+   *
+   * One case still declines and falls through deliberately: an empty class.
+   * A teacher's mirror holds only the pupils they teach, so "no pupils here"
+   * and "not your class" are indistinguishable locally while the server answers
+   * 200 and 403. Rather than guess, the handler asks. That is the existing rule
+   * of this file — a mirror that answers differently from the server is worse
+   * than one that says it cannot.
+   */
+
   // ── Pupil records: the writes that carry a credential or a minted number ──
   //
   // The record writes themselves — suspend, restore, move, approve, reject,
