@@ -130,6 +130,11 @@ const SALT = "check-only-salt-that-is-long-enough";
     }
     return JSON.stringify(out);
   };
+  // Every model's indexes built — and so every collection created — BEFORE
+  // the snapshot. autoIndex runs in the background; without this, a collection
+  // the parent had not yet created appears when the child loads the models,
+  // and a read-only export is blamed for a write it did not make.
+  await Promise.all(mongoose.modelNames().map((n) => mongoose.model(n).init()));
   const before = await snapshot();
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "osa-calib-"));
@@ -257,7 +262,15 @@ const SALT = "check-only-salt-that-is-long-enough";
   // ═══════════════════════════════════════════════════════════════════════════
 
   const after = await snapshot();
-  check("every collection is byte-identical before and after the export", after === before, true);
+  // On failure, name the collection rather than reporting a bare false: a
+  // read-only proof that fails should say what was written.
+  const drift = (() => {
+    if (after === before) return [];
+    const a = JSON.parse(before), z = JSON.parse(after);
+    return [...new Set([...Object.keys(a), ...Object.keys(z)])].filter((k) => JSON.stringify(a[k]) !== JSON.stringify(z[k]))
+      .map((k) => ({ collection: k, before: (a[k] ?? []).length, after: (z[k] ?? []).length, sample: ((z[k] ?? a[k]) ?? [])[0]?.slice(0, 160) ?? null }));
+  })();
+  check("every collection is byte-identical before and after the export", drift, []);
 
   const outA2 = path.join(tmp, "alpha-again.json");
   await runExporter(outA2, {});

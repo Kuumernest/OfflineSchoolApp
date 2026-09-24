@@ -6,7 +6,7 @@
   "engineVersion": "1.0.0",
   "cases": [
     {
-      "caseId": "absence_heavy-22",
+      "caseId": "absence_heavy:S09:MAT",
       "category": "absence_heavy",
       "studentId": "S09",
       "subjectId": "MAT",
@@ -27,7 +27,7 @@
       }
     },
     {
-      "caseId": "borderline_threshold-2",
+      "caseId": "borderline_threshold:S01:ENG",
       "category": "borderline_threshold",
       "studentId": "S01",
       "subjectId": "ENG",
@@ -68,7 +68,7 @@
       }
     },
     {
-      "caseId": "borderline_threshold-4",
+      "caseId": "borderline_threshold:S01:MAT",
       "category": "borderline_threshold",
       "studentId": "S01",
       "subjectId": "MAT",
@@ -109,7 +109,7 @@
       }
     },
     {
-      "caseId": "borderline_threshold-10",
+      "caseId": "borderline_threshold:S03:MAT",
       "category": "borderline_threshold",
       "studentId": "S03",
       "subjectId": "MAT",
@@ -141,7 +141,7 @@
       }
     },
     {
-      "caseId": "declining-5",
+      "caseId": "declining:S02:MAT",
       "category": "declining",
       "studentId": "S02",
       "subjectId": "MAT",
@@ -173,7 +173,7 @@
       }
     },
     {
-      "caseId": "declining-21",
+      "caseId": "declining:S08:MAT",
       "category": "declining",
       "studentId": "S08",
       "subjectId": "MAT",
@@ -205,7 +205,7 @@
       }
     },
     {
-      "caseId": "declining-32",
+      "caseId": "declining:S14:MAT",
       "category": "declining",
       "studentId": "S14",
       "subjectId": "MAT",
@@ -246,7 +246,7 @@
       }
     },
     {
-      "caseId": "emerging_strength-14",
+      "caseId": "emerging_strength:S05:MAT",
       "category": "emerging_strength",
       "studentId": "S05",
       "subjectId": "MAT",
@@ -278,7 +278,7 @@
       }
     },
     {
-      "caseId": "emerging_strength-16",
+      "caseId": "emerging_strength:S06:MAT",
       "category": "emerging_strength",
       "studentId": "S06",
       "subjectId": "MAT",
@@ -310,7 +310,7 @@
       }
     },
     {
-      "caseId": "insufficient_evidence-18",
+      "caseId": "insufficient_evidence:S07:MAT",
       "category": "insufficient_evidence",
       "studentId": "S07",
       "subjectId": "MAT",
@@ -331,7 +331,7 @@
       }
     },
     {
-      "caseId": "insufficient_evidence-19",
+      "caseId": "insufficient_evidence:S07:-",
       "category": "insufficient_evidence",
       "studentId": "S07",
       "subjectId": null,
@@ -348,7 +348,7 @@
       }
     },
     {
-      "caseId": "insufficient_evidence-29",
+      "caseId": "insufficient_evidence:S12:-",
       "category": "insufficient_evidence",
       "studentId": "S12",
       "subjectId": null,
@@ -365,7 +365,7 @@
       }
     },
     {
-      "caseId": "mixed_assessment-28",
+      "caseId": "mixed_assessment:S11:MAT",
       "category": "mixed_assessment",
       "studentId": "S11",
       "subjectId": "MAT",
@@ -386,7 +386,7 @@
       }
     },
     {
-      "caseId": "strong_and_stable-1",
+      "caseId": "strong_and_stable:S01:ENG",
       "category": "strong_and_stable",
       "studentId": "S01",
       "subjectId": "ENG",
@@ -427,7 +427,7 @@
       }
     },
     {
-      "caseId": "strong_and_stable-3",
+      "caseId": "strong_and_stable:S01:MAT",
       "category": "strong_and_stable",
       "studentId": "S01",
       "subjectId": "MAT",
@@ -468,7 +468,7 @@
       }
     },
     {
-      "caseId": "strong_and_stable-30",
+      "caseId": "strong_and_stable:S13:ENG",
       "category": "strong_and_stable",
       "studentId": "S13",
       "subjectId": "ENG",
@@ -509,7 +509,7 @@
       }
     },
     {
-      "caseId": "strong_but_recent-17",
+      "caseId": "strong_but_recent:S06:MAT",
       "category": "strong_but_recent",
       "studentId": "S06",
       "subjectId": "MAT",
@@ -541,7 +541,7 @@
       }
     },
     {
-      "caseId": "sudden_change-33",
+      "caseId": "sudden_change:S14:MAT",
       "category": "sudden_change",
       "studentId": "S14",
       "subjectId": "MAT",
@@ -582,7 +582,7 @@
       }
     },
     {
-      "caseId": "trend_on_variable_subject-7",
+      "caseId": "trend_on_variable_subject:S02:MAT",
       "category": "trend_on_variable_subject",
       "studentId": "S02",
       "subjectId": "MAT",
@@ -614,7 +614,7 @@
       }
     },
     {
-      "caseId": "trend_on_variable_subject-26",
+      "caseId": "trend_on_variable_subject:S10:MAT",
       "category": "trend_on_variable_subject",
       "studentId": "S10",
       "subjectId": "MAT",
@@ -655,7 +655,7 @@
       }
     },
     {
-      "caseId": "trend_on_variable_subject-31",
+      "caseId": "trend_on_variable_subject:S13:MAT",
       "category": "trend_on_variable_subject",
       "studentId": "S13",
       "subjectId": "MAT",
@@ -687,7 +687,7 @@
       }
     },
     {
-      "caseId": "volatile-6",
+      "caseId": "volatile:S02:MAT",
       "category": "volatile",
       "studentId": "S02",
       "subjectId": "MAT",
@@ -719,7 +719,7 @@
       }
     },
     {
-      "caseId": "volatile-15",
+      "caseId": "volatile:S05:MAT",
       "category": "volatile",
       "studentId": "S05",
       "subjectId": "MAT",
@@ -751,7 +751,7 @@
       }
     },
     {
-      "caseId": "volatile-25",
+      "caseId": "volatile:S10:MAT",
       "category": "volatile",
       "studentId": "S10",
       "subjectId": "MAT",
@@ -792,7 +792,7 @@
       }
     },
     {
-      "caseId": "weak_and_persistent-9",
+      "caseId": "weak_and_persistent:S03:MAT",
       "category": "weak_and_persistent",
       "studentId": "S03",
       "subjectId": "MAT",
@@ -824,7 +824,7 @@
       }
     },
     {
-      "caseId": "weak_and_persistent-12",
+      "caseId": "weak_and_persistent:S04:MAT",
       "category": "weak_and_persistent",
       "studentId": "S04",
       "subjectId": "MAT",
@@ -865,7 +865,7 @@
       }
     },
     {
-      "caseId": "weak_and_persistent-23",
+      "caseId": "weak_and_persistent:S10:MAT",
       "category": "weak_and_persistent",
       "studentId": "S10",
       "subjectId": "MAT",
@@ -906,7 +906,7 @@
       }
     },
     {
-      "caseId": "weak_but_improving-13",
+      "caseId": "weak_but_improving:S04:MAT",
       "category": "weak_but_improving",
       "studentId": "S04",
       "subjectId": "MAT",
@@ -947,7 +947,7 @@
       }
     },
     {
-      "caseId": "weak_but_improving-24",
+      "caseId": "weak_but_improving:S10:MAT",
       "category": "weak_but_improving",
       "studentId": "S10",
       "subjectId": "MAT",
@@ -988,7 +988,7 @@
       }
     },
     {
-      "caseId": "with_intervention-8",
+      "caseId": "with_intervention:S02:MAT",
       "category": "with_intervention",
       "studentId": "S02",
       "subjectId": "MAT",
@@ -1020,7 +1020,7 @@
       }
     },
     {
-      "caseId": "with_intervention-11",
+      "caseId": "with_intervention:S03:MAT",
       "category": "with_intervention",
       "studentId": "S03",
       "subjectId": "MAT",
@@ -1052,7 +1052,7 @@
       }
     },
     {
-      "caseId": "with_intervention-20",
+      "caseId": "with_intervention:S07:-",
       "category": "with_intervention",
       "studentId": "S07",
       "subjectId": null,
@@ -1069,7 +1069,7 @@
       }
     },
     {
-      "caseId": "zero_heavy-27",
+      "caseId": "zero_heavy:S10:MAT",
       "category": "zero_heavy",
       "studentId": "S10",
       "subjectId": "MAT",

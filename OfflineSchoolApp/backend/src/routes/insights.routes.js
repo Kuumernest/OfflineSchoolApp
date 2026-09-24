@@ -14,6 +14,12 @@ const Class             = require("../db/models/Class");
 const Intervention      = require("../db/models/Intervention");
 const TeacherAssignment = require("../db/models/TeacherAssignment");
 
+const IntelligenceReview = require("../db/models/IntelligenceReview");
+const { scopes: feedScopes } = require("../config/syncFeed");
+const reviewCases     = require("../services/intelligence/reviewCases.service");
+const pilots          = require("../services/intelligence/pilot.service");
+const IntelligencePilot = require("../db/models/IntelligencePilot");
+
 const earlyWarning    = require("../services/earlyWarning.service");
 const subjectInsights = require("../services/intelligence/subjectInsights.service");
 const guidance        = require("../services/intelligence/guidance.service");
@@ -313,5 +319,467 @@ router.get(
     });
   })
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CALIBRATION REVIEW — the same engine, laid out for a human to judge
+//
+// Who may see what follows the one hierarchy every intelligence read uses:
+//
+//   teacher        the classes they hold an assignment for
+//   school_admin   the whole school
+//   super_admin    the school they have selected with ?schoolId, which the
+//                  middleware has already checked exists
+//
+// The engine's answer is the same whoever asks. Only the set of pupils differs,
+// and it is resolved once, here, by the same primitive the sync feed uses to
+// decide which pupils a teacher's machine may hold.
+//
+// And one more rule, for the review itself: a teacher who has not yet answered
+// a case does not see what colleagues answered. The package is built for the
+// viewer, in reviewCases.service, so that two independent judgements are
+// actually independent.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Reading reviews is a staffroom right, not an office-wide one.
+ *
+ * subjectRead admits the bursar, because subject intelligence is computed from
+ * marks the bursar can already read and carries no money. A review is a
+ * different kind of thing: a named colleague's written judgement about a named
+ * child — the same class of record as an intervention note, which the bursar
+ * is deliberately kept out of. insights.viewTaught is held by exactly the
+ * hierarchy that may read one: the teacher for their classes, the head for the
+ * school, the operator for the school they have selected. A school that wants
+ * its bursar on the review sheet can delegate it; the default does not.
+ */
+const reviewRead = requirePermission("insights.viewTaught");
+
+/** Who is looking, for the contamination shield. */
+const viewerOf = (req) => ({ userId: String(req.user._id ?? req.user.id), role: req.user.role });
+
+/**
+ * Which pupils this caller may review: a school and, for a teacher, a class list.
+ *
+ * feedScopes.taughtStudentsOnly is the sync feed's own answer to "which pupils
+ * does this teacher get" — reused rather than restated, so a teacher can never
+ * see more on the review sheet than their desktop is allowed to mirror.
+ *
+ * `?classId=` narrows to one class; for a teacher it must be one they teach.
+ * Answers the response itself when it cannot resolve, and returns null.
+ */
+const reviewScope = async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) {
+    res.status(400).json({ success: false, message: "schoolId is required" });
+    return null;
+  }
+
+  let classIds = null;
+  if (isTeacher(req)) {
+    const filter = await feedScopes.taughtStudentsOnly(req, { TeacherAssignment });
+    classIds = filter.classId?.$in ?? [];
+  }
+
+  const asked = req.query.classId ? String(req.query.classId) : null;
+  if (asked) {
+    const klass = await Class.findOne({ _id: asked, schoolId, deletedAt: null }).select("_id").lean();
+    if (!klass) {
+      res.status(404).json({ success: false, message: "Class not found" });
+      return null;
+    }
+    if (!(await mayReadClass(req, { schoolId, classId: asked }))) { forbidden(res); return null; }
+    classIds = [asked];
+  }
+
+  return { schoolId, classIds };
+};
+
+/** The pupil, in this school, with the class the caller must be allowed to reach. */
+const pupilForReview = async (req, res, schoolId, studentId) => {
+  const student = await Student.findOne({ _id: String(studentId ?? ""), schoolId, deletedAt: null })
+    .select("classId").lean();
+  if (!student) {
+    res.status(404).json({ success: false, message: "Student not found" });
+    return null;
+  }
+  const classId = student.classId ? String(student.classId) : null;
+  if (!(await mayReadClass(req, { schoolId, classId }))) { forbidden(res); return null; }
+  return { student, classId };
+};
+
+/**
+ * GET /api/insights/review-cases?classId=&limit=
+ *
+ * The queue: the cases the calibration machinery would put in front of a
+ * teacher, over live pupils the caller may see, in the order a reviewer's time
+ * is best spent, with any judgements attached as this viewer may see them.
+ */
+router.get("/review-cases", reviewRead, asyncHandler(async (req, res) => {
+  const scope = await reviewScope(req, res);
+  if (!scope) return undefined;
+
+  const pkg = await reviewCases.reviewPackage(scope, viewerOf(req));
+  const { report, ...sheet } = pkg;
+  void report;
+
+  // A queue, not a dump: the sheet is already in priority order, and a client
+  // that asks for the first twenty gets the twenty most worth a teacher's time.
+  const limit = Math.max(1, Math.min(200, Number.parseInt(String(req.query.limit ?? ""), 10) || 200));
+  return res.json({
+    success: true,
+    data: { generatedAt: new Date(), ...sheet, cases: sheet.cases.slice(0, limit), totalCases: sheet.cases.length },
+  });
+}));
+
+/**
+ * GET /api/insights/calibration-summary?classId=
+ *
+ * What the data is, what the engine said, the flags, the sensitivity table and
+ * how the review is going — for the pupils the caller may see. No salt, no
+ * export, no download.
+ */
+router.get("/calibration-summary", reviewRead, asyncHandler(async (req, res) => {
+  const scope = await reviewScope(req, res);
+  if (!scope) return undefined;
+  return res.json({
+    success: true,
+    data: { generatedAt: new Date(), ...(await reviewCases.calibrationSummary(scope, viewerOf(req))) },
+  });
+}));
+
+/**
+ * GET /api/insights/reviews/student/:studentId
+ *
+ * Every judgement recorded about one pupil, newest first, each named — subject
+ * to the shield: a teacher sees their own, and colleagues' only on cases they
+ * have answered themselves.
+ */
+router.get("/reviews/student/:studentId", reviewRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, message: "schoolId is required" });
+  }
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+
+  const viewer = viewerOf(req);
+  const all = await reviewCases.reviewsFor({ schoolId, studentIds: [String(pupil.student._id)] });
+  const answered = new Set(all.filter((r) => String(r.reviewedBy) === viewer.userId).map(reviewCases.caseKey));
+  const visible = all.filter((r) =>
+    !reviewCases.shielded(viewer, answered.has(reviewCases.caseKey(r))));
+
+  return res.json({
+    success: true,
+    data: visible.map(reviewCases.publicReview),
+    hiddenCount: all.length - visible.length,
+  });
+}));
+
+/**
+ * POST /api/insights/reviews
+ *
+ * A teacher records their judgement of one engine conclusion about one pupil.
+ *
+ * The case is verified against the engine before anything is stored: a review
+ * has to be OF something the engine actually said today, and its
+ * classifications are taken from the server rather than the request. One
+ * reviewer gets one review per case — a second opinion is a revision, through
+ * PATCH, so that a person cannot count twice in the tally. And a review made
+ * under one engine version is refused if the client saw the case under another.
+ */
+router.post("/reviews", requirePermission("insights.review"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, message: "schoolId is required" });
+  }
+  const pupil = await pupilForReview(req, res, schoolId, req.body.studentId);
+  if (!pupil) return undefined;
+
+  const category  = String(req.body.category ?? "").trim();
+  const subjectId = req.body.subjectId ? String(req.body.subjectId) : null;
+  if (!category || category.length > 60) {
+    return res.status(400).json({ success: false, code: "INVALID_REVIEW", message: "category is required" });
+  }
+  if (!req.body.review || typeof req.body.review !== "object") {
+    return res.status(400).json({ success: false, code: "INVALID_REVIEW", message: "review form is required" });
+  }
+  const problems = reviewCases.validateReview(req.body.review, "review");
+  if (problems.length) {
+    return res.status(400).json({ success: false, code: "INVALID_REVIEW", problems });
+  }
+
+  // The version the reviewer saw the case under. If the engine has moved since
+  // the sheet was loaded, the judgement is of something that no longer exists.
+  if (req.body.engineVersion && String(req.body.engineVersion) !== subjectInsights.ENGINE_VERSION) {
+    return res.status(409).json({
+      success: false, code: "STALE_ENGINE_VERSION",
+      message: "The case was loaded under a different engine version. Reload it and review again.",
+      current: subjectInsights.ENGINE_VERSION,
+    });
+  }
+
+  const actor       = String(req.user._id ?? req.user.id);
+  const requestedId = req.body._id ? String(req.body._id) : null;
+
+  // The offline outbox resends a create after a dropped connection; the row
+  // that already exists is the answer, exactly as for an intervention.
+  const replayed = requestedId ? await IntelligenceReview.findOne({ _id: requestedId, schoolId }) : null;
+  if (replayed) return res.status(201).json({ success: true, data: replayed });
+
+  const studentId = String(pupil.student._id);
+  const duplicate = await IntelligenceReview.findOne({
+    schoolId, studentId, category, subjectId, reviewedBy: actor, deletedAt: null,
+  }).select("_id").lean();
+  if (duplicate) {
+    return res.status(409).json({
+      success: false, code: "DUPLICATE_REVIEW",
+      message: "You have already reviewed this case. Revise that review instead.",
+      reviewId: String(duplicate._id),
+    });
+  }
+
+  const found = await reviewCases.caseFor({ schoolId, studentId, category, subjectId });
+  if (!found) {
+    return res.status(404).json({
+      success: false, code: "CASE_NOT_FOUND",
+      message: "The engine produces no such case for this pupil today.",
+    });
+  }
+
+  const item = await IntelligenceReview.create({
+    _id:             requestedId ?? undefined,
+    schoolId,
+    studentId,
+    classId:         pupil.classId ?? "",
+    subjectId,
+    category,
+    engineVersion:   subjectInsights.ENGINE_VERSION,
+    classifications: found.classifications,
+    review:          req.body.review,
+    reviewedBy:      actor,
+  });
+
+  return res.status(201).json({ success: true, data: item });
+}));
+
+/**
+ * PATCH /api/insights/reviews/:id
+ *
+ * The author corrects their own review. Nobody else may — a head who disagrees
+ * writes their own, they do not edit a teacher's. What was said before is kept
+ * on the record, and the engine version the review was made under is not
+ * touched: it was a judgement of what 1.0.0 said, whatever the engine says now.
+ */
+router.patch("/reviews/:id", requirePermission("insights.review"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, message: "schoolId is required" });
+  }
+  const item = await IntelligenceReview.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
+  if (!item) {
+    return res.status(404).json({ success: false, message: "Review not found" });
+  }
+  const actor = String(req.user._id ?? req.user.id);
+  if (String(item.reviewedBy) !== actor) {
+    return res.status(403).json({
+      success: false, code: "NOT_AUTHOR",
+      message: "Only the teacher who wrote a review may revise it.",
+    });
+  }
+  if (req.body.version !== undefined && Number(req.body.version) !== item.version) {
+    return res.status(409).json({ success: false, code: "VERSION_CONFLICT", data: item });
+  }
+  if (!req.body.review || typeof req.body.review !== "object") {
+    return res.status(400).json({ success: false, code: "INVALID_REVIEW", message: "review form is required" });
+  }
+  const problems = reviewCases.validateReview(req.body.review, "review");
+  if (problems.length) {
+    return res.status(400).json({ success: false, code: "INVALID_REVIEW", problems });
+  }
+
+  item.revisions.push({ review: item.review.toObject ? item.review.toObject() : item.review, replacedAt: new Date() });
+  item.review    = req.body.review;
+  item.revisedAt = new Date();
+  item.version  += 1;
+  await item.save();
+
+  return res.json({ success: true, data: item });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILOT — the frame around a validation exercise
+//
+// Reading the pilot's state is a staffroom right (a teacher should know the
+// exercise is on, and which kind it is). Opening, advancing and concluding one
+// is the head's, on insights.pilot, and the operator's for the school they have
+// selected. Status is written by pilot.service and by nothing else; the
+// evidence a decision rests on is taken by the server, never posted.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const pilotManage = requirePermission("insights.pilot");
+const isOffice = (req) => !isTeacher(req);
+
+const pilotErr = (res, err) => {
+  if (!err.code || !err.status) throw err;
+  const { status, code, message, ...extra } = err;
+  return res.status(status).json({ success: false, code, message, ...extra });
+};
+
+/** What a teacher sees of a pilot: that it exists, its kind, its state. */
+const leanPilot = (p) => (p ? {
+  pilotRunId: p.pilotRunId, kind: p.kind, status: p.status, engineVersion: p.engineVersion,
+  label: p.label, startedAt: p.startedAt, endedAt: p.endedAt,
+} : null);
+
+/**
+ * GET /api/insights/pilot
+ * The school's open pilot, or its most recently closed one. Full record for
+ * the office, the lean shape for a teacher.
+ */
+router.get("/pilot", reviewRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const open = await pilots.openPilot(schoolId);
+  const latest = open ?? await IntelligencePilot.findOne({ schoolId, deletedAt: null }).sort({ updatedAt: -1 });
+  const pub = pilots.publicPilot(latest);
+  return res.json({
+    success: true,
+    data: { generatedAt: new Date(), open: Boolean(open), pilot: isOffice(req) ? pub : leanPilot(pub) },
+  });
+}));
+
+/**
+ * GET /api/insights/pilot/preflight?classId=
+ * May a REAL pilot start here? Every precondition a query can answer, and the
+ * two that a person must sign. Read before opening; enforced again on open.
+ */
+router.get("/pilot/preflight", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const classIds = req.query.classId ? String(req.query.classId).split(",").filter(Boolean) : null;
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await pilots.preflight({ schoolId, classIds })) } });
+}));
+
+/** POST /api/insights/pilot/:id/findings — record a finding. PATCH …/:findingId — move its status. */
+router.post("/pilot/:id/findings", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pilot = await IntelligencePilot.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
+  if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
+  try {
+    const f = await pilots.addFinding(pilot, {
+      category: String(req.body.category ?? ""), severity: String(req.body.severity ?? ""), summary: req.body.summary,
+      evidence: req.body.evidence ? String(req.body.evidence).slice(0, 4000) : null,
+      affectedCases: req.body.affectedCases, recommendedNextAction: req.body.recommendedNextAction ? String(req.body.recommendedNextAction).slice(0, 1000) : null,
+      actor: String(req.user._id ?? req.user.id),
+    });
+    return res.status(201).json({ success: true, data: f.toObject ? f.toObject() : f, pilot: pilots.publicPilot(pilot) });
+  } catch (err) { return pilotErr(res, err); }
+}));
+router.patch("/pilot/:id/findings/:findingId", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pilot = await IntelligencePilot.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
+  if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
+  try {
+    const f = await pilots.updateFinding(pilot, String(req.params.findingId), {
+      status: req.body.status, recommendedNextAction: req.body.recommendedNextAction, actor: String(req.user._id ?? req.user.id),
+    });
+    return res.json({ success: true, data: f.toObject ? f.toObject() : f, pilot: pilots.publicPilot(pilot) });
+  } catch (err) { return pilotErr(res, err); }
+}));
+
+/** GET /api/insights/pilot/history — every pilot the school has run, newest first. */
+router.get("/pilot/history", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const rows = await IntelligencePilot.find({ schoolId, deletedAt: null }).sort({ createdAt: -1 });
+  return res.json({ success: true, data: rows.map(pilots.publicPilot) });
+}));
+
+/**
+ * GET /api/insights/pilot/evidence
+ * The evidence counts as they stand now, for the open pilot's scope (or the
+ * whole school when none is open). Not stored: the stored snapshot is the one
+ * taken at a transition.
+ */
+router.get("/pilot/evidence", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const open = await pilots.openPilot(schoolId);
+  const evidence = await pilots.evidenceFor({ schoolId, classIds: open?.classIds ?? null });
+  return res.json({
+    success: true,
+    data: {
+      generatedAt: new Date(), pilotRunId: open ? String(open._id) : null, evidence,
+      minimum: pilots.MINIMUM_EVIDENCE, shortfalls: pilots.evidenceShortfalls(evidence),
+    },
+  });
+}));
+
+/**
+ * POST /api/insights/pilot  { kind, classIds?, label? }
+ * Opens a pilot at the caller's school in READY. One open pilot per school.
+ */
+router.post("/pilot", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const classIds = Array.isArray(req.body.classIds) ? req.body.classIds.map(String) : null;
+  if (classIds && classIds.length) {
+    const found = await Class.countDocuments({ _id: { $in: classIds }, schoolId, deletedAt: null });
+    if (found !== new Set(classIds).size) {
+      return res.status(404).json({ success: false, code: "CLASS_NOT_FOUND", message: "A class in the scope is not in this school." });
+    }
+  }
+  try {
+    const pilot = await pilots.createPilot({
+      schoolId, classIds, kind: String(req.body.kind ?? ""),
+      label: req.body.label ? String(req.body.label).slice(0, 120) : null,
+      actor: String(req.user._id ?? req.user.id),
+      attestations: req.body.attestations && typeof req.body.attestations === "object" ? req.body.attestations : null,
+    });
+    return res.status(201).json({ success: true, data: pilots.publicPilot(pilot) });
+  } catch (err) { return pilotErr(res, err); }
+}));
+
+/**
+ * PATCH /api/insights/pilot/:id  { to, note?, decision?, version? }
+ * Moves the pilot one state along, under the rules in pilot.service.
+ */
+router.patch("/pilot/:id", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pilot = await IntelligencePilot.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
+  if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
+  if (req.body.version !== undefined && Number(req.body.version) !== pilot.version) {
+    return res.status(409).json({ success: false, code: "VERSION_CONFLICT", data: pilots.publicPilot(pilot) });
+  }
+  try {
+    await pilots.transition(pilot, String(req.body.to ?? ""), {
+      actor: String(req.user._id ?? req.user.id),
+      note: req.body.note ? String(req.body.note).slice(0, 2000) : null,
+      decision: req.body.decision && typeof req.body.decision === "object" ? req.body.decision : null,
+    });
+    return res.json({ success: true, data: pilots.publicPilot(pilot) });
+  } catch (err) { return pilotErr(res, err); }
+}));
+
+/**
+ * GET /api/insights/student/:studentId/consistency
+ *
+ * One pupil through the live path and the offline path, diffed. For the pilot
+ * protocol's "live == offline" check, by anyone who may read the pupil. A
+ * difference is reported as found; nothing is normalised away.
+ */
+router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  return res.json({
+    success: true,
+    data: { generatedAt: new Date(), ...(await reviewCases.liveOfflineConsistency({ schoolId, studentId: String(pupil.student._id) })) },
+  });
+}));
 
 module.exports = router;

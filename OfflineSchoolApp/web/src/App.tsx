@@ -37,6 +37,7 @@ const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPage"));
 const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
 const ClassIntelPage   = lazy(() => import("@/pages/insights/class-intelligence"));
+const IntelReviewPage  = lazy(() => import("@/pages/insights/intelligence-review"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
@@ -272,6 +273,9 @@ export default function App() {
             <Route path="/watchlist" element={page(<WatchlistPage />)} />
             {/* The teacher loop: evidence → guidance → action → outcome. */}
             <Route path="/class-intelligence" element={page(<ClassIntelPage />)} />
+            {/* Calibration: a teacher judges what the engine said, without seeing
+                what colleagues said until they have answered themselves. */}
+            <Route path="/intelligence-review" element={page(<IntelReviewPage />)} />
           </Route>
 
           {/* ── The ledger ─────────────────────────────────────────────── */}

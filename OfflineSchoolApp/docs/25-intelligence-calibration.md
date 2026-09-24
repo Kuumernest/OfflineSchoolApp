@@ -399,3 +399,490 @@ next log write; every child from then on times out, while the parent — which
 drains its own pipe the moment it is unblocked — keeps working. The check now
 drives the child with async `spawn`. The exporter itself was never at fault,
 and the real run does not involve an in-memory server at all.
+
+---
+
+## 10. Stage 7B — real-cohort run: still blocked on the same inputs
+
+Checked again on 2026-09-23: `SCHOOL_ID` and `CALIBRATION_SALT` are absent from
+the environment and from `backend/.env`; `MONGODB_URI` is in `.env` only, which
+the exporter deliberately does not read. The run stopped at the gate, as the
+stage requires. No database connection was made; no substitute was manufactured.
+
+What did change is that the calibration review surface now exists **inside the
+application**, scoped by the same authorisation hierarchy as every other
+intelligence read (see docs/24, "Visibility and authorisation"), and teacher
+judgements are persisted, named, as `IntelligenceReview` records and
+cross-tabulated by the same `reviewFeedback.js` the offline sheet uses. That
+means the teacher-validation half of 7B no longer has to wait for the operator
+export: a head teacher can open the school's review cases today and two
+teachers can record independent judgements against live pupils. The operator
+export remains the path for a cohort that must leave the building.
+
+```
+REAL-COHORT CALIBRATION: NOT PERFORMED — OPERATOR INPUTS ABSENT
+CALIBRATION REQUIRES MORE DATA
+ENGINE_VERSION: 1.0.0
+```
+
+---
+
+## 11. Stage 7C — in-app teacher validation and evidence collection
+
+Stage 7B left the operator export blocked and put the review surface inside the
+application. Stage 7C makes that surface usable by a teacher with nothing but
+the application, and makes what it collects fit to be read as evidence. The
+engine, its thresholds, `FLAG_LIMITS` and `ENGINE_VERSION` were not touched;
+`check-shared-intelligence.js` and the regression fixture hold the engine's
+answers exactly where they were.
+
+### What a teacher now does, and does not need a developer for
+
+Sidebar → **Intelligence review** (`/intelligence-review`, teachers, heads and
+the operator). The queue is the calibration sheet over live pupils the caller
+may see, in priority order — borderline first, then the trend claims, then the
+rest (`REVIEW_PRIORITY` in `analyseCohort.js`, a presentation order that changes
+nothing the engine says). Opening a case shows three sections, always in the
+same order and never blended:
+
+1. **Observed evidence** — the published marks as `year Tn Sn: mark` strings and
+   the figures computed from them (recent, earlier and overall averages, change,
+   latest step, spread, consistency, marks below pass, marks at or above the
+   strength threshold).
+2. **System interpretation** — the codes with their confidence, the guidance the
+   engine attached, and the thresholds behind them with their current values.
+3. **Your review** — the one form contract from `REVIEW_FORM`, unchanged in its
+   four questions and its temporal block, extended with an optional
+   `dataQuality[]` list of codes (`missing_assessment`, `incorrect_result`,
+   `unpublished_result`, `assessment_unusually_difficult`, `grading_change`,
+   `student_absence`, `curriculum_change`, `insufficient_history`, `other`).
+   There is no second schema: the offline sheet, the in-app form, the model and
+   `reviewFeedback.validateReview` all read the same list.
+
+Submit → `POST /api/insights/reviews`. The server verifies the case against
+the engine before storing anything (`reviewCases.caseFor` analyses the pupil
+alone; a review of a case the engine does not produce today is 404
+`CASE_NOT_FOUND`), stores the **server's** classifications rather than the
+request's, stamps `engineVersion` and `reviewedBy`, refuses a second review by
+the same person on the same case (409 `DUPLICATE_REVIEW`, backed by a unique
+index), and refuses a review made against another engine version (409
+`STALE_ENGINE_VERSION`).
+
+### Independence — the contamination rule
+
+A teacher who has not answered a case sees how many colleagues have, and not
+one word of what they said, nor who they were, nor whether they agreed. The
+package is built for the viewer in `reviewCases.service.js`: the review list,
+`agreement`, the school-wide agreement counts and the feedback tally are all
+cut to what that viewer may see — a tally over one hidden review would be that
+review with the shield taken off, so for a teacher the tally covers only cases
+they have answered. After they submit, the other reviews appear, named. Heads
+and the operator are not reviewers; they see everything from the start.
+`check-review-workflow.js` §3 asserts the second teacher's whole response
+carries neither the first teacher's reason text nor their name.
+
+### Status, monitoring, aggregate
+
+Every case carries `reviewStatus` — `UNREVIEWED`, `ONE_REVIEW`,
+`MULTIPLE_REVIEWS` — with counts and, where visible, `agreement` on the one
+question that matters most (`classificationAppropriate`): `AGREE` or `DIFFER`,
+described and never scored. Two teachers agreeing that the engine was wrong is
+agreement.
+
+The head's page shows the school-wide block: cases, reviewed / unreviewed /
+with several, reviewers, agree / differ, per category, how reviewers answered,
+data problems cited, and any pattern above the support minimum — including the
+new `DATA_QUALITY_OFTEN_CITED`, raised when at least three reviews and at least
+half of them point at the data rather than the rule. Shares stay withheld below
+thirty reviewed cases, as before. Nothing anywhere is called accuracy.
+
+The operator sees the selected school exactly as its head does, and, gated on
+`platform.dashboard`, `GET /api/super-admin/intelligence/calibration` — counts
+per school from the persisted reviews alone: reviews, reviewers, engine
+versions, outcomes, categories, data-quality citations, patterns. The engine is
+not run there and no pupil row is loaded; the test asserts no pupil id, name or
+mark appears in it.
+
+### Audit trail and revision
+
+A review keeps who, when, and the engine version it was made under. The author
+— and only the author — may revise it (`PATCH /api/insights/reviews/:id`, 403
+`NOT_AUTHOR` for everyone else including the head, 409 `VERSION_CONFLICT` on a
+stale version). The replaced form is pushed onto `revisions[]` with
+`replacedAt`; `revisedAt` is set; `engineVersion` and `reviewedBy` are not
+touched. Evidence that can be silently rewritten is not evidence.
+
+### Case identity
+
+Case ids are now derived from what a case is about
+(`category:studentId:subjectId`) rather than its position on the sheet, so a
+new category cannot renumber a fixture. The regression fixture was re-keyed
+accordingly — its 33 recorded answers are byte-identical and the check that
+holds them still passes. A `cross_subject_strength` category joins the sheet
+(student-scoped, the subjects named, no domain claimed) and the synthetic
+cohort gained one pupil so that every category has a case; that pupil, like the
+other fourteen, is not evidence about anything.
+
+### Verification (Stage 7C)
+
+| | |
+|---|---|
+| `check-review-workflow.js` (new) | 55 assertions, 0 failures — the workflow as two teachers, a head, a third teacher, the bursar and the operator |
+| `check-intelligence-access.js` | 61 assertions (was 52), 0 failures — shield, revision rights, the cross-school aggregate |
+| `check-calibration.js` | 68 assertions, 0 failures, against the re-keyed fixture and the 15-pupil cohort |
+| `npm run check:intel` | 9 scripts, 514 assertions, 0 failures |
+| `check:roles` (backend) | 94 assertions, 0 failures — no new permission key; `insights.review` reused |
+| web | `tsc` clean, `eslint` 0 errors (one pre-existing warning in LoginPage), `vite build` ok, `i18n:check` 3,213 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| Engine | `ENGINE_VERSION` 1.0.0; every threshold and every flag limit unchanged |
+
+Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials: **68 scripts, 4,310 assertions, 0 failures** (the nine intelligence scripts included). One script exited non-zero without a tally — `check-student-integrity.js`, a live-database maintenance report that connects to the configured Atlas cluster; it is not a regression test, is not in `check:all`, and stopped on connectivity before reaching any code. `check:all` itself remains unrun: SMTP/Brevo credentials absent, as before.
+
+### Real teacher validation
+
+No authorised school and no real reviewers were available in this environment.
+No teacher response was manufactured; the answers in the test fixtures are
+test inputs and are labelled as such in the script header. Nothing in this
+stage produces evidence for or against any threshold.
+
+```
+REAL TEACHER VALIDATION: NOT PERFORMED
+REASON: AUTHORIZED SCHOOL/REVIEWERS UNAVAILABLE
+CALIBRATION REQUIRES MORE DATA
+ENGINE_VERSION: 1.0.0
+```
+
+When a school and at least two reviewers are authorised: each reviewer opens
+**Intelligence review**, works the queue top-down, and submits; the head reads
+the school-wide block; the operator reads the per-school counts. Then apply §6
+to what `reviewFeedback.js` reports — with the data-quality citations read
+first, because a threshold is never the answer to a wrong mark.
+
+---
+
+## 12. Stage 7D — controlled pilot and validation readiness
+
+Everything before this section built the machinery. This section is about
+running it at a real school without a developer in the room, and about never
+mistaking the machinery having run for the engine having been validated. The
+engine, its thresholds, `FLAG_LIMITS`, the guidance, confidence and outcome
+rules and `ENGINE_VERSION` are unchanged; nothing in this stage touches
+`shared/intelligence/`.
+
+### Four things that are not the same
+
+| | What it is | What it proves |
+|---|---|---|
+| **Synthetic validation** | fixtures (`synthetic-cohort.json`, the check scripts' schools) through the tooling | the tooling works; nothing about a threshold |
+| **Technical validation** | a developer or tester driving the live workflow — a pilot of kind `development` | the workflow is usable end to end; nothing about a threshold |
+| **Real-cohort calibration** | an authorised school's exported cohort through the offline runner (§7–§9) | distributions, flags, sensitivity on real marks |
+| **Real-teacher validation** | that school's own teachers reviewing live cases — a pilot of kind `real` | whether the engine's conclusions match what teachers see |
+
+Only the last two are evidence. A report that aggregates reviews must say
+which kind of pilot they came from; the pilot record exists so that it can.
+
+### The pilot record
+
+`IntelligencePilot` — one per open exercise per school, enforced by a partial
+unique index on `isOpen` and by `pilot.service.createPilot`. It carries:
+
+```
+pilotRunId · schoolId · classIds (null = whole school) · kind · status
+engineVersion (stamped by the server) · startedAt · endedAt · createdBy
+transitions[] {from, to, at, by, note} · evidence (counts) · decision
+```
+
+It carries **no** salt, credential, export, pupil row, mark, result or review
+document id, or reviewer's words. The evidence block is counts and code lists
+taken by the server from the persisted reviews at the moment of a transition.
+`check-pilot-readiness.js` §4 asserts all of this against the stored JSON with
+`CALIBRATION_SALT` set in the environment. The scope fields are the tenancy
+key and class ids the application already puts in every URL.
+
+### State model
+
+```
+READY → ACTIVE → REVIEWING → ANALYSIS_READY → CALIBRATED
+                                            → INSUFFICIENT_EVIDENCE
+any → CLOSED (terminal)
+```
+
+No skipping, no going back. `pilot.service.transition` is the only writer of
+`status`. Two moves have conditions:
+
+- **→ ANALYSIS_READY** takes the evidence snapshot; refused (409
+  `EVIDENCE_REQUIRED`) when no review exists in the scope.
+- **→ CALIBRATED** requires a written decision (≥ 20 characters, outcome
+  `KEEP` or `CALIBRATE`) **and** the snapshot to clear the minimum evidence
+  gate; otherwise 409 `EVIDENCE_GATE` with each shortfall named — the response
+  text says `CALIBRATION REQUIRES MORE DATA`. **→ INSUFFICIENT_EVIDENCE**
+  requires the written decision only. Teachers having submitted reviews never,
+  by itself, reaches CALIBRATED.
+
+A `CALIBRATE` outcome is a recorded intention. The threshold change itself
+remains the separate decision of §6, with its own evidence list and regression
+coverage; the engine version on the pilot stays the one its reviews were of.
+
+### Minimum evidence gate
+
+Derived from minimums that already exist rather than invented: the feedback
+tool withholds shares below `MIN_CASES_FOR_SHARE` and names no pattern below
+`MIN_SUPPORT_FOR_PATTERN`; the brief requires two independent reviewers.
+
+```
+reviewers                 ≥ 2
+casesReviewed             ≥ 30
+casesWithMultipleReviews  ≥ 3
+```
+
+This is a floor for calling the exercise analysable, not a proof of anything.
+Before declaring evidence sufficient the snapshot also has to be read, and it
+records for that purpose: pupils reviewed, cases reviewed, independent
+reviewers, cases with two or more reviews, categories represented, subjects
+represented, temporal patterns represented, repeated disagreements by category,
+data-quality citations, and how reviewers answered.
+
+### Pilot checklist
+
+**School authorisation**
+- [ ] the school is explicitly selected (the head's own; the operator via `?schoolId`)
+- [ ] the operator is authorised to access the school (the door middleware answers 404 `SCHOOL_NOT_FOUND` / 403 otherwise)
+- [ ] the school knows it is participating and has agreed
+
+**Data readiness**
+- [ ] sufficient published results exist (`calibration-summary` → `evidence`; `studentsSufficient` is not a handful)
+- [ ] more than one sequence/term exists where the categories need it (`declining`, `sudden_change`, `weak_but_improving` all need history)
+- [ ] subjects have usable history (the review sheet's `coverage` shows every category with a case)
+- [ ] the grading configuration is valid (`engine.passMark`/`strongMark`/`strongBand` on the class route read sensibly)
+- [ ] attendance/result semantics are intact (absent = `isAbsent`, score `null`; genuine zero kept — Stage 2.1)
+
+**Reviewer readiness**
+- [ ] at least two teachers identified, each holding an assignment for the classes in scope
+- [ ] each knows the pupils they will be asked about
+- [ ] each has read the briefing on the review page (the system is being tested; it is not expected to be right)
+- [ ] each will review independently — the shield enforces it; the briefing asks for it
+- [ ] the head understands the review process and the state model
+
+**Technical readiness**
+- [ ] intelligence routes answer for the school (`/insights/class/:id`, `/insights/student/:id`)
+- [ ] authorisation verified for the three roles (`check-intelligence-access.js`, and a manual check with real accounts)
+- [ ] review queue available (`/insights/review-cases`)
+- [ ] review submission available (`POST /insights/reviews`)
+- [ ] review revision available (`PATCH /insights/reviews/:id`)
+- [ ] calibration summary available (`/insights/calibration-summary`)
+- [ ] audit trail available (`reviewedBy`, `reviewedAt`, `engineVersion`, `revisions[]` on each review; `transitions[]` on the pilot)
+- [ ] live = offline for a sample of pupils (`/insights/student/:id/consistency`, or the button on any case)
+
+### Workflow
+
+1. The head opens **Intelligence review** → *Validation pilot* → opens a pilot of
+   kind `real`, scoped to the classes the two reviewers teach. State READY.
+2. Teachers are briefed (the page carries the briefing; the head moves the pilot to
+   ACTIVE with a note).
+3. Each teacher works the queue top-down. It is in `REVIEW_PRIORITY` order —
+   borderline first, then the trend claims, then the rest — and the page offers
+   no filter by category, so a reviewer cannot pick only the cases that look
+   right. The head moves the pilot to REVIEWING once reviews are arriving.
+4. The head reads *Evidence now* on the panel as the pilot runs. When the
+   sample is worth reading, → ANALYSIS_READY; the snapshot is stored.
+5. The head reads the school-wide block (how reviewers answered, data problems
+   cited, repeated disagreements) and `reviewFeedback.js` through the summary,
+   and records the decision: → CALIBRATED (gate met, KEEP/CALIBRATE) or
+   → INSUFFICIENT_EVIDENCE. Then → CLOSED.
+6. Evidence that must leave the school goes through the existing operator
+   export (§7A); in-app validation uses the live path. Both end in
+   `shared/intelligence`; the consistency check proves the road to it is the same.
+
+### Reviewer responsibilities (the briefing on the page)
+
+The system analyses academic evidence already on record; it does not diagnose
+pupils, predict careers or replace the teacher's judgement; the teacher is
+judging whether the detected pattern is reasonable for a pupil they know;
+disagreement is valuable evidence; reviews are made independently and colleagues'
+answers are hidden until one's own is submitted; where the problem is the data,
+the data-quality codes are ticked; nobody has told the system it is expected to
+be right.
+
+### Data quality is recorded apart from disagreement
+
+`dataQuality[]` codes on the form, tallied as `dataQualityCitations` and, above
+the support minimum, the `DATA_QUALITY_OFTEN_CITED` pattern. A systemic data
+problem (missing results, unpublished results, a grading mismatch, an unexpected
+sequence structure) is a platform issue to be documented and fixed at source;
+no threshold is moved to compensate for bad source data.
+
+### Live = offline — and what the check found
+
+`GET /api/insights/student/:id/consistency` runs one pupil through the live
+loader and through `cohortFromDocuments → toEngineInput → runEngine`, and
+diffs the two profiles and guidance lists path by path
+(`scripts/calibration/consistency.js`). It normalises nothing. On its first run
+it reported a real difference: the live path carries `isPassing` on every mark
+(the engine copies it from the result row as evidence; it is an input to no
+rule) and the cohort contract dropped it, so the offline profile showed
+`null` where the live one showed a boolean. The fix is at the mapping —
+`cohortFromDocuments` and `toEngineInput` now carry the field — and the engine
+was not touched. That is exactly the class of difference §11 of the brief says
+must be investigated rather than normalised away, and the mechanism now exists
+to find the next one.
+
+### Security and privacy
+
+The pilot routes sit on the same hierarchy as every other intelligence read:
+teachers read the lean pilot state for their school (that a pilot is on, its
+kind and state); `insights.pilot` — office roles, not delegable — opens,
+advances and concludes; the operator does so for the school selected with
+`?schoolId` and nothing without a selection; the bursar reaches none of it.
+The operator's cross-school figure now carries each school's open pilot kind
+and state and how many it has closed — counts, no pupil. No endpoint added in
+this stage bypasses the door middleware or the capability registry.
+
+### Verification (Stage 7D)
+
+| | |
+|---|---|
+| `check-pilot-readiness.js` (new) | 64 assertions, 0 failures — state machine, gate, record contents, authorisation, independence inside a pilot, live = offline, operator row, registries |
+| `npm run check:intel` | 10 scripts, 578 assertions, 0 failures |
+| `check:roles` (backend) | 94 assertions, 0 failures — `insights.pilot` registered, labelled in EN/FR, its lock explained |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials | **69 scripts, 4,374 assertions, 0 failures**; `check-student-integrity.js` (a live-Atlas maintenance report, not a regression test) again exited without a tally |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,300 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| Engine | `ENGINE_VERSION` 1.0.0; `shared/intelligence/` untouched; every threshold and flag limit unchanged |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+No authorised school and no real reviewers were available in this environment.
+The pilot exercised in the tests is of kind `development`, with fixture
+teachers, and concludes INSUFFICIENT_EVIDENCE — which is what two reviews of
+one case deserve. Nothing here is validation of the engine.
+
+```
+PILOT READY
+REAL VALIDATION NOT YET PERFORMED
+REAL COHORT VALIDATION: NOT PERFORMED
+REAL TEACHER VALIDATION: NOT PERFORMED
+CALIBRATION REQUIRES MORE DATA
+ENGINE_VERSION: 1.0.0
+```
+
+---
+
+## 13. Stage 8 — controlled real-world validation: not started
+
+Stage 8 is the first real pilot: an authorised school, its own administrator,
+at least two of its own teachers, at least thirty reviewable cases, at least
+three cases that two teachers can review independently. None of the
+operational preconditions exist in this environment. The real pilot was not
+started, no teacher feedback was manufactured, and nothing synthetic is
+described below as validation.
+
+```
+STAGE 8 NOT STARTED
+REAL PILOT PREREQUISITES: BLOCKED — no authorised school, administrator or reviewers available
+ENGINE_VERSION: 1.0.0
+```
+
+### Prerequisite status
+
+| Precondition (brief §1) | Status here | How it is verified when a school exists |
+|---|---|---|
+| one authorised school | **missing** | operator selects it; head signs `schoolParticipates` |
+| an authorised school administrator | **missing** (fixtures only) | preflight `schoolAdminPresent` |
+| ≥ 2 real teachers/reviewers | **missing** (fixtures only) | preflight `reviewersAvailable` — active assignments in scope |
+| teachers understand the task | **missing** | briefing on the page; head signs `reviewersUnderstandTask` |
+| sufficient published evidence | **missing** | preflight `publishedEvidence` |
+| ≥ 30 reviewable cases | **missing** | preflight `reviewableCases` |
+| ≥ 3 multi-review-capable cases | **missing** | preflight `multiReviewCapableCases` — cases in classes with two or more assigned teachers |
+| teacher visibility assignment-limited | verified | `check-intelligence-access.js` §1, `check-review-workflow.js` §5 |
+| school-admin visibility | verified | `check-intelligence-access.js` §2 |
+| super-admin requires explicit selection | verified | `check-intelligence-access.js` §3, `check-pilot-readiness.js` §2 |
+| no salt exposed to school users | verified | `check-intelligence-access.js` §6; preflight `saltNotExposed` |
+| no raw cohort export to ordinary users | verified | `check-intelligence-access.js` §6 |
+| no pupil identity in the engine input | verified | preflight `engineInputNameFree` runs `validateCohort` over the live cohort |
+| live/offline consistency operational | verified | preflight `consistencyOperational` on a sample; `/insights/student/:id/consistency` |
+
+### What was put in place so the real pilot needs no developer
+
+- **Preflight** — `GET /api/insights/pilot/preflight` answers every automatic
+  precondition for the school (and an optional class scope), names the two
+  that only a person can answer, and lists blockers. **A pilot of kind `real`
+  cannot be opened while any automatic check fails** (409 `REAL_PILOT_BLOCKED —
+  <reason>`) **or without both attestations signed** (409
+  `ATTESTATION_REQUIRED`). The attestations are stored on the record with who
+  signed and when. Development and synthetic pilots are not gated.
+- **Findings record** — `findings[]` on the pilot: `findingId`, category
+  (ENGINE, DATA_QUALITY, MAPPING, AUTHORIZATION, UX, MISSING_EVIDENCE, GUIDANCE,
+  REVIEW_WORKFLOW, OFFLINE_CONSISTENCY), severity, summary, evidence, affected
+  cases, the pilot's engine version (never the caller's), status (open →
+  investigating → confirmed / resolved / not_reproduced), recommended next
+  action. Findings are never deleted; a closed pilot takes no new ones. This is
+  the `finding → evidence → reproduction → review → post-pilot decision` path
+  the brief requires instead of a silent fix; the one finding this project has
+  so far (the offline contract dropping `isPassing`, §12) is the worked example.
+- **Four phenomena, kept apart** — the tally now carries `concerns`:
+  interpretation disagreement (classification judged NO or PARTIALLY), data
+  quality, missing evidence, contextual limitation — each a count of reviews
+  with the codes repeated at or above the support minimum, never summed. Two
+  reviewer codes were added to the one form contract for this: `stale_record`
+  and `context_unavailable`. The head's page shows the four side by side with
+  the sentence "teacher agreement is not ground truth".
+- **Reviewer wording** — the outcomes are labelled as the brief words them:
+  Supported / Partly supported / Not supported / Insufficient evidence. They
+  are the existing `confirmed / partially_appropriate / rejected /
+  insufficient_evidence` outcomes of `reviewFeedback.outcomeOf`; no second
+  schema.
+
+### The protocol, when a school is available
+
+1. Operator selects the school; head opens **Intelligence review → Validation
+   pilot → kind: real**; the preflight must be all green; the head signs both
+   attestations; the pilot opens READY with `engineVersion` stamped by the server.
+2. Head briefs the teachers (the page carries the briefing; the banner tells
+   each teacher a real pilot is on) and moves the pilot to ACTIVE.
+3. Teachers work the queue top-down in `REVIEW_PRIORITY` order; no category
+   filter exists, so the sample is the engine's own distribution. Colleagues'
+   answers stay hidden until one's own is submitted. → REVIEWING.
+4. Suspected engine defects, mapping differences, authorisation surprises and
+   UX problems are recorded as **findings**, not fixed. `shared/intelligence/`
+   is not touched while the pilot is open.
+5. For a sample of real cases the head presses *Check live = offline*; a
+   mismatch is recorded as an OFFLINE_CONSISTENCY finding with the exact paths.
+6. → ANALYSIS_READY takes the evidence snapshot. The head reads: outcome
+   distribution, the four concern groups, data-quality citations, repeated
+   disagreements, patterns, and the sensitivity table on the calibration
+   summary. Threshold changes are candidates only under §14 of the brief and §6
+   of this document; a single disagreement changes nothing.
+7. → CALIBRATED (gate met — ≥ 2 reviewers, ≥ 30 reviewed cases, ≥ 3
+   multi-reviewed — and a written decision, meaning only "the evidence is
+   sufficient to accept the current rules for this pilot's scope") or
+   → INSUFFICIENT_EVIDENCE. Then → CLOSED. The trail and the evidence stay.
+
+### Privacy
+
+Real pupil data enters no fixture, test, commit, log or document; the
+committed fixtures remain synthetic. The engine input is name-free and the
+preflight re-checks it against the live cohort every time. Teacher screens show
+the minimum a teacher needs to recognise the case (name, class, enrolment
+number); the operator's cross-school figure shows counts and the pilot's kind
+and state.
+
+### Verification (Stage 8 readiness)
+
+| | |
+|---|---|
+| `check-pilot-readiness.js` | 82 assertions (was 64), 0 failures — preflight answers and blockers, `REAL_PILOT_BLOCKED` on open, findings lifecycle and authorisation, four concern groups counted apart, the two new reviewer codes |
+| `npm run check:intel` | 10 scripts, 596 assertions, 0 failures |
+| `check-calibration-export.js` | 51/51, twice in a row after fixing a race in the read-only proof itself (the parent's `autoIndex` had not always created every collection before the "before" snapshot; the check now awaits `Model.init()` and names a drifting collection instead of reporting `false`) |
+| `check:roles` (backend) | 94 assertions, 0 failures — no new permission; `insights.pilot` reused |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials | **69 scripts, 4,392 assertions, 0 failures** (`check-student-integrity.js`, a live-database maintenance report, is not a regression test and is excluded) |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,363 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| Engine | `ENGINE_VERSION` 1.0.0; `shared/intelligence/` untouched; every threshold and flag limit unchanged |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Final output
+
+```
+STAGE 8 NOT STARTED
+REAL PILOT PREREQUISITES: BLOCKED — no authorised school, administrator or reviewers available;
+                          every technical precondition verified and enforced by the preflight
+ENGINE_VERSION: 1.0.0
+```

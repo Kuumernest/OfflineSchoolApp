@@ -196,7 +196,8 @@
     "messageAudit": "Message audit",
     "approvals": "Approvals",
     "platformSettings": "Platform settings",
-    "classIntelligence": "Class intelligence"
+    "classIntelligence": "Class intelligence",
+    "intelligenceReview": "Intelligence review"
   },
   "academic": {
     "student": "Student",
@@ -1855,6 +1856,7 @@
       "messages.audit": "Read other people's messages",
       "insights.view": "See the watch list",
       "insights.viewTaught": "See subject strengths and risks for the classes you teach",
+      "insights.review": "Record whether an intelligence conclusion matches what you see in class",
       "interventions.view": "See student support actions across the school",
       "interventions.viewTaught": "See support actions for the classes you teach",
       "interventions.create": "Record a support action for a pupil you teach",
@@ -1879,7 +1881,8 @@
       "settings.manage": "Change school settings",
       "fees.remind": "Send fee reminders",
       "fees.penalize": "Add late fees",
-      "fees.plan": "Agree instalment plans"
+      "fees.plan": "Agree instalment plans",
+      "insights.pilot": "Open, advance and conclude an intelligence validation pilot for the school"
     },
     "note": {
       "platform.schools": "Reaches past this school's walls. Only the operator of the deployment holds it, and no school can grant it.",
@@ -1910,7 +1913,8 @@
       "fees.refund": "Above the school's refund threshold this raises a request instead of paying the money out.",
       "fees.waive": "Above the waiver threshold this raises a request instead of reducing the bill.",
       "fees.penalize": "Adds money to a family's bill, so it is never automatic — the bursar raises them from a preview.",
-      "fees.plan": "Changes when fees are due, never how much is owed. A family keeping to a plan is not chased and not charged late fees."
+      "fees.plan": "Changes when fees are due, never how much is owed. A family keeping to a plan is not chased and not charged late fees.",
+      "insights.pilot": "Concluding a pilot is a decision about evidence — that the sample was enough, or was not — and the head signs it. Nobody the head delegates to should be able to declare the engine calibrated."
     }
   },
   "approvals": {
@@ -3292,6 +3296,370 @@
       "no_change": "No change",
       "further_support": "Needs more support",
       "not_assessed": "Not assessed yet"
+    }
+  },
+  "intelReview": {
+    "title": "Intelligence review",
+    "blurb": "Judge what the system concluded about pupils you teach. The evidence, the system's reading of it and your own are kept apart.",
+    "selectSchool": "Select a school to review its cases.",
+    "class": "Class",
+    "show": "Show",
+    "wholeSchool": "Whole school",
+    "allMyClasses": "All my classes",
+    "filter": {
+      "all": "All cases",
+      "mine_pending": "Awaiting my review",
+      "mine_done": "Reviewed by me",
+      "unreviewed": "Not yet reviewed by anyone"
+    },
+    "engine": "Engine {{v}}",
+    "stale": "Showing the last information this device received. It may not be up to date.",
+    "empty": "No cases to review in this scope.",
+    "review": "Review",
+    "revise": "Revise",
+    "submit": "Submit review",
+    "saveRevision": "Save revision",
+    "submitted": "Review recorded.",
+    "revised": "Revision recorded.",
+    "youReviewed": "You reviewed this",
+    "hiddenUntilYours": "{{n}} colleague review(s) — shown after you submit yours",
+    "status": {
+      "UNREVIEWED": "Unreviewed",
+      "ONE_REVIEW": "One review",
+      "MULTIPLE_REVIEWS": "Multiple reviews",
+      "UNREVIEWED_n": "{{n}} unreviewed",
+      "ONE_REVIEW_n": "{{n}} with one review",
+      "MULTIPLE_REVIEWS_n": "{{n}} with several"
+    },
+    "agreement": {
+      "AGREE": "Reviewers agree",
+      "DIFFER": "Reviewers differ"
+    },
+    "agreementNote": {
+      "AGREE": "The reviewers gave the same answer on whether the classification was appropriate. Agreement is described, not scored.",
+      "DIFFER": "The reviewers gave different answers on whether the classification was appropriate. A difference is information, not an error."
+    },
+    "evidenceHeading": "Observed evidence",
+    "evidenceHint": "Published marks on record, and the figures computed from them. Nothing here is an interpretation.",
+    "studentScoped": "This case concerns the pupil as a whole; {{n}} assessment sequence(s) on record.",
+    "engineHeading": "System interpretation",
+    "engineHint": "What engine {{v}} concluded from the evidence above, and the thresholds it used.",
+    "noClassification": "The system drew no conclusion for this subject.",
+    "guidanceGiven": "Guidance the system attached",
+    "thresholds": "Thresholds involved",
+    "yourHeading": "Your review",
+    "yourHint": "Answer from what you know of the pupil. You are judging the system, not the pupil.",
+    "yoursOn": "Your review of {{when}}, engine {{v}}",
+    "revisedOn": "revised {{when}}",
+    "othersHeading": "Other reviewers",
+    "noOthers": "Nobody else has reviewed this case yet.",
+    "field": {
+      "observedPattern": "Do you observe this pattern in the pupil?",
+      "classificationAppropriate": "Is the classification appropriate?",
+      "evidenceSufficient": "Is the evidence sufficient?",
+      "guidanceAppropriate": "Is the guidance appropriate?",
+      "interpretationReasonable": "Is the reading of the change over time reasonable?",
+      "possibleExplanation": "Most likely explanation of the change",
+      "dataQuality": "Data problems, if any",
+      "reason": "Reason (short)",
+      "notes": "Notes"
+    },
+    "dataQualityHint": "Tick these when the problem is the data rather than the rule. They change nothing; they are counted.",
+    "answer": {
+      "choose": "Choose…",
+      "YES": "Yes",
+      "NO": "No",
+      "PARTIALLY": "Partially",
+      "UNCERTAIN": "Uncertain"
+    },
+    "explanation": {
+      "genuine_student_change": "Genuine change in the pupil",
+      "assessment_difficulty": "Assessment difficulty",
+      "curriculum_or_content_change": "Curriculum or content change",
+      "grading_change": "Grading change",
+      "missing_data": "Missing data",
+      "attendance_or_context": "Attendance or context",
+      "other": "Other"
+    },
+    "dataQuality": {
+      "missing_assessment": "An assessment is missing",
+      "incorrect_result": "A result is wrong",
+      "unpublished_result": "A result is not yet published",
+      "assessment_unusually_difficult": "The assessment was unusually difficult",
+      "grading_change": "Grading changed",
+      "student_absence": "The pupil was absent",
+      "curriculum_change": "The curriculum changed",
+      "insufficient_history": "Not enough history",
+      "other": "Other",
+      "stale_record": "The record is out of date",
+      "context_unavailable": "Relevant context exists outside the school data"
+    },
+    "consistency": {
+      "check": "Check live = offline",
+      "identical": "Live and offline paths agree for this pupil (engine {{v}}).",
+      "differs": "Live and offline paths DIFFER for this pupil — {{n}} difference(s). Investigate before any calibration decision."
+    },
+    "code": {
+      "academic_decline": "Academic decline",
+      "sudden_performance_change": "Sudden performance change",
+      "persistent_underperformance": "Persistent underperformance",
+      "sustained_improvement": "Sustained improvement",
+      "subject_strength": "Subject strength",
+      "consistency_strength": "Consistent strength",
+      "cross_subject_strength": "Strength across subjects",
+      "insufficient_evidence": "Insufficient evidence"
+    },
+    "category": {
+      "borderline_threshold": "Borderline: one mark either way changes the answer",
+      "declining": "Decline",
+      "sudden_change": "Sudden change",
+      "weak_and_persistent": "Weak and persistent",
+      "weak_but_improving": "Weak but improving",
+      "cross_subject_strength": "Strong across subjects",
+      "trend_on_variable_subject": "Trend on a variable subject",
+      "strong_but_recent": "Strong, but recent",
+      "emerging_strength": "Emerging strength",
+      "insufficient_evidence": "Insufficient evidence",
+      "volatile": "Volatile",
+      "strong_and_stable": "Strong and stable",
+      "absence_heavy": "Many absences",
+      "zero_heavy": "Many zeros",
+      "mixed_assessment": "Mixed assessment types",
+      "with_intervention": "With an intervention"
+    },
+    "reason": {
+      "borderline_threshold": "one mark either way would change what the system says",
+      "declining": "the system reads a fall — is it the pupil, or the paper?",
+      "sudden_change": "the latest step is large — is it a genuine change?",
+      "weak_and_persistent": "several marks below the pass mark — is the picture right?",
+      "weak_but_improving": "below the pass mark but rising — is the improvement real?",
+      "cross_subject_strength": "several subjects strong together — the system names them and claims no domain",
+      "trend_on_variable_subject": "a trend read on a subject whose marks swing — is the trend real?",
+      "strong_but_recent": "strong, on little history — too early to say so?",
+      "emerging_strength": "the first signs of a strength — is it there?",
+      "insufficient_evidence": "the system declined to conclude — was that right?",
+      "volatile": "marks that swing widely — is any reading sound here?",
+      "strong_and_stable": "strong and steady — does that match the pupil?",
+      "absence_heavy": "many absences — did they distort the reading?",
+      "zero_heavy": "many zeros — real zeros, or missing marks?",
+      "mixed_assessment": "tests and continuous assessment together — did the mix mislead?",
+      "with_intervention": "a support action was recorded; before/after evidence applies"
+    },
+    "outcome": {
+      "confirmed": "Supported",
+      "partially_confirmed": "Partially confirmed",
+      "rejected": "Not supported",
+      "uncertain": "Uncertain",
+      "unreviewed": "Unreviewed",
+      "partially_appropriate": "Partly supported",
+      "insufficient_evidence": "Insufficient evidence"
+    },
+    "pattern": {
+      "DATA_QUALITY_OFTEN_CITED": "Reviewers often pointed at the data rather than the rule",
+      "ASSESSMENT_DIFFICULTY_CITED": "Assessment difficulty often cited for temporal readings",
+      "GUIDANCE_DISAGREEMENT": "Guidance often judged inappropriate",
+      "EVIDENCE_INSUFFICIENT": "Evidence often judged insufficient"
+    },
+    "monitoring": "School-wide review status",
+    "mon": {
+      "cases": "{{n}} cases",
+      "reviewsRecorded": "{{n}} reviews recorded",
+      "reviewers": "{{n}} reviewers",
+      "agree": "{{n}} agree",
+      "differ": "{{n}} differ",
+      "byCategory": "By category (reviewed / cases, several)",
+      "catCounts": "{{r}} / {{c}}, {{m}} with several",
+      "byOutcome": "How reviewers answered",
+      "sharesWithheld": "Too few reviews for shares to mean anything; counts only.",
+      "dataQuality": "Data problems cited",
+      "patterns": "Patterns above the support minimum"
+    },
+    "acrossSchools": "Across schools (counts from recorded reviews)",
+    "noSchools": "No schools to show.",
+    "error": {
+      "generic": "The review could not be saved.",
+      "INVALID_REVIEW": "A value on the form is not allowed.",
+      "DUPLICATE_REVIEW": "You have already reviewed this case — revise that review instead.",
+      "CASE_NOT_FOUND": "The system no longer produces this case for this pupil. Reload the queue.",
+      "STALE_ENGINE_VERSION": "The engine version changed since this case was loaded. Reload the queue.",
+      "VERSION_CONFLICT": "This review was changed elsewhere. Reload and try again.",
+      "NOT_AUTHOR": "Only the teacher who wrote a review may revise it."
+    },
+    "instructions": {
+      "heading": "Before you review — what this is, and what it is not",
+      "show": "Read the briefing",
+      "hide": "Hide the briefing",
+      "p1": "The system reads academic evidence already on record — published marks, sequence by sequence — and states the patterns it finds.",
+      "p2": "It does not diagnose a pupil, it does not predict a career or a future result, and it does not replace your judgement.",
+      "p3": "You are being asked whether the pattern the system detected is reasonable for this pupil, given what you know of them. You are reviewing the system, not the pupil.",
+      "p4": "Disagreement is valuable evidence. If the system is wrong about a pupil you know, say so — that is exactly what this exercise is for.",
+      "p5": "Review independently. You will not see what colleagues answered until you have submitted your own review; please do not discuss a case before then.",
+      "p6": "Where the problem is the data rather than the rule — a missing result, a hard paper, an absence — tick the data-quality codes. They are counted separately.",
+      "p7": "Nobody has told the system it is expected to be right. It is being tested."
+    },
+    "pilot": {
+      "heading": "Validation pilot",
+      "none": "No pilot is open for this school.",
+      "kind": {
+        "synthetic": "Synthetic (fixtures)",
+        "development": "Development (testing the workflow)",
+        "real": "Real (authorised school, own teachers)"
+      },
+      "status": {
+        "READY": "Ready",
+        "ACTIVE": "Active",
+        "REVIEWING": "Reviewing",
+        "ANALYSIS_READY": "Analysis ready",
+        "CALIBRATED": "Calibrated",
+        "INSUFFICIENT_EVIDENCE": "Insufficient evidence",
+        "CLOSED": "Closed"
+      },
+      "statusHint": {
+        "READY": "Opened; teachers not yet briefed or reviewing.",
+        "ACTIVE": "Teachers have been briefed; the queue is open.",
+        "REVIEWING": "Reviews are being recorded.",
+        "ANALYSIS_READY": "Enough has been recorded to read the evidence and decide.",
+        "CALIBRATED": "The evidence met the minimum and a decision was recorded.",
+        "INSUFFICIENT_EVIDENCE": "The sample could not answer the calibration questions. Calibration requires more data.",
+        "CLOSED": "Finished."
+      },
+      "teacherBanner": "A {{kind}} validation pilot is {{status}} at this school (engine {{v}}). Your reviews are part of it.",
+      "engine": "Engine {{v}}",
+      "scope": "Scope",
+      "wholeSchool": "Whole school",
+      "opened": "Opened",
+      "started": "Started",
+      "ended": "Ended",
+      "by": "by {{who}}",
+      "open": "Open a pilot",
+      "openKind": "Kind of exercise",
+      "openLabel": "Label (optional)",
+      "openScope": "Classes (leave empty for the whole school)",
+      "openHint": "One open pilot per school. Only a pilot of kind “real” — an authorised school reviewed by its own teachers — produces calibration evidence.",
+      "advance": "Move to {{state}}",
+      "note": "Note for the record (optional)",
+      "decisionHeading": "Decision",
+      "decisionOutcome": "Outcome",
+      "decisionSummary": "Written decision (required to conclude)",
+      "outcome": {
+        "KEEP": "Keep the rules as they are",
+        "CALIBRATE": "Propose a rule change (separate, regression-covered decision)",
+        "INSUFFICIENT_EVIDENCE": "Insufficient evidence"
+      },
+      "evidenceHeading": "Evidence on record",
+      "liveEvidence": "Evidence now (not yet stored)",
+      "gate": "Minimum before a calibration decision: {{list}}",
+      "shortfall": "{{req}}: {{actual}} of {{min}}",
+      "gateMet": "The minimum evidence is met. The decision text still has to carry the argument.",
+      "ev": {
+        "casesSelected": "Cases selected",
+        "casesReviewed": "Cases reviewed",
+        "casesAwaitingReview": "Awaiting review",
+        "casesWithMultipleReviews": "With two or more reviews",
+        "studentsReviewed": "Pupils reviewed",
+        "reviewsRecorded": "Reviews recorded",
+        "reviewers": "Independent reviewers",
+        "categories": "Categories represented",
+        "subjects": "Subjects represented",
+        "temporalPatterns": "Temporal patterns represented",
+        "repeatedDisagreements": "Repeated disagreements (by category)",
+        "dataQualityCitations": "Data problems cited",
+        "byOutcome": "How reviewers answered"
+      },
+      "req": {
+        "reviewers": "reviewers",
+        "casesReviewed": "cases reviewed",
+        "casesWithMultipleReviews": "cases with two or more reviews"
+      },
+      "history": "Previous pilots",
+      "trail": "Trail",
+      "advanced": "Pilot updated.",
+      "opened_ok": "Pilot opened.",
+      "error": {
+        "generic": "The pilot could not be updated.",
+        "PILOT_OPEN": "This school already has an open pilot. Close it first.",
+        "INVALID_TRANSITION": "The pilot cannot move there from its current state.",
+        "EVIDENCE_REQUIRED": "No reviews have been recorded in this pilot's scope yet.",
+        "DECISION_REQUIRED": "A written decision (at least a sentence) is required to conclude a pilot.",
+        "EVIDENCE_GATE": "The evidence does not meet the minimum for a calibration decision. Calibration requires more data — record INSUFFICIENT_EVIDENCE instead, or keep reviewing.",
+        "VERSION_CONFLICT": "The pilot changed elsewhere. Reload and try again.",
+        "CLASS_NOT_FOUND": "A class in the scope is not in this school.",
+        "INVALID_PILOT_KIND": "Choose a kind of exercise.",
+        "REAL_PILOT_BLOCKED": "A real pilot cannot open here yet — see the preflight.",
+        "ATTESTATION_REQUIRED": "Both attestations must be signed to open a real pilot.",
+        "INVALID_FINDING": "The finding is missing a category, a severity or a summary.",
+        "PILOT_CLOSED": "A closed pilot takes no new findings.",
+        "FINDING_NOT_FOUND": "No such finding."
+      }
+    },
+    "repeatedDisagreements": "Categories where reviewers differed on more than one case",
+    "concern": {
+      "heading": "What reviewers are telling us — four things, kept apart",
+      "interpretationDisagreement": "Interpretation disagreement (reading judged wrong or partly wrong)",
+      "dataQuality": "Data-quality problem",
+      "missingEvidence": "Missing evidence",
+      "contextualLimitation": "Contextual limitation (information the system cannot see)",
+      "repeated": "repeated",
+      "note": "Counts of reviews, not a score. Teacher agreement is not ground truth, and these are never summed."
+    },
+    "preflight": {
+      "heading": "Before a real pilot can open",
+      "ready": "Every automatic check passes. Sign the two attestations to open.",
+      "blocked": "REAL PILOT BLOCKED — {{reason}}",
+      "check": {
+        "schoolAdminPresent": "An active school administrator exists",
+        "reviewersAvailable": "At least two teachers hold assignments in scope",
+        "publishedEvidence": "Published results exist for the scope",
+        "reviewableCases": "At least 30 reviewable cases",
+        "multiReviewCapableCases": "At least 3 cases can receive two independent reviews",
+        "engineInputNameFree": "The engine input carries no pupil identity",
+        "consistencyOperational": "Live = offline on a sample of pupils",
+        "saltNotExposed": "No calibration salt in the review package",
+        "teacherScopeEnforced": "Teacher scope enforced (test suite)",
+        "schoolAdminScopeEnforced": "School-admin scope enforced (test suite)",
+        "operatorSelectionRequired": "Operator must select a school (test suite)",
+        "rawExportNotExposed": "No raw export on any route (test suite)",
+        "schoolParticipates": "I attest that the school knows it is taking part and has agreed",
+        "reviewersUnderstandTask": "I attest that each reviewer has read the briefing and understands the task"
+      }
+    },
+    "finding": {
+      "heading": "Findings",
+      "add": "Record a finding",
+      "record": "Record",
+      "recorded": "Finding recorded.",
+      "cases": "case(s)",
+      "next": "Next",
+      "categoryLabel": "Category",
+      "severityLabel": "Severity",
+      "summaryLabel": "Summary",
+      "evidenceLabel": "Evidence (how to reproduce)",
+      "affectedLabel": "Affected cases",
+      "nextLabel": "Recommended next action",
+      "category": {
+        "ENGINE": "Engine",
+        "DATA_QUALITY": "Data quality",
+        "MAPPING": "Mapping",
+        "AUTHORIZATION": "Authorisation",
+        "UX": "UX",
+        "MISSING_EVIDENCE": "Missing evidence",
+        "GUIDANCE": "Guidance",
+        "REVIEW_WORKFLOW": "Review workflow",
+        "OFFLINE_CONSISTENCY": "Live/offline consistency"
+      },
+      "severity": {
+        "low": "Low",
+        "medium": "Medium",
+        "high": "High"
+      },
+      "status": {
+        "label": "Status",
+        "open": "Open",
+        "investigating": "Investigating",
+        "confirmed": "Confirmed",
+        "resolved": "Resolved",
+        "not_reproduced": "Not reproduced"
+      }
     }
   }
 }

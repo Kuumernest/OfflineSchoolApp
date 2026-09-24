@@ -61,7 +61,10 @@ const FORMAT_VERSION = 1;
 const ASSESSMENT_TYPES = Object.freeze([TEST_TYPE, "practical", "promotion_exam", CA_TYPE]);
 
 /** How the file says where it came from. Only one of these is evidence. */
-const PROVENANCE_KINDS = Object.freeze(["synthetic", "anonymised-real"]);
+// "live": built in-app over live documents for an authorised caller and never
+// written to a file — real data, real provenance, no export. The review
+// surface and the pilot preflight run this validator over it too.
+const PROVENANCE_KINDS = Object.freeze(["synthetic", "anonymised-real", "live"]);
 
 /**
  * Keys that may not appear anywhere in a cohort file, at any depth.
@@ -339,6 +342,11 @@ const toEngineInput = (cohort) => {
           coefficient:    s.coefficient ?? 1,
           isAbsent:       s.isAbsent === true,
           isExempt:       s.isExempt === true,
+          // Carried as evidence on each mark by the engine (never a rule input).
+          // The live loader hands it over; the file must too, or the two paths
+          // disagree on a field a reviewer can see. Found by the live/offline
+          // consistency check in Stage 7D.
+          isPassing:      typeof s.isPassing === "boolean" ? s.isPassing : null,
         })),
       };
     });
@@ -390,3 +398,89 @@ module.exports = {
   validateCohort,
   toEngineInput,
 };
+
+/**
+ * Database documents → a cohort, with identity applied by the caller.
+ *
+ * ── Why this lives here and takes a `mask` ────────────────────────────────
+ *
+ * Two things build a cohort from the school's documents: the anonymising
+ * exporter, which replaces every id with an HMAC an operator holds the key to,
+ * and the in-app review surface, which runs the identical analysis over LIVE
+ * documents for a caller the server has already authorised to see them. The
+ * mapping from ResultSummary and Exam into the contract is the same in both
+ * cases, and a second copy of it is how the export and the screen would come
+ * to disagree about which row is an absence.
+ *
+ * So the mapping is written once and identity is a parameter: the exporter
+ * passes its HMAC, the live surface passes the identity function. Nothing here
+ * decides who may see what — the caller has done that before it loads a row.
+ *
+ * @param {object}   input
+ * @param {object}   input.provenance         { kind, note }
+ * @param {object[]} input.exams              Exam documents
+ * @param {object[]} input.summaries          ResultSummary documents, published or not
+ * @param {object[]} [input.students]         Student documents (for pupils with no results)
+ * @param {object}   [input.gradingConfig]
+ * @param {object}   [input.academicStructure]
+ * @param {object[]} [input.interventions]
+ * @param {Function} [input.mask]             (kind, id) => opaque id; identity by default
+ */
+const cohortFromDocuments = ({
+  provenance, exams, summaries, students = [], gradingConfig = null,
+  academicStructure = null, interventions = [], mask = (_kind, id) => String(id),
+}) => ({
+  format: FORMAT,
+  formatVersion: FORMAT_VERSION,
+  provenance,
+  grading: gradingConfig
+    ? {
+        passMark: gradingConfig.passMark,
+        grades: (gradingConfig.grades ?? []).map((g) => ({ grade: g.grade, minMark: g.minMark, maxMark: g.maxMark })),
+      }
+    : null,
+  academicStructure: academicStructure ? { passMark: academicStructure.passMark } : null,
+  exams: (exams ?? []).map((e) => ({
+    examId:         mask("exam", e._id),
+    type:           e.type,
+    academicYear:   e.academicYear,
+    term:           e.term,
+    sequenceNumber: e.sequenceNumber ?? null,
+    startDate:      e.startDate ?? null,
+    parentExamId:   e.parentExamId ? mask("exam", e.parentExamId) : null,
+  })),
+  students: (students ?? []).map((s) => ({
+    studentId: mask("student", s._id),
+    classId:   s.classId ? mask("class", s.classId) : null,
+  })),
+  results: (summaries ?? []).map((r) => ({
+    resultId:    mask("result", r._id),
+    studentId:   mask("student", r.studentId),
+    classId:     r.classId ? mask("class", r.classId) : null,
+    examId:      mask("exam", r.examId),
+    isPublished: r.isPublished === true,
+    computedAt:  r.createdAt ? new Date(r.createdAt).toISOString() : null,
+    subjects: (r.subjectBreakdown ?? []).map((s) => ({
+      subjectId:      String(s.subjectId),
+      subjectName:    s.subjectName ?? String(s.subjectId),
+      normalizedMark: s.normalizedMark ?? null,
+      // Preserved exactly: 0 and null are different facts.
+      score:          s.score === undefined ? null : s.score,
+      maxScore:       s.maxScore ?? 20,
+      coefficient:    s.coefficient ?? 1,
+      isAbsent:       s.isAbsent === true,
+      isExempt:       s.isExempt === true,
+      isPassing:      typeof s.isPassing === "boolean" ? s.isPassing : null,
+    })),
+  })),
+  interventions: (interventions ?? []).map((iv) => ({
+    interventionId: mask("intervention", iv._id),
+    studentId:      mask("student", iv.studentId),
+    subjectId:      iv.subjectId ? String(iv.subjectId) : null,
+    status:         iv.status ?? null,
+    createdAt:      new Date(iv.createdAt).toISOString(),
+    startedAt:      iv.startedAt ? new Date(iv.startedAt).toISOString() : null,
+  })),
+});
+
+module.exports.cohortFromDocuments = cohortFromDocuments;

@@ -170,7 +170,7 @@ const runEngine = (cohort, eng = engine) => {
     intervention: iv,
     history: input.historyByStudent.get(String(iv.studentId)) ?? [],
   }));
-  return { input, grading, profiles, guidanceByStudent, outcomes };
+  return { input, grading, profiles, guidanceByStudent, outcomes, engineVersion: eng.subjectInsights.ENGINE_VERSION };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -425,10 +425,27 @@ const REVIEW_CATEGORIES = Object.freeze([
   "strong_and_stable", "strong_but_recent", "weak_and_persistent", "weak_but_improving",
   "declining", "sudden_change", "volatile", "emerging_strength", "trend_on_variable_subject",
   "insufficient_evidence", "borderline_threshold", "absence_heavy", "zero_heavy",
-  "mixed_assessment", "with_intervention",
+  "mixed_assessment", "with_intervention", "cross_subject_strength",
 ]);
 
 const MAX_PER_CATEGORY = 3;
+
+/**
+ * The order a reviewer's time is best spent in. Borderline first, because one
+ * mark either way changes the answer; then the trend claims, which are the
+ * ones most likely to be a hard paper rather than a child; then the rest.
+ * A queue ordering only — it changes nothing the engine says.
+ */
+const REVIEW_PRIORITY = Object.freeze([
+  "borderline_threshold", "declining", "sudden_change", "weak_and_persistent",
+  "weak_but_improving", "cross_subject_strength", "trend_on_variable_subject",
+  "strong_but_recent", "emerging_strength", "insufficient_evidence", "volatile",
+  "strong_and_stable", "absence_heavy", "zero_heavy", "mixed_assessment", "with_intervention",
+]);
+const priorityOf = (category) => {
+  const i = REVIEW_PRIORITY.indexOf(category);
+  return i < 0 ? REVIEW_PRIORITY.length + 1 : i + 1;
+};
 
 /** Why each category is worth a teacher's minute. Labels for the sheet, not rules. */
 const REVIEW_REASONS = Object.freeze({
@@ -447,6 +464,7 @@ const REVIEW_REASONS = Object.freeze({
   zero_heavy:                "several genuine zeros; check they were earned, not unentered",
   mixed_assessment:          "continuous assessment present; it must not count as an occasion",
   with_intervention:         "a support action was recorded; before/after evidence applies",
+  cross_subject_strength:    "several subjects strong together — the engine names them and claims no domain",
 });
 
 /**
@@ -458,6 +476,17 @@ const REVIEW_FORM = Object.freeze({
   classificationAppropriate: ["YES", "PARTIALLY", "NO", "UNCERTAIN"],
   evidenceSufficient:        ["YES", "NO"],
   guidanceAppropriate:       ["YES", "PARTIALLY", "NO", "UNCERTAIN"],
+  /**
+   * Where the reviewer thinks the problem is the DATA, not the rule. Structured
+   * so it becomes evidence about data quality; it changes no result and no rule.
+   */
+  dataQuality: [
+    "missing_assessment", "incorrect_result", "unpublished_result", "assessment_unusually_difficult",
+    "grading_change", "student_absence", "curriculum_change", "insufficient_history",
+    // Stage 8: a record that is out of date, and information that exists but
+    // not in any school data — kept apart from data quality in the tally.
+    "stale_record", "context_unavailable", "other",
+  ],
   temporal: {
     appliesTo: ["academic_decline", "sustained_improvement", "sudden_performance_change"],
     interpretationReasonable: ["YES", "NO", "UNCERTAIN"],
@@ -476,6 +505,7 @@ const emptyReview = (insights) => ({
   guidanceAppropriate: null,
   reason: null,
   notes: null,
+  dataQuality: [],
   ...(insights.some((i) => REVIEW_FORM.temporal.appliesTo.includes(i.code))
     ? { temporal: { interpretationReasonable: null, possibleExplanation: null } }
     : {}),
@@ -516,7 +546,10 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
       ? profile.insights.filter((i) => i.subjectId === subject.subjectId)
       : profile.insights.filter((i) => i.scope === "student");
     cases.push({
-      caseId: `${category}-${cases.length + 1}`,
+      // Stable: derived from what the case is ABOUT, not from its position on
+      // the sheet, so adding a category later cannot renumber a fixture.
+      caseId: `${category}:${studentId}:${subject?.subjectId ?? "-"}`,
+      priority: priorityOf(category),
       category,
       studentId,
       subjectId:   subject?.subjectId ?? null,
@@ -577,6 +610,7 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
     if (f?.zeros  >= 2) add("zero_heavy",    studentId, subjects[0] ?? null);
     if (f?.ca > 0 && f?.tests > 0) add("mixed_assessment", studentId, subjects[0] ?? null);
     if (!profile.coverage.sufficient) add("insufficient_evidence", studentId, null);
+    if (profile.insights.some((i) => i.code === "cross_subject_strength")) add("cross_subject_strength", studentId, null);
     for (const iv of interventionsBy.get(studentId) ?? []) {
       const s = subjects.find((x) => x.subjectId === iv.subjectId) ?? null;
       add("with_intervention", studentId, s);
@@ -586,7 +620,9 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
   return {
     categories: REVIEW_CATEGORIES,
     reviewForm: REVIEW_FORM,
-    cases: cases.sort((a, b) => a.category.localeCompare(b.category) || a.studentId.localeCompare(b.studentId)),
+    priority: REVIEW_PRIORITY,
+    cases: cases.sort((a, b) => a.priority - b.priority || a.studentId.localeCompare(b.studentId) ||
+      String(a.subjectId ?? "").localeCompare(String(b.subjectId ?? ""))),
     coverage: Object.fromEntries(REVIEW_CATEGORIES.map((c) => [c, cases.filter((x) => x.category === c).length])),
   };
 };
@@ -744,4 +780,5 @@ module.exports = {
   REVIEW_CATEGORIES,
   REVIEW_FORM,
   REVIEW_REASONS,
+  REVIEW_PRIORITY,
 };

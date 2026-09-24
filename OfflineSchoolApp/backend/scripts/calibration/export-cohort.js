@@ -52,7 +52,7 @@ const fs     = require("fs");
 const path   = require("path");
 const crypto = require("crypto");
 
-const { FORMAT, FORMAT_VERSION, validateCohort } = require("./cohortSchema");
+const { validateCohort, cohortFromDocuments } = require("./cohortSchema");
 
 const need = (name) => {
   const v = process.env[name];
@@ -110,58 +110,16 @@ const main = async () => {
           .select("_id studentId subjectId status createdAt startedAt").lean()
       : [];
 
-    const cohort = {
-      format: FORMAT,
-      formatVersion: FORMAT_VERSION,
+    // The one mapping, shared with the in-app review surface; identity is the
+    // HMAC here and the identity function there. See cohortSchema.js.
+    const cohort = cohortFromDocuments({
       provenance: {
         kind: "anonymised-real",
         note: "Exported by scripts/calibration/export-cohort.js. Identifiers are HMAC-SHA256 under an operator-held salt.",
       },
-      grading: grading
-        ? { passMark: grading.passMark, grades: (grading.grades ?? []).map((g) => ({ grade: g.grade, minMark: g.minMark, maxMark: g.maxMark })) }
-        : null,
-      academicStructure: structure ? { passMark: structure.passMark } : null,
-      exams: exams.map((e) => ({
-        examId:         mask("exam", e._id),
-        type:           e.type,
-        academicYear:   e.academicYear,
-        term:           e.term,
-        sequenceNumber: e.sequenceNumber ?? null,
-        startDate:      e.startDate ?? null,
-        parentExamId:   e.parentExamId ? mask("exam", e.parentExamId) : null,
-      })),
-      students: students.map((s) => ({
-        studentId: mask("student", s._id),
-        classId:   s.classId ? mask("class", s.classId) : null,
-      })),
-      results: summaries.map((r) => ({
-        resultId:    mask("result", r._id),
-        studentId:   mask("student", r.studentId),
-        classId:     r.classId ? mask("class", r.classId) : null,
-        examId:      mask("exam", r.examId),
-        isPublished: r.isPublished === true,
-        computedAt:  r.createdAt ? new Date(r.createdAt).toISOString() : null,
-        subjects: (r.subjectBreakdown ?? []).map((s) => ({
-          subjectId:      String(s.subjectId),
-          subjectName:    s.subjectName ?? String(s.subjectId),
-          normalizedMark: s.normalizedMark ?? null,
-          // Preserved exactly: 0 and null are different facts.
-          score:          s.score === undefined ? null : s.score,
-          maxScore:       s.maxScore ?? 20,
-          coefficient:    s.coefficient ?? 1,
-          isAbsent:       s.isAbsent === true,
-          isExempt:       s.isExempt === true,
-        })),
-      })),
-      interventions: interventions.map((iv) => ({
-        interventionId: mask("intervention", iv._id),
-        studentId:      mask("student", iv.studentId),
-        subjectId:      iv.subjectId ? String(iv.subjectId) : null,
-        status:         iv.status,
-        createdAt:      new Date(iv.createdAt).toISOString(),
-        startedAt:      iv.startedAt ? new Date(iv.startedAt).toISOString() : null,
-      })),
-    };
+      exams, summaries, students, gradingConfig: grading, academicStructure: structure, interventions,
+      mask,
+    });
 
     // The same validator the analysis runs. A file that would not analyse, or
     // that carries an identifying key, is not written at all.

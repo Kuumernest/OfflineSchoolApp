@@ -39,6 +39,20 @@ const MIN_CASES_FOR_SHARE = 30;
 /** A pattern is only named when at least this many cases support it. */
 const MIN_SUPPORT_FOR_PATTERN = 3;
 
+/**
+ * Four different things a reviewer can be telling us, which must never be
+ * summed into one number. A code the reviewer ticks lands in exactly one group;
+ * a NO or PARTIALLY on the classification is the fourth, whatever else is
+ * ticked. Teacher agreement is not ground truth, and none of these is a score.
+ */
+const CONCERN_GROUPS = Object.freeze({
+  missingEvidence:      ["missing_assessment", "unpublished_result", "insufficient_history"],
+  dataQuality:          ["incorrect_result", "assessment_unusually_difficult", "grading_change", "student_absence",
+                         "curriculum_change", "stale_record", "other"],
+  contextualLimitation: ["context_unavailable"],
+});
+const groupOf = (code) => Object.keys(CONCERN_GROUPS).find((g) => CONCERN_GROUPS[g].includes(code)) ?? "dataQuality";
+
 const OUTCOMES = Object.freeze([
   "confirmed", "partially_appropriate", "rejected", "insufficient_evidence", "uncertain", "unreviewed",
 ]);
@@ -85,6 +99,12 @@ const validateReview = (review, caseId) => {
   allow("classificationAppropriate", REVIEW_FORM.classificationAppropriate);
   allow("evidenceSufficient",        REVIEW_FORM.evidenceSufficient);
   allow("guidanceAppropriate",       REVIEW_FORM.guidanceAppropriate);
+  if (review.dataQuality !== undefined && review.dataQuality !== null) {
+    if (!Array.isArray(review.dataQuality)) problems.push(`${caseId}: dataQuality must be a list`);
+    else for (const code of review.dataQuality) {
+      if (!REVIEW_FORM.dataQuality.includes(code)) problems.push(`${caseId}: dataQuality "${code}" is not allowed`);
+    }
+  }
   if (review.temporal) {
     const t = review.temporal;
     if (t.interpretationReasonable != null && !REVIEW_FORM.temporal.interpretationReasonable.includes(t.interpretationReasonable)) {
@@ -119,6 +139,8 @@ const analyseReviews = (sheet) => {
     guidance: c.review?.guidanceAppropriate ?? null,
     temporal: c.review?.temporal ?? null,
     reason: c.review?.reason ?? null,
+    dataQuality: Array.isArray(c.review?.dataQuality) ? c.review.dataQuality : [],
+    classificationAppropriate: c.review?.classificationAppropriate ?? null,
   })).sort((a, b) => a.caseId.localeCompare(b.caseId));
 
   const reviewed = rows.filter((r) => r.outcome !== "unreviewed");
@@ -180,6 +202,32 @@ const analyseReviews = (sheet) => {
         note: `${k} disputed trend readings were attributed to ${why} rather than the pupil. If they share an assessment boundary, the signal may be the paper, not the children.` });
     }
   }
+  const dataQualityCitations = countBy(reviewed.flatMap((r) => r.dataQuality), (code) => code);
+  const citing = reviewed.filter((r) => r.dataQuality.length > 0).length;
+  if (citing >= MIN_SUPPORT_FOR_PATTERN && citing * 2 >= n) {
+    patterns.push({ kind: "DATA_QUALITY_OFTEN_CITED", support: citing, of: n,
+      note: `Reviewers pointed at the data rather than the rule in ${citing} of ${n} cases. ` +
+            `Look at the cited problems before any threshold: ${JSON.stringify(dataQualityCitations)}.` });
+  }
+  // The four phenomena, counted separately, each with the codes repeated at or
+  // above the support minimum. Interpretation disagreement is the reviewer
+  // saying the reading is wrong or partly wrong; the other three say the
+  // evidence is the problem, in three different ways.
+  const concernCount = (group) => reviewed.filter((r) => r.dataQuality.some((c) => CONCERN_GROUPS[group].includes(c))).length;
+  const repeatedIn = (group) => Object.entries(dataQualityCitations)
+    .filter(([code, k]) => CONCERN_GROUPS[group].includes(code) && k >= MIN_SUPPORT_FOR_PATTERN)
+    .map(([code, k]) => ({ code, support: k })).sort((a, b) => b.support - a.support);
+  const concerns = {
+    interpretationDisagreement: {
+      reviews: reviewed.filter((r) => r.classificationAppropriate === "NO" || r.classificationAppropriate === "PARTIALLY").length,
+      repeated: Object.entries(byCode)
+        .filter(([, o]) => (o.rejected + o.partially_appropriate) >= MIN_SUPPORT_FOR_PATTERN)
+        .map(([code, o]) => ({ code, support: o.rejected + o.partially_appropriate })).sort((a, b) => b.support - a.support),
+    },
+    dataQuality:          { reviews: concernCount("dataQuality"),          repeated: repeatedIn("dataQuality") },
+    missingEvidence:      { reviews: concernCount("missingEvidence"),      repeated: repeatedIn("missingEvidence") },
+    contextualLimitation: { reviews: concernCount("contextualLimitation"), repeated: repeatedIn("contextualLimitation") },
+  };
   if (guidanceDisagreements.length >= MIN_SUPPORT_FOR_PATTERN &&
       guidanceDisagreements.length * 2 >= n) {
     patterns.push({ kind: "GUIDANCE_OFTEN_DISPUTED", support: guidanceDisagreements.length, of: n,
@@ -197,6 +245,9 @@ const analyseReviews = (sheet) => {
     guidanceDisagreements,
     temporalDisagreements,
     temporalExplanations: explanations,
+    dataQualityCitations,
+    casesCitingDataQuality: citing,
+    concerns,
     patterns,
     problems,
     minCasesForShare: MIN_CASES_FOR_SHARE,
@@ -204,4 +255,4 @@ const analyseReviews = (sheet) => {
   };
 };
 
-module.exports = { analyseReviews, validateReview, outcomeOf, OUTCOMES, MIN_CASES_FOR_SHARE, MIN_SUPPORT_FOR_PATTERN };
+module.exports = { analyseReviews, validateReview, outcomeOf, groupOf, OUTCOMES, CONCERN_GROUPS, MIN_CASES_FOR_SHARE, MIN_SUPPORT_FOR_PATTERN };

@@ -196,7 +196,8 @@
     "messageAudit": "Audit des messages",
     "approvals": "Validations",
     "platformSettings": "Paramètres de la plateforme",
-    "classIntelligence": "Intelligence de classe"
+    "classIntelligence": "Intelligence de classe",
+    "intelligenceReview": "Revue de l'intelligence"
   },
   "academic": {
     "student": "Élève",
@@ -1855,6 +1856,7 @@
       "messages.audit": "Lire les messages des autres",
       "insights.view": "Consulter la liste de surveillance",
       "insights.viewTaught": "Consulter les forces et les risques par matière pour vos classes",
+      "insights.review": "Indiquer si une conclusion de l’intelligence correspond à ce que vous observez en classe",
       "interventions.view": "Consulter les actions de soutien de tout l’établissement",
       "interventions.viewTaught": "Consulter les actions de soutien de vos classes",
       "interventions.create": "Enregistrer une action de soutien pour un élève que vous enseignez",
@@ -1879,7 +1881,8 @@
       "settings.manage": "Modifier les paramètres",
       "fees.remind": "Envoyer des rappels de frais",
       "fees.penalize": "Ajouter des pénalités de retard",
-      "fees.plan": "Convenir des échéanciers"
+      "fees.plan": "Convenir des échéanciers",
+      "insights.pilot": "Ouvrir, faire avancer et conclure un pilote de validation de l'intelligence pour l'établissement"
     },
     "note": {
       "platform.schools": "Dépasse les murs de cet établissement. Seul l'opérateur de la plateforme le détient, et aucun établissement ne peut l'accorder.",
@@ -1910,7 +1913,8 @@
       "fees.refund": "Au-delà du seuil de remboursement, cette action crée une demande au lieu de verser l'argent.",
       "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture.",
       "fees.penalize": "Ajoute de l'argent à la facture d'une famille : jamais automatique, l'économe les crée depuis un aperçu.",
-      "fees.plan": "Modifie la date d'exigibilité, jamais le montant dû. Une famille qui respecte son échéancier n'est ni relancée ni pénalisée."
+      "fees.plan": "Modifie la date d'exigibilité, jamais le montant dû. Une famille qui respecte son échéancier n'est ni relancée ni pénalisée.",
+      "insights.pilot": "Conclure un pilote est une décision sur des preuves — l'échantillon suffisait, ou non — et le chef d'établissement la signe. Personne à qui il délègue ne doit pouvoir déclarer le moteur calibré."
     }
   },
   "approvals": {
@@ -3292,6 +3296,370 @@
       "no_change": "Aucun changement",
       "further_support": "Soutien supplémentaire nécessaire",
       "not_assessed": "Pas encore évalué"
+    }
+  },
+  "intelReview": {
+    "title": "Revue de l'intelligence",
+    "blurb": "Jugez ce que le système a conclu sur les élèves que vous enseignez. Les preuves, la lecture du système et la vôtre restent séparées.",
+    "selectSchool": "Sélectionnez un établissement pour en revoir les cas.",
+    "class": "Classe",
+    "show": "Afficher",
+    "wholeSchool": "Tout l'établissement",
+    "allMyClasses": "Toutes mes classes",
+    "filter": {
+      "all": "Tous les cas",
+      "mine_pending": "En attente de ma revue",
+      "mine_done": "Revus par moi",
+      "unreviewed": "Encore revus par personne"
+    },
+    "engine": "Moteur {{v}}",
+    "stale": "Affichage des dernières informations reçues par cet appareil. Elles peuvent ne plus être à jour.",
+    "empty": "Aucun cas à revoir dans ce périmètre.",
+    "review": "Revoir",
+    "revise": "Réviser",
+    "submit": "Envoyer la revue",
+    "saveRevision": "Enregistrer la révision",
+    "submitted": "Revue enregistrée.",
+    "revised": "Révision enregistrée.",
+    "youReviewed": "Vous l'avez revu",
+    "hiddenUntilYours": "{{n}} revue(s) de collègues — visibles après l'envoi de la vôtre",
+    "status": {
+      "UNREVIEWED": "Non revu",
+      "ONE_REVIEW": "Une revue",
+      "MULTIPLE_REVIEWS": "Plusieurs revues",
+      "UNREVIEWED_n": "{{n}} non revus",
+      "ONE_REVIEW_n": "{{n}} avec une revue",
+      "MULTIPLE_REVIEWS_n": "{{n}} avec plusieurs"
+    },
+    "agreement": {
+      "AGREE": "Les relecteurs concordent",
+      "DIFFER": "Les relecteurs divergent"
+    },
+    "agreementNote": {
+      "AGREE": "Les relecteurs ont donné la même réponse sur la pertinence de la classification. La concordance est décrite, pas notée.",
+      "DIFFER": "Les relecteurs ont donné des réponses différentes sur la pertinence de la classification. Une divergence est une information, pas une erreur."
+    },
+    "evidenceHeading": "Preuves observées",
+    "evidenceHint": "Notes publiées au dossier, et les chiffres qui en sont calculés. Rien ici n'est une interprétation.",
+    "studentScoped": "Ce cas concerne l'élève dans son ensemble ; {{n}} séquence(s) d'évaluation au dossier.",
+    "engineHeading": "Interprétation du système",
+    "engineHint": "Ce que le moteur {{v}} a conclu des preuves ci-dessus, et les seuils utilisés.",
+    "noClassification": "Le système n'a tiré aucune conclusion pour cette matière.",
+    "guidanceGiven": "Orientation attachée par le système",
+    "thresholds": "Seuils en jeu",
+    "yourHeading": "Votre revue",
+    "yourHint": "Répondez d'après ce que vous savez de l'élève. Vous jugez le système, pas l'élève.",
+    "yoursOn": "Votre revue du {{when}}, moteur {{v}}",
+    "revisedOn": "révisée le {{when}}",
+    "othersHeading": "Autres relecteurs",
+    "noOthers": "Personne d'autre n'a encore revu ce cas.",
+    "field": {
+      "observedPattern": "Observez-vous ce schéma chez l'élève ?",
+      "classificationAppropriate": "La classification est-elle pertinente ?",
+      "evidenceSufficient": "Les preuves sont-elles suffisantes ?",
+      "guidanceAppropriate": "L'orientation est-elle pertinente ?",
+      "interpretationReasonable": "La lecture de l'évolution dans le temps est-elle raisonnable ?",
+      "possibleExplanation": "Explication la plus probable du changement",
+      "dataQuality": "Problèmes de données, le cas échéant",
+      "reason": "Raison (courte)",
+      "notes": "Remarques"
+    },
+    "dataQualityHint": "Cochez lorsque le problème vient des données et non de la règle. Cela ne change rien ; c'est compté.",
+    "answer": {
+      "choose": "Choisir…",
+      "YES": "Oui",
+      "NO": "Non",
+      "PARTIALLY": "En partie",
+      "UNCERTAIN": "Incertain"
+    },
+    "explanation": {
+      "genuine_student_change": "Changement réel chez l'élève",
+      "assessment_difficulty": "Difficulté de l'évaluation",
+      "curriculum_or_content_change": "Changement de programme ou de contenu",
+      "grading_change": "Changement de notation",
+      "missing_data": "Données manquantes",
+      "attendance_or_context": "Assiduité ou contexte",
+      "other": "Autre"
+    },
+    "dataQuality": {
+      "missing_assessment": "Une évaluation manque",
+      "incorrect_result": "Un résultat est faux",
+      "unpublished_result": "Un résultat n'est pas encore publié",
+      "assessment_unusually_difficult": "L'évaluation était inhabituellement difficile",
+      "grading_change": "La notation a changé",
+      "student_absence": "L'élève était absent",
+      "curriculum_change": "Le programme a changé",
+      "insufficient_history": "Historique insuffisant",
+      "other": "Autre",
+      "stale_record": "Le dossier n'est pas à jour",
+      "context_unavailable": "Un contexte pertinent existe hors des données de l'école"
+    },
+    "consistency": {
+      "check": "Vérifier direct = hors ligne",
+      "identical": "Les chemins direct et hors ligne concordent pour cet élève (moteur {{v}}).",
+      "differs": "Les chemins direct et hors ligne DIVERGENT pour cet élève — {{n}} différence(s). À examiner avant toute décision de calibration."
+    },
+    "code": {
+      "academic_decline": "Baisse scolaire",
+      "sudden_performance_change": "Changement brusque de performance",
+      "persistent_underperformance": "Sous-performance persistante",
+      "sustained_improvement": "Amélioration soutenue",
+      "subject_strength": "Point fort dans la matière",
+      "consistency_strength": "Point fort constant",
+      "cross_subject_strength": "Point fort transversal",
+      "insufficient_evidence": "Preuves insuffisantes"
+    },
+    "category": {
+      "borderline_threshold": "Limite : une note de plus ou de moins change la réponse",
+      "declining": "Baisse",
+      "sudden_change": "Changement brusque",
+      "weak_and_persistent": "Faible et persistant",
+      "weak_but_improving": "Faible mais en progrès",
+      "cross_subject_strength": "Fort dans plusieurs matières",
+      "trend_on_variable_subject": "Tendance sur une matière variable",
+      "strong_but_recent": "Fort, mais récent",
+      "emerging_strength": "Point fort émergent",
+      "insufficient_evidence": "Preuves insuffisantes",
+      "volatile": "Volatil",
+      "strong_and_stable": "Fort et stable",
+      "absence_heavy": "Nombreuses absences",
+      "zero_heavy": "Nombreux zéros",
+      "mixed_assessment": "Types d'évaluation mélangés",
+      "with_intervention": "Avec une intervention"
+    },
+    "reason": {
+      "borderline_threshold": "une note de plus ou de moins changerait ce que dit le système",
+      "declining": "le système lit une baisse — l'élève, ou l'épreuve ?",
+      "sudden_change": "le dernier écart est grand — changement réel ?",
+      "weak_and_persistent": "plusieurs notes sous la moyenne — le tableau est-il juste ?",
+      "weak_but_improving": "sous la moyenne mais en hausse — le progrès est-il réel ?",
+      "cross_subject_strength": "plusieurs matières fortes ensemble — le système les nomme sans prétendre à un domaine",
+      "trend_on_variable_subject": "une tendance lue sur une matière aux notes changeantes — est-elle réelle ?",
+      "strong_but_recent": "fort, sur peu d'historique — trop tôt pour le dire ?",
+      "emerging_strength": "les premiers signes d'un point fort — est-il là ?",
+      "insufficient_evidence": "le système a refusé de conclure — à raison ?",
+      "volatile": "des notes qui varient fortement — une lecture est-elle possible ?",
+      "strong_and_stable": "fort et régulier — cela correspond-il à l'élève ?",
+      "absence_heavy": "nombreuses absences — ont-elles faussé la lecture ?",
+      "zero_heavy": "nombreux zéros — vrais zéros, ou notes manquantes ?",
+      "mixed_assessment": "devoirs et contrôle continu ensemble — le mélange a-t-il trompé ?",
+      "with_intervention": "une action de soutien est enregistrée ; la comparaison avant/après s'applique"
+    },
+    "outcome": {
+      "confirmed": "Étayée",
+      "partially_confirmed": "Partiellement confirmée",
+      "rejected": "Non étayée",
+      "uncertain": "Incertaine",
+      "unreviewed": "Non revue",
+      "partially_appropriate": "Partiellement étayée",
+      "insufficient_evidence": "Preuves insuffisantes"
+    },
+    "pattern": {
+      "DATA_QUALITY_OFTEN_CITED": "Les relecteurs ont souvent mis en cause les données plutôt que la règle",
+      "ASSESSMENT_DIFFICULTY_CITED": "Difficulté de l'évaluation souvent citée pour les lectures temporelles",
+      "GUIDANCE_DISAGREEMENT": "Orientation souvent jugée non pertinente",
+      "EVIDENCE_INSUFFICIENT": "Preuves souvent jugées insuffisantes"
+    },
+    "monitoring": "État des revues dans l'établissement",
+    "mon": {
+      "cases": "{{n}} cas",
+      "reviewsRecorded": "{{n}} revues enregistrées",
+      "reviewers": "{{n}} relecteurs",
+      "agree": "{{n}} concordent",
+      "differ": "{{n}} divergent",
+      "byCategory": "Par catégorie (revus / cas, plusieurs)",
+      "catCounts": "{{r}} / {{c}}, {{m}} avec plusieurs",
+      "byOutcome": "Réponses des relecteurs",
+      "sharesWithheld": "Trop peu de revues pour que des parts aient un sens ; comptes seulement.",
+      "dataQuality": "Problèmes de données cités",
+      "patterns": "Schémas au-dessus du minimum de soutien"
+    },
+    "acrossSchools": "Tous établissements (comptes issus des revues enregistrées)",
+    "noSchools": "Aucun établissement à afficher.",
+    "error": {
+      "generic": "La revue n'a pas pu être enregistrée.",
+      "INVALID_REVIEW": "Une valeur du formulaire n'est pas autorisée.",
+      "DUPLICATE_REVIEW": "Vous avez déjà revu ce cas — révisez cette revue.",
+      "CASE_NOT_FOUND": "Le système ne produit plus ce cas pour cet élève. Rechargez la file.",
+      "STALE_ENGINE_VERSION": "La version du moteur a changé depuis le chargement. Rechargez la file.",
+      "VERSION_CONFLICT": "Cette revue a été modifiée ailleurs. Rechargez et réessayez.",
+      "NOT_AUTHOR": "Seul l'enseignant qui a écrit une revue peut la réviser."
+    },
+    "instructions": {
+      "heading": "Avant de commencer — ce que c'est, et ce que ce n'est pas",
+      "show": "Lire la note d'information",
+      "hide": "Masquer la note",
+      "p1": "Le système lit des preuves scolaires déjà enregistrées — notes publiées, séquence par séquence — et énonce les schémas qu'il y trouve.",
+      "p2": "Il ne diagnostique pas un élève, il ne prédit ni une carrière ni un résultat futur, et il ne remplace pas votre jugement.",
+      "p3": "On vous demande si le schéma détecté est raisonnable pour cet élève, d'après ce que vous en savez. Vous évaluez le système, pas l'élève.",
+      "p4": "Le désaccord est une preuve précieuse. Si le système se trompe sur un élève que vous connaissez, dites-le — c'est exactement l'objet de cet exercice.",
+      "p5": "Évaluez de façon indépendante. Vous ne verrez pas les réponses de vos collègues avant d'avoir envoyé la vôtre ; merci de ne pas discuter d'un cas avant.",
+      "p6": "Quand le problème vient des données et non de la règle — résultat manquant, épreuve difficile, absence — cochez les codes de qualité des données. Ils sont comptés à part.",
+      "p7": "Personne n'a dit au système qu'il devait avoir raison. Il est mis à l'épreuve."
+    },
+    "pilot": {
+      "heading": "Pilote de validation",
+      "none": "Aucun pilote ouvert pour cet établissement.",
+      "kind": {
+        "synthetic": "Synthétique (jeux de données)",
+        "development": "Développement (test du flux)",
+        "real": "Réel (établissement autorisé, ses propres enseignants)"
+      },
+      "status": {
+        "READY": "Prêt",
+        "ACTIVE": "Actif",
+        "REVIEWING": "En revue",
+        "ANALYSIS_READY": "Analyse prête",
+        "CALIBRATED": "Calibré",
+        "INSUFFICIENT_EVIDENCE": "Preuves insuffisantes",
+        "CLOSED": "Clos"
+      },
+      "statusHint": {
+        "READY": "Ouvert ; enseignants pas encore informés ni en revue.",
+        "ACTIVE": "Enseignants informés ; la file est ouverte.",
+        "REVIEWING": "Des revues sont enregistrées.",
+        "ANALYSIS_READY": "Assez d'éléments pour lire les preuves et décider.",
+        "CALIBRATED": "Les preuves ont atteint le minimum et une décision a été consignée.",
+        "INSUFFICIENT_EVIDENCE": "L'échantillon n'a pas pu répondre aux questions de calibration. La calibration exige plus de données.",
+        "CLOSED": "Terminé."
+      },
+      "teacherBanner": "Un pilote de validation {{kind}} est {{status}} dans cet établissement (moteur {{v}}). Vos revues en font partie.",
+      "engine": "Moteur {{v}}",
+      "scope": "Périmètre",
+      "wholeSchool": "Tout l'établissement",
+      "opened": "Ouvert",
+      "started": "Démarré",
+      "ended": "Terminé",
+      "by": "par {{who}}",
+      "open": "Ouvrir un pilote",
+      "openKind": "Type d'exercice",
+      "openLabel": "Libellé (facultatif)",
+      "openScope": "Classes (vide = tout l'établissement)",
+      "openHint": "Un seul pilote ouvert par établissement. Seul un pilote de type « réel » — établissement autorisé, revu par ses propres enseignants — produit des preuves de calibration.",
+      "advance": "Passer à {{state}}",
+      "note": "Note pour le dossier (facultatif)",
+      "decisionHeading": "Décision",
+      "decisionOutcome": "Issue",
+      "decisionSummary": "Décision écrite (obligatoire pour conclure)",
+      "outcome": {
+        "KEEP": "Conserver les règles telles quelles",
+        "CALIBRATE": "Proposer un changement de règle (décision distincte, couverte par la régression)",
+        "INSUFFICIENT_EVIDENCE": "Preuves insuffisantes"
+      },
+      "evidenceHeading": "Preuves au dossier",
+      "liveEvidence": "Preuves actuelles (non encore enregistrées)",
+      "gate": "Minimum avant une décision de calibration : {{list}}",
+      "shortfall": "{{req}} : {{actual}} sur {{min}}",
+      "gateMet": "Le minimum de preuves est atteint. Le texte de la décision doit encore porter l'argument.",
+      "ev": {
+        "casesSelected": "Cas sélectionnés",
+        "casesReviewed": "Cas revus",
+        "casesAwaitingReview": "En attente de revue",
+        "casesWithMultipleReviews": "Avec deux revues ou plus",
+        "studentsReviewed": "Élèves revus",
+        "reviewsRecorded": "Revues enregistrées",
+        "reviewers": "Relecteurs indépendants",
+        "categories": "Catégories représentées",
+        "subjects": "Matières représentées",
+        "temporalPatterns": "Schémas temporels représentés",
+        "repeatedDisagreements": "Désaccords répétés (par catégorie)",
+        "dataQualityCitations": "Problèmes de données cités",
+        "byOutcome": "Réponses des relecteurs"
+      },
+      "req": {
+        "reviewers": "relecteurs",
+        "casesReviewed": "cas revus",
+        "casesWithMultipleReviews": "cas avec deux revues ou plus"
+      },
+      "history": "Pilotes précédents",
+      "trail": "Historique",
+      "advanced": "Pilote mis à jour.",
+      "opened_ok": "Pilote ouvert.",
+      "error": {
+        "generic": "Le pilote n'a pas pu être mis à jour.",
+        "PILOT_OPEN": "Cet établissement a déjà un pilote ouvert. Fermez-le d'abord.",
+        "INVALID_TRANSITION": "Le pilote ne peut pas passer à cet état depuis son état actuel.",
+        "EVIDENCE_REQUIRED": "Aucune revue n'a encore été enregistrée dans le périmètre de ce pilote.",
+        "DECISION_REQUIRED": "Une décision écrite (au moins une phrase) est requise pour conclure un pilote.",
+        "EVIDENCE_GATE": "Les preuves n'atteignent pas le minimum pour une décision de calibration. La calibration exige plus de données — consignez PREUVES INSUFFISANTES, ou poursuivez les revues.",
+        "VERSION_CONFLICT": "Le pilote a été modifié ailleurs. Rechargez et réessayez.",
+        "CLASS_NOT_FOUND": "Une classe du périmètre n'appartient pas à cet établissement.",
+        "INVALID_PILOT_KIND": "Choisissez un type d'exercice.",
+        "REAL_PILOT_BLOCKED": "Un pilote réel ne peut pas encore s'ouvrir ici — voir la vérification préalable.",
+        "ATTESTATION_REQUIRED": "Les deux attestations doivent être signées pour ouvrir un pilote réel.",
+        "INVALID_FINDING": "Il manque au constat une catégorie, une gravité ou un résumé.",
+        "PILOT_CLOSED": "Un pilote clos n'accepte plus de constats.",
+        "FINDING_NOT_FOUND": "Constat introuvable."
+      }
+    },
+    "repeatedDisagreements": "Catégories où les relecteurs ont divergé sur plus d'un cas",
+    "concern": {
+      "heading": "Ce que disent les relecteurs — quatre choses, tenues séparées",
+      "interpretationDisagreement": "Désaccord d'interprétation (lecture jugée fausse ou partiellement fausse)",
+      "dataQuality": "Problème de qualité des données",
+      "missingEvidence": "Preuves manquantes",
+      "contextualLimitation": "Limite contextuelle (information que le système ne voit pas)",
+      "repeated": "répété",
+      "note": "Des comptes de revues, pas une note. L'accord des enseignants n'est pas la vérité terrain, et ces comptes ne s'additionnent jamais."
+    },
+    "preflight": {
+      "heading": "Avant qu'un pilote réel puisse s'ouvrir",
+      "ready": "Toutes les vérifications automatiques passent. Signez les deux attestations pour ouvrir.",
+      "blocked": "PILOTE RÉEL BLOQUÉ — {{reason}}",
+      "check": {
+        "schoolAdminPresent": "Un administrateur d'établissement actif existe",
+        "reviewersAvailable": "Au moins deux enseignants ont des affectations dans le périmètre",
+        "publishedEvidence": "Des résultats publiés existent pour le périmètre",
+        "reviewableCases": "Au moins 30 cas à revoir",
+        "multiReviewCapableCases": "Au moins 3 cas peuvent recevoir deux revues indépendantes",
+        "engineInputNameFree": "L'entrée du moteur ne porte aucune identité d'élève",
+        "consistencyOperational": "Direct = hors ligne sur un échantillon d'élèves",
+        "saltNotExposed": "Aucun sel de calibration dans le paquet de revue",
+        "teacherScopeEnforced": "Périmètre enseignant appliqué (suite de tests)",
+        "schoolAdminScopeEnforced": "Périmètre administrateur appliqué (suite de tests)",
+        "operatorSelectionRequired": "L'opérateur doit sélectionner un établissement (suite de tests)",
+        "rawExportNotExposed": "Aucun export brut sur aucune route (suite de tests)",
+        "schoolParticipates": "J'atteste que l'établissement sait qu'il participe et a donné son accord",
+        "reviewersUnderstandTask": "J'atteste que chaque relecteur a lu la note d'information et comprend la tâche"
+      }
+    },
+    "finding": {
+      "heading": "Constats",
+      "add": "Consigner un constat",
+      "record": "Consigner",
+      "recorded": "Constat consigné.",
+      "cases": "cas",
+      "next": "Suite",
+      "categoryLabel": "Catégorie",
+      "severityLabel": "Gravité",
+      "summaryLabel": "Résumé",
+      "evidenceLabel": "Preuves (comment reproduire)",
+      "affectedLabel": "Cas concernés",
+      "nextLabel": "Action suivante recommandée",
+      "category": {
+        "ENGINE": "Moteur",
+        "DATA_QUALITY": "Qualité des données",
+        "MAPPING": "Correspondance des données",
+        "AUTHORIZATION": "Autorisation",
+        "UX": "Interface",
+        "MISSING_EVIDENCE": "Preuves manquantes",
+        "GUIDANCE": "Orientation",
+        "REVIEW_WORKFLOW": "Flux de revue",
+        "OFFLINE_CONSISTENCY": "Cohérence direct/hors ligne"
+      },
+      "severity": {
+        "low": "Faible",
+        "medium": "Moyenne",
+        "high": "Élevée"
+      },
+      "status": {
+        "label": "Statut",
+        "open": "Ouvert",
+        "investigating": "En cours d'examen",
+        "confirmed": "Confirmé",
+        "resolved": "Résolu",
+        "not_reproduced": "Non reproduit"
+      }
     }
   }
 }

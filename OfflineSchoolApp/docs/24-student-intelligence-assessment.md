@@ -726,3 +726,115 @@ parity check compares backend and shared output as serialised objects.
 
 `shared/` is otherwise flat; `intelligence/` is a folder because it is four
 files that only make sense together and are always reached as a unit.
+
+## Visibility and authorisation — who may see what
+
+The engine determines what the evidence means. The application determines who
+may see it. The two never meet: the engine does not know whether a teacher, a
+head or the platform operator is asking, and returns the same bytes to each.
+`check-intelligence-access.js` asserts that literally, by fetching one pupil's
+profile as all three and comparing.
+
+| Caller | Sees | Resolved by |
+|---|---|---|
+| **teacher** | pupils in the classes they hold an active assignment for | `utils/teacherScope.js` per pupil; the sync feed's `taughtStudentsOnly` for a whole sheet |
+| **school_admin** | every pupil in their school, whoever teaches them | tenancy alone |
+| **super_admin** | the school they have selected with `?schoolId` — and no school they have not | the auth middleware: an unknown school is 404 `SCHOOL_NOT_FOUND` at the door; selecting nothing is not selecting everything |
+| **bursar** | subject intelligence (it holds `results.view` already, and the module is money-free by construction); no interventions, no reviews | the capability registry |
+
+The same hierarchy covers every intelligence surface at once — insights,
+guidance, class lists, interventions and their before/after evidence, review
+cases, calibration summaries and recorded reviews — because authorisation fails
+at the seams: a rule enforced on one route and forgotten on the evidence route
+is not a rule. The one gap the audit found was exactly that kind:
+`interventions.routes.js` read `req.user.schoolId` alone, so an operator who
+could see a pupil through `/insights` found that pupil had no interventions.
+It now resolves the school the way every other router does.
+
+### Reviews are school records
+
+A teacher's recorded judgement of an engine conclusion (`IntelligenceReview`)
+is named and stays named. The head reads it with the teacher's name on it; so
+does the operator for the selected school. A role that may not read the pupil
+gets nothing — not an anonymised copy, nothing. Writing one needs
+`insights.review`; reading follows the intelligence guard.
+
+### The review surface, in-app
+
+The anonymised export exists so that nobody without the operator's salt can get
+from a case back to a child — the right property for a file, the wrong one for
+a teacher being asked "is this your pupil?". So `GET /api/insights/review-cases`
+and `GET /api/insights/calibration-summary` run the identical calibration
+analysis over **live** documents for a caller the server has already
+authorised: `cohortFromDocuments` with the identity function where the exporter
+puts its HMAC, then `analyseCohort.analyse`, then `shared/intelligence` for
+every judgement. Nothing is a copy.
+
+What those routes never carry: a salt (there is none — nothing was
+anonymised), the raw cohort, a download, or any pupil the caller could not
+already read through `/insights`. The exported file remains an operator
+artefact that never passes through the application.
+
+
+### Independent review, in-app (Stage 7C)
+
+Reading a colleague's answer before giving your own is contamination, and the
+shield against it is enforced where the package is built, not in the browser.
+`reviewCases.service.reviewPackage(scope, viewer)` shapes every case for the
+caller: a **teacher** who has not answered a case gets its `reviewCount` and
+`reviewStatus` and an empty `reviews` list — no content, no names, no
+`agreement` — and the school-wide tally is cut to the cases they have answered;
+after they submit, the other reviews appear, named. A **head** or the
+**operator** is not a reviewer and sees everything from the start.
+`GET /api/insights/reviews/student/:id` applies the same rule and reports how
+many it hid.
+
+Writes are checked against the engine and against the record: a review must be
+of a case the engine produces for that pupil today; the stored classifications
+are the server's; one reviewer gets one review per case; a review is revised
+by its author (`PATCH /api/insights/reviews/:id`) or by nobody, with the
+replaced form kept on the row. The operator's cross-school figure,
+`GET /api/super-admin/intelligence/calibration`, is gated on
+`platform.dashboard` and built from review counts alone — the engine is not
+run and no pupil is loaded. `check-review-workflow.js` walks all of it as the
+people who will use it; `check-intelligence-access.js` holds the matrix.
+
+
+### The pilot frame (Stage 7D)
+
+A validation exercise at a school is a recorded thing: `IntelligencePilot`
+holds the school, the class scope, the engine version (the server's), the kind
+— `synthetic`, `development` or `real` — the state, the dates, the trail, the
+evidence counts and the written decision. One open pilot per school. Only a
+`real` pilot's reviews are calibration evidence, and the operator's
+cross-school view says which kind each school is running.
+
+Its state machine (`pilot.service.js`) is the only writer of `status`:
+READY → ACTIVE → REVIEWING → ANALYSIS_READY → CALIBRATED | INSUFFICIENT_EVIDENCE,
+any → CLOSED. CALIBRATED needs the server's own evidence snapshot to clear a
+minimum gate (≥ 2 reviewers, ≥ 30 cases reviewed, ≥ 3 cases with two or more
+reviews) and a written decision; nothing about a pilot changes what the engine
+says. Who may act follows the one hierarchy: teachers read that a pilot is on,
+`insights.pilot` (office, not delegable) runs it, the operator runs it for the
+selected school, the bursar sees none of it.
+
+`GET /api/insights/student/:id/consistency` diffs the live path against the
+offline (exporter/review-sheet) path for one pupil, path by path, normalising
+nothing. Its first run found the cohort contract dropping `isPassing` from each
+mark — evidence, not a rule input — which is now carried; the engine was not
+touched. docs/25 §12 has the checklist, the workflow and the status.
+
+
+### Stage 8 — the real pilot, gated (not started)
+
+No authorised school or reviewers were available, so no real pilot ran and no
+feedback was manufactured. What exists is the gate: `GET
+/api/insights/pilot/preflight` verifies every automatic precondition
+(administrator present, two assigned teachers, published evidence, ≥ 30 cases,
+≥ 3 multi-review-capable cases, name-free engine input, live = offline on a
+sample, no salt in the package) and a `real` pilot cannot open until all pass
+and the head signs two attestations. Findings live on the pilot record by
+category and status, so a suspected defect becomes evidence for the post-pilot
+decision rather than a change made mid-pilot. The tally keeps interpretation
+disagreement, data quality, missing evidence and contextual limitation as four
+separate counts. docs/25 §13 has the status and the protocol.

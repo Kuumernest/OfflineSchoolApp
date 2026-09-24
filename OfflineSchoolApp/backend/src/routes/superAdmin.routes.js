@@ -643,6 +643,81 @@ router.get("/performance", canReport, asyncHandler(async (req, res) => {
   return sendSuccess(res, { filters, totals, schools });
 }));
 
+/**
+ * GET /intelligence/calibration?schoolId=
+ *
+ * How the intelligence validation is going, per school, for the operator.
+ *
+ * ── Counts, never children ────────────────────────────────────────────────
+ *
+ * Built from the review records alone — how many judgements, by how many
+ * teachers, how they fell, what data problems they cited — and never from a
+ * pupil's profile. A cross-school view is the one place a student-level row
+ * would be a leak by construction, so none is loaded: the engine is not even
+ * run here. An operator who wants a school's cases selects that school and
+ * reads them through /insights, under the same scope rules as its head.
+ *
+ * ── Interpreted by the one feedback tool ──────────────────────────────────
+ *
+ * The tally comes from scripts/calibration/reviewFeedback.js, the same
+ * cross-tabulation the offline sheet and the in-app summary use, so "rejected"
+ * means the same thing on every screen. It withholds shares below its own
+ * minimum and computes no accuracy, here as everywhere.
+ *
+ * Gated on platform.dashboard, the existing capability for figures aggregated
+ * across schools; a school named in the query is checked to exist, as the
+ * other aggregate routes do.
+ */
+router.get("/intelligence/calibration", canReport, asyncHandler(async (req, res) => {
+  const IntelligenceReview = require("../db/models/IntelligenceReview");
+  const IntelligencePilot  = require("../db/models/IntelligencePilot");
+  const { analyseReviews } = require("../../scripts/calibration/reviewFeedback");
+  const { ENGINE_VERSION } = require("../../../shared/intelligence");
+
+  const filters = parseFilters(req.query);
+  if (filters.schoolId && !(await findSchool(filters.schoolId))) {
+    return sendError(res, 404, "School not found");
+  }
+
+  const schoolFilter = { deletedAt: null, ...(filters.schoolId ? { _id: filters.schoolId } : {}) };
+  const schools = await School.find(schoolFilter).select("_id name isActive").sort({ name: 1 }).lean();
+
+  const rows = [];
+  for (const school of schools) {
+    const reviews = await IntelligenceReview.find({ schoolId: String(school._id), deletedAt: null })
+      .select("category classifications review reviewedBy engineVersion").lean();
+    const feedback = analyseReviews({
+      cases: reviews.map((r, i) => ({
+        caseId: `${school._id}#${i}`, category: r.category,
+        classifications: r.classifications ?? [], thresholdsInvolved: [], review: r.review,
+      })),
+    });
+    // The pilot frame: which kind of exercise these reviews belong to, and
+    // how far it has got. A report that cannot tell a development run from a
+    // real school's validation is not a report.
+    const open = await IntelligencePilot.findOne({ schoolId: String(school._id), deletedAt: null, isOpen: true })
+      .select("kind status engineVersion startedAt label").lean();
+    const closed = await IntelligencePilot.countDocuments({ schoolId: String(school._id), deletedAt: null, status: "CLOSED" });
+    rows.push({
+      schoolId:   String(school._id),
+      schoolName: school.name,
+      isActive:   school.isActive !== false,
+      pilot: open ? { kind: open.kind, status: open.status, engineVersion: open.engineVersion, startedAt: open.startedAt ?? null, label: open.label ?? null } : null,
+      pilotsClosed: closed,
+      reviews:    reviews.length,
+      reviewers:  new Set(reviews.map((r) => String(r.reviewedBy))).size,
+      engineVersions: [...new Set(reviews.map((r) => r.engineVersion))].sort(),
+      byOutcome:  feedback.totals.byOutcome,
+      byCategory: reviews.reduce((o, r) => { o[r.category] = (o[r.category] ?? 0) + 1; return o; }, {}),
+      dataQualityCitations: feedback.dataQualityCitations,
+      patterns:   feedback.patterns,
+      sharesWithheld: feedback.sharesWithheld,
+    });
+  }
+
+  return sendSuccess(res, { engineVersion: ENGINE_VERSION, schools: rows });
+}));
+
 /** GET /filters — the years and schools the filter controls can offer. */
 router.get("/filters", canReport, asyncHandler(async (_req, res) => {
   return sendSuccess(res, await availableFilters());

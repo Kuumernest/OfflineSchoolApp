@@ -59,7 +59,26 @@ const read = requireAnyPermission("interventions.view", "interventions.viewTaugh
 /** Writing: a teacher for their own classes, the office anywhere in its school. */
 const write = requireAnyPermission("interventions.create", "interventions.manage");
 
-const schoolOf = (req) => req.user.schoolId;
+/**
+ * Which school this request is about.
+ *
+ * The same three lines every router in this application carries, and the same
+ * rule: a platform operator names the school they are working in with
+ * ?schoolId, everybody else is their own school. The middleware has already
+ * refused a non-operator who named a different school (SCHOOL_ACCESS_DENIED)
+ * and an operator who named one that does not exist (SCHOOL_NOT_FOUND), so by
+ * the time this runs the answer is either authorised or absent.
+ *
+ * This used to read req.user.schoolId alone, which for an operator working a
+ * selected school is null or their own — so the operator could see a pupil
+ * through /insights and then find that pupil had no interventions. Same
+ * school, two answers.
+ */
+const schoolOf = (req) => {
+  if (req.user?.role === ROLES.SUPER_ADMIN && req.query?.schoolId) return String(req.query.schoolId).trim();
+  if (req.user?.role === ROLES.SUPER_ADMIN && req.body?.schoolId)  return String(req.body.schoolId).trim();
+  return req.user?.schoolId;
+};
 
 /**
  * May this caller act on a record in this class?

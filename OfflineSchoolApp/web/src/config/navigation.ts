@@ -191,6 +191,13 @@ export const NAV_ITEMS: NavItem[] = [
     icon:  Lightbulb,
     roles: ["super_admin", "school_admin", "teacher"],
   },
+  {
+    label: "Intelligence review",
+    labelKey: "nav.intelligenceReview",
+    path:  "/intelligence-review",
+    icon:  ClipboardCheck,
+    roles: ["super_admin", "school_admin", "teacher"],
+  },
 
   // ── Students ─────────────────────────────────────────────
   {

@@ -254,6 +254,13 @@ const FEED = [
   { collection: "homework",     model: "Homework",     permission: "homework.view" },
   { collection: "intervention", model: "Intervention", permission: ["interventions.view", "interventions.viewTaught"], scope: taughtStudentsOnly,
     why: "Teachers mirror only actions for taught pupils; finance roles have no intervention capability." },
+  {
+    collection: "intelligenceReview", model: "IntelligenceReview",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A teacher's recorded judgement of an engine conclusion about a pupil — a school " +
+         "record, named, and read on the same guard as the intelligence it reviews. Scoped " +
+         "like intervention: a teacher's machine holds reviews for the pupils they teach.",
+  },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },
   { collection: "enrollment",   model: "Enrollment",   permission: ["students.view", "students.viewTaught"] },
   { collection: "promotionRun",      model: "PromotionRun",      permission: "promotion.run" },
@@ -270,6 +277,14 @@ const FEED = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EXCLUDED = {
+  // ── Bookkeeping the classroom never needs ──────────────────────────────
+  IntelligencePilot:
+    "The frame around a validation exercise: which school, which classes, " +
+    "which engine version, what state it is in, the evidence counts and the " +
+    "decision. Read online by the head and the operator; no classroom machine " +
+    "has a use for it offline, and keeping it off every mirror keeps the one " +
+    "record of a pilot in one place.",
+
   // The FILE, whose two registered models are in the FEED above as
   // studentAttendance and teacherAttendance. Listed here so the filename-based
   // classification check is satisfied without implying the data is unmirrored.
