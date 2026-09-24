@@ -30,6 +30,7 @@
 // not imply it.
 
 import { useState }                     from "react";
+import { useNavigate }                  from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation }               from "react-i18next";
 import {
@@ -280,6 +281,7 @@ function StudentPanel({
 }) {
   const { t } = useTranslation();
   const qc = useQueryClient();
+  const navigate = useNavigate();
 
   const guidanceQ = useQuery({
     queryKey: ["student-guidance", row.studentId],
@@ -379,6 +381,7 @@ function StudentPanel({
       </div>
 
       <div className="mt-4 flex justify-end border-t border-line pt-4">
+        <Button variant="ghost" onClick={() => { onClose(); navigate(`/students/${row.studentId}/strengths`); }}>{t("strengths.openFromClass")}</Button>
         <Button variant="secondary" onClick={onClose}>{t("common.close")}</Button>
       </div>
       {/* canAssign is reserved for the assignee picker; the server validates it. */}

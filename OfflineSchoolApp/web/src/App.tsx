@@ -38,6 +38,7 @@ const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPag
 const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
 const ClassIntelPage   = lazy(() => import("@/pages/insights/class-intelligence"));
 const IntelReviewPage  = lazy(() => import("@/pages/insights/intelligence-review"));
+const StrengthsPage    = lazy(() => import("@/pages/insights/student-strengths"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
@@ -276,6 +277,8 @@ export default function App() {
             {/* Calibration: a teacher judges what the engine said, without seeing
                 what colleagues said until they have answered themselves. */}
             <Route path="/intelligence-review" element={page(<IntelReviewPage />)} />
+            {/* Strengths and exploration: the layer above the academic engine, one pupil. */}
+            <Route path="/students/:studentId/strengths" element={page(<StrengthsPage />)} />
           </Route>
 
           {/* ── The ledger ─────────────────────────────────────────────── */}

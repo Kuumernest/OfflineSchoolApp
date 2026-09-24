@@ -1286,4 +1286,27 @@ router.get("/announcements", asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * GET /children/:studentId/strengths
+ *
+ * A guardian's view of one child's strengths and exploration areas: plain
+ * words, the supporting subjects, the limits, and the list of what the system
+ * does not infer. No engine internals, no teacher's review, no other child.
+ * The child must be one this access unlocks — the same scope every other
+ * child route uses.
+ */
+router.get("/children/:studentId/strengths", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const strengthsSvc = require("../services/intelligence/strengths.service");
+  const profile = await strengthsSvc.profileFor({ schoolId, studentId: id });
+  const view = strengthsSvc.forGuardian(profile) ?? {
+    strengths: [], emergingAreas: [], explorationAreas: [], limitations: ["no_academic_profile"], confidence: "insufficient",
+    notInferred: require("../../../shared/strengths").NOT_INFERRED, versions: { academic: null, strengths: null },
+  };
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...view } });
+}));
+
 module.exports = router;

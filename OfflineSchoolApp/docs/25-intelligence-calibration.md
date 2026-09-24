@@ -886,3 +886,53 @@ REAL PILOT PREREQUISITES: BLOCKED — no authorised school, administrator or rev
                           every technical precondition verified and enforced by the preflight
 ENGINE_VERSION: 1.0.0
 ```
+
+---
+
+## 14. Stage 9 — the strengths layer, and how it will be calibrated
+
+`shared/strengths` (STRENGTH_ENGINE_VERSION 1.0.0) reads the academic profile
+the review sheet already carries; nothing in the academic engine moved for it.
+Its thresholds are its own and documented in `engine.js`: minObservations 2,
+recurringSequences 2, persistentTerms 2, consistentSpread 2, variableSpread 4,
+declineDrop 2, crossSubjectMin 2, teacherObservationsForSupport 2, minWeight 0.5.
+
+Calibration hooks already in place:
+
+- **Teacher confirmation** — a review of category `strength`, on the existing
+  `IntelligenceReview` collection, tallied by the same `reviewFeedback.js`;
+  the four concern groups apply unchanged.
+- **Live = offline** — `GET …/consistency` diffs the strengths profile through
+  both roads; a difference is recorded as an OFFLINE_CONSISTENCY finding on the
+  pilot, as for the academic profile.
+- **Longitudinal record** — snapshots keep what the profile said each term,
+  with both engine versions, so a rule change can be read against history.
+
+Any threshold, keyword, weight or area change follows §6 and §14 of the Stage
+8 brief exactly as an academic threshold does — repeated evidence, affected
+cases, expected effect, regression, a documented version increment of the
+strengths layer only.
+
+### Verification (Stage 9)
+
+| | |
+|---|---|
+| `check-strengths.js` (new) | 74 assertions, 0 failures — persistent / emerging / variable / declining / cross-subject / single-subject / secondary-only / sparse / contradictory / absences / interest / participation / teacher-observation rule / never-said / determinism; then every role and boundary, evidence by source, snapshots and history, confirmation stored apart, the guardian shape, live = offline for the layer |
+| `npm run check:intel` | 11 scripts, 670 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **70 scripts, 4,466 assertions, 0 failures** (`check-desktop-parity.js` 1,365, `check-sync-feed.js` 61 among them) |
+| `check:roles` (backend) | 94 assertions, 0 failures — no capability minted for pupils; students still hold none |
+| web | `tsc -b` clean, `eslint` 0 errors, `vite build` ok, `i18n:check` 3,530 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| Engines | `ENGINE_VERSION` 1.0.0 and `shared/intelligence/` untouched; `STRENGTH_ENGINE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 9 COMPLETE
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.0.0
+CAREER_PREDICTION: NOT IMPLEMENTED
+PSYCHOLOGICAL_INFERENCE: NOT IMPLEMENTED
+LLM_DECISION_MAKING: NOT IMPLEMENTED
+REAL-WORLD VALIDATION: STILL PENDING
+```

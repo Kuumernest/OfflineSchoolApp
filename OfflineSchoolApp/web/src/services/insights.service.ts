@@ -396,3 +396,91 @@ export async function fetchConsistency(studentId: string, schoolId?: string): Pr
   const { data } = await api.get(`/insights/student/${studentId}/consistency`, sp(schoolId));
   return (data as { data: ConsistencyReport }).data;
 }
+
+
+// ── Strengths & exploration — the layer above the academic engine ───────────
+//
+// Stage 9. shared/strengths reads the academic profile and says where the
+// school evidence is consistent with strength, how persistent it is, what it
+// rests on, which broad areas it opens, and what it does not infer. Interest
+// and exposure are carried apart from strength; teacher confirmation is a
+// review, stored apart from the engine's reading. Versioned on its own.
+
+export type StrengthState = "ESTABLISHED" | "EMERGING" | "DECLINING" | "INSUFFICIENT";
+export type Persistence   = "persistent" | "recurring" | "emerging" | "none";
+
+export interface StrengthEvidenceItem {
+  evidenceType: "subject_performance" | "subject_decline" | "cross_subject_support" | "teacher_observation";
+  subjectId?: string; subjectName?: string | null; subjectIds?: string[]; observers?: number;
+  observations?: number; strongObservations?: number; persistence?: Persistence; consistency?: string | null;
+  direction?: string; overallAverage?: number | null; recentAverage?: number | null; delta?: number | null; supports: boolean;
+}
+
+export interface DimensionReading {
+  dimension: string; state: StrengthState; confidence: Confidence; persistence: Persistence;
+  supportingSubjects: Array<{ subjectId: string; subjectName: string | null }>;
+  decliningSubjects:  Array<{ subjectId: string; subjectName: string | null }>;
+  crossSubject: boolean; evidence: StrengthEvidenceItem[]; limitations: string[];
+}
+
+export interface ExplorationArea {
+  area: string; evidenceLevel: "strong" | "emerging" | "limited"; openedBy: string[];
+  supportingSubjects: Array<{ subjectId: string; subjectName: string | null }>;
+  because: Array<{ dimension: string; state: StrengthState; confidence: Confidence; persistence: Persistence }>;
+  waysToExplore: string[];
+}
+
+export interface InterestSignal {
+  kind: "interest" | "exposure" | "student_reflection"; dimension: string | null; area: string | null; activity: string | null;
+  date: string | null; source: string | null; participation: string | null; reflection: string | null;
+}
+
+export interface StrengthProfile {
+  studentId: string; academicEngineVersion: string | null; strengthEngineVersion: string;
+  grading: { passMark: number; strongMark: number; strongMarkBasis: string | null };
+  evidenceCoverage: { sequences: number; subjects: number; subjectsInTaxonomy: number; sufficient: boolean; explorationEvidence: number };
+  confidence: Confidence;
+  strengths: DimensionReading[]; emergingAreas: DimensionReading[]; decliningAreas: DimensionReading[];
+  singleSubjectStrengths: Array<{ subjectId: string; subjectName: string | null; state: StrengthState; persistence: Persistence; consistency: string | null; direction: string; strongObservations: number }>;
+  explorationAreas: ExplorationArea[];
+  interestSignals: InterestSignal[];
+  subjects: Array<{ subjectId: string; subjectName: string | null; state: StrengthState; persistence: Persistence; consistency: string | null; direction: string; observations: number; strongObservations: number; overallAverage: number | null; recentAverage: number | null }>;
+  limitations: string[];
+  notInferred: string[];
+}
+
+export interface StrengthsResponse { studentId: string; name: string | null; enrollmentNo: string | null; classId: string | null; profile: StrengthProfile | null; reviews?: RecordedReview[] }
+
+export interface StrengthSnapshot {
+  snapshotId: string; profileVersion: number; academicEngineVersion: string; strengthEngineVersion: string;
+  sourcePeriod: { from: unknown; to: unknown; sequences: number } | null; periodLabel: string | null; generatedAt: string; recordedBy: string;
+  profile: { confidence: Confidence; strengths: Array<{ dimension: string; persistence: Persistence }>; emergingAreas: Array<{ dimension: string; persistence: Persistence }>; decliningAreas: Array<{ dimension: string }>; explorationAreas: Array<{ area: string; evidenceLevel: string }>; limitations: string[] };
+}
+
+export interface ExplorationEvidenceRow {
+  _id: string; kind: string; source: string; dimension: string | null; area: string | null; activity: string; date: string;
+  participation: string | null; outcome: string | null; reflection: string | null; notes: string | null; recordedBy: string;
+}
+
+const q = (schoolId?: string) => (schoolId ? { params: { schoolId } } : {});
+
+export async function fetchStrengths(studentId: string, schoolId?: string): Promise<StrengthsResponse> {
+  const { data } = await api.get(`/insights/student/${studentId}/strengths`, q(schoolId));
+  return (data as { data: StrengthsResponse }).data;
+}
+export async function fetchStrengthProfile(studentId: string, schoolId?: string): Promise<{ current: unknown; history: StrengthSnapshot[] }> {
+  const { data } = await api.get(`/insights/student/${studentId}/profile`, q(schoolId));
+  return (data as { data: { current: unknown; history: StrengthSnapshot[] } }).data;
+}
+export async function fetchStrengthEvidence(studentId: string, schoolId?: string): Promise<{ explorationEvidence: ExplorationEvidenceRow[] }> {
+  const { data } = await api.get(`/insights/student/${studentId}/evidence`, q(schoolId));
+  return (data as { data: { explorationEvidence: ExplorationEvidenceRow[] } }).data;
+}
+export async function snapshotStrengthProfile(studentId: string, input: { schoolId?: string; periodLabel?: string }): Promise<StrengthSnapshot> {
+  const { data } = await api.post(`/insights/student/${studentId}/profile/snapshot`, input);
+  return (data as { data: StrengthSnapshot }).data;
+}
+export async function recordExplorationEvidence(studentId: string, input: { schoolId?: string; kind: string; dimension?: string; area?: string; activity: string; date: string; participation?: string; reflection?: string; outcome?: string; notes?: string }): Promise<ExplorationEvidenceRow> {
+  const { data } = await api.post(`/insights/student/${studentId}/evidence`, input);
+  return (data as { data: ExplorationEvidenceRow }).data;
+}

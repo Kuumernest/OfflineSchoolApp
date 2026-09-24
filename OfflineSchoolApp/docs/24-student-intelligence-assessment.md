@@ -838,3 +838,153 @@ category and status, so a suspected defect becomes evidence for the post-pilot
 decision rather than a change made mid-pilot. The tally keeps interpretation
 disagreement, data quality, missing evidence and contextual limitation as four
 separate counts. docs/25 §13 has the status and the protocol.
+
+
+---
+
+## Stage 9 — Student Strengths & Exploration Intelligence
+
+A deterministic layer above the academic engine that answers: *what recurring
+strengths, learning patterns, subject affinities and areas of exploration does
+the pupil's school evidence support?* — and refuses to answer: *what career
+should this pupil choose?*
+
+```
+raw school evidence → shared/intelligence (academic profile)
+                    → shared/strengths     (evidence → strengths → exploration areas)
+                    → human guidance
+```
+
+The academic engine is untouched and stays at `ENGINE_VERSION` 1.0.0. The new
+layer has its own `STRENGTH_ENGINE_VERSION` (1.0.0) in
+`shared/strengths/index.js`; a profile records both. A change to a keyword, a
+weight, a threshold, a combination or an activity in the strengths layer moves
+its version and not the academic one.
+
+### The strength model
+
+Ten **exploration dimensions** (`taxonomy.js`): quantitative reasoning,
+scientific reasoning, language & communication, reading & interpretation,
+analytical reasoning, creative expression, social/collaborative, technical/
+applied, organisational/structured, visual/spatial. They are places where
+evidence can recur, not traits. A school subject reaches a dimension through
+keywords in its name (English or French) with a weight — 1 when the subject is
+about the dimension, 0.5 when it draws on it. A subject that matches nothing is
+still reported, as a **single-subject strength under its own name**.
+
+For each subject the layer reads the academic engine's metrics — nothing about
+marks is recomputed — and adds the reading across time:
+
+| | |
+|---|---|
+| **level** | marks at or above the school's strength threshold (the academic engine's `strongMark`, from the grade bands) |
+| **persistence** | none (< 2 strong marks) → *emerging* (one sequence) → *recurring* (≥ 2 sequences) → *persistent* (≥ 2 terms), over the academic ordering |
+| **consistency** | spread ≤ 2 consistent, ≤ 4 moderate, else variable — the academic engine's own bands |
+| **direction** | rising / sustaining / declining, from the academic `delta` (± 2) |
+| **state** | ESTABLISHED (persistent, not variable, still strong) · EMERGING · DECLINING (was strong, is not now, or fell by 2) · INSUFFICIENT |
+
+A dimension is read across every subject that speaks to it. A half-weight
+subject cannot establish a dimension alone (English is about language and
+only half about interpretation); it needs a primary subject or a second
+subject agreeing. **Evidence against counts**: a declining or variable
+supporting subject contradicts the reading and caps it at EMERGING; a
+dimension whose only subjects have declined is DECLINING, never quietly
+dropped. 18,18,18,18 and 20,12,19,11 share an average and not a state.
+
+### Confidence
+
+Confidence that the school evidence supports the reading — never talent,
+career or success probability. From evidence quantity, persistence,
+consistency, cross-subject support (≥ 2 subjects), coverage, and one explicit,
+versioned teacher rule: at least two distinct teachers recording a
+`teacher_observation` in a dimension lifts an EMERGING reading to strong.
+Nothing lifts INSUFFICIENT; nothing exceeds strong; interest never counts.
+Insufficient coverage in the academic profile makes the whole strengths
+profile INSUFFICIENT, with the limitation named — poor data is never a
+negative characteristic.
+
+### Exploration areas
+
+Ten broad areas (`EXPLORATION_AREAS`), each opened by one or more dimension
+combinations — Mathematics + Physics opens *quantitative & scientific*, not
+"engineer". Every area carries its evidence level (strong / emerging /
+limited — the only ordering), the dimensions and subjects behind it (*why it
+appeared*), and *ways to explore* (activities, framed as exploration, never as
+proof of fit). No code in the taxonomy names a profession; the test asserts it.
+
+### Evidence outside the marks
+
+`ExplorationEvidence` rows: **interest** and **student_reflection** (recorded
+by the pupil), **exposure**, **performance** and **teacher_observation**
+(recorded by a teacher or the office), each with a dimension and/or area, an
+activity, a date, participation or a reflection code. The kind a source may
+record is fixed in `strengths.service.js`. The engine carries interest,
+exposure and reflection as *interest signals*, apart from strengths — taking
+part in the robotics club is exposure, not competence — and reads teacher
+observations only under the rule above.
+
+### The profile, and its history
+
+`buildStrengthProfile` returns: both engine versions, the thresholds, the
+grading in force, evidence coverage, overall confidence, `strengths`,
+`emergingAreas`, `decliningAreas`, `singleSubjectStrengths`,
+`explorationAreas`, `academicSignals` (the academic engine's own codes),
+`interestSignals`, per-subject readings, `limitations`, and `notInferred`.
+It carries no name; the router joins identity after authorisation.
+
+The profile is recomputed on every read. To keep the progression visible,
+`StrengthProfileSnapshot` records the reading deliberately (a teacher or the
+office, e.g. at a term's end): numbered per pupil, both engine versions, the
+source period, who took it, never edited. `GET …/profile` returns the current
+reading and the history in order.
+
+### Teacher confirmation
+
+An ordinary review of category `strength` with the dimension (or subject) in
+`subjectId`, verified against the current profile as an academic case is
+verified against the sheet, stored with the server's reading. It is shown
+beside the profile under the same shield (hidden from colleagues who have not
+answered) and **changes nothing** in the engine's reading. Mapping onto the
+brief's words: supported = YES, partly = PARTIALLY, not = NO, insufficient =
+`evidenceSufficient: NO`.
+
+### Routes and who may read
+
+`GET /api/insights/student/:id/strengths | /exploration | /profile | /evidence`,
+`POST …/evidence`, `POST …/profile/snapshot` (staff), and
+`GET /api/portal/children/:id/strengths` for a guardian.
+
+| Caller | Sees |
+|---|---|
+| teacher | pupils in the classes they hold an assignment for |
+| school_admin | the school |
+| super_admin | the school selected with `?schoolId`; nothing without a selection |
+| bursar | nothing — holds no teaching capability |
+| **student** | their own profile only — by role, as every student-facing route in the application (pupils hold no capabilities; the role matrix asserts it); another pupil's id → 403 `OWN_PROFILE_ONLY`; no teacher's review; may record interest and reflection |
+| **guardian** | the children their portal access unlocks, in the plain `forGuardian` shape: dimensions, subjects by name, areas with ways to explore, limits, what is not inferred — no engine internals, no review |
+
+### Offline
+
+The layer is pure and lives in `shared/`. `GET …/consistency` now diffs the
+strengths profile through both roads to the academic profile beneath it, with
+the same evidence rows on both sides, and the top-level `identical` is the
+conjunction. `ExplorationEvidence` mirrors to a teacher's machine like an
+intervention; snapshots stay online (derived, recomputable).
+
+### What the system does not infer
+
+Every profile lists it, and the test asserts no other field mentions it:
+**career, occupation, career fit, future success, personality, intelligence
+quotient, mental health, learning disability, character, motivation,
+discipline, leadership, fixed talent.** The wording the application uses is
+"evidence suggests strength in", "recurring evidence appears in", "areas worth
+exploring on current evidence" — never "is naturally", "was born to", "will
+become", "should become". No LLM sits anywhere in this path.
+
+### Limitations
+
+Subject names are matched by keyword; a school's unusual name reaches no
+dimension and is shown as a single-subject strength instead. Persistence is
+read over published sequences only. Teacher observations are the only human
+input to confidence, under one rule. No real pupil has yet been through this
+layer — docs/25 §14 says how it will be calibrated when the real pilot runs.

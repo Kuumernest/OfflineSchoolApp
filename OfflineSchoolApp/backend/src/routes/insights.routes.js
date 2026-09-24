@@ -18,6 +18,8 @@ const IntelligenceReview = require("../db/models/IntelligenceReview");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const reviewCases     = require("../services/intelligence/reviewCases.service");
 const pilots          = require("../services/intelligence/pilot.service");
+const strengthsSvc    = require("../services/intelligence/strengths.service");
+const ExplorationEvidence = require("../db/models/ExplorationEvidence");
 const IntelligencePilot = require("../db/models/IntelligencePilot");
 
 const earlyWarning    = require("../services/earlyWarning.service");
@@ -538,7 +540,13 @@ router.post("/reviews", requirePermission("insights.review"), asyncHandler(async
     });
   }
 
-  const found = await reviewCases.caseFor({ schoolId, studentId, category, subjectId });
+  // A review of a STRENGTH reading names the dimension (or subject) in
+  // subjectId under the category "strength"; it is verified against the
+  // current strengths profile the way an academic case is verified against
+  // the sheet, and stored with the server's reading.
+  const found = category === "strength"
+    ? await strengthsSvc.strengthReviewCase({ schoolId, studentId, code: subjectId })
+    : await reviewCases.caseFor({ schoolId, studentId, category, subjectId });
   if (!found) {
     return res.status(404).json({
       success: false, code: "CASE_NOT_FOUND",
@@ -776,10 +784,187 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
+  const academic = await reviewCases.liveOfflineConsistency({ schoolId, studentId: String(pupil.student._id) });
+  // The strengths layer, through both roads to the academic profile beneath it.
+  const { compareProfiles } = require("../../scripts/calibration/consistency");
+  const [liveS, offS] = await Promise.all([
+    strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) }),
+    strengthsSvc.offlineProfileFor({ schoolId, studentId: String(pupil.student._id) }),
+  ]);
+  const strengthsCmp = compareProfiles(
+    { engineVersion: liveS?.strengthEngineVersion ?? null, profile: liveS, guidance: null },
+    { engineVersion: offS?.strengthEngineVersion ?? null, profile: offS, guidance: null }
+  );
   return res.json({
     success: true,
-    data: { generatedAt: new Date(), ...(await reviewCases.liveOfflineConsistency({ schoolId, studentId: String(pupil.student._id) })) },
+    data: {
+      generatedAt: new Date(), ...academic,
+      identical: academic.identical && strengthsCmp.identical,
+      strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, differences: strengthsCmp.differences },
+    },
   });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STRENGTHS & EXPLORATION — the layer above the academic engine
+//
+// Reads follow the intelligence hierarchy with one addition: a PUPIL reads
+// their own profile and nobody else's, by role. The bursar holds no teaching
+// capability and is out. Identity is joined here, after
+// authorisation; the shared layer never sees a name.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const isStudent = (req) => req.user?.role === ROLES.STUDENT;
+// Staff read on the intelligence capability; a pupil reads by ROLE, as every
+// student-facing route in this application does — pupils hold no capabilities,
+// and the role matrix keeps it that way. pupilForStrengths then limits the
+// pupil to their own record.
+const strengthRead = (req, res, next) => (isStudent(req) ? next() : requirePermission("insights.viewTaught")(req, res, next));
+
+/** The pupil this caller may read strengths for. A pupil: only themselves. */
+const pupilForStrengths = async (req, res, schoolId, studentId) => {
+  if (!isStudent(req)) return pupilForReview(req, res, schoolId, studentId);
+  const actor = String(req.user._id ?? req.user.id);
+  const own = await Student.findOne({ _id: String(studentId ?? ""), schoolId, userId: actor, deletedAt: null })
+    .select("classId studentName name firstName lastName enrollmentNo").lean();
+  if (!own) {
+    res.status(403).json({ success: false, code: "OWN_PROFILE_ONLY", message: "A pupil may read only their own profile." });
+    return null;
+  }
+  return { student: own, classId: own.classId ? String(own.classId) : null };
+};
+
+const identityOf = async (schoolId, pupil) => {
+  const s = pupil.student.studentName !== undefined ? pupil.student
+    : await Student.findOne({ _id: String(pupil.student._id), schoolId }).select("studentName name firstName lastName enrollmentNo classId").lean();
+  return { studentId: String(pupil.student._id), name: displayName(s) || null, enrollmentNo: s?.enrollmentNo ?? null, classId: pupil.classId };
+};
+
+/** Strength reviews on this pupil, as this viewer may see them (the shield applies). */
+const strengthReviewsFor = async (req, schoolId, studentId) => {
+  if (isStudent(req)) return undefined;
+  const viewer = viewerOf(req);
+  const all = (await reviewCases.reviewsFor({ schoolId, studentIds: [studentId] })).filter((r) => r.category === "strength");
+  const answered = new Set(all.filter((r) => String(r.reviewedBy) === viewer.userId).map(reviewCases.caseKey));
+  return all.filter((r) => !reviewCases.shielded(viewer, answered.has(reviewCases.caseKey(r)))).map(reviewCases.publicReview);
+};
+
+/** GET /api/insights/student/:studentId/strengths — the full profile, every claim with its evidence. */
+router.get("/student/:studentId/strengths", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const id = String(pupil.student._id);
+  const profile = await strengthsSvc.profileFor({ schoolId, studentId: id });
+  const reviews = await strengthReviewsFor(req, schoolId, id);
+  return res.json({
+    success: true,
+    data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), profile, ...(reviews ? { reviews } : {}) },
+  });
+}));
+
+/** GET /api/insights/student/:studentId/exploration — the areas, the interest signals, the limits. */
+router.get("/student/:studentId/exploration", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  return res.json({
+    success: true,
+    data: {
+      generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+      explorationAreas: p?.explorationAreas ?? [], interestSignals: p?.interestSignals ?? [],
+      strengths: (p?.strengths ?? []).map((d) => ({ dimension: d.dimension, persistence: d.persistence, confidence: d.confidence })),
+      emergingAreas: (p?.emergingAreas ?? []).map((d) => ({ dimension: d.dimension, persistence: d.persistence, confidence: d.confidence })),
+      limitations: p?.limitations ?? ["no_academic_profile"], confidence: p?.confidence ?? "insufficient",
+      notInferred: p?.notInferred ?? [], versions: { academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null },
+    },
+  });
+}));
+
+/** GET /api/insights/student/:studentId/profile — the current reading and every snapshot before it. */
+router.get("/student/:studentId/profile", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const id = String(pupil.student._id);
+  const [p, history] = await Promise.all([strengthsSvc.profileFor({ schoolId, studentId: id }), strengthsSvc.history({ schoolId, studentId: id })]);
+  return res.json({
+    success: true,
+    data: {
+      generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+      current: p ? { ...strengthsSvc.readingOf(p), academicEngineVersion: p.academicEngineVersion, strengthEngineVersion: p.strengthEngineVersion } : null,
+      history: history.map((h) => ({
+        snapshotId: String(h._id), profileVersion: h.profileVersion, academicEngineVersion: h.academicEngineVersion,
+        strengthEngineVersion: h.strengthEngineVersion, sourcePeriod: h.sourcePeriod, periodLabel: h.periodLabel,
+        generatedAt: h.generatedAt, recordedBy: h.recordedBy, profile: h.profile,
+      })),
+    },
+  });
+}));
+
+/** POST /api/insights/student/:studentId/profile/snapshot — keep today's reading. Staff only. */
+router.post("/student/:studentId/profile/snapshot", requirePermission("insights.viewTaught"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const snap = await strengthsSvc.snapshot({
+      schoolId, studentId: String(pupil.student._id), classId: pupil.classId,
+      actor: String(req.user._id ?? req.user.id), periodLabel: req.body?.periodLabel ?? null,
+    });
+    return res.status(201).json({ success: true, data: snap });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
+/** GET /api/insights/student/:studentId/evidence — everything the profile rests on, by kind. */
+router.get("/student/:studentId/evidence", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const id = String(pupil.student._id);
+  const [p, rows] = await Promise.all([strengthsSvc.profileFor({ schoolId, studentId: id }), strengthsSvc.evidenceRows({ schoolId, studentId: id })]);
+  return res.json({
+    success: true,
+    data: {
+      generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+      academicSignals: p?.academicSignals ?? [],
+      strengthEvidence: [...(p?.strengths ?? []), ...(p?.emergingAreas ?? []), ...(p?.decliningAreas ?? [])]
+        .map((d) => ({ dimension: d.dimension, state: d.state, evidence: d.evidence })),
+      subjects: p?.subjects ?? [],
+      explorationEvidence: rows,
+      versions: { academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null },
+    },
+  });
+}));
+
+/**
+ * POST /api/insights/student/:studentId/evidence
+ * A pupil records interest or a reflection about themselves; a teacher or the
+ * office records exposure, performance or an observation. The kind a source
+ * may record is fixed in strengths.service — nobody records ability on a
+ * pupil's behalf from the pupil's seat, and a pupil's interest is never
+ * entered as a teacher's observation.
+ */
+router.post("/student/:studentId/evidence", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const actor = String(req.user._id ?? req.user.id);
+  const requestedId = req.body?._id ? String(req.body._id) : null;
+  const replayed = requestedId ? await ExplorationEvidence.findOne({ _id: requestedId, schoolId }) : null;
+  if (replayed) return res.status(201).json({ success: true, data: replayed });
+  const source = isStudent(req) ? "student" : isTeacher(req) ? "teacher" : "office";
+  try {
+    const row = await strengthsSvc.recordEvidence({ schoolId, studentId: String(pupil.student._id), classId: pupil.classId, source, actor, body: req.body ?? {} });
+    return res.status(201).json({ success: true, data: row });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
 }));
 
 module.exports = router;

@@ -261,6 +261,13 @@ const FEED = [
          "record, named, and read on the same guard as the intelligence it reviews. Scoped " +
          "like intervention: a teacher's machine holds reviews for the pupils they teach.",
   },
+  {
+    collection: "explorationEvidence", model: "ExplorationEvidence",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "What a pupil tried, enjoyed or was seen doing outside the marks — interest, exposure, " +
+         "performance, a teacher's observation, a reflection. A school record about a pupil, " +
+         "scoped like intervention: a teacher's machine holds rows for the pupils they teach.",
+  },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },
   { collection: "enrollment",   model: "Enrollment",   permission: ["students.view", "students.viewTaught"] },
   { collection: "promotionRun",      model: "PromotionRun",      permission: "promotion.run" },
@@ -278,6 +285,11 @@ const FEED = [
 
 const EXCLUDED = {
   // ── Bookkeeping the classroom never needs ──────────────────────────────
+  StrengthProfileSnapshot:
+    "A strengths profile as it read on one day, taken deliberately for the " +
+    "longitudinal view. Derived from documents that ARE mirrored and " +
+    "recomputable from them; the memory of what it used to say is read online " +
+    "by the office and stays in one place.",
   IntelligencePilot:
     "The frame around a validation exercise: which school, which classes, " +
     "which engine version, what state it is in, the evidence counts and the " +
