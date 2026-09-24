@@ -89,7 +89,9 @@ const interventionSchema = new mongoose.Schema(
     // Codes rather than sentences, so both travel in the reader's language
     // through the existing i18n catalogues — the same rule the watch list's
     // signals already follow.
-    sourceType: { type: String, enum: ["guidance", "other"], default: "other" },
+    // "development_guidance" (Stage 15): proposed from a trigger the development
+    // history supports, with the contract below; the lifecycle drives `status`.
+    sourceType: { type: String, enum: ["guidance", "development_guidance", "other"], default: "other" },
     sourceCode: { type: String, default: null, maxlength: 80 },
     actionCode: { type: String, required: true, maxlength: 80 },
     notes:      { type: String, default: null, maxlength: 2000 },
@@ -141,6 +143,34 @@ const interventionSchema = new mongoose.Schema(
     // letting whoever synced last win — the explicit-conflict policy the rest
     // of this application already keeps.
     version: { type: Number, default: 1 },
+
+    // Stage 15 — the intervention contract for a development intervention.
+    // Null for every other kind. No mark, no reflection text, no name.
+    development: {
+      type: new mongoose.Schema({
+        guidanceId:       { type: String, default: null },
+        dimension:        { type: String, default: null },
+        trigger:          { type: String, default: null },
+        triggerEvidence:  { type: mongoose.Schema.Types.Mixed, default: null },
+        objective:        { type: String, default: null },
+        action:           { type: String, default: null },
+        ownerRole:        { type: String, enum: ["STUDENT", "TEACHER", "PARENT", "SCHOOL_ADMIN"], default: "TEACHER" },
+        startDate:        { type: Date, default: null },
+        durationDays:     { type: Number, default: null },
+        reviewDate:       { type: Date, default: null },
+        evidenceToCollect: { type: [String], default: [] },
+        lifecycle:        { type: String, enum: ["PROPOSED", "ACCEPTED", "ACTIVE", "REVIEW_DUE", "COMPLETED", "DECLINED", "PAUSED", "CANCELLED"], default: "PROPOSED" },
+        lifecycleHistory: { type: [new mongoose.Schema({ from: String, to: String, action: String, by: String, role: String, at: Date, note: { type: String, default: null, maxlength: 1000 } }, { _id: false })], default: [] },
+        proposedBy:       { type: String, default: null },
+        proposedByRole:   { type: String, default: null },
+        acceptedBy:       { type: String, default: null },
+        acceptedAt:       { type: Date, default: null },
+        reviews:          { type: [new mongoose.Schema({ at: Date, by: String, note: { type: String, default: null, maxlength: 2000 }, outcome: mongoose.Schema.Types.Mixed }, { _id: false })], default: [] },
+        engineVersions:   { type: mongoose.Schema.Types.Mixed, default: null },
+        explanation:      { type: mongoose.Schema.Types.Mixed, default: null },
+      }, { _id: false }),
+      default: null,
+    },
 
     deletedAt: { type: Date, default: null },
   },

@@ -248,3 +248,12 @@ the relationship, the independent event count, the families, the unavailable
 modalities and the standing `ACADEMIC_VS_LEARNING_EVIDENCE` conflict — and
 describe how each changed between observations without recomputing anything.
 A snapshot from before this stage has none of these and is read as such.
+
+## 19. Stage 15 — what the integration feeds guidance
+
+The learning relationship this stage records per dimension is what the
+guidance engine (docs/29) reads as `CORROBORATED` (→ DEEPEN beside MAINTAIN),
+`CONTRADICTED` (→ REFLECT, and SEEK_SUPPORT on a decline), `UNSUPPORTED` or
+`INSUFFICIENT_EVIDENCE` (→ BUILD_EVIDENCE) and `CONTEXT_LIMITED` (→ MONITOR).
+Two consecutive contradicted readings are the intervention trigger
+`REPEATED_DIFFICULTY`. Nothing here changed for that.

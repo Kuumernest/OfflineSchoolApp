@@ -808,14 +808,29 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
     { engineVersion: liveD?.developmentEngineVersion ?? null, profile: liveD, guidance: null },
     { engineVersion: offD?.developmentEngineVersion ?? null, profile: offD, guidance: null }
   );
+  // Guidance and the intervention interpretation, both roads, on the same asOf.
+  const gSvc = require("../services/intelligence/developmentGuidance.service");
+  const ivShared = require("../../../shared/interventions");
+  const [liveG, offG] = await Promise.all([gSvc.guidanceFor({ schoolId, studentId: String(pupil.student._id), asOf }), gSvc.offlineGuidanceFor({ schoolId, studentId: String(pupil.student._id), asOf })]);
+  const liveT = liveD ? ivShared.triggersFor({ development: liveD, guidance: liveG }) : [], offT = offD ? ivShared.triggersFor({ development: offD, guidance: offG }) : [];
+  const guidanceCmp = compareProfiles({ engineVersion: liveG?.guidanceEngineVersion ?? null, profile: liveG, guidance: null }, { engineVersion: offG?.guidanceEngineVersion ?? null, profile: offG, guidance: null });
+  const interventionCmp = compareProfiles({ engineVersion: ivShared.INTERVENTION_ENGINE_VERSION, profile: { triggers: liveT }, guidance: null }, { engineVersion: ivShared.INTERVENTION_ENGINE_VERSION, profile: { triggers: offT }, guidance: null });
+  const mismatches = [
+    ...(guidanceCmp.summary.guidanceState ? ["GUIDANCE_STATE_MISMATCH"] : []), ...(guidanceCmp.summary.guidanceReason ? ["GUIDANCE_REASON_MISMATCH"] : []), ...(guidanceCmp.summary.guidanceEvidence ? ["GUIDANCE_EVIDENCE_MISMATCH"] : []),
+    ...(interventionCmp.summary.interventionTrigger ? ["INTERVENTION_TRIGGER_MISMATCH"] : []), ...(interventionCmp.summary.interventionRule ? ["INTERVENTION_RULE_MISMATCH"] : []),
+    ...(guidanceCmp.summary.engineVersion || guidanceCmp.summary.versions || interventionCmp.summary.engineVersion ? ["VERSION_MISMATCH"] : []),
+  ];
   return res.json({
     success: true,
     data: {
       generatedAt: new Date(), ...academic,
-      identical: academic.identical && strengthsCmp.identical && developmentCmp.identical,
+      identical: academic.identical && strengthsCmp.identical && developmentCmp.identical && guidanceCmp.identical && interventionCmp.identical,
       strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, summary: strengthsCmp.summary, differences: strengthsCmp.differences,
                    versions: { live: versionsOf(liveS), offline: versionsOf(offS) } },
       development: { identical: developmentCmp.identical, engineVersion: developmentCmp.engineVersion, summary: developmentCmp.summary, differences: developmentCmp.differences },
+      guidance: { identical: guidanceCmp.identical, engineVersion: guidanceCmp.engineVersion, summary: guidanceCmp.summary, differences: guidanceCmp.differences },
+      interventions: { identical: interventionCmp.identical, engineVersion: interventionCmp.engineVersion, summary: interventionCmp.summary, differences: interventionCmp.differences },
+      mismatches,
     },
   });
 }));
@@ -1029,6 +1044,89 @@ router.get("/student/:studentId/development/evidence", strengthRead, asyncHandle
   return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
     engineVersion: h?.developmentEngineVersion ?? null, asOf: h?.asOf ?? null, versions: h?.versions ?? null,
     observations: h?.observations ?? [], evidence: developmentSvc.evidenceOf(h, p), contradictions: h?.contradictions ?? [] } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUIDANCE & INTERVENTIONS — downstream of the development history (Stage 15)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const devGuidanceSvc = require("../services/intelligence/developmentGuidance.service");
+const devInterventionsSvc = require("../services/intelligence/developmentInterventions.service");
+const { requireAnyPermission: anyPermission } = require("../../middleware/permissions");
+
+/** A pupil acts on their own record; staff need the intervention capability. The bursar has none. */
+const interventionWrite = (req, res, next) => (isStudent(req) ? next() : anyPermission("interventions.create", "interventions.manage")(req, res, next));
+
+/** GET …/development/guidance — bounded, categorical, evidence-linked guidance from the development history. Informs; never instructs. */
+router.get("/student/:studentId/development/guidance", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const g = await devGuidanceSvc.guidanceFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    guidanceEngineVersion: g?.guidanceEngineVersion ?? null, developmentEngineVersion: g?.developmentEngineVersion ?? null, asOf: g?.asOf ?? null,
+    historySufficient: g?.historySufficient ?? false, items: g?.items ?? [], byCategory: g?.byCategory ?? {}, byDimension: g?.byDimension ?? {}, agency: g?.agency ?? "INFORMS_ONLY", notInferred: g?.notInferred ?? [] } });
+}));
+
+/** GET …/interventions — the pupil's development interventions, each with its observed outcome on asOf, and the triggers the history supports today. */
+router.get("/student/:studentId/interventions", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const id = String(pupil.student._id), asOf = asOfOf(req), staff = !isStudent(req);
+  const [docs, proposals] = await Promise.all([devInterventionsSvc.listFor({ schoolId, studentId: id }), devInterventionsSvc.proposalsFor({ schoolId, studentId: id, asOf })]);
+  const items = await Promise.all(docs.map(async (d) => devInterventionsSvc.view(d, { outcome: await devInterventionsSvc.outcomeFor(d, { asOf }), staff })));
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), asOf: proposals.asOf, interventionEngineVersion: proposals.interventionEngineVersion,
+    interventions: items, triggers: proposals.triggers, previews: proposals.previews, lifecycle: require("../../../shared/interventions").LIFECYCLE } });
+}));
+
+/** GET …/interventions/:interventionId — one, with its outcome. */
+router.get("/student/:studentId/interventions/:interventionId", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const doc = await devInterventionsSvc.oneFor({ schoolId, studentId: String(pupil.student._id), interventionId: req.params.interventionId });
+  if (!doc) return res.status(404).json({ success: false, message: "Intervention not found" });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), intervention: devInterventionsSvc.view(doc, { outcome: await devInterventionsSvc.outcomeFor(doc, { asOf: asOfOf(req) }), staff: !isStudent(req) }) } });
+}));
+
+/** POST …/interventions — propose, from a trigger the history supports. A pupil may propose only what they own. Idempotent on a client _id. */
+router.post("/student/:studentId/interventions", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await devInterventionsSvc.propose({ schoolId, studentId: String(pupil.student._id), classId: pupil.student.classId ?? pupil.classId ?? null, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, body: req.body ?? {}, asOf: asOfOf(req) });
+    return res.status(201).json({ success: true, created: r.created, data: devInterventionsSvc.view(r.intervention, { staff: !isStudent(req) }) });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message, ...(err.supported ? { supported: err.supported } : {}) }); throw err; }
+}));
+
+/** PATCH …/interventions/:interventionId — one lifecycle action: accept, decline, activate, mark_review_due, pause, resume, cancel, complete. */
+router.patch("/student/:studentId/interventions/:interventionId", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await devInterventionsSvc.act({ schoolId, studentId: String(pupil.student._id), interventionId: req.params.interventionId, action: String(req.body?.action ?? ""), actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, note: req.body?.note ?? null });
+    return res.json({ success: true, changed: r.changed, data: devInterventionsSvc.view(r.intervention, { staff: !isStudent(req) }) });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
+/** POST …/interventions/:interventionId/review — staff record a review: the observed outcome on that day, a note, and whether it completes. */
+router.post("/student/:studentId/interventions/:interventionId/review", anyPermission("interventions.create", "interventions.manage"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await devInterventionsSvc.review({ schoolId, studentId: String(pupil.student._id), interventionId: req.params.interventionId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, note: req.body?.note ?? null, complete: Boolean(req.body?.complete), asOf: asOfOf(req) });
+    return res.json({ success: true, changed: r.changed, data: devInterventionsSvc.view(r.intervention, { outcome: r.outcome, staff: true }) });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
 }));
 
 /**

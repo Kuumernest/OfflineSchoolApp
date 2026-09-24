@@ -267,3 +267,15 @@ time with status, occurrences and dates.
 No real pupil has been through the development engine. Real evidence enters
 through the Stage 8 pilot and nothing else. **Real-world validation is still
 pending.**
+
+## 22. Stage 15 — what the history feeds downstream
+
+The guidance engine (docs/29) reads each trajectory's `trajectory`,
+`direction`, `currentState`, `currentRelationship`, `quality`,
+`contradictions`, `evidenceCoverage` and the last change event, and nothing
+else. The intervention engine reads the same trajectories for its triggers
+(`PERSISTENT_DECLINE` from two consecutive declining observations,
+`LEARNING_CONTRADICTION` from a persistent or recurring contradiction, and so
+on) and, for an outcome, the observation before and the observation after an
+intervention's start date. Neither writes anything back: the next snapshots
+carry what happened, and the history reads them as it reads any other.

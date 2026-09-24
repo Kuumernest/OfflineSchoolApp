@@ -387,7 +387,7 @@ const B = "68e0000000000000000000b2";   // Beta College
   check("and neither can reach the grading engine — a support note decides no mark",
     graphOf(path.join(SRC, "routes/interventions.routes")).filter((f) => GRADING.test(f)), []);
 
-  const MONEY_WORD = /balance|fee|arrear|owed|owing|debt|invoice|receipt|payment|paid|charge|waive|amount|currency|xaf|cfa/i;
+  const MONEY_WORD = /balance|\bfees?\b|arrear|owed|owing|debt|invoice|receipt|payment|paid|charge|waive|amount|currency|\bxaf\b|\bcfa\b/i;   // word-bounded short tokens: a generated uuid can contain "fee" or "cfa"
   const offending = (node, trail = "$") => {
     if (node === null || node === undefined) return [];
     if (Array.isArray(node)) return node.flatMap((v, i) => offending(v, `${trail}[${i}]`));

@@ -151,6 +151,22 @@ export const fetchMyDevelopment = async () => {
   } catch { return null; }
 };
 
+/** The pupil's own development guidance: bounded options with what was noticed, why, what to try, what to watch. Informs; never instructs. Online only. */
+export const fetchMyGuidance = async () => {
+  try { const { data } = await api.get("/insights/student/me/development/guidance"); return data?.data ?? null; } catch { return null; }
+};
+
+/** The pupil's own support: proposed and agreed interventions with their observed outcome. Online only. */
+export const fetchMyInterventions = async () => {
+  try { const { data } = await api.get("/insights/student/me/interventions"); return data?.data ?? null; } catch { return null; }
+};
+
+/** Accept or decline a proposal made to the pupil. The pupil decides; the server enforces which moves a pupil may make. */
+export const actOnMyIntervention = async (interventionId, action) => {
+  const { data } = await api.patch(`/insights/student/me/interventions/${interventionId}`, { action });
+  return data?.data ?? null;
+};
+
 /** What changed since the last profile snapshot, in the words the pupil sees. Online only; null offline. */
 export const fetchProfileChanges = async () => {
   try {

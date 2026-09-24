@@ -559,7 +559,7 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
 
   // Currency codes as whole words: a UUID can contain the hex letters "cfa", and
   // an id is not money.
-  const MONEY_WORD = /balance|fee|arrear|owed|debt|invoice|receipt|payment|paid|charge|waive|amount|currency|\bxaf\b|\bcfa\b|bursar/i;
+  const MONEY_WORD = /balance|\bfees?\b|arrear|owed|debt|invoice|receipt|payment|paid|charge|waive|amount|currency|\bxaf\b|\bcfa\b|bursar/i;   // word-bounded short tokens: a generated uuid can contain "fee" or "cfa"
   const offending = (node, trail = "$") => {
     if (node === null || node === undefined) return [];
     if (Array.isArray(node)) return node.flatMap((v, i) => offending(v, `${trail}[${i}]`));

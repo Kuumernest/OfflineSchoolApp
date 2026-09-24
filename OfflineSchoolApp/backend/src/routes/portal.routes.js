@@ -1330,6 +1330,28 @@ router.get("/children/:studentId/development", asyncHandler(async (req, res) => 
 }));
 
 /**
+ * GET /children/:studentId/guidance
+ *
+ * A guardian's view of the development guidance: the areas the child is
+ * building, suggested ways to support learning, what to watch, the support
+ * that has been agreed, and the observed progress since it began. No reason
+ * codes, no reviewer, no staff note, no other child.
+ */
+router.get("/children/:studentId/guidance", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const gSvc = require("../services/intelligence/developmentGuidance.service");
+  const ivSvc = require("../services/intelligence/developmentInterventions.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const asOf = asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null;
+  const [g, docs] = await Promise.all([gSvc.guidanceFor({ schoolId, studentId: id, asOf }), ivSvc.listFor({ schoolId, studentId: id })]);
+  const outcomes = new Map(await Promise.all(docs.map(async (d) => [String(d._id), await ivSvc.outcomeFor(d, { asOf })])));
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, guidance: gSvc.forGuardian(g), agreedSupport: ivSvc.forGuardian(docs, outcomes) } });
+}));
+
+/**
  * GET /children/:studentId/explorations
  *
  * A guardian's view of what one child has explored: which activities, in

@@ -251,7 +251,7 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
     [pilot.evidence.casesSelected > 1, pilot.evidence.casesAwaitingReview, pilot.evidence.dataQualityCitations],
     [true, pilot.evidence.casesSelected - 1, { assessment_unusually_difficult: 1 }]);
   check("and it is counts — no pupil, no mark, no reviewer's words",
-    /st-a1|Pupil|16|hard paper|Ateba|Biya/.test(JSON.stringify(pilot.evidence)), false);
+    /st-a1|Pupil|16|hard paper|Ateba|Biya/.test(JSON.stringify(pilot.evidence).replace(/\d{4}-\d{2}-\d{2}T[\d:.]+Z/g, "")), false);   // timestamps stripped: a run at 16:xx is not a mark
 
   r = await move(head, "CALIBRATED");
   check("ANALYSIS_READY → CALIBRATED without a decision → 400 DECISION_REQUIRED", [r.status, r.body.code], [400, "DECISION_REQUIRED"]);
@@ -355,7 +355,9 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
       // Strength Reading 1.2.0 names its own difference classes; none differ either.
       state: false, relationship: false, reasonCodes: false, eventCounts: false, sources: false, contradictions: false, versions: false,
       // Development Engine 1.0.0 classes; none differ either.
-      trajectory: false, transitions: false, changeTypes: false, changeReasons: false, quality: false, persistence: false });
+      trajectory: false, transitions: false, changeTypes: false, changeReasons: false, quality: false, persistence: false,
+      // Guidance 1.0.0 and Intervention 1.0.0 classes; none differ either.
+      guidanceState: false, guidanceReason: false, guidanceEvidence: false, interventionTrigger: false, interventionRule: false });
   check("a persistently weak pupil, read by the head: identical",
     (await head.get("/insights/student/st-a2/consistency")).body.data.identical, true);
   check("the teacher cannot run it on a pupil they do not teach", (await teacherA.get("/insights/student/st-a2/consistency")).status, 403);

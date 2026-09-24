@@ -25,7 +25,7 @@ import { useState }                                from "react";
 import { useParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                          from "react-i18next";
-import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen, Activity } from "lucide-react";
+import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen, Activity, LifeBuoy } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
 import { PageHeader }   from "@/components/ui/PageHeader";
@@ -39,7 +39,8 @@ import {
   fetchStrengths, fetchStrengthProfile, fetchStrengthEvidence, snapshotStrengthProfile, recordExplorationEvidence, submitReview,
   fetchExplorations, fetchCatalog, observeExploration, rateExploration, fetchProfileChanges, rebuildProfile,
   fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence, fetchDevelopment,
-  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine,
+  fetchDevelopmentGuidance, fetchDevelopmentInterventions, proposeDevelopmentIntervention, actOnDevelopmentIntervention, reviewDevelopmentIntervention,
+  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine, type DevGuidanceItem, type DevelopmentIntervention, type InterventionTrigger,
 } from "@/services/insights.service";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
@@ -112,6 +113,9 @@ export default function StudentStrengthsPage() {
 
       {/* ── Development over time (Stage 14) ─────────────────────────── */}
       <Development studentId={studentId} schoolId={schoolId} isStaff={isStaff} />
+
+      {/* ── Guidance and support (Stage 15) ──────────────────────────── */}
+      <GuidanceAndSupport studentId={studentId} schoolId={schoolId} isStaff={isStaff} toast={toast} />
 
       {/* ── Conflicting evidence, reported as a pattern ──────────────── */}
       {p?.fusion && p.fusion.contradictions.length > 0 && (
@@ -647,6 +651,133 @@ function TrajectoryCard({ x, isStaff, fam, day, explainLine }: { x: Trajectory; 
           {x.contradictions.length > 0 ? x.contradictions.map((c) => <p key={c.kind} className="text-ink-muted">{t(`strengths.integration.conflict.${c.kind}`, { defaultValue: t(`strengths.fusion.conflict.${c.kind}`, { defaultValue: c.kind }) })} · {t(`development.status.${c.status}`, { defaultValue: c.status })} · {t("development.occurrences", { n: c.occurrences, p: c.independentPeriods })}</p>) : <p className="text-ink-muted">{t("development.noneActive")}</p>}
         </details>
       )}
+    </Card>
+  );
+}
+
+/**
+ * Guidance and support. Four things kept visibly apart on every card:
+ * observed evidence, the system's interpretation, a possible action, and
+ * the teacher's judgment. Guidance informs; a person proposes, accepts,
+ * runs, reviews. No score, no ranking, no career.
+ */
+function GuidanceAndSupport({ studentId, schoolId, isStaff, toast }: { studentId: string; schoolId?: string; isStaff: boolean; toast: ReturnType<typeof useToast>["toast"] }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const g = useQuery({ queryKey: ["dev-guidance", studentId, schoolId], queryFn: () => fetchDevelopmentGuidance(studentId, schoolId) });
+  const iv = useQuery({ queryKey: ["dev-interventions", studentId, schoolId], queryFn: () => fetchDevelopmentInterventions(studentId, schoolId) });
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ["dev-interventions", studentId, schoolId] }), qc.invalidateQueries({ queryKey: ["dev-guidance", studentId, schoolId] })]);
+  const onError = (err: unknown) => { const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code; toast({ kind: "error", title: t(`devIntervention.error.${code ?? "generic"}`, { defaultValue: t("devIntervention.error.generic") }) }); };
+  const propose = useMutation({ mutationFn: (b: { trigger: string; dimension: string; guidanceId?: string | null }) => proposeDevelopmentIntervention(studentId, { ...b, ...(schoolId ? { schoolId } : {}) }), onSuccess: async () => { toast({ kind: "success", title: t("devIntervention.lifecycle.PROPOSED") }); await refresh(); }, onError });
+  const act = useMutation({ mutationFn: (b: { id: string; action: string }) => actOnDevelopmentIntervention(studentId, b.id, { action: b.action, ...(schoolId ? { schoolId } : {}) }), onSuccess: refresh, onError });
+  const review = useMutation({ mutationFn: (b: { id: string; note: string; complete: boolean }) => reviewDevelopmentIntervention(studentId, b.id, { note: b.note || null, complete: b.complete, ...(schoolId ? { schoolId } : {}) }), onSuccess: refresh, onError });
+  const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
+  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const items = g.data?.items ?? [];
+  const triggers = iv.data?.triggers ?? [];
+  const interventions = iv.data?.interventions ?? [];
+  return (
+    <Section icon={<LifeBuoy className="h-3.5 w-3.5" />} heading={t("devGuidance.heading")} hint={t("devGuidance.hint", { v: g.data?.guidanceEngineVersion ?? "—" })}>
+      {items.length === 0 && <p className="text-sm text-ink-muted">{t("devGuidance.none")}</p>}
+      {items.map((i) => <GuidanceCard key={i.id} i={i} isStaff={isStaff} triggers={triggers.filter((x) => x.dimension === i.dimension)} onPropose={(trigger, dimension) => propose.mutate({ trigger, dimension, guidanceId: i.id })} fam={fam} day={day} />)}
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-ink">{isStaff ? t("devIntervention.heading") : t("devIntervention.studentHeading")} <span className="text-xs font-normal text-ink-muted">· {t("devIntervention.hint", { v: iv.data?.interventionEngineVersion ?? "—" })}</span></p>
+        {interventions.length === 0 && <p className="text-sm text-ink-muted">{t("devIntervention.none")}</p>}
+        {interventions.map((x) => <InterventionCard key={x.interventionId} x={x} isStaff={isStaff} onAct={(action) => act.mutate({ id: x.interventionId, action })} onReview={(note, complete) => review.mutate({ id: x.interventionId, note, complete })} fam={fam} day={day} />)}
+        {isStaff && triggers.length > 0 && (
+          <p className="text-xs text-ink-muted">{t("devIntervention.triggers")}: {triggers.map((x) => `${t(`strengths.dimension.${x.dimension}`, { defaultValue: x.dimension })} — ${t(`devIntervention.trigger.${x.trigger}`, { defaultValue: x.trigger })}`).join(" · ")}</p>
+        )}
+        {isStaff && triggers.length === 0 && <p className="text-xs text-ink-muted">{t("devIntervention.noTriggers")}</p>}
+      </div>
+    </Section>
+  );
+}
+
+function GuidanceCard({ i, isStaff, triggers, onPropose, fam, day }: { i: DevGuidanceItem; isStaff: boolean; triggers: InterventionTrigger[]; onPropose: (trigger: string, dimension: string) => void; fam: (l: string[]) => string; day: (d?: string | null) => string }) {
+  const { t } = useTranslation();
+  const name = i.dimension ? t(`strengths.dimension.${i.dimension}`, { defaultValue: i.dimension }) : (i.subjectId ?? "");
+  const un = i.explanation.uncertain;
+  const unclear = [
+    ...(!un.historySufficient ? [t("development.trajectory.INSUFFICIENT_HISTORY")] : []),
+    ...(un.missingModalities.length ? [t("development.unavailable", { list: fam(un.missingModalities) })] : []),
+    ...(un.conflicts !== "NONE" ? [`${t("development.qualityLabel.conflicts")}: ${t(`development.quality.${un.conflicts === "HISTORICAL" ? "HISTORICAL_CONFLICT" : un.conflicts}`)}`] : []),
+    ...(un.recency === "STALE" ? [t("devGuidance.reason.EVIDENCE_STALE")] : []),
+  ];
+  return (
+    <Card className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-ink">{name}</span>
+        <Badge variant={["SEEK_SUPPORT", "CHANGE_APPROACH"].includes(i.category) ? "warning" : ["MAINTAIN", "DEEPEN"].includes(i.category) ? "success" : "info"} label={t(`devGuidance.category.${i.category}`, { defaultValue: i.category })} />
+        <Badge variant="default" label={`${t("devGuidance.quality")}: ${t(`devGuidance.evidenceQuality.${i.evidenceQuality}`, { defaultValue: i.evidenceQuality })}`} />
+      </div>
+      <div className="grid gap-2 text-xs md:grid-cols-2">
+        <div>
+          <p className="font-medium text-ink-faint">{isStaff ? t("devGuidance.observedEvidence") : t("devGuidance.noticed")}</p>
+          <p className="text-ink">{t("devGuidance.observedLine", { state: t(`strengths.state.${i.explanation.observed.state}`), trajectory: t(`development.trajectory.${i.explanation.observed.trajectory}`, { defaultValue: i.explanation.observed.trajectory }), n: i.explanation.observed.observations })}</p>
+          {i.explanation.relationship.relationship && <p className="text-ink-muted">{t("devGuidance.relationshipLine", { rel: t(`strengths.integration.relationship.${i.explanation.relationship.relationship}`, { defaultValue: i.explanation.relationship.relationship }), fam: i.explanation.relationship.families?.length ? ` (${fam(i.explanation.relationship.families)})` : "" })}</p>}
+          <p className="text-ink-muted">{i.explanation.changed.changeTypes ? t("devGuidance.lastChange", { types: i.explanation.changed.changeTypes.map((k) => t(`development.changeType.${k}`, { defaultValue: k })).join(", ") }) : t("devGuidance.noChange")}</p>
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{isStaff ? t("devGuidance.systemInterpretation") : t("devGuidance.why")}</p>
+          <ul className="list-disc pl-5 text-ink">{i.reasons.map((r) => <li key={r}>{t(`devGuidance.reason.${r}`, { defaultValue: r })}</li>)}</ul>
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{isStaff ? t("devGuidance.possibleAction") : t("devGuidance.couldTry")}</p>
+          <p className="text-ink">{t(`devGuidance.categoryStudent.${i.category}`, { defaultValue: i.category })}</p>
+          <ul className="list-disc pl-5 text-ink-muted">{i.suggestedActions.map((a) => <li key={a.instruction}>{t(`devGuidance.instruction.${a.instruction}`, { defaultValue: a.instruction })} — {t("devGuidance.watch").toLowerCase()}: {t(`devGuidance.expected.${a.expectedEvidence}`, { defaultValue: a.expectedEvidence })}</li>)}</ul>
+          <p className="text-ink-faint">{t("devGuidance.watch")}: {fam(i.evidenceToWatch)}</p>
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{t("devGuidance.unclear")}</p>
+          {unclear.length ? <ul className="list-disc pl-5 text-ink">{unclear.map((u, k) => <li key={k}>{u}</li>)}</ul> : <p className="text-ink-muted">{t("strengths.integration.nothingUnclear")}</p>}
+        </div>
+      </div>
+      {isStaff && (
+        <div className="border-t border-line pt-2 text-xs">
+          <p className="font-medium text-ink-faint">{t("devGuidance.teacherJudgment")} <span className="font-normal text-ink-muted">· {t("devGuidance.teacherJudgmentHint")}</span></p>
+          {triggers.length ? (
+            <div className="mt-1 flex flex-wrap gap-2">{triggers.map((x) => <Button key={x.trigger} size="sm" variant="secondary" onClick={() => onPropose(x.trigger, x.dimension)}>{t("devGuidance.proposeFrom")}: {t(`devIntervention.trigger.${x.trigger}`, { defaultValue: x.trigger })}</Button>)}</div>
+          ) : <p className="text-ink-muted">{t("devGuidance.noTrigger")}</p>}
+          <p className="text-ink-faint">{t("devGuidance.lastChange", { types: day(i.explanation.changed.at) })}</p>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function InterventionCard({ x, isStaff, onAct, onReview, fam, day }: { x: DevelopmentIntervention; isStaff: boolean; onAct: (action: string) => void; onReview: (note: string, complete: boolean) => void; fam: (l: string[]) => string; day: (d?: string | null) => string }) {
+  const { t } = useTranslation();
+  const [note, setNote] = useState("");
+  const [complete, setComplete] = useState(false);
+  const studentActions = x.lifecycle === "PROPOSED" ? ["accept", "decline"] : [];
+  const staffActions = ({ PROPOSED: ["accept", "decline"], ACCEPTED: ["activate", "cancel"], ACTIVE: ["pause", "complete", "cancel"], REVIEW_DUE: ["pause", "complete", "cancel"], PAUSED: ["resume", "cancel"] } as Record<string, string[]>)[x.lifecycle] ?? [];
+  const actions = isStaff ? staffActions : studentActions;
+  const canReview = isStaff && (x.lifecycle === "ACTIVE" || x.lifecycle === "REVIEW_DUE");
+  const o = x.outcome;
+  return (
+    <Card className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-ink">{x.dimension ? t(`strengths.dimension.${x.dimension}`, { defaultValue: x.dimension }) : x.subjectId ?? ""}</span>
+        <Badge variant={x.lifecycle === "ACTIVE" ? "success" : x.lifecycle === "REVIEW_DUE" || (o?.reviewDue ?? false) ? "warning" : "default"} label={t(`devIntervention.lifecycle.${o?.reviewDue && x.lifecycle === "ACTIVE" ? "REVIEW_DUE" : x.lifecycle}`, { defaultValue: x.lifecycle })} />
+        {x.trigger && <Badge variant="info" label={t(`devIntervention.trigger.${x.trigger}`, { defaultValue: x.trigger })} />}
+      </div>
+      <p className="text-xs text-ink">{t("devIntervention.objective")}: {t(`devIntervention.objectiveText.${x.objective}`, { defaultValue: x.objective ?? "" })} · {t("devIntervention.action")}: {t(`devIntervention.actionText.${x.action}`, { defaultValue: x.action })}</p>
+      <p className="text-xs text-ink-muted">{t("devIntervention.owner")}: {x.ownerRole ? t(`devIntervention.role.${x.ownerRole}`) : "—"} · {t("devIntervention.reviewOn", { when: day(x.reviewDate) })} · {t("devIntervention.evidenceToCollect")}: {fam(x.evidenceToCollect)}</p>
+      {o && (
+        <p className="text-xs text-ink-muted">{t("devIntervention.outcomeHeading")}: <span className="text-ink">{t(`devIntervention.outcome.${o.outcome}`, { defaultValue: o.outcome })}</span>
+          {o.academic?.reading ? ` · ${t("devIntervention.academicLine", { reading: o.academic.reading })}` : ""}
+          {o.development.before && o.development.after ? ` · ${t("devIntervention.developmentLine", { before: t(`strengths.state.${o.development.before.state}`), after: t(`strengths.state.${o.development.after.state}`) })}` : ""}
+          {" — "}{t("devIntervention.outcomeNote")}</p>
+      )}
+      {actions.length > 0 && <div className="flex flex-wrap gap-2">{actions.map((a) => <Button key={a} size="sm" variant={a === "decline" || a === "cancel" ? "secondary" : "primary"} onClick={() => onAct(a)}>{t(`devIntervention.${a}`)}</Button>)}</div>}
+      {canReview && (
+        <div className="flex flex-wrap items-end gap-2 border-t border-line pt-2">
+          <FormField label={t("devIntervention.reviewNote")}><Textarea rows={1} maxLength={2000} value={note} onChange={(e) => setNote(e.target.value)} /></FormField>
+          <Checkbox checked={complete} onChange={(e) => setComplete(e.target.checked)} label={t("devIntervention.completeOnReview")} />
+          <Button size="sm" variant="secondary" onClick={() => { onReview(note, complete); setNote(""); }}>{t("devIntervention.review")}</Button>
+        </div>
+      )}
+      {isStaff && x.reviews.length > 0 && <ul className="list-disc pl-5 text-xs text-ink-muted">{x.reviews.map((r, k) => <li key={k}>{day(r.at)} · {r.outcome ? t(`devIntervention.outcome.${r.outcome.outcome}`, { defaultValue: r.outcome.outcome }) : "—"}{r.note ? ` · ${r.note}` : ""}</li>)}</ul>}
     </Card>
   );
 }

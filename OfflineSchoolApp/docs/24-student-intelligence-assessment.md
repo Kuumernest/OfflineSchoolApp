@@ -1355,3 +1355,27 @@ reinterpreted; one new event is never a trend; two independent observations
 are the least a history needs. Routes, a parent view, a pupil screen and a
 teacher section follow the existing authorisation. docs/28 holds the model,
 the rules, the vocabulary, the API and the limits.
+
+
+---
+
+## Stage 15 — Evidence-Informed Development Guidance & Intervention Intelligence (Guidance 1.0.0, Intervention 1.0.0)
+
+**The system informs; a person decides.** Stage 15 adds two pure engines
+downstream of the development history. `shared/guidance`
+(`GUIDANCE_ENGINE_VERSION` 1.0.0) turns each trajectory into bounded,
+categorical guidance — MAINTAIN, PRACTICE, DEEPEN, EXPLORE, REFLECT,
+SEEK_SUPPORT, CHANGE_APPROACH, BUILD_EVIDENCE, REVISIT, MONITOR — each item
+saying what was observed, what changed, what supports it, what the pupil
+could try, why, and what evidence to watch, with a categorical evidence
+quality and never a score. `shared/interventions`
+(`INTERVENTION_ENGINE_VERSION` 1.0.0) proposes a human-owned support action
+only from a documented trigger the history supports (never from one mark, one
+activity or one observation), runs a closed lifecycle (PROPOSED → ACCEPTED →
+ACTIVE → COMPLETED, with DECLINED, PAUSED, CANCELLED), and interprets the
+observed outcome after the period through the existing academic before/after
+engine beside the development reading — descriptive, never causal.
+Interventions live in the existing Intervention collection; guidance is never
+stored. The academic guidance projection of Stage 3 is unchanged. docs/29
+holds the taxonomy, the rules, the contracts, the lifecycle, the privacy and
+authorisation rules, and what is intentionally not implemented.

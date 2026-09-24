@@ -1170,3 +1170,49 @@ DEVELOPMENT_ENGINE_VERSION: 1.0.0
 
 REAL-WORLD_VALIDATION: STILL PENDING
 ```
+
+---
+
+## 20. Stage 15 — guidance and interventions, and what a pilot can calibrate
+
+Guidance adds no threshold of its own beyond the vocabulary and the bounds
+(five items per dimension, "most modalities" at seven of nine); the
+intervention engine adds the trigger bars (two independent observations, three
+for an evidence gap) and the review window (14–120 days). A pilot can compare
+each guidance category against what the teacher would have suggested, each
+trigger against whether the teacher recognises the pattern, and each observed
+outcome against the teacher's own reading of the period — categorical
+comparisons, never a fit. No real pupil has been through either engine.
+
+### Verification (Stage 15)
+
+| | |
+|---|---|
+| `check-development-guidance.js` (new) | 38 assertions, 0 failures — every rule case, the object contract, bounded categories and actions, categorical quality, agency, determinism, historical asOf, purity, forbidden vocabulary in the engine, its output and both locale catalogues; the route as every role, the guardian, live = offline, no model |
+| `check-development-interventions.js` (new) | 48 assertions, 0 failures — triggers and the no-single-observation rule, the proposal contract, every lifecycle move and every invalid one, roles, replay, review-due, outcome classification, legacy status; refusal without evidence, proposal, idempotent replay, the pupil's limited view, accept, activate, review, pause, resume, complete, decline, cancel, snapshot integrity, authorisation, the guardian's agreed support, live = offline, no new model |
+| `check-pilot-readiness.js` | 82 (five more consistency classes expected false; a time-of-day flake in its "no mark" scan fixed by stripping timestamps) |
+| `check-interventions.js`, `check-teacher-intelligence.js` | unchanged in scope; their money-word scans now word-bound the short tokens ("fee", "xaf", "cfa") a generated uuid can contain |
+| `npm run check:intel` | 18 scripts, 1,098 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **77 scripts, 4,894 assertions, 0 failures** |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 4,171 keys in 2 languages, `api:check`, `check:roles` 31, `check:l10n` 70 ok |
+| mobile | `eslint` clean on the development screen, home and service; `check:i18n` 5,872 keys OK; `check:l10n` 89 |
+| Engines | academic 1.0.0, strengths 1.2.0, exploration 1.0.0, learning evidence 1.0.0, learning integration 1.0.0, development 1.0.0 untouched; `GUIDANCE_ENGINE_VERSION` 1.0.0, `INTERVENTION_ENGINE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 15 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.2.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+LEARNING_INTEGRATION_VERSION: 1.0.0
+DEVELOPMENT_ENGINE_VERSION: 1.0.0
+GUIDANCE_ENGINE_VERSION: 1.0.0
+INTERVENTION_ENGINE_VERSION: 1.0.0
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```

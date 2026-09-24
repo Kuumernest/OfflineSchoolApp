@@ -95,6 +95,12 @@ const compareProfiles = (live, offline) => {
       changeReasons:  differences.some((d) => /\.(reasonCodes|reasons)\[/.test(d.path) && /changes|trajectories/.test(d.path)),
       quality:        differences.some((d) => /\.quality\./.test(d.path)),
       persistence:    differences.some((d) => /\.persistence\b/.test(d.path)),
+      // Guidance 1.0.0 and Intervention 1.0.0: the categories, the reasons, the evidence, the triggers, the rules.
+      guidanceState:      differences.some((d) => /\.(category|evidenceQuality|byCategory|byDimension)\b/.test(d.path)),
+      guidanceReason:     differences.some((d) => /\.(reasons|why)\b/.test(d.path) && /items/.test(d.path)),
+      guidanceEvidence:   differences.some((d) => /items\[\d+\]\.(evidence|explanation|evidenceToWatch|suggestedActions)\b/.test(d.path)),
+      interventionTrigger: differences.some((d) => /\.triggers\[\d+\]\.(trigger|dimension)\b/.test(d.path)),
+      interventionRule:   differences.some((d) => /\.triggers\[\d+\]\.(evidence|independentObservations)\b/.test(d.path) || /\.(lifecycle|outcome)\b/.test(d.path)),
     },
     differences,
   };

@@ -672,6 +672,48 @@ export async function fetchDevelopment(studentId: string, schoolId?: string): Pr
   return (data as { data: DevelopmentHistory }).data;
 }
 
+// ── Guidance and interventions (Stage 15) — bounded, categorical, evidence-linked. No score. The pupil decides.
+export interface SuggestedAction { type: string; instruction: string; expectedEvidence: string }
+export interface DevGuidanceItem {
+  id: string; category: string; dimension: string | null; subjectId: string | null; title: { code: string };
+  explanation: { observed: { state: string; trajectory: string; observations: number }; changed: { code: string; changeTypes?: string[]; reasonCodes?: string[]; at?: string };
+                 relationship: { code: string; relationship?: string; families?: string[] }; why: { code: string; reasons: string[] };
+                 uncertain: { missingModalities: string[]; conflicts: string; historySufficient: boolean; recency: string | null; attendanceLimited: boolean } };
+  evidence: { state: string; relationship: string | null; trajectory: string; direction: string; coverage: { academicSequences: number; learningIndependentEvents: number; exploration: number; teacherObservers: number } | null; contradictions: Array<{ kind: string; status: string; occurrences: number }> };
+  reasons: string[]; suggestedActions: SuggestedAction[]; evidenceToWatch: string[]; evidenceQuality: string;
+  developmentContext: { trajectory: string; direction: string; currentState: string; previousState: string | null; independentObservations: number }; engineVersion: string;
+}
+export interface DevGuidanceResponse { guidanceEngineVersion: string | null; developmentEngineVersion: string | null; asOf: string | null; historySufficient: boolean; items: DevGuidanceItem[]; byCategory: Record<string, number>; agency: string; notInferred: string[] }
+export interface InterventionOutcome { asOf: string; reviewDue: boolean; outcome: string; statement: { code: string; outcome: string }; academic: { reading: string; status: string; change: number | null } | null; development: { before: { observedAt: string; state: string } | null; after: { observedAt: string; state: string } | null; reading: string | null }; causal: boolean }
+export interface DevelopmentIntervention {
+  interventionId: string; studentId: string; subjectId: string | null; dimension: string | null; trigger: string | null; guidanceId: string | null; objective: string | null; action: string; ownerRole: string | null;
+  startDate: string | null; durationDays: number | null; reviewDate: string | null; evidenceToCollect: string[]; lifecycle: string; legacyStatus: string;
+  lifecycleHistory: Array<{ from: string | null; to: string; action: string; role: string; at: string; by?: string; note?: string | null }>;
+  reviews: Array<{ at: string; outcome: { outcome: string } | null; by?: string; note?: string | null }>; proposedByRole: string | null; acceptedAt: string | null; notes?: string | null; outcome: InterventionOutcome | null;
+}
+export interface InterventionTrigger { dimension: string; trigger: string; evidence: Record<string, unknown>; independentObservations: number }
+export interface InterventionsResponse { asOf: string; interventionEngineVersion: string; interventions: DevelopmentIntervention[]; triggers: InterventionTrigger[]; previews: Array<{ dimension: string; trigger: string; objective: string; action: string; ownerRole: string; reviewDate: string; evidenceToCollect: string[] }>; lifecycle: string[] }
+export async function fetchDevelopmentGuidance(studentId: string, schoolId?: string): Promise<DevGuidanceResponse> {
+  const { data } = await api.get(`/insights/student/${studentId}/development/guidance`, q(schoolId));
+  return (data as { data: DevGuidanceResponse }).data;
+}
+export async function fetchDevelopmentInterventions(studentId: string, schoolId?: string): Promise<InterventionsResponse> {
+  const { data } = await api.get(`/insights/student/${studentId}/interventions`, q(schoolId));
+  return (data as { data: InterventionsResponse }).data;
+}
+export async function proposeDevelopmentIntervention(studentId: string, body: { trigger: string; dimension: string; guidanceId?: string | null; ownerRole?: string; notes?: string | null; schoolId?: string }): Promise<DevelopmentIntervention> {
+  const { data } = await api.post(`/insights/student/${studentId}/interventions`, body);
+  return (data as { data: DevelopmentIntervention }).data;
+}
+export async function actOnDevelopmentIntervention(studentId: string, interventionId: string, body: { action: string; note?: string | null; schoolId?: string }): Promise<DevelopmentIntervention> {
+  const { data } = await api.patch(`/insights/student/${studentId}/interventions/${interventionId}`, body);
+  return (data as { data: DevelopmentIntervention }).data;
+}
+export async function reviewDevelopmentIntervention(studentId: string, interventionId: string, body: { note?: string | null; complete?: boolean; schoolId?: string }): Promise<DevelopmentIntervention> {
+  const { data } = await api.post(`/insights/student/${studentId}/interventions/${interventionId}/review`, body);
+  return (data as { data: DevelopmentIntervention }).data;
+}
+
 export async function fetchLearningChanges(studentId: string, schoolId?: string): Promise<LearningChanges> {
   const { data } = await api.get(`/insights/student/${studentId}/learning-changes`, lq(schoolId));
   return (data as { data: LearningChanges }).data;
