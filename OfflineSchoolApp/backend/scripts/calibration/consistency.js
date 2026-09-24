@@ -87,7 +87,14 @@ const compareProfiles = (live, offline) => {
       eventCounts:    differences.some((d) => /\.(independentEventCount|currentEventCount|historicalEventCount|staleEventCount|supportingEvents|contradictingEvents|independentLearningItems)\b/.test(d.path)),
       sources:        differences.some((d) => /\.(sourceFamilies|supportingSources|contradictingSources|missingModalities|modalities)\b/.test(d.path)),
       contradictions: differences.some((d) => /\.contradictions\[/.test(d.path)),
-      versions:       differences.some((d) => /Version$/.test(d.path) || /\.version$/.test(d.path)),
+      versions:       differences.some((d) => /Version$/.test(d.path) || /\.version$/.test(d.path) || /\.versions\./.test(d.path)),
+      // Development Engine 1.0.0: the longitudinal reading, class by class.
+      trajectory:     differences.some((d) => /\.(trajectory|direction)$/.test(d.path)),
+      transitions:    differences.some((d) => /\.(stateTransitions|relationshipTransitions)\[/.test(d.path)),
+      changeTypes:    differences.some((d) => /\.changeTypes\[/.test(d.path)),
+      changeReasons:  differences.some((d) => /\.(reasonCodes|reasons)\[/.test(d.path) && /changes|trajectories/.test(d.path)),
+      quality:        differences.some((d) => /\.quality\./.test(d.path)),
+      persistence:    differences.some((d) => /\.persistence\b/.test(d.path)),
     },
     differences,
   };

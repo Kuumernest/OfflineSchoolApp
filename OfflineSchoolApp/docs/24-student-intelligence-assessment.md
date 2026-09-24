@@ -1335,3 +1335,23 @@ reflection are context and never ability; a source that does not exist is
 *unavailable*, never weak. Every change since a snapshot is named as evidence
 arriving, leaving, ageing or changing context — never as ability changing.
 docs/27 holds the contract, the rules, the shapes, the routes and the limits.
+
+
+---
+
+## Stage 14 — Longitudinal Student Development & Change Intelligence (Development Engine 1.0.0)
+
+**Change without a measurement of potential.** Stage 14 adds a pure
+Development Engine (`shared/development`, `DEVELOPMENT_ENGINE_VERSION` 1.0.0)
+that reads the immutable strength snapshots and the current reading, built
+for one `asOf`, and explains how each dimension's evidence-backed reading has
+changed: a trajectory (stable, emerging, strengthening, weakening, declining,
+recovering, variable, or too little history), the state transitions with
+their dates, the evidence coverage over time, the standing contradictions as
+longitudinal records (new, recurring, persistent, resolved, stale), and one
+change event per pair of observations with types and reason codes about
+evidence. Nothing is stored; nothing beneath moved; no snapshot is
+reinterpreted; one new event is never a trend; two independent observations
+are the least a history needs. Routes, a parent view, a pupil screen and a
+teacher section follow the existing authorisation. docs/28 holds the model,
+the rules, the vocabulary, the API and the limits.

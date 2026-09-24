@@ -798,13 +798,24 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
     { engineVersion: liveS?.strengthEngineVersion ?? null, profile: liveS, guidance: null },
     { engineVersion: offS?.strengthEngineVersion ?? null, profile: offS, guidance: null }
   );
+  // The development layer, on the same asOf, through both roads.
+  const devSvc = require("../services/intelligence/development.service");
+  const [liveD, offD] = await Promise.all([
+    devSvc.historyFor({ schoolId, studentId: String(pupil.student._id), asOf }),
+    devSvc.offlineHistoryFor({ schoolId, studentId: String(pupil.student._id), asOf }),
+  ]);
+  const developmentCmp = compareProfiles(
+    { engineVersion: liveD?.developmentEngineVersion ?? null, profile: liveD, guidance: null },
+    { engineVersion: offD?.developmentEngineVersion ?? null, profile: offD, guidance: null }
+  );
   return res.json({
     success: true,
     data: {
       generatedAt: new Date(), ...academic,
-      identical: academic.identical && strengthsCmp.identical,
+      identical: academic.identical && strengthsCmp.identical && developmentCmp.identical,
       strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, summary: strengthsCmp.summary, differences: strengthsCmp.differences,
                    versions: { live: versionsOf(liveS), offline: versionsOf(offS) } },
+      development: { identical: developmentCmp.identical, engineVersion: developmentCmp.engineVersion, summary: developmentCmp.summary, differences: developmentCmp.differences },
     },
   });
 }));
@@ -962,6 +973,62 @@ router.get("/student/:studentId/profile/evidence", strengthRead, asyncHandler(as
     dimensions: [...(p?.strengths ?? []), ...(p?.emergingAreas ?? []), ...(p?.decliningAreas ?? [])].map((d) => ({
       dimension: d.dimension, state: d.state, baseState: d.baseState, fusedState: d.fusedState, confidence: d.confidence, baseConfidence: d.baseConfidence, fused: d.fused,
       academic: d.academic, learningEvidence: d.learningEvidence, corroboration: d.corroboration, context: d.context, interpretation: d.interpretation })) } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEVELOPMENT — how the evidence-backed profile changed over time (Stage 14)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const developmentSvc = require("../services/intelligence/development.service");
+
+/**
+ * GET /api/insights/student/:studentId/development
+ *
+ * The pupil's development history on one day: trajectories per dimension,
+ * change events between consecutive observations, contradiction records over
+ * time, coverage history, quality. Derived from the immutable snapshots and
+ * the current reading built for the same asOf; nothing is stored. Same
+ * readers as the strengths: the pupil their own, a teacher within scope, the
+ * school's admin, the operator with a school. No score.
+ */
+router.get("/student/:studentId/development", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const h = await developmentSvc.historyFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    engineVersion: h?.developmentEngineVersion ?? null, asOf: h?.asOf ?? null, versions: h?.versions ?? null, history: h?.history ?? null,
+    observations: h?.observations ?? [], trajectories: h?.trajectories ?? [], changes: h?.changes ?? [], contradictions: h?.contradictions ?? [],
+    coverage: h?.coverage ?? null, quality: h?.quality ?? null, notInferred: h?.notInferred ?? [] } });
+}));
+
+/** GET …/development/changes — the change events, optionally within [from, to] and for one dimension or subject. */
+router.get("/student/:studentId/development/changes", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const h = await developmentSvc.historyFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
+  const dateOf = (v) => { const d = v ? new Date(String(v)) : null; return d && !Number.isNaN(d.getTime()) ? d : null; };
+  const filter = { from: dateOf(req.query.from), to: dateOf(req.query.to), dimensionId: req.query.dimensionId ? String(req.query.dimensionId) : null, subjectId: req.query.subjectId ? String(req.query.subjectId) : null };
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    engineVersion: h?.developmentEngineVersion ?? null, asOf: h?.asOf ?? null, filter: { ...filter, from: filter.from?.toISOString() ?? null, to: filter.to?.toISOString() ?? null },
+    changes: developmentSvc.changesOf(h, filter), contradictions: (h?.contradictions ?? []).filter((c) => !filter.dimensionId || c.dimension === filter.dimensionId) } });
+}));
+
+/** GET …/development/evidence — the evidence behind each trajectory: event references, boundaries, coverage. No note text ever. */
+router.get("/student/:studentId/development/evidence", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const asOf = asOfOf(req);
+  const id = String(pupil.student._id);
+  const [h, p] = await Promise.all([developmentSvc.historyFor({ schoolId, studentId: id, asOf }), strengthsSvc.profileFor({ schoolId, studentId: id, asOf })]);
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    engineVersion: h?.developmentEngineVersion ?? null, asOf: h?.asOf ?? null, versions: h?.versions ?? null,
+    observations: h?.observations ?? [], evidence: developmentSvc.evidenceOf(h, p), contradictions: h?.contradictions ?? [] } });
 }));
 
 /**

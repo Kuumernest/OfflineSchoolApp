@@ -1310,6 +1310,26 @@ router.get("/children/:studentId/strengths", asyncHandler(async (req, res) => {
 }));
 
 /**
+ * GET /children/:studentId/development
+ *
+ * A guardian's view of how one child's strengths have read over time: what
+ * is developing, what has stayed consistent, what changed, what is too early
+ * to call, and what supports each — in plain categories. No engine internals,
+ * no reviewer, no note, no other child. Same scope as every other child route.
+ */
+router.get("/children/:studentId/development", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const developmentSvc = require("../services/intelligence/development.service");
+  const asOf = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const h = await developmentSvc.historyFor({ schoolId, studentId: id, asOf: asOf && !Number.isNaN(asOf.getTime()) ? asOf : null });
+  const view = developmentSvc.forGuardian(h) ?? { asOf: null, developing: [], consistent: [], changing: [], tooEarly: [], observations: null, notInferred: require("../../../shared/development").NOT_INFERRED, versions: null };
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...view } });
+}));
+
+/**
  * GET /children/:studentId/explorations
  *
  * A guardian's view of what one child has explored: which activities, in

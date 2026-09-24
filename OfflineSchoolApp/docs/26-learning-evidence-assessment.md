@@ -157,3 +157,14 @@ attendance (context only), submission timing and completion (context only),
 and everything in the INTEGRATION list for the exploration engine and
 guidance, which remains empty. This layer's own version, thresholds, states
 and patterns did not change. See docs/27.
+
+## 15. Stage 14 — the reading over time
+
+The development layer (docs/28) never reads this layer directly. It reads the
+strength snapshots in which Stage 13 recorded each dimension's learning
+relationship, the independent event counts, the families and the unavailable
+modalities, and describes how those changed between observations
+(`LEARNING_CORROBORATION_ADDED`, `LEARNING_CORROBORATION_LOST`,
+`EVIDENCE_COVERAGE_EXPANDED`, `EVIDENCE_RETRACTED`, …). Attendance and
+submission remain context there as here: they can mark a reading
+context-limited and nothing else.

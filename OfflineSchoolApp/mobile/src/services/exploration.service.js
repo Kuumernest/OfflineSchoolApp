@@ -138,6 +138,19 @@ export const fetchMyStrengths = async () => {
   } catch { return null; }
 };
 
+/**
+ * The pupil's own development history (Development Engine 1.0.0): per
+ * strength, the observations over time, the trajectory, why it changed, what
+ * is unclear. Derived on the server from immutable snapshots; nothing is
+ * scored. Online only; null offline.
+ */
+export const fetchMyDevelopment = async () => {
+  try {
+    const { data } = await api.get("/insights/student/me/development");
+    return data?.data ?? null;
+  } catch { return null; }
+};
+
 /** What changed since the last profile snapshot, in the words the pupil sees. Online only; null offline. */
 export const fetchProfileChanges = async () => {
   try {

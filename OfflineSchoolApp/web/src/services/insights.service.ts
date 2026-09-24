@@ -646,6 +646,32 @@ export async function fetchLearningEvidence(studentId: string, schoolId?: string
   const { data } = await api.get(`/insights/student/${studentId}/learning-evidence`, lq(schoolId));
   return (data as { data: LearningEvidence }).data;
 }
+// ── Development (Stage 14) — how the evidence-backed reading changed over time. Categories and counts; no score.
+export interface TrajectoryObservation { observedAt: string; source: "snapshot" | "current"; profileVersion: number | null; periodLabel: string | null; state: StrengthState; confidence: Confidence | null; relationship: string | null; sourceFamilies: string[]; independentEventCount: number; explorationEvents: number; teacherObservers: number; missingModalities: string[]; contradictions: string[] }
+export interface DevelopmentContradiction { dimension: string; kind: string; status: string; firstSeen: string; lastSeen: string; occurrences: number; independentPeriods: number; current: boolean; priority: string | null; resolutionDate?: string }
+export interface DevelopmentChange { changeId: string; dimensionId: string | null; subjectId: string | null; observedAt: string; previousObservedAt: string | null; previousState: string; currentState: string; previousRelationship: string | null; currentRelationship: string | null; changeTypes: string[]; reasonCodes: string[] }
+export interface ExplanationLine { code: string; state?: string; relationship?: string | null; n?: number; from?: string; to?: string; at?: string; family?: string; kind?: string; status?: string; occurrences?: number; firstSeen?: string; lastSeen?: string; families?: string[] }
+export interface Trajectory {
+  dimensionId: string | null; subjectId: string | null; subjectName?: string | null; observations: TrajectoryObservation[]; currentState: StrengthState; currentRelationship: string | null;
+  firstObservedAt: string | null; lastObservedAt: string | null; direction: string; trajectory: string;
+  persistence: { observationCount: number; independentObservationCount: number; consecutiveObservations?: number; independentPeriods?: number; academic: string | null };
+  stateTransitions: Array<{ from: string; to: string; fromAt: string; at: string }>; relationshipTransitions: Array<{ from: string | null; to: string | null; fromAt: string; at: string }>;
+  evidenceCoverage: { current: { academicSequences: number; learning: Record<string, number>; learningIndependentEvents: number; learningStale: number; exploration: number; teacherObservers: number; unavailable: string[] } | null; firstSeenFamily: Record<string, string>; corroborationBegan: string | null } | null;
+  contradictions: DevelopmentContradiction[]; changes: DevelopmentChange[];
+  quality: { coverage: string; recency: string | null; independence: string; conflicts: string; missingModalities: string[]; attendanceLimited?: boolean };
+  reasons: string[]; explanation: ExplanationLine[];
+}
+export interface DevelopmentHistory {
+  engineVersion: string | null; asOf: string | null; history: { observationCount: number; independentObservationCount: number; sufficient: boolean; firstObservedAt: string | null; lastObservedAt: string | null } | null;
+  observations: Array<{ observedAt: string; source: string; profileVersion: number | null; periodLabel: string | null }>;
+  trajectories: Trajectory[]; changes: DevelopmentChange[]; contradictions: DevelopmentContradiction[];
+  quality: { history: string; missingModalities: string[]; contradictions: { current: number; historical: number; persistent: number } } | null; notInferred: string[];
+}
+export async function fetchDevelopment(studentId: string, schoolId?: string): Promise<DevelopmentHistory> {
+  const { data } = await api.get(`/insights/student/${studentId}/development`, q(schoolId));
+  return (data as { data: DevelopmentHistory }).data;
+}
+
 export async function fetchLearningChanges(studentId: string, schoolId?: string): Promise<LearningChanges> {
   const { data } = await api.get(`/insights/student/${studentId}/learning-changes`, lq(schoolId));
   return (data as { data: LearningChanges }).data;

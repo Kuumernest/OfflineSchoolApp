@@ -1126,3 +1126,47 @@ LEARNING_INTEGRATION_VERSION: 1.0.0
 
 REAL-WORLD_VALIDATION: STILL PENDING
 ```
+
+---
+
+## 19. Stage 14 — the Development Engine and what a pilot can calibrate
+
+The development layer adds three rules of its own: two independent
+observations before any trajectory is named, two later independent
+observations before a contradiction is called resolved, and the shared
+one-year window before an unobserved contradiction is called stale. A pilot
+can compare each against what teachers recognise: whether a `STABLE_*` or
+`STRENGTHENING` trajectory matches the teacher's sense of the year; whether
+a `PERSISTENT` contradiction points at something real (a task type, a
+period) or at noise; whether the resolution bar is too quick or too slow.
+Each is a categorical comparison, never a fit of a rate. No real pupil has
+been through the engine.
+
+### Verification (Stage 14)
+
+| | |
+|---|---|
+| `check-development.js` (new) | 62 assertions, 0 failures — one observation is no trend; every supported transition; coverage change is not state change; unavailable modalities are not negative; contradictions new / recurring / persistent / resolved / stale / never erased; retraction changes the next reading and no snapshot; asOf replay and determinism; duplicate observations, quiz retries and one project across modalities count once; no score, no prediction, purity, name-free, no reflection text; versions kept as recorded; then the routes as every role, snapshots feeding the history, the guardian's view, live = offline, no new model |
+| `check-pilot-readiness.js` | 82 (the consistency summary names six more difference classes, all false) |
+| `npm run check:intel` | 16 scripts, 1,012 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **75 scripts, 4,808 assertions, 0 failures** |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,999 keys in 2 languages, `api:check`, `check:roles` 31, `check:l10n` 70 ok |
+| mobile | `eslint` clean on the development screen, home and service; `check:i18n` 5,700 keys OK; `check:l10n` 89 |
+| Engines | academic 1.0.0, strengths 1.2.0, exploration 1.0.0, learning evidence 1.0.0, learning integration 1.0.0 untouched; `DEVELOPMENT_ENGINE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 14 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.2.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+LEARNING_INTEGRATION_VERSION: 1.0.0
+DEVELOPMENT_ENGINE_VERSION: 1.0.0
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```

@@ -238,3 +238,13 @@ under `strengths.integration` in EN and FR, web and mobile.
 - No real pupil has been through the integrated reading. **Real-world
   validation is still pending**; real evidence enters through the Stage 8
   pilot and nothing else.
+
+## 18. Stage 14 — what the integration leaves for the history
+
+The per-dimension blocks this stage added (`academic`, `learningEvidence`,
+`corroboration`, `context`, `interpretation`) are kept in every snapshot's
+reading, so the Development Engine (docs/28) can read, for each observation,
+the relationship, the independent event count, the families, the unavailable
+modalities and the standing `ACADEMIC_VS_LEARNING_EVIDENCE` conflict — and
+describe how each changed between observations without recomputing anything.
+A snapshot from before this stage has none of these and is read as such.

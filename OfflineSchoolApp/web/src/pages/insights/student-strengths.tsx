@@ -25,7 +25,7 @@ import { useState }                                from "react";
 import { useParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                          from "react-i18next";
-import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen } from "lucide-react";
+import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen, Activity } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
 import { PageHeader }   from "@/components/ui/PageHeader";
@@ -38,8 +38,8 @@ import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/Form
 import {
   fetchStrengths, fetchStrengthProfile, fetchStrengthEvidence, snapshotStrengthProfile, recordExplorationEvidence, submitReview,
   fetchExplorations, fetchCatalog, observeExploration, rateExploration, fetchProfileChanges, rebuildProfile,
-  fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence,
-  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef,
+  fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence, fetchDevelopment,
+  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine,
 } from "@/services/insights.service";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
@@ -109,6 +109,9 @@ export default function StudentStrengthsPage() {
 
       {/* ── What changed since the last snapshot ─────────────────────── */}
       <WhatChanged studentId={studentId} schoolId={schoolId} />
+
+      {/* ── Development over time (Stage 14) ─────────────────────────── */}
+      <Development studentId={studentId} schoolId={schoolId} isStaff={isStaff} />
 
       {/* ── Conflicting evidence, reported as a pattern ──────────────── */}
       {p?.fusion && p.fusion.contradictions.length > 0 && (
@@ -549,6 +552,105 @@ function ExplorationCard({ e, criteria, schoolId, toast, onChanged }: { e: Explo
 }
 
 /** What changed since the last snapshot: the new evidence, the moved dimensions, the reasons. */
+/**
+ * How the evidence-backed reading changed over time: per dimension the
+ * current and previous state, the direction, the relationship, the coverage,
+ * the contradictions over time, the history, why it changed and what is
+ * still unclear. Categories and counts. Never a score, a rate or a rank.
+ */
+function Development({ studentId, schoolId, isStaff }: { studentId: string; schoolId?: string; isStaff: boolean }) {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["development", studentId, schoolId], queryFn: () => fetchDevelopment(studentId, schoolId) });
+  const h = q.data;
+  const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
+  const day = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const explainLine = (l: ExplanationLine) => t(`development.explain.${l.code}`, {
+    defaultValue: l.code, state: l.state ? t(`strengths.state.${l.state}`) : "", n: l.n ?? "", from: l.from ? t(`strengths.state.${l.from}`) : "", to: l.to ? t(`strengths.state.${l.to}`) : "",
+    at: day(l.at), family: l.family ? t(`strengths.integration.family.${l.family}`, { defaultValue: l.family }) : "", kind: l.kind ? t(`strengths.integration.conflict.${l.kind}`, { defaultValue: t(`strengths.fusion.conflict.${l.kind}`, { defaultValue: l.kind }) }) : "",
+    status: l.status ? t(`development.status.${l.status}`, { defaultValue: l.status }) : "", occurrences: l.occurrences ?? "", firstSeen: day(l.firstSeen), lastSeen: day(l.lastSeen),
+    rel: l.relationship ? ` · ${t(`strengths.integration.relationship.${l.relationship}`, { defaultValue: l.relationship })}` : "",
+  });
+  const shown = (h?.trajectories ?? []).filter((x) => x.currentState !== "INSUFFICIENT" || x.stateTransitions.length > 0);
+  return (
+    <Section icon={<Activity className="h-3.5 w-3.5" />} heading={t("development.heading")} hint={t("development.hint", { v: h?.engineVersion ?? "—" })}>
+      {!h || !h.history || h.history.observationCount === 0 ? <p className="text-sm text-ink-muted">{t("development.noHistory")}</p> : (
+        <>
+          <p className="text-xs text-ink-muted">
+            {t("development.observations", { n: h.history.observationCount, i: h.history.independentObservationCount })}
+            {h.history.firstObservedAt && ` · ${t("development.observedFrom", { from: day(h.history.firstObservedAt), to: day(h.history.lastObservedAt) })}`}
+          </p>
+          {shown.length === 0 && <p className="text-sm text-ink-muted">{t("strengths.none")}</p>}
+          {shown.map((x) => <TrajectoryCard key={x.dimensionId ?? `subject:${x.subjectId}`} x={x} isStaff={isStaff} fam={fam} day={day} explainLine={explainLine} />)}
+          {isStaff && (h.contradictions.length > 0) && (
+            <div className="text-xs text-ink-muted">
+              <p className="font-medium text-ink">{t("development.contradictionsHeading")}</p>
+              <ul className="list-disc pl-5">
+                {h.contradictions.map((c) => (
+                  <li key={`${c.dimension}|${c.kind}`}>{t(`strengths.dimension.${c.dimension}`, { defaultValue: c.dimension })} · {t(`strengths.integration.conflict.${c.kind}`, { defaultValue: t(`strengths.fusion.conflict.${c.kind}`, { defaultValue: c.kind }) })} · {t(`development.status.${c.status}`, { defaultValue: c.status })} · {t("development.occurrences", { n: c.occurrences, p: c.independentPeriods })} · {t("development.firstSeen", { when: day(c.firstSeen) })} · {t("development.lastSeen", { when: day(c.lastSeen) })}{c.resolutionDate ? ` · ${t("development.resolvedOn", { when: day(c.resolutionDate) })}` : ""}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </>
+      )}
+    </Section>
+  );
+}
+
+function TrajectoryCard({ x, isStaff, fam, day, explainLine }: { x: Trajectory; isStaff: boolean; fam: (l: string[]) => string; day: (d?: string | null) => string; explainLine: (l: ExplanationLine) => string }) {
+  const { t } = useTranslation();
+  const name = x.dimensionId ? t(`strengths.dimension.${x.dimensionId}`, { defaultValue: x.dimensionId }) : (x.subjectName ?? x.subjectId ?? "");
+  const prev = x.observations.length > 1 ? x.observations[x.observations.length - 2] : null;
+  const cov = x.evidenceCoverage?.current ?? null;
+  const unclear: string[] = [
+    ...(x.trajectory === "INSUFFICIENT_HISTORY" ? [t("development.trajectory.INSUFFICIENT_HISTORY")] : []),
+    ...(x.quality.missingModalities.length ? [t("development.unavailable", { list: fam(x.quality.missingModalities) })] : []),
+    ...(x.quality.conflicts !== "NONE" ? [`${t("development.qualityLabel.conflicts")}: ${t(`development.quality.${x.quality.conflicts === "HISTORICAL" ? "HISTORICAL_CONFLICT" : x.quality.conflicts}`)}`] : []),
+  ];
+  return (
+    <Card className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-ink">{name}</span>
+        <Badge variant={x.currentState === "ESTABLISHED" ? "success" : x.currentState === "EMERGING" ? "info" : x.currentState === "DECLINING" ? "warning" : "default"} label={`${t("development.current")}: ${t(`strengths.state.${x.currentState}`)}`} />
+        {prev && <Badge variant="default" label={`${t("development.previous")}: ${t(`strengths.state.${prev.state}`)}`} />}
+        <Badge variant="default" label={t(`development.trajectory.${x.trajectory}`, { defaultValue: x.trajectory })} />
+        <Badge variant="default" label={`${t("development.direction")}: ${t(`development.dir.${x.direction}`, { defaultValue: x.direction })}`} />
+      </div>
+      {x.currentRelationship && <p className="text-xs text-ink-muted">{t("development.relationship")}: {t(`strengths.integration.relationship.${x.currentRelationship}`, { defaultValue: x.currentRelationship })}</p>}
+      <div className="text-xs">
+        <p className="font-medium text-ink-faint">{t("development.history")}</p>
+        <p className="text-ink">{x.observations.map((o) => `${o.periodLabel ?? day(o.observedAt)}: ${t(`strengths.state.${o.state}`)}`).join(" → ")}</p>
+        <p className="text-ink-muted">{x.stateTransitions.length ? x.stateTransitions.map((s) => t("development.transition", { from: t(`strengths.state.${s.from}`), to: t(`strengths.state.${s.to}`) })).join(" · ") : t("development.noTransition")}</p>
+      </div>
+      <div className="text-xs">
+        <p className="font-medium text-ink-faint">{t("development.whyChanged")}</p>
+        <ul className="list-disc pl-5 text-ink">{x.explanation.filter((l) => !["MODALITY_UNAVAILABLE", "ATTENDANCE_LIMITED"].includes(l.code)).map((l, i) => <li key={i}>{explainLine(l)}</li>)}</ul>
+      </div>
+      {cov && (
+        <div className="text-xs">
+          <p className="font-medium text-ink-faint">{t("development.coverageHeading")}</p>
+          <p className="text-ink">{t("development.coverageLine", { a: cov.academicSequences, l: cov.learningIndependentEvents, e: cov.exploration, o: cov.teacherObservers })}</p>
+          {Object.keys(cov.learning).length > 0 && <p className="text-ink-muted">{Object.entries(cov.learning).map(([f, n]) => `${n} × ${t(`strengths.integration.family.${f}`, { defaultValue: f })}`).join(" · ")}</p>}
+        </div>
+      )}
+      <div className="text-xs">
+        <p className="font-medium text-ink-faint">{t("development.stillUnclear")}</p>
+        {unclear.length ? <ul className="list-disc pl-5 text-ink">{unclear.map((u, i) => <li key={i}>{u}</li>)}</ul> : <p className="text-ink-muted">{t("strengths.integration.nothingUnclear")}</p>}
+        {x.quality.missingModalities.length > 0 && <p className="text-ink-faint">{t("development.unavailableNote")}</p>}
+      </div>
+      {isStaff && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-ink-muted">{t("development.changesHeading")} ({x.changes.length}) · {t("development.qualityLabel.coverage")}: {t(`development.quality.${x.quality.coverage}`)} · {t("development.qualityLabel.recency")}: {x.quality.recency ? t(`development.quality.${x.quality.recency}`) : "—"} · {t("development.qualityLabel.independence")}: {t(`development.quality.${x.quality.independence}`)}</summary>
+          <ul className="mt-1 list-disc pl-5 text-ink-muted">
+            {x.changes.map((c) => <li key={c.changeId}>{day(c.observedAt)} · {c.changeTypes.map((k) => t(`development.changeType.${k}`, { defaultValue: k })).join(", ")}{c.reasonCodes.length ? ` — ${c.reasonCodes.map((k) => t(`development.reason.${k}`, { defaultValue: k })).join("; ")}` : ""}</li>)}
+          </ul>
+          {x.contradictions.length > 0 ? x.contradictions.map((c) => <p key={c.kind} className="text-ink-muted">{t(`strengths.integration.conflict.${c.kind}`, { defaultValue: t(`strengths.fusion.conflict.${c.kind}`, { defaultValue: c.kind }) })} · {t(`development.status.${c.status}`, { defaultValue: c.status })} · {t("development.occurrences", { n: c.occurrences, p: c.independentPeriods })}</p>) : <p className="text-ink-muted">{t("development.noneActive")}</p>}
+        </details>
+      )}
+    </Card>
+  );
+}
+
 function WhatChanged({ studentId, schoolId }: { studentId: string; schoolId?: string }) {
   const { t } = useTranslation();
   const q = useQuery({ queryKey: ["profile-changes", studentId, schoolId], queryFn: () => fetchProfileChanges(studentId, schoolId) });
