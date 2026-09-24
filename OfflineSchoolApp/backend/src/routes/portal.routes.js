@@ -1309,4 +1309,22 @@ router.get("/children/:studentId/strengths", asyncHandler(async (req, res) => {
   return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...view } });
 }));
 
+/**
+ * GET /children/:studentId/explorations
+ *
+ * A guardian's view of what one child has explored: which activities, in
+ * which areas, how far they got, how many observations and which kinds of
+ * evidence — and never the child's reflection, which is theirs.
+ */
+router.get("/children/:studentId/explorations", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const explorationSvc = require("../services/intelligence/exploration.service");
+  const lang = String(req.query.lang ?? "en").toLowerCase().startsWith("fr") ? "fr" : "en";
+  const rows = await explorationSvc.history({ schoolId, studentId: id, viewer: "guardian", lang });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, explorations: rows } });
+}));
+
 module.exports = router;

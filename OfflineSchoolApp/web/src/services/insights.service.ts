@@ -484,3 +484,63 @@ export async function recordExplorationEvidence(studentId: string, input: { scho
   const { data } = await api.post(`/insights/student/${studentId}/evidence`, input);
   return (data as { data: ExplorationEvidenceRow }).data;
 }
+
+
+// ── Exploration — the loop above the strengths layer ────────────────────────
+//
+// Stage 10. The server suggests activities with reasons, records the pupil's
+// moves, and turns what happened into evidence rows by kind. Staff read a
+// pupil's explorations (the reflection's text only when the pupil shared it),
+// observe, and rate against the activity's own criteria.
+
+export type ExplorationStatus = "DISCOVERED" | "SAVED" | "STARTED" | "SUBMITTED" | "REVIEW_REQUIRED" | "COMPLETED" | "ABANDONED" | "SKIPPED" | "NOT_INTERESTED";
+
+export interface ExplorationRow {
+  explorationId: string; activityId: string; activityVersion: number; area: string; level: string; title: string;
+  status: ExplorationStatus; relevance: string | null; suggestedBecause: string[];
+  discoveredAt: string; startedAt: string | null; submittedAt: string | null; completedAt: string | null; closedAt: string | null;
+  completionMode: string | null; outputs?: Array<{ label: string; value: string }>;
+  performance: { ratings: Array<{ criterion: string; rating: string }>; level: string | null; note: string | null; ratedBy: string; ratedAt: string } | null;
+  reflection: { interest: string | null; difficulty: string | null; continue: string | null; enjoyed?: string | null; difficult?: string | null; next?: string | null; shareText: boolean } | null;
+  observations: Array<{ observationId: string; level: string; codes: string[]; note: string | null; observedBy: string; observedAt: string }>;
+  evidence: Array<{ evidenceId: string; kind: string; source: string; date: string; outcome: string | null }>;
+  pattern: { interest: string | null; performance: string | null; pattern: string | null };
+  transitions?: Array<{ from: string | null; to: string; at: string; by: string }>;
+  version: number; explorationEngineVersion: string;
+}
+
+export interface CatalogActivity {
+  activityId: string; version: number; area: string; category: string; dimensions: string[]; level: string; estimatedMinutes: number;
+  resources: string[]; deliveryMode: string; evidenceTypes: string[]; performanceCriteria: string[]; title: string; description: string; task: string;
+  expectedOutputs: string[]; observable: string[]; reflectionPrompts: string[]; engineVersion: string;
+}
+
+export interface ExplorationSummary {
+  explorationEngineVersion: string; students: number; explorations: number;
+  byArea: Record<string, { students: number; started: number; completed: number; skipped: number; notInterested: number; abandoned: number }>;
+  frequentlySkipped: Array<{ activityId: string; count: number }>; frequentlyDeclined: Array<{ activityId: string; count: number }>;
+  frequentlyCompleted: Array<{ activityId: string; count: number }>; evidenceRows: number;
+}
+
+const qs = (schoolId?: string) => (schoolId ? { params: { schoolId } } : {});
+
+export async function fetchExplorations(studentId: string, schoolId?: string): Promise<{ explorations: ExplorationRow[] }> {
+  const { data } = await api.get(`/insights/student/${studentId}/explorations`, qs(schoolId));
+  return (data as { data: { explorations: ExplorationRow[] } }).data;
+}
+export async function fetchCatalog(schoolId?: string): Promise<CatalogActivity[]> {
+  const { data } = await api.get("/explorations/activities", qs(schoolId));
+  return (data as { data: { activities: CatalogActivity[] } }).data.activities;
+}
+export async function fetchExplorationSummary(params: { schoolId?: string; classId?: string }): Promise<ExplorationSummary> {
+  const { data } = await api.get("/insights/explorations/summary", { params });
+  return (data as { data: ExplorationSummary }).data;
+}
+export async function observeExploration(id: string, input: { schoolId?: string; level: string; codes: string[]; note?: string }) {
+  const { data } = await api.post(`/explorations/${id}/observation`, input);
+  return (data as { data: unknown }).data;
+}
+export async function rateExploration(id: string, input: { schoolId?: string; ratings: Array<{ criterion: string; rating: string }>; note?: string; version?: number }): Promise<ExplorationRow> {
+  const { data } = await api.post(`/explorations/${id}/performance`, input);
+  return (data as { data: ExplorationRow }).data;
+}

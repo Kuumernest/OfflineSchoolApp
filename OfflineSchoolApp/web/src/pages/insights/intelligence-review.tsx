@@ -56,7 +56,7 @@ import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/Form
 import api              from "@/services/api";
 import {
   fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration,
-  fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding,
+  fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
   type RecordedReview, type ReviewStatus,
   type Pilot, type LeanPilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence,
@@ -219,6 +219,7 @@ export default function IntelligenceReviewPage() {
         />
       )}
       {isAdmin && sheet && <Monitoring sheet={sheet} />}
+      {isAdmin && <ExplorationAcrossSchool schoolId={schoolId} classId={classId} />}
       {isOperator && <AcrossSchools />}
 
       {sheet && !cases.length && (
@@ -585,6 +586,33 @@ function Monitoring({ sheet }: { sheet: ReviewPackage }) {
           )}
         </div>
       </div>
+    </Card>
+  );
+}
+
+/** The office's exploration counts: areas, completion, skips, declines, evidence volume. No pupil, no reflection. */
+function ExplorationAcrossSchool({ schoolId, classId }: { schoolId?: string; classId: string }) {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["exploration-summary", schoolId ?? "own", classId], queryFn: () => fetchExplorationSummary({ ...(schoolId ? { schoolId } : {}), ...(classId ? { classId } : {}) }), staleTime: 60_000 });
+  const d = q.data;
+  if (!d) return null;
+  return (
+    <Card className="space-y-2">
+      <h3 className="text-xs font-semibold uppercase tracking-[0.08em] text-ink-faint">{t("explore.summaryHeading")}</h3>
+      <div className="flex flex-wrap gap-2 text-xs">
+        <Badge variant="default" label={t("explore.summary.students", { n: d.students })} />
+        <Badge variant="default" label={t("explore.summary.explorations", { n: d.explorations })} />
+        <Badge variant="default" label={t("explore.summary.evidence", { n: d.evidenceRows })} />
+      </div>
+      <ul className="space-y-0.5 text-sm">
+        {Object.entries(d.byArea).map(([k, v]) => (
+          <li key={k} className="flex justify-between gap-2"><span className="text-ink">{t(`strengths.area.${k}`, { defaultValue: k })}</span>
+            <span className="text-ink-muted">{t("explore.summary.areaLine", { s: v.students, c: v.completed, k: v.skipped, d: v.notInterested })}</span></li>
+        ))}
+      </ul>
+      {d.frequentlyDeclined.length > 0 && <p className="text-xs text-ink-muted">{t("explore.summary.declined")}: {d.frequentlyDeclined.map((x) => `${x.activityId} (${x.count})`).join(", ")}</p>}
+      {d.frequentlySkipped.length > 0 && <p className="text-xs text-ink-muted">{t("explore.summary.skipped")}: {d.frequentlySkipped.map((x) => `${x.activityId} (${x.count})`).join(", ")}</p>}
+      <p className="text-xs text-ink-muted">{t("explore.summary.note")}</p>
     </Card>
   );
 }

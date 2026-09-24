@@ -936,3 +936,58 @@ PSYCHOLOGICAL_INFERENCE: NOT IMPLEMENTED
 LLM_DECISION_MAKING: NOT IMPLEMENTED
 REAL-WORLD VALIDATION: STILL PENDING
 ```
+
+---
+
+## 15. Stage 10 — exploration evidence, and what it will mean
+
+`shared/exploration` (EXPLORATION_ENGINE_VERSION 1.0.0) produces evidence rows
+by kind; it interprets none of them. When the real pilot runs, the loop
+produces three things the calibration protocol can use:
+
+- **Interest × performance pairs** per exploration — the four corners, never a
+  score — read against the strengths profile's dimensions.
+- **Teacher observations** in the layer's coded vocabulary, already consumed by
+  the strengths engine under its one rule (two distinct observers lift EMERGING
+  to strong) and therefore already a calibration question.
+- **Participation and performance rows**, carried and not yet consumed. Whether
+  and how the strengths engine should read them is a STRENGTH_ENGINE_VERSION
+  1.1.0 decision under §6: repeated evidence, affected cases, expected effect,
+  regression, a documented increment. Nothing in 1.0.0 moves because a pupil
+  completed an activity.
+
+The recommender's quota (3 / 1 / 2 for six) and adjacency map are the layer's
+thresholds; any change moves EXPLORATION_ENGINE_VERSION and is read against the
+office's summary (frequently skipped, frequently declined) before it is made.
+
+### Verification (Stage 10)
+
+| | |
+|---|---|
+| `check-exploration.js` (new) | 86 assertions, 0 failures — catalog validity and versioning; quota, reasons, breadth, history, resources, determinism; the evidence matrix and the pair; discover / start / save / skip / decline / abandon / submit with replays and version conflicts; reflection privacy and revision; observation and rating apart; the strengths profile unmoved; guardian, office, feed classification |
+| `npm run check:intel` | 12 scripts, 756 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **71 scripts, 4,552 assertions, 0 failures** (`check-create-replays.js`, `check-idempotency.js`, `check-sync-feed.js`, `check-desktop-parity.js` among them) |
+| `check:roles` (backend) | 94 assertions, 0 failures — no capability minted; pupils act by role |
+| web | `tsc -b` clean, `eslint` 0 errors, `vite build` ok, `i18n:check` 3,687 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| mobile | `eslint` clean on the Explore screens, the service and the home entry; the `explore` key tree added to both locales in step with the web |
+| Engines | `ENGINE_VERSION` 1.0.0 and `STRENGTH_ENGINE_VERSION` 1.0.0 untouched; `EXPLORATION_ENGINE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 10 COMPLETE
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.0.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+
+EXPLORATION_LOOP: IMPLEMENTED
+LONGITUDINAL_EVIDENCE: IMPLEMENTED
+STUDENT_AGENCY: PRESERVED
+
+CAREER_PREDICTION: NOT IMPLEMENTED
+PSYCHOLOGICAL_INFERENCE: NOT IMPLEMENTED
+LLM_DECISION_MAKING: NOT IMPLEMENTED
+
+REAL-WORLD VALIDATION: STILL PENDING
+```

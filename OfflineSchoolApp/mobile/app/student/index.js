@@ -800,6 +800,19 @@ export default function StudentDashboard() {
           />
         </View>
 
+        {/* Explore: the pupil's own way into the exploration loop */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/explore")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="compass-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("explore.subtitle")}</Text>
+            <Text style={s.urgentBannerLink}>{t("explore.title")}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Urgent homework banner */}
         {homeworkStats.urgent > 0 && (
           <View style={s.section}>

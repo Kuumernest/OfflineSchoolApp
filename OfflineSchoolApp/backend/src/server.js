@@ -890,6 +890,8 @@ app.use("/api/insights",
   loadRoute("./routes/insights.routes")
 );
 app.use("/api/interventions", auth.authenticate, loadRoute("./routes/interventions.routes"));
+// The exploration catalog and a pupil's moves through an exploration (Stage 10).
+app.use("/api/explorations", auth.authenticate, loadRoute("./routes/explorations.routes"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER ROUTES

@@ -988,3 +988,161 @@ dimension and is shown as a single-subject strength instead. Persistence is
 read over published sequences only. Teacher observations are the only human
 input to confidence, under one rule. No real pupil has yet been through this
 layer — docs/25 §14 says how it will be calibrated when the real pilot runs.
+
+
+---
+
+## Stage 10 — Guided Exploration & Evidence Loop
+
+**Exploration is evidence generation. It is not career prediction.**
+
+Stage 9 reads what the school's records already say. Stage 10 gives the pupil
+structured things to *try*, records what happened, and turns it into new
+evidence — kind by kind — that a later profile snapshot can read.
+
+```
+strengths profile → suggestions (with reasons) → the pupil chooses
+  → activity → outputs + reflection → optional teacher observation / rating
+  → evidence rows (exposure · participation · interest · performance · observation)
+  → the next profile snapshot
+```
+
+Versions: `ACADEMIC_ENGINE_VERSION` 1.0.0 and `STRENGTH_ENGINE_VERSION` 1.0.0
+are untouched; `shared/exploration` carries `EXPLORATION_ENGINE_VERSION`
+1.0.0, and every suggestion, exploration and evidence row records it.
+
+### The catalog (`shared/exploration/catalog.js`)
+
+Thirty reusable activity definitions — three levels (introductory,
+intermediate, extended) in each of the strengths layer's ten exploration
+areas — shipped in the code, so they are offline by construction. Each names
+its task, expected outputs, the behaviours a teacher could observe, its
+reflection prompts, its resources (most need paper, a phone, a group, or
+nothing), its delivery mode, the evidence kinds it can produce and, where the
+output is objective, the criteria a rating uses. English and French. A
+definition carries nothing about any pupil; `validateActivity` refuses one
+that does. A school may add its own (`ExplorationActivity`), validated the
+same way.
+
+### Five things that are never the same
+
+| evidence | meaning | produced by |
+|---|---|---|
+| **exposure** | the pupil encountered the area | starting |
+| **participation** | the pupil engaged in the activity | submitting |
+| **interest** | the pupil wants more of it | the reflection (interest HIGH or continue YES) |
+| **performance** | an observable outcome, rated against the activity's own criteria | a teacher's rating |
+| **teacher observation** | an authorised adult saw something, coded | a teacher's observation |
+
+Joining the robotics club is exposure and, once submitted, participation — not
+technical strength. Each kind is its own row with an id derived from the
+exploration and the kind, so a re-sent submission or observation lands on the
+same row. The reflection itself is kept as the pupil's record, not as an
+evidence row. Interest × performance is reported as a **pair** (`HIGH_INTEREST_
+LIMITED_PERFORMANCE` …), never as a fit score.
+
+### The recommender (`shared/exploration/recommend.js`)
+
+Deterministic and explainable without an LLM. For N suggestions: ceil(N/2)
+**aligned** with the areas the pupil's evidence opened (strong first), floor(N/4)
+**adjacent** (next to an aligned area, by `ADJACENT_AREAS`), the rest
+**discovery** (no evidence, fewest previous explorations first); for six,
+3 / 1 / 2, with shortfall spilling discovery → adjacent → aligned and never
+more than asked. Completed, abandoned and declined activities are not
+suggested again; skipped ones go behind; in-progress ones are excluded; a
+completed activity moves its area's next suggestion up a level. Resources
+filter. Each suggestion carries `relevance`, `reasons` (RECURRING_STRENGTH,
+EMERGING_STRENGTH, RELATED_EXPLORATION, NEW_DOMAIN_EXPLORATION,
+STUDENT_INTEREST, PREVIOUS_ACTIVITY_FOLLOWUP, RESOURCE_AVAILABLE), the
+dimensions and subjects behind it, and both versions. Interest moves an area
+up within its bucket and never across: it is a reason, not evidence of
+strength. A pupil strong only in Mathematics is still shown other areas — the
+test asserts it.
+
+### The pupil's record and agency
+
+`StudentExploration`: DISCOVERED · SAVED · STARTED · SUBMITTED · REVIEW_REQUIRED ·
+COMPLETED · ABANDONED · SKIPPED · NOT_INTERESTED, moved only through the
+transitions in `shared/exploration`, every move on a trail. A pupil may start,
+save, skip or decline any suggestion; NOT_INTERESTED is preference, not
+failure, and nothing in the strengths profile moves because of it. Submitting
+records outputs (what was produced) and, where the activity has rated
+criteria, waits in REVIEW_REQUIRED for a teacher; otherwise it completes.
+
+### Reflection, and who sees it
+
+`ExplorationReflection`: controlled values (interest LOW/MODERATE/HIGH,
+difficulty, continue NO/MAYBE/YES) and free text (enjoyed, difficult, next),
+one per exploration, revised with the earlier account kept. **Student-private
+by default**: the pupil sees all of it; staff who may read the pupil see the
+controlled values, and the text only when the pupil ticked `shareText`; a
+guardian sees no reflection. The collection is never mirrored to a staff
+machine.
+
+### Observation and performance
+
+`ExplorationObservation`: OBSERVED / PARTLY_OBSERVED / NOT_OBSERVED /
+INSUFFICIENT_OPPORTUNITY with codes (PROBLEM_SOLVING, PERSISTENCE,
+COMMUNICATION, TECHNICAL_EXECUTION, CREATIVE_APPROACH, COLLABORATION,
+EXPLANATION, ITERATION) — the only vocabulary; "natural leader" has no field.
+One per teacher per exploration, revised in place. A performance rating is per
+criterion (not_met / partly_met / met / exceeded) and folds to an
+activity-specific level (limited / partial / demonstrated / strong); it is
+never a score of the pupil.
+
+### Boundary with the strengths engine
+
+The exploration layer writes evidence; it never writes a strength. The
+strengths engine 1.0.0 reads the kinds it already knew — interest, exposure,
+reflection as signals, teacher observation under its one rule — and ignores
+participation and performance until a deliberate, regression-covered 1.1.0
+says otherwise. The current profile is not recomputed differently because an
+activity was completed; the next snapshot reads whatever the evidence then
+says. The test asserts the profile's strengths are byte-for-byte the same
+before and after a completed exploration.
+
+### Routes and authorisation
+
+`GET /api/explorations/activities[/:id]` (catalog); `POST /api/explorations/:id/
+start | skip | not-interested | abandon | submit | reflection | observation |
+performance`; `GET /api/insights/student/:id/explorations[/recommended|/history]`,
+`POST …/explorations` (choose), `GET …/exploration-evidence`,
+`GET /api/insights/explorations/summary`; `GET /api/portal/children/:id/explorations`.
+
+| Caller | May |
+|---|---|
+| **student** | read the catalog; read and act on their own explorations and reflection, by role |
+| **teacher** | read/act for pupils in the classes they hold an assignment for; observe and rate |
+| **school_admin** | the school; the aggregate summary |
+| **super_admin** | the school selected with `?schoolId`; nothing without a selection |
+| **bursar** | nothing — no teaching capability |
+| **guardian** | progress on the children their portal access unlocks: status, area, evidence kinds, observation count; no reflection, outputs or trail |
+
+Every create accepts the client's id; state moves are no-ops when already
+made; evidence ids are derived — a retried or duplicated delivery does nothing
+twice. `StudentExploration` and `ExplorationObservation` mirror to a
+teacher's machine scoped like an intervention; `ExplorationReflection` and
+`ExplorationActivity` stay online, with reasons in `syncFeed.js`.
+
+### Monitoring
+
+The office sees counts: pupils exploring each area, started / completed /
+skipped / declined / abandoned, frequently skipped, declined and completed
+activities, evidence volume. No pupil, no reflection, no ranking of pupils or
+teachers.
+
+### Limitations
+
+The catalog is thirty activities and grows deliberately; adjacency is a fixed
+map; a rating is a teacher's judgement against named criteria and nothing
+more; participation and performance rows await a versioned strengths-engine
+decision before they mean anything to a profile; the student experience on
+mobile ships as the first screens of "Explore" and will need field use before
+it is judged; no real pupil has been through the loop.
+
+### What Stage 10 does not do
+
+No career prediction, ranking or probability; no college recommendation; no
+psychological profiling, IQ estimate or personality; no automated counselling;
+no LLM anywhere in the path; no machine learning over the exploration data. A
+missing signal is insufficient evidence, never absence of ability.

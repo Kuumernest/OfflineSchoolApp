@@ -19,6 +19,7 @@ const { scopes: feedScopes } = require("../config/syncFeed");
 const reviewCases     = require("../services/intelligence/reviewCases.service");
 const pilots          = require("../services/intelligence/pilot.service");
 const strengthsSvc    = require("../services/intelligence/strengths.service");
+const explorationSvc  = require("../services/intelligence/exploration.service");
 const ExplorationEvidence = require("../db/models/ExplorationEvidence");
 const IntelligencePilot = require("../db/models/IntelligencePilot");
 
@@ -825,7 +826,9 @@ const strengthRead = (req, res, next) => (isStudent(req) ? next() : requirePermi
 const pupilForStrengths = async (req, res, schoolId, studentId) => {
   if (!isStudent(req)) return pupilForReview(req, res, schoolId, studentId);
   const actor = String(req.user._id ?? req.user.id);
-  const own = await Student.findOne({ _id: String(studentId ?? ""), schoolId, userId: actor, deletedAt: null })
+  // "me": the pupil's own record, found by their account — a phone need not
+  // know the Student id to ask about its owner.
+  const own = await Student.findOne({ ...(String(studentId) === "me" ? {} : { _id: String(studentId ?? "") }), schoolId, userId: actor, deletedAt: null })
     .select("classId studentName name firstName lastName enrollmentNo").lean();
   if (!own) {
     res.status(403).json({ success: false, code: "OWN_PROFILE_ONLY", message: "A pupil may read only their own profile." });
@@ -965,6 +968,85 @@ router.post("/student/:studentId/evidence", strengthRead, asyncHandler(async (re
     const row = await strengthsSvc.recordEvidence({ schoolId, studentId: String(pupil.student._id), classId: pupil.classId, source, actor, body: req.body ?? {} });
     return res.status(201).json({ success: true, data: row });
   } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EXPLORATION — what a pupil may explore, what they explored, what it produced
+//
+// Reads follow the strengths rules: staff on insights.viewTaught scoped to
+// the pupils they may read; a pupil their own, by role. The pupil's reflection
+// text reaches staff only when the pupil shared it (exploration.service
+// applies the policy); a guardian's view is progress only, on the portal.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const explorationViewer = (req) => (isStudent(req) ? "student" : "staff");
+const langOf = (req) => (String(req.query.lang ?? req.headers["accept-language"] ?? "en").toLowerCase().startsWith("fr") ? "fr" : "en");
+const explErr = (res, err) => {
+  if (!err.status) throw err;
+  const { status, code, message, ...extra } = err;
+  return res.status(status).json({ success: false, code, message, ...extra });
+};
+
+/** GET /api/insights/student/:studentId/explorations — the pupil's list, as the viewer may see it. */
+router.get("/student/:studentId/explorations", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const rows = await explorationSvc.history({ schoolId, studentId: String(pupil.student._id), viewer: explorationViewer(req), lang: langOf(req) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), explorations: rows } });
+}));
+
+/** GET …/explorations/recommended?resources=a,b&count= — what to put in front of the pupil, with reasons. */
+router.get("/student/:studentId/explorations/recommended", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const resources = req.query.resources ? String(req.query.resources).split(",").filter(Boolean) : null;
+  const r = await explorationSvc.recommended({ schoolId, studentId: String(pupil.student._id), resources, count: req.query.count, lang: langOf(req) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), ...r } });
+}));
+
+/** GET …/explorations/history — the same list; the name the brief uses. */
+router.get("/student/:studentId/explorations/history", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const rows = await explorationSvc.history({ schoolId, studentId: String(pupil.student._id), viewer: explorationViewer(req), lang: langOf(req) });
+  const counts = rows.reduce((o, r) => { o[r.status] = (o[r.status] ?? 0) + 1; return o; }, {});
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), counts, areasExplored: [...new Set(rows.map((r) => r.area))].sort(), explorations: rows } });
+}));
+
+/** POST …/explorations  { activityId, action: start|save|skip|not_interested|discover, _id?, reasons?, relevance? } */
+router.post("/student/:studentId/explorations", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const { exploration, replayed } = await explorationSvc.choose({ schoolId, studentId: String(pupil.student._id), classId: pupil.classId, actor: String(req.user._id ?? req.user.id), body: req.body ?? {} });
+    return res.status(201).json({ success: true, data: exploration, replayed });
+  } catch (err) { return explErr(res, err); }
+}));
+
+/** GET …/exploration-evidence — the rows explorations produced, by kind. */
+router.get("/student/:studentId/exploration-evidence", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const rows = await explorationSvc.evidenceFor({ schoolId, studentId: String(pupil.student._id) });
+  const byKind = rows.reduce((o, r) => { o[r.kind] = (o[r.kind] ?? 0) + 1; return o; }, {});
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), byKind, evidence: rows } });
+}));
+
+/** GET /api/insights/explorations/summary?classId= — the office's counts. No pupil, no reflection. */
+router.get("/explorations/summary", requirePermission("insights.viewTaught"), asyncHandler(async (req, res) => {
+  const scope = await reviewScope(req, res);
+  if (!scope) return undefined;
+  return res.json({ success: true, data: { generatedAt: new Date(), scope, ...(await explorationSvc.summary(scope)) } });
 }));
 
 module.exports = router;

@@ -25,7 +25,7 @@ import { useState }                                from "react";
 import { useParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                          from "react-i18next";
-import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History } from "lucide-react";
+import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
 import { PageHeader }   from "@/components/ui/PageHeader";
@@ -34,11 +34,16 @@ import { Button }       from "@/components/ui/Button";
 import { Badge }        from "@/components/ui/Badge";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useToast }     from "@/components/ui/Toast";
-import { FormField, Textarea, SelectField } from "@/components/ui/FormField";
+import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/FormField";
 import {
   fetchStrengths, fetchStrengthProfile, fetchStrengthEvidence, snapshotStrengthProfile, recordExplorationEvidence, submitReview,
-  type DimensionReading, type RecordedReview,
+  fetchExplorations, fetchCatalog, observeExploration, rateExploration,
+  type DimensionReading, type RecordedReview, type ExplorationRow,
 } from "@/services/insights.service";
+
+const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
+const OBS_CODES  = ["PROBLEM_SOLVING", "PERSISTENCE", "COMMUNICATION", "TECHNICAL_EXECUTION", "CREATIVE_APPROACH", "COLLABORATION", "EXPLANATION", "ITERATION"];
+const RATINGS    = ["not_met", "partly_met", "met", "exceeded"];
 
 const DIMENSIONS = ["quantitative_reasoning", "scientific_reasoning", "language_communication", "reading_interpretation", "analytical_reasoning",
   "creative_expression", "social_collaborative", "technical_applied", "organizational_structured", "visual_spatial"];
@@ -174,6 +179,9 @@ export default function StudentStrengthsPage() {
         <p className="text-sm text-ink">{(p?.notInferred ?? []).map((k) => t(`strengths.notInferred.${k}`, { defaultValue: k })).join(" · ")}</p>
       </Section>
 
+      {/* ── Explorations: what the pupil tried, apart from the reading ── */}
+      {isStaff && <Explorations studentId={studentId} schoolId={schoolId} toast={toast} onChanged={refresh} />}
+
       {/* ── Longitudinal ───────────────────────────────────────────── */}
       <Section icon={<History className="h-3.5 w-3.5" />} heading={t("strengths.historyHeading")} hint={t("strengths.historyHint")}>
         {isStaff && p && <SnapshotButton studentId={studentId} schoolId={schoolId} onChanged={refresh} toast={toast} />}
@@ -306,6 +314,111 @@ function SnapshotButton({ studentId, schoolId, onChanged, toast }: { studentId: 
       <FormField label={t("strengths.form.periodLabel")}><Textarea rows={1} maxLength={60} value={label} onChange={(e) => setLabel(e.target.value)} /></FormField>
       <Button size="sm" variant="secondary" disabled={m.isPending} onClick={() => m.mutate()}>{t("strengths.snapshotButton")}</Button>
     </div>
+  );
+}
+
+/**
+ * The pupil's explorations, for staff: status, the pair, the reflection as the
+ * pupil allowed it, observations and ratings — with the forms to add one.
+ */
+function Explorations({ studentId, schoolId, toast, onChanged }: { studentId: string; schoolId?: string; toast: ReturnType<typeof useToast>["toast"]; onChanged: () => Promise<unknown> }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["explorations", studentId, schoolId], queryFn: () => fetchExplorations(studentId, schoolId) });
+  const catalogQ = useQuery({ queryKey: ["exploration-catalog", schoolId], queryFn: () => fetchCatalog(schoolId), staleTime: 300_000 });
+  const criteriaOf = (activityId: string) => catalogQ.data?.find((a) => a.activityId === activityId)?.performanceCriteria ?? [];
+  const refresh = async () => { await qc.invalidateQueries({ queryKey: ["explorations", studentId] }); await onChanged(); };
+  const rows = q.data?.explorations ?? [];
+  return (
+    <Section icon={<Route className="h-3.5 w-3.5" />} heading={t("explore.staffHeading")} hint={t("explore.staffHint")}>
+      {q.isLoading && <PageSpinner />}
+      {!q.isLoading && !rows.length && <p className="text-sm text-ink-muted">{t("explore.none")}</p>}
+      {rows.map((e) => <ExplorationCard key={e.explorationId} e={e} criteria={criteriaOf(e.activityId)} schoolId={schoolId} toast={toast} onChanged={refresh} />)}
+    </Section>
+  );
+}
+
+function ExplorationCard({ e, criteria, schoolId, toast, onChanged }: { e: ExplorationRow; criteria: string[]; schoolId?: string; toast: ReturnType<typeof useToast>["toast"]; onChanged: () => Promise<unknown> }) {
+  const { t } = useTranslation();
+  const [obs, setObs] = useState<{ level: string; codes: string[]; note: string }>({ level: "OBSERVED", codes: [], note: "" });
+  const [ratings, setRatings] = useState<Record<string, string>>({});
+  const fail = (err: unknown) => {
+    const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
+    toast({ kind: "error", title: t(`explore.error.${code ?? "generic"}`, { defaultValue: t("explore.error.generic") }) });
+  };
+  const observe = useMutation({
+    mutationFn: () => observeExploration(e.explorationId, { ...(schoolId ? { schoolId } : {}), level: obs.level, codes: obs.codes, note: obs.note || undefined }),
+    onSuccess: async () => { toast({ kind: "success", title: t("explore.observed") }); await onChanged(); }, onError: fail,
+  });
+  const rate = useMutation({
+    mutationFn: () => rateExploration(e.explorationId, { ...(schoolId ? { schoolId } : {}), version: e.version,
+      ratings: Object.entries(ratings).filter(([, r]) => r).map(([criterion, rating]) => ({ criterion, rating })) }),
+    onSuccess: async () => { toast({ kind: "success", title: t("explore.rated") }); await onChanged(); }, onError: fail,
+  });
+  const canRate = criteria.length > 0 && ["SUBMITTED", "REVIEW_REQUIRED"].includes(e.status);
+  const closedish = ["COMPLETED", "ABANDONED", "SKIPPED", "NOT_INTERESTED"].includes(e.status);
+  return (
+    <Card className="space-y-2 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="font-medium text-ink">{e.title}</span>
+        <Badge variant={e.status === "COMPLETED" ? "success" : e.status === "REVIEW_REQUIRED" ? "warning" : closedish ? "default" : "info"} label={t(`explore.status.${e.status}`)} />
+        <Badge variant="default" label={t(`strengths.area.${e.area}`, { defaultValue: e.area })} />
+        <span className="text-xs text-ink-muted">{t(`explore.level.${e.level}`)}{e.relevance ? ` · ${t(`explore.relevance.${e.relevance}`)}` : ""}</span>
+      </div>
+      {e.suggestedBecause.length > 0 && <p className="text-xs text-ink-muted">{t("explore.because")}: {e.suggestedBecause.map((r) => t(`explore.reason.${r}`, { defaultValue: r })).join(", ")}</p>}
+      {e.outputs && e.outputs.length > 0 && (
+        <ul className="list-disc pl-5 text-xs text-ink">{e.outputs.map((o, i) => <li key={i}><span className="text-ink-muted">{o.label}: </span>{o.value}</li>)}</ul>
+      )}
+      {e.reflection && (
+        <p className="text-xs text-ink">
+          <span className="text-ink-muted">{t("explore.reflection")}: </span>
+          {[e.reflection.interest && t("explore.interest", { v: t(`explore.scale.${e.reflection.interest}`) }),
+            e.reflection.difficulty && t("explore.difficulty", { v: t(`explore.scale.${e.reflection.difficulty}`) }),
+            e.reflection.continue && t("explore.continue", { v: t(`explore.scale.${e.reflection.continue}`) })].filter(Boolean).join(" · ")}
+          {e.reflection.enjoyed !== undefined ? ` — "${e.reflection.enjoyed ?? ""}"` : ` · ${t("explore.textPrivate")}`}
+        </p>
+      )}
+      {e.pattern.pattern && <p className="text-xs text-ink-muted">{t("explore.pair")}: {t(`explore.scale.${e.pattern.interest}`)} {t("explore.pairInterest")} · {t(`explore.perfLevel.${e.pattern.performance}`)} {t("explore.pairPerformance")}</p>}
+      <p className="text-xs text-ink-muted">{t("explore.evidence")}: {e.evidence.length ? e.evidence.map((v) => t(`strengths.kind.${v.kind}`, { defaultValue: v.kind })).join(", ") : "—"}</p>
+      {e.observations.map((o) => (
+        <p key={o.observationId} className="text-xs text-ink"><span className="text-ink-muted">{t("explore.observationBy", { who: o.observedBy })}: </span>{t(`explore.obsLevel.${o.level}`)} · {o.codes.map((c) => t(`explore.obsCode.${c}`)).join(", ")}{o.note ? ` — ${o.note}` : ""}</p>
+      ))}
+      {e.performance && <p className="text-xs text-ink"><span className="text-ink-muted">{t("explore.ratedBy", { who: e.performance.ratedBy })}: </span>{t(`explore.perfLevel.${e.performance.level}`)} · {e.performance.ratings.map((r) => `${t(`explore.criterion.${r.criterion}`)} ${t(`explore.rating.${r.rating}`)}`).join(", ")}</p>}
+
+      {["STARTED", "SUBMITTED", "REVIEW_REQUIRED", "COMPLETED"].includes(e.status) && (
+        <details className="text-xs">
+          <summary className="cursor-pointer text-ink-muted">{t("explore.observeHeading")}</summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            <FormField label={t("explore.obsLevelLabel")}>
+              <SelectField value={obs.level} onChange={(ev) => setObs((o) => ({ ...o, level: ev.target.value }))} options={OBS_LEVELS.map((l) => ({ value: l, label: t(`explore.obsLevel.${l}`) }))} />
+            </FormField>
+            <FormField label={t("explore.obsNote")}><Textarea rows={1} maxLength={1000} value={obs.note} onChange={(ev) => setObs((o) => ({ ...o, note: ev.target.value }))} /></FormField>
+          </div>
+          <div className="mt-1 grid gap-1 sm:grid-cols-2">
+            {OBS_CODES.map((c) => (
+              <Checkbox key={c} label={t(`explore.obsCode.${c}`)} checked={obs.codes.includes(c)}
+                onChange={(ev) => setObs((o) => ({ ...o, codes: ev.target.checked ? [...o.codes, c] : o.codes.filter((x) => x !== c) }))} />
+            ))}
+          </div>
+          <Button size="sm" variant="secondary" disabled={observe.isPending} onClick={() => observe.mutate()}>{t("explore.observeButton")}</Button>
+        </details>
+      )}
+      {canRate && (
+        <details className="text-xs" open>
+          <summary className="cursor-pointer text-ink-muted">{t("explore.rateHeading")}</summary>
+          <p className="mt-1 text-ink-muted">{t("explore.rateHint")}</p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {criteria.map((c) => (
+              <FormField key={c} label={t(`explore.criterion.${c}`)}>
+                <SelectField value={ratings[c] ?? ""} onChange={(ev) => setRatings((r) => ({ ...r, [c]: ev.target.value }))}
+                  options={[{ value: "", label: t("intelReview.answer.choose") }, ...RATINGS.map((r) => ({ value: r, label: t(`explore.rating.${r}`) }))]} />
+              </FormField>
+            ))}
+          </div>
+          <Button size="sm" variant="primary" disabled={rate.isPending || !Object.values(ratings).some(Boolean)} onClick={() => rate.mutate()}>{t("explore.rateButton")}</Button>
+        </details>
+      )}
+    </Card>
   );
 }
 

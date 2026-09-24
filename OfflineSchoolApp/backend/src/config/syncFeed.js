@@ -268,6 +268,19 @@ const FEED = [
          "performance, a teacher's observation, a reflection. A school record about a pupil, " +
          "scoped like intervention: a teacher's machine holds rows for the pupils they teach.",
   },
+  {
+    collection: "studentExploration", model: "StudentExploration",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A pupil's engagement with a catalog activity — chosen, started, submitted, completed, " +
+         "skipped or declined — with the teacher's rating where the activity has one. A school " +
+         "record about a pupil, scoped like intervention.",
+  },
+  {
+    collection: "explorationObservation", model: "ExplorationObservation",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A teacher's dated, coded observation of a pupil during an exploration activity. " +
+         "Written by staff, read by staff who may read the pupil.",
+  },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },
   { collection: "enrollment",   model: "Enrollment",   permission: ["students.view", "students.viewTaught"] },
   { collection: "promotionRun",      model: "PromotionRun",      permission: "promotion.run" },
@@ -284,6 +297,17 @@ const FEED = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EXCLUDED = {
+  // ── The pupil's own words ───────────────────────────────────────────────
+  ExplorationReflection:
+    "A pupil's own account of an exploration: controlled answers and free text " +
+    "the pupil chooses whether to share. Student-authored and student-private by " +
+    "default; a staff machine must not hold the text a pupil did not share, so it " +
+    "is read online through the route that applies the pupil's choice, never mirrored.",
+  // ── Definitions, not records ────────────────────────────────────────────
+  ExplorationActivity:
+    "A school's own addition to the exploration catalog. The shipped catalog " +
+    "is in shared/exploration and is offline by construction; a school's " +
+    "additions are read online with it and carry nothing about any pupil.",
   // ── Bookkeeping the classroom never needs ──────────────────────────────
   StrengthProfileSnapshot:
     "A strengths profile as it read on one day, taken deliberately for the " +

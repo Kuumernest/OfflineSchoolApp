@@ -31,8 +31,12 @@ const mongoose = require("mongoose");
 const { v4: uuidv4 } = require("uuid");
 const { DIMENSIONS, EXPLORATION_AREAS } = require("../../../../shared/strengths");
 
-const KINDS   = ["interest", "exposure", "performance", "teacher_observation", "student_reflection"];
-const SOURCES = ["student", "teacher", "office"];
+// Stage 10 adds participation (the pupil engaged in an activity) and the
+// system source for rows the exploration layer derives from a pupil's own
+// moves. The strengths engine 1.0.0 reads the kinds it already knew;
+// participation and performance are carried, not yet consumed.
+const KINDS   = ["interest", "exposure", "participation", "performance", "teacher_observation", "student_reflection"];
+const SOURCES = ["student", "teacher", "office", "system"];
 const PARTICIPATION = ["attended", "took_part", "led", "completed", "did_not_complete", null];
 const REFLECTIONS   = ["enjoyed", "want_more", "found_difficult", "want_help", null];
 
@@ -52,6 +56,11 @@ const explorationEvidenceSchema = new mongoose.Schema(
 
     activity: { type: String, required: true, maxlength: 200 },
     date:     { type: Date, required: true },
+
+    // When the row came out of an exploration: which one, of which activity.
+    explorationId:   { type: String, default: null, index: true },
+    activityId:      { type: String, default: null },
+    activityVersion: { type: Number, default: null },
 
     participation: { type: String, enum: PARTICIPATION, default: null },
     outcome:       { type: String, default: null, maxlength: 500 },
