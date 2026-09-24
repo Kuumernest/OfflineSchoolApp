@@ -20,7 +20,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
-  refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations,
+  refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations, fetchProfileChanges, fetchLearningConcise,
 } from "../../../src/services/exploration.service";
 
 const TABS = ["forYou", "inProgress", "completed"];
@@ -37,6 +37,8 @@ export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [offline, setOffline] = useState(false);
+  const [changes, setChanges] = useState(null);
+  const [learning, setLearning] = useState([]);
 
   const loadLocal = useCallback(async () => {
     const [s, e] = await Promise.all([getSuggestions(), getExplorations()]);
@@ -48,6 +50,8 @@ export default function ExploreScreen() {
     try {
       await refreshCatalog(lang);
       await Promise.all([refreshSuggestions(lang), refreshExplorations(lang)]);
+      setChanges(await fetchProfileChanges());
+      setLearning(await fetchLearningConcise());
       setOffline(false);
     } catch {
       setOffline(true);
@@ -102,6 +106,23 @@ export default function ExploreScreen() {
           </TouchableOpacity>
         ))}
       </View>
+      {changes?.comparison && (changes.newEvidence?.rows > 0 || changes.comparison.newStrengths.length || changes.comparison.newEmerging.length || changes.comparison.weakened.length) ? (
+        <View style={st.updated}>
+          <Text style={st.updatedTitle}>{t("strengths.fusion.updated")}</Text>
+          {changes.newEvidence?.rows > 0 && <Text style={st.updatedLine}>• {t("strengths.fusion.newEvidenceShort", { n: changes.newEvidence.rows, e: changes.newEvidence.explorations })}</Text>}
+          {[...changes.comparison.newStrengths, ...changes.comparison.newEmerging, ...changes.comparison.weakened].map((e) => (
+            <Text key={e.dimension} style={st.updatedLine}>• {t(`strengths.dimension.${e.dimension}`)}: {t(`strengths.state.${e.previous.state}`)} → {t(`strengths.state.${e.current.state}`)}</Text>
+          ))}
+          <Text style={st.updatedHint}>{t("strengths.fusion.updatedHint")}</Text>
+        </View>
+      ) : null}
+      {learning.length > 0 && (
+        <View style={st.updated}>
+          <Text style={st.updatedTitle}>{t("learning.mobileHeading")}</Text>
+          {learning.slice(0, 4).map((l, i) => <Text key={i} style={st.updatedLine}>• {t(`learning.concise.${l.code}`, { subject: l.subjectId ?? "", n: l.n ?? "", c: l.completed ?? "", a: l.assigned ?? "" })}</Text>)}
+          <Text style={st.updatedHint}>{t("learning.mobileHint")}</Text>
+        </View>
+      )}
       {loading ? <ActivityIndicator style={{ marginTop: 32 }} /> : (
         <FlatList
           data={data}
@@ -133,4 +154,8 @@ const st = StyleSheet.create({
   cardWhy: { fontSize: 12, color: "#4B5563", marginTop: 6 },
   badge: { fontSize: 11, color: "#3730A3", backgroundColor: "#EEF2FF", paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999 },
   empty: { textAlign: "center", color: "#6B7280", marginTop: 32 },
+  updated: { marginHorizontal: 16, marginTop: 10, backgroundColor: "#EEF2FF", borderRadius: 12, padding: 12 },
+  updatedTitle: { fontSize: 14, fontWeight: "700", color: "#3730A3", marginBottom: 4 },
+  updatedLine: { fontSize: 13, color: "#1F2937" },
+  updatedHint: { fontSize: 11, color: "#6B7280", marginTop: 6 },
 });

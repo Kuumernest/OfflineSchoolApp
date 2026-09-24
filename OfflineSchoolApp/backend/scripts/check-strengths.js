@@ -91,7 +91,7 @@ const dim = (p, d) => [...p.strengths, ...p.emergingAreas, ...p.decliningAreas].
     p.explorationAreas.filter((a) => a.area === "quantitative_scientific").map((a) => [a.evidenceLevel, a.openedBy, a.waysToExplore.length > 0, a.because.length]),
     [["strong", ["quantitative_reasoning", "scientific_reasoning"], true, 2]]);
   check("the profile carries both engine versions and the strength thresholds",
-    [p.academicEngineVersion, p.strengthEngineVersion, p.thresholds.minObservations, p.grading.strongMark], ["1.0.0", "1.0.0", 2, 14]);
+    [p.academicEngineVersion, p.strengthEngineVersion, p.thresholds.minObservations, p.grading.strongMark], ["1.0.0", "1.1.0", 2, 14]);
   check("overall confidence is the confidence that the evidence supports the reading", p.confidence, "strong");
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -211,7 +211,7 @@ const dim = (p, d) => [...p.strengths, ...p.emergingAreas, ...p.decliningAreas].
     p.explorationAreas.every((a, i, arr) => i === 0 || ({ strong: 3, emerging: 2, limited: 1 })[arr[i - 1].evidenceLevel] >= ({ strong: 3, emerging: 2, limited: 1 })[a.evidenceLevel]), true);
   check("deterministic: the same evidence gives the same bytes",
     JSON.stringify(sp({ Mathematics: [16, 17, 16, 17, 16], Physics: [15, 16, 15, 16, 15] })) === JSON.stringify(sp({ Mathematics: [16, 17, 16, 17, 16], Physics: [15, 16, 15, 16, 15] })), true);
-  check("the layer has its own version and the academic engine keeps its own", [strengths.STRENGTH_ENGINE_VERSION, p.academicEngineVersion], ["1.0.0", "1.0.0"]);
+  check("the layer has its own version and the academic engine keeps its own", [strengths.STRENGTH_ENGINE_VERSION, p.academicEngineVersion], ["1.1.0", "1.0.0"]);
   check("ten dimensions, ten areas, none named after a profession",
     [strengths.DIMENSIONS.length, strengths.EXPLORATION_AREAS.length, /engineer|doctor|lawyer|nurse|pilot|teacher|accountant/i.test(JSON.stringify(strengths.EXPLORATION_AREAS))], [10, 10, false]);
 
@@ -288,7 +288,7 @@ const dim = (p, d) => [...p.strengths, ...p.emergingAreas, ...p.decliningAreas].
   check("the assigned teacher → 200, the profile named, both versions, quantitative and scientific established",
     [r.status, r.body.data.name, r.body.data.profile.strengthEngineVersion, r.body.data.profile.academicEngineVersion,
      r.body.data.profile.strengths.map((d) => d.dimension)],
-    [200, "Pupil A1", "1.0.0", "1.0.0", ["quantitative_reasoning", "scientific_reasoning"]]);
+    [200, "Pupil A1", "1.1.0", "1.0.0", ["quantitative_reasoning", "scientific_reasoning"]]);
   check("all four reads answer the teacher for their pupil", await statuses(teacherA, reads("st-a1")), [200, 200, 200, 200]);
   check("and refuse the pupil they do not teach", await statuses(teacherA, reads("st-a2")), [403, 403, 403, 403]);
   check("a teacher of another class → 403", await statuses(teacherC, reads("st-a1")), [403, 403, 403, 403]);
@@ -343,7 +343,7 @@ const dim = (p, d) => [...p.strengths, ...p.emergingAreas, ...p.decliningAreas].
   check("the teacher takes a snapshot → 201, version 1, both engine versions, the source period, the reading without the mark series",
     [r.status, r.body.data.profileVersion, r.body.data.strengthEngineVersion, r.body.data.academicEngineVersion, r.body.data.sourcePeriod.sequences,
      "subjects" in r.body.data.profile, r.body.data.profile.strengths.length],
-    [201, 1, "1.0.0", "1.0.0", 3, false, 2]);
+    [201, 1, "1.1.0", "1.0.0", 3, false, 2]);
   r = await head.post("/insights/student/st-a1/profile/snapshot", { periodLabel: "Term 2 (head)" });
   check("a second snapshot is version 2; the first is not overwritten", [r.status, r.body.data.profileVersion], [201, 2]);
   r = await pupilA1.get("/insights/student/st-a1/profile");
@@ -375,7 +375,7 @@ const dim = (p, d) => [...p.strengths, ...p.emergingAreas, ...p.decliningAreas].
   r = await teacherA.get("/insights/student/st-a1/consistency");
   check("the consistency read now diffs the strengths profile through both roads, and it matches",
     [r.status, r.body.data.identical, r.body.data.strengths.identical, r.body.data.strengths.differences, r.body.data.strengths.engineVersion],
-    [200, true, true, [], { live: "1.0.0", offline: "1.0.0" }]);
+    [200, true, true, [], { live: "1.1.0", offline: "1.1.0" }]);
   const strengthsSvc = require(path.join(SRC, "services/intelligence/strengths.service"));
   const g = strengthsSvc.forGuardian(await strengthsSvc.profileFor({ schoolId: A, studentId: "st-a1" }));
   check("the guardian's view is plain: dimensions, subjects by name, areas with ways to explore, limits, what is not inferred — no evidence internals, no review",

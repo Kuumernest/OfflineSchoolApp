@@ -3861,6 +3861,66 @@
       "discipline": "discipline",
       "leadership": "leadership",
       "fixed_talent": "talent fixe"
+    },
+    "fusion": {
+      "changesHeading": "Ce qui a changé",
+      "changesSince": "Depuis l'instantané v{{v}} du {{when}}",
+      "noSnapshotYet": "Aucun instantané encore — la première reconstruction conserve la lecture d'aujourd'hui.",
+      "nothingChanged": "Rien n'a changé depuis le dernier instantané.",
+      "nothingNew": "Rien de nouveau : le dernier instantané couvre déjà ces preuves.",
+      "newEvidence": "Nouvelles preuves",
+      "explorations": "{{n}} exploration(s)",
+      "pending": "Nouvelles preuves depuis le dernier instantané — reconstruisez pour conserver la lecture d'aujourd'hui.",
+      "moved": {
+        "newStrengths": "Désormais établi",
+        "newEmerging": "Désormais émergent",
+        "strengthened": "Confiance en hausse",
+        "weakened": "Affaibli",
+        "declining": "Désormais en baisse"
+      },
+      "reason": {
+        "EXPLORATION_SUPPORT": "{{n}} exploration(s) indépendante(s) à l'appui",
+        "EXPLORATION_CONTRADICTION": "{{n}} exploration(s) indépendante(s) contraire(s)",
+        "EXPLORATION_SUPPORT_BELOW_THRESHOLD": "{{n}} exploration à l'appui — sous les deux requises",
+        "EXPLORATION_SUPPORT_DESPITE_DECLINE": "{{n}} exploration(s) à l'appui malgré la baisse scolaire",
+        "TEACHER_OBSERVERS": "{{n}} observation(s) d'enseignants distincts",
+        "ACADEMIC_PERSISTENT": "preuves scolaires maintenues",
+        "ACADEMIC_DECLINE": "preuves scolaires récentes affaiblies"
+      },
+      "conflictsHeading": "Preuves contradictoires",
+      "conflictsHint": "Des sources qui divergent, rapportées comme un schéma. Le système ne les tranche pas en verdict.",
+      "conflict": {
+        "ACADEMIC_VS_EXPLORATION": "les preuves scolaires et la performance en exploration divergent",
+        "EXPLORATION_MIXED": "la performance en exploration est mitigée",
+        "OBSERVATION_VS_PERFORMANCE": "une observation favorable face à une performance contraire",
+        "INTEREST_VS_PERFORMANCE": "l'intérêt et la performance vont dans des sens différents"
+      },
+      "src": {
+        "academic": "scolaire",
+        "exploration": "exploration",
+        "observation": "observation",
+        "interest": "intérêt",
+        "exploration_performance": "exploration",
+        "teacher_observation": "observation",
+        "student_interest": "intérêt",
+        "profile": "lecture"
+      },
+      "mix": {
+        "supportive": "favorable",
+        "mixed": "mitigée",
+        "contradictory": "contraire"
+      },
+      "source": {
+        "academic": "preuves scolaires",
+        "exploration": "preuves d'exploration",
+        "teacher_observation": "observation d'enseignant"
+      },
+      "line": "Lecture scolaire {{base}} · issue de {{src}} · {{s}} exploration(s) à l'appui / {{c}} contraire(s) · {{o}} observateur(s) · {{stale}} ligne(s) périmée(s)",
+      "pair": "intérêt {{i}} / performance {{p}}",
+      "timeline": "Chronologie",
+      "updated": "Votre profil a été mis à jour",
+      "newEvidenceShort": "{{n}} nouvelle(s) ligne(s) de preuve issue(s) de {{e}} exploration(s)",
+      "updatedHint": "D'après des preuves : ce que vous avez fait, ce que vous avez dit, ce qu'un enseignant a vu. Pas un verdict sur ce que vous êtes."
     }
   },
   "explore": {
@@ -4048,6 +4108,93 @@
       "INVALID_PERFORMANCE": "N'évaluez que les critères de cette activité.",
       "NO_PERFORMANCE_CRITERIA": "Cette activité n'a pas de résultat évalué.",
       "NOT_SUBMITTED": "Évaluez après l'envoi par l'élève."
+    }
+  },
+  "learning": {
+    "heading": "Preuves d'apprentissage",
+    "hint": "Les propres dossiers de l'école — devoirs, quiz, tests, contrôle continu, travaux pratiques, assiduité — chacun gardé pour ce qu'il est. Couche de preuves d'apprentissage {{v}}.",
+    "counts": "{{e}} événements : {{h}} devoirs · {{q}} quiz · {{s}} notes d'évaluation · {{a}} relevés d'assiduité",
+    "coverageOverall": "Couverture des preuves",
+    "observed": "Preuves observées, par type",
+    "mean": "moyenne {{v}}/20",
+    "events": "{{n}} indépendant(s)",
+    "stale": "{{n}} périmé(s)",
+    "family": {
+      "formal": "Évaluation formelle (tests, examens)",
+      "continuous": "Contrôle continu",
+      "practical": "Travaux pratiques",
+      "quiz": "Quiz",
+      "homeworkMarks": "Notes de devoirs",
+      "homeworkCompletion": "Devoirs rendus",
+      "submission": "Ponctualité des remises"
+    },
+    "completedOf": "{{c}} sur {{a}} rendus",
+    "pending": "{{n}} pas encore dus",
+    "submissionCounts": "{{onTime}} à temps · {{late}} en retard · {{veryLate}} très en retard · {{missing}} manquants",
+    "conflicts": "Preuves contradictoires",
+    "attendance": "Assiduité",
+    "attendanceCounts": "{{p}} présent · {{a}} absent · {{l}} en retard · {{e}} excusé · {{m}} jours marqués",
+    "attendanceNote": "L'assiduité est de l'engagement et du contexte. Elle limite ce que les autres preuves peuvent montrer ; elle ne dit rien des capacités.",
+    "timeline": "Chronologie ({{n}} événements)",
+    "notInferred": "Ces preuves décrivent une activité et une performance observées. Elles n'établissent ni personnalité, ni motivation, ni intelligence, ni traits psychologiques, ni orientation professionnelle, et aucune ligne ici n'est une note de l'élève.",
+    "lastSnapshot": "Dernier instantané n°{{n}} du {{when}}",
+    "noSnapshot": "Aucun instantané",
+    "pending2": "nouvelles preuves depuis",
+    "rebuild": "Conserver la lecture du jour",
+    "snapshotTaken": "Lecture conservée.",
+    "nothingNew": "Rien de nouveau depuis le dernier instantané.",
+    "rebuildFailed": "Impossible de conserver la lecture.",
+    "source": {
+      "HOMEWORK": "devoir",
+      "QUIZ": "quiz",
+      "EXAM_SCORE": "évaluation",
+      "ATTENDANCE": "assiduité"
+    },
+    "pattern": {
+      "IMPROVING": "En progrès",
+      "DECLINING": "En baisse",
+      "VARIABLE": "Variable",
+      "CONSISTENT": "Régulier",
+      "INSUFFICIENT_EVIDENCE": "Preuves insuffisantes",
+      "CONSISTENTLY_COMPLETED": "Toujours rendus",
+      "OFTEN_COMPLETED": "Souvent rendus",
+      "OFTEN_MISSING": "Souvent manquants",
+      "MOSTLY_ON_TIME": "Surtout à temps",
+      "OFTEN_LATE": "Souvent en retard",
+      "ATTENDANCE_STABLE": "Stable",
+      "ATTENDANCE_IRREGULAR": "Irrégulière",
+      "ATTENDANCE_DECLINING": "En baisse",
+      "ATTENDANCE_IMPROVING": "En hausse",
+      "INSUFFICIENT_ATTENDANCE_DATA": "Données d'assiduité insuffisantes"
+    },
+    "quality": {
+      "NO_DATA": "Aucune donnée",
+      "INSUFFICIENT_DATA": "Données insuffisantes",
+      "SPARSE_DATA": "Clairsemées",
+      "GOOD_COVERAGE": "Bonne couverture",
+      "STRONG_COVERAGE": "Couverture solide"
+    },
+    "flag": {
+      "STALE_DATA": "Données périmées seulement",
+      "INCOMPLETE_PERIOD": "Période incomplète (travaux en attente ou non notés)",
+      "CONFLICTING_DATA": "Preuves contradictoires",
+      "LIMITED_BY_ATTENDANCE": "Preuves formelles limitées par une assiduité irrégulière"
+    },
+    "contradiction": {
+      "FORMAL_VS_CONTINUOUS_ASSESSMENT": "évaluation formelle et contrôle continu divergent",
+      "THEORY_VS_PRACTICAL": "évaluation écrite et travaux pratiques divergent",
+      "PERFORMANCE_VS_ENGAGEMENT": "notes et remise des devoirs vont dans des sens différents",
+      "ATTENDANCE_VS_COMPLETION": "assiduité et remise des devoirs vont dans des sens différents",
+      "RECENT_VS_HISTORICAL": "les résultats récents diffèrent des anciens"
+    },
+    "mobileHeading": "Votre apprentissage récent",
+    "mobileHint": "Des faits tirés de vos dossiers scolaires. Pas un jugement sur vous.",
+    "concise": {
+      "QUIZ_CONSISTENT": "Vos résultats récents aux quiz en {{subject}} ont été réguliers ({{n}} quiz).",
+      "QUIZ_IMPROVING": "Vos résultats aux quiz en {{subject}} progressent ({{n}} quiz).",
+      "HOMEWORK_MOSTLY_COMPLETED": "Vous avez rendu {{c}} des {{a}} derniers devoirs de {{subject}}.",
+      "HOMEWORK_OFTEN_MISSING": "{{c}} des {{a}} derniers devoirs de {{subject}} ont été rendus — certains manquent.",
+      "LIMITED_EVIDENCE": "Il y a peu de preuves pour {{subject}} car peu d'activités sont enregistrées."
     }
   }
 }

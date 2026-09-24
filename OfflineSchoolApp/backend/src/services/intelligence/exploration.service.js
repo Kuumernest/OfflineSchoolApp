@@ -75,6 +75,9 @@ const recommended = async ({ schoolId, studentId, resources = null, count = 6, l
     strengthProfile: profile,
     history: history.map((h) => ({ activityId: h.activityId, area: h.area, level: h.level, status: h.status })),
     resources, count,
+    // Two completed activities in an area and its aligned slot yields to
+    // breadth. The pupil may still open the area from the catalog.
+    saturation: 2,
   });
   const suggestions = [];
   for (const s of r.suggestions) {

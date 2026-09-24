@@ -54,8 +54,18 @@
  */
 
 const { DIMENSIONS, EXPLORATION_AREAS, dimensionsForSubject } = require("./taxonomy");
+const { STATES, PERSISTENCE, CONFIDENCE } = require("./engineConstants");
+const fusion = require("./fusion");
 
-const STRENGTH_ENGINE_VERSION = "1.0.0";
+/**
+ * 1.1.0 — longitudinal fusion of authorised exploration evidence into strength
+ * interpretation. The 1.0.0 reading is computed exactly as before and kept on
+ * every dimension as baseState/baseConfidence; fusion.js then reads rated
+ * exploration performance, observations, interest, reflection, exposure and
+ * participation — each as what it is — and may move a reading one step on
+ * independent events. See fusion.js for the rules and the recency windows.
+ */
+const STRENGTH_ENGINE_VERSION = "1.1.0";
 
 /**
  * Every number the layer reasons with. Documented here because the brief
@@ -86,11 +96,6 @@ const THRESHOLDS = Object.freeze({
   minWeight: 0.5,
 });
 
-const STATES = Object.freeze({
-  ESTABLISHED: "ESTABLISHED", EMERGING: "EMERGING", DECLINING: "DECLINING", INSUFFICIENT: "INSUFFICIENT",
-});
-const PERSISTENCE = Object.freeze({ PERSISTENT: "persistent", RECURRING: "recurring", EMERGING: "emerging", NONE: "none" });
-const CONFIDENCE  = Object.freeze({ STRONG: "strong", EMERGING: "emerging", INSUFFICIENT: "insufficient" });
 
 /** What this layer will not do, stated on every profile. */
 const NOT_INFERRED = Object.freeze([
@@ -148,6 +153,8 @@ const subjectEvidence = (subject, grading) => {
     strongObservations: strong.length,
     sequencesAtStrength: seqKeys.size,
     termsAtStrength: termKeys.size,
+    termsAtStrengthList: [...termKeys].sort().map((k) => k.replace("|", " T")),
+    lastPeriod: marks.length ? `${marks[marks.length - 1].academicYear} T${marks[marks.length - 1].term}` : null,
     overallAverage: subject.overallAverage ?? null,
     recentAverage: subject.recentAverage ?? null,
     delta: subject.delta ?? null,
@@ -324,12 +331,20 @@ const interestSignals = (explorationEvidence) => (explorationEvidence ?? [])
  * @param {object} input.academicProfile     shared/intelligence buildProfile output
  * @param {object[]} [input.explorationEvidence]  rows { kind, dimension, area, activity, date, recordedBy, source, ... }
  */
-const buildStrengthProfile = ({ academicProfile, explorationEvidence = [] }) => {
+const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf = null }) => {
   const grading = academicProfile.engine;
   const coverageSufficient = Boolean(academicProfile.coverage?.sufficient);
   const subjects = (academicProfile.subjects ?? []).map((s) => subjectEvidence(s, grading));
 
-  const readings = DIMENSIONS.map((d) => dimensionReading(d, subjects, { coverageSufficient, explorationEvidence }));
+  // asOf fixes the recency windows. Callers comparing two roads pass the same
+  // value; left null it is the latest evidence date, so a profile is a pure
+  // function of its inputs and never of the clock.
+  const evidenceTimes = explorationEvidence.map((e) => new Date(e.date).getTime()).filter((n) => !Number.isNaN(n));
+  const asOfDate = asOf ? new Date(asOf) : evidenceTimes.length ? new Date(Math.max(...evidenceTimes)) : null;
+  const normalized = fusion.normalizeEvidence(explorationEvidence, asOfDate);
+
+  const baseReadings = DIMENSIONS.map((d) => dimensionReading(d, subjects, { coverageSufficient, explorationEvidence }));
+  const readings = baseReadings.map((r) => fusion.fuseDimension(r, normalized.items));
 
   // Single-subject strengths: a subject at strength whose name maps to no
   // dimension still deserves to be named under its own name.
@@ -355,10 +370,17 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [] }) => 
     ...(!explorationEvidence.length ? ["no_exploration_evidence"] : []),
   ];
 
-  const overallConfidence = !coverageSufficient ? CONFIDENCE.INSUFFICIENT
-    : strengths.length ? CONFIDENCE.STRONG
+  // 1.1.0: a profile with exploration-established emerging areas is no longer
+  // insufficient merely because the academic coverage is thin.
+  const overallConfidence = strengths.length ? CONFIDENCE.STRONG
     : emergingAreas.length ? CONFIDENCE.EMERGING
     : CONFIDENCE.INSUFFICIENT;
+
+  const coverage = fusion.coverageOf(normalized.items, academicProfile.coverage);
+  const contradictions = readings.flatMap((r) => r.fused.conflicts.map((c) => ({ dimension: r.dimension, ...c })));
+  const timeline = Object.fromEntries(readings
+    .filter((r) => r.state !== STATES.INSUFFICIENT || r.fused.events > 0)
+    .map((r) => [r.dimension, fusion.timelineFor(r, subjects, normalized.items)]));
 
   return {
     studentId: String(academicProfile.studentId),
@@ -387,13 +409,31 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [] }) => 
     // Kept apart from strengths, always.
     interestSignals: interestSignals(explorationEvidence),
     subjects,
-    limitations,
+    limitations: [...limitations, ...(normalized.rejected.length ? ["rejected_evidence_rows"] : []), ...(coverage.stale ? ["stale_evidence_present"] : [])],
     notInferred: NOT_INFERRED,
+    // 1.1.0: the fused evidence, its coverage, the conflicts and the timeline —
+    // every contribution traceable to an evidenceId, an eventId and a source.
+    fusion: {
+      asOf: asOfDate ? asOfDate.toISOString() : null,
+      windows: { recentDays: fusion.FUSION.recentDays, historicalDays: fusion.FUSION.historicalDays },
+      thresholds: fusion.FUSION,
+      authority: fusion.AUTHORITY,
+      coverage, contradictions, timeline,
+      evidence: normalized.items,
+      rejected: normalized.rejected,
+    },
   };
 };
 
 module.exports = {
   STRENGTH_ENGINE_VERSION,
+  FUSION: fusion.FUSION,
+  SOURCES: fusion.SOURCES,
+  AUTHORITY: fusion.AUTHORITY,
+  recencyOf: fusion.recencyOf,
+  normalizeEvidence: fusion.normalizeEvidence,
+  fuseDimension: fusion.fuseDimension,
+  compareProfiles: fusion.compareProfiles,
   THRESHOLDS,
   STATES,
   PERSISTENCE,

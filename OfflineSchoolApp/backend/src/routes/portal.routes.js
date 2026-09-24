@@ -1327,4 +1327,23 @@ router.get("/children/:studentId/explorations", asyncHandler(async (req, res) =>
   return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, explorations: rows } });
 }));
 
+/**
+ * GET /children/:studentId/learning
+ *
+ * A guardian's plain view of one child's learning evidence: per subject, the
+ * pattern each kind of evidence shows and how much evidence there is;
+ * attendance counts and pattern; the concise lines. No event, no note, no
+ * label on the child.
+ */
+router.get("/children/:studentId/learning", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const learningSvc = require("../services/intelligence/learningEvidence.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const r = await learningSvc.readingFor({ schoolId, studentId: id, asOf: asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...(learningSvc.forGuardian(r) ?? { subjects: [], attendance: null, concise: [], notInferred: [] }) } });
+}));
+
 module.exports = router;

@@ -23,6 +23,7 @@
  */
 
 const path = require("path");
+const crypto = require("crypto");
 const ExplorationEvidence      = require("../../db/models/ExplorationEvidence");
 const StrengthProfileSnapshot  = require("../../db/models/StrengthProfileSnapshot");
 const subjectInsights          = require("./subjectInsights.service");
@@ -33,27 +34,35 @@ const CAL = path.join(__dirname, "..", "..", "..", "scripts", "calibration");
 
 const fail = (status, code, message, extra = {}) => Object.assign(new Error(message), { status, code, ...extra });
 
-/** The row as the pure layer reads it: kind, domain, who, when — no notes. */
+/**
+ * The row as the pure layer reads it: kind, domain, who, when, which
+ * exploration, and the rated outcome — no notes, no name. The exploration id
+ * is what lets fusion count one activity's several rows as one event.
+ */
 const evidenceForEngine = (rows) => rows.map((e) => ({
-  kind: e.kind, source: e.source, dimension: e.dimension ?? null, area: e.area ?? null, activity: e.activity,
+  _id: String(e._id), kind: e.kind, source: e.source, dimension: e.dimension ?? null, area: e.area ?? null, activity: e.activity,
   date: e.date, participation: e.participation ?? null, reflection: e.reflection ?? null, recordedBy: String(e.recordedBy),
+  explorationId: e.explorationId ?? null, activityId: e.activityId ?? null, activityVersion: e.activityVersion ?? null, outcome: e.outcome ?? null,
 }));
+
+/** The recency clock: the start of today (UTC), the same on every road in one request. */
+const startOfToday = () => { const d = new Date(); return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); };
 
 const evidenceRows = ({ schoolId, studentId }) =>
   ExplorationEvidence.find({ schoolId, studentId: String(studentId), deletedAt: null }).sort({ date: 1, createdAt: 1 }).lean();
 
 /** The live strengths profile for one pupil, or null when the pupil has no academic profile. */
-const profileFor = async ({ schoolId, studentId }) => {
+const profileFor = async ({ schoolId, studentId, asOf = null }) => {
   const [academicProfile, rows] = await Promise.all([
     subjectInsights.profileFor({ schoolId, studentId: String(studentId) }),
     evidenceRows({ schoolId, studentId }),
   ]);
   if (!academicProfile) return null;
-  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows) });
+  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), asOf: asOf ?? startOfToday() });
 };
 
 /** The same profile through the offline road to the academic engine. */
-const offlineProfileFor = async ({ schoolId, studentId }) => {
+const offlineProfileFor = async ({ schoolId, studentId, asOf = null }) => {
   const { runEngine } = require(path.join(CAL, "analyseCohort"));
   const id = String(studentId);
   const [{ cohort }, rows] = await Promise.all([
@@ -63,7 +72,7 @@ const offlineProfileFor = async ({ schoolId, studentId }) => {
   const run = runEngine(cohort);
   const academicProfile = run.profiles.get(id);
   if (!academicProfile) return null;
-  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows) });
+  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), asOf: asOf ?? startOfToday() });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,24 +130,70 @@ const readingOf = (p) => ({
   explorationAreas: p.explorationAreas,
   interestSignals: p.interestSignals.length,
   notInferred: p.notInferred,
+  fusion: p.fusion ? { asOf: p.fusion.asOf, coverage: p.fusion.coverage, contradictions: p.fusion.contradictions, timeline: p.fusion.timeline, evidenceIds: p.fusion.evidence.map((e) => e.evidenceId) } : null,
 });
 
-const snapshot = async ({ schoolId, studentId, classId, actor, periodLabel = null }) => {
+/** What the reading was made from, hashed, so an unchanged boundary is recognised. */
+const boundaryOf = (profile) => {
+  const ids = (profile.fusion?.evidence ?? []).map((e) => e.evidenceId).sort();
+  const academicTo = profile.evidenceCoverage?.to ?? null;
+  const hash = crypto.createHash("sha1").update(JSON.stringify({ ids, academicTo, seq: profile.evidenceCoverage?.sequences ?? 0,
+    v: [profile.academicEngineVersion, profile.strengthEngineVersion] })).digest("hex");
+  const dates = (profile.fusion?.evidence ?? []).map((e) => e.timestamp).filter(Boolean).sort();
+  return { evidenceRows: ids.length, latestEvidenceAt: dates.length ? new Date(dates[dates.length - 1]) : null, academicTo, hash };
+};
+
+const latestSnapshot = ({ schoolId, studentId }) =>
+  StrengthProfileSnapshot.findOne({ schoolId, studentId: String(studentId), deletedAt: null }).sort({ profileVersion: -1 }).lean();
+
+/**
+ * Keep today's reading. Idempotent on the evidence boundary: when the latest
+ * snapshot was made from exactly these rows under these engine versions, it is
+ * returned and nothing new is written. Engine versions are the server's; a
+ * caller cannot supply them. Old snapshots are never touched.
+ */
+const snapshot = async ({ schoolId, studentId, classId, actor, periodLabel = null, force = false }) => {
   const profile = await profileFor({ schoolId, studentId });
   if (!profile) throw fail(404, "NO_PROFILE", "The pupil has no academic profile to snapshot.");
-  const last = await StrengthProfileSnapshot.findOne({ schoolId, studentId: String(studentId), deletedAt: null })
-    .sort({ profileVersion: -1 }).select("profileVersion").lean();
-  return StrengthProfileSnapshot.create({
+  const boundary = boundaryOf(profile);
+  const last = await latestSnapshot({ schoolId, studentId });
+  if (!force && last?.evidenceBoundary?.hash === boundary.hash && last.strengthEngineVersion === profile.strengthEngineVersion) {
+    return { snapshot: last, created: false };
+  }
+  const { EXPLORATION_ENGINE_VERSION } = require("../../../../shared/exploration");
+  const created = await StrengthProfileSnapshot.create({
     schoolId, studentId: String(studentId), classId: classId ?? null,
     profileVersion: (last?.profileVersion ?? 0) + 1,
     academicEngineVersion: profile.academicEngineVersion,
     strengthEngineVersion: profile.strengthEngineVersion,
+    explorationEngineVersion: EXPLORATION_ENGINE_VERSION,
+    asOf: new Date(profile.fusion.asOf),
+    evidenceBoundary: boundary,
     sourcePeriod: { from: profile.evidenceCoverage.from, to: profile.evidenceCoverage.to, sequences: profile.evidenceCoverage.sequences },
     periodLabel: periodLabel ? String(periodLabel).slice(0, 60) : null,
     generatedAt: new Date(),
     recordedBy: actor,
     profile: readingOf(profile),
   });
+  return { snapshot: created, created: true };
+};
+
+/** What changed since the last snapshot: structured, with the new evidence since it. */
+const changesSince = async ({ schoolId, studentId }) => {
+  const [profile, last, rows] = await Promise.all([
+    profileFor({ schoolId, studentId }), latestSnapshot({ schoolId, studentId }), evidenceRows({ schoolId, studentId }),
+  ]);
+  if (!profile) return null;
+  const since = last?.generatedAt ?? null;
+  const newRows = rows.filter((r) => !since || new Date(r.createdAt ?? r.date) > since);
+  const byKind = newRows.reduce((o, r) => { o[r.kind] = (o[r.kind] ?? 0) + 1; return o; }, {});
+  return {
+    previous: last ? { snapshotId: String(last._id), profileVersion: last.profileVersion, generatedAt: last.generatedAt, strengthEngineVersion: last.strengthEngineVersion } : null,
+    current: { strengthEngineVersion: profile.strengthEngineVersion, academicEngineVersion: profile.academicEngineVersion, asOf: profile.fusion.asOf },
+    newEvidence: { rows: newRows.length, byKind, explorations: new Set(newRows.map((r) => r.explorationId).filter(Boolean)).size },
+    comparison: strengths.compareProfiles(last?.profile ?? null, profile),
+    pendingSnapshot: !last || last.evidenceBoundary?.hash !== boundaryOf(profile).hash || last.strengthEngineVersion !== profile.strengthEngineVersion,
+  };
 };
 
 const history = ({ schoolId, studentId }) =>
@@ -178,6 +233,10 @@ const forGuardian = (p) => (p ? {
 module.exports = {
   profileFor,
   offlineProfileFor,
+  startOfToday,
+  boundaryOf,
+  latestSnapshot,
+  changesSince,
   evidenceRows,
   recordEvidence,
   KINDS_BY_SOURCE,

@@ -36,8 +36,18 @@ const strengthProfileSnapshotSchema = new mongoose.Schema(
 
     // Per pupil, 1, 2, 3 … in the order taken.
     profileVersion:        { type: Number, required: true },
-    academicEngineVersion: { type: String, required: true },
-    strengthEngineVersion: { type: String, required: true },
+    academicEngineVersion:    { type: String, required: true },
+    strengthEngineVersion:    { type: String, required: true },
+    explorationEngineVersion: { type: String, default: null },
+
+    // The evidence the reading was made from: how much, up to when, and a
+    // hash of exactly which rows — so a rebuild on unchanged evidence returns
+    // this snapshot instead of minting an identical one.
+    asOf: { type: Date, default: null },
+    evidenceBoundary: {
+      type: new mongoose.Schema({ evidenceRows: Number, latestEvidenceAt: Date, academicTo: mongoose.Schema.Types.Mixed, hash: String }, { _id: false }),
+      default: null,
+    },
 
     sourcePeriod: {
       type: new mongoose.Schema({ from: mongoose.Schema.Types.Mixed, to: mongoose.Schema.Types.Mixed, sequences: Number }, { _id: false }),

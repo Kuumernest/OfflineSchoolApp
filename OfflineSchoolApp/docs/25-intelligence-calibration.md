@@ -991,3 +991,95 @@ LLM_DECISION_MAKING: NOT IMPLEMENTED
 
 REAL-WORLD VALIDATION: STILL PENDING
 ```
+
+---
+
+## 16. Stage 11 — Strength Engine 1.1.0 and what it will calibrate against
+
+The fusion thresholds are the layer's own and documented in
+`shared/strengths/fusion.js`: recentDays 120, historicalDays 365, eventsToLift
+2, eventsToContradict 2, sourcesForBroadCoverage 3; the teacher rule's 2
+observers is unchanged from 1.0.0. Each is a calibration question the real
+pilot can answer with the same tools: teacher confirmation on a strength
+reading (a review of category `strength`), the four concern groups, and the
+interest × performance pairs the exploration loop records.
+
+When 1.1.0 moves a reading that 1.0.0 would not have, the profile says so
+(`baseState` vs `state`, `fused.stateSource`, `fused.reasons`), so a reviewer
+can judge the fusion step apart from the academic reading. A change to any
+fusion threshold is a 1.2.0 decision under §6.
+
+### Verification (Stage 11)
+
+| | |
+|---|---|
+| `check-strength-fusion.js` (new) | 58 assertions, 0 failures — baseline kept, one step on two events and never two, one event is one event, signals never ability, the one teacher rule unchanged, four corners, recency at 120/121 and 365/366 days, agency, timeline, comparison, saturation, determinism; then roles, v1 → evidence → v2 with v1 untouched, idempotent rebuild, retraction, live = offline |
+| `check-strengths.js` / `check-exploration.js` | 74 / 86, 0 failures — only the strength-engine version pins moved to 1.1.0; every 1.0.0 behaviour still asserted |
+| `npm run check:intel` | 13 scripts, 814 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | 72 scripts, 4,609 passed, 1 failed — the failure a pre-existing false positive in `check-teacher-intelligence.js` (its money-word scan matched the hex letters `cfa` inside a randomly generated UUID); the currency codes now match as whole words, and the script re-runs 55/55 |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,733 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| mobile | `eslint` clean on the Explore screen and service |
+| Engines | `ENGINE_VERSION` 1.0.0 untouched; `STRENGTH_ENGINE_VERSION` 1.0.0 → **1.1.0**; `EXPLORATION_ENGINE_VERSION` 1.0.0 — its recommender's new `saturation` input is optional and leaves the 1.0.0 output identical when omitted |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 11 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.1.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+
+EVIDENCE_FUSION: IMPLEMENTED
+LONGITUDINAL_PROFILE: IMPLEMENTED
+PROFILE_CHANGE_EXPLANATION: IMPLEMENTED
+CONTRADICTION_TRACKING: IMPLEMENTED
+EXPLORATION_FEEDBACK_LOOP: CLOSED
+
+CAREER_PREDICTION: NOT IMPLEMENTED
+PSYCHOLOGICAL_INFERENCE: NOT IMPLEMENTED
+LLM_DECISION_MAKING: NOT IMPLEMENTED
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```
+
+---
+
+## 17. Stage 12 — learning evidence and calibration
+
+The learning-evidence layer's thresholds are its own (`taxonomy.js`):
+minEventsForPattern 3, minAttendanceDays 10, veryLateDays 7, directionDelta
+0.10, consistentSpread 0.10, variableSpread 0.20, completion 0.90 / 0.60,
+onTime 0.80, attendanceStable 0.90, contradictionDelta 0.15, coverage bands
+3 / 6 / 12. None of its signals is authorised to influence the strength,
+exploration or guidance engines in 1.0.0; the real pilot will read them beside
+teacher confirmations before any signal is admitted, and admitting one is a
+versioned change of the receiving engine.
+
+### Verification (Stage 12)
+
+| | |
+|---|---|
+| `check-learning-evidence.js` (new) | 69 assertions, 0 failures — every source, every semantic state, one event once, patterns that need evidence, recency at the boundaries, homework completion/submission/lateness, attendance never ability, practical apart from formal, five contradictions kept standing, quality as coverage, the strength boundary untouched, privacy, determinism; then every role, the guardian, snapshots, an idempotent rebuild, a corrected mark, live = offline |
+| `npm run check:intel` | 14 scripts, 883 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **73 scripts, 4,679 assertions, 0 failures** |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,804 keys in 2 languages, `api:check`, `check:roles`, `check:l10n` ok |
+| mobile | `eslint` clean on the Explore screen and service |
+| Engines | academic 1.0.0, strengths 1.1.0, exploration 1.0.0 untouched; `LEARNING_EVIDENCE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 12 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.1.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```

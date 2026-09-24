@@ -416,8 +416,16 @@ export interface StrengthEvidenceItem {
   direction?: string; overallAverage?: number | null; recentAverage?: number | null; delta?: number | null; supports: boolean;
 }
 
+export interface FusedBlock {
+  stateSource: "academic" | "exploration" | "teacher_observation"; reasons: string[];
+  events: number; supportingEvents: number; contradictingEvents: number; neutralEvents: number; teacherObservers: number; interestEvents: number;
+  participationEvents: number; exposureEvents: number; pair: { interest: string; performance: string } | null;
+  recency: { recent: number; historical: number; stale: number }; conflicts: Array<Record<string, unknown>>; evidenceIds: string[];
+}
+
 export interface DimensionReading {
   dimension: string; state: StrengthState; confidence: Confidence; persistence: Persistence;
+  baseState?: StrengthState; baseConfidence?: Confidence; fused?: FusedBlock;
   supportingSubjects: Array<{ subjectId: string; subjectName: string | null }>;
   decliningSubjects:  Array<{ subjectId: string; subjectName: string | null }>;
   crossSubject: boolean; evidence: StrengthEvidenceItem[]; limitations: string[];
@@ -447,6 +455,34 @@ export interface StrengthProfile {
   subjects: Array<{ subjectId: string; subjectName: string | null; state: StrengthState; persistence: Persistence; consistency: string | null; direction: string; observations: number; strongObservations: number; overallAverage: number | null; recentAverage: number | null }>;
   limitations: string[];
   notInferred: string[];
+  fusion?: {
+    asOf: string; windows: { recentDays: number; historicalDays: number };
+    coverage: { overall: string; sources: string[]; stale: number; exploration: { events: number }; teacherObservation: { observers: number }; interest: number; reflection: number; exposure: number; participation: number };
+    contradictions: Array<{ dimension: string; kind: string; academic?: string; exploration?: string; interest?: string; performance?: string; teacherObservation?: string; observers?: number; supporting?: number; contradicting?: number }>;
+    timeline: Record<string, Array<{ when: string | null; source: string; reading: string; subjectName?: string | null; area?: string; observers?: number; confidence?: string; stateSource?: string }>>;
+    evidence: Array<{ evidenceId: string; sourceType: string; eventId: string; dimension: string | null; timestamp: string | null; recency: string; direction: string }>;
+  };
+}
+
+export interface ProfileChanges {
+  previous: { snapshotId: string; profileVersion: number; generatedAt: string; strengthEngineVersion: string } | null;
+  current: { strengthEngineVersion: string; academicEngineVersion: string; asOf: string } | null;
+  newEvidence: { rows: number; byKind: Record<string, number>; explorations: number } | null;
+  comparison: {
+    newStrengths: ChangeEntry[]; strengthened: ChangeEntry[]; unchanged: ChangeEntry[]; weakened: ChangeEntry[]; newEmerging: ChangeEntry[]; declining: ChangeEntry[];
+    newContradictions: Array<{ dimension: string; kind: string }>; coverage: { previous: string | null; current: string | null };
+  } | null;
+  pendingSnapshot: boolean;
+}
+export interface ChangeEntry { dimension: string; previous: { state: string; confidence: string }; current: { state: string; confidence: string }; reasons: string[] }
+
+export async function fetchProfileChanges(studentId: string, schoolId?: string): Promise<ProfileChanges> {
+  const { data } = await api.get(`/insights/student/${studentId}/profile/changes`, schoolId ? { params: { schoolId } } : {});
+  return (data as { data: ProfileChanges }).data;
+}
+export async function rebuildProfile(studentId: string, input: { schoolId?: string; periodLabel?: string }): Promise<{ created: boolean; data: StrengthSnapshot }> {
+  const { data } = await api.post(`/insights/student/${studentId}/profile/rebuild`, input);
+  return data as { created: boolean; data: StrengthSnapshot };
 }
 
 export interface StrengthsResponse { studentId: string; name: string | null; enrollmentNo: string | null; classId: string | null; profile: StrengthProfile | null; reviews?: RecordedReview[] }
@@ -543,4 +579,58 @@ export async function observeExploration(id: string, input: { schoolId?: string;
 export async function rateExploration(id: string, input: { schoolId?: string; ratings: Array<{ criterion: string; rating: string }>; note?: string; version?: number }): Promise<ExplorationRow> {
   const { data } = await api.post(`/explorations/${id}/performance`, input);
   return (data as { data: ExplorationRow }).data;
+}
+
+
+// ── Learning evidence — the school's own records, kept apart by kind ────────
+//
+// Stage 12. Homework, quiz attempts, subject scores (tests, CA, practicals)
+// and attendance become events with their observations apart; patterns need
+// evidence; quality is coverage; contradictions stand. Nothing here is a
+// score of the pupil, and in 1.0.0 no signal moves any engine.
+
+export interface SeriesReading {
+  events: number; validEvents: number; independentEvents: number; recent: number; historical: number; stale: number;
+  firstObserved: string | null; lastObserved: string | null; mean: number | null; spread: number | null;
+  direction: string | null; delta: number | null; pattern: string;
+}
+export interface HomeworkReading {
+  performance: SeriesReading; assigned: number; completed: number; missing: number; pending: number; ungraded: number; completionRate: number | null; pattern: string;
+  submission: { onTime: number; late: number; veryLate: number; missing: number; noDeadline: number; pattern: string };
+}
+export interface AttendanceReading {
+  present: number; absent: number; late: number; excused: number; marked: number; unmarked: number | null; presenceRate: number | null; trend: number | null; pattern: string;
+  recent: number; historical: number; stale: number; firstObserved: string | null; lastObserved: string | null;
+}
+export interface SubjectLearning {
+  subjectId: string | null; formal: SeriesReading; continuous: SeriesReading; practical: SeriesReading; quiz: SeriesReading; homework: HomeworkReading;
+  persistence: { quizzesRetried: number; quizzesAttempted: number; currentCompletionStreak: number };
+}
+export interface LearningEvidence {
+  learningEvidenceVersion: string | null; asOf: string | null;
+  counts: { events: number; bySource: Record<string, number>; rejected: number };
+  patterns: { bySubject: Record<string, SubjectLearning>; attendance: { overall: AttendanceReading; bySubject: Record<string, AttendanceReading> } };
+  quality: { subjects: Record<string, { subjectId: string | null; level: string; independentEvents: number; families: Record<string, { level: string; independentEvents: number; stale: number; flags: string[] }>; flags: string[]; contradictions: Array<{ code: string } & Record<string, unknown>> }>; attendance: { level: string; marked: number }; overall: { level: string; independentEvents: number; subjects: number; flags: string[] }; contradictions: Array<Record<string, unknown> & { subjectId: string | null; code: string }> };
+  signals: Array<{ signal: string; subjectId: string | null; family?: string; code: string; authorizedFor: string[] }>;
+  timeline: Array<{ when: string | null; learningEventId: string; sourceType: string; family: string | null; subjectId: string | null; recency: string; observations: Array<{ kind: string; state: string; normalizedValue?: number | null }> }>;
+  concise: Array<{ code: string; subjectId: string | null; n?: number; completed?: number; assigned?: number }>;
+  notInferred: string[];
+}
+export interface LearningChanges {
+  previous: { snapshotNumber: number; generatedAt: string } | null; current: { learningEvidenceVersion: string; asOf: string | null; events: number } | null; newEvents: number;
+  comparison: { changes: Array<{ subjectId: string | null; family: string; previous: string; current: string }>; newContradictions: Array<{ subjectId: string | null; code: string }>; coverage: { previous: string | null; current: string | null } } | null;
+  pendingSnapshot: boolean; history: Array<{ snapshotNumber: number; generatedAt: string; events: number; coverage: string | null }>;
+}
+const lq = (schoolId?: string) => (schoolId ? { params: { schoolId } } : {});
+export async function fetchLearningEvidence(studentId: string, schoolId?: string): Promise<LearningEvidence> {
+  const { data } = await api.get(`/insights/student/${studentId}/learning-evidence`, lq(schoolId));
+  return (data as { data: LearningEvidence }).data;
+}
+export async function fetchLearningChanges(studentId: string, schoolId?: string): Promise<LearningChanges> {
+  const { data } = await api.get(`/insights/student/${studentId}/learning-changes`, lq(schoolId));
+  return (data as { data: LearningChanges }).data;
+}
+export async function rebuildLearningEvidence(studentId: string, schoolId?: string): Promise<{ created: boolean }> {
+  const { data } = await api.post(`/insights/student/${studentId}/learning-evidence/rebuild`, schoolId ? { schoolId } : {});
+  return data as { created: boolean };
 }

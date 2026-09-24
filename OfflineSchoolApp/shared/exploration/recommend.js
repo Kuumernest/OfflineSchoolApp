@@ -77,7 +77,14 @@ const areaOfSignal = (s) => {
  * @param {string[]|null} [input.resources] what is available; null = do not filter
  * @param {number} [input.count]
  */
-const recommend = ({ strengthProfile = null, history = [], resources = null, count = 6 } = {}) => {
+/**
+ * `saturation`: when a number, an aligned area with that many COMPLETED
+ * activities yields its slot to adjacent and discovery areas — the pupil can
+ * still open it from the catalog; the list stops repeating it. Omitted (the
+ * 1.0.0 contract), nothing changes. A suggestion is never justified by having
+ * been suggested before: every reason here is an evidence reason.
+ */
+const recommend = ({ strengthProfile = null, history = [], resources = null, count = 6, saturation = null } = {}) => {
   const n = Math.max(1, Math.min(12, Number(count) || 6));
   const q = quota(n);
 
@@ -93,6 +100,9 @@ const recommend = ({ strengthProfile = null, history = [], resources = null, cou
 
   const explorationsByArea = new Map();
   for (const h of history) explorationsByArea.set(h.area, (explorationsByArea.get(h.area) ?? 0) + 1);
+  const completedByArea = new Map();
+  for (const h of history.filter((x) => x.status === "COMPLETED")) completedByArea.set(h.area, (completedByArea.get(h.area) ?? 0) + 1);
+  const saturated = saturation === null ? [] : alignedAreas.filter((a) => (completedByArea.get(a) ?? 0) >= saturation);
   const discoveryAreas = AREAS.filter((a) => !openedByArea.has(a) && !adjacentAreas.includes(a))
     .sort((a, b) => (explorationsByArea.get(a) ?? 0) - (explorationsByArea.get(b) ?? 0) || a.localeCompare(b));
 
@@ -157,7 +167,7 @@ const recommend = ({ strengthProfile = null, history = [], resources = null, cou
   };
 
   const taken = new Set();
-  let aligned   = fill(alignedAreas,   "aligned",   q.aligned,   taken);
+  let aligned   = fill(alignedAreas.filter((a) => !saturated.includes(a)), "aligned", q.aligned, taken);
   let adjacent  = fill(adjacentAreas,  "adjacent",  q.adjacent,  taken);
   let discovery = fill(discoveryAreas, "discovery", q.discovery, taken);
   // Spill: discovery, then adjacent, then aligned — only the shortfall, so the
@@ -174,6 +184,7 @@ const recommend = ({ strengthProfile = null, history = [], resources = null, cou
     suggestions: [...aligned, ...adjacent, ...discovery],
     // Named so a screen can say why the list is shaped as it is.
     breadth: { aligned: aligned.length, adjacent: adjacent.length, discovery: discovery.length },
+    saturated,
   };
 };
 

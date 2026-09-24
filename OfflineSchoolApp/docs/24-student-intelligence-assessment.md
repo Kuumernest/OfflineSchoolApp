@@ -1146,3 +1146,165 @@ No career prediction, ranking or probability; no college recommendation; no
 psychological profiling, IQ estimate or personality; no automated counselling;
 no LLM anywhere in the path; no machine learning over the exploration data. A
 missing signal is insufficient evidence, never absence of ability.
+
+
+---
+
+## Stage 11 — Longitudinal Evidence Fusion (Strength Engine 1.1.0)
+
+> Strength Engine 1.1.0 introduces longitudinal fusion of authorised
+> exploration evidence into strength interpretation.
+
+Before: `ACADEMIC 1.0.0 · STRENGTH 1.0.0 · EXPLORATION 1.0.0`. After:
+`ACADEMIC 1.0.0 · STRENGTH 1.1.0 · EXPLORATION 1.0.0`. The academic engine is
+untouched. The exploration engine is untouched in behaviour: its recommender
+gained an *optional* `saturation` input that leaves the 1.0.0 contract
+identical when omitted (the service passes 2).
+
+```
+academic marks + rated exploration performance + teacher observations
+  + interest / reflection + exposure / participation
+    → normalise (shared/strengths/fusion.js)
+    → 1.0.0 reading per dimension, kept as baseState / baseConfidence
+    → fuse: one step on independent events, never past the baseline's reach
+    → longitudinal profile · timeline · coverage · conflicts
+    → exploration areas from the fused reading → recommendations
+```
+
+### Source semantics — what each can and cannot say
+
+| source | authority | may |
+|---|---|---|
+| ACADEMIC | demonstrated school performance | establish or retire a strength alone — the baseline |
+| EXPLORATION_PERFORMANCE | demonstrated performance in a defined activity, rated against its criteria | move a reading **one step** on ≥ 2 independent events; lower confidence on ≥ 2 contradicting |
+| TEACHER_OBSERVATION | contextual human observation | the one 1.0.0 rule, unchanged: two distinct observers lift EMERGING to strong |
+| STUDENT_INTEREST | stated preference | an interest signal — never ability |
+| STUDENT_REFLECTION | self-reported experience | coverage — never ability |
+| EXPOSURE | encountered the domain | coverage — never ability |
+| PARTICIPATION | engaged with the activity | coverage — never ability |
+
+### Evidence grouping — one event is one event
+
+Rows share an `eventId` (the exploration's id). An event has at most one
+performance direction (strong / demonstrated → *supports*; limited →
+*contradicts*; partial → neutral), one interest signal and a set of distinct
+observers. Two supporting events are two activities. The same rows delivered
+twice are rejected as duplicates; a kind the layer does not know is rejected
+and named. Every fused item keeps `evidenceId`, `sourceType`, `sourceId`,
+`eventId`, `dimension`, `timestamp`, `recency` and `provenance`.
+
+### Transitions fusion may make
+
+| from | to | on |
+|---|---|---|
+| INSUFFICIENT | EMERGING | ≥ 2 independent supporting events, none contradicting |
+| EMERGING | ESTABLISHED | ≥ 2 independent supporting events, none contradicting |
+| EMERGING | (stays) confidence −1 | ≥ 2 contradicting events outnumbering support |
+| ESTABLISHED | (stays) confidence −1 | ≥ 2 contradicting events and no support — reported as a conflict |
+| DECLINING | (stays) | supporting events are reported as a conflict, not a rescue |
+| INSUFFICIENT | ESTABLISHED | **never**, from exploration alone |
+
+One successful activity establishes nothing; one unsuccessful activity
+disproves nothing; five successes still cap at EMERGING without academic
+support. Skipped, declined and abandoned activities produce no performance row
+and weaken nothing.
+
+### Recency
+
+RECENT ≤ 120 days before `asOf`; HISTORICAL ≤ 365; STALE beyond — kept on the
+record and on the timeline, counted in nothing. An unreadable date is STALE.
+`asOf` is an input (the service passes the start of today, the same value on
+both roads of the consistency check), so a profile is a function of its inputs
+and never of the clock.
+
+### Coverage, confidence, contradiction
+
+**Coverage** is how much evidence there is, by source — academic
+sequences/subjects, exploration events, observers, interest/reflection/
+exposure/participation rows, stale rows, the sources present, an overall band
+(none / thin / moderate / broad). It is never a score of the pupil.
+**Confidence** keeps its meaning — confidence that the evidence supports the
+reading — and moves one band at a time. **Contradictions** are reported as
+patterns (`ACADEMIC_VS_EXPLORATION`, `EXPLORATION_MIXED`,
+`OBSERVATION_VS_PERFORMANCE`, `INTEREST_VS_PERFORMANCE`) with the counts
+behind them; nothing resolves them into "suited" or "not suited". The interest
+× performance pair from Stage 10 is carried on every dimension that has both.
+
+### Timeline, snapshots, comparison
+
+Per dimension: academic periods at strength, then events by date with source
+and reading, then the profile's reading with its state source. Snapshots
+(`StrengthProfileSnapshot`) now carry all three engine versions, `asOf`, and an
+**evidence boundary** (row count, latest evidence date, academic period, a hash
+of exactly which rows). `POST …/profile/rebuild` is idempotent on that
+boundary — unchanged evidence returns the snapshot that already covers it —
+takes the server's engine versions only, and never touches an old snapshot.
+`compareProfiles` says what changed — new strengths, strengthened, unchanged,
+weakened, new emerging, declining, new contradictions, coverage change — with
+structured reason codes (`EXPLORATION_SUPPORT:2`, `TEACHER_OBSERVERS:2`,
+`ACADEMIC_PERSISTENT`, …). No improvement score. A retracted evidence row
+changes the next reading and not the old snapshot.
+
+### Rebuild semantics
+
+Snapshots are taken by staff (rebuild), never on every write. `GET
+…/profile/changes` says whether one is pending (the boundary moved) and lists
+the evidence that arrived since; the pupil's phone shows it as "Your profile
+has been updated — based on evidence", the teacher's page as previous →
+current with reasons.
+
+### Recommendation feedback
+
+The recommender reads the fused profile; it interprets no evidence itself.
+Every reason is an evidence reason. With `saturation` (2), an aligned area
+with two completed activities yields its slot to adjacent and discovery areas;
+the pupil can still open it from the catalog. "Recommended because it was
+recommended" cannot occur.
+
+### Routes and authorisation
+
+`GET …/profile/timeline`, `GET …/profile/changes`, `GET …/profile/evidence`
+(the pupil by role for their own; staff on `insights.viewTaught` for pupils
+they may read; operator by selection; bursar out), `POST …/profile/rebuild`
+(staff). The guardian's views are unchanged. The engine receives normalised
+rows: no name, no contact, no note text.
+
+### Offline
+
+`GET …/consistency` diffs the fused profile through both roads with one
+`asOf`: states, base states, evidence items, coverage, contradictions,
+timeline. A structural difference fails.
+
+## What evidence fusion does not mean
+
+- Exploration evidence does not prove innate talent.
+- Interest does not prove ability.
+- Participation does not prove competence.
+- One successful activity does not establish a strength.
+- One unsuccessful activity does not disprove a strength.
+- Teacher observation is contextual evidence, not absolute ground truth.
+- The system does not determine a student's career.
+
+### Limitations
+
+Direction is read from a teacher's rating against an activity's own criteria;
+adjacency and windows are fixed numbers awaiting calibration; participation and
+exposure are coverage only; the pair is reported, not weighed; no real pupil
+has been through the fused engine — real evidence enters through the Stage 8
+pilot and nothing else.
+
+
+---
+
+## Stage 12 — Comprehensive Learning Evidence Intelligence
+
+**More data ≠ more intelligence.** Stage 12 adds a deterministic
+Learning Evidence layer (`shared/learningEvidence`, `LEARNING_EVIDENCE_VERSION`
+1.0.0) that represents the school's ordinary records — homework, quiz
+attempts, tests, continuous assessment, practicals, attendance — as events
+with their observations kept apart, reads longitudinal patterns only where the
+evidence suffices, states coverage and contradictions, and hands the existing
+engines **nothing** until a versioned decision says otherwise. The academic,
+strengths and exploration engines are unchanged. docs/26 holds the audit, the
+taxonomy, the state vocabulary, the thresholds, the boundary, the privacy and
+offline rules, and what the layer does not infer.

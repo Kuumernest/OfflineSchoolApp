@@ -309,6 +309,11 @@ const EXCLUDED = {
     "is in shared/exploration and is offline by construction; a school's " +
     "additions are read online with it and carry nothing about any pupil.",
   // ── Bookkeeping the classroom never needs ──────────────────────────────
+  LearningEvidenceSnapshot:
+    "A learning-evidence reading as it stood on one day — patterns, quality, " +
+    "contradictions, a hash of the events it was made from. Derived from " +
+    "collections that ARE mirrored (homework, scores, exams, attendance) and " +
+    "recomputable from them; the memory stays online in one place.",
   StrengthProfileSnapshot:
     "A strengths profile as it read on one day, taken deliberately for the " +
     "longitudinal view. Derived from documents that ARE mirrored and " +

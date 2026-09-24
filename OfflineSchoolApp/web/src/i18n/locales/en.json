@@ -3861,6 +3861,66 @@
       "discipline": "discipline",
       "leadership": "leadership",
       "fixed_talent": "fixed talent"
+    },
+    "fusion": {
+      "changesHeading": "What changed",
+      "changesSince": "Since snapshot v{{v}} of {{when}}",
+      "noSnapshotYet": "No snapshot yet — the first rebuild keeps today's reading.",
+      "nothingChanged": "Nothing has changed since the last snapshot.",
+      "nothingNew": "Nothing new: the last snapshot already covers this evidence.",
+      "newEvidence": "New evidence",
+      "explorations": "{{n}} exploration(s)",
+      "pending": "New evidence since the last snapshot — rebuild to keep today's reading.",
+      "moved": {
+        "newStrengths": "Now established",
+        "newEmerging": "Now emerging",
+        "strengthened": "Confidence up",
+        "weakened": "Weakened",
+        "declining": "Now declining"
+      },
+      "reason": {
+        "EXPLORATION_SUPPORT": "{{n}} independent supporting exploration(s)",
+        "EXPLORATION_CONTRADICTION": "{{n}} independent contradicting exploration(s)",
+        "EXPLORATION_SUPPORT_BELOW_THRESHOLD": "{{n}} supporting exploration — below the two needed",
+        "EXPLORATION_SUPPORT_DESPITE_DECLINE": "{{n}} supporting exploration(s) despite the academic decline",
+        "TEACHER_OBSERVERS": "{{n}} distinct teacher observation(s)",
+        "ACADEMIC_PERSISTENT": "continued academic evidence",
+        "ACADEMIC_DECLINE": "recent academic evidence weakened"
+      },
+      "conflictsHeading": "Conflicting evidence",
+      "conflictsHint": "Sources that disagree, reported as a pattern. The system does not resolve them into a verdict.",
+      "conflict": {
+        "ACADEMIC_VS_EXPLORATION": "academic evidence and exploration performance disagree",
+        "EXPLORATION_MIXED": "exploration performance is mixed",
+        "OBSERVATION_VS_PERFORMANCE": "a supportive observation against contradicting performance",
+        "INTEREST_VS_PERFORMANCE": "interest and performance point different ways"
+      },
+      "src": {
+        "academic": "academic",
+        "exploration": "exploration",
+        "observation": "observation",
+        "interest": "interest",
+        "exploration_performance": "exploration",
+        "teacher_observation": "observation",
+        "student_interest": "interest",
+        "profile": "reading"
+      },
+      "mix": {
+        "supportive": "supportive",
+        "mixed": "mixed",
+        "contradictory": "contradictory"
+      },
+      "source": {
+        "academic": "academic evidence",
+        "exploration": "exploration evidence",
+        "teacher_observation": "teacher observation"
+      },
+      "line": "Academic reading {{base}} · from {{src}} · {{s}} supporting / {{c}} contradicting exploration(s) · {{o}} observer(s) · {{stale}} stale row(s)",
+      "pair": "interest {{i}} / performance {{p}}",
+      "timeline": "Timeline",
+      "updated": "Your profile has been updated",
+      "newEvidenceShort": "{{n}} new evidence row(s) from {{e}} exploration(s)",
+      "updatedHint": "Based on evidence: what you did, what you said, what a teacher saw. Not a verdict on what you are."
     }
   },
   "explore": {
@@ -4048,6 +4108,93 @@
       "INVALID_PERFORMANCE": "Rate only this activity's criteria.",
       "NO_PERFORMANCE_CRITERIA": "This activity has no rated output.",
       "NOT_SUBMITTED": "Rate after the pupil submits."
+    }
+  },
+  "learning": {
+    "heading": "Learning evidence",
+    "hint": "The school's own records — homework, quizzes, tests, continuous assessment, practicals, attendance — each kept as what it is. Learning evidence layer {{v}}.",
+    "counts": "{{e}} events: {{h}} homework · {{q}} quizzes · {{s}} assessment marks · {{a}} attendance entries",
+    "coverageOverall": "Evidence coverage",
+    "observed": "Observed evidence, by kind",
+    "mean": "average {{v}}/20",
+    "events": "{{n}} independent",
+    "stale": "{{n}} stale",
+    "family": {
+      "formal": "Formal assessment (tests, exams)",
+      "continuous": "Continuous assessment",
+      "practical": "Practical work",
+      "quiz": "Quizzes",
+      "homeworkMarks": "Homework marks",
+      "homeworkCompletion": "Homework completion",
+      "submission": "Submission timing"
+    },
+    "completedOf": "{{c}} of {{a}} handed in",
+    "pending": "{{n}} not yet due",
+    "submissionCounts": "{{onTime}} on time · {{late}} late · {{veryLate}} very late · {{missing}} missing",
+    "conflicts": "Conflicting evidence",
+    "attendance": "Attendance",
+    "attendanceCounts": "{{p}} present · {{a}} absent · {{l}} late · {{e}} excused · {{m}} marked days",
+    "attendanceNote": "Attendance is engagement and context. It limits what the other evidence can show; it says nothing about ability.",
+    "timeline": "Timeline ({{n}} events)",
+    "notInferred": "This evidence describes observed activity and performance. It does not establish personality, motivation, intelligence, psychological traits or career suitability, and no line here is a score of the pupil.",
+    "lastSnapshot": "Last snapshot #{{n}} of {{when}}",
+    "noSnapshot": "No snapshot yet",
+    "pending2": "new evidence since",
+    "rebuild": "Keep today's reading",
+    "snapshotTaken": "Reading kept.",
+    "nothingNew": "Nothing new since the last snapshot.",
+    "rebuildFailed": "Could not keep the reading.",
+    "source": {
+      "HOMEWORK": "homework",
+      "QUIZ": "quiz",
+      "EXAM_SCORE": "assessment",
+      "ATTENDANCE": "attendance"
+    },
+    "pattern": {
+      "IMPROVING": "Improving",
+      "DECLINING": "Declining",
+      "VARIABLE": "Variable",
+      "CONSISTENT": "Consistent",
+      "INSUFFICIENT_EVIDENCE": "Not enough evidence",
+      "CONSISTENTLY_COMPLETED": "Consistently completed",
+      "OFTEN_COMPLETED": "Often completed",
+      "OFTEN_MISSING": "Often missing",
+      "MOSTLY_ON_TIME": "Mostly on time",
+      "OFTEN_LATE": "Often late",
+      "ATTENDANCE_STABLE": "Stable",
+      "ATTENDANCE_IRREGULAR": "Irregular",
+      "ATTENDANCE_DECLINING": "Declining",
+      "ATTENDANCE_IMPROVING": "Improving",
+      "INSUFFICIENT_ATTENDANCE_DATA": "Not enough attendance data"
+    },
+    "quality": {
+      "NO_DATA": "No data",
+      "INSUFFICIENT_DATA": "Insufficient data",
+      "SPARSE_DATA": "Sparse",
+      "GOOD_COVERAGE": "Good coverage",
+      "STRONG_COVERAGE": "Strong coverage"
+    },
+    "flag": {
+      "STALE_DATA": "Only stale data",
+      "INCOMPLETE_PERIOD": "Period incomplete (pending or ungraded work)",
+      "CONFLICTING_DATA": "Conflicting evidence",
+      "LIMITED_BY_ATTENDANCE": "Formal evidence limited by irregular attendance"
+    },
+    "contradiction": {
+      "FORMAL_VS_CONTINUOUS_ASSESSMENT": "formal assessment and continuous assessment disagree",
+      "THEORY_VS_PRACTICAL": "written assessment and practical work disagree",
+      "PERFORMANCE_VS_ENGAGEMENT": "marks and completion point different ways",
+      "ATTENDANCE_VS_COMPLETION": "attendance and homework completion point different ways",
+      "RECENT_VS_HISTORICAL": "recent results differ from earlier ones"
+    },
+    "mobileHeading": "Your recent learning",
+    "mobileHint": "Facts from your school records. Not a judgement of you.",
+    "concise": {
+      "QUIZ_CONSISTENT": "Your recent quiz results in {{subject}} have been consistent ({{n}} quizzes).",
+      "QUIZ_IMPROVING": "Your quiz results in {{subject}} have been improving ({{n}} quizzes).",
+      "HOMEWORK_MOSTLY_COMPLETED": "You have handed in {{c}} of {{a}} recent {{subject}} homeworks.",
+      "HOMEWORK_OFTEN_MISSING": "{{c}} of {{a}} recent {{subject}} homeworks were handed in — some are missing.",
+      "LIMITED_EVIDENCE": "There is limited evidence for {{subject}} because few learning activities are recorded."
     }
   }
 }

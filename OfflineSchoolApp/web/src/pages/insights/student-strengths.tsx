@@ -25,7 +25,7 @@ import { useState }                                from "react";
 import { useParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                          from "react-i18next";
-import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route } from "lucide-react";
+import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
 import { PageHeader }   from "@/components/ui/PageHeader";
@@ -37,8 +37,9 @@ import { useToast }     from "@/components/ui/Toast";
 import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/FormField";
 import {
   fetchStrengths, fetchStrengthProfile, fetchStrengthEvidence, snapshotStrengthProfile, recordExplorationEvidence, submitReview,
-  fetchExplorations, fetchCatalog, observeExploration, rateExploration,
-  type DimensionReading, type RecordedReview, type ExplorationRow,
+  fetchExplorations, fetchCatalog, observeExploration, rateExploration, fetchProfileChanges, rebuildProfile,
+  fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence,
+  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading,
 } from "@/services/insights.service";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
@@ -97,6 +98,28 @@ export default function StudentStrengthsPage() {
 
       {p && !p.evidenceCoverage.sufficient && (
         <Card><p className="text-sm text-ink">{t("strengths.insufficientBody")}</p></Card>
+      )}
+
+      {/* ── What changed since the last snapshot ─────────────────────── */}
+      <WhatChanged studentId={studentId} schoolId={schoolId} />
+
+      {/* ── Conflicting evidence, reported as a pattern ──────────────── */}
+      {p?.fusion && p.fusion.contradictions.length > 0 && (
+        <Section icon={<AlertTriangle className="h-3.5 w-3.5" />} heading={t("strengths.fusion.conflictsHeading")} hint={t("strengths.fusion.conflictsHint")}>
+          <ul className="space-y-1 text-sm">
+            {p.fusion.contradictions.map((c, i) => (
+              <li key={i} className="text-ink">
+                <span className="font-medium">{t(`strengths.dimension.${c.dimension}`, { defaultValue: c.dimension })}</span> — {t(`strengths.fusion.conflict.${c.kind}`, { defaultValue: c.kind })}
+                <span className="text-xs text-ink-muted">
+                  {c.academic ? ` · ${t("strengths.fusion.src.academic")}: ${t(`strengths.state.${c.academic}`)}` : ""}
+                  {c.exploration ? ` · ${t("strengths.fusion.src.exploration")}: ${t(`strengths.fusion.mix.${c.exploration}`, { defaultValue: c.exploration })}` : ""}
+                  {c.teacherObservation ? ` · ${t("strengths.fusion.src.observation")}: ${c.teacherObservation}` : ""}
+                  {c.interest ? ` · ${t("strengths.fusion.src.interest")}: ${c.interest} / ${c.performance}` : ""}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Section>
       )}
 
       {/* ── Strength in ─────────────────────────────────────────────── */}
@@ -179,6 +202,9 @@ export default function StudentStrengthsPage() {
         <p className="text-sm text-ink">{(p?.notInferred ?? []).map((k) => t(`strengths.notInferred.${k}`, { defaultValue: k })).join(" · ")}</p>
       </Section>
 
+      {/* ── Learning evidence: the school's own records, by kind ──────── */}
+      <LearningEvidence studentId={studentId} schoolId={schoolId} isStaff={isStaff} toast={toast} />
+
       {/* ── Explorations: what the pupil tried, apart from the reading ── */}
       {isStaff && <Explorations studentId={studentId} schoolId={schoolId} toast={toast} onChanged={refresh} />}
 
@@ -245,6 +271,14 @@ function DimensionCard({ d, reviews, studentId, schoolId, isStaff, onChanged, to
         ))}
       </ul>
       {d.limitations.length > 0 && <p className="text-xs text-ink-muted">{t("strengths.limits")}: {d.limitations.map((l) => t(`strengths.limitation.${l}`, { defaultValue: l })).join(", ")}</p>}
+      {d.fused && (
+        <p className="text-xs text-ink-muted">
+          {t("strengths.fusion.line", { base: t(`strengths.state.${d.baseState ?? d.state}`), src: t(`strengths.fusion.source.${d.fused.stateSource}`),
+            s: d.fused.supportingEvents, c: d.fused.contradictingEvents, o: d.fused.teacherObservers, stale: d.fused.recency.stale })}
+          {d.fused.pair && ` · ${t("strengths.fusion.pair", { i: d.fused.pair.interest, p: d.fused.pair.performance })}`}
+        </p>
+      )}
+      <Timeline dimension={d.dimension} />
       {isStaff && (
         <div className="flex flex-wrap items-end gap-2 border-t border-line pt-2">
           <div className="text-xs text-ink-muted">{t("strengths.yourViewLabel")}</div>
@@ -304,9 +338,11 @@ function RecordEvidence({ studentId, schoolId, onChanged, toast }: { studentId: 
 function SnapshotButton({ studentId, schoolId, onChanged, toast }: { studentId: string; schoolId?: string; onChanged: () => Promise<unknown>; toast: ReturnType<typeof useToast>["toast"] }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState("");
+  void snapshotStrengthProfile;
   const m = useMutation({
-    mutationFn: () => snapshotStrengthProfile(studentId, { ...(schoolId ? { schoolId } : {}), periodLabel: label || undefined }),
-    onSuccess: async () => { toast({ kind: "success", title: t("strengths.snapshotTaken") }); setLabel(""); await onChanged(); },
+    // Rebuild: idempotent on the evidence boundary — unchanged evidence returns the snapshot that already covers it.
+    mutationFn: () => rebuildProfile(studentId, { ...(schoolId ? { schoolId } : {}), periodLabel: label || undefined }),
+    onSuccess: async (r) => { toast({ kind: r.created ? "success" : "info", title: t(r.created ? "strengths.snapshotTaken" : "strengths.fusion.nothingNew") }); setLabel(""); await onChanged(); },
     onError: () => toast({ kind: "error", title: t("strengths.snapshotFailed") }),
   });
   return (
@@ -419,6 +455,172 @@ function ExplorationCard({ e, criteria, schoolId, toast, onChanged }: { e: Explo
         </details>
       )}
     </Card>
+  );
+}
+
+/** What changed since the last snapshot: the new evidence, the moved dimensions, the reasons. */
+function WhatChanged({ studentId, schoolId }: { studentId: string; schoolId?: string }) {
+  const { t } = useTranslation();
+  const q = useQuery({ queryKey: ["profile-changes", studentId, schoolId], queryFn: () => fetchProfileChanges(studentId, schoolId) });
+  const c = q.data;
+  if (!c?.comparison) return null;
+  const moved: Array<[string, ChangeEntry[]]> = [["newStrengths", c.comparison.newStrengths], ["newEmerging", c.comparison.newEmerging], ["strengthened", c.comparison.strengthened], ["weakened", c.comparison.weakened], ["declining", c.comparison.declining]];
+  const any = moved.some(([, l]) => l.length) || (c.newEvidence?.rows ?? 0) > 0;
+  return (
+    <Section icon={<GitCompare className="h-3.5 w-3.5" />} heading={t("strengths.fusion.changesHeading")}
+      hint={c.previous ? t("strengths.fusion.changesSince", { v: c.previous.profileVersion, when: new Date(c.previous.generatedAt).toLocaleDateString() }) : t("strengths.fusion.noSnapshotYet")}>
+      {!any && <p className="text-sm text-ink-muted">{t("strengths.fusion.nothingChanged")}</p>}
+      {c.newEvidence && c.newEvidence.rows > 0 && (
+        <p className="text-sm text-ink">{t("strengths.fusion.newEvidence")}: {Object.entries(c.newEvidence.byKind).map(([k, v]) => `${v} × ${t(`strengths.kind.${k}`, { defaultValue: k })}`).join(", ")} · {t("strengths.fusion.explorations", { n: c.newEvidence.explorations })}</p>
+      )}
+      {moved.filter(([, l]) => l.length).map(([k, l]) => (
+        <div key={k}>
+          <p className="text-xs font-medium text-ink-faint">{t(`strengths.fusion.moved.${k}`)}</p>
+          <ul className="list-disc pl-5 text-sm text-ink">
+            {l.map((e) => (
+              <li key={e.dimension}>
+                {t(`strengths.dimension.${e.dimension}`, { defaultValue: e.dimension })}: {t(`strengths.state.${e.previous.state}`)} → {t(`strengths.state.${e.current.state}`)}
+                {e.previous.confidence !== e.current.confidence && ` (${t(`strengths.confidence.${e.previous.confidence}`)} → ${t(`strengths.confidence.${e.current.confidence}`)})`}
+                {e.reasons.length > 0 && <span className="text-xs text-ink-muted"> — {e.reasons.map((r) => t(`strengths.fusion.reason.${r.split(":")[0]}`, { defaultValue: r, n: r.split(":")[1] ?? "" })).join("; ")}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      {c.pendingSnapshot && <p className="text-xs text-ink-muted">{t("strengths.fusion.pending")}</p>}
+    </Section>
+  );
+}
+
+/** The dimension's timeline, collapsed: academic periods, events by date, the reading. */
+function Timeline({ dimension }: { dimension: string }) {
+  const { t } = useTranslation();
+  const { studentId = "" } = useParams();
+  const user = useUser();
+  const schoolId = user?.role === "super_admin" ? (user?.schoolId || undefined) : undefined;
+  const q = useQuery({ queryKey: ["strengths", studentId, schoolId], queryFn: () => fetchStrengths(studentId, schoolId), enabled: false });
+  const rows = q.data?.profile?.fusion?.timeline?.[dimension] ?? [];
+  if (!rows.length) return null;
+  return (
+    <details className="text-xs">
+      <summary className="cursor-pointer text-ink-muted">{t("strengths.fusion.timeline")}</summary>
+      <ul className="mt-1 space-y-0.5 text-ink-muted">
+        {rows.map((r, i) => (
+          <li key={i}>
+            {r.when ? (r.when.length > 10 ? new Date(r.when).toLocaleDateString() : r.when) : "—"} · {t(`strengths.fusion.src.${r.source.toLowerCase()}`, { defaultValue: r.source })} · {r.subjectName ?? ""}{r.area ? t(`strengths.area.${r.area}`, { defaultValue: r.area }) : ""} {r.reading}{r.observers ? ` ×${r.observers}` : ""}
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/** One series reading, as a line: pattern, mean, events, recency. */
+function SeriesLine({ label, s }: { label: string; s: SeriesReading }) {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-1 text-sm">
+      <span className="text-ink">{label}</span>
+      <span className="text-right text-xs text-ink-muted">
+        {t(`learning.pattern.${s.pattern}`, { defaultValue: s.pattern })}
+        {s.mean !== null && ` · ${t("learning.mean", { v: Math.round(s.mean * 20 * 10) / 10 })}`}
+        {` · ${t("learning.events", { n: s.independentEvents })}`}
+        {s.stale > 0 && ` · ${t("learning.stale", { n: s.stale })}`}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * The school's own records, per subject: assessment, CA, practical, quizzes,
+ * homework (completion and submission apart from marks), attendance, the
+ * patterns, the coverage, the conflicts, the timeline. Observed evidence,
+ * system pattern and evidence limitation are three different columns here,
+ * as they are everywhere else in this system.
+ */
+function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: string; schoolId?: string; isStaff: boolean; toast: ReturnType<typeof useToast>["toast"] }) {
+  const { t } = useTranslation();
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ["learning-evidence", studentId, schoolId], queryFn: () => fetchLearningEvidence(studentId, schoolId) });
+  const cq = useQuery({ queryKey: ["learning-changes", studentId, schoolId], queryFn: () => fetchLearningChanges(studentId, schoolId), enabled: isStaff });
+  const rebuild = useMutation({
+    mutationFn: () => rebuildLearningEvidence(studentId, schoolId),
+    onSuccess: async (r) => { toast({ kind: r.created ? "success" : "info", title: t(r.created ? "learning.snapshotTaken" : "learning.nothingNew") }); await qc.invalidateQueries({ queryKey: ["learning-changes", studentId] }); },
+    onError: () => toast({ kind: "error", title: t("learning.rebuildFailed") }),
+  });
+  const d = q.data;
+  if (!d || !d.learningEvidenceVersion) return null;
+  const subjects = Object.values(d.patterns.bySubject).filter((s) => s.subjectId);
+  const att: AttendanceReading = d.patterns.attendance.overall;
+  return (
+    <Section icon={<BookOpen className="h-3.5 w-3.5" />} heading={t("learning.heading")} hint={t("learning.hint", { v: d.learningEvidenceVersion })}>
+      <Card className="text-xs text-ink-muted">
+        {t("learning.counts", { e: d.counts.events, h: d.counts.bySource.HOMEWORK ?? 0, q: d.counts.bySource.QUIZ ?? 0, s: d.counts.bySource.EXAM_SCORE ?? 0, a: d.counts.bySource.ATTENDANCE ?? 0 })}
+        {" · "}{t("learning.coverageOverall")}: <Badge variant="default" label={t(`learning.quality.${d.quality.overall.level}`)} />
+        {d.quality.overall.flags.map((f) => <span key={f}> <Badge variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} /></span>)}
+      </Card>
+
+      {subjects.map((s: SubjectLearning) => {
+        const qs = d.quality.subjects[s.subjectId ?? "__none__"];
+        return (
+          <Card key={s.subjectId ?? "none"} className="space-y-2 text-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-ink">{s.subjectId}</span>
+              <Badge variant="default" label={t(`learning.quality.${qs?.level ?? "NO_DATA"}`)} />
+              {(qs?.flags ?? []).map((f) => <Badge key={f} variant="warning" label={t(`learning.flag.${f}`, { defaultValue: f })} />)}
+            </div>
+            <p className="text-xs font-medium text-ink-faint">{t("learning.observed")}</p>
+            <SeriesLine label={t("learning.family.formal")} s={s.formal} />
+            <SeriesLine label={t("learning.family.continuous")} s={s.continuous} />
+            <SeriesLine label={t("learning.family.practical")} s={s.practical} />
+            <SeriesLine label={t("learning.family.quiz")} s={s.quiz} />
+            <SeriesLine label={t("learning.family.homeworkMarks")} s={s.homework.performance} />
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-1">
+              <span className="text-ink">{t("learning.family.homeworkCompletion")}</span>
+              <span className="text-right text-xs text-ink-muted">
+                {t(`learning.pattern.${s.homework.pattern}`, { defaultValue: s.homework.pattern })} · {t("learning.completedOf", { c: s.homework.completed, a: s.homework.assigned })}
+                {s.homework.pending > 0 && ` · ${t("learning.pending", { n: s.homework.pending })}`}
+              </span>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-line py-1">
+              <span className="text-ink">{t("learning.family.submission")}</span>
+              <span className="text-right text-xs text-ink-muted">
+                {t(`learning.pattern.${s.homework.submission.pattern}`, { defaultValue: s.homework.submission.pattern })} · {t("learning.submissionCounts", s.homework.submission)}
+              </span>
+            </div>
+            {(qs?.contradictions ?? []).length > 0 && (
+              <p className="text-xs text-warning">{t("learning.conflicts")}: {(qs?.contradictions ?? []).map((c) => t(`learning.contradiction.${c.code}`, { defaultValue: c.code })).join("; ")}</p>
+            )}
+          </Card>
+        );
+      })}
+
+      <Card className="text-sm">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-medium text-ink">{t("learning.attendance")}</span>
+          <Badge variant={att.pattern === "ATTENDANCE_STABLE" ? "success" : att.pattern === "INSUFFICIENT_ATTENDANCE_DATA" ? "default" : "warning"} label={t(`learning.pattern.${att.pattern}`)} />
+        </div>
+        <p className="text-xs text-ink-muted">{t("learning.attendanceCounts", { p: att.present, a: att.absent, l: att.late, e: att.excused, m: att.marked })}</p>
+        <p className="text-xs text-ink-muted">{t("learning.attendanceNote")}</p>
+      </Card>
+
+      <details className="text-xs">
+        <summary className="cursor-pointer text-ink-muted">{t("learning.timeline", { n: d.timeline.length })}</summary>
+        <ul className="mt-1 max-h-64 space-y-0.5 overflow-y-auto text-ink-muted">
+          {d.timeline.slice().reverse().map((e) => (
+            <li key={e.learningEventId}>{e.when ? new Date(e.when).toLocaleDateString() : "—"} · {t(`learning.source.${e.sourceType}`)}{e.subjectId ? ` · ${e.subjectId}` : ""} · {e.observations.map((o) => `${o.kind}: ${o.state}${o.normalizedValue !== undefined && o.normalizedValue !== null ? ` (${Math.round(o.normalizedValue * 100)}%)` : ""}`).join(", ")} · {e.recency}</li>
+          ))}
+        </ul>
+      </details>
+
+      <p className="text-xs text-ink-muted">{t("learning.notInferred")}</p>
+      {isStaff && cq.data && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-ink-muted">
+          <span>{cq.data.previous ? t("learning.lastSnapshot", { n: cq.data.previous.snapshotNumber, when: new Date(cq.data.previous.generatedAt).toLocaleDateString() }) : t("learning.noSnapshot")}{cq.data.pendingSnapshot ? ` · ${t("learning.pending2")}` : ""}</span>
+          <Button size="sm" variant="secondary" disabled={rebuild.isPending} onClick={() => rebuild.mutate()}>{t("learning.rebuild")}</Button>
+        </div>
+      )}
+    </Section>
   );
 }
 

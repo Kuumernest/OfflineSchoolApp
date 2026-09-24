@@ -109,6 +109,22 @@ export const getSuggestions = async () => {
   return row ? JSON.parse(row.json) : { suggestions: [], breadth: null };
 };
 
+/** The pupil's concise learning lines — facts, no labels. Online only; [] offline. */
+export const fetchLearningConcise = async () => {
+  try {
+    const { data } = await api.get("/insights/student/me/learning-patterns");
+    return data?.data?.concise ?? [];
+  } catch { return []; }
+};
+
+/** What changed since the last profile snapshot, in the words the pupil sees. Online only; null offline. */
+export const fetchProfileChanges = async () => {
+  try {
+    const { data } = await api.get("/insights/student/me/profile/changes");
+    return data?.data ?? null;
+  } catch { return null; }
+};
+
 export const refreshExplorations = async (lang = "en") => {
   const db = await getDatabase();
   await ensureSchema(db);

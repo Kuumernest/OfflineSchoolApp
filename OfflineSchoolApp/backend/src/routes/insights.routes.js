@@ -20,6 +20,7 @@ const reviewCases     = require("../services/intelligence/reviewCases.service");
 const pilots          = require("../services/intelligence/pilot.service");
 const strengthsSvc    = require("../services/intelligence/strengths.service");
 const explorationSvc  = require("../services/intelligence/exploration.service");
+const learningSvc     = require("../services/intelligence/learningEvidence.service");
 const ExplorationEvidence = require("../db/models/ExplorationEvidence");
 const IntelligencePilot = require("../db/models/IntelligencePilot");
 
@@ -788,9 +789,10 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
   const academic = await reviewCases.liveOfflineConsistency({ schoolId, studentId: String(pupil.student._id) });
   // The strengths layer, through both roads to the academic profile beneath it.
   const { compareProfiles } = require("../../scripts/calibration/consistency");
+  const asOf = strengthsSvc.startOfToday();
   const [liveS, offS] = await Promise.all([
-    strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) }),
-    strengthsSvc.offlineProfileFor({ schoolId, studentId: String(pupil.student._id) }),
+    strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id), asOf }),
+    strengthsSvc.offlineProfileFor({ schoolId, studentId: String(pupil.student._id), asOf }),
   ]);
   const strengthsCmp = compareProfiles(
     { engineVersion: liveS?.strengthEngineVersion ?? null, profile: liveS, guidance: null },
@@ -909,6 +911,56 @@ router.get("/student/:studentId/profile", strengthRead, asyncHandler(async (req,
   });
 }));
 
+/** GET …/profile/timeline — per dimension: academic periods at strength, events by date, the reading. */
+router.get("/student/:studentId/profile/timeline", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    asOf: p?.fusion.asOf ?? null, windows: p?.fusion.windows ?? null, timeline: p?.fusion.timeline ?? {}, contradictions: p?.fusion.contradictions ?? [],
+    versions: { academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null } } });
+}));
+
+/** GET …/profile/changes — what changed since the last snapshot, and the evidence that arrived since. */
+router.get("/student/:studentId/profile/changes", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const c = await strengthsSvc.changesSince({ schoolId, studentId: String(pupil.student._id) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), ...(c ?? { previous: null, current: null, newEvidence: null, comparison: null, pendingSnapshot: false }) } });
+}));
+
+/** GET …/profile/evidence — the fused evidence items, each traceable; the pupil sees their own. */
+router.get("/student/:studentId/profile/evidence", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
+    authority: p?.fusion.authority ?? null, coverage: p?.fusion.coverage ?? null, evidence: p?.fusion.evidence ?? [], rejected: p?.fusion.rejected ?? [],
+    dimensions: [...(p?.strengths ?? []), ...(p?.emergingAreas ?? []), ...(p?.decliningAreas ?? [])].map((d) => ({ dimension: d.dimension, state: d.state, baseState: d.baseState, confidence: d.confidence, baseConfidence: d.baseConfidence, fused: d.fused })) } });
+}));
+
+/**
+ * POST …/profile/rebuild — keep today's reading as a new snapshot when the
+ * evidence has changed; otherwise return the one that already covers it.
+ * Idempotent; engine versions are the server's; old snapshots untouched.
+ */
+router.post("/student/:studentId/profile/rebuild", requirePermission("insights.viewTaught"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await strengthsSvc.snapshot({ schoolId, studentId: String(pupil.student._id), classId: pupil.classId, actor: String(req.user._id ?? req.user.id), periodLabel: req.body?.periodLabel ?? null });
+    return res.status(r.created ? 201 : 200).json({ success: true, created: r.created, data: r.snapshot });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
 /** POST /api/insights/student/:studentId/profile/snapshot — keep today's reading. Staff only. */
 router.post("/student/:studentId/profile/snapshot", requirePermission("insights.viewTaught"), asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
@@ -916,9 +968,9 @@ router.post("/student/:studentId/profile/snapshot", requirePermission("insights.
   const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
   try {
-    const snap = await strengthsSvc.snapshot({
+    const { snapshot: snap } = await strengthsSvc.snapshot({
       schoolId, studentId: String(pupil.student._id), classId: pupil.classId,
-      actor: String(req.user._id ?? req.user.id), periodLabel: req.body?.periodLabel ?? null,
+      actor: String(req.user._id ?? req.user.id), periodLabel: req.body?.periodLabel ?? null, force: true,
     });
     return res.status(201).json({ success: true, data: snap });
   } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
@@ -1047,6 +1099,82 @@ router.get("/explorations/summary", requirePermission("insights.viewTaught"), as
   const scope = await reviewScope(req, res);
   if (!scope) return undefined;
   return res.json({ success: true, data: { generatedAt: new Date(), scope, ...(await explorationSvc.summary(scope)) } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEARNING EVIDENCE — what the school's own records say, kept apart by kind
+//
+// Same hierarchy as strengths: staff on insights.viewTaught for pupils they
+// may read; a pupil their own, by role; operator by selection; bursar out.
+// The pupil's reading carries no note text and no other pupil.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// A reading may be asked "as of" a date: recency and past-due are read against
+// it. An audit reads a term as it stood; a snapshot always uses today.
+const asOfOf = (req) => { const d = req.query.asOf ? new Date(String(req.query.asOf)) : null; return d && !Number.isNaN(d.getTime()) ? d : null; };
+const learningRead = async (req, res, pick) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const r = await learningSvc.readingFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), ...(r ? pick(r) : { learningEvidenceVersion: null }) } });
+};
+
+/** GET …/learning-evidence — the events, the patterns, the quality, the signals. Everything, by kind. */
+router.get("/student/:studentId/learning-evidence", strengthRead, asyncHandler((req, res) => learningRead(req, res, (r) => ({
+  learningEvidenceVersion: r.learningEvidenceVersion, asOf: r.asOf, windows: r.windows, counts: r.counts, rejected: r.rejected,
+  events: r.events, patterns: r.patterns, quality: r.quality, signals: r.signals, integration: r.integration, timeline: r.timeline, concise: r.concise, notInferred: r.notInferred,
+}))));
+
+/** GET …/learning-patterns — the patterns only. */
+router.get("/student/:studentId/learning-patterns", strengthRead, asyncHandler((req, res) => learningRead(req, res, (r) => ({
+  learningEvidenceVersion: r.learningEvidenceVersion, asOf: r.asOf, patterns: r.patterns, concise: r.concise, notInferred: r.notInferred,
+}))));
+
+/** GET …/learning-coverage — quality and contradictions only. */
+router.get("/student/:studentId/learning-coverage", strengthRead, asyncHandler((req, res) => learningRead(req, res, (r) => ({
+  learningEvidenceVersion: r.learningEvidenceVersion, asOf: r.asOf, quality: r.quality, contradictions: r.quality.contradictions, counts: r.counts,
+}))));
+
+/** GET …/learning-changes — what changed since the last snapshot. */
+router.get("/student/:studentId/learning-changes", strengthRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const c = await learningSvc.changesSince({ schoolId, studentId: String(pupil.student._id) });
+  const hist = await learningSvc.history({ schoolId, studentId: String(pupil.student._id) });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), ...(c ?? {}),
+    history: hist.map((h) => ({ snapshotId: String(h._id), snapshotNumber: h.snapshotNumber, learningEvidenceVersion: h.learningEvidenceVersion, asOf: h.asOf, generatedAt: h.generatedAt, recordedBy: h.recordedBy, events: h.evidenceBoundary?.events ?? 0, coverage: h.reading?.quality?.overall?.level ?? null })) } });
+}));
+
+/** POST …/learning-evidence/rebuild — keep today's reading; idempotent on the evidence boundary. Staff only. */
+router.post("/student/:studentId/learning-evidence/rebuild", requirePermission("insights.viewTaught"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await learningSvc.rebuild({ schoolId, studentId: String(pupil.student._id), classId: pupil.classId, actor: String(req.user._id ?? req.user.id) });
+    return res.status(r.created ? 201 : 200).json({ success: true, created: r.created, data: r.snapshot });
+  } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
+/** GET …/learning-evidence/consistency — live reading vs the reading from mirrored documents, diffed. */
+router.get("/student/:studentId/learning-evidence/consistency", reviewRead, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const { compareProfiles } = require("../../scripts/calibration/consistency");
+  const asOf = asOfOf(req) ?? learningSvc.startOfToday();
+  const [live, off] = await Promise.all([
+    learningSvc.readingFor({ schoolId, studentId: String(pupil.student._id), asOf }),
+    learningSvc.offlineReadingFor({ schoolId, studentId: String(pupil.student._id), asOf }),
+  ]);
+  const cmp = compareProfiles({ engineVersion: live?.learningEvidenceVersion ?? null, profile: live, guidance: null }, { engineVersion: off?.learningEvidenceVersion ?? null, profile: off, guidance: null });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: String(pupil.student._id), identical: cmp.identical, engineVersion: cmp.engineVersion, differences: cmp.differences } });
 }));
 
 module.exports = router;
