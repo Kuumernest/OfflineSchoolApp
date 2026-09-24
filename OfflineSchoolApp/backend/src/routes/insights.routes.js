@@ -789,7 +789,7 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
   const academic = await reviewCases.liveOfflineConsistency({ schoolId, studentId: String(pupil.student._id) });
   // The strengths layer, through both roads to the academic profile beneath it.
   const { compareProfiles } = require("../../scripts/calibration/consistency");
-  const asOf = strengthsSvc.startOfToday();
+  const asOf = asOfOf(req) ?? strengthsSvc.startOfToday();
   const [liveS, offS] = await Promise.all([
     strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id), asOf }),
     strengthsSvc.offlineProfileFor({ schoolId, studentId: String(pupil.student._id), asOf }),
@@ -803,7 +803,8 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
     data: {
       generatedAt: new Date(), ...academic,
       identical: academic.identical && strengthsCmp.identical,
-      strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, differences: strengthsCmp.differences },
+      strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, summary: strengthsCmp.summary, differences: strengthsCmp.differences,
+                   versions: { live: versionsOf(liveS), offline: versionsOf(offS) } },
     },
   });
 }));
@@ -861,7 +862,7 @@ router.get("/student/:studentId/strengths", strengthRead, asyncHandler(async (re
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
   const id = String(pupil.student._id);
-  const profile = await strengthsSvc.profileFor({ schoolId, studentId: id });
+  const profile = await strengthsSvc.profileFor({ schoolId, studentId: id, asOf: asOfOf(req) });
   const reviews = await strengthReviewsFor(req, schoolId, id);
   return res.json({
     success: true,
@@ -875,7 +876,7 @@ router.get("/student/:studentId/exploration", strengthRead, asyncHandler(async (
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
-  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
   return res.json({
     success: true,
     data: {
@@ -884,10 +885,15 @@ router.get("/student/:studentId/exploration", strengthRead, asyncHandler(async (
       strengths: (p?.strengths ?? []).map((d) => ({ dimension: d.dimension, persistence: d.persistence, confidence: d.confidence })),
       emergingAreas: (p?.emergingAreas ?? []).map((d) => ({ dimension: d.dimension, persistence: d.persistence, confidence: d.confidence })),
       limitations: p?.limitations ?? ["no_academic_profile"], confidence: p?.confidence ?? "insufficient",
-      notInferred: p?.notInferred ?? [], versions: { academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null },
+      notInferred: p?.notInferred ?? [], versions: versionsOf(p),
     },
   });
 }));
+
+/** Every engine version beneath a reading, in one place. */
+const versionsOf = (p) => ({ academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null,
+  learningIntegration: p?.learningIntegrationVersion ?? null, learningEvidence: p?.learningEvidenceVersion ?? null, exploration: EXPLORATION_ENGINE_VERSION_OF() });
+const EXPLORATION_ENGINE_VERSION_OF = () => require("../../../shared/exploration").EXPLORATION_ENGINE_VERSION;
 
 /** GET /api/insights/student/:studentId/profile — the current reading and every snapshot before it. */
 router.get("/student/:studentId/profile", strengthRead, asyncHandler(async (req, res) => {
@@ -896,15 +902,17 @@ router.get("/student/:studentId/profile", strengthRead, asyncHandler(async (req,
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
   const id = String(pupil.student._id);
-  const [p, history] = await Promise.all([strengthsSvc.profileFor({ schoolId, studentId: id }), strengthsSvc.history({ schoolId, studentId: id })]);
+  const [p, history] = await Promise.all([strengthsSvc.profileFor({ schoolId, studentId: id, asOf: asOfOf(req) }), strengthsSvc.history({ schoolId, studentId: id })]);
   return res.json({
     success: true,
     data: {
       generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
-      current: p ? { ...strengthsSvc.readingOf(p), academicEngineVersion: p.academicEngineVersion, strengthEngineVersion: p.strengthEngineVersion } : null,
+      current: p ? { ...strengthsSvc.readingOf(p), academicEngineVersion: p.academicEngineVersion, strengthEngineVersion: p.strengthEngineVersion,
+                     learningIntegrationVersion: p.learningIntegrationVersion, learningEvidenceVersion: p.learningEvidenceVersion } : null,
       history: history.map((h) => ({
         snapshotId: String(h._id), profileVersion: h.profileVersion, academicEngineVersion: h.academicEngineVersion,
-        strengthEngineVersion: h.strengthEngineVersion, sourcePeriod: h.sourcePeriod, periodLabel: h.periodLabel,
+        strengthEngineVersion: h.strengthEngineVersion, learningIntegrationVersion: h.learningIntegrationVersion ?? null, learningEvidenceVersion: h.learningEvidenceVersion ?? null,
+        explorationEngineVersion: h.explorationEngineVersion ?? null, sourcePeriod: h.sourcePeriod, periodLabel: h.periodLabel,
         generatedAt: h.generatedAt, recordedBy: h.recordedBy, profile: h.profile,
       })),
     },
@@ -917,10 +925,12 @@ router.get("/student/:studentId/profile/timeline", strengthRead, asyncHandler(as
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
-  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
   return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
-    asOf: p?.fusion.asOf ?? null, windows: p?.fusion.windows ?? null, timeline: p?.fusion.timeline ?? {}, contradictions: p?.fusion.contradictions ?? [],
-    versions: { academic: p?.academicEngineVersion ?? null, strengths: p?.strengthEngineVersion ?? null } } });
+    asOf: p?.fusion.asOf ?? null, windows: p?.fusion.windows ?? null, timeline: p?.fusion.timeline ?? {},
+    contradictions: [...(p?.fusion.contradictions ?? []), ...(p?.learningIntegration?.contradictions ?? [])],
+    learningRelationships: p?.learningIntegration?.relationships ?? {},
+    versions: versionsOf(p) } });
 }));
 
 /** GET …/profile/changes — what changed since the last snapshot, and the evidence that arrived since. */
@@ -929,7 +939,7 @@ router.get("/student/:studentId/profile/changes", strengthRead, asyncHandler(asy
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
-  const c = await strengthsSvc.changesSince({ schoolId, studentId: String(pupil.student._id) });
+  const c = await strengthsSvc.changesSince({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
   return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)), ...(c ?? { previous: null, current: null, newEvidence: null, comparison: null, pendingSnapshot: false }) } });
 }));
 
@@ -939,10 +949,19 @@ router.get("/student/:studentId/profile/evidence", strengthRead, asyncHandler(as
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
   if (!pupil) return undefined;
-  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id) });
+  const p = await strengthsSvc.profileFor({ schoolId, studentId: String(pupil.student._id), asOf: asOfOf(req) });
   return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(schoolId, pupil)),
     authority: p?.fusion.authority ?? null, coverage: p?.fusion.coverage ?? null, evidence: p?.fusion.evidence ?? [], rejected: p?.fusion.rejected ?? [],
-    dimensions: [...(p?.strengths ?? []), ...(p?.emergingAreas ?? []), ...(p?.decliningAreas ?? [])].map((d) => ({ dimension: d.dimension, state: d.state, baseState: d.baseState, confidence: d.confidence, baseConfidence: d.baseConfidence, fused: d.fused })) } });
+    // 1.2.0: the learning-evidence authority, the independent items that reached a dimension, what was unavailable.
+    learningAuthority: p?.learningIntegration?.authority ?? null,
+    learningIntegration: p?.learningIntegration ? { version: p.learningIntegration.version, learningEvidenceVersion: p.learningIntegration.learningEvidenceVersion,
+      independentLearningItems: p.learningIntegration.independentLearningItems, duplicateEventsCollapsed: p.learningIntegration.duplicateEventsCollapsed,
+      items: p.learningIntegration.items, modalities: p.learningIntegration.modalities, missingModalities: p.learningIntegration.missingModalities,
+      quality: p.learningIntegration.quality, contradictions: p.learningIntegration.contradictions } : null,
+    versions: versionsOf(p),
+    dimensions: [...(p?.strengths ?? []), ...(p?.emergingAreas ?? []), ...(p?.decliningAreas ?? [])].map((d) => ({
+      dimension: d.dimension, state: d.state, baseState: d.baseState, fusedState: d.fusedState, confidence: d.confidence, baseConfidence: d.baseConfidence, fused: d.fused,
+      academic: d.academic, learningEvidence: d.learningEvidence, corroboration: d.corroboration, context: d.context, interpretation: d.interpretation })) } });
 }));
 
 /**

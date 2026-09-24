@@ -350,8 +350,10 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   r = await teacherA.get("/insights/student/st-a1/consistency");
   check("a pupil with a decline, an intervention and a steady subject: identical through both paths",
     [r.status, r.body.data.identical, r.body.data.differences, r.body.data.engineVersion], [200, true, [], { live: "1.0.0", offline: "1.0.0" }]);
-  check("classification, metrics, evidence, guidance, coverage — none differ",
-    r.body.data.summary, { engineVersion: false, classification: false, metrics: false, evidence: false, guidance: false, coverage: false });
+  check("classification, metrics, evidence, guidance, coverage, and the 1.2.0 classes — none differ",
+    r.body.data.summary, { engineVersion: false, classification: false, metrics: false, evidence: false, guidance: false, coverage: false,
+      // Strength Reading 1.2.0 names its own difference classes; none differ either.
+      state: false, relationship: false, reasonCodes: false, eventCounts: false, sources: false, contradictions: false, versions: false });
   check("a persistently weak pupil, read by the head: identical",
     (await head.get("/insights/student/st-a2/consistency")).body.data.identical, true);
   check("the teacher cannot run it on a pupil they do not teach", (await teacherA.get("/insights/student/st-a2/consistency")).status, 403);

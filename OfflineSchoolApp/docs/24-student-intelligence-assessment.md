@@ -1308,3 +1308,30 @@ engines **nothing** until a versioned decision says otherwise. The academic,
 strengths and exploration engines are unchanged. docs/26 holds the audit, the
 taxonomy, the state vocabulary, the thresholds, the boundary, the privacy and
 offline rules, and what the layer does not infer.
+
+
+---
+
+## Stage 13 — Learning Evidence Integration & Multi-Modal Student Intelligence (Strength Engine 1.2.0)
+
+**More evidence-aware without becoming a scoring system.** Stage 13 is the
+versioned decision Stage 12 deferred: the independent learning evidence —
+assignments, quizzes, continuous assessment — is set beside each dimension's
+academic reading and the *relationship* between the two is reported
+(`CORROBORATED`, `PARTIALLY_CORROBORATED`, `UNSUPPORTED`, `CONTRADICTED`,
+`CONTEXT_LIMITED`, `INSUFFICIENT_EVIDENCE`) with counts, sources, dates,
+limits and reasons. A pure module, `shared/strengths/learningIntegration.js`
+(`LEARNING_INTEGRATION_VERSION` 1.0.0), does the work; `STRENGTH_ENGINE_VERSION`
+moved to 1.2.0 because the reading changed. The academic, exploration and
+learning-evidence engines are unchanged at 1.0.0.
+
+The rules that keep it from becoming a score: the academic baseline is never
+retired and a decline is never rescued; two independent, clean, non-stale
+events may move a reading one step above its baseline, and only if
+exploration has not already taken that step; nothing the academic engine
+already read (formal marks, and practicals entered as exam scores) is counted
+again; quiz retries are one event; attendance, submission, interest and
+reflection are context and never ability; a source that does not exist is
+*unavailable*, never weak. Every change since a snapshot is named as evidence
+arriving, leaving, ageing or changing context — never as ability changing.
+docs/27 holds the contract, the rules, the shapes, the routes and the limits.

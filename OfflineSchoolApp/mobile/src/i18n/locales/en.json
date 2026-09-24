@@ -6073,6 +6073,7 @@
     }
   },
   "explore": {
+    "offline": "offline",
     "title": "Explore",
     "subtitle": "Explore something new",
     "forYou": "For you",
@@ -6264,6 +6265,107 @@
       "updated": "Your profile has been updated",
       "newEvidenceShort": "{{n}} new evidence row(s) from {{e}} exploration(s)",
       "updatedHint": "Based on evidence: what you did, what you said, what a teacher saw. Not a verdict on what you are."
+    },
+    "integration": {
+      "heading": "How we know",
+      "hint": "Each strength is read from the school's own records. Independent learning evidence — assignments, quizzes, coursework, practicals — is set beside the academic reading. It corroborates or qualifies; it is never a score.",
+      "yourStrengths": "Your strengths",
+      "howWeKnow": "How we know",
+      "supports": "What supports this",
+      "unclear": "What is still unclear",
+      "exploreNext": "What you can explore next",
+      "academicLine": "Academic reading: {{state}} · {{persistence}} · {{direction}} · {{consistency}}",
+      "learningLine": "{{n}} independent learning event(s) — {{families}}",
+      "learningNone": "No independent learning evidence speaks to this yet",
+      "currentHistorical": "{{c}} current · {{h}} earlier · {{s}} too old to count",
+      "explorationLine": "{{s}} supporting / {{c}} contradicting exploration(s) · {{o}} teacher observer(s)",
+      "nothingUnclear": "Nothing to flag: the sources that exist agree.",
+      "missing": "Not available yet: {{list}}",
+      "unavailableNote": "A source that is not available is not weak evidence; it is simply not there yet.",
+      "attendanceLimited": "Attendance was irregular over this period, so thin evidence is read with care.",
+      "noProfile": "No academic profile yet, so there is no reading to explain.",
+      "teacherEvidenceHeading": "Evidence, source by source",
+      "teacherEvidenceHint": "Every independent event that reached this reading: what it was, when, and how it reads against the school's own pass and strong marks. Retries of one quiz count once.",
+      "event": "{{family}} · {{subject}} · {{when}} · {{recency}}",
+      "supportingEvents": "Supporting",
+      "contradictingEvents": "Contradicting",
+      "neutralEvents": "{{n}} between the pass and strong marks (neutral)",
+      "duplicatesCollapsed": "{{n}} repeated attempt(s) collapsed into their event",
+      "versions": "Strength reading {{s}} · integration {{i}} · learning evidence {{l}} · exploration {{e}} · academic {{a}}",
+      "changesHeading": "Learning evidence since the last snapshot",
+      "relationship": {
+        "CORROBORATED": "Corroborated by independent learning evidence",
+        "PARTIALLY_CORROBORATED": "Partly corroborated",
+        "UNSUPPORTED": "No independent learning evidence yet",
+        "CONTRADICTED": "Contradicted by independent learning evidence",
+        "CONTEXT_LIMITED": "Limited by context (attendance)",
+        "INSUFFICIENT_EVIDENCE": "Learning evidence too thin or too old to read"
+      },
+      "family": {
+        "ACADEMIC": "formal assessment",
+        "ASSIGNMENT": "assignments",
+        "QUIZ": "quizzes",
+        "COURSEWORK": "continuous assessment",
+        "PRACTICAL": "practicals",
+        "EXPLORATION": "exploration",
+        "TEACHER_OBSERVATION": "teacher observation",
+        "INTEREST": "interest",
+        "REFLECTION": "reflection",
+        "EXPOSURE": "exposure",
+        "PARTICIPATION": "participation",
+        "ATTENDANCE": "attendance",
+        "SUBMISSION": "submission"
+      },
+      "recency": {
+        "RECENT": "recent",
+        "HISTORICAL": "earlier this year",
+        "STALE": "too old to count"
+      },
+      "direction": {
+        "improving": "improving",
+        "stable": "stable",
+        "declining": "declining",
+        "mixed": "mixed",
+        "insufficient": "not enough sittings"
+      },
+      "quality": {
+        "NO_INDEPENDENT_LEARNING_EVENTS": "No independent learning events reached this dimension",
+        "DUPLICATE_EVENT_COLLAPSED": "Repeated attempts were counted once",
+        "LEARNING_EVIDENCE_STALE": "Some learning evidence is too old to count",
+        "LEARNING_EVIDENCE_PARTIAL": "Learning evidence only partly corroborates the reading",
+        "SOURCE_MODALITY_UNAVAILABLE": "Some sources are not available for this pupil yet",
+        "ACADEMIC_LEARNING_CONFLICT": "Academic and learning evidence disagree; both are shown",
+        "CONTEXT_INCOMPLETE": "Attendance context limits how much thin evidence can say"
+      },
+      "conflict": {
+        "ACADEMIC_VS_LEARNING_EVIDENCE": "academic evidence and independent learning evidence disagree"
+      },
+      "explanation": {
+        "different_task_type": "a different kind of task",
+        "different_period": "a different period",
+        "limited_evidence": "little evidence",
+        "assessment_context": "the assessment context",
+        "missing_context": "missing context"
+      },
+      "reason": {
+        "LEARNING_SUPPORT": "{{n}} independent supporting learning event(s)",
+        "LEARNING_CONTRADICTION": "{{n}} independent contradicting learning event(s)",
+        "LEARNING_SUPPORT_BELOW_THRESHOLD": "one supporting learning event — below the two needed",
+        "LEARNING_SUPPORT_AFTER_EXPLORATION_LIFT": "learning evidence agrees with the step exploration already took",
+        "LEARNING_FAMILIES": "from {{n}}",
+        "LEARNING_STALE": "{{n}} learning event(s) too old to count",
+        "ATTENDANCE_LIMITED_COVERAGE": "attendance was irregular",
+        "MODALITY_UNAVAILABLE": "{{n}} not available",
+        "LEARNING_EVIDENCE_CORROBORATION_ADDED": "new corroborating learning evidence",
+        "LEARNING_EVIDENCE_CONTRADICTION_ADDED": "new contradicting learning evidence",
+        "LEARNING_EVIDENCE_COVERAGE_CHANGED": "the sources of learning evidence changed",
+        "LEARNING_EVIDENCE_BECAME_STALE": "learning evidence aged out of the window",
+        "LEARNING_EVIDENCE_RETRACTED": "learning evidence was retracted or corrected",
+        "LEARNING_EVIDENCE_CONTEXT_CHANGED": "the attendance or source context changed"
+      },
+      "source": {
+        "learning_evidence": "independent learning evidence"
+      }
     },
     "dimension": {
       "quantitative_reasoning": "Quantitative reasoning",

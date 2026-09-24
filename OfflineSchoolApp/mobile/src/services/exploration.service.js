@@ -117,6 +117,27 @@ export const fetchLearningConcise = async () => {
   } catch { return []; }
 };
 
+/**
+ * The pupil's own strengths reading (Strength Reading 1.2.0): established and
+ * emerging dimensions with how each is known, what supports it, what is still
+ * unclear, and the areas it opens. Online only; null offline. No score.
+ */
+export const fetchMyStrengths = async () => {
+  try {
+    const { data } = await api.get("/insights/student/me/strengths");
+    const p = data?.data?.profile ?? null;
+    if (!p) return null;
+    const pick = (d) => ({
+      dimension: d.dimension, state: d.state, relationship: d.learningEvidence?.relationship ?? null,
+      events: d.learningEvidence?.independentEventCount ?? 0, families: d.learningEvidence?.sourceFamilies ?? [],
+      missing: d.context?.missingModalities ?? [], attendanceLimited: Boolean(d.context?.attendanceLimited),
+      quality: (d.interpretation?.quality ?? []).filter((q) => q !== "SOURCE_MODALITY_UNAVAILABLE"),
+      areas: (p.explorationAreas ?? []).filter((a) => (a.because ?? []).some((b) => b.dimension === d.dimension)).map((a) => a.area),
+    });
+    return { versions: { strengths: p.strengthEngineVersion, integration: p.learningIntegrationVersion ?? null }, dimensions: [...(p.strengths ?? []), ...(p.emergingAreas ?? [])].map(pick) };
+  } catch { return null; }
+};
+
 /** What changed since the last profile snapshot, in the words the pupil sees. Online only; null offline. */
 export const fetchProfileChanges = async () => {
   try {

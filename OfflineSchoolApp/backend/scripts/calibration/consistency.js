@@ -80,6 +80,14 @@ const compareProfiles = (live, offline) => {
       evidence:       differences.some((d) => /\.evidence\[/.test(d.path)),
       guidance:       touches("$.guidance"),
       coverage:       differences.some((d) => /\.coverage\./.test(d.path)),
+      // Strength Reading 1.2.0: the learning-evidence integration, class by class.
+      state:          differences.some((d) => /\.(state|baseState|fusedState)$/.test(d.path)),
+      relationship:   differences.some((d) => /\.relationship$/.test(d.path)),
+      reasonCodes:    differences.some((d) => /\.(reasonCodes|reasons)\[/.test(d.path)),
+      eventCounts:    differences.some((d) => /\.(independentEventCount|currentEventCount|historicalEventCount|staleEventCount|supportingEvents|contradictingEvents|independentLearningItems)\b/.test(d.path)),
+      sources:        differences.some((d) => /\.(sourceFamilies|supportingSources|contradictingSources|missingModalities|modalities)\b/.test(d.path)),
+      contradictions: differences.some((d) => /\.contradictions\[/.test(d.path)),
+      versions:       differences.some((d) => /Version$/.test(d.path) || /\.version$/.test(d.path)),
     },
     differences,
   };

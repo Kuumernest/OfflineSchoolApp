@@ -192,7 +192,7 @@ const days = (n, from = "2027-03-01") => Array.from({ length: n }, (_, i) => new
   check("the strengths engine does not read this layer: a profile built with and without it is the same bytes",
     JSON.stringify(st.buildStrengthProfile({ academicProfile: { studentId: "s", engine: { version: "1.0.0", passMark: 10, strongMark: 14 }, coverage: { sequences: 0, subjects: 0, sufficient: false }, subjects: [], insights: [] }, explorationEvidence: [] }))
       === JSON.stringify(st.buildStrengthProfile({ academicProfile: { studentId: "s", engine: { version: "1.0.0", passMark: 10, strongMark: 14 }, coverage: { sequences: 0, subjects: 0, sufficient: false }, subjects: [], insights: [] }, explorationEvidence: [] })), true);
-  check("versions: learning evidence 1.0.0 beside strengths 1.1.0 and academic 1.0.0", [le.LEARNING_EVIDENCE_VERSION, st.STRENGTH_ENGINE_VERSION], ["1.0.0", "1.1.0"]);
+  check("versions: learning evidence 1.0.0 beside strengths 1.2.0 and academic 1.0.0", [le.LEARNING_EVIDENCE_VERSION, st.STRENGTH_ENGINE_VERSION], ["1.0.0", "1.2.0"]);
   check("a row carrying a name, phone or email is refused and reported, not read",
     build({ homework: [{ ...hw("h1", "2027-05-01", { score: 18, submittedOffsetDays: 0 }), studentName: "X" }], attendance: [{ ...att(1, "2027-03-01", "present"), phone: "6" }] }).rejected.map((x) => x.reason), ["forbidden field(s): studentName", "forbidden field(s): phone"]);
   const big = { homework: [1, 2, 3, 4].map((i) => hw(`h${i}`, `2027-04-0${i}`, { score: 15 + i, submittedOffsetDays: i % 2 })), quizAttempts: [1, 2, 3].map((i) => quiz(`q${i}`, `2027-04-1${i}`, 6 + i)), scores: [score("t1", "test", "2027-01-10", 14), score("c1", "ca", "2027-01-20", 12)], attendance: days(12).map((d, i) => att(i, d, i % 3 ? "present" : "absent")) };
@@ -303,7 +303,7 @@ const days = (n, from = "2027-03-01") => Array.from({ length: n }, (_, i) => new
   const feed = require(path.join(SRC, "config/syncFeed"));
   check("the snapshot stays online with a reason; the sources it reads are mirrored already",
     [typeof feed.EXCLUDED.LearningEvidenceSnapshot, ["homework", "studentScore", "exam", "studentAttendance"].every((c) => feed.byCollection.has(c))], ["string", true]);
-  check("the strengths profile is unchanged by the learning layer's existence — no signal is authorised", (await teacherA.get("/insights/student/st-a1/strengths")).body.data.profile.strengthEngineVersion, "1.1.0");
+  check("the strengths profile reads under 1.2.0 — the learning layer is integrated, never a signal into the exploration engine", (await teacherA.get("/insights/student/st-a1/strengths")).body.data.profile.strengthEngineVersion, "1.2.0");
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

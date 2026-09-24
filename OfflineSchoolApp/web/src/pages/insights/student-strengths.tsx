@@ -39,7 +39,7 @@ import {
   fetchStrengths, fetchStrengthProfile, fetchStrengthEvidence, snapshotStrengthProfile, recordExplorationEvidence, submitReview,
   fetchExplorations, fetchCatalog, observeExploration, rateExploration, fetchProfileChanges, rebuildProfile,
   fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence,
-  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading,
+  type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef,
 } from "@/services/insights.service";
 
 const OBS_LEVELS = ["OBSERVED", "PARTLY_OBSERVED", "NOT_OBSERVED", "INSUFFICIENT_OPPORTUNITY"];
@@ -100,6 +100,13 @@ export default function StudentStrengthsPage() {
         <Card><p className="text-sm text-ink">{t("strengths.insufficientBody")}</p></Card>
       )}
 
+      {p?.learningIntegration && (
+        <p className="text-xs text-ink-faint">
+          {t("strengths.integration.versions", { s: p.strengthEngineVersion, i: p.learningIntegrationVersion ?? "—", l: p.learningEvidenceVersion ?? "—", e: "1.0.0", a: p.academicEngineVersion ?? "—" })}
+          {" · "}{t("strengths.integration.hint")}
+        </p>
+      )}
+
       {/* ── What changed since the last snapshot ─────────────────────── */}
       <WhatChanged studentId={studentId} schoolId={schoolId} />
 
@@ -115,6 +122,7 @@ export default function StudentStrengthsPage() {
                   {c.exploration ? ` · ${t("strengths.fusion.src.exploration")}: ${t(`strengths.fusion.mix.${c.exploration}`, { defaultValue: c.exploration })}` : ""}
                   {c.teacherObservation ? ` · ${t("strengths.fusion.src.observation")}: ${c.teacherObservation}` : ""}
                   {c.interest ? ` · ${t("strengths.fusion.src.interest")}: ${c.interest} / ${c.performance}` : ""}
+                  {c.kind === "ACADEMIC_VS_LEARNING_EVIDENCE" ? ` · ${t("strengths.integration.supportingEvents")} ${c.supporting} / ${t("strengths.integration.contradictingEvents")} ${c.contradicting}` : ""}
                 </span>
               </li>
             ))}
@@ -124,7 +132,7 @@ export default function StudentStrengthsPage() {
 
       {/* ── Strength in ─────────────────────────────────────────────── */}
       <Section icon={<Sparkles className="h-3.5 w-3.5" />} heading={t("strengths.establishedHeading")} hint={t("strengths.establishedHint")}>
-        {p?.strengths.length ? p.strengths.map((d) => <DimensionCard key={d.dimension} d={d} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
+        {p?.strengths.length ? p.strengths.map((d) => <DimensionCard key={d.dimension} d={d} areas={p?.explorationAreas} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
           : <p className="text-sm text-ink-muted">{t("strengths.none")}</p>}
         {p?.singleSubjectStrengths.map((s) => (
           <Card key={s.subjectId} className="text-sm">
@@ -136,14 +144,14 @@ export default function StudentStrengthsPage() {
 
       {/* ── Emerging ───────────────────────────────────────────────── */}
       <Section icon={<Sparkles className="h-3.5 w-3.5" />} heading={t("strengths.emergingHeading")} hint={t("strengths.emergingHint")}>
-        {p?.emergingAreas.length ? p.emergingAreas.map((d) => <DimensionCard key={d.dimension} d={d} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
+        {p?.emergingAreas.length ? p.emergingAreas.map((d) => <DimensionCard key={d.dimension} d={d} areas={p?.explorationAreas} reviews={data?.reviews} studentId={studentId} schoolId={schoolId} isStaff={isStaff} onChanged={refresh} toast={toast} />)
           : <p className="text-sm text-ink-muted">{t("strengths.noneEmerging")}</p>}
       </Section>
 
       {/* ── Evidence against ───────────────────────────────────────── */}
       {p && p.decliningAreas.length > 0 && (
         <Section icon={<TrendingDown className="h-3.5 w-3.5" />} heading={t("strengths.decliningHeading")} hint={t("strengths.decliningHint")}>
-          {p.decliningAreas.map((d) => <DimensionCard key={d.dimension} d={d} studentId={studentId} schoolId={schoolId} isStaff={false} onChanged={refresh} toast={toast} />)}
+          {p.decliningAreas.map((d) => <DimensionCard key={d.dimension} d={d} areas={p.explorationAreas} studentId={studentId} schoolId={schoolId} isStaff={false} onChanged={refresh} toast={toast} />)}
         </Section>
       )}
 
@@ -231,8 +239,8 @@ export default function StudentStrengthsPage() {
   );
 }
 
-function DimensionCard({ d, reviews, studentId, schoolId, isStaff, onChanged, toast }: {
-  d: DimensionReading; reviews?: RecordedReview[]; studentId: string; schoolId?: string; isStaff: boolean;
+function DimensionCard({ d, areas, reviews, studentId, schoolId, isStaff, onChanged, toast }: {
+  d: DimensionReading; areas?: ExplorationArea[]; reviews?: RecordedReview[]; studentId: string; schoolId?: string; isStaff: boolean;
   onChanged: () => Promise<unknown>; toast: ReturnType<typeof useToast>["toast"];
 }) {
   const { t } = useTranslation();
@@ -278,6 +286,7 @@ function DimensionCard({ d, reviews, studentId, schoolId, isStaff, onChanged, to
           {d.fused.pair && ` · ${t("strengths.fusion.pair", { i: d.fused.pair.interest, p: d.fused.pair.performance })}`}
         </p>
       )}
+      {d.interpretation && <HowWeKnow d={d} areas={areas} isStaff={isStaff} />}
       <Timeline dimension={d.dimension} />
       {isStaff && (
         <div className="flex flex-wrap items-end gap-2 border-t border-line pt-2">
@@ -294,6 +303,87 @@ function DimensionCard({ d, reviews, studentId, schoolId, isStaff, onChanged, to
         </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * The four questions a pupil (or a teacher) can ask of a strength, answered
+ * from the record: how we know, what supports this, what is still unclear,
+ * what you can explore next. No percentages, no score — counts, sources,
+ * dates and the limits of each.
+ */
+function HowWeKnow({ d, areas, isStaff }: { d: DimensionReading; areas?: ExplorationArea[]; isStaff: boolean }) {
+  const { t } = useTranslation();
+  const le = d.learningEvidence, co = d.corroboration, cx = d.context, ip = d.interpretation, ac = d.academic;
+  if (!le || !co || !cx || !ip || !ac) return null;
+  const fam = (list: string[]) => list.map((f) => t(`strengths.integration.family.${f}`, { defaultValue: f })).join(", ");
+  const next = (areas ?? []).filter((a) => a.because.some((b) => b.dimension === d.dimension));
+  const unclear: string[] = [
+    ...ip.quality.filter((q) => q !== "SOURCE_MODALITY_UNAVAILABLE").map((q) => t(`strengths.integration.quality.${q}`, { defaultValue: q })),
+    ...(cx.missingModalities.length ? [t("strengths.integration.missing", { list: fam(cx.missingModalities) })] : []),
+    ...ip.contradictions.map((c) => `${t(`strengths.integration.conflict.${c.kind}`, { defaultValue: c.kind })} — ${c.possibleExplanations.map((x) => t(`strengths.integration.explanation.${x}`, { defaultValue: x })).join(", ")}`),
+  ];
+  return (
+    <details className="rounded-md border border-line bg-surface-muted/40 p-2 text-xs" open={isStaff}>
+      <summary className="cursor-pointer font-medium text-ink">{t("strengths.integration.howWeKnow")} · <span className="font-normal text-ink-muted">{t(`strengths.integration.relationship.${le.relationship}`, { defaultValue: le.relationship })}</span></summary>
+      <div className="mt-2 space-y-2">
+        <div>
+          <p className="font-medium text-ink-faint">{t("strengths.integration.howWeKnow")}</p>
+          <p className="text-ink">{t("strengths.integration.academicLine", { state: t(`strengths.state.${ac.state}`), persistence: t(`strengths.persistence.${ac.persistence}`),
+            direction: ac.direction ? t(`strengths.integration.direction.${ac.direction}`, { defaultValue: ac.direction }) : "—", consistency: ac.consistency ? t(`strengths.consistency.${ac.consistency}`, { defaultValue: ac.consistency }) : "—" })}</p>
+          <p className="text-ink-muted">{t("strengths.integration.explorationLine", { s: co.explorationSupportingEvents, c: co.explorationContradictingEvents, o: co.teacherObservers })}</p>
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{t("strengths.integration.supports")}</p>
+          {le.independentEventCount > 0 ? (
+            <>
+              <p className="text-ink">{t("strengths.integration.learningLine", { n: le.independentEventCount, families: fam(le.sourceFamilies) })}</p>
+              <p className="text-ink-muted">{t("strengths.integration.currentHistorical", { c: le.currentEventCount, h: le.historicalEventCount, s: le.staleEventCount })}</p>
+            </>
+          ) : <p className="text-ink-muted">{t("strengths.integration.learningNone")}</p>}
+          <ul className="mt-1 list-disc pl-5 text-ink-muted">{ip.reasonCodes.filter((r) => /^LEARNING_|^ATTENDANCE_/.test(r)).map((r) => <li key={r}>{reasonText(t, r)}</li>)}</ul>
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{t("strengths.integration.unclear")}</p>
+          {unclear.length ? <ul className="list-disc pl-5 text-ink">{unclear.map((u, i) => <li key={i}>{u}</li>)}</ul> : <p className="text-ink-muted">{t("strengths.integration.nothingUnclear")}</p>}
+          {cx.attendanceLimited && <p className="text-ink-muted">{t("strengths.integration.attendanceLimited")}</p>}
+          {cx.missingModalities.length > 0 && <p className="text-ink-faint">{t("strengths.integration.unavailableNote")}</p>}
+        </div>
+        <div>
+          <p className="font-medium text-ink-faint">{t("strengths.integration.exploreNext")}</p>
+          {next.length ? <ul className="list-disc pl-5 text-ink">{next.map((a) => <li key={a.area}>{t(`strengths.area.${a.area}`, { defaultValue: a.area })}: {a.waysToExplore.slice(0, 3).map((w) => t(`strengths.activity.${w}`, { defaultValue: w })).join(" · ")}</li>)}</ul>
+            : <p className="text-ink-muted">{t("strengths.noAreas")}</p>}
+        </div>
+        {isStaff && (co.supportingEvents.length > 0 || co.contradictingEvents.length > 0 || co.neutralEvents > 0) && (
+          <div className="border-t border-line pt-2">
+            <p className="font-medium text-ink-faint">{t("strengths.integration.teacherEvidenceHeading")}</p>
+            <p className="text-ink-faint">{t("strengths.integration.teacherEvidenceHint")}</p>
+            <EventList label={t("strengths.integration.supportingEvents")} events={co.supportingEvents} />
+            <EventList label={t("strengths.integration.contradictingEvents")} events={co.contradictingEvents} warn />
+            {co.neutralEvents > 0 && <p className="text-ink-muted">{t("strengths.integration.neutralEvents", { n: co.neutralEvents })}</p>}
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+function reasonText(t: ReturnType<typeof useTranslation>["t"], code: string) {
+  const [key, arg] = code.split(":");
+  return t(`strengths.integration.reason.${key}`, { n: arg ?? "", defaultValue: code });
+}
+
+function EventList({ label, events, warn }: { label: string; events: LearningEventRef[]; warn?: boolean }) {
+  const { t } = useTranslation();
+  if (!events.length) return null;
+  return (
+    <div className="mt-1">
+      <p className={warn ? "text-warning" : "text-ink"}>{label} ({events.length})</p>
+      <ul className="list-disc pl-5 text-ink-muted">
+        {events.map((e) => <li key={e.eventId}>{t("strengths.integration.event", { family: t(`strengths.integration.family.${e.sourceKind}`, { defaultValue: e.sourceKind }), subject: e.subjectName ?? e.subjectId ?? "—",
+          when: e.observedAt ? new Date(e.observedAt).toLocaleDateString() : "—", recency: t(`strengths.integration.recency.${e.recency}`, { defaultValue: e.recency }) })}</li>)}
+      </ul>
+    </div>
   );
 }
 
@@ -487,6 +577,16 @@ function WhatChanged({ studentId, schoolId }: { studentId: string; schoolId?: st
           </ul>
         </div>
       ))}
+      {(c.comparison?.learningEvidence?.length ?? 0) > 0 && (
+        <div className="text-sm">
+          <p className="font-medium text-ink">{t("strengths.integration.changesHeading")}</p>
+          <ul className="list-disc pl-5 text-xs text-ink-muted">
+            {c.comparison!.learningEvidence!.map((x) => (
+              <li key={x.dimension}>{t(`strengths.dimension.${x.dimension}`, { defaultValue: x.dimension })}: {x.previous ? t(`strengths.integration.relationship.${x.previous}`, { defaultValue: x.previous }) : "—"} → {x.current ? t(`strengths.integration.relationship.${x.current}`, { defaultValue: x.current }) : "—"} · {x.reasons.map((r) => t(`strengths.integration.reason.${r}`, { defaultValue: r })).join("; ")}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {c.pendingSnapshot && <p className="text-xs text-ink-muted">{t("strengths.fusion.pending")}</p>}
     </Section>
   );

@@ -87,7 +87,7 @@ const Q = "quantitative_reasoning", T = "technical_applied";
 
   let p = fused(STRONG_MATHS);
   check("1.1.0 with no exploration evidence reads exactly as 1.0.0 did: base and fused agree",
-    [p.strengthEngineVersion, dim(p, Q).baseState, dim(p, Q).state, dim(p, Q).baseConfidence, dim(p, Q).confidence, dim(p, Q).fused.stateSource], ["1.1.0", "ESTABLISHED", "ESTABLISHED", "strong", "strong", "academic"]);
+    [p.strengthEngineVersion, dim(p, Q).baseState, dim(p, Q).state, dim(p, Q).baseConfidence, dim(p, Q).confidence, dim(p, Q).fused.stateSource], ["1.2.0", "ESTABLISHED", "ESTABLISHED", "strong", "strong", "academic"]);
   check("the academic engine stays at 1.0.0 beneath it", p.academicEngineVersion, "1.0.0");
   p = fused(STRONG_MATHS, event("e1", Q, "2027-05-01", { level: "limited" }));
   check("one unsuccessful activity does not touch a persistent academic strength — state, confidence, and it is reported below threshold",
@@ -298,7 +298,7 @@ const Q = "quantitative_reasoning", T = "technical_applied";
   const v1 = rr.body.data;
   check("first rebuild → 201, snapshot 1, the SERVER's three versions, the evidence boundary recorded",
     [rr.status, rr.body.created, v1.profileVersion, v1.academicEngineVersion, v1.strengthEngineVersion, v1.explorationEngineVersion, v1.evidenceBoundary.evidenceRows, typeof v1.evidenceBoundary.hash],
-    [201, true, 1, "1.0.0", "1.1.0", "1.0.0", 0, "string"]);
+    [201, true, 1, "1.0.0", "1.2.0", "1.0.0", 0, "string"]);
   rr = await teacherA.post("/insights/student/st-a1/profile/rebuild", {});
   check("a rebuild on unchanged evidence returns snapshot 1 again and writes nothing", [rr.status, rr.body.created, rr.body.data.profileVersion, await M("StrengthProfileSnapshot").countDocuments({ studentId: "st-a1" })], [200, false, 1, 1]);
   check("with no new evidence, changes says nothing is pending and the comparison is all unchanged",
@@ -331,7 +331,7 @@ const Q = "quantitative_reasoning", T = "technical_applied";
   const v1Again = await M("StrengthProfileSnapshot").findOne({ studentId: "st-a1", profileVersion: 1 }).lean();
   check("snapshot 1 is byte-for-byte what it was", JSON.stringify(v1Again.profile) === JSON.stringify(v1.profile) && v1Again.evidenceBoundary.hash === v1.evidenceBoundary.hash, true);
   rr = await pupilA1.get("/insights/student/me/profile");
-  check("the pupil's profile read shows both versions in order", rr.body.data.history.map((h) => [h.profileVersion, h.strengthEngineVersion]), [[1, "1.1.0"], [2, "1.1.0"]]);
+  check("the pupil's profile read shows both versions in order", rr.body.data.history.map((h) => [h.profileVersion, h.strengthEngineVersion]), [[1, "1.2.0"], [2, "1.2.0"]]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 11. retraction, and live = offline ---");
@@ -345,7 +345,7 @@ const Q = "quantitative_reasoning", T = "technical_applied";
   void x1;
   rr = await teacherA.get("/insights/student/st-a1/consistency");
   check("live = offline for the fused profile: states, evidence, coverage, contradictions, timeline — identical",
-    [rr.status, rr.body.data.identical, rr.body.data.strengths.identical, rr.body.data.strengths.differences, rr.body.data.strengths.engineVersion], [200, true, true, [], { live: "1.1.0", offline: "1.1.0" }]);
+    [rr.status, rr.body.data.identical, rr.body.data.strengths.identical, rr.body.data.strengths.differences, rr.body.data.strengths.engineVersion], [200, true, true, [], { live: "1.2.0", offline: "1.2.0" }]);
   check("the recommender for this pupil reads the fused profile and carries the saturation list", Array.isArray((await pupilA1.get("/insights/student/me/explorations/recommended")).body.data.saturated), true);
 
   console.log("");

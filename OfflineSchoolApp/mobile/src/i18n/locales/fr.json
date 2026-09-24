@@ -6073,6 +6073,7 @@
     }
   },
   "explore": {
+    "offline": "hors ligne",
     "title": "Explorer",
     "subtitle": "Explorer quelque chose de nouveau",
     "forYou": "Pour vous",
@@ -6264,6 +6265,107 @@
       "updated": "Votre profil a été mis à jour",
       "newEvidenceShort": "{{n}} nouvelle(s) ligne(s) de preuve issue(s) de {{e}} exploration(s)",
       "updatedHint": "D'après des preuves : ce que vous avez fait, ce que vous avez dit, ce qu'un enseignant a vu. Pas un verdict sur ce que vous êtes."
+    },
+    "integration": {
+      "heading": "Comment nous le savons",
+      "hint": "Chaque force est lue dans les propres dossiers de l'école. Les preuves d'apprentissage indépendantes — devoirs, quiz, contrôle continu, travaux pratiques — sont placées à côté de la lecture académique. Elles corroborent ou nuancent ; elles ne sont jamais une note.",
+      "yourStrengths": "Vos forces",
+      "howWeKnow": "Comment nous le savons",
+      "supports": "Ce qui l'appuie",
+      "unclear": "Ce qui reste incertain",
+      "exploreNext": "Ce que vous pouvez explorer ensuite",
+      "academicLine": "Lecture académique : {{state}} · {{persistence}} · {{direction}} · {{consistency}}",
+      "learningLine": "{{n}} événement(s) d'apprentissage indépendant(s) — {{families}}",
+      "learningNone": "Aucune preuve d'apprentissage indépendante ne porte encore sur ce point",
+      "currentHistorical": "{{c}} récent(s) · {{h}} plus tôt · {{s}} trop ancien(s) pour compter",
+      "explorationLine": "{{s}} exploration(s) favorable(s) / {{c}} contraire(s) · {{o}} enseignant(s) observateur(s)",
+      "nothingUnclear": "Rien à signaler : les sources existantes concordent.",
+      "missing": "Pas encore disponible : {{list}}",
+      "unavailableNote": "Une source indisponible n'est pas une preuve faible ; elle n'existe simplement pas encore.",
+      "attendanceLimited": "L'assiduité a été irrégulière sur cette période ; des preuves minces sont lues avec prudence.",
+      "noProfile": "Pas encore de profil académique, donc aucune lecture à expliquer.",
+      "teacherEvidenceHeading": "Les preuves, source par source",
+      "teacherEvidenceHint": "Chaque événement indépendant ayant atteint cette lecture : ce que c'était, quand, et comment il se lit face aux seuils de réussite et d'excellence de l'école. Les reprises d'un même quiz comptent une fois.",
+      "event": "{{family}} · {{subject}} · {{when}} · {{recency}}",
+      "supportingEvents": "Favorables",
+      "contradictingEvents": "Contraires",
+      "neutralEvents": "{{n}} entre le seuil de réussite et le seuil d'excellence (neutres)",
+      "duplicatesCollapsed": "{{n}} tentative(s) répétée(s) regroupée(s) dans leur événement",
+      "versions": "Lecture des forces {{s}} · intégration {{i}} · preuves d'apprentissage {{l}} · exploration {{e}} · académique {{a}}",
+      "changesHeading": "Preuves d'apprentissage depuis le dernier instantané",
+      "relationship": {
+        "CORROBORATED": "Corroborée par des preuves d'apprentissage indépendantes",
+        "PARTIALLY_CORROBORATED": "Partiellement corroborée",
+        "UNSUPPORTED": "Pas encore de preuve d'apprentissage indépendante",
+        "CONTRADICTED": "Contredite par des preuves d'apprentissage indépendantes",
+        "CONTEXT_LIMITED": "Limitée par le contexte (assiduité)",
+        "INSUFFICIENT_EVIDENCE": "Preuves d'apprentissage trop minces ou trop anciennes"
+      },
+      "family": {
+        "ACADEMIC": "évaluation formelle",
+        "ASSIGNMENT": "devoirs",
+        "QUIZ": "quiz",
+        "COURSEWORK": "contrôle continu",
+        "PRACTICAL": "travaux pratiques",
+        "EXPLORATION": "exploration",
+        "TEACHER_OBSERVATION": "observation d'enseignant",
+        "INTEREST": "intérêt",
+        "REFLECTION": "réflexion",
+        "EXPOSURE": "exposition",
+        "PARTICIPATION": "participation",
+        "ATTENDANCE": "assiduité",
+        "SUBMISSION": "remise"
+      },
+      "recency": {
+        "RECENT": "récent",
+        "HISTORICAL": "plus tôt cette année",
+        "STALE": "trop ancien pour compter"
+      },
+      "direction": {
+        "improving": "en progrès",
+        "stable": "stable",
+        "declining": "en baisse",
+        "mixed": "mixte",
+        "insufficient": "pas assez de sessions"
+      },
+      "quality": {
+        "NO_INDEPENDENT_LEARNING_EVENTS": "Aucun événement d'apprentissage indépendant n'a atteint cette dimension",
+        "DUPLICATE_EVENT_COLLAPSED": "Les tentatives répétées ont été comptées une fois",
+        "LEARNING_EVIDENCE_STALE": "Certaines preuves d'apprentissage sont trop anciennes pour compter",
+        "LEARNING_EVIDENCE_PARTIAL": "Les preuves d'apprentissage ne corroborent que partiellement la lecture",
+        "SOURCE_MODALITY_UNAVAILABLE": "Certaines sources ne sont pas encore disponibles pour cet élève",
+        "ACADEMIC_LEARNING_CONFLICT": "Preuves académiques et preuves d'apprentissage divergent ; les deux sont affichées",
+        "CONTEXT_INCOMPLETE": "Le contexte d'assiduité limite ce que des preuves minces peuvent dire"
+      },
+      "conflict": {
+        "ACADEMIC_VS_LEARNING_EVIDENCE": "les preuves académiques et les preuves d'apprentissage indépendantes divergent"
+      },
+      "explanation": {
+        "different_task_type": "un autre type de tâche",
+        "different_period": "une autre période",
+        "limited_evidence": "peu de preuves",
+        "assessment_context": "le contexte d'évaluation",
+        "missing_context": "un contexte manquant"
+      },
+      "reason": {
+        "LEARNING_SUPPORT": "{{n}} événement(s) d'apprentissage indépendant(s) favorable(s)",
+        "LEARNING_CONTRADICTION": "{{n}} événement(s) d'apprentissage indépendant(s) contraire(s)",
+        "LEARNING_SUPPORT_BELOW_THRESHOLD": "un seul événement favorable — sous les deux requis",
+        "LEARNING_SUPPORT_AFTER_EXPLORATION_LIFT": "les preuves d'apprentissage confirment le pas déjà franchi par l'exploration",
+        "LEARNING_FAMILIES": "issus de {{n}}",
+        "LEARNING_STALE": "{{n}} événement(s) trop ancien(s) pour compter",
+        "ATTENDANCE_LIMITED_COVERAGE": "l'assiduité a été irrégulière",
+        "MODALITY_UNAVAILABLE": "{{n}} non disponible",
+        "LEARNING_EVIDENCE_CORROBORATION_ADDED": "nouvelles preuves d'apprentissage corroborantes",
+        "LEARNING_EVIDENCE_CONTRADICTION_ADDED": "nouvelles preuves d'apprentissage contraires",
+        "LEARNING_EVIDENCE_COVERAGE_CHANGED": "les sources de preuves d'apprentissage ont changé",
+        "LEARNING_EVIDENCE_BECAME_STALE": "des preuves d'apprentissage sont sorties de la fenêtre",
+        "LEARNING_EVIDENCE_RETRACTED": "des preuves d'apprentissage ont été retirées ou corrigées",
+        "LEARNING_EVIDENCE_CONTEXT_CHANGED": "le contexte d'assiduité ou de sources a changé"
+      },
+      "source": {
+        "learning_evidence": "preuves d'apprentissage indépendantes"
+      }
     },
     "dimension": {
       "quantitative_reasoning": "Raisonnement quantitatif",

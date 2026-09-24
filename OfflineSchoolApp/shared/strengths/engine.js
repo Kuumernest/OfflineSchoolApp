@@ -56,6 +56,7 @@
 const { DIMENSIONS, EXPLORATION_AREAS, dimensionsForSubject } = require("./taxonomy");
 const { STATES, PERSISTENCE, CONFIDENCE } = require("./engineConstants");
 const fusion = require("./fusion");
+const learningIntegration = require("./learningIntegration");
 
 /**
  * 1.1.0 — longitudinal fusion of authorised exploration evidence into strength
@@ -65,7 +66,7 @@ const fusion = require("./fusion");
  * participation — each as what it is — and may move a reading one step on
  * independent events. See fusion.js for the rules and the recency windows.
  */
-const STRENGTH_ENGINE_VERSION = "1.1.0";
+const STRENGTH_ENGINE_VERSION = "1.2.0";
 
 /**
  * Every number the layer reasons with. Documented here because the brief
@@ -331,7 +332,7 @@ const interestSignals = (explorationEvidence) => (explorationEvidence ?? [])
  * @param {object} input.academicProfile     shared/intelligence buildProfile output
  * @param {object[]} [input.explorationEvidence]  rows { kind, dimension, area, activity, date, recordedBy, source, ... }
  */
-const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf = null }) => {
+const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], learningEvidence = null, subjectNames = {}, asOf = null }) => {
   const grading = academicProfile.engine;
   const coverageSufficient = Boolean(academicProfile.coverage?.sufficient);
   const subjects = (academicProfile.subjects ?? []).map((s) => subjectEvidence(s, grading));
@@ -344,7 +345,16 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf 
   const normalized = fusion.normalizeEvidence(explorationEvidence, asOfDate);
 
   const baseReadings = DIMENSIONS.map((d) => dimensionReading(d, subjects, { coverageSufficient, explorationEvidence }));
-  const readings = baseReadings.map((r) => fusion.fuseDimension(r, normalized.items));
+  const fusedReadings = baseReadings.map((r) => fusion.fuseDimension(r, normalized.items));
+
+  // 1.2.0: the independent learning evidence — assignments, quizzes,
+  // coursework, practicals — set beside each fused reading. It corroborates,
+  // qualifies or contradicts; it never scores. The learning reading is the
+  // pupil's own (shared/learningEvidence), built on the same asOf.
+  const integrated = learningIntegration.integrateLearningEvidence({
+    readings: fusedReadings, academicProfile, learningEvidence, explorationEvidence, subjectNames, asOf: asOfDate ? asOfDate.toISOString() : null,
+  });
+  const readings = integrated.readings;
 
   // Single-subject strengths: a subject at strength whose name maps to no
   // dimension still deserves to be named under its own name.
@@ -368,6 +378,8 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf 
     ...(declining.length ? ["declining_dimensions"] : []),
     ...(readings.some((r) => r.limitations.includes("variable_marks")) ? ["variable_marks"] : []),
     ...(!explorationEvidence.length ? ["no_exploration_evidence"] : []),
+    ...(!learningEvidence ? ["no_learning_evidence"] : []),
+    ...(integrated.integration.quality.includes("ACADEMIC_LEARNING_CONFLICT") ? ["academic_learning_conflict"] : []),
   ];
 
   // 1.1.0: a profile with exploration-established emerging areas is no longer
@@ -386,6 +398,8 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf 
     studentId: String(academicProfile.studentId),
     academicEngineVersion: academicProfile.engine?.version ?? null,
     strengthEngineVersion: STRENGTH_ENGINE_VERSION,
+    learningIntegrationVersion: learningIntegration.LEARNING_INTEGRATION_VERSION,
+    learningEvidenceVersion: learningEvidence?.learningEvidenceVersion ?? null,
     thresholds: THRESHOLDS,
     grading: { passMark: grading.passMark, strongMark: grading.strongMark, strongMarkBasis: grading.strongMarkBasis ?? null },
     evidenceCoverage: {
@@ -396,6 +410,7 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf 
       from: academicProfile.coverage?.from ?? null,
       to:   academicProfile.coverage?.to ?? null,
       explorationEvidence: explorationEvidence.length,
+      learningEvents: learningEvidence?.counts?.events ?? 0,
     },
     confidence: overallConfidence,
     // "Strengths" means dimensions where the school evidence is consistent with
@@ -422,11 +437,19 @@ const buildStrengthProfile = ({ academicProfile, explorationEvidence = [], asOf 
       evidence: normalized.items,
       rejected: normalized.rejected,
     },
+    // 1.2.0: the integration — authority, independence, relationships per
+    // dimension, conflicts kept standing, quality codes, what was unavailable.
+    learningIntegration: integrated.integration,
   };
 };
 
 module.exports = {
   STRENGTH_ENGINE_VERSION,
+  LEARNING_INTEGRATION_VERSION: learningIntegration.LEARNING_INTEGRATION_VERSION,
+  LEARNING_EVIDENCE_AUTHORITY: learningIntegration.LEARNING_EVIDENCE_AUTHORITY,
+  INTEGRATION: learningIntegration.INTEGRATION,
+  RELATIONSHIPS: learningIntegration.RELATIONSHIPS,
+  integrateLearningEvidence: learningIntegration.integrateLearningEvidence,
   FUSION: fusion.FUSION,
   SOURCES: fusion.SOURCES,
   AUTHORITY: fusion.AUTHORITY,

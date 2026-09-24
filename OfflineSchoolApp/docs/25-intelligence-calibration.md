@@ -1083,3 +1083,46 @@ LEARNING_EVIDENCE_VERSION: 1.0.0
 
 REAL-WORLD_VALIDATION: STILL PENDING
 ```
+
+---
+
+## 18. Stage 13 — Strength Reading 1.2.0 and what the integration will calibrate against
+
+The integration adds no threshold of its own beyond the two-event bar it
+shares with 1.1.0 (`eventsToCorroborate 2`, `eventsToContradict 2`,
+`minWeight 0.5`). What the pilot can calibrate: whether a `CORROBORATED`
+reading is more often confirmed by a teacher than an `UNSUPPORTED` one;
+whether `CONTRADICTED` readings correspond to something the teacher recognises
+(a different kind of task, a different period) or to noise; whether the
+one-step limit is too cautious or not cautious enough; whether the strong-mark
+bar for an assignment or a quiz should differ from the exam bar. Each is a
+comparison of a relationship code against a teacher's answer, never a fit of
+a weight. No real pupil has been through 1.2.0.
+
+### Verification (Stage 13)
+
+| | |
+|---|---|
+| `check-learning-integration.js` (new) | 67 assertions, 0 failures — baseline preserved, corroboration per family, one step at most, practical and formal marks never recounted, quiz retries one event, contradiction kept standing (never retired, never rescued), stale and neutral evidence, modalities unavailable not weak, attendance and submission as context, interest as context, six change codes about evidence, a 1.1.0 snapshot yields no codes, determinism, purity, no score or career key; then the routes as every role, the pupil's own view, snapshots with five versions, a corrected mark, a retraction, live = offline |
+| `check-pilot-readiness.js` | 82 (the consistency summary names seven more difference classes, all false) |
+| `npm run check:intel` | 15 scripts, 950 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **74 scripts, 4,746 assertions, 0 failures** |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 3,888 keys in 2 languages, `api:check`, `check:roles` 31, `check:l10n` 70 ok |
+| mobile | `eslint` clean on the Explore screen and service; `check:i18n` 5,589 keys OK (a pre-existing missing `common.offline` reference fixed); `check:l10n` 89 |
+| Engines | academic 1.0.0, exploration 1.0.0, learning evidence 1.0.0 untouched; strengths **1.2.0**; learning integration **1.0.0** |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 13 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.2.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+LEARNING_INTEGRATION_VERSION: 1.0.0
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```

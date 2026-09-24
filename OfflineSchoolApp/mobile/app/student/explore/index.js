@@ -20,7 +20,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import {
-  refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations, fetchProfileChanges, fetchLearningConcise,
+  refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations, fetchProfileChanges, fetchLearningConcise, fetchMyStrengths,
 } from "../../../src/services/exploration.service";
 
 const TABS = ["forYou", "inProgress", "completed"];
@@ -39,6 +39,7 @@ export default function ExploreScreen() {
   const [offline, setOffline] = useState(false);
   const [changes, setChanges] = useState(null);
   const [learning, setLearning] = useState([]);
+  const [mine, setMine] = useState(null);
 
   const loadLocal = useCallback(async () => {
     const [s, e] = await Promise.all([getSuggestions(), getExplorations()]);
@@ -52,6 +53,7 @@ export default function ExploreScreen() {
       await Promise.all([refreshSuggestions(lang), refreshExplorations(lang)]);
       setChanges(await fetchProfileChanges());
       setLearning(await fetchLearningConcise());
+      setMine(await fetchMyStrengths());
       setOffline(false);
     } catch {
       setOffline(true);
@@ -98,7 +100,7 @@ export default function ExploreScreen() {
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{t("explore.subtitle")}</Text>
       </View>
-      <Text style={st.sub}>{t("explore.basedOn")}{offline ? ` · ${t("common.offline", { defaultValue: "offline" })}` : ""}</Text>
+      <Text style={st.sub}>{t("explore.basedOn")}{offline ? ` · ${t("explore.offline")}` : ""}</Text>
       <View style={st.tabs}>
         {TABS.map((k) => (
           <TouchableOpacity key={k} style={[st.tab, tab === k && st.tabOn]} onPress={() => setTab(k)}>
@@ -116,6 +118,23 @@ export default function ExploreScreen() {
           <Text style={st.updatedHint}>{t("strengths.fusion.updatedHint")}</Text>
         </View>
       ) : null}
+      {mine?.dimensions?.length > 0 && (
+        <View style={st.updated}>
+          <Text style={st.updatedTitle}>{t("strengths.integration.yourStrengths")}</Text>
+          {mine.dimensions.slice(0, 4).map((d) => (
+            <View key={d.dimension} style={{ marginBottom: 6 }}>
+              <Text style={st.updatedLine}>• {t(`strengths.dimension.${d.dimension}`)} — {t(`strengths.state.${d.state}`)}</Text>
+              <Text style={st.updatedSub}>{t("strengths.integration.howWeKnow")}: {d.relationship ? t(`strengths.integration.relationship.${d.relationship}`) : "—"}</Text>
+              <Text style={st.updatedSub}>{t("strengths.integration.supports")}: {d.events > 0 ? t("strengths.integration.learningLine", { n: d.events, families: d.families.map((f) => t(`strengths.integration.family.${f}`)).join(", ") }) : t("strengths.integration.learningNone")}</Text>
+              <Text style={st.updatedSub}>{t("strengths.integration.unclear")}: {d.quality.length || d.missing.length
+                ? [...d.quality.map((q) => t(`strengths.integration.quality.${q}`)), ...(d.missing.length ? [t("strengths.integration.missing", { list: d.missing.slice(0, 3).map((f) => t(`strengths.integration.family.${f}`)).join(", ") })] : [])].join(" · ")
+                : t("strengths.integration.nothingUnclear")}</Text>
+              {d.areas.length > 0 && <Text style={st.updatedSub}>{t("strengths.integration.exploreNext")}: {d.areas.map((a) => t(`explore.area.${a}`)).join(", ")}</Text>}
+            </View>
+          ))}
+          <Text style={st.updatedHint}>{t("strengths.integration.unavailableNote")}</Text>
+        </View>
+      )}
       {learning.length > 0 && (
         <View style={st.updated}>
           <Text style={st.updatedTitle}>{t("learning.mobileHeading")}</Text>
@@ -157,5 +176,6 @@ const st = StyleSheet.create({
   updated: { marginHorizontal: 16, marginTop: 10, backgroundColor: "#EEF2FF", borderRadius: 12, padding: 12 },
   updatedTitle: { fontSize: 14, fontWeight: "700", color: "#3730A3", marginBottom: 4 },
   updatedLine: { fontSize: 13, color: "#1F2937" },
+  updatedSub: { fontSize: 12, color: "#4B5563", marginLeft: 12 },
   updatedHint: { fontSize: 11, color: "#6B7280", marginTop: 6 },
 });

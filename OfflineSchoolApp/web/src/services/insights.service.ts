@@ -416,8 +416,16 @@ export interface StrengthEvidenceItem {
   direction?: string; overallAverage?: number | null; recentAverage?: number | null; delta?: number | null; supports: boolean;
 }
 
+export interface LearningEventRef { eventId: string; independenceKey: string; sourceKind: string; subjectId: string | null; subjectName: string | null; observedAt: string | null; recency: "RECENT" | "HISTORICAL" | "STALE"; normalizedValue: number }
+export interface LearningRelationshipBlock { relationship: string; independentEventCount: number; sourceFamilies: string[]; currentEventCount: number; historicalEventCount: number; staleEventCount: number; subjects: string[] }
+export interface CorroborationBlock { supportingSources: string[]; supportingEvents: LearningEventRef[]; contradictingSources: string[]; contradictingEvents: LearningEventRef[]; neutralEvents: number; explorationSupportingEvents: number; explorationContradictingEvents: number; teacherObservers: number }
+export interface ContextBlock { attendanceLimited: boolean; attendancePattern: string | null; submissionContextAvailable: boolean; missingModalities: string[] }
+export interface LearningContradiction { kind: string; academic: string; supporting: number; contradicting: number; families: string[]; possibleExplanations: string[] }
+export interface InterpretationBlock { state: StrengthState; confidence: Confidence; stateSource: string; relationship: string; reasonCodes: string[]; quality: string[]; contradictions: LearningContradiction[] }
+export interface AcademicBlock { state: StrengthState; confidence: Confidence; persistence: Persistence; direction: string | null; consistency: string | null }
+
 export interface FusedBlock {
-  stateSource: "academic" | "exploration" | "teacher_observation"; reasons: string[];
+  stateSource: "academic" | "exploration" | "teacher_observation" | "learning_evidence"; reasons: string[];
   events: number; supportingEvents: number; contradictingEvents: number; neutralEvents: number; teacherObservers: number; interestEvents: number;
   participationEvents: number; exposureEvents: number; pair: { interest: string; performance: string } | null;
   recency: { recent: number; historical: number; stale: number }; conflicts: Array<Record<string, unknown>>; evidenceIds: string[];
@@ -426,6 +434,8 @@ export interface FusedBlock {
 export interface DimensionReading {
   dimension: string; state: StrengthState; confidence: Confidence; persistence: Persistence;
   baseState?: StrengthState; baseConfidence?: Confidence; fused?: FusedBlock;
+  baseDirection?: string | null; basePersistence?: Persistence; baseConsistency?: string | null; fusedState?: StrengthState; fusedConfidence?: Confidence;
+  academic?: AcademicBlock; learningEvidence?: LearningRelationshipBlock; corroboration?: CorroborationBlock; context?: ContextBlock; interpretation?: InterpretationBlock;
   supportingSubjects: Array<{ subjectId: string; subjectName: string | null }>;
   decliningSubjects:  Array<{ subjectId: string; subjectName: string | null }>;
   crossSubject: boolean; evidence: StrengthEvidenceItem[]; limitations: string[];
@@ -443,8 +453,16 @@ export interface InterestSignal {
   date: string | null; source: string | null; participation: string | null; reflection: string | null;
 }
 
+export interface LearningIntegrationBlock {
+  version: string; learningEvidenceVersion: string | null; asOf: string | null; available: boolean; independentLearningItems: number; duplicateEventsCollapsed: number;
+  items: Array<LearningEventRef & { sourceVersion: number | null; dimensions: Record<string, number>; direction: "supports" | "contradicts" | "neutral" }>;
+  modalities: Record<string, boolean>; missingModalities: string[]; attendancePattern: string | null;
+  relationships: Record<string, string>; contradictions: Array<LearningContradiction & { dimension: string }>; quality: string[];
+}
+
 export interface StrengthProfile {
-  studentId: string; academicEngineVersion: string | null; strengthEngineVersion: string;
+  studentId: string; academicEngineVersion: string | null; strengthEngineVersion: string; learningIntegrationVersion?: string; learningEvidenceVersion?: string | null;
+  learningIntegration?: LearningIntegrationBlock;
   grading: { passMark: number; strongMark: number; strongMarkBasis: string | null };
   evidenceCoverage: { sequences: number; subjects: number; subjectsInTaxonomy: number; sufficient: boolean; explorationEvidence: number };
   confidence: Confidence;
@@ -465,16 +483,18 @@ export interface StrengthProfile {
 }
 
 export interface ProfileChanges {
-  previous: { snapshotId: string; profileVersion: number; generatedAt: string; strengthEngineVersion: string } | null;
-  current: { strengthEngineVersion: string; academicEngineVersion: string; asOf: string } | null;
+  previous: { snapshotId: string; profileVersion: number; generatedAt: string; strengthEngineVersion: string; learningIntegrationVersion?: string | null; learningEvidenceVersion?: string | null } | null;
+  current: { strengthEngineVersion: string; academicEngineVersion: string; learningIntegrationVersion?: string; learningEvidenceVersion?: string | null; asOf: string } | null;
   newEvidence: { rows: number; byKind: Record<string, number>; explorations: number } | null;
   comparison: {
     newStrengths: ChangeEntry[]; strengthened: ChangeEntry[]; unchanged: ChangeEntry[]; weakened: ChangeEntry[]; newEmerging: ChangeEntry[]; declining: ChangeEntry[];
     newContradictions: Array<{ dimension: string; kind: string }>; coverage: { previous: string | null; current: string | null };
+    learningEvidence?: LearningChange[];
   } | null;
   pendingSnapshot: boolean;
 }
-export interface ChangeEntry { dimension: string; previous: { state: string; confidence: string }; current: { state: string; confidence: string }; reasons: string[] }
+export interface LearningChange { dimension: string; previous: string | null; current: string | null; reasons: string[] }
+export interface ChangeEntry { dimension: string; previous: { state: string; confidence: string }; current: { state: string; confidence: string }; reasons: string[]; learningEvidence?: LearningChange }
 
 export async function fetchProfileChanges(studentId: string, schoolId?: string): Promise<ProfileChanges> {
   const { data } = await api.get(`/insights/student/${studentId}/profile/changes`, schoolId ? { params: { schoolId } } : {});

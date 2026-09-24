@@ -27,6 +27,8 @@ const crypto = require("crypto");
 const ExplorationEvidence      = require("../../db/models/ExplorationEvidence");
 const StrengthProfileSnapshot  = require("../../db/models/StrengthProfileSnapshot");
 const subjectInsights          = require("./subjectInsights.service");
+const learningEvidenceSvc      = require("./learningEvidence.service");
+const Subject                  = require("../../db/models/Subject");
 const reviewCases              = require("./reviewCases.service");
 const strengths                = require("../../../../shared/strengths");
 
@@ -51,28 +53,49 @@ const startOfToday = () => { const d = new Date(); return new Date(Date.UTC(d.ge
 const evidenceRows = ({ schoolId, studentId }) =>
   ExplorationEvidence.find({ schoolId, studentId: String(studentId), deletedAt: null }).sort({ date: 1, createdAt: 1 }).lean();
 
+/**
+ * 1.2.0: the learning events carry subject ids; the taxonomy maps subject
+ * NAMES to dimensions. Names for the subjects the reading mentions, joined
+ * here — the academic profile's own names first, the Subject collection for
+ * a subject that has homework or quizzes but no exam mark yet.
+ */
+const subjectNamesFor = async ({ schoolId, academicProfile, learningEvidence }) => {
+  const names = Object.fromEntries((academicProfile?.subjects ?? []).filter((x) => x.subjectName).map((x) => [String(x.subjectId), x.subjectName]));
+  const missing = [...new Set((learningEvidence?.events ?? []).map((ev) => ev.subjectId).filter((id) => id && !names[id]))];
+  if (missing.length) {
+    for (const sub of await Subject.find({ _id: { $in: missing }, schoolId }).select("_id name").lean()) names[String(sub._id)] = sub.name;
+  }
+  return names;
+};
+
 /** The live strengths profile for one pupil, or null when the pupil has no academic profile. */
 const profileFor = async ({ schoolId, studentId, asOf = null }) => {
-  const [academicProfile, rows] = await Promise.all([
+  const at = asOf ?? startOfToday();
+  const [academicProfile, rows, learningEvidence] = await Promise.all([
     subjectInsights.profileFor({ schoolId, studentId: String(studentId) }),
     evidenceRows({ schoolId, studentId }),
+    learningEvidenceSvc.readingFor({ schoolId, studentId: String(studentId), asOf: at }),
   ]);
   if (!academicProfile) return null;
-  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), asOf: asOf ?? startOfToday() });
+  const subjectNames = await subjectNamesFor({ schoolId, academicProfile, learningEvidence });
+  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), learningEvidence, subjectNames, asOf: at });
 };
 
 /** The same profile through the offline road to the academic engine. */
 const offlineProfileFor = async ({ schoolId, studentId, asOf = null }) => {
   const { runEngine } = require(path.join(CAL, "analyseCohort"));
   const id = String(studentId);
-  const [{ cohort }, rows] = await Promise.all([
+  const at = asOf ?? startOfToday();
+  const [{ cohort }, rows, learningEvidence] = await Promise.all([
     reviewCases.liveCohort({ schoolId, classIds: null, studentIds: [id] }),
     evidenceRows({ schoolId, studentId: id }),
+    learningEvidenceSvc.offlineReadingFor({ schoolId, studentId: id, asOf: at }),
   ]);
   const run = runEngine(cohort);
   const academicProfile = run.profiles.get(id);
   if (!academicProfile) return null;
-  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), asOf: asOf ?? startOfToday() });
+  const subjectNames = await subjectNamesFor({ schoolId, academicProfile, learningEvidence });
+  return strengths.buildStrengthProfile({ academicProfile, explorationEvidence: evidenceForEngine(rows), learningEvidence, subjectNames, asOf: at });
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -131,16 +154,28 @@ const readingOf = (p) => ({
   interestSignals: p.interestSignals.length,
   notInferred: p.notInferred,
   fusion: p.fusion ? { asOf: p.fusion.asOf, coverage: p.fusion.coverage, contradictions: p.fusion.contradictions, timeline: p.fusion.timeline, evidenceIds: p.fusion.evidence.map((e) => e.evidenceId) } : null,
+  // 1.2.0: the integration summary — relationships, quality, what was unavailable. Not the events; they stay in the sources.
+  learningIntegration: p.learningIntegration ? {
+    version: p.learningIntegration.version, learningEvidenceVersion: p.learningIntegration.learningEvidenceVersion,
+    relationships: p.learningIntegration.relationships, contradictions: p.learningIntegration.contradictions, quality: p.learningIntegration.quality,
+    missingModalities: p.learningIntegration.missingModalities, independentLearningItems: p.learningIntegration.independentLearningItems,
+  } : null,
 });
 
 /** What the reading was made from, hashed, so an unchanged boundary is recognised. */
 const boundaryOf = (profile) => {
   const ids = (profile.fusion?.evidence ?? []).map((e) => e.evidenceId).sort();
   const academicTo = profile.evidenceCoverage?.to ?? null;
-  const hash = crypto.createHash("sha1").update(JSON.stringify({ ids, academicTo, seq: profile.evidenceCoverage?.sequences ?? 0,
-    v: [profile.academicEngineVersion, profile.strengthEngineVersion] })).digest("hex");
+  // 1.2.0: every independent learning item that reached a dimension — its id
+  // and its source version, so a corrected mark or a retracted submission
+  // changes the boundary — plus the asOf and every engine version beneath.
+  const learning = (profile.learningIntegration?.items ?? []).map((i) => [i.eventId, i.sourceVersion ?? null, i.normalizedValue]).sort((a, b) => (a[0] < b[0] ? -1 : 1));
+  const hash = crypto.createHash("sha1").update(JSON.stringify({ ids, academicTo, seq: profile.evidenceCoverage?.sequences ?? 0, learning, asOf: profile.fusion?.asOf ?? null,
+    v: [profile.academicEngineVersion, profile.strengthEngineVersion, profile.learningIntegrationVersion ?? null, profile.learningEvidenceVersion ?? null] })).digest("hex");
   const dates = (profile.fusion?.evidence ?? []).map((e) => e.timestamp).filter(Boolean).sort();
-  return { evidenceRows: ids.length, latestEvidenceAt: dates.length ? new Date(dates[dates.length - 1]) : null, academicTo, hash };
+  const learningDates = (profile.learningIntegration?.items ?? []).map((i) => i.observedAt).filter(Boolean).map((d) => new Date(d).toISOString()).sort();
+  return { evidenceRows: ids.length, latestEvidenceAt: dates.length ? new Date(dates[dates.length - 1]) : null, academicTo,
+           learningEvents: learning.length, latestLearningEventAt: learningDates.length ? new Date(learningDates[learningDates.length - 1]) : null, hash };
 };
 
 const latestSnapshot = ({ schoolId, studentId }) =>
@@ -167,6 +202,8 @@ const snapshot = async ({ schoolId, studentId, classId, actor, periodLabel = nul
     academicEngineVersion: profile.academicEngineVersion,
     strengthEngineVersion: profile.strengthEngineVersion,
     explorationEngineVersion: EXPLORATION_ENGINE_VERSION,
+    learningIntegrationVersion: profile.learningIntegrationVersion ?? null,
+    learningEvidenceVersion: profile.learningEvidenceVersion ?? null,
     asOf: new Date(profile.fusion.asOf),
     evidenceBoundary: boundary,
     sourcePeriod: { from: profile.evidenceCoverage.from, to: profile.evidenceCoverage.to, sequences: profile.evidenceCoverage.sequences },
@@ -179,20 +216,23 @@ const snapshot = async ({ schoolId, studentId, classId, actor, periodLabel = nul
 };
 
 /** What changed since the last snapshot: structured, with the new evidence since it. */
-const changesSince = async ({ schoolId, studentId }) => {
+const changesSince = async ({ schoolId, studentId, asOf = null }) => {
   const [profile, last, rows] = await Promise.all([
-    profileFor({ schoolId, studentId }), latestSnapshot({ schoolId, studentId }), evidenceRows({ schoolId, studentId }),
+    profileFor({ schoolId, studentId, asOf }), latestSnapshot({ schoolId, studentId }), evidenceRows({ schoolId, studentId }),
   ]);
   if (!profile) return null;
   const since = last?.generatedAt ?? null;
   const newRows = rows.filter((r) => !since || new Date(r.createdAt ?? r.date) > since);
   const byKind = newRows.reduce((o, r) => { o[r.kind] = (o[r.kind] ?? 0) + 1; return o; }, {});
   return {
-    previous: last ? { snapshotId: String(last._id), profileVersion: last.profileVersion, generatedAt: last.generatedAt, strengthEngineVersion: last.strengthEngineVersion } : null,
-    current: { strengthEngineVersion: profile.strengthEngineVersion, academicEngineVersion: profile.academicEngineVersion, asOf: profile.fusion.asOf },
+    previous: last ? { snapshotId: String(last._id), profileVersion: last.profileVersion, generatedAt: last.generatedAt, strengthEngineVersion: last.strengthEngineVersion,
+                       learningIntegrationVersion: last.learningIntegrationVersion ?? null, learningEvidenceVersion: last.learningEvidenceVersion ?? null } : null,
+    current: { strengthEngineVersion: profile.strengthEngineVersion, academicEngineVersion: profile.academicEngineVersion,
+               learningIntegrationVersion: profile.learningIntegrationVersion, learningEvidenceVersion: profile.learningEvidenceVersion, asOf: profile.fusion.asOf },
     newEvidence: { rows: newRows.length, byKind, explorations: new Set(newRows.map((r) => r.explorationId).filter(Boolean)).size },
     comparison: strengths.compareProfiles(last?.profile ?? null, profile),
-    pendingSnapshot: !last || last.evidenceBoundary?.hash !== boundaryOf(profile).hash || last.strengthEngineVersion !== profile.strengthEngineVersion,
+    pendingSnapshot: !last || last.evidenceBoundary?.hash !== boundaryOf(profile).hash || last.strengthEngineVersion !== profile.strengthEngineVersion
+                     || (last.learningIntegrationVersion ?? null) !== profile.learningIntegrationVersion,
   };
 };
 
@@ -227,7 +267,7 @@ const forGuardian = (p) => (p ? {
   limitations: p.limitations,
   confidence: p.confidence,
   notInferred: p.notInferred,
-  versions: { academic: p.academicEngineVersion, strengths: p.strengthEngineVersion },
+  versions: { academic: p.academicEngineVersion, strengths: p.strengthEngineVersion, learningIntegration: p.learningIntegrationVersion, learningEvidence: p.learningEvidenceVersion },
 } : null);
 
 module.exports = {
@@ -243,6 +283,7 @@ module.exports = {
   snapshot,
   history,
   readingOf,
+  subjectNamesFor,
   strengthReviewCase,
   forGuardian,
 };

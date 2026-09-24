@@ -103,7 +103,7 @@ const profileOf = (marks, interest = []) => {
   check("adjacent suggestions say what they relate to; discovery ones say they are new ground",
     [r.suggestions.find((s) => s.relevance === "adjacent")?.reasons, r.suggestions.find((s) => s.relevance === "discovery")?.reasons], [["RELATED_EXPLORATION"], ["NEW_DOMAIN_EXPLORATION"]]);
   check("every suggestion carries the evidence and exploration versions, and no relevance is called fit or probability",
-    [r.suggestions.every((s) => s.evidenceVersion === "1.1.0" && s.explorationEngineVersion === "1.0.0"), /fit|probability|career/i.test(JSON.stringify(r))], [true, false]);
+    [r.suggestions.every((s) => s.evidenceVersion === "1.2.0" && s.explorationEngineVersion === "1.0.0"), /fit|probability|career/i.test(JSON.stringify(r))], [true, false]);
   const emerging = profileOf({ Mathematics: [16, 17, 9, 9] });
   r = ex.recommend({ strengthProfile: profileOf({ Mathematics: [16, 12, 17, 15] }), history: [], count: 6 });
   check("an emerging area (strong but variable) suggests with EMERGING_STRENGTH", r.suggestions.some((s) => s.reasons.includes("EMERGING_STRENGTH")), true);
@@ -246,7 +246,7 @@ const profileOf = (marks, interest = []) => {
   rr = await pupilA1.get("/insights/student/st-a1/explorations/recommended");
   const sug = rr.body.data.suggestions;
   check("the pupil's suggestions → 200, six, each with reasons a screen can show and the versions",
-    [rr.status, sug.length, sug.every((s) => s.reasons.length && s.activity?.title), rr.body.data.explorationEngineVersion, rr.body.data.evidenceVersion], [200, 6, true, "1.0.0", "1.1.0"]);
+    [rr.status, sug.length, sug.every((s) => s.reasons.length && s.activity?.title), rr.body.data.explorationEngineVersion, rr.body.data.evidenceVersion], [200, 6, true, "1.0.0", "1.2.0"]);
   check("aligned with Mathematics and Physics, and still with breadth", [sug.filter((s) => s.relevance === "aligned").length >= 1, rr.body.data.breadth.adjacent + rr.body.data.breadth.discovery >= 1], [true, true]);
   check("another pupil's suggestions → 403; a teacher of another class → 403; the bursar → 403; Beta's head → 404",
     [(await pupilA2.get("/insights/student/st-a1/explorations/recommended")).status, ...(await statuses(teacherC, reads("st-a1"))).slice(0, 1), (await bursar.get("/insights/student/st-a1/explorations")).status, (await headB.get("/insights/student/st-a1/explorations")).status],
@@ -358,7 +358,7 @@ const profileOf = (marks, interest = []) => {
 
   rr = await teacherA.get("/insights/student/st-a1/strengths");
   check("the strengths profile is unchanged by a completed exploration — participation and performance are carried, not consumed by 1.0.0",
-    [rr.body.data.profile.strengths.map((d) => d.dimension), rr.body.data.profile.strengthEngineVersion, rr.body.data.profile.interestSignals.length > 0], [["quantitative_reasoning", "scientific_reasoning"], "1.1.0", true]);
+    [rr.body.data.profile.strengths.map((d) => d.dimension), rr.body.data.profile.strengthEngineVersion, rr.body.data.profile.interestSignals.length > 0], [["quantitative_reasoning", "scientific_reasoning"], "1.2.0", true]);
   rr = await pupilA1.get("/insights/student/st-a1/exploration-evidence");
   check("the evidence read groups the rows by kind", Object.fromEntries(Object.entries(rr.body.data.byKind).sort()), { exposure: 4, interest: 1, participation: 3, performance: 2, teacher_observation: 2 });
   rr = await pupilA1.get("/insights/student/st-a1/explorations/history");

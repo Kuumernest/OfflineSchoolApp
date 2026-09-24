@@ -11,7 +11,7 @@
  * PROGRESSION stays visible — "Term 1 emerging, Term 2 recurring, Term 3
  * persistent" — and a recomputation cannot show what it used to say. A
  * snapshot is that memory: taken deliberately (a teacher or the office at a
- * term's end), numbered per pupil, stamped with both engine versions and the
+ * term's end), numbered per pupil, stamped with every engine version beneath it and the
  * period the evidence covered, and never edited.
  *
  * ── What it keeps, and what it does not ───────────────────────────────────
@@ -39,13 +39,17 @@ const strengthProfileSnapshotSchema = new mongoose.Schema(
     academicEngineVersion:    { type: String, required: true },
     strengthEngineVersion:    { type: String, required: true },
     explorationEngineVersion: { type: String, default: null },
+    // 1.2.0: the two layers beneath the integration, so a snapshot says under
+    // exactly which readings of learning evidence it was made.
+    learningIntegrationVersion: { type: String, default: null },
+    learningEvidenceVersion:    { type: String, default: null },
 
     // The evidence the reading was made from: how much, up to when, and a
     // hash of exactly which rows — so a rebuild on unchanged evidence returns
     // this snapshot instead of minting an identical one.
     asOf: { type: Date, default: null },
     evidenceBoundary: {
-      type: new mongoose.Schema({ evidenceRows: Number, latestEvidenceAt: Date, academicTo: mongoose.Schema.Types.Mixed, hash: String }, { _id: false }),
+      type: new mongoose.Schema({ evidenceRows: Number, latestEvidenceAt: Date, academicTo: mongoose.Schema.Types.Mixed, learningEvents: Number, latestLearningEventAt: Date, hash: String }, { _id: false }),
       default: null,
     },
 

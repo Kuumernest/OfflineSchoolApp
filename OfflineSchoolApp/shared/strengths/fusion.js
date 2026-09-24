@@ -285,6 +285,29 @@ const timelineFor = (fusedReading, subjects, items) => {
 };
 
 /**
+ * 1.2.0: what changed in the learning evidence beside a dimension, as reason
+ * codes about EVIDENCE — corroboration added, contradiction added, coverage
+ * changed, evidence gone stale, evidence retracted, context changed. Never
+ * "ability increased": the codes name what arrived or left, not the child.
+ * A reading without the block (a 1.1.0 snapshot) yields no codes.
+ */
+const learningChangeOf = (b, a) => {
+  const pb = b?.learningEvidence, pa = a?.learningEvidence;
+  const cb = b?.corroboration, ca = a?.corroboration;
+  const xb = b?.context, xa = a?.context;
+  if (!pb || !pa) return { previous: pb?.relationship ?? null, current: pa?.relationship ?? null, reasons: [] };
+  const reasons = [];
+  if ((ca?.supportingEvents?.length ?? 0) > (cb?.supportingEvents?.length ?? 0)) reasons.push("LEARNING_EVIDENCE_CORROBORATION_ADDED");
+  if ((ca?.contradictingEvents?.length ?? 0) > (cb?.contradictingEvents?.length ?? 0)) reasons.push("LEARNING_EVIDENCE_CONTRADICTION_ADDED");
+  if (JSON.stringify(pa.sourceFamilies) !== JSON.stringify(pb.sourceFamilies)) reasons.push("LEARNING_EVIDENCE_COVERAGE_CHANGED");
+  if (pa.staleEventCount > pb.staleEventCount) reasons.push("LEARNING_EVIDENCE_BECAME_STALE");
+  if (pa.independentEventCount + pa.staleEventCount < pb.independentEventCount + pb.staleEventCount) reasons.push("LEARNING_EVIDENCE_RETRACTED");
+  // Context is attendance and submission; a source that newly exists is a coverage change, counted above.
+  if (Boolean(xa?.attendanceLimited) !== Boolean(xb?.attendanceLimited) || (xa?.attendancePattern ?? null) !== (xb?.attendancePattern ?? null)) reasons.push("LEARNING_EVIDENCE_CONTEXT_CHANGED");
+  return { previous: pb.relationship, current: pa.relationship, reasons };
+};
+
+/**
  * What changed between two readings of the same pupil (profiles or snapshot
  * readings). Structured facts and reason codes; no improvement score.
  */
@@ -297,7 +320,8 @@ const compareProfiles = (previous, current) => {
     const b = before.get(d), a = after.get(d);
     const bs = b?.state ?? "INSUFFICIENT", as = a?.state ?? "INSUFFICIENT";
     const bc = b?.confidence ?? "insufficient", ac = a?.confidence ?? "insufficient";
-    const entry = { dimension: d, previous: { state: bs, confidence: bc }, current: { state: as, confidence: ac }, reasons: a?.fused?.reasons ?? [] };
+    const entry = { dimension: d, previous: { state: bs, confidence: bc }, current: { state: as, confidence: ac }, reasons: a?.fused?.reasons ?? [],
+                    learningEvidence: learningChangeOf(b, a) };
     if (as === "ESTABLISHED" && bs !== "ESTABLISHED") out.newStrengths.push(entry);
     else if (as === "EMERGING" && bs === "INSUFFICIENT") out.newEmerging.push(entry);
     else if (as === "DECLINING" && bs !== "DECLINING") out.declining.push(entry);
@@ -308,6 +332,7 @@ const compareProfiles = (previous, current) => {
   }
   const prevConf = new Set((previous?.fusion?.contradictions ?? []).map((c) => `${c.dimension}|${c.kind}`));
   out.newContradictions = (current?.fusion?.contradictions ?? []).filter((c) => !prevConf.has(`${c.dimension}|${c.kind}`));
+  out.learningEvidence = out.dimensions.filter((x) => x.learningEvidence?.reasons.length).map((x) => ({ dimension: x.dimension, ...x.learningEvidence }));
   const pc = previous?.fusion?.coverage, cc = current?.fusion?.coverage;
   out.coverage = { previous: pc?.overall ?? null, current: cc?.overall ?? null, explorationEvents: { previous: pc?.exploration?.events ?? 0, current: cc?.exploration?.events ?? 0 }, teacherObservers: { previous: pc?.teacherObservation?.observers ?? 0, current: cc?.teacherObservation?.observers ?? 0 } };
   return out;
@@ -315,5 +340,5 @@ const compareProfiles = (previous, current) => {
 
 module.exports = {
   FUSION, SOURCES, AUTHORITY, KIND_TO_SOURCE, RECENCY,
-  recencyOf, performanceLevelOf, normalizeEvidence, eventsOf, fuseDimension, coverageOf, timelineFor, compareProfiles,
+  recencyOf, performanceLevelOf, normalizeEvidence, eventsOf, fuseDimension, coverageOf, timelineFor, compareProfiles, learningChangeOf,
 };

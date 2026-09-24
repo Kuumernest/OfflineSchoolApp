@@ -142,3 +142,18 @@ Personality, motivation, discipline, laziness, intelligence, ability from
 attendance, ability from participation, career, dropout risk, mental health,
 a student ranking, a student score. There is no weighted formula anywhere:
 no field is a score of the pupil, and coverage is never presented as one.
+
+## 14. Stage 13 — the boundary, crossed by a versioned decision
+
+Section 8 said the layer hands the engines nothing until a versioned decision
+says otherwise. Stage 13 is that decision, for the strengths engine only:
+`STRENGTH_ENGINE_VERSION` 1.2.0 reads this layer's events through
+`shared/strengths/learningIntegration.js` (`LEARNING_INTEGRATION_VERSION`
+1.0.0). What crosses: independent performance observations from the
+*homework*, *quiz* and *continuous* families, keyed by `independentKey`. What
+does not cross: *formal* marks and *practical* marks entered as exam scores
+(already the academic engine's input — reported as baseline, never recounted),
+attendance (context only), submission timing and completion (context only),
+and everything in the INTEGRATION list for the exploration engine and
+guidance, which remains empty. This layer's own version, thresholds, states
+and patterns did not change. See docs/27.
