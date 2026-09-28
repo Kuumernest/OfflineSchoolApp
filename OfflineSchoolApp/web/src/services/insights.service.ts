@@ -714,6 +714,41 @@ export async function reviewDevelopmentIntervention(studentId: string, intervent
   return (data as { data: DevelopmentIntervention }).data;
 }
 
+// ── Development plans (Stage 16) — objectives, milestones, review, adaptation. Categorical; the human decides.
+export interface PlanMilestone { milestoneId: string; kind: string; owner: string; order: number; evidenceFamily: string; state: string; reason: string | null; adaptationIndex: number | null }
+export interface PlanReview { reviewId: string; at: string; asOf: string; decision: string; outcome: string | null; reasons?: string[]; teacherReview: { code: string; note?: string | null } | null; contract?: PlanContract | null; adaptation?: { suggestedActions: string[] } | null }
+export interface PlanContract { objective: { category: string; code: string }; attempted: { actions: string[]; adaptations: number }; milestones: { progress: { total: number; completed: number; skipped: number; blocked: number }; occurred: Array<{ kind: string; state: string; reason: string | null }> }; evidence: { independentObservations: number; families: string[]; relevantFamilies: string[]; baseline: { state: string; relationship: string | null } | null; latest: { state: string; relationship: string | null } | null }; changed: { reading: string | null; interventionOutcomes: Array<string | null> }; studentReported: { codes: string[]; count: number }; teacherObserved: { code: string | null } | null; uncertain: { noNewEvidence: boolean; contradiction: boolean; constraints: string[]; missingRelevantFamilies: string[] }; next: { outcome: string; suggestedActions: string[] } }
+export interface PlanSystemReview { adaptiveSupportEngineVersion: string; asOf: string; outcome: string; reasons: string[]; adaptation: { suggestedActions: string[]; explanations: Record<string, string> }; contradiction: { code: string } | null; contract: PlanContract; statement: { code: string; causal: boolean } }
+export interface DevelopmentPlan {
+  planId: string; dimension: string | null; subjectId: string | null; objective: { category: string; code: string; evidenceFamilies: string[]; completion: { requiredMilestones: number; independentObservations: number } };
+  rationale: { guidanceId?: string; guidanceCategory?: string; reasons?: string[]; observed: { state: string | null; trajectory: string | null; relationship: string | null } | null; evidenceQuality: string | null } | null;
+  actions: Array<{ actionType: string; explanation: string; addedAt: string; replacedAt: string | null }>; milestones: PlanMilestone[]; reviewSchedule: { startDate: string; reviewDate: string; intervalDays: number };
+  ownerRole: string; studentParticipation: { required: boolean; acceptedAt: string | null; declinedAt: string | null; reflections: number }; status: string;
+  reviews: PlanReview[]; adaptations: Array<{ index: number; at: string; previous: { actions: string[] }; next: { actions: string[] }; reason: { outcome: string | null; reasons: string[] } }>;
+  reflections?: Array<{ at: string; codes: string[]; note: string | null }>; constraints: Array<{ code: string; at: string }>; reviewDue: boolean; systemReview: PlanSystemReview | null; explanation: Record<string, unknown> | null;
+}
+export interface PlansResponse { asOf: string | null; engineVersions: { planning: string; adaptive: string }; plans: DevelopmentPlan[]; vocabulary: { objectives: string[]; reflectionCodes: string[]; skipReasons: string[] } }
+export async function fetchDevelopmentPlans(studentId: string, schoolId?: string): Promise<PlansResponse> {
+  const { data } = await api.get(`/insights/student/${studentId}/development-plans`, q(schoolId));
+  return (data as { data: PlansResponse }).data;
+}
+export async function createDevelopmentPlan(studentId: string, body: { guidanceId: string; schoolId?: string }): Promise<DevelopmentPlan> {
+  const { data } = await api.post(`/insights/student/${studentId}/development-plans`, body);
+  return (data as { data: DevelopmentPlan }).data;
+}
+export async function actOnDevelopmentPlan(studentId: string, planId: string, body: { action?: string; actionType?: string; note?: string | null; schoolId?: string }): Promise<DevelopmentPlan> {
+  const { data } = await api.patch(`/insights/student/${studentId}/development-plans/${planId}`, body);
+  return (data as { data: DevelopmentPlan }).data;
+}
+export async function moveDevelopmentPlanMilestone(studentId: string, planId: string, milestoneId: string, body: { action: string; reason?: string | null; schoolId?: string }): Promise<DevelopmentPlan> {
+  const { data } = await api.post(`/insights/student/${studentId}/development-plans/${planId}/milestones/${milestoneId}`, body);
+  return (data as { data: DevelopmentPlan }).data;
+}
+export async function reviewDevelopmentPlan(studentId: string, planId: string, body: { teacherReview?: { code: string; note?: string | null } | null; decision: string; actionType?: string | null; note?: string | null; schoolId?: string }): Promise<DevelopmentPlan> {
+  const { data } = await api.post(`/insights/student/${studentId}/development-plans/${planId}/review`, body);
+  return (data as { data: DevelopmentPlan }).data;
+}
+
 export async function fetchLearningChanges(studentId: string, schoolId?: string): Promise<LearningChanges> {
   const { data } = await api.get(`/insights/student/${studentId}/learning-changes`, lq(schoolId));
   return (data as { data: LearningChanges }).data;

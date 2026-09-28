@@ -826,6 +826,19 @@ export default function StudentDashboard() {
           </TouchableOpacity>
         </View>
 
+        {/* Development plans: what the pupil is working on, with a teacher */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/plans")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="clipboard-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("devPlan.activePlans")}</Text>
+            <Text style={s.urgentBannerLink}>{t("devPlan.studentTitle")}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Urgent homework banner */}
         {homeworkStats.urgent > 0 && (
           <View style={s.section}>

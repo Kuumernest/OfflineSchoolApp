@@ -257,3 +257,10 @@ guidance engine (docs/29) reads as `CORROBORATED` (→ DEEPEN beside MAINTAIN),
 `INSUFFICIENT_EVIDENCE` (→ BUILD_EVIDENCE) and `CONTEXT_LIMITED` (→ MONITOR).
 Two consecutive contradicted readings are the intervention trigger
 `REPEATED_DIFFICULTY`. Nothing here changed for that.
+
+## 20. Stage 16 — the relationship at review time
+
+A plan review reads the learning relationship recorded in the snapshots after
+the plan began: a move to CORROBORATED reads as improving evidence, a move to
+CONTRADICTED as a contradiction to explain, with the original rationale kept.
+Nothing here changed for that.

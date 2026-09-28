@@ -279,3 +279,11 @@ else. The intervention engine reads the same trajectories for its triggers
 on) and, for an outcome, the observation before and the observation after an
 intervention's start date. Neither writes anything back: the next snapshots
 carry what happened, and the history reads them as it reads any other.
+
+## 23. Stage 16 — the history at review time
+
+A plan review (docs/30) reads this history for its day: the observations of
+the plan's dimension since the plan's start on a boundary other than the
+plan's own are its "new independent evidence"; the reading before and after
+the start is its development change. The history is not written to by a plan:
+the next snapshots carry what happened, and the loop closes there.

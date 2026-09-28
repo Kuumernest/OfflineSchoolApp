@@ -376,7 +376,7 @@ const cur = (p, hash = "cur") => ({ profile: p, asOf: ASOF, boundaryHash: hash, 
   const at = new Date(ASOF);
   const [liveH, offH] = await Promise.all([devSvc.historyFor({ schoolId: A, studentId: "st-a1", asOf: at }), devSvc.offlineHistoryFor({ schoolId: A, studentId: "st-a1", asOf: at })]);
   check("and directly: JSON-identical histories from the live loader and the mirrored documents", JSON.stringify(liveH) === JSON.stringify(offH), true);
-  check("no new persistent model: the history is derived from StrengthProfileSnapshot and the current reading", mongoose.modelNames().some((n) => /Development/i.test(n)), false);
+  check("no persistent development-history model: the history is derived from StrengthProfileSnapshot and the current reading (DevelopmentPlan, Stage 16, is a plan record, not a history)", mongoose.modelNames().some((n) => /DevelopmentHistory|Trajectory|DevelopmentSnapshot/i.test(n)), false);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

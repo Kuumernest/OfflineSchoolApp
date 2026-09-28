@@ -167,6 +167,29 @@ export const actOnMyIntervention = async (interventionId, action) => {
   return data?.data ?? null;
 };
 
+/** The pupil's development plans, each with the system's reading beside it. Online only; null offline. */
+export const fetchMyPlans = async () => {
+  try { const { data } = await api.get("/insights/student/me/development-plans"); return data?.data ?? null; } catch { return null; }
+};
+export const fetchMyPlan = async (planId) => {
+  try { const { data } = await api.get(`/insights/student/me/development-plans/${planId}`); return data?.data?.plan ?? null; } catch { return null; }
+};
+/** Accept, decline, pause or resume a plan. The server enforces which moves a pupil may make. */
+export const actOnMyPlan = async (planId, action) => {
+  const { data } = await api.patch(`/insights/student/me/development-plans/${planId}`, { action });
+  return data?.data ?? null;
+};
+/** Complete, start or skip (with a documented reason) one of the pupil's own milestones. */
+export const moveMyPlanMilestone = async (planId, milestoneId, action, reason = null) => {
+  const { data } = await api.post(`/insights/student/me/development-plans/${planId}/milestones/${milestoneId}`, { action, reason });
+  return data?.data ?? null;
+};
+/** The pupil's reflection on a plan: controlled codes and an optional short note. About the experience, never a mark. */
+export const reflectOnMyPlan = async (planId, codes, note = null) => {
+  const { data } = await api.post(`/insights/student/me/development-plans/${planId}/reflect`, { codes, note: note || null });
+  return data?.data ?? null;
+};
+
 /** What changed since the last profile snapshot, in the words the pupil sees. Online only; null offline. */
 export const fetchProfileChanges = async () => {
   try {

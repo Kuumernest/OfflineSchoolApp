@@ -1216,3 +1216,52 @@ INTERVENTION_ENGINE_VERSION: 1.0.0
 
 REAL-WORLD_VALIDATION: STILL PENDING
 ```
+
+---
+
+## 21. Stage 16 — plans, reviews, and what a pilot can calibrate
+
+The planning engine adds the objective taxonomy, the milestone catalogue and
+the completion criteria (required milestones plus one new independent
+observation); the adaptive engine adds the review priority and the two-review
+bar before "the expected change is not shown". A pilot can compare each review
+outcome and each suggested adaptation against the decision the teacher
+actually took (both are stored), each completion against whether the teacher
+recognises the objective as addressed, and each pupil reflection code against
+what the pupil says in the room. Categorical comparisons; no rate; no real
+pupil has been through a plan.
+
+### Verification (Stage 16)
+
+| | |
+|---|---|
+| `check-development-planning.js` (new) | 48 assertions, 0 failures — eligibility (never from weak evidence), the plan contract, bounded objectives and observable milestones, every lifecycle move and every invalid one, roles, replay, duplicates, milestones, reconstruction as of a date, purity and vocabulary; then the routes: refusal on weak evidence, creation, idempotent replay, duplicate refusal, the pupil's ownership rule, authorisation, propose, accept, activate, milestones, reflection, historical replay, pause, resume, review, constraints, decline, close, the guardian, live = offline, the feed registration |
+| `check-adaptive-support.js` (new) | 32 assertions, 0 failures — the five outcomes from improving, stable, declining, contradictory and missing evidence; completion by criteria; the pupil's and the teacher's feedback; a constraint; the intervention outcome; the boundary rule; the expected-change rule; the nine questions; the adaptation record; determinism; historical asOf; purity; then the routes: a reading on an active plan, a contradiction after a new boundary, a review that adapts, the pupil's limited view, refusals, a second review, live = offline |
+| `check-development.js` | 62 (its "no persistent model" assertion narrowed to its intent — no development-history model — now that a plan record exists) |
+| `check-pilot-readiness.js` | 82 (seven more consistency classes expected false) |
+| `npm run check:intel` | 20 scripts, 1,178 assertions, 0 failures |
+| Whole-repository sweep, every `scripts/check-*.js` except the two that need mail credentials and the live-database maintenance report | **79 scripts, 4,974 assertions, 0 failures** |
+| `check:roles` (backend) | 94 assertions, 0 failures |
+| web | `tsc -b` clean, `eslint` 0 errors (one pre-existing warning), `vite build` ok, `i18n:check` 4,382 keys in 2 languages, `api:check`, `check:roles` 31, `check:l10n` 70 ok |
+| mobile | `eslint` clean on the plan screens, home and service; `check:i18n` 6,083 keys OK; `check:l10n` 89 |
+| Engines | academic 1.0.0, strengths 1.2.0, exploration 1.0.0, learning evidence 1.0.0, learning integration 1.0.0, development 1.0.0, guidance 1.0.0, intervention 1.0.0 untouched; `DEVELOPMENT_PLANNING_ENGINE_VERSION` 1.0.0, `ADAPTIVE_SUPPORT_ENGINE_VERSION` 1.0.0 |
+| `check:all` | not run — SMTP/Brevo credentials absent, unchanged |
+
+### Status
+
+```
+STAGE 16 COMPLETE
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.2.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+LEARNING_INTEGRATION_VERSION: 1.0.0
+DEVELOPMENT_ENGINE_VERSION: 1.0.0
+GUIDANCE_ENGINE_VERSION: 1.0.0
+INTERVENTION_ENGINE_VERSION: 1.0.0
+DEVELOPMENT_PLANNING_ENGINE_VERSION: 1.0.0
+ADAPTIVE_SUPPORT_ENGINE_VERSION: 1.0.0
+
+REAL-WORLD_VALIDATION: STILL PENDING
+```

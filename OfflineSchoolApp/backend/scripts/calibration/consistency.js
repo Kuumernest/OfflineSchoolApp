@@ -101,6 +101,14 @@ const compareProfiles = (live, offline) => {
       guidanceEvidence:   differences.some((d) => /items\[\d+\]\.(evidence|explanation|evidenceToWatch|suggestedActions)\b/.test(d.path)),
       interventionTrigger: differences.some((d) => /\.triggers\[\d+\]\.(trigger|dimension)\b/.test(d.path)),
       interventionRule:   differences.some((d) => /\.triggers\[\d+\]\.(evidence|independentObservations)\b/.test(d.path) || /\.(lifecycle|outcome)\b/.test(d.path)),
+      // Development Planning 1.0.0 and Adaptive Support 1.0.0: the plan and its review, class by class.
+      planState:            differences.some((d) => /\.plan\.(status|statusHistory)\b/.test(d.path)),
+      planObjective:        differences.some((d) => /\.plan\.(objective|rationale|actions)\b/.test(d.path)),
+      planMilestone:        differences.some((d) => /\.plan\.milestones\b|\.contract\.milestones\b/.test(d.path)),
+      planEvidenceBoundary: differences.some((d) => /\.(evidenceBoundaryHash|developmentObservationBoundary)\b/.test(d.path)),
+      planReview:           differences.some((d) => /\.review\.(outcome|reasons|contract|statement|contradiction)\b/.test(d.path)),
+      planAdaptation:       differences.some((d) => /\.(adaptation|adaptations)\b/.test(d.path)),
+      planVersion:          differences.some((d) => /\.(adaptiveSupportEngineVersion|engineVersions)\b/.test(d.path)),
     },
     differences,
   };

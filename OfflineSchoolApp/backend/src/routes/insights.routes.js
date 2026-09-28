@@ -815,7 +815,16 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
   const liveT = liveD ? ivShared.triggersFor({ development: liveD, guidance: liveG }) : [], offT = offD ? ivShared.triggersFor({ development: offD, guidance: offG }) : [];
   const guidanceCmp = compareProfiles({ engineVersion: liveG?.guidanceEngineVersion ?? null, profile: liveG, guidance: null }, { engineVersion: offG?.guidanceEngineVersion ?? null, profile: offG, guidance: null });
   const interventionCmp = compareProfiles({ engineVersion: ivShared.INTERVENTION_ENGINE_VERSION, profile: { triggers: liveT }, guidance: null }, { engineVersion: ivShared.INTERVENTION_ENGINE_VERSION, profile: { triggers: offT }, guidance: null });
+  // Development plans: each active plan's review on both roads.
+  const plansSvcC = require("../services/intelligence/developmentPlans.service");
+  const planDocs = await plansSvcC.listFor({ schoolId, studentId: String(pupil.student._id) });
+  const planPairs = await Promise.all(planDocs.map(async (d) => ({ plan: plansSvcC.view(d, { asOf, viewer: "staff" }), live: await plansSvcC.systemReview({ doc: d, schoolId, studentId: String(pupil.student._id), asOf }), off: await plansSvcC.offlineSystemReview({ doc: d, schoolId, studentId: String(pupil.student._id), asOf }) })));
+  const planCmp = compareProfiles({ engineVersion: require("../../../shared/adaptiveSupport").ADAPTIVE_SUPPORT_ENGINE_VERSION, profile: planPairs.map((p) => ({ plan: p.plan, review: p.live })), guidance: null },
+    { engineVersion: require("../../../shared/adaptiveSupport").ADAPTIVE_SUPPORT_ENGINE_VERSION, profile: planPairs.map((p) => ({ plan: JSON.parse(JSON.stringify(p.plan)), review: p.off })), guidance: null });
   const mismatches = [
+    ...(planCmp.summary.planState ? ["PLAN_STATE_MISMATCH"] : []), ...(planCmp.summary.planObjective ? ["PLAN_OBJECTIVE_MISMATCH"] : []), ...(planCmp.summary.planMilestone ? ["PLAN_MILESTONE_MISMATCH"] : []),
+    ...(planCmp.summary.planEvidenceBoundary ? ["PLAN_EVIDENCE_BOUNDARY_MISMATCH"] : []), ...(planCmp.summary.planReview ? ["PLAN_REVIEW_MISMATCH"] : []), ...(planCmp.summary.planAdaptation ? ["PLAN_ADAPTATION_MISMATCH"] : []),
+    ...(planCmp.summary.planVersion ? ["PLAN_VERSION_MISMATCH"] : []),
     ...(guidanceCmp.summary.guidanceState ? ["GUIDANCE_STATE_MISMATCH"] : []), ...(guidanceCmp.summary.guidanceReason ? ["GUIDANCE_REASON_MISMATCH"] : []), ...(guidanceCmp.summary.guidanceEvidence ? ["GUIDANCE_EVIDENCE_MISMATCH"] : []),
     ...(interventionCmp.summary.interventionTrigger ? ["INTERVENTION_TRIGGER_MISMATCH"] : []), ...(interventionCmp.summary.interventionRule ? ["INTERVENTION_RULE_MISMATCH"] : []),
     ...(guidanceCmp.summary.engineVersion || guidanceCmp.summary.versions || interventionCmp.summary.engineVersion ? ["VERSION_MISMATCH"] : []),
@@ -824,12 +833,13 @@ router.get("/student/:studentId/consistency", reviewRead, asyncHandler(async (re
     success: true,
     data: {
       generatedAt: new Date(), ...academic,
-      identical: academic.identical && strengthsCmp.identical && developmentCmp.identical && guidanceCmp.identical && interventionCmp.identical,
+      identical: academic.identical && strengthsCmp.identical && developmentCmp.identical && guidanceCmp.identical && interventionCmp.identical && planCmp.identical,
       strengths: { identical: strengthsCmp.identical, engineVersion: strengthsCmp.engineVersion, summary: strengthsCmp.summary, differences: strengthsCmp.differences,
                    versions: { live: versionsOf(liveS), offline: versionsOf(offS) } },
       development: { identical: developmentCmp.identical, engineVersion: developmentCmp.engineVersion, summary: developmentCmp.summary, differences: developmentCmp.differences },
       guidance: { identical: guidanceCmp.identical, engineVersion: guidanceCmp.engineVersion, summary: guidanceCmp.summary, differences: guidanceCmp.differences },
       interventions: { identical: interventionCmp.identical, engineVersion: interventionCmp.engineVersion, summary: interventionCmp.summary, differences: interventionCmp.differences },
+      plans: { identical: planCmp.identical, engineVersion: planCmp.engineVersion, summary: planCmp.summary, differences: planCmp.differences, count: planPairs.length },
       mismatches,
     },
   });
@@ -1127,6 +1137,131 @@ router.post("/student/:studentId/interventions/:interventionId/review", anyPermi
     const r = await devInterventionsSvc.review({ schoolId, studentId: String(pupil.student._id), interventionId: req.params.interventionId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, note: req.body?.note ?? null, complete: Boolean(req.body?.complete), asOf: asOfOf(req) });
     return res.json({ success: true, changed: r.changed, data: devInterventionsSvc.view(r.intervention, { outcome: r.outcome, staff: true }) });
   } catch (err) { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message }); throw err; }
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DEVELOPMENT PLANS — objectives, milestones, review, adaptation (Stage 16)
+// ─────────────────────────────────────────────────────────────────────────────
+
+const plansSvc = require("../services/intelligence/developmentPlans.service");
+const viewerOfPlan = (req) => (isStudent(req) ? "student" : "staff");
+
+const planRead = async (req, res, withSystem = false) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) { res.status(400).json({ success: false, message: "schoolId is required" }); return null; }
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return null;
+  return { schoolId, pupil, id: String(pupil.student._id), asOf: asOfOf(req), viewer: viewerOfPlan(req), withSystem };
+};
+const planErr = (res, err) => { if (err.status) return res.status(err.status).json({ success: false, code: err.code, message: err.message, ...(err.existingPlanId ? { existingPlanId: err.existingPlanId } : {}), ...(err.available ? { available: err.available } : {}), ...(err.reason ? { reason: err.reason } : {}) }); throw err; };
+
+/** GET …/development-plans — every plan as of the day, each with the adaptive engine's current reading. */
+router.get("/student/:studentId/development-plans", strengthRead, asyncHandler(async (req, res) => {
+  const c = await planRead(req, res); if (!c) return undefined;
+  const docs = await plansSvc.listFor({ schoolId: c.schoolId, studentId: c.id });
+  const plans = (await Promise.all(docs.map(async (d) => plansSvc.view(d, { asOf: c.asOf, viewer: c.viewer, system: ["ACTIVE", "REVIEW_DUE"].includes(d.status) ? await plansSvc.systemReview({ doc: d, schoolId: c.schoolId, studentId: c.id, asOf: c.asOf }) : null })))).filter(Boolean);
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(c.schoolId, c.pupil)), asOf: c.asOf ? c.asOf.toISOString() : null, engineVersions: plansSvc.engineVersions(), plans,
+    vocabulary: { objectives: require("../../../shared/developmentPlanning").OBJECTIVE_CATEGORIES, reflectionCodes: require("../../../shared/developmentPlanning").REFLECTION_CODES, skipReasons: require("../../../shared/developmentPlanning").SKIP_REASONS } } });
+}));
+
+/** GET …/development-plans/:planId — one plan as of the day, with the system reading. */
+router.get("/student/:studentId/development-plans/:planId", strengthRead, asyncHandler(async (req, res) => {
+  const c = await planRead(req, res); if (!c) return undefined;
+  const doc = await plansSvc.oneFor({ schoolId: c.schoolId, studentId: c.id, planId: req.params.planId });
+  if (!doc) return res.status(404).json({ success: false, message: "Plan not found" });
+  const system = await plansSvc.systemReview({ doc, schoolId: c.schoolId, studentId: c.id, asOf: c.asOf });
+  const plan = plansSvc.view(doc, { asOf: c.asOf, viewer: c.viewer, system });
+  if (!plan) return res.status(404).json({ success: false, message: "Plan did not exist as of that date" });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...(await identityOf(c.schoolId, c.pupil)), plan } });
+}));
+
+/** POST …/development-plans — create from a current guidance item. Staff, or a pupil for a plan they own. Idempotent on a client _id. */
+router.post("/student/:studentId/development-plans", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.create({ schoolId, studentId: String(pupil.student._id), classId: pupil.student.classId ?? pupil.classId ?? null, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, body: req.body ?? {}, asOf: asOfOf(req) });
+    return res.status(201).json({ success: true, created: r.created, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+}));
+
+/** PATCH …/development-plans/:planId — one lifecycle action (propose, accept, decline, activate, pause, resume, close, …) or an adaptation to apply. */
+router.patch("/student/:studentId/development-plans/:planId", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  const base = { schoolId, studentId: String(pupil.student._id), planId: req.params.planId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role };
+  try {
+    if (req.body?.actionType && !req.body?.action) { const r = await plansSvc.applyAdaptation({ ...base, actionType: String(req.body.actionType) }); return res.json({ success: true, changed: true, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) }); }
+    const r = await plansSvc.act({ ...base, action: String(req.body?.action ?? ""), note: req.body?.note ?? null });
+    return res.json({ success: true, changed: r.changed, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+}));
+
+const planAction = (action) => asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.act({ schoolId, studentId: String(pupil.student._id), planId: req.params.planId, action, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, note: req.body?.note ?? null });
+    return res.json({ success: true, changed: r.changed, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+});
+router.post("/student/:studentId/development-plans/:planId/accept", interventionWrite, planAction("accept"));
+router.post("/student/:studentId/development-plans/:planId/decline", interventionWrite, planAction("decline"));
+router.post("/student/:studentId/development-plans/:planId/pause", interventionWrite, planAction("pause"));
+
+/** POST …/development-plans/:planId/milestones/:milestoneId — start, complete, skip (with a reason), block, unblock. Its owner or staff. */
+router.post("/student/:studentId/development-plans/:planId/milestones/:milestoneId", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.milestone({ schoolId, studentId: String(pupil.student._id), planId: req.params.planId, milestoneId: req.params.milestoneId, action: String(req.body?.action ?? "complete"), reason: req.body?.reason ?? null, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role });
+    return res.json({ success: true, changed: r.changed, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+}));
+
+/** POST …/development-plans/:planId/reflect — the pupil's own reflection: controlled codes, an optional short note. */
+router.post("/student/:studentId/development-plans/:planId/reflect", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.reflect({ schoolId, studentId: String(pupil.student._id), planId: req.params.planId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, codes: req.body?.codes ?? [], note: req.body?.note ?? null });
+    return res.status(201).json({ success: true, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+}));
+
+/** POST …/development-plans/:planId/constraints — an explicit operational constraint (staff, or the pupil about their own plan). */
+router.post("/student/:studentId/development-plans/:planId/constraints", interventionWrite, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.constrain({ schoolId, studentId: String(pupil.student._id), planId: req.params.planId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role, code: String(req.body?.code ?? ""), note: req.body?.note ?? null });
+    return res.status(201).json({ success: true, data: plansSvc.view(r.plan, { viewer: viewerOfPlan(req) }) });
+  } catch (err) { return planErr(res, err); }
+}));
+
+/** POST …/development-plans/:planId/review — staff: the system reading of the day beside the teacher's observation and decision. */
+router.post("/student/:studentId/development-plans/:planId/review", anyPermission("interventions.create", "interventions.manage"), asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForReview(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const r = await plansSvc.review({ schoolId, studentId: String(pupil.student._id), planId: req.params.planId, actor: String(req.user._id ?? req.user.id), actorRole: req.user.role,
+      teacherReview: req.body?.teacherReview ?? null, decision: String(req.body?.decision ?? "continue"), actionType: req.body?.actionType ?? null, note: req.body?.note ?? null, asOf: asOfOf(req) });
+    return res.json({ success: true, data: plansSvc.view(r.plan, { viewer: "staff", system: r.system }), review: r.review });
+  } catch (err) { return planErr(res, err); }
 }));
 
 /**

@@ -357,7 +357,9 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
       // Development Engine 1.0.0 classes; none differ either.
       trajectory: false, transitions: false, changeTypes: false, changeReasons: false, quality: false, persistence: false,
       // Guidance 1.0.0 and Intervention 1.0.0 classes; none differ either.
-      guidanceState: false, guidanceReason: false, guidanceEvidence: false, interventionTrigger: false, interventionRule: false });
+      guidanceState: false, guidanceReason: false, guidanceEvidence: false, interventionTrigger: false, interventionRule: false,
+      // Development Planning 1.0.0 and Adaptive Support 1.0.0 classes; none differ either.
+      planState: false, planObjective: false, planMilestone: false, planEvidenceBoundary: false, planReview: false, planAdaptation: false, planVersion: false });
   check("a persistently weak pupil, read by the head: identical",
     (await head.get("/insights/student/st-a2/consistency")).body.data.identical, true);
   check("the teacher cannot run it on a pupil they do not teach", (await teacherA.get("/insights/student/st-a2/consistency")).status, 403);

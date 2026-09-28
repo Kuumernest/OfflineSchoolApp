@@ -1379,3 +1379,28 @@ Interventions live in the existing Intervention collection; guidance is never
 stored. The academic guidance projection of Stage 3 is unchanged. docs/29
 holds the taxonomy, the rules, the contracts, the lifecycle, the privacy and
 authorisation rules, and what is intentionally not implemented.
+
+
+---
+
+## Stage 16 — Development Planning & Adaptive Support Intelligence (Planning 1.0.0, Adaptive Support 1.0.0)
+
+**Longitudinal, measurable through observable evidence, student-participatory,
+adaptable — and never autonomous.** Stage 16 adds two pure engines downstream
+of guidance. `shared/developmentPlanning` (`DEVELOPMENT_PLANNING_ENGINE_VERSION`
+1.0.0) turns a guidance item on a sufficient history into a plan a pupil and a
+teacher work on together: a bounded, evidence-oriented objective from a
+controlled taxonomy, controlled actions, milestones that are observable events,
+a review schedule, the pupil's own participation, a closed ten-state lifecycle
+with role gates, duplicate prevention, documented constraints, and
+reconstruction as of any date from an append-only record.
+`shared/adaptiveSupport` (`ADAPTIVE_SUPPORT_ENGINE_VERSION` 1.0.0) reviews a
+plan against the independent evidence that arrived since its boundary, the
+development change, the linked interventions' outcomes (Stage 15's engine,
+reused), the pupil's reflection codes and the teacher's observation, and
+answers CONTINUE, ADAPT, COMPLETE, PAUSE or INSUFFICIENT_EVIDENCE with reasons
+and a bounded adaptation; a person decides, and the system's reading is stored
+beside the decision. Plans live in a new append-only collection (docs/30 §3
+says why no existing record could carry them); guidance and reviews are never
+scored. The closed loop — evidence → development → guidance → intervention →
+plan → milestones → review → new evidence → development — is complete.

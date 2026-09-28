@@ -1352,6 +1352,26 @@ router.get("/children/:studentId/guidance", asyncHandler(async (req, res) => {
 }));
 
 /**
+ * GET /children/:studentId/development-plans
+ *
+ * A guardian's view of a child's development plans: the objective, how the
+ * child is being supported, the milestones completed, the upcoming support,
+ * the review status. No reflection, no staff note, no reason code, no other
+ * child. Same scope as every other child route.
+ */
+router.get("/children/:studentId/development-plans", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const plansSvc = require("../services/intelligence/developmentPlans.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const asOf = asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null;
+  const docs = await plansSvc.listFor({ schoolId, studentId: id });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, plans: plansSvc.forGuardian(docs, asOf) } });
+}));
+
+/**
  * GET /children/:studentId/explorations
  *
  * A guardian's view of what one child has explored: which activities, in

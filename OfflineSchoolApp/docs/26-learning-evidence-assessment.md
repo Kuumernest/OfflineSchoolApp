@@ -168,3 +168,10 @@ modalities, and describes how those changed between observations
 `EVIDENCE_COVERAGE_EXPANDED`, `EVIDENCE_RETRACTED`, …). Attendance and
 submission remain context there as here: they can mark a reading
 context-limited and nothing else.
+
+## 16. Stage 16 — the families a plan collects
+
+A plan's objective names the learning families it expects to collect
+(ASSIGNMENT, QUIZ, COURSEWORK, PRACTICAL, …) and its milestones are the
+observable events that produce them. This layer's rules did not change; a
+plan reads what the strengths snapshots recorded from it.

@@ -309,6 +309,12 @@ const EXCLUDED = {
     "is in shared/exploration and is offline by construction; a school's " +
     "additions are read online with it and carry nothing about any pupil.",
   // ── Bookkeeping the classroom never needs ──────────────────────────────
+  DevelopmentPlan:
+    "A development plan a pupil and a teacher work on: objective, milestones, " +
+    "reviews, adaptations, the pupil's own reflections and documented " +
+    "constraints. Read online through the routes that apply each viewer's " +
+    "policy (a pupil's reflection is never a staff machine's); every reading " +
+    "beside it is derived from documents that ARE mirrored.",
   LearningEvidenceSnapshot:
     "A learning-evidence reading as it stood on one day — patterns, quality, " +
     "contradictions, a hash of the events it was made from. Derived from " +

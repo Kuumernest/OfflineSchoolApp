@@ -240,3 +240,13 @@ the Stage 8 pilot and nothing else. The pilot should compare each guidance
 category and each trigger against what teachers recognise, and each observed
 outcome against the teacher's own reading of the period, before any threshold
 moves. **Real-world validation is still pending.**
+
+## 19. Stage 16 — from guidance to a plan
+
+A guidance item on a sufficient history (or a BUILD_EVIDENCE item on any
+history) may open a development plan (docs/30): the guidance category maps to
+one objective, the item's reasons become the plan's rationale, and the plan
+references the guidance id and the strengths boundary it stood on. An
+intervention a plan follows is named in `sourceInterventionIds`; at review its
+outcome is read through `interpretOutcome` unchanged. Guidance and
+interventions themselves did not change for this.
