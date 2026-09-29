@@ -830,6 +830,62 @@ ENGINE_VERSION: 1.0.0
   are the existing `confirmed / partially_appropriate / rejected /
   insufficient_evidence` outcomes of `reviewFeedback.outcomeOf`; no second
   schema.
+- **Technical readiness and operational readiness, answered apart** (added
+  after Stage 17). Every preflight check carries a `group`. TECHNICAL is
+  whether this application is sound at this school: a name-free engine
+  input, live = offline on a sample, no salt on the wire, the access suites.
+  OPERATIONAL is whether a real pilot has what it needs from people and
+  records: an active school (`schoolAuthorized` — a closed school is not
+  authorised), an administrator, two reviewers with assignments in scope,
+  published evidence, thirty reviewable cases, three multi-review-capable
+  cases, and the two attestations, which are given at opening. The preflight
+  returns `technicalReady`, `operationalReady`, a `status`
+  (`TECHNICAL_NOT_READY` · `REAL_PILOT_BLOCKED` · `AWAITING_ATTESTATION`) and
+  `missing` — what a real pilot still lacks, in words: "authorized school",
+  "authorized administrator", "reviewer 1", "reviewer 2", "sufficient
+  published evidence", "reviewable cases (n/30)", "multi-review cases (n/3)".
+  A technically healthy application is not a school ready to pilot, and the
+  refusal (`REAL_PILOT_BLOCKED`) carries both answers and the list, so
+  nobody reads the first as the second. Nothing here can be satisfied by
+  fixtures: the thresholds are unchanged, the attestations are signed by a
+  person at opening, and no synthetic run is described as evidence.
+- **A pilot's evidence is the reviews made inside it.** The evidence
+  snapshot taken at ANALYSIS_READY, CALIBRATED and INSUFFICIENT_EVIDENCE, and
+  the live read on `/pilot/evidence`, count reviews recorded since the pilot
+  opened, on the pilot's engine version (`evidence.since`,
+  `evidence.engineVersion`), and record how many earlier reviews were left
+  out (`evidence.reviewsExcluded`). A review recorded under an earlier pilot,
+  or in a trial of the workflow, is a school record and stays one; it is not
+  evidence for a later pilot's decision. The review queue itself is
+  unchanged: every review remains visible to those the privacy rules allow.
+- **Findings on a closed pilot are a record**: they are not amended (409
+  `PILOT_CLOSED`), and every amendment on an open pilot records who made it.
+
+### What the pilot is for, and what it cannot show
+
+The pilot validates one thing: whether the deterministic Student
+Intelligence interpretations are supported by real educational evidence and
+by the judgement of the teachers who know the pupils. It does not prove, and
+its result must never be read as proving: career prediction; psychological
+assessment; a prediction of a pupil's success; the accuracy of any AI
+explanation (Stage 17's layer narrates the same readings and is not what the
+reviewers judge); universal educational validity beyond the school, the
+term and the subjects reviewed; or that an intervention caused a change
+(the engines report what was observed after a period, never why).
+
+Reviewers assess whether the documented interpretation is supported, partly
+supported, not supported, or insufficiently evidenced, and may record
+missing evidence, a contextual limitation, a data-quality problem, and
+interpretation disagreement. Those four are kept apart in the tally.
+
+**The calibration rule.** No production threshold moves on one anecdote,
+one disagreement, or a handful of them. A rule changes only on documented
+evidence — the pilot's snapshot at or above the minimum, the findings, the
+written decision — read by a person, with the reasoning recorded on the
+pilot; and the change is a new engine version, never a rewrite of the one
+the pilot judged. The state machine enforces the shape of this: CALIBRATED
+needs a written decision and the evidence minimum, INSUFFICIENT_EVIDENCE
+needs a written decision, and nothing moves to either on its own.
 
 ### The protocol, when a school is available
 

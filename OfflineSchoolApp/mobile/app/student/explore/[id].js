@@ -20,6 +20,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Switch
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import {
   getActivity, getExploration, getSuggestions, chooseActivity, startExploration, abandonExploration, submitExploration,
 } from "../../../src/services/exploration.service";
@@ -30,6 +31,7 @@ const CONTINUE = ["NO", "MAYBE", "YES"];
 
 export default function ExploreDetailScreen() {
   const router = useRouter();
+  const pad = useScreenInsets({ top: 16 });
   const { id, kind } = useLocalSearchParams();
   const { t, language } = useTranslation();
   const lang = String(language ?? "en").startsWith("fr") ? "fr" : "en";
@@ -83,7 +85,7 @@ export default function ExploreDetailScreen() {
   return (
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
-      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 52, paddingBottom: 64 }}>
+      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: pad.paddingTop, paddingBottom: 64 }}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12} style={{ marginBottom: 8 }}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{activity.title}</Text>
         <Text style={st.meta}>{t(`explore.area.${activity.area}`)} · {t(`explore.level.${activity.level}`)} · {t("explore.minutes", { n: activity.estimatedMinutes })}</Text>

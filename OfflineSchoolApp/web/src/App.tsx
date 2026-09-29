@@ -272,13 +272,6 @@ export default function App() {
             {/* Named by fee arrears, so teachers are out and the bursar is in.
                 Read-only — the endpoint has no write route at all. */}
             <Route path="/watchlist" element={page(<WatchlistPage />)} />
-            {/* The teacher loop: evidence → guidance → action → outcome. */}
-            <Route path="/class-intelligence" element={page(<ClassIntelPage />)} />
-            {/* Calibration: a teacher judges what the engine said, without seeing
-                what colleagues said until they have answered themselves. */}
-            <Route path="/intelligence-review" element={page(<IntelReviewPage />)} />
-            {/* Strengths and exploration: the layer above the academic engine, one pupil. */}
-            <Route path="/students/:studentId/strengths" element={page(<StrengthsPage />)} />
           </Route>
 
           {/* ── The ledger ─────────────────────────────────────────────── */}
@@ -305,6 +298,23 @@ export default function App() {
 
           {/* ── Academic work ──────────────────────────────────────────── */}
           <Route element={gate(TEACHING)}>
+            {/*
+              The student intelligence pages are the staffroom's, and the
+              navigation has always offered them to teachers — but they sat in
+              the OFFICE gate, where a teacher who followed the link was turned
+              back. The API decides the rest: insights.viewTaught is a TEACHING
+              capability and every pupil route scopes a teacher to their own
+              classes (a pupil outside them is 403), so this gate is only "is
+              this your business at all". The bursar is out, as on the API.
+            */}
+            {/* The teacher loop: evidence → guidance → action → outcome. */}
+            <Route path="/class-intelligence" element={page(<ClassIntelPage />)} />
+            {/* Calibration: a teacher judges what the engine said, without seeing
+                what colleagues said until they have answered themselves. */}
+            <Route path="/intelligence-review" element={page(<IntelReviewPage />)} />
+            {/* Strengths, exploration and the explanation layer, one pupil. */}
+            <Route path="/students/:studentId/strengths" element={page(<StrengthsPage />)} />
+
             {/* Students. The bursar may read a student record through the API
                 but not here: these are the admission and approval screens, and
                 they read from /admin/students, which is admin-only. */}

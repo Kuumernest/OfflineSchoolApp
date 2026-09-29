@@ -715,8 +715,11 @@ const SIGNED_OUT = [
 
 // Signed-in screens still pad with constants. Fixing that is a layout pass
 // over every screen in the app, not a search and replace, so they are listed
-// rather than pretended about — and the list may only shrink.
-const PADS_BY_HAND = 93;
+// rather than pretended about — and the list may only shrink. 93 when the
+// rule was written; 82 once the six intelligence screens added after it were
+// moved to the hook and the count stopped taking a 12-point detail padding
+// for a guess at the bar.
+const PADS_BY_HAND = 82;
 
 const checkScreenEdges = () => {
   console.log("");
@@ -771,12 +774,20 @@ const checkScreenEdges = () => {
   }
 
   // ── 3. The rest of the app: a count that may only go down ───────────────
+  //
+  // What counts as guessing is what rule 2 counts: a top padding chosen for
+  // the status bar — Platform-dependent, or a constant of 24 or more. A
+  // paddingTop of 12 on a detail block is layout, not a guess at the bar,
+  // and counting it made a screen that measures the bars with the hook look
+  // like one that does not.
   let byHand = 0;
   for (const f of screens) {
     const rel = path.relative(ROOT, f).replace(/\\/g, "/");
     if (SIGNED_OUT.includes(rel)) continue;
     const text = fs.readFileSync(f, "utf8");
-    if (/paddingTop:\s*(?:Platform[^,\n]*|\d{2,})/.test(text)) byHand++;
+    const platform = /paddingTop:\s*Platform/.test(text);
+    const constant = [...text.matchAll(/paddingTop:\s*(\d+)/g)].some((m) => Number(m[1]) >= 24);
+    if (platform || constant) byHand++;
   }
 
   if (byHand > PADS_BY_HAND) {

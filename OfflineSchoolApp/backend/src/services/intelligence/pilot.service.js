@@ -38,6 +38,7 @@
  */
 
 const IntelligencePilot = require("../../db/models/IntelligencePilot");
+const School            = require("../../db/models/School");
 const User              = require("../../db/models/User");
 const Student           = require("../../db/models/Student");
 const ResultSummary     = require("../../db/models/ResultSummary");
@@ -91,15 +92,22 @@ const fail = (status, code, message, extra = {}) =>
  * scope. Read as an administrator — the snapshot is the school's, not a
  * reviewer's — and reduced to numbers and code lists before it is stored.
  */
-const evidenceFor = async ({ schoolId, classIds }) => {
+const evidenceFor = async ({ schoolId, classIds, since = null, engineVersion = null }) => {
   const pkg = await reviewCases.reviewPackage(
     { schoolId, classIds: classIds && classIds.length ? classIds : null },
-    { userId: null, role: "school_admin" }
+    { userId: null, role: "school_admin" },
+    { reviewedSince: since, engineVersion }
   );
   const reviewed = pkg.cases.filter((c) => c.reviewCount > 0);
   const codes = new Set(reviewed.flatMap((c) => c.classifications.map((k) => k.code)));
   return {
     takenAt:                  new Date(),
+    // The window the counts were taken in: reviews recorded since the pilot
+    // opened, on the pilot's engine version. Earlier reviews are excluded and
+    // the number excluded is kept, so a decision can say what it rested on.
+    since:                    since ? new Date(since) : null,
+    engineVersion:            engineVersion ?? null,
+    reviewsExcluded:          pkg.window.excluded,
     casesSelected:            pkg.cases.length,
     casesReviewed:            reviewed.length,
     casesAwaitingReview:      pkg.cases.length - reviewed.length,
@@ -115,6 +123,9 @@ const evidenceFor = async ({ schoolId, classIds }) => {
     byOutcome:                pkg.feedback.totals.byOutcome ?? {},
   };
 };
+
+/** The evidence window of a pilot: reviews recorded since it was opened, on its engine version. */
+const windowOf = (pilot) => ({ since: pilot.createdAt ?? pilot.startedAt ?? null, engineVersion: pilot.engineVersion ?? null });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PREFLIGHT — may a REAL pilot start here?
@@ -140,7 +151,8 @@ const preflight = async ({ schoolId, classIds = null }) => {
   const studentIds = students.map((s) => String(s._id));
   const classesInScope = [...new Set(students.map((s) => String(s.classId)).filter(Boolean))];
 
-  const [admins, assignments, published] = await Promise.all([
+  const [school, admins, assignments, published] = await Promise.all([
+    School.findOne({ _id: schoolId, deletedAt: null }).select("_id isActive").lean(),
     User.countDocuments({ schoolId, role: "school_admin", isActive: true }),
     TeacherAssignment.find({ schoolId, isActive: true, class: { $in: classesInScope } }).select("teacher class").lean(),
     studentIds.length ? ResultSummary.countDocuments({ schoolId, deletedAt: null, isPublished: true, studentId: { $in: studentIds } }) : 0,
@@ -165,26 +177,45 @@ const preflight = async ({ schoolId, classIds = null }) => {
   const mismatches = consistency.filter((c) => !c.identical);
 
   const salt = process.env.CALIBRATION_SALT;
+  // Two groups, deliberately. TECHNICAL is whether this application is sound
+  // here: a name-free engine input, live = offline, no salt on the wire, the
+  // access suites. OPERATIONAL is whether a real pilot has what it needs from
+  // people and records: an active school, an administrator, two reviewers,
+  // published evidence, enough cases, and — signed at opening, never here —
+  // the two attestations. A technically healthy application is not a school
+  // ready to pilot, and the two answers are returned apart so nobody reads
+  // the first as the second.
+  const schoolAuthorized = Boolean(school) && school.isActive !== false;
   const checks = [
-    { key: "schoolAdminPresent",      kind: "automatic", ok: admins >= 1,           detail: `${admins} active school administrator(s)` },
-    { key: "reviewersAvailable",      kind: "automatic", ok: reviewers >= MINIMUM_EVIDENCE.reviewers, detail: `${reviewers} teacher(s) hold an active assignment in scope (need ${MINIMUM_EVIDENCE.reviewers})` },
-    { key: "publishedEvidence",       kind: "automatic", ok: published > 0 && pkg.scope.students > 0, detail: `${published} published result(s) for ${pkg.scope.students} pupil(s)` },
-    { key: "reviewableCases",         kind: "automatic", ok: pkg.cases.length >= MINIMUM_EVIDENCE.casesReviewed, detail: `${pkg.cases.length} case(s) on the sheet (need ${MINIMUM_EVIDENCE.casesReviewed})` },
-    { key: "multiReviewCapableCases", kind: "automatic", ok: multiReviewCapable >= MINIMUM_EVIDENCE.casesWithMultipleReviews, detail: `${multiReviewCapable} case(s) in classes with two or more assigned teachers (need ${MINIMUM_EVIDENCE.casesWithMultipleReviews})` },
-    { key: "engineInputNameFree",     kind: "automatic", ok: cohortProblems.length === 0, detail: cohortProblems.length ? cohortProblems.slice(0, 3).join("; ") : "the engine input carries no identity field" },
-    { key: "consistencyOperational",  kind: "automatic", ok: sample.length > 0 && mismatches.length === 0, detail: `${consistency.length} pupil(s) checked, ${mismatches.length} mismatch(es)` },
-    { key: "saltNotExposed",          kind: "automatic", ok: !salt || !JSON.stringify(pkg).includes(salt), detail: "the review package carries no salt" },
-    { key: "teacherScopeEnforced",    kind: "suite", ok: true, detail: "check-intelligence-access.js §1, check-review-workflow.js §5" },
-    { key: "schoolAdminScopeEnforced", kind: "suite", ok: true, detail: "check-intelligence-access.js §2" },
-    { key: "operatorSelectionRequired", kind: "suite", ok: true, detail: "check-intelligence-access.js §3, check-pilot-readiness.js §2" },
-    { key: "rawExportNotExposed",     kind: "suite", ok: true, detail: "check-intelligence-access.js §6 — no export, download or raw cohort on any route" },
-    { key: "schoolParticipates",      kind: "manual", ok: null, detail: "the school knows it is taking part and has agreed" },
-    { key: "reviewersUnderstandTask", kind: "manual", ok: null, detail: "each reviewer has read the briefing and knows the task" },
+    { key: "schoolAuthorized",        kind: "automatic", group: "operational", ok: schoolAuthorized, detail: school ? (schoolAuthorized ? "the school is active on this deployment" : "the school is closed") : "no such school", missing: "authorized school" },
+    { key: "schoolAdminPresent",      kind: "automatic", group: "operational", ok: admins >= 1,           detail: `${admins} active school administrator(s)`, missing: "authorized administrator" },
+    { key: "reviewersAvailable",      kind: "automatic", group: "operational", ok: reviewers >= MINIMUM_EVIDENCE.reviewers, detail: `${reviewers} teacher(s) hold an active assignment in scope (need ${MINIMUM_EVIDENCE.reviewers})`, missing: Array.from({ length: Math.max(0, MINIMUM_EVIDENCE.reviewers - reviewers) }, (_, i) => `reviewer ${reviewers + i + 1}`) },
+    { key: "publishedEvidence",       kind: "automatic", group: "operational", ok: published > 0 && pkg.scope.students > 0, detail: `${published} published result(s) for ${pkg.scope.students} pupil(s)`, missing: "sufficient published evidence" },
+    { key: "reviewableCases",         kind: "automatic", group: "operational", ok: pkg.cases.length >= MINIMUM_EVIDENCE.casesReviewed, detail: `${pkg.cases.length} case(s) on the sheet (need ${MINIMUM_EVIDENCE.casesReviewed})`, missing: `reviewable cases (${pkg.cases.length}/${MINIMUM_EVIDENCE.casesReviewed})` },
+    { key: "multiReviewCapableCases", kind: "automatic", group: "operational", ok: multiReviewCapable >= MINIMUM_EVIDENCE.casesWithMultipleReviews, detail: `${multiReviewCapable} case(s) in classes with two or more assigned teachers (need ${MINIMUM_EVIDENCE.casesWithMultipleReviews})`, missing: `multi-review cases (${multiReviewCapable}/${MINIMUM_EVIDENCE.casesWithMultipleReviews})` },
+    { key: "engineInputNameFree",     kind: "automatic", group: "technical", ok: cohortProblems.length === 0, detail: cohortProblems.length ? cohortProblems.slice(0, 3).join("; ") : "the engine input carries no identity field", missing: "name-free engine input" },
+    { key: "consistencyOperational",  kind: "automatic", group: "technical", ok: sample.length > 0 && mismatches.length === 0, detail: `${consistency.length} pupil(s) checked, ${mismatches.length} mismatch(es)`, missing: "live = offline consistency" },
+    { key: "saltNotExposed",          kind: "automatic", group: "technical", ok: !salt || !JSON.stringify(pkg).includes(salt), detail: "the review package carries no salt", missing: "salt kept off the wire" },
+    { key: "teacherScopeEnforced",    kind: "suite", group: "technical", ok: true, detail: "check-intelligence-access.js §1, check-review-workflow.js §5" },
+    { key: "schoolAdminScopeEnforced", kind: "suite", group: "technical", ok: true, detail: "check-intelligence-access.js §2" },
+    { key: "operatorSelectionRequired", kind: "suite", group: "technical", ok: true, detail: "check-intelligence-access.js §3, check-pilot-readiness.js §2" },
+    { key: "rawExportNotExposed",     kind: "suite", group: "technical", ok: true, detail: "check-intelligence-access.js §6 — no export, download or raw cohort on any route" },
+    { key: "schoolParticipates",      kind: "manual", group: "operational", ok: null, detail: "the school knows it is taking part and has agreed", missing: "attestation: the school participates" },
+    { key: "reviewersUnderstandTask", kind: "manual", group: "operational", ok: null, detail: "each reviewer has read the briefing and knows the task", missing: "attestation: the reviewers understand the task" },
   ];
   const blockers = checks.filter((c) => c.ok === false).map((c) => `${c.key}: ${c.detail}`);
+  const technicalReady   = checks.filter((c) => c.group === "technical").every((c) => c.ok === true);
+  const operationalReady = checks.filter((c) => c.group === "operational" && c.kind === "automatic").every((c) => c.ok === true);
+  const missing = checks.filter((c) => c.ok === false).flatMap((c) => (Array.isArray(c.missing) ? c.missing : [c.missing])).filter(Boolean);
   return {
     schoolId, classIds: scope.classIds,
     ready: blockers.length === 0,
+    technicalReady, operationalReady,
+    // What a real pilot still lacks, in the words a person reads; the two
+    // attestations are listed separately because they are given at opening.
+    status: !technicalReady ? "TECHNICAL_NOT_READY" : !operationalReady ? "REAL_PILOT_BLOCKED" : "AWAITING_ATTESTATION",
+    missing,
+    attestationsPending: checks.filter((c) => c.kind === "manual").map((c) => c.missing),
     blockers,
     checks,
     counts: { students: pkg.scope.students, published, cases: pkg.cases.length, reviewers, multiReviewCapable, consistencyChecked: consistency.length },
@@ -214,7 +245,8 @@ const createPilot = async ({ schoolId, classIds = null, kind, label = null, acto
   if (kind === "real") {
     const pre = await preflight({ schoolId, classIds });
     if (!pre.ready) {
-      throw fail(409, "REAL_PILOT_BLOCKED", `REAL PILOT BLOCKED — ${pre.blockers[0]}`, { blockers: pre.blockers, checks: pre.checks });
+      throw fail(409, "REAL_PILOT_BLOCKED", `REAL PILOT BLOCKED — ${pre.blockers[0]}`,
+        { blockers: pre.blockers, checks: pre.checks, technicalReady: pre.technicalReady, operationalReady: pre.operationalReady, missing: pre.missing });
     }
     const a = attestations ?? {};
     if (a.schoolParticipates !== true || a.reviewersUnderstandTask !== true) {
@@ -252,7 +284,7 @@ const transition = async (pilot, to, { actor, note = null, decision = null } = {
 
   // Entering analysis, or deciding, takes a fresh snapshot of the evidence.
   if (["ANALYSIS_READY", "CALIBRATED", "INSUFFICIENT_EVIDENCE"].includes(to)) {
-    const evidence = await evidenceFor({ schoolId: pilot.schoolId, classIds: pilot.classIds });
+    const evidence = await evidenceFor({ schoolId: pilot.schoolId, classIds: pilot.classIds, ...windowOf(pilot) });
     if (to === "ANALYSIS_READY" && evidence.reviewsRecorded === 0) {
       throw fail(409, "EVIDENCE_REQUIRED", "No reviews have been recorded in this pilot's scope; there is nothing to analyse.");
     }
@@ -318,13 +350,14 @@ const addFinding = async (pilot, { category, severity, summary, evidence = null,
 const updateFinding = async (pilot, findingId, { status, recommendedNextAction, actor }) => {
   const f = pilot.findings.find((x) => x.findingId === findingId);
   if (!f) throw fail(404, "FINDING_NOT_FOUND", "No such finding on this pilot.");
+  if (pilot.status === "CLOSED") throw fail(409, "PILOT_CLOSED", "A closed pilot's findings are a record; they are not amended.");
   if (status !== undefined) {
     if (!FINDING.STATUSES.includes(status)) throw fail(400, "INVALID_FINDING", `status must be one of ${FINDING.STATUSES.join(", ")}`);
     f.status = status;
   }
   if (recommendedNextAction !== undefined) f.recommendedNextAction = recommendedNextAction;
   f.updatedAt = new Date();
-  void actor;
+  f.updatedBy = actor;
   pilot.version += 1;
   await pilot.save();
   return f;
@@ -355,6 +388,7 @@ module.exports = {
   canTransition,
   evidenceShortfalls,
   evidenceFor,
+  windowOf,
   preflight,
   FINDING,
   addFinding,

@@ -19,6 +19,7 @@ import { View, Text, StyleSheet, FlatList, TouchableOpacity, RefreshControl, Sta
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import {
   refreshCatalog, refreshSuggestions, refreshExplorations, getSuggestions, getExplorations, fetchProfileChanges, fetchLearningConcise, fetchMyStrengths,
 } from "../../../src/services/exploration.service";
@@ -28,6 +29,7 @@ const OPEN = ["DISCOVERED", "SAVED", "STARTED", "SUBMITTED", "REVIEW_REQUIRED"];
 
 export default function ExploreScreen() {
   const router = useRouter();
+  const pad = useScreenInsets({ top: 16 });
   const { t, language } = useTranslation();
   const lang = String(language ?? "en").startsWith("fr") ? "fr" : "en";
 
@@ -96,7 +98,7 @@ export default function ExploreScreen() {
   return (
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{t("explore.subtitle")}</Text>
       </View>
@@ -158,7 +160,7 @@ export default function ExploreScreen() {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
-  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingTop: 52, paddingBottom: 4 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 16, paddingBottom: 4 },
   title: { fontSize: 22, fontWeight: "700", color: "#111827" },
   sub: { paddingHorizontal: 16, color: "#6B7280", fontSize: 13, marginBottom: 8 },
   tabs: { flexDirection: "row", paddingHorizontal: 16, gap: 8 },

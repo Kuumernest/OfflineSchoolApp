@@ -12,6 +12,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, S
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyDevelopment, fetchMyGuidance, fetchMyInterventions, actOnMyIntervention } from "../../../src/services/exploration.service";
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
@@ -19,6 +20,7 @@ const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 export default function StudentDevelopmentScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const pad = useScreenInsets({ top: 16 });
   const [h, setH] = useState(null);
   const [g, setG] = useState(null);
   const [iv, setIv] = useState(null);
@@ -44,7 +46,7 @@ export default function StudentDevelopmentScreen() {
   return (
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{t("development.studentTitle")}</Text>
       </View>
@@ -123,7 +125,7 @@ export default function StudentDevelopmentScreen() {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
-  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 52, paddingBottom: 4 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
   title: { fontSize: 20, fontWeight: "700", color: "#111827" },
   sub: { fontSize: 13, color: "#6B7280", paddingHorizontal: 16, marginBottom: 8 },
   meta: { fontSize: 12, color: "#6B7280", marginBottom: 10 },

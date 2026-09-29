@@ -12,6 +12,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, StatusBar, Activi
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyPlan, actOnMyPlan, moveMyPlanMilestone, reflectOnMyPlan } from "../../../src/services/exploration.service";
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
@@ -20,6 +21,7 @@ const SKIPS = ["STUDENT_CHOICE", "RESOURCE_UNAVAILABLE", "TIME_CONSTRAINT", "SCH
 
 export default function StudentPlanScreen() {
   const router = useRouter();
+  const pad = useScreenInsets({ top: 16 });
   const { id } = useLocalSearchParams();
   const { t } = useTranslation();
   const [p, setP] = useState(null);
@@ -38,7 +40,7 @@ export default function StudentPlanScreen() {
   return (
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{p.dimension ? t(`strengths.dimension.${p.dimension}`) : p.subjectId ?? ""}</Text>
       </View>
@@ -96,7 +98,7 @@ export default function StudentPlanScreen() {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
-  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 52, paddingBottom: 4 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 4 },
   title: { fontSize: 20, fontWeight: "700", color: "#111827" },
   status: { fontSize: 13, color: "#6B7280", marginBottom: 8 },
   label: { fontSize: 13, fontWeight: "700", color: "#111827", marginTop: 14, marginBottom: 4 },

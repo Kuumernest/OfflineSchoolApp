@@ -280,7 +280,13 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   const pre = r.body.data;
   check("the preflight answers every automatic precondition for this school",
     [r.status, pre.ready, pre.checks.filter((c) => c.kind === "automatic").length, pre.checks.filter((c) => c.kind === "manual").map((c) => c.key)],
-    [200, false, 8, ["schoolParticipates", "reviewersUnderstandTask"]]);
+    [200, false, 9, ["schoolParticipates", "reviewersUnderstandTask"]]);
+  check("technical readiness and operational readiness are answered apart: the application is sound here, the school is not yet ready, and what is missing is said in words",
+    [pre.technicalReady, pre.operationalReady, pre.status, pre.missing, pre.attestationsPending, pre.checks.every((c) => ["technical", "operational"].includes(c.group))],
+    [true, false, "REAL_PILOT_BLOCKED", [`reviewable cases (${pre.counts.cases}/30)`, `multi-review cases (${pre.counts.multiReviewCapable}/3)`].filter((m, i) => (i === 0 ? pre.counts.cases < 30 : pre.counts.multiReviewCapable < 3)), ["attestation: the school participates", "attestation: the reviewers understand the task"], true]);
+  check("an active school is an operational prerequisite: a closed school is not authorised, and the preflight says so in words",
+    await (async () => { await M("School").updateOne({ _id: B }, { $set: { isActive: false } }); const p = await pilots.preflight({ schoolId: B }); await M("School").updateOne({ _id: B }, { $set: { isActive: true } }); return [p.checks.find((c) => c.key === "schoolAuthorized").ok, p.operationalReady, p.missing[0]]; })(),
+    [false, false, "authorized school"]);
   const byKey = Object.fromEntries(pre.checks.map((c) => [c.key, c.ok]));
   check("two teachers, an administrator, published results, a name-free engine input and live = offline all pass",
     [byKey.reviewersAvailable, byKey.schoolAdminPresent, byKey.publishedEvidence, byKey.engineInputNameFree, byKey.consistencyOperational, byKey.saltNotExposed],
@@ -290,14 +296,18 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   check("the consistency sample is reported per pupil, identical",
     pre.consistency.every((c) => c.identical) && pre.consistency.length > 0, true);
   r = await head.post("/insights/pilot", { kind: "real", label: "Next term", attestations: { schoolParticipates: true, reviewersUnderstandTask: true } });
-  check("so a REAL pilot is refused → 409 REAL_PILOT_BLOCKED with the reason, even with both attestations signed",
-    [r.status, r.body.code, /REAL PILOT BLOCKED/.test(r.body.message), r.body.blockers.length > 0], [409, "REAL_PILOT_BLOCKED", true, true]);
+  check("so a REAL pilot is refused → 409 REAL_PILOT_BLOCKED with the reason, even with both attestations signed; the refusal carries the split and the missing list",
+    [r.status, r.body.code, /REAL PILOT BLOCKED/.test(r.body.message), r.body.blockers.length > 0, r.body.technicalReady, r.body.operationalReady, Array.isArray(r.body.missing) && r.body.missing.length > 0], [409, "REAL_PILOT_BLOCKED", true, true, true, false, true]);
   check("a teacher cannot read the preflight", (await teacherA.get("/insights/pilot/preflight")).status, 403);
   check("a development pilot is not gated", (await head.post("/insights/pilot", { kind: "development", label: "Next term" })).status, 201);
   check("history tells the two apart",
     (await head.get("/insights/pilot/history")).body.data.map((p) => [p.kind, p.status, p.label]),
     [["development", "READY", "Next term"], ["development", "CLOSED", "Form 3A, first try"]]);
   check("the school's current pilot is the open one", (await head.get("/insights/pilot")).body.data.pilot.label, "Next term");
+  r = await head.get("/insights/pilot/evidence");
+  check("a pilot's evidence is the reviews made inside it: the reviews recorded under the earlier pilot are not this one's, and the number left out is said",
+    [r.status, r.body.data.evidence.reviewsRecorded, r.body.data.evidence.reviewers, r.body.data.evidence.reviewsExcluded > 0, typeof r.body.data.evidence.since, r.body.data.evidence.engineVersion],
+    [200, 0, 0, true, "string", (await head.get("/insights/pilot")).body.data.pilot.engineVersion]);
 
   // ── Stage 8: findings on the record ─────────────────────────────────────
   const current = (await head.get("/insights/pilot")).body.data.pilot;
@@ -332,9 +342,14 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   // ═══════════════════════════════════════════════════════════════════════════
 
   process.env.CALIBRATION_SALT = "a-salt-that-must-never-appear";
+  process.env.ANTHROPIC_API_KEY = "sk-ant-check-only-key-that-must-never-appear";
   const stored = JSON.stringify(await M("IntelligencePilot").find({}).lean());
+  const onTheWire = JSON.stringify([(await head.get("/insights/pilot")).body, (await head.get("/insights/pilot/history")).body, (await head.get("/insights/pilot/evidence")).body, (await head.get("/insights/pilot/preflight")).body]);
   check("no salt, no credential, no connection string",
     /salt|CALIBRATION_SALT|a-salt-that|mongodb|MONGODB_URI|password|Check-only/i.test(stored), false);
+  check("no signing secret and no provider key, in the record or on any pilot route",
+    [stored.includes(process.env.JWT_SECRET), /sk-ant-/.test(stored), onTheWire.includes(process.env.JWT_SECRET), /sk-ant-|a-salt-that|mongodb:/.test(onTheWire)], [false, false, false, false]);
+  delete process.env.ANTHROPIC_API_KEY;
   check("no pupil id, name, mark or reviewer's words",
     /st-a1|st-a2|Pupil A|"16"|hard paper|One mark|Ateba|Biya/.test(stored), false);
   check("no result, exam or review document ids",

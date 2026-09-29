@@ -717,7 +717,7 @@ router.get("/pilot/evidence", pilotManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const open = await pilots.openPilot(schoolId);
-  const evidence = await pilots.evidenceFor({ schoolId, classIds: open?.classIds ?? null });
+  const evidence = await pilots.evidenceFor({ schoolId, classIds: open?.classIds ?? null, ...(open ? pilots.windowOf(open) : {}) });
   return res.json({
     success: true,
     data: {

@@ -78,6 +78,17 @@ check("accessibility: a labelled textarea, a labelled prompt group, a live regio
   (explanation.match(/<Button /g) ?? []).every(() => true) && !/<div[^>]*onClick/.test(explanation),
 ], [true, true, true, true]);
 
+console.log("--- the routes ---");
+const appTsx = read("src/App.tsx");
+const nav = read("src/config/navigation.ts");
+const blockOf = (gate) => { const start = appTsx.indexOf(`<Route element={gate(${gate})}>`); if (start < 0) return ""; const end = appTsx.indexOf("\n          </Route>", start); return appTsx.slice(start, end); };
+const inGate = (gate, routePath) => blockOf(gate).includes(`path="${routePath}"`);
+check("the intelligence pages sit in the gate the navigation offers them to — TEACHING for class intelligence, the review and the pupil page; OFFICE for the arrears watch list — and the API scopes the teacher beneath", [
+  inGate("TEACHING", "/class-intelligence"), inGate("TEACHING", "/intelligence-review"), inGate("TEACHING", "/students/:studentId/strengths"),
+  inGate("OFFICE", "/watchlist"), inGate("OFFICE", "/class-intelligence") || inGate("OFFICE", "/intelligence-review") || inGate("OFFICE", "/students/:studentId/strengths"),
+  /path:\s*"\/class-intelligence"[\s\S]{0,200}?roles:\s*\["super_admin", "school_admin", "teacher"\]/.test(nav), /path:\s*"\/watchlist"[\s\S]{0,200}?roles:\s*\["super_admin", "school_admin", "bursar"\]/.test(nav),
+], [true, true, true, true, false, true, true]);
+
 console.log("--- the strings ---");
 const used = [...new Set([...page.matchAll(/t\(\s*["'`](explain\.[\w.]+)["'`]/g)].map((m) => m[1]))];
 check("every explain.* key the page uses literally exists in en and fr", used.filter((k) => get(en, k) === undefined || get(fr, k) === undefined), []);

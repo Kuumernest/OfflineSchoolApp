@@ -72,6 +72,7 @@ const findingSchema = new mongoose.Schema(
     raisedBy:  { type: String, required: true },
     raisedAt:  { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
+    updatedBy: { type: String, default: null },
   },
   { _id: false }
 );
@@ -104,6 +105,11 @@ const evidenceSchema = new mongoose.Schema(
     repeatedDisagreements:    { type: [String], default: [] },
     dataQualityCitations:     { type: Map, of: Number, default: {} },
     byOutcome:                { type: Map, of: Number, default: {} },
+    // The window the counts were taken in: reviews since the pilot opened,
+    // on its engine version; and how many earlier reviews were left out.
+    since:                    { type: Date, default: null },
+    engineVersion:            { type: String, default: null },
+    reviewsExcluded:          { type: Number, default: 0 },
   },
   { _id: false }
 );

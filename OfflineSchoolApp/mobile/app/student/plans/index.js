@@ -12,6 +12,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, S
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { fetchMyPlans } from "../../../src/services/exploration.service";
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
@@ -20,6 +21,7 @@ const OPEN = ["PROPOSED", "ACCEPTED", "ACTIVE", "REVIEW_DUE", "ADAPTING", "PAUSE
 export default function StudentPlansScreen() {
   const router = useRouter();
   const { t } = useTranslation();
+  const pad = useScreenInsets({ top: 16 });
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -35,7 +37,7 @@ export default function StudentPlansScreen() {
   return (
     <View style={st.root}>
       <StatusBar barStyle="dark-content" />
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: pad.paddingTop }]}>
         <TouchableOpacity onPress={() => router.back()} hitSlop={12}><Ionicons name="chevron-back" size={24} color="#111827" /></TouchableOpacity>
         <Text style={st.title}>{t("devPlan.studentTitle")}</Text>
       </View>
@@ -70,7 +72,7 @@ export default function StudentPlansScreen() {
 
 const st = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#F9FAFB" },
-  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingTop: 52, paddingBottom: 8 },
+  header: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingBottom: 8 },
   title: { fontSize: 20, fontWeight: "700", color: "#111827" },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 12, marginBottom: 6 },
   empty: { fontSize: 13, color: "#6B7280" },

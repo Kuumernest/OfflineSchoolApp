@@ -248,10 +248,18 @@ const reviewStatusOf = (cases, allReviews) => {
  * @param {object} scope   { schoolId, classIds }
  * @param {object} viewer  { userId, role }
  */
-const reviewPackage = async (scope, viewer = null) => {
+const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engineVersion = null } = {}) => {
   const { studentIds, students, cohort } = await liveCohort(scope);
   const report = analyse(cohort);
-  const reviews = await reviewsFor({ schoolId: scope.schoolId, studentIds });
+  const allReviews = await reviewsFor({ schoolId: scope.schoolId, studentIds });
+  // A pilot's evidence is the reviews made inside it, on its engine version.
+  // A review recorded before the pilot opened — under an earlier pilot, or a
+  // trial of the workflow — is a school record and stays one, but it is not
+  // evidence for this pilot's decision, and the snapshot must not count it.
+  // Without a window (the review queue itself), every review is visible.
+  const reviews = allReviews.filter((r) =>
+    (!reviewedSince || new Date(r.reviewedAt) >= new Date(reviewedSince)) &&
+    (!engineVersion || r.engineVersion === engineVersion));
 
   // Who each case is about, for the person reading it. analyse() itself never
   // sees a name — the identity is joined here, after authorisation, and only
@@ -303,6 +311,7 @@ const reviewPackage = async (scope, viewer = null) => {
     reviewStatus: reviewStatusOf(cases, byCase),
     cases,
     feedback: analyseReviews(feedbackSheet),
+    window: { reviewedSince: reviewedSince ? new Date(reviewedSince) : null, engineVersion: engineVersion ?? null, excluded: allReviews.length - reviews.length },
     report,
   };
 };

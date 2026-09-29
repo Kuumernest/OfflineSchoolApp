@@ -35,6 +35,7 @@ import { Ionicons } from "@expo/vector-icons";
 
 import api                 from "../../../src/services/api";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
+import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
 import { InterventionService } from "../../../src/services/intervention.service";
 import { errorText }       from "../../../src/utils/appError";
 
@@ -58,6 +59,7 @@ const TONE = {
 
 export default function ClassIntelligenceScreen() {
   const { t } = useTranslation();
+  const pad = useScreenInsets({ top: 16 });
 
   const [classes, setClasses]   = useState([]);
   const [classId, setClassId]   = useState("");
@@ -140,7 +142,7 @@ export default function ClassIntelligenceScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: pad.paddingTop }]}>
         <Text style={styles.title}>{t("classIntel.title")}</Text>
         <Text style={styles.blurb}>{t("classIntel.blurb")}</Text>
       </View>
@@ -270,7 +272,7 @@ export default function ClassIntelligenceScreen() {
 
 const styles = StyleSheet.create({
   root:   { flex: 1, backgroundColor: C.gray50 },
-  header: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8 },
+  header: { paddingHorizontal: 16, paddingBottom: 8 },
   title:  { fontSize: 20, fontWeight: "700", color: C.gray900 },
   blurb:  { fontSize: 12, color: C.gray500, marginTop: 4 },
 
