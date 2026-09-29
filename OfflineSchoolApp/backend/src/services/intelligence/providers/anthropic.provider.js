@@ -43,16 +43,20 @@ const { renderUserMessage } = require("../../../../../shared/advancedIntelligenc
 
 const MAX_TOKENS = 4096;
 
-const clientFor = ({ apiKey, timeoutMs }) => {
+// An organisation key that is not scoped to one workspace must name the
+// workspace on every request; the API refuses it otherwise. The id is
+// configuration (ANTHROPIC_WORKSPACE_ID), sent as a default header, and
+// like the key it lives only in the client closure.
+const clientFor = ({ apiKey, timeoutMs, workspaceId }) => {
   const mod = require("@anthropic-ai/sdk");
   const Anthropic = mod.default ?? mod;
-  return { Anthropic, client: new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 1 }) };
+  return { Anthropic, client: new Anthropic({ apiKey, timeout: timeoutMs, maxRetries: 1, ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}) }) };
 };
 
 const failed = (message, code, status = null) => { const e = new Error(message); e.code = code; if (status) e.status = status; return e; };
 
 class AnthropicProvider {
-  constructor({ apiKey, model, timeoutMs, effort = "low", fallbacks = false } = {}) {
+  constructor({ apiKey, workspaceId = null, model, timeoutMs, effort = "low", fallbacks = false } = {}) {
     this.name = "anthropic";
     this.model = model;
     this.configured = Boolean(apiKey);
@@ -61,7 +65,7 @@ class AnthropicProvider {
     this.fallbacks = fallbacks;
     // The key lives in a closure, not on the instance: nothing that
     // serialises, logs or inspects the provider can reach it.
-    this.sdkOf = () => { if (!this._sdk) this._sdk = clientFor({ apiKey, timeoutMs }); return this._sdk; };
+    this.sdkOf = () => { if (!this._sdk) this._sdk = clientFor({ apiKey, timeoutMs, workspaceId }); return this._sdk; };
   }
 
   /** What the audit may know: the name, the model, whether a key is present. Never the key. */
@@ -88,6 +92,10 @@ class AnthropicProvider {
     } catch (err) {
       const is = (name) => Anthropic[name] && err instanceof Anthropic[name];
       if (is("AuthenticationError") || is("PermissionDeniedError")) throw failed(err.message, "PROVIDER_AUTH", err.status);
+      // A key not scoped to a workspace, and no ANTHROPIC_WORKSPACE_ID: the
+      // request is refused as a 400 naming the header. That is a credential
+      // configuration problem, not an unavailable service.
+      if (is("BadRequestError") && /workspace/i.test(String(err.message))) throw failed(`${err.message} (set ANTHROPIC_WORKSPACE_ID, or use a key scoped to a workspace)`, "PROVIDER_AUTH", 400);
       if (is("NotFoundError")) throw failed(err.message, "MODEL_UNAVAILABLE", 404);
       if (is("RateLimitError")) throw failed(err.message, "PROVIDER_QUOTA", 429);
       if (is("APIConnectionTimeoutError")) throw failed(err.message, "PROVIDER_TIMEOUT");

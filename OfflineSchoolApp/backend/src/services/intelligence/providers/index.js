@@ -43,6 +43,7 @@ const describeConfig = (env = process.env) => {
     provider: !kind || kind === "off" || kind === "false" ? "none" : kind,
     model: env.ANTHROPIC_MODEL || env.ADVANCED_INTELLIGENCE_MODEL || DEFAULT_MODEL,
     apiKeyPresent: Boolean(env.ANTHROPIC_API_KEY && String(env.ANTHROPIC_API_KEY).trim()),
+    workspaceIdPresent: Boolean(env.ANTHROPIC_WORKSPACE_ID && String(env.ANTHROPIC_WORKSPACE_ID).trim()),
     timeoutMs: Number(env.ADVANCED_INTELLIGENCE_TIMEOUT_MS) > 0 ? Number(env.ADVANCED_INTELLIGENCE_TIMEOUT_MS) : DEFAULT_TIMEOUT_MS,
     effort: env.ADVANCED_INTELLIGENCE_EFFORT || "low",
     fallbacks: ["on", "true", "default", "1"].includes(String(env.ADVANCED_INTELLIGENCE_MODEL_FALLBACKS ?? "off").trim().toLowerCase()),
@@ -55,7 +56,7 @@ const providerFromEnv = (env = process.env) => {
   if (c.provider === "anthropic") {
     if (!c.apiKeyPresent) { warnOnce("no-key", "ADVANCED_INTELLIGENCE_PROVIDER=anthropic but ANTHROPIC_API_KEY is not set — using none (deterministic explanation only)"); return new NullProvider(); }
     const { AnthropicProvider } = require("./anthropic.provider");
-    return new AnthropicProvider({ apiKey: String(env.ANTHROPIC_API_KEY).trim(), model: c.model, timeoutMs: c.timeoutMs, effort: c.effort, fallbacks: c.fallbacks });
+    return new AnthropicProvider({ apiKey: String(env.ANTHROPIC_API_KEY).trim(), workspaceId: c.workspaceIdPresent ? String(env.ANTHROPIC_WORKSPACE_ID).trim() : null, model: c.model, timeoutMs: c.timeoutMs, effort: c.effort, fallbacks: c.fallbacks });
   }
   warnOnce(`unknown:${c.provider}`, `unknown ADVANCED_INTELLIGENCE_PROVIDER "${c.provider}" — using none (deterministic explanation only)`);
   return new NullProvider();

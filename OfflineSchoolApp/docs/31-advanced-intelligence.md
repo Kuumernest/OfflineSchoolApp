@@ -194,7 +194,10 @@ instance.
 `anthropic` — without it the provider is not constructed, a warning is
 printed once and the null provider is used, so a school is told at the first
 explanation that nothing is configured rather than shown an authentication
-error later; `ANTHROPIC_MODEL`, default **`claude-sonnet-5`**, never
+error later; `ANTHROPIC_WORKSPACE_ID`, needed only for an organisation
+key not scoped to one workspace (the API refuses such a key until the
+workspace is named; the adapter reports that as `PROVIDER_AUTH` with the
+variable to set); `ANTHROPIC_MODEL`, default **`claude-sonnet-5`**, never
 written in code; `ADVANCED_INTELLIGENCE_TIMEOUT_MS`,
 `ADVANCED_INTELLIGENCE_EFFORT`, `ADVANCED_INTELLIGENCE_MODEL_FALLBACKS`. A
 misspelt provider is reported once and treated as `none`. The key exists on
