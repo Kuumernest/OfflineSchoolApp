@@ -36,19 +36,49 @@ const INPUT_SCREENS = Object.freeze([
 ]);
 
 const OUTPUT_SCREENS = Object.freeze([
-  ["CAREER_PREDICTION", /\b(you (will|would|should|are likely to|are going to|could) (become|be|make) (an?|the) [a-z -]{0,30}\b(engineer|doctor|lawyer|nurse|pilot|accountant|architect|scientist|teacher|programmer|developer|entrepreneur|journalist|artist|designer|banker|surgeon|pharmacist)|\b(best|ideal|right|perfect|suitable|recommended) (career|profession|job)\b|\bcareer (fit|match|score|probability|prediction)\b|\b(predicted|likely|future) (career|profession)\b|\b(you should|you must) (study|choose|pursue|become)\b|\bborn to be\b|\bnatural(ly)? (gifted|talented|born)\b|\bmeant to be an?\b)/i],
+  // "The choice is yours" and "your future career is your decision" are the
+  // sentences this layer is supposed to produce; the screen must not catch
+  // them. It catches a named profession, a fit, a match, a prediction, a
+  // "best" career, a "you should become", never the word career alone.
+  ["CAREER_PREDICTION", /\b(you (will|would|should|are likely to|are going to|could) (become|be|make) (an?|the) [a-z -]{0,30}\b(engineer|doctor|lawyer|nurse|pilot|accountant|architect|scientist|teacher|programmer|developer|entrepreneur|journalist|artist|designer|banker|surgeon|pharmacist)|\b(best|ideal|right|perfect|suitable|recommended) (career|profession|job)\b|\bcareer (fit|match|score|probability|prediction)\b|\b(predicted|likely|probable) (career|profession)\b|\b(you should|you must) (become|pursue a career|go into|train as)\b|\bborn to be\b|\bnatural(ly)? (gifted|talented|born)\b|\bmeant to be an?\b)/i],
   ["PSYCHOLOGICAL_INFERENCE", /\b(personalit(y|ies)|introvert\w*|extrovert\w*|lazy|unmotivated|low self-esteem|anxi(ous|ety)|depress\w*|adhd|autis\w*|gifted|genius|iq|intelligence quotient|learning disabilit\w*|cognitive (ability|deficit)|mental(ly)? (health|ill\w*)|emotionally|temperament|character flaw|you are (a|an) (naturally|inherently))\b/i],
   ["MEDICAL_INFERENCE", /\b(diagnos\w*|dyslexi\w*|dyscalculi\w*|disorders?|syndromes?|medical(ly)?|clinical(ly)?|condition (is|may be)|symptoms?|treatments?|therap(y|ies)|medications?|see a doctor)\b/i],
   ["RISK_INFERENCE", /\b(at[- ]risk|risk (score|level|of (failing|dropping|failure))|likely to (fail|drop out|underperform)|will (fail|drop out)|probability of (success|failure|passing)|chance of (passing|failing)|\d{1,3} ?% (chance|likely|probability))\b/i],
-  ["INTERVENTION_COMMAND", /\b(i(?: (?:have|will|am going to|just)|'ll|'ve) (?:created?|activated?|chang(?:e|ed)|updat(?:e|ed)|modif(?:y|ied)|clos(?:e|ed)|cancel(?:led)?|sen[dt]|notif(?:y|ied)|record(?:ed)?|adjust(?:ed)?|mark(?:ed)?|set|open(?:ed)?|schedul(?:e|ed))|(?:has|have) been (?:created|activated|updated|changed|modified|sent|notified|closed|cancelled|opened|scheduled)|your (?:grade|mark|attendance|plan|strength|guidance|milestone|intervention) (?:has been|is now|was|were) (?:changed|updated|modified|set|activated|created|closed)|i (?:changed|updated|modified|activated|created|sent|notified|closed|cancelled|opened|scheduled))\b/i],
+  // A claim to have acted, or to be about to: first person with an action
+  // verb, or a change to a mark, grade or attendance record, which nothing on
+  // this path ever legitimately reports. A passive description of a recorded
+  // state ("your plan has been activated") is a fact the context may carry
+  // and is not caught here; the citation rules decide whether it is true.
+  ["INTERVENTION_COMMAND", /\b(i(?: (?:have|will|am going to|just|can|could)|'ll|'ve) (?:created?|activated?|chang(?:e|ed)|updat(?:e|ed)|modif(?:y|ied)|clos(?:e|ed)|cancel(?:led)?|sen[dt]|notif(?:y|ied)|record(?:ed)?|adjust(?:ed)?|mark(?:ed)?|set|open(?:ed)?|schedul(?:e|ed)|arrang(?:e|ed))|your (?:grades?|marks?|attendance(?: record)?) (?:has been|have been|is now|are now|was|were) (?:changed|updated|modified|set|corrected|raised|lowered)|i (?:changed|updated|modified|activated|created|sent|notified|closed|cancelled|opened|scheduled|arranged))\b/i],
 ]);
 
 const matches = (screens, text) => { const s = String(text ?? ""); return screens.filter(([, re]) => re.test(s)).map(([code]) => code); };
 
+/**
+ * A denial is not a claim. "No career prediction is made", "this is not a
+ * diagnosis", "not predictions of what you should become" are the sentences
+ * this layer is meant to produce, and a screen that read only the words
+ * after the negation would throw the whole answer away for them — which
+ * the first live runs did. So an output match is ignored when a negation
+ * stands within a few words before it in the same clause. "You should
+ * become an engineer" is still caught; "not what you should become" is not.
+ */
+const NEGATION = /\b(no|not|never|none|cannot|can't|can not|doesn't|does not|don't|do not|didn't|did not|won't|will not|isn't|is not|aren't|are not|wasn't|weren't|without|rather than|instead of|neither|nor|unable to|refuse to|avoid)\b[^.!?;:]{0,45}$/i;
+const negated = (s, index) => NEGATION.test(s.slice(Math.max(0, index - 60), index));
+const matchesOutput = (screens, text) => {
+  const s = String(text ?? "");
+  return screens.filter(([, re]) => {
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    let m;
+    while ((m = g.exec(s)) !== null) { if (!negated(s, m.index)) return true; if (m[0].length === 0) g.lastIndex++; }
+    return false;
+  }).map(([code]) => code);
+};
+
 /** The threats a piece of untrusted input attempts. Empty when none. */
 const screenInput = (text) => matches(INPUT_SCREENS, text);
-/** The forbidden shapes a generated sentence takes. Empty when none. */
-const screenOutput = (text) => matches(OUTPUT_SCREENS, text);
+/** The forbidden shapes a generated sentence takes, denials excluded. Empty when none. */
+const screenOutput = (text) => matchesOutput(OUTPUT_SCREENS, text);
 
 /** Sensitive topics a question may raise: answered without any invented pupil intelligence, and never from conversation. */
 const SENSITIVE = /\b(suicid|self[- ]harm|kill myself|abuse|abused|beaten|pregnan|drugs?|alcohol|depress|anxiety|anxious|panic|eating disorder|bully|bullied|violence|police|arrest|money problems?|can'?t afford|poverty|homeless|my (mother|father|parents?|family) (is|are) (sick|dying|dead|divorc)|hiv|illness|medic|diagnos|therap|counsel)/i;

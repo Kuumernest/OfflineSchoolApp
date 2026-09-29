@@ -217,6 +217,24 @@ intelligence. Claude explains deterministic intelligence. The application
 validates Claude's output. LLM availability is not required for
 deterministic Student Intelligence.**
 
+`scripts/verify-advanced-runtime.js` (`npm run verify:advanced-runtime`)
+is the runtime verification: it starts `src/server.js` itself — the real
+process, reading `backend/.env` for its provider configuration — against an
+in-memory database with synthetic fixtures, and speaks to it over HTTP
+three times over: live (the server's own provider selection, one real call
+per question type, injection, the historical boundary, the authorisation
+matrix, response boundaries, the debug routes and the server's own log
+scanned for secrets); behind a stand-in Anthropic reached through
+`ANTHROPIC_BASE_URL` (what the server actually sends, the parent
+projection, and 401, 403, 404, 429, a hang, junk, a wrong shape and a
+dropped socket, each answered deterministically with its reason, nothing
+persisted, the deterministic reading byte-identical before and after); and
+with the provider off. It also asserts that no tracked file carries a
+configured secret's value. Because a model's words vary, a live answer may
+be kept (`MODEL_VALIDATED`) or replaced by the deterministic one when a
+screen catches it (`DETERMINISTIC_FALLBACK`, `VALIDATION_FAILED`); both are
+correct, both are reported, and a diagnostic prints what a screen caught.
+
 `scripts/check-anthropic-live.js` (`npm run check:anthropic`) makes one
 controlled call through the whole pipeline on synthetic fixtures — request
 → Anthropic → structured response → claim validator → citation validator →

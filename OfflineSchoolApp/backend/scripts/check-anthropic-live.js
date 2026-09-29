@@ -66,6 +66,8 @@ const check = (label, actual, expected) => {
   else {
     const accepted = ai.acceptModelOutput({ context, synthesis, classification: det.classification, facts: det.facts, modelOutput });
     console.log(`  mode ${accepted.mode}; issues ${JSON.stringify(accepted.validation.issues.map((i) => i.code))}`);
+    // What a screen caught, when one did: the sentence, so a false positive can be told from a real one.
+    if (!accepted.validation.valid) for (const [code, re] of ai.safety.OUTPUT_SCREENS) for (const t of [modelOutput.answer ?? "", ...(modelOutput.claims ?? []).map((c) => c?.text ?? "")]) { const m = String(t).match(re); if (m && ai.safety.screenOutput(t).includes(code)) console.log(`  caught ${code}: …${String(t).slice(Math.max(0, m.index - 80), m.index + m[0].length + 30)}…`); }
     console.log(`  answer: ${String(accepted.output.answer).slice(0, 300)}`);
     check("the reply is the structured object", ai.contracts.validateOutputShape(ai.contracts.normalizeModelOutput(modelOutput)).length, 0);
     check("every fact claim cites the context; no forbidden shape; no career named; the pipeline's verdict is one of the two it may give", [accepted.validation.issues.filter((i) => ["MISSING_CITATION", "UNSUPPORTED_CLAIM"].includes(i.code)).length, ai.safety.screenOutput(accepted.output.answer), ["MODEL_VALIDATED", "DETERMINISTIC_FALLBACK"].includes(accepted.mode)], [0, [], true]);
