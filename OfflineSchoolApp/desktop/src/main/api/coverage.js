@@ -306,6 +306,28 @@ const ONLINE_ONLY = [
   },
 
   {
+    endpoint: "GET /insights/student/:id/intelligence-summary",
+    because:
+      "Stage 17's deterministic synthesis over every intelligence layer at " +
+      "once — plans, interventions, reviews and explorations included, none of " +
+      "which the mirror holds. The engine beneath it is pure and shared, but " +
+      "the picture it reads is assembled on the server from records that " +
+      "are read online by design.",
+  },
+  {
+    endpoint: "POST /insights/student/:id/explain",
+    because:
+      "An explanation, optionally narrated by a model provider the server " +
+      "alone is configured with. The deterministic answer needs the same " +
+      "server-side picture as the summary; the narration needs the network. " +
+      "Neither is a write.",
+  },
+  {
+    endpoint: "POST /insights/student/:id/ask",
+    because: "The same pipeline as explain, for an open question.",
+  },
+
+  {
     endpoint: "GET /insights/early-warning",
     because:
       "The early-warning list, computed by services/earlyWarning.service across " +

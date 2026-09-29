@@ -1496,4 +1496,46 @@ router.get("/student/:studentId/learning-evidence/consistency", reviewRead, asyn
   return res.json({ success: true, data: { generatedAt: new Date(), studentId: String(pupil.student._id), identical: cmp.identical, engineVersion: cmp.engineVersion, differences: cmp.differences } });
 }));
 
+// ─────────────────────────────────────────────────────────────────────────────
+// ADVANCED INTELLIGENCE (Stage 17): explanation, synthesis, exploration
+//
+// Reads only. The same guard and the same pupil resolver as every strengths
+// route: a pupil asks about themselves ("me"), staff on insights.viewTaught
+// within their class scope, the operator with a schoolId. The viewer decides
+// the projection the context builder applies; the service decides whether
+// a model narrates; the validator decides whether its words are kept. No
+// route here writes anything and no model is handed a way to.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const advancedSvc = require("../services/intelligence/advancedIntelligence.service");
+const advancedViewerOf = (req) => (isStudent(req) ? "student" : req.user?.role === ROLES.SUPER_ADMIN ? "super_admin" : req.user?.role === ROLES.SCHOOL_ADMIN ? "school_admin" : "teacher");
+const advancedRead = async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
+  if (!schoolId) { res.status(400).json({ success: false, message: "schoolId is required" }); return null; }
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return null;
+  return { schoolId, pupil, id: String(pupil.student._id), asOf: asOfOf(req), viewer: advancedViewerOf(req), lang: langOf(req), identity: await identityOf(schoolId, pupil) };
+};
+
+/** GET …/intelligence-summary — the deterministic synthesis, the exploration candidates and the evidence they cite. Never a model. */
+router.get("/student/:studentId/intelligence-summary", strengthRead, asyncHandler(async (req, res) => {
+  const c = await advancedRead(req, res); if (!c) return undefined;
+  const s = await advancedSvc.summaryFor({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: c.viewer, lang: c.lang });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...c.identity, ...s } });
+}));
+
+const questionRoute = (operation) => asyncHandler(async (req, res) => {
+  const c = await advancedRead(req, res); if (!c) return undefined;
+  const question = req.body?.question;
+  if (typeof question !== "string" || !question.trim()) return res.status(400).json({ success: false, code: "QUESTION_REQUIRED", message: "A question is required." });
+  if (question.length > advancedSvc.QUESTION_MAX) return res.status(400).json({ success: false, code: "QUESTION_TOO_LONG", message: `A question is at most ${advancedSvc.QUESTION_MAX} characters.` });
+  const r = await advancedSvc.explain({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: c.viewer, lang: c.lang, question, operation, identity: c.identity });
+  return res.json({ success: true, data: { generatedAt: new Date(), ...c.identity, ...r } });
+});
+
+/** POST …/explain { question } — why something is on the profile, what changed, why guidance, an intervention or a plan appeared, what evidence supports or is missing. */
+router.post("/student/:studentId/explain", strengthRead, questionRoute("explain"));
+/** POST …/ask { question } — the same pipeline for an open question; a career question becomes exploration, a sensitive or unauthorised one is refused. */
+router.post("/student/:studentId/ask", strengthRead, questionRoute("answer"));
+
 module.exports = router;

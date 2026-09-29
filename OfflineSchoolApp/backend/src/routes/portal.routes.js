@@ -1408,4 +1408,41 @@ router.get("/children/:studentId/learning", asyncHandler(async (req, res) => {
   return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...(learningSvc.forGuardian(r) ?? { subjects: [], attendance: null, concise: [], notInferred: [] }) } });
 }));
 
+/**
+ * GET  /children/:studentId/intelligence-summary
+ * POST /children/:studentId/explain { question }
+ *
+ * A guardian's view of the advanced intelligence layer (Stage 17): the
+ * deterministic synthesis and the exploration candidates, and an explanation
+ * of them, projected for a parent — objectives, support and progress; never
+ * a reflection code, a reason code, a teacher's review code, a note, or
+ * another child. Same scope as every other child route.
+ */
+const guardianChild = (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) { res.status(404).json({ success: false, message: "Child not found" }); return null; }
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const lang = String(req.query.lang ?? req.headers["accept-language"] ?? "en").toLowerCase().startsWith("fr") ? "fr" : "en";
+  return { schoolId, id, asOf: asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null, lang };
+};
+
+router.get("/children/:studentId/intelligence-summary", asyncHandler(async (req, res) => {
+  const c = guardianChild(req, res); if (!c) return undefined;
+  const advancedSvc = require("../services/intelligence/advancedIntelligence.service");
+  const s = await advancedSvc.summaryFor({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: "parent", lang: c.lang });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: c.id, ...s } });
+}));
+
+router.post("/children/:studentId/explain", asyncHandler(async (req, res) => {
+  const c = guardianChild(req, res); if (!c) return undefined;
+  const advancedSvc = require("../services/intelligence/advancedIntelligence.service");
+  const question = req.body?.question;
+  if (typeof question !== "string" || !question.trim()) return res.status(400).json({ success: false, code: "QUESTION_REQUIRED", message: "A question is required." });
+  if (question.length > advancedSvc.QUESTION_MAX) return res.status(400).json({ success: false, code: "QUESTION_TOO_LONG", message: `A question is at most ${advancedSvc.QUESTION_MAX} characters.` });
+  const r = await advancedSvc.explain({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: "parent", lang: c.lang, question, operation: "explain", identity: null });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: c.id, ...r } });
+}));
+
 module.exports = router;
