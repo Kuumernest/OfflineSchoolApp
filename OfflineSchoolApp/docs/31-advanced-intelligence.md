@@ -158,19 +158,68 @@ request every provider receives:
 - `outputSchema` — the JSON schema of the contract (`contracts.OUTPUT_SCHEMA`).
 - `constraints` — the claim types, the forbidden list, `tools: []`, `actions: []`.
 
+`provider.renderUserMessage` (pure) lays the request out as the message a
+model reads: fixed sections in a fixed order — operation, evidence boundary,
+deterministic findings, answer facts, evidence context, citation index,
+limitations, permitted behaviour — each a JSON block under a heading, every
+person-authored string marked as data, and the question last, marked
+untrusted. An adapter passes it through unchanged, so what any model sees
+is testable without a network and identical across models.
+
 No tools are declared; no provider is handed the database, the shell, the
 filesystem, git, HTTP or user management. The `NullProvider` fails every
 operation with `PROVIDER_NOT_CONFIGURED`; it is what the application uses
-when nothing is configured and it is the offline road. The one adapter
-shipped, `anthropic.provider.js`, calls the Messages API with the schema
-enforced at the API (`output_config.format`), effort `low` by default (it is
-putting known facts into words), the server-side model fallback on a safety
-decline enabled by default, and the SDK required lazily so nothing needs it
-installed. Selection is `ADVANCED_INTELLIGENCE_PROVIDER` (`none` |
-`anthropic`), with `ANTHROPIC_API_KEY`, `ADVANCED_INTELLIGENCE_MODEL`,
-`ADVANCED_INTELLIGENCE_TIMEOUT_MS`, `ADVANCED_INTELLIGENCE_EFFORT` and
-`ADVANCED_INTELLIGENCE_MODEL_FALLBACKS` beside it (`.env.example`). A
-misspelt provider is reported once and treated as `none`.
+when nothing is configured and it is the offline road.
+
+**The Anthropic adapter.** `providers/anthropic.provider.js` is the one
+implementation shipped and the only file in the application that names the
+SDK (`@anthropic-ai/sdk`), a client or a model — the check scans `shared/`
+and every other file under `backend/src` and fails on a mention. It sends
+the frozen instructions as a cached system block and the rendered message
+as the user turn, asks for the contract with the schema enforced at the API
+(`output_config.format`), effort `low` by default (it is putting known facts
+into words), declares no tools, parses the text as JSON and hands the
+object to the service; the service normalises it (`contracts.
+normalizeModelOutput`: a null uncertainty, an absent list) and validates
+it. A safety decline is `PROVIDER_REFUSED`; the API's server-side fallback
+to another model on a decline is off by default
+(`ADVANCED_INTELLIGENCE_MODEL_FALLBACKS=on` enables it). The SDK is
+required lazily, so nothing needs it installed. The key lives in a closure
+in the adapter: it is not a property, not in `describe()`, not in
+`toJSON()`, and the check asserts a fixture key appears nowhere on the
+instance.
+
+**Configuration** (`.env.example`): `ADVANCED_INTELLIGENCE_PROVIDER`
+(`none`, the default, or `anthropic`); `ANTHROPIC_API_KEY`, required for
+`anthropic` — without it the provider is not constructed, a warning is
+printed once and the null provider is used, so a school is told at the first
+explanation that nothing is configured rather than shown an authentication
+error later; `ANTHROPIC_MODEL`, default **`claude-sonnet-5`**, never
+written in code; `ADVANCED_INTELLIGENCE_TIMEOUT_MS`,
+`ADVANCED_INTELLIGENCE_EFFORT`, `ADVANCED_INTELLIGENCE_MODEL_FALLBACKS`. A
+misspelt provider is reported once and treated as `none`. The key exists on
+the backend only: never in an `EXPO_PUBLIC_`, `VITE_` or `REACT_APP_`
+variable, a response, a log, an audit block, a fixture, a document or Git.
+
+**Model neutrality.** A different model may word an explanation
+differently; it cannot change a mark, a state, a trajectory, a relationship,
+a quality, a category, a trigger, an outcome, a plan or a decision, because
+none is computed on this path. The deterministic engine versions are
+carried in `engineVersions`; the provider and model names are carried in
+the audit block; the check asserts the two never mix. Changing
+`ANTHROPIC_MODEL` bumps no engine version.
+
+In one line each, as the brief asks: **Claude does not determine student
+intelligence. Claude explains deterministic intelligence. The application
+validates Claude's output. LLM availability is not required for
+deterministic Student Intelligence.**
+
+`scripts/check-anthropic-live.js` (`npm run check:anthropic`) makes one
+controlled call through the whole pipeline on synthetic fixtures — request
+→ Anthropic → structured response → claim validator → citation validator →
+safety validator → final answer — when `ANTHROPIC_API_KEY` is set, and
+exits 0 as "skipped" otherwise. It is deliberately not part of `check:intel`
+or `check:all`: those run with no provider and no network, by design.
 
 ## 7. Failure handling
 
@@ -181,8 +230,10 @@ reason:
 
 | Reason | When |
 |---|---|
-| `PROVIDER_NOT_CONFIGURED` | no provider — the default, and offline |
+| `PROVIDER_NOT_CONFIGURED` | no provider — the default, and offline; or `anthropic` named without a key |
+| `PROVIDER_AUTH` | an invalid or rejected key (401, 403), or an adapter constructed without one |
 | `PROVIDER_UNAVAILABLE` | the SDK missing, a 5xx, any other failure |
+| `MODEL_UNAVAILABLE` | the configured model is unknown to the API (404) |
 | `PROVIDER_TIMEOUT` | the SDK's timeout or the service's bound |
 | `PROVIDER_QUOTA` | 429, quota, billing |
 | `PROVIDER_REFUSED` | the model declined (after the API's own fallback route) |
@@ -387,9 +438,14 @@ versions and the same viewer, which the boundary hash identifies.
   data; the mapping from dimensions to domains is a taxonomy, not a finding.
 - No web or mobile screen renders the new routes yet; the mobile client's
   deterministic summary would come from `intelligence-summary` unchanged.
-- The Anthropic adapter is written against the current SDK and API surface
-  and has not been exercised against a live account from the checks, which
-  run with no provider by design.
+- The Anthropic adapter is written against the current SDK and API surface.
+  The checks run with no provider by design; the live call is the opt-in
+  `check:anthropic`, which needs a key and a network and was not run in
+  the environment that produced this stage (no key was present).
+- The validator catches what it can name. A fluent sentence that is
+  wrong in a way no rule covers passes; the citations beside it are what
+  a reader should trust, and the deterministic answer is always one
+  request away.
 
 ## 18. Real-world validation
 
@@ -424,13 +480,23 @@ validator on each code it must find; exploration — several domains,
 insufficient, contradictory, declining and single-subject evidence,
 cross-domain evidence, the pupil's own exploration, new evidence, the
 career question, no ranking, no prediction, no profession; the provider
-request, the null provider, purity, the model-independent contract; then
+request, the rendered message and the instructions the brief requires, the
+null provider, purity, the model-independent contract; the provider
+registry (none by default, `claude-sonnet-5` by default, no key → none, a
+typo → none), the key never on the instance, auth and unknown-model
+failures, SDK isolation by source scan, normalisation, citation objects, a
+fabricated id, a foreign boundary, a grade-change claim, injection inside
+every evidence field, the stable historical hash; then
 the routes — the summary for the teacher, the pupil as "me", the operator
 with a school, the guardian as a parent; refusals for another pupil, the
 bursar, a teacher of another class, another school's head, the operator
 without a school; historical asOf; determinism; explain and ask with no
-provider; a provider that answers well (`MODEL_VALIDATED`), one that
-predicts a career, one that contradicts the engine, one that names the
-pupil, one that returns junk, one over quota, one offline, one that fails,
-one that hangs; an injected, a cross-pupil and a sensitive question never
+provider; a provider that answers well (`MODEL_VALIDATED`), one answering
+with full citation objects and a null uncertainty, one that predicts a
+career, one that contradicts the engine, one that names the pupil, one that
+returns junk, one over quota, one with a bad key, one with an unknown model,
+one offline, one that fails, one that hangs; reviewer-only content and
+hostile text inserted raw into exploration records never reaching a
+request; a historical request handing the provider the historical context
+and hash; an injected, a cross-pupil and a sensitive question never
 reaching the provider; nothing written; live = offline still holding.

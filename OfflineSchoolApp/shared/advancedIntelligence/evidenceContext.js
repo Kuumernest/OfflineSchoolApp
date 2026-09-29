@@ -286,7 +286,12 @@ const buildEvidenceContext = ({
   };
   const sourceTypes = V.SOURCE_TYPES.filter((t) => Object.values(sources).some((list) => list.some((x) => x.sourceType === t)));
   const core = { contextVersion: V.CONTEXT_VERSION, asOf: at, viewer, engineVersions: versions, sourceTypes, sources, contradictions, evidenceQuality, limitations: [...limitations].sort() };
-  return { ...core, evidenceBoundaryHash: hashOf(core), notInferred: V.NOT_INFERRED, authority: V.AUTHORITY };
+  // The hash names the evidence used. How many later items were dropped is
+  // reported, but not hashed: a historical context must hash the same
+  // whatever arrived after its day, or "the same asOf twice" would stop
+  // being byte-identical the moment the next term's marks were published.
+  const hashed = { ...core, limitations: core.limitations.filter((l) => !l.startsWith("FUTURE_EVIDENCE_EXCLUDED")) };
+  return { ...core, evidenceBoundaryHash: hashOf(hashed), notInferred: V.NOT_INFERRED, authority: V.AUTHORITY };
 };
 
 /** Every item in the context, flat, sorted by id. */

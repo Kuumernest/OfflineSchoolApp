@@ -105,7 +105,7 @@ const prepareFor = async (args) => {
 const auditOf = ({ context, provider, requestType, classification = null, output = null, validation = null, mode, fallbackReason = null }) => ({
   advancedIntelligenceVersion: ai.ADVANCED_INTELLIGENCE_VERSION, contextVersion: context.contextVersion, asOf: context.asOf, evidenceBoundaryHash: context.evidenceBoundaryHash, engineVersions: context.engineVersions,
   provider: provider?.name ?? "none", model: provider?.model ?? null, requestType, questionCategory: classification?.category ?? null,
-  citationIds: [...new Set((output?.claims ?? []).flatMap((c) => c.citations ?? []))].sort(), validationResult: validation ? { valid: validation.valid, issues: validation.issues.map((i) => i.code) } : null, mode, fallbackReason,
+  citationIds: ai.citations.citedIds(output), validationResult: validation ? { valid: validation.valid, issues: validation.issues.map((i) => i.code) } : null, mode, fallbackReason,
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -137,7 +137,7 @@ const explain = async ({ schoolId, studentId, asOf = null, viewer, lang = "en", 
   const provider = providerInUse();
   const finish = ({ output, mode, validation, fallbackReason }) => ({
     classification: { category: det.classification.category, transformed: det.classification.transformed, threats: det.classification.threats, topic: det.classification.topic },
-    mode, fallbackReason, output, citations: ai.citations.resolve(context, [...new Set(output.claims.flatMap((c) => c.citations ?? []))]).map((r) => ({ sourceId: r.sourceId, item: r.item })),
+    mode, fallbackReason, output, citations: ai.citations.resolve(context, ai.citations.citedIds(output)).map((r) => ({ sourceId: r.sourceId, item: r.item })),
     validation: { valid: validation.valid, issues: validation.issues.map((i) => ({ code: i.code, claim: i.claim ?? null, detail: i.detail ?? null })) },
     asOf: context.asOf, evidenceBoundaryHash: context.evidenceBoundaryHash, engineVersions: context.engineVersions, contextVersion: context.contextVersion, advancedIntelligenceVersion: ai.ADVANCED_INTELLIGENCE_VERSION,
     audit: auditOf({ context, provider: mode === "MODEL_VALIDATED" || mode === "DETERMINISTIC_FALLBACK" ? provider : null, requestType: operation, classification: det.classification, output, validation, mode, fallbackReason }),

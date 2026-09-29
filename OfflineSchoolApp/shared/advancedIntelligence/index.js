@@ -58,8 +58,9 @@ const answerDeterministically = ({ context, synthesis: syn, question, lang = "en
  * what the offline road would have said.
  */
 const acceptModelOutput = ({ context, synthesis: syn, classification, facts, modelOutput, unauthorizedTerms = [], lang = "en" } = {}) => {
-  const validation = explanation.validateExplanation({ output: modelOutput, context, unauthorizedTerms });
-  if (validation.valid) return { output: modelOutput, mode: "MODEL_VALIDATED", validation, fallbackReason: null };
+  const normalized = contracts.normalizeModelOutput(modelOutput);
+  const validation = explanation.validateExplanation({ output: normalized, context, unauthorizedTerms });
+  if (validation.valid) return { output: normalized, mode: "MODEL_VALIDATED", validation, fallbackReason: null };
   return { output: explanation.deterministicAnswer({ context, synthesis: syn, classification, facts, lang }), mode: "DETERMINISTIC_FALLBACK", validation, fallbackReason: "VALIDATION_FAILED" };
 };
 

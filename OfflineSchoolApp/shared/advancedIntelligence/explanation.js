@@ -31,7 +31,7 @@
 
 const V = require("./version");
 const { itemById } = require("./evidenceContext");
-const { validateCitations } = require("./citations");
+const { validateCitations, citationId } = require("./citations");
 const { screenOutput } = require("./safety");
 const { validateOutputShape, hasForbiddenKey, LIMITS } = require("./contracts");
 const { explorationCandidates } = require("./exploration/candidates");
@@ -308,7 +308,7 @@ const validateExplanation = ({ output, context, unauthorizedTerms = [] } = {}) =
   output.claims.forEach((c, i) => {
     if (V.CITED_CLAIM_TYPES.includes(c.type) && !c.citations.length) issues.push({ code: "UNSUPPORTED_CLAIM", claim: i });
     for (const issue of validateCitations(c.citations, context)) issues.push({ ...issue, claim: i });
-    for (const id of c.citations) { const why = contradicts(c.text, itemById(context, id), context); if (why) issues.push({ code: "CONTRADICTS_EVIDENCE", claim: i, sourceId: id, detail: why }); }
+    for (const c0 of c.citations) { const id = citationId(c0); const why = contradicts(c.text, itemById(context, id), context); if (why) issues.push({ code: "CONTRADICTS_EVIDENCE", claim: i, sourceId: id, detail: why }); }
   });
   const seen = new Set();
   const unique = issues.filter((x) => { const k = JSON.stringify(x); if (seen.has(k)) return false; seen.add(k); return true; });
