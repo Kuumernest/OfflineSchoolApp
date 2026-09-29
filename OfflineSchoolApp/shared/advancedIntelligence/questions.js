@@ -29,6 +29,20 @@ const GUIDANCE = /\b(guidance|advice|advise|suggest(ion|ed)?|recommend(ation|ed)
 const EVIDENCE = /\b(evidence|missing|support(s|ing)? (this|that|it)|proof|prove|based on|why do you say|where does this come from|how do you know|what (data|information) (do you|did you)|source)\b/i;
 const DEVELOPMENT = /\b(what (has )?changed|change[ds]?|trajectory|progress(ed|ing)?|develop(ed|ing|ment)?|over time|history|improv(ed|ing|ement)|declin(ed|ing|e)|since (last|term)|compared to (before|last)|getting (better|worse)|trend)\b/i;
 const PROFILE = /\b(strength|strengths|profile|showing|why is this|emerging|established|why (do|did) you say|why does it say|what does .* mean|weak(ness)?|good at|not good at)\b/i;
+
+// The French a pupil on the mobile app types — the other language the
+// application speaks. `\b` does not know an accented letter is a letter
+// ("changé " has no word boundary after the é), so these are bounded with
+// Unicode-aware lookarounds instead. Same topics, French stems.
+const fr = (...stems) => new RegExp(`(?<!\\p{L})(?:${stems.join("|")})(?!\\p{L})`, "iu");
+const EXPLORE_FR = fr("explor(?:er|ation)", "domaines?", "activit[ée]s?", "essayer", "d[ée]couvrir", "que pourrais-je (?:essayer|explorer)");
+const PLAN_FR = fr("jalons?", "adapt[ée]e?", "objectif", "revue", "pourquoi (?:mon|ce|le) plan");
+const INTERVENTION_FR = fr("accompagnement", "d[ée]clencheur", "soutien");
+const GUIDANCE_FR = fr("orientation", "conseils?", "sugg[ée]r[ée]e?", "que (?:dois|devrais)-je faire");
+const EVIDENCE_FR = fr("preuves?", "manque", "appuie(?:nt)?", "pourquoi dites-vous", "d'o[uù] vient");
+const DEVELOPMENT_FR = fr("chang[ée]s?", "changement", "trajectoire", "progr[èe]s", "[ée]volu(?:tion|[ée])", "d[ée]veloppement", "historique", "am[ée]lior[ée]e?", "d[ée]clin", "au fil du temps");
+const PROFILE_FR = fr("forces?", "profil", "montre", "pourquoi (?:ceci|cela|ça)", "[ée]mergente?", "[ée]tablie?", "que signifie", "faible(?:sse)?");
+const either = (en, frRe, q) => en.test(q) || frRe.test(q);
 const GENERAL = /\b(how (do|can|should) i (study|revise|learn|prepare|improve|practise|practice|remember|concentrate|focus)|study (tips?|habits?|technique)|revision|exam (tips?|preparation)|homework tips?|note[- ]taking|time management|learning strateg)\b/i;
 
 const norm = (s) => String(s ?? "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -58,13 +72,13 @@ const classifyQuestion = ({ text, subjects = [], planIds = [], areas = [] } = {}
   if (isSensitive(q)) return out("SENSITIVE", "SENSITIVE_TOPIC");
   if (threats.length) return out("UNSUPPORTED", "INPUT_SCREEN");
   if (CAREER.test(q)) return out("EXPLORATION_QUESTION", "CAREER_QUESTION", "CAREER_TO_EXPLORATION");
-  if (PLAN.test(q)) return out("PLAN_EXPLANATION", "KEYWORD");
-  if (INTERVENTION.test(q)) return out("INTERVENTION_EXPLANATION", "KEYWORD");
-  if (EXPLORE.test(q)) return out("EXPLORATION_QUESTION", "KEYWORD");
-  if (GUIDANCE.test(q)) return out("GUIDANCE_EXPLANATION", "KEYWORD");
-  if (EVIDENCE.test(q)) return out("EVIDENCE_QUESTION", "KEYWORD");
-  if (DEVELOPMENT.test(q)) return out("DEVELOPMENT_EXPLANATION", "KEYWORD");
-  if (PROFILE.test(q)) return out("PROFILE_EXPLANATION", "KEYWORD");
+  if (either(PLAN, PLAN_FR, q)) return out("PLAN_EXPLANATION", "KEYWORD");
+  if (either(INTERVENTION, INTERVENTION_FR, q)) return out("INTERVENTION_EXPLANATION", "KEYWORD");
+  if (either(EXPLORE, EXPLORE_FR, q)) return out("EXPLORATION_QUESTION", "KEYWORD");
+  if (either(GUIDANCE, GUIDANCE_FR, q)) return out("GUIDANCE_EXPLANATION", "KEYWORD");
+  if (either(EVIDENCE, EVIDENCE_FR, q)) return out("EVIDENCE_QUESTION", "KEYWORD");
+  if (either(DEVELOPMENT, DEVELOPMENT_FR, q)) return out("DEVELOPMENT_EXPLANATION", "KEYWORD");
+  if (either(PROFILE, PROFILE_FR, q)) return out("PROFILE_EXPLANATION", "KEYWORD");
   if (GENERAL.test(q)) return out("GENERAL_EDUCATIONAL", "KEYWORD");
   return out("UNSUPPORTED", "NO_MATCH");
 };

@@ -757,3 +757,52 @@ export async function rebuildLearningEvidence(studentId: string, schoolId?: stri
   const { data } = await api.post(`/insights/student/${studentId}/learning-evidence/rebuild`, schoolId ? { schoolId } : {});
   return data as { created: boolean };
 }
+
+// ── Advanced intelligence (Stage 17) — the deterministic synthesis and the explanation layer above it ──
+//
+// The summary never involves a model. An explanation is answered by the
+// deterministic layer, or by a model provider whose every sentence was
+// validated against the evidence first; `mode` says which, and a fallback
+// carries its reason. Nothing here computes a state: the client renders
+// what the engines said and what the layer explained.
+
+export interface IntelDimension {
+  dimension: string; academicState: string; confidence: string; persistence: string | null; developmentDirection: string; trajectory: string; independentObservations: number;
+  learningRelationship: string; evidenceQuality: string; recentChange: string; contradictions: { kind: string; status: string | null; current?: boolean }[];
+  activePlan: boolean; activePlanIds: string[]; guidanceCategories: string[]; interventionTriggers: string[]; activeInterventions: number;
+  explorationAreas: string[]; explorations: { total: number; completed: number }; supportingSubjects: { subjectId: string | null; subjectName: string | null }[];
+  crossDomain: { relationship: string; supportingSources: string[]; conflictingSources: string[]; statementCode: string }; citations: string[];
+}
+export interface ExplorationCandidate {
+  domain: string; label: string; description?: string; evidenceQuality: string; whyItAppeared: { code: string; dimension: string | null; area: string | null }[];
+  contradictoryEvidence: { code: string }[]; activities: { activityId: string; area: string; level: string; title: string; explored: string | null }[];
+  questionsToInvestigate: string[]; skillsToExplore: string[]; limitations: string[];
+}
+export interface IntelligenceSummary {
+  studentId: string; name: string | null; asOf: string; viewer: string; evidenceBoundaryHash: string; engineVersions: Record<string, string | null>;
+  synthesis: { dimensions: IntelDimension[]; overall: { profileConfidence: string; coverage: string; historySufficient: boolean; independentObservations: number; dimensionsRead: number; established: number; emerging: number; declining: number; openContradictions: number; activePlans: number; plans: number; guidanceItems: number; explorations: number; explorationsCompleted: number } };
+  exploration: { ordering: string; candidates: ExplorationCandidate[]; notSupported: { domain: string; label: string; reason: string }[] };
+  limitations: string[]; mode: string;
+}
+export type ClaimType = "OBSERVED" | "INFERRED_BY_DETERMINISTIC_ENGINE" | "SUGGESTED_EXPLORATION" | "UNCERTAIN" | "NOT_AVAILABLE";
+export type ExplainMode = "DETERMINISTIC" | "MODEL_VALIDATED" | "DETERMINISTIC_FALLBACK" | "REFUSED";
+export interface ExplainClaim { text: string; type: ClaimType; citations: (string | { sourceId: string })[] }
+export interface CitationItem { sourceId: string; item: (Record<string, unknown> & { sourceType: string }) | null }
+export interface ExplainResponse {
+  classification: { category: string; transformed: string | null }; mode: ExplainMode; fallbackReason: string | null;
+  output: { answer: string; claims: ExplainClaim[]; uncertainty: string; limitations: string[]; suggestedQuestions: string[] };
+  citations: CitationItem[]; validation: { valid: boolean; issues: { code: string }[] }; asOf: string; evidenceBoundaryHash: string;
+}
+
+export async function fetchIntelligenceSummary(studentId: string, schoolId?: string): Promise<IntelligenceSummary> {
+  const { data } = await api.get(`/insights/student/${studentId}/intelligence-summary`, q(schoolId));
+  return (data as { data: IntelligenceSummary }).data;
+}
+export async function explainStudent(studentId: string, body: { question: string; schoolId?: string }): Promise<ExplainResponse> {
+  const { data } = await api.post(`/insights/student/${studentId}/explain`, body);
+  return (data as { data: ExplainResponse }).data;
+}
+export async function askStudent(studentId: string, body: { question: string; schoolId?: string }): Promise<ExplainResponse> {
+  const { data } = await api.post(`/insights/student/${studentId}/ask`, body);
+  return (data as { data: ExplainResponse }).data;
+}

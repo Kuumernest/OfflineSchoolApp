@@ -25,7 +25,7 @@ import { useState }                                from "react";
 import { useParams }                               from "react-router-dom";
 import { useQuery, useMutation, useQueryClient }   from "@tanstack/react-query";
 import { useTranslation }                          from "react-i18next";
-import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen, Activity, LifeBuoy, ClipboardList } from "lucide-react";
+import { Sparkles, Compass, EyeOff, TrendingDown, ShieldOff, History, Route, GitCompare, AlertTriangle, BookOpen, Activity, LifeBuoy, ClipboardList, MessageSquare } from "lucide-react";
 
 import { useUser }      from "@/store/auth.store";
 import { PageHeader }   from "@/components/ui/PageHeader";
@@ -41,6 +41,8 @@ import {
   fetchLearningEvidence, fetchLearningChanges, rebuildLearningEvidence, fetchDevelopment,
   fetchDevelopmentGuidance, fetchDevelopmentInterventions, proposeDevelopmentIntervention, actOnDevelopmentIntervention, reviewDevelopmentIntervention,
   fetchDevelopmentPlans, createDevelopmentPlan, actOnDevelopmentPlan, moveDevelopmentPlanMilestone, reviewDevelopmentPlan,
+  fetchIntelligenceSummary, explainStudent,
+  type ExplainResponse, type ExplainClaim, type CitationItem,
   type DimensionReading, type RecordedReview, type ExplorationRow, type ChangeEntry, type SeriesReading, type SubjectLearning, type AttendanceReading, type ExplorationArea, type LearningEventRef, type Trajectory, type ExplanationLine, type DevGuidanceItem, type DevelopmentIntervention, type InterventionTrigger, type DevelopmentPlan,
 } from "@/services/insights.service";
 
@@ -120,6 +122,9 @@ export default function StudentStrengthsPage() {
 
       {/* ── Development plans (Stage 16) ─────────────────────────────── */}
       <DevelopmentPlans studentId={studentId} schoolId={schoolId} isStaff={isStaff} toast={toast} />
+
+      {/* ── Explanation (Stage 17): the synthesis, and questions about it ── */}
+      {isStaff && <Explanation studentId={studentId} schoolId={schoolId} toast={toast} />}
 
       {/* ── Conflicting evidence, reported as a pattern ──────────────── */}
       {p?.fusion && p.fusion.contradictions.length > 0 && (
@@ -1092,6 +1097,162 @@ function LearningEvidence({ studentId, schoolId, isStaff, toast }: { studentId: 
         </div>
       )}
     </Section>
+  );
+}
+
+// ── Explanation (Stage 17) ───────────────────────────────────────────────────
+//
+// The deterministic synthesis first, then a bounded question box. An answer
+// arrives as a structured object — the answer, typed claims with citations,
+// uncertainty, limitations, suggested questions — and is rendered as such,
+// never as a chat transcript. `mode` says whether a model narrated it or the
+// deterministic layer answered; either way the facts are the engines'. A
+// suggested question fills the box; a person presses the button. Nothing is
+// remembered between questions.
+
+const EXPLAIN_PROMPTS = ["profile", "changed", "evidence", "guidance", "plan", "explore"] as const;
+const humanCode = (s: unknown) => String(s ?? "").toLowerCase().replace(/_/g, " ");
+const dayOf = (d?: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+type Tr = ReturnType<typeof useTranslation>["t"];
+const pickText = (...vals: unknown[]) => vals.find((v) => typeof v === "string" && v.length > 0) as string | undefined;
+
+/** A citation as a reader understands it: the kind of record, and what it is about. Never an internal id. */
+function citationLabel(item: CitationItem["item"], t: Tr): string {
+  if (!item) return t("explain.source.unknown");
+  const kind = t(`explain.source.${item.sourceType}`, { defaultValue: humanCode(item.sourceType) });
+  const detail = typeof item.dimension === "string" && item.dimension
+    ? t(`strengths.dimension.${item.dimension}`, { defaultValue: humanCode(item.dimension) })
+    : pickText(item.subjectName, item.area, item.category, item.trigger, (item.objective as { code?: unknown } | undefined)?.code, item.activityId, item.kind, item.insight, item.concise, item.contradiction);
+  return detail ? `${kind} · ${humanCode(detail)}` : kind;
+}
+
+function Explanation({ studentId, schoolId, toast }: { studentId: string; schoolId?: string; toast: ReturnType<typeof useToast>["toast"] }) {
+  const { t } = useTranslation();
+  const [question, setQuestion] = useState("");
+  const [result, setResult] = useState<ExplainResponse | null>(null);
+  const summaryQ = useQuery({ queryKey: ["intel-summary", studentId, schoolId], queryFn: () => fetchIntelligenceSummary(studentId, schoolId), enabled: !!studentId });
+  const ask = useMutation({
+    mutationFn: (q: string) => explainStudent(studentId, { question: q, ...(schoolId ? { schoolId } : {}) }),
+    onSuccess: (r) => setResult(r),
+    onError: (err: unknown) => {
+      const res = (err as { response?: { status?: number; data?: { code?: string } } })?.response;
+      const code = res?.data?.code ?? (res?.status === 403 ? "forbidden" : res?.status === 404 ? "notFound" : res === undefined ? "offline" : "generic");
+      toast({ kind: "error", title: t(`explain.error.${code}`, { defaultValue: t("explain.error.generic") }) });
+    },
+  });
+  const submit = () => { const q = question.trim(); if (!q || ask.isPending) return; ask.mutate(q); };
+  const s = summaryQ.data;
+  const dimName = (d: string) => t(`strengths.dimension.${d}`, { defaultValue: humanCode(d) });
+  const limitationText = (l: string) => t(`explain.limitation.${l.split(":")[0]}`, { defaultValue: humanCode(l) });
+  return (
+    <Section icon={<MessageSquare className="h-3.5 w-3.5" />} heading={t("explain.heading")} hint={t("explain.hint")}>
+      {summaryQ.isLoading && <PageSpinner />}
+      {summaryQ.isError && <Card className="ring-warning-line"><p className="text-sm text-warning">{t("explain.summaryUnavailable")}</p></Card>}
+      {s && (
+        <Card className="space-y-3 text-sm">
+          <p className="text-xs text-ink-muted">{t("explain.summaryBlurb", { date: dayOf(s.asOf) })}</p>
+          {s.synthesis.dimensions.length === 0 ? (
+            <p className="text-ink-muted">{t("explain.noProfile")}</p>
+          ) : (
+            <ul className="space-y-2">
+              {s.synthesis.dimensions.map((d) => (
+                <li key={d.dimension} className="flex flex-wrap items-center gap-2">
+                  <span className="font-medium text-ink">{dimName(d.dimension)}</span>
+                  <Badge variant={d.academicState === "ESTABLISHED" ? "success" : d.academicState === "DECLINING" ? "warning" : "info"} label={t(`strengths.state.${d.academicState}`, { defaultValue: humanCode(d.academicState) })} />
+                  <span className="text-xs text-ink-muted">{t("explain.dimLine", { trajectory: humanCode(d.trajectory), relationship: humanCode(d.learningRelationship), quality: humanCode(d.evidenceQuality), sources: humanCode(d.crossDomain.relationship) })}</span>
+                  {d.activePlan && <Badge variant="purple" label={t("explain.activePlan")} />}
+                  {d.contradictions.length > 0 && <Badge variant="warning" label={t("explain.contradictionsLabel", { n: d.contradictions.length })} />}
+                </li>
+              ))}
+            </ul>
+          )}
+          <div className="border-t border-line pt-2 text-xs">
+            <p className="font-medium text-ink-faint">{t("explain.explorationHeading")}</p>
+            <p className="text-ink-muted">{t("explain.explorationHint")}</p>
+            {s.exploration.candidates.length === 0 ? (
+              <p className="text-ink-muted">{t("explain.noExploration")}</p>
+            ) : (
+              <ul className="mt-1 space-y-1">
+                {s.exploration.candidates.map((c) => (
+                  <li key={c.domain} className="text-ink">
+                    <span className="font-medium">{c.label}</span>{" · "}{t("explain.candidateLine", { quality: humanCode(c.evidenceQuality), why: c.whyItAppeared.map((w) => humanCode(w.code)).join(", "), n: c.activities.length })}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          {s.limitations.length > 0 && <p className="text-xs text-ink-muted">{t("explain.limitationsLine")}: {s.limitations.map(limitationText).join("; ")}</p>}
+        </Card>
+      )}
+
+      <Card className="space-y-3 text-sm">
+        <p className="text-xs text-ink-muted">{t("explain.askBlurb")}</p>
+        <div className="flex flex-wrap gap-2" role="group" aria-label={t("explain.promptsLabel")}>
+          {EXPLAIN_PROMPTS.map((k) => (
+            <Button key={k} type="button" variant="ghost" size="sm" onClick={() => setQuestion(t(`explain.prompt.${k}`))}>{t(`explain.prompt.${k}`)}</Button>
+          ))}
+        </div>
+        <FormField label={t("explain.questionLabel")} hint={t("explain.questionHint")}>
+          <Textarea value={question} onChange={(e) => setQuestion(e.target.value)} maxLength={1000} rows={2} placeholder={t("explain.questionPlaceholder")} aria-label={t("explain.questionLabel")} />
+        </FormField>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" variant="secondary" size="sm" loading={ask.isPending} disabled={!question.trim() || ask.isPending} onClick={submit}>{t("explain.askButton")}</Button>
+          <span className="text-xs text-ink-muted">{t("explain.agency")}</span>
+        </div>
+        {result && <ExplanationResult r={result} onPick={(q) => setQuestion(q)} />}
+      </Card>
+    </Section>
+  );
+}
+
+const claimVariant = (type: ExplainClaim["type"]) => {
+  if (type === "OBSERVED") return "success";
+  if (type === "INFERRED_BY_DETERMINISTIC_ENGINE") return "info";
+  if (type === "SUGGESTED_EXPLORATION") return "purple";
+  if (type === "UNCERTAIN") return "warning";
+  return "default";
+};
+
+function ExplanationResult({ r, onPick }: { r: ExplainResponse; onPick: (q: string) => void }) {
+  const { t } = useTranslation();
+  const items = new Map(r.citations.map((c) => [c.sourceId, c.item]));
+  const label = (c: string | { sourceId: string }) => citationLabel(items.get(typeof c === "string" ? c : c.sourceId) ?? null, t);
+  const limitationText = (l: string) => t(`explain.limitation.${l.split(":")[0]}`, { defaultValue: humanCode(l) });
+  return (
+    <div className="space-y-3 border-t border-line pt-3" aria-live="polite">
+      <div className="flex flex-wrap items-center gap-2 text-xs">
+        <Badge variant={r.mode === "MODEL_VALIDATED" ? "info" : r.mode === "REFUSED" ? "warning" : "default"} label={t(`explain.mode.${r.mode}`, { defaultValue: humanCode(r.mode) })} />
+        {r.fallbackReason && <span className="text-ink-muted">{t(`explain.reason.${r.fallbackReason}`, { defaultValue: humanCode(r.fallbackReason) })}</span>}
+        {r.classification.transformed === "CAREER_TO_EXPLORATION" && <Badge variant="purple" label={t("explain.careerTransformed")} />}
+        <span className="text-ink-muted">{t("explain.boundary", { date: dayOf(r.asOf) })}</span>
+      </div>
+      <p className="whitespace-pre-line text-ink">{r.output.answer}</p>
+      {r.output.claims.length > 0 && (
+        <div className="text-xs">
+          <p className="font-medium text-ink-faint">{t("explain.claimsHeading")}</p>
+          <p className="text-ink-muted">{t("explain.claimsHint")}</p>
+          <ul className="mt-1 space-y-1">
+            {r.output.claims.map((c, i) => (
+              <li key={i} className="flex flex-wrap items-start gap-2">
+                <Badge variant={claimVariant(c.type)} label={t(`explain.claimType.${c.type}`, { defaultValue: humanCode(c.type) })} />
+                <span className="text-ink">{c.text}</span>
+                {c.citations.length > 0 && <span className="text-ink-muted">{t("explain.basedOn")}: {c.citations.map(label).join("; ")}</span>}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {r.output.uncertainty && <p className="text-xs text-ink-muted"><span className="font-medium text-ink-faint">{t("explain.uncertaintyHeading")}</span>: {r.output.uncertainty}</p>}
+      {r.output.limitations.length > 0 && <p className="text-xs text-ink-muted"><span className="font-medium text-ink-faint">{t("explain.limitationsLine")}</span>: {r.output.limitations.map(limitationText).join("; ")}</p>}
+      {r.output.suggestedQuestions.length > 0 && (
+        <div className="text-xs">
+          <p className="font-medium text-ink-faint">{t("explain.suggestedHeading")}</p>
+          <div className="flex flex-wrap gap-2">
+            {r.output.suggestedQuestions.map((q) => <Button key={q} type="button" variant="ghost" size="sm" onClick={() => onPick(q)}>{q}</Button>)}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 

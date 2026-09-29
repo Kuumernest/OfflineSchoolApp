@@ -370,6 +370,78 @@ counts, missing modalities, quality). A layer with nothing recorded answers
 `NOT_AVAILABLE`, dated. A sensitive question is answered with a referral to
 a person and no invented intelligence.
 
+### 12a. The pupil's screens (mobile)
+
+`app/student/intelligence/index.js` — **My intelligence**, reached from a
+banner on the pupil's home screen beside Explore, Development and Plans.
+A connected entry point, not a second copy of those screens: the engines'
+readings lined up — strengths (state, supporting subjects), what has
+changed (trajectory, latest change), learning evidence (relationship,
+which sources agree), guidance categories, the current plan, exploration
+areas (alphabetical, unranked) — each with a link to the existing screen
+that holds the detail, and at the top a note that the explanation layer
+puts existing evidence into words and decides nothing. The summary is read
+online and mirrored into SQLite (`src/services/intelligence.service.js`),
+so offline the last one taken is shown, dated, and said to be the last one.
+
+`app/student/intelligence/ask.js` — **Ask about my profile**: six
+suggested questions that fill the box, a question of at most 1000
+characters, one button. The answer is rendered as what it is: its mode
+(deterministic, AI checked against the evidence, deterministic because the
+AI was unavailable or rejected, or refused), the date the evidence stands
+at, the answer, each statement typed with a badge and the records it rests
+on named in plain words (`describeCitation`: the kind of record and what it
+concerns, never an id), what the evidence does not settle, its limits, and
+questions the pupil could ask next, which fill the box and are never sent
+on their own. A career question shows the server's transformation. A
+question is never mirrored and never queued: offline, the box is closed and
+the screen says explanations need a connection while the summary and every
+other screen remain — two conditions, told apart. Every string is in
+`intel.*` in both languages; the wording keeps agency ("The system informs.
+You decide.") and the check asserts no string recommends, ranks, scores or
+predicts a career in either language. Because the pupil may ask in French,
+the classifier (`questions.js`) gained French stems bounded with
+Unicode-aware lookarounds — JavaScript's `\b` does not know "é" is a
+letter — and the check asserts the six prompts classify identically in
+both languages.
+
+`scripts/check-intelligence-client.js` (`npm run check:intelligence`, in
+the `check` chain) loads the real service through babel with a fake
+SQLite and a real axios against the real routers on an in-memory MongoDB:
+own summary as "me", mirrored and dated; another pupil refused however the
+id is spelt; private things absent; a question structured, cited,
+readable; the plan question without the notes; the career transformation;
+injection refused; French answered in French; the bound; offline through
+the mirror with nothing queued; a failing and a lying provider; then the
+screens' source — the links, the bound, no auto-submit, the offline
+states, no provider names, accessibility, and every `intel.*` key present.
+
+Deferred: a historical (`asOf`) chooser. The API keeps the capability; the
+initial screens always show current evidence and say so ("Evidence as of
+{{date}}"), so no historical and current answers are ever mixed.
+
+### 12b. The staff section (web)
+
+On the student strengths page an **Explanation** section (`explain.*`,
+staff only) shows the deterministic synthesis first — each read dimension
+with its state, trajectory, learning relationship, evidence quality and
+which sources agree, an active-plan badge, contradictions on record, then
+the exploration areas the evidence supports, unranked — and beneath it a
+bounded question box with the six suggested questions. The answer renders
+as sections: mode badge and fallback reason, the evidence date, the answer,
+typed claims with readable citations, uncertainty, limitations, suggested
+questions that fill the box. `scripts/check-intelligence-ui.mjs` (`npm run
+check:intelui`) asserts the service routes, the staff gate, the bound, no
+auto-submit, no provider or model name in the client, the readable
+citations, every label the backend can produce in both languages, and the
+absence of career wording. The super admin's school comes from the active
+school in the auth store, as on the rest of the page; the server still
+refuses a missing `schoolId`.
+
+Found, not changed: the page's route is gated to office roles, so a
+teacher who follows the link from class intelligence cannot open it. That
+predates this stage and is a routing decision for its own change.
+
 ## 13. Evidence-grounded exploration
 
 `exploration/domains.js` names ten broad domains — `MATHEMATICAL_REASONING`,
@@ -457,8 +529,12 @@ versions and the same viewer, which the boundary hash identifies.
   model having been given the facts.
 - The exploration domains and their opening rules were not tuned on real
   data; the mapping from dimensions to domains is a taxonomy, not a finding.
-- No web or mobile screen renders the new routes yet; the mobile client's
-  deterministic summary would come from `intelligence-summary` unchanged.
+- The pupil's screens show current evidence only; a historical chooser is
+  deferred (§12a). The staff section lives on a page teachers cannot open
+  (§12b), a routing decision outside this stage.
+- The classifier's French covers the stems of the six suggested questions
+  and their near variants; a French question outside them is `UNSUPPORTED`
+  rather than guessed, as in English.
 - The Anthropic adapter is written against the current SDK and API surface.
   The checks run with no provider by design; the live call is the opt-in
   `check:anthropic`, which needs a key and a network. It was run once on

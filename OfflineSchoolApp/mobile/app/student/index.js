@@ -839,6 +839,21 @@ export default function StudentDashboard() {
           </TouchableOpacity>
         </View>
 
+        {/* My intelligence: the readings lined up, and a way to ask about them */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/intelligence")}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={t("intel.title")}
+          >
+            <Ionicons name="sparkles-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("intel.homeSubtitle")}</Text>
+            <Text style={s.urgentBannerLink}>{t("intel.title")}</Text>
+          </TouchableOpacity>
+        </View>
+
         {/* Urgent homework banner */}
         {homeworkStats.urgent > 0 && (
           <View style={s.section}>
