@@ -443,8 +443,13 @@ versions and the same viewer, which the boundary hash identifies.
   deterministic summary would come from `intelligence-summary` unchanged.
 - The Anthropic adapter is written against the current SDK and API surface.
   The checks run with no provider by design; the live call is the opt-in
-  `check:anthropic`, which needs a key and a network and was not run in
-  the environment that produced this stage (no key was present).
+  `check:anthropic`, which needs a key and a network. It was run once on
+  2026-09-29 against `claude-sonnet-5` on the synthetic fixture: the reply
+  was the structured object, every fact claim cited the context, the
+  validators found nothing, the injected instruction in the question was
+  named and refused, and the career request was answered with unranked
+  exploration areas (`MODEL_VALIDATED`). One call on one fixture is a
+  smoke test of the pipeline, not an evaluation of explanation quality.
 - The validator catches what it can name. A fluent sentence that is
   wrong in a way no rule covers passes; the citations beside it are what
   a reader should trust, and the deterministic answer is always one
