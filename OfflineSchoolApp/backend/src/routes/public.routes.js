@@ -120,12 +120,16 @@ const applyRateLimit = (req, res, next) => {
   next();
 };
 
+// Housekeeping only: sweep expired buckets. unref() so the sweeper never keeps a
+// process alive on its own — the HTTP server holds the loop while it runs, and
+// anything that merely requires this router (a check, a script) can exit. The
+// verify router's sweeper already does this.
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of rateLimitStore) {
     if (now > entry.resetAt) rateLimitStore.delete(ip);
   }
-}, RATE_WINDOW_MS);
+}, RATE_WINDOW_MS).unref();
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 4 — FILE HANDLING
