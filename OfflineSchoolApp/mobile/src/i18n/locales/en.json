@@ -7190,6 +7190,44 @@
       "DEVELOPMENT_PLAN": "Development plan",
       "PLAN_REVIEW": "Plan review",
       "unknown": "Evidence reference"
+    },
+    "feedback": {
+      "title": "Help check this pilot",
+      "subtitle": "Six questions about your own summary. There are no right answers.",
+      "cardTitle": "Your school is checking this summary",
+      "cardText": "Six quick questions about whether this page was clear to you. No typing, no marks, nothing changes about you.",
+      "cardAnswered": "You have answered. You can change your answers while the pilot is on.",
+      "cardOpen": "Answer the six questions",
+      "cardChange": "Change my answers",
+      "aboutTitle": "What this is for",
+      "about": "Your school is checking whether pupils can understand this page. You are not asked whether the system is right about you — only whether it was clear. Your answers are counted with everyone else's and never shown with your name.",
+      "alreadyAnswered": "You have already answered; sending again replaces your earlier answers.",
+      "q": {
+        "observedClear": "I understood what the system observed about my work",
+        "inferredClear": "I understood what it read from that",
+        "uncertaintyClear": "I understood what it is not sure about",
+        "evidenceClear": "I could see which evidence it used",
+        "explorationClear": "I understood what I could explore",
+        "choiceClear": "I understood what I choose myself"
+      },
+      "a": {
+        "YES": "Yes",
+        "PARTLY": "Partly",
+        "NO": "No",
+        "NOT_SHOWN": "Not shown"
+      },
+      "submit": "Send my answers",
+      "answerAll": "Answer all six to send.",
+      "thanksTitle": "Thank you",
+      "thanks": "Your answers were counted. Nothing about your profile changes.",
+      "agency": "This page is about the screen, not about you. What you explore and choose stays yours.",
+      "notCollecting": "Your school is not collecting answers right now.",
+      "offlineTitle": "Answers need a connection",
+      "offline": "The pilot may have moved on while you were offline, so answers are sent only when connected. Your summary is still on the previous screen.",
+      "error": {
+        "closed": "The pilot stopped collecting answers.",
+        "generic": "Your answers could not be sent. Try again later."
+      }
     }
   }
 }

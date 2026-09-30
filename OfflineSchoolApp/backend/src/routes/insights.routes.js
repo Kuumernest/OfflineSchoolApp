@@ -556,6 +556,10 @@ router.post("/reviews", requirePermission("insights.review"), asyncHandler(async
     });
   }
 
+  // The pilot this review is made inside, if the school has one open: stamped
+  // by the server, never taken from the request. A pilot's evidence counts the
+  // reviews that carry its id and no others.
+  const openPilot = await pilots.openPilot(schoolId);
   const item = await IntelligenceReview.create({
     _id:             requestedId ?? undefined,
     schoolId,
@@ -567,6 +571,8 @@ router.post("/reviews", requirePermission("insights.review"), asyncHandler(async
     classifications: found.classifications,
     review:          req.body.review,
     reviewedBy:      actor,
+    pilotRunId:      openPilot ? String(openPilot._id) : null,
+    pilotKind:       openPilot ? openPilot.kind : null,
   });
 
   return res.status(201).json({ success: true, data: item });
@@ -637,7 +643,7 @@ const pilotErr = (res, err) => {
 
 /** What a teacher sees of a pilot: that it exists, its kind, its state. */
 const leanPilot = (p) => (p ? {
-  pilotRunId: p.pilotRunId, kind: p.kind, status: p.status, engineVersion: p.engineVersion,
+  pilotRunId: p.pilotRunId, kind: p.kind, status: p.status, engineVersion: p.engineVersion, engineVersions: p.engineVersions,
   label: p.label, startedAt: p.startedAt, endedAt: p.endedAt,
 } : null);
 
@@ -681,11 +687,13 @@ router.post("/pilot/:id/findings", pilotManage, asyncHandler(async (req, res) =>
       category: String(req.body.category ?? ""), severity: String(req.body.severity ?? ""), summary: req.body.summary,
       evidence: req.body.evidence ? String(req.body.evidence).slice(0, 4000) : null,
       affectedCases: req.body.affectedCases, recommendedNextAction: req.body.recommendedNextAction ? String(req.body.recommendedNextAction).slice(0, 1000) : null,
+      disagreementSource: req.body.disagreementSource !== undefined ? String(req.body.disagreementSource) : "undetermined",
       actor: String(req.user._id ?? req.user.id),
     });
     return res.status(201).json({ success: true, data: f.toObject ? f.toObject() : f, pilot: pilots.publicPilot(pilot) });
   } catch (err) { return pilotErr(res, err); }
 }));
+/** An amendment: status, next action or disagreement source, with the reason it records. Works on a closed pilot too — the one road by which its record changes. */
 router.patch("/pilot/:id/findings/:findingId", pilotManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
@@ -693,10 +701,27 @@ router.patch("/pilot/:id/findings/:findingId", pilotManage, asyncHandler(async (
   if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
   try {
     const f = await pilots.updateFinding(pilot, String(req.params.findingId), {
-      status: req.body.status, recommendedNextAction: req.body.recommendedNextAction, actor: String(req.user._id ?? req.user.id),
+      status: req.body.status, recommendedNextAction: req.body.recommendedNextAction,
+      disagreementSource: req.body.disagreementSource, reason: req.body.reason,
+      actor: String(req.user._id ?? req.user.id),
     });
     return res.json({ success: true, data: f.toObject ? f.toObject() : f, pilot: pilots.publicPilot(pilot) });
   } catch (err) { return pilotErr(res, err); }
+}));
+
+/**
+ * GET /api/insights/pilot/:id/report
+ * The real-world validation report for one pilot (docs/25 §22): scope,
+ * coverage, outcomes, the four concerns, the explanation layer's tally, the
+ * pupils' answers, the findings, the decision, and what was and was not
+ * tested. Counts and codes; no case, no pupil, no reviewer.
+ */
+router.get("/pilot/:id/report", pilotManage, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pilot = await IntelligencePilot.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
+  if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
+  return res.json({ success: true, data: await pilots.reportFor(pilot) });
 }));
 
 /** GET /api/insights/pilot/history — every pilot the school has run, newest first. */
@@ -1530,8 +1555,44 @@ const questionRoute = (operation) => asyncHandler(async (req, res) => {
   if (typeof question !== "string" || !question.trim()) return res.status(400).json({ success: false, code: "QUESTION_REQUIRED", message: "A question is required." });
   if (question.length > advancedSvc.QUESTION_MAX) return res.status(400).json({ success: false, code: "QUESTION_TOO_LONG", message: `A question is at most ${advancedSvc.QUESTION_MAX} characters.` });
   const r = await advancedSvc.explain({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: c.viewer, lang: c.lang, question, operation, identity: c.identity });
+  // Counted against the school's open pilot, if any: the mode, the fallback
+  // reason, the validator's codes. Not the question, not the answer, not the
+  // pupil. A failure to count never fails the answer.
+  pilots.recordAdvancedUse({ schoolId: c.schoolId, audit: r.audit }).catch((err) => console.warn(`[advanced-intelligence] pilot tally not recorded: ${err.message}`));
   return res.json({ success: true, data: { generatedAt: new Date(), ...c.identity, ...r } });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PILOT FEEDBACK FROM A PUPIL (Stage 18)
+//
+// Six bounded questions about the pupil's own summary, answered from four
+// words, inside the school's collecting pilot. A pupil only, about themself
+// only; nothing is read by any engine; the pilot report counts the answers
+// and never lists a pupil. Staff have no per-pupil read of this.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const pupilOnly = (req, res, next) => (isStudent(req) ? next() : res.status(403).json({ success: false, code: "PUPIL_ONLY", message: "Only a pupil answers about their own summary." }));
+
+/** GET …/pilot-feedback — is a pilot collecting, the questions and words, and whether this pupil has answered. */
+router.get("/student/:studentId/pilot-feedback", pupilOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, null);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: String(pupil.student._id), ...(await pilots.studentFeedbackStatusFor({ schoolId, studentId: String(pupil.student._id) })) } });
+}));
+
+/** POST …/pilot-feedback { answers } — record or replace the pupil's answers. */
+router.post("/student/:studentId/pilot-feedback", pupilOnly, asyncHandler(async (req, res) => {
+  const schoolId = resolveSchoolId(req, null);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
+  const pupil = await pupilForStrengths(req, res, schoolId, req.params.studentId);
+  if (!pupil) return undefined;
+  try {
+    const out = await pilots.recordStudentFeedback({ schoolId, studentId: String(pupil.student._id), answers: req.body?.answers });
+    return res.status(201).json({ success: true, data: { studentId: String(pupil.student._id), ...out } });
+  } catch (err) { return pilotErr(res, err); }
+}));
 
 /** POST …/explain { question } — why something is on the profile, what changed, why guidance, an intervention or a plan appeared, what evidence supports or is missing. */
 router.post("/student/:studentId/explain", strengthRead, questionRoute("explain"));

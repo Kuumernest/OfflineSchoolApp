@@ -303,29 +303,73 @@ export interface PilotEvidence {
   studentsReviewed: number; reviewsRecorded: number; reviewers: number;
   categories: string[]; subjects: string[]; temporalPatterns: string[]; repeatedDisagreements: string[];
   dataQualityCitations: Record<string, number>; byOutcome: Record<string, number>;
+  // Stage 18: the window the counts were taken in, and the engines against the baseline.
+  pilotRunId: string | null; since: string | null; engineVersion: string | null; reviewsExcluded: number;
+  engineVersionsMatch: boolean; engineDrift: EngineDrift[];
+  advanced: AdvancedTally | null; studentFeedback: StudentFeedbackSummary | null;
 }
 
 export interface PilotShortfall { requirement: string; minimum: number; actual: number }
 
-export type FindingCategory = "ENGINE" | "DATA_QUALITY" | "MAPPING" | "AUTHORIZATION" | "UX" | "MISSING_EVIDENCE" | "GUIDANCE" | "REVIEW_WORKFLOW" | "OFFLINE_CONSISTENCY";
-export type FindingSeverity = "low" | "medium" | "high";
-export type FindingStatus   = "open" | "investigating" | "confirmed" | "resolved" | "not_reproduced";
-export interface PilotFinding {
-  findingId: string; category: FindingCategory; severity: FindingSeverity; summary: string; evidence: string | null;
-  affectedCases: number; engineVersion: string; status: FindingStatus; recommendedNextAction: string | null;
-  raisedBy: string; raisedAt: string; updatedAt: string;
+/** The eleven engines a pilot is of, in the brief's vocabulary. Stamped by the server. */
+export const ENGINE_KEYS = ["academic", "strengths", "exploration", "learningEvidence", "learningIntegration", "development", "guidance", "intervention", "developmentPlanning", "adaptiveSupport", "advancedIntelligence"] as const;
+export type EngineKey = (typeof ENGINE_KEYS)[number];
+export type EngineVersions = Record<EngineKey, string>;
+export interface EngineDrift { engine: EngineKey; pilot: string; current: string }
+
+/** The four things a person signs to open a REAL pilot. */
+export const ATTESTATION_KEYS = ["schoolParticipates", "reviewersUnderstandTask", "noticeRequirementsMet", "retentionAgreed"] as const;
+export type AttestationKey = (typeof ATTESTATION_KEYS)[number];
+export type Attestations = Record<AttestationKey, boolean>;
+
+/** The explanation layer inside a pilot, counted. Never a question, an answer or a pupil. */
+export interface AdvancedTally {
+  advancedIntelligenceVersion: string; validatorMandatory: boolean;
+  requests: number; modelValidated: number; refused: number; providerFailures: number; validatorRejections: number;
+  byRequestType: Record<string, number>; byMode: Record<string, number>; byFallbackReason: Record<string, number>;
+  byQuestionCategory: Record<string, number>; byValidationIssue: Record<string, number>;
+  explanationValidation: { modelAnswersKept: number; modelAnswersRejected: number };
+  citationValidation: Record<string, number>; safety: Record<string, number>; fallbackUsage: Record<string, number>;
+  lastAt: string | null;
 }
 
-export interface PreflightCheck { key: string; kind: "automatic" | "suite" | "manual"; ok: boolean | null; detail: string }
+export const FEEDBACK_QUESTIONS = ["observedClear", "inferredClear", "uncertaintyClear", "evidenceClear", "explorationClear", "choiceClear"] as const;
+export const FEEDBACK_ANSWERS = ["YES", "PARTLY", "NO", "NOT_SHOWN"] as const;
+export interface StudentFeedbackSummary {
+  responses: number; minimumForBreakdown: number; withheld: boolean;
+  byQuestion: Record<string, Record<string, number>> | null;
+  questions: string[]; answers: string[];
+}
+
+export type FindingCategory = "ENGINE" | "DATA_QUALITY" | "MAPPING" | "AUTHORIZATION" | "UX" | "MISSING_EVIDENCE" | "GUIDANCE" | "REVIEW_WORKFLOW" | "OFFLINE_CONSISTENCY" | "ADVANCED_INTELLIGENCE";
+export type FindingSeverity = "low" | "medium" | "high";
+export type FindingStatus   = "open" | "investigating" | "confirmed" | "resolved" | "not_reproduced";
+/** Where a disagreement was found to come from — kept apart from any rule change. */
+export type FindingSource   = "undetermined" | "data_quality" | "missing_context" | "insufficient_evidence" | "interpretation_ambiguity" | "rule_weakness";
+export interface FindingAmendment { at: string; by: string; changes: Array<{ field: string; from: unknown; to: unknown }>; reason: string; pilotClosed: boolean }
+export interface PilotFinding {
+  findingId: string; category: FindingCategory; severity: FindingSeverity; summary: string; evidence: string | null;
+  affectedCases: number; engineVersion: string; status: FindingStatus; disagreementSource: FindingSource; recommendedNextAction: string | null;
+  raisedBy: string; raisedAt: string; updatedAt: string; updatedBy: string | null; amendments: FindingAmendment[];
+}
+
+export type ReadinessGroup  = "technical" | "operational" | "evidence" | "reviewer" | "privacy";
+export type ReadinessStatus = "READY" | "BLOCKED" | "REQUIRES_CONFIRMATION";
+export interface PreflightCheck { key: string; kind: "automatic" | "suite" | "manual"; group: ReadinessGroup; ok: boolean | null; detail: string; missing?: string | string[] }
 export interface Preflight {
-  ready: boolean; blockers: string[]; checks: PreflightCheck[];
+  ready: boolean; technicalReady: boolean; operationalReady: boolean;
+  readiness: Record<ReadinessGroup, { status: ReadinessStatus; checks: string[]; missing: string[]; pending: string[] }>;
+  status: "TECHNICAL_NOT_READY" | "REAL_PILOT_BLOCKED" | "AWAITING_ATTESTATION";
+  realPilotStatus: "BLOCKED" | "AWAITING_ATTESTATION";
+  missing: string[]; attestationsPending: string[]; attestations: AttestationKey[]; engineVersions: EngineVersions;
+  blockers: string[]; checks: PreflightCheck[];
   counts: { students: number; published: number; cases: number; reviewers: number; multiReviewCapable: number; consistencyChecked: number };
   consistency: Array<{ studentId: string; identical: boolean; differences: number }>;
 }
 
 export interface Pilot {
   pilotRunId: string; schoolId: string; classIds: string[] | null; label: string | null;
-  kind: PilotKind; status: PilotStatus; engineVersion: string;
+  kind: PilotKind; status: PilotStatus; engineVersion: string; engineVersions: EngineVersions | null; engineDrift: EngineDrift[];
   startedAt: string | null; endedAt: string | null; createdBy: string; createdAt: string; updatedAt: string; version: number;
   transitions: Array<{ from: PilotStatus | null; to: PilotStatus; at: string; by: string; note: string | null }>;
   evidence: PilotEvidence | null;
@@ -333,11 +377,43 @@ export interface Pilot {
   allowedTransitions: PilotStatus[];
   evidenceShortfalls: PilotShortfall[];
   findings: PilotFinding[];
-  attestations: { schoolParticipates: boolean; reviewersUnderstandTask: boolean; by: string | null; at: string | null } | null;
+  attestations: (Attestations & { by: string | null; at: string | null }) | null;
+  advanced: AdvancedTally;
 }
 
 /** What a teacher is sent: that a pilot is on, its kind and state. */
-export type LeanPilot = Pick<Pilot, "pilotRunId" | "kind" | "status" | "engineVersion" | "label" | "startedAt" | "endedAt">;
+export type LeanPilot = Pick<Pilot, "pilotRunId" | "kind" | "status" | "engineVersion" | "engineVersions" | "label" | "startedAt" | "endedAt">;
+
+/** The real-world validation report (docs/25 §22): counts and codes, one school, no ranking. */
+export interface PilotReport {
+  generatedAt: string; pilotRunId: string; aggregation: "ONE_SCHOOL"; noRanking: true;
+  scope: {
+    schoolId: string; classIds: string[] | null; kind: PilotKind; label: string | null; status: PilotStatus;
+    startedAt: string | null; endedAt: string | null; createdAt: string;
+    engineVersion: string; engineVersions: EngineVersions | null; engineVersionsMatch: boolean; engineDrift: EngineDrift[];
+    students: number; cases: number; reviewers: number; attestations: (Attestations & { by: string | null; at: string | null }) | null;
+  };
+  evidenceCoverage: {
+    reviewable: number; reviewed: number; multiReviewed: number; incomplete: number; studentsReviewed: number; reviewsRecorded: number; reviewsExcluded: number;
+    window: { pilotRunId: string; since: string | null; engineVersion: string | null };
+    byCategory: Record<string, { cases: number; reviewed: number; multipleReviews: number; differ: number }>;
+    dataQualityCitations: Record<string, number>;
+    evidenceQualityLimitations: Array<{ group: string; code: string; reviews: number }>;
+    minimum: Record<string, number>; shortfalls: PilotShortfall[];
+  };
+  reviewOutcomes: Record<"SUPPORTED" | "PARTLY_SUPPORTED" | "NOT_SUPPORTED" | "INSUFFICIENT_EVIDENCE" | "UNCERTAIN", number>;
+  concerns: Record<"INTERPRETATION_DISAGREEMENT" | "DATA_QUALITY" | "MISSING_EVIDENCE" | "CONTEXTUAL_LIMITATION", { reviews: number; examples: Array<{ code: string; reviews: number }> }>;
+  agreement: { agree: number; differ: number };
+  repeatedDisagreements: string[];
+  patterns: Array<{ kind: string; code: string | null; support: number; of: number }>;
+  advancedIntelligence: AdvancedTally & { findings: number };
+  studentFeedback: StudentFeedbackSummary;
+  findings: { total: number; byCategory: Record<string, number>; bySeverity: Record<string, number>; byStatus: Record<string, number>; byDisagreementSource: Record<string, number>; items: PilotFinding[] };
+  decision: { outcome: PilotOutcome; summary: string; recordedAt: string; recordedBy: string } | null;
+  evidenceOnRecord: PilotEvidence | null;
+  limitations: { tested: string[]; notTested: string[]; evidenceSupports: string[]; unknown: string[] };
+  notClaimed: string[];
+}
 
 const sp = (schoolId?: string) => (schoolId ? { params: { schoolId } } : {});
 
@@ -356,22 +432,28 @@ export async function fetchPilotHistory(schoolId?: string): Promise<Pilot[]> {
   return (data as { data: Pilot[] }).data;
 }
 
+export async function fetchPilotReport(pilotId: string, schoolId?: string): Promise<PilotReport> {
+  const { data } = await api.get(`/insights/pilot/${pilotId}/report`, sp(schoolId));
+  return (data as { data: PilotReport }).data;
+}
+
 export async function fetchPreflight(schoolId?: string, classIds?: string[]): Promise<Preflight> {
   const { data } = await api.get("/insights/pilot/preflight", { params: { ...(schoolId ? { schoolId } : {}), ...(classIds?.length ? { classId: classIds.join(",") } : {}) } });
   return (data as { data: Preflight }).data;
 }
 
-export async function addFinding(pilotId: string, input: { schoolId?: string; category: FindingCategory; severity: FindingSeverity; summary: string; evidence?: string; affectedCases?: number; recommendedNextAction?: string }): Promise<PilotFinding> {
+export async function addFinding(pilotId: string, input: { schoolId?: string; category: FindingCategory; severity: FindingSeverity; summary: string; evidence?: string; affectedCases?: number; recommendedNextAction?: string; disagreementSource?: FindingSource }): Promise<PilotFinding> {
   const { data } = await api.post(`/insights/pilot/${pilotId}/findings`, input);
   return (data as { data: PilotFinding }).data;
 }
 
-export async function updateFinding(pilotId: string, findingId: string, input: { schoolId?: string; status?: FindingStatus; recommendedNextAction?: string }): Promise<PilotFinding> {
+/** An amendment records why. The server refuses one without a reason. */
+export async function updateFinding(pilotId: string, findingId: string, input: { schoolId?: string; status?: FindingStatus; recommendedNextAction?: string; disagreementSource?: FindingSource; reason: string }): Promise<PilotFinding> {
   const { data } = await api.patch(`/insights/pilot/${pilotId}/findings/${findingId}`, input);
   return (data as { data: PilotFinding }).data;
 }
 
-export async function openPilot(input: { schoolId?: string; kind: PilotKind; classIds?: string[]; label?: string; attestations?: { schoolParticipates: boolean; reviewersUnderstandTask: boolean } }): Promise<Pilot> {
+export async function openPilot(input: { schoolId?: string; kind: PilotKind; classIds?: string[]; label?: string; attestations?: Attestations }): Promise<Pilot> {
   const { data } = await api.post("/insights/pilot", input);
   return (data as { data: Pilot }).data;
 }

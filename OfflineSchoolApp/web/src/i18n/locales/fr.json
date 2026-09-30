@@ -3564,7 +3564,9 @@
         "temporalPatterns": "Schémas temporels représentés",
         "repeatedDisagreements": "Désaccords répétés (par catégorie)",
         "dataQualityCitations": "Problèmes de données cités",
-        "byOutcome": "Réponses des relecteurs"
+        "byOutcome": "Réponses des relecteurs",
+        "reviewsExcluded": "Revues hors de ce pilote (exclues)",
+        "engineVersionsMatch": "Moteurs inchangés depuis l'ouverture"
       },
       "req": {
         "reviewers": "relecteurs",
@@ -3573,7 +3575,13 @@
       },
       "history": "Pilotes précédents",
       "trail": "Historique",
-      "advanced": "Pilote mis à jour.",
+      "advanced": {
+        "requests": "Questions posées",
+        "modelValidated": "Réponses du modèle conservées par le validateur",
+        "validatorRejections": "Réponses du modèle rejetées par le validateur",
+        "providerFailures": "Échecs du fournisseur",
+        "refused": "Questions refusées"
+      },
       "opened_ok": "Pilote ouvert.",
       "error": {
         "generic": "Le pilote n'a pas pu être mis à jour.",
@@ -3586,11 +3594,35 @@
         "CLASS_NOT_FOUND": "Une classe du périmètre n'appartient pas à cet établissement.",
         "INVALID_PILOT_KIND": "Choisissez un type d'exercice.",
         "REAL_PILOT_BLOCKED": "Un pilote réel ne peut pas encore s'ouvrir ici — voir la vérification préalable.",
-        "ATTESTATION_REQUIRED": "Les deux attestations doivent être signées pour ouvrir un pilote réel.",
+        "ATTESTATION_REQUIRED": "Les quatre confirmations doivent être signées pour ouvrir un pilote réel.",
         "INVALID_FINDING": "Il manque au constat une catégorie, une gravité ou un résumé.",
         "PILOT_CLOSED": "Un pilote clos n'accepte plus de constats.",
-        "FINDING_NOT_FOUND": "Constat introuvable."
-      }
+        "FINDING_NOT_FOUND": "Constat introuvable.",
+        "AMENDMENT_REASON_REQUIRED": "Une modification exige un motif.",
+        "NOTHING_TO_AMEND": "La modification ne change rien.",
+        "ENGINE_VERSION_CHANGED": "Une version de moteur a changé pendant le pilote ; l'échantillon est mixte et ne peut fonder une décision de calibration. Consignez PREUVES INSUFFISANTES ou fermez."
+      },
+      "engineVersions": "Versions des moteurs",
+      "engineName": {
+        "academic": "Académique",
+        "strengths": "Forces",
+        "exploration": "Exploration",
+        "learningEvidence": "Preuves d'apprentissage",
+        "learningIntegration": "Intégration des apprentissages",
+        "development": "Développement",
+        "guidance": "Orientation",
+        "intervention": "Intervention",
+        "developmentPlanning": "Planification du développement",
+        "adaptiveSupport": "Soutien adaptatif",
+        "advancedIntelligence": "Intelligence avancée"
+      },
+      "drift": "Dérive de moteur : {{list}}. Les revues ne portent pas toutes sur les mêmes moteurs ; une décision de calibration est bloquée tant que ce n'est pas résolu.",
+      "advancedHeading": "Couche d'explication dans ce pilote (comptes)",
+      "lastPilot": "Dernier pilote",
+      "showReport": "Afficher le rapport",
+      "hideReport": "Masquer le rapport",
+      "yes": "oui",
+      "no": "non"
     },
     "repeatedDisagreements": "Catégories où les relecteurs ont divergé sur plus d'un cas",
     "concern": {
@@ -3604,7 +3636,7 @@
     },
     "preflight": {
       "heading": "Avant qu'un pilote réel puisse s'ouvrir",
-      "ready": "Toutes les vérifications automatiques passent. Signez les deux attestations pour ouvrir.",
+      "ready": "Toutes les vérifications automatiques passent. Signez les quatre confirmations pour ouvrir.",
       "blocked": "PILOTE RÉEL BLOQUÉ — {{reason}}",
       "check": {
         "schoolAdminPresent": "Un administrateur d'établissement actif existe",
@@ -3620,7 +3652,14 @@
         "operatorSelectionRequired": "L'opérateur doit sélectionner un établissement (suite de tests)",
         "rawExportNotExposed": "Aucun export brut sur aucune route (suite de tests)",
         "schoolParticipates": "J'atteste que l'établissement sait qu'il participe et a donné son accord",
-        "reviewersUnderstandTask": "J'atteste que chaque relecteur a lu la note d'information et comprend la tâche"
+        "reviewersUnderstandTask": "J'atteste que chaque relecteur a lu la note d'information et comprend la tâche",
+        "schoolAuthorized": "L'établissement est actif sur ce déploiement",
+        "studentDataBoundaries": "Limites d'accès aux données élèves tenues (suite de tests)",
+        "reviewerPrivacy": "Indépendance des relecteurs tenue (suite de tests)",
+        "dataMinimization": "Le dossier et le rapport ne portent que des comptes et des codes (suite de tests)",
+        "closureBehaviour": "La clôture est définitive ; les constats ne sont jamais supprimés (suite de tests)",
+        "noticeRequirementsMet": "Je confirme que les exigences d'information ou de consentement applicables à cet établissement ont été satisfaites",
+        "retentionAgreed": "Je confirme que la conservation des revues, constats et réponses du pilote, et ce que signifie la clôture, ont été convenues avec l'établissement"
       }
     },
     "finding": {
@@ -3645,7 +3684,8 @@
         "MISSING_EVIDENCE": "Preuves manquantes",
         "GUIDANCE": "Orientation",
         "REVIEW_WORKFLOW": "Flux de revue",
-        "OFFLINE_CONSISTENCY": "Cohérence direct/hors ligne"
+        "OFFLINE_CONSISTENCY": "Cohérence direct/hors ligne",
+        "ADVANCED_INTELLIGENCE": "Intelligence avancée (couche d'explication)"
       },
       "severity": {
         "low": "Faible",
@@ -3659,6 +3699,146 @@
         "confirmed": "Confirmé",
         "resolved": "Résolu",
         "not_reproduced": "Non reproduit"
+      },
+      "sourceLabel": "Origine du désaccord (dans la mesure du connu)",
+      "source": {
+        "undetermined": "Pas encore déterminée",
+        "data_quality": "Qualité des données",
+        "missing_context": "Contexte manquant",
+        "insufficient_evidence": "Preuves insuffisantes",
+        "interpretation_ambiguity": "Ambiguïté d'interprétation",
+        "rule_weakness": "Faiblesse réelle de la règle (candidate à un processus de calibration distinct)"
+      },
+      "sourceNote": "Un désaccord observé est une chose ; une proposition de changement de règle en est une autre. Aucun seuil ne bouge parce que des relecteurs ont exprimé un désaccord.",
+      "reasonLabel": "Motif de la modification (requis)",
+      "amend": "Modifier",
+      "amended": "Constat modifié.",
+      "amendments": "Modifications",
+      "afterClosure": "après clôture"
+    },
+    "readiness": {
+      "heading": "Préparation d'un pilote réel",
+      "group": {
+        "technical": "Préparation technique",
+        "operational": "Préparation opérationnelle",
+        "evidence": "Préparation des preuves",
+        "reviewer": "Préparation des relecteurs",
+        "privacy": "Préparation vie privée"
+      },
+      "status": {
+        "READY": "Prêt",
+        "BLOCKED": "Bloqué",
+        "REQUIRES_CONFIRMATION": "Confirmation requise"
+      },
+      "blocked": "PILOTE RÉEL BLOQUÉ — Manque : {{missing}}",
+      "awaiting": "Toutes les vérifications automatiques passent. Un pilote réel ne s'ouvre qu'une fois les quatre confirmations ci-dessous signées par la personne qui l'ouvre.",
+      "note": "Une application techniquement prête n'est pas un établissement prêt à piloter. Rien ici ne peut être satisfait par des jeux de données de test, et aucun essai synthétique ne vaut preuve.",
+      "confirmNote": "CONFIRMATION ÉTABLISSEMENT / OPÉRATEUR REQUISE — l'application ne peut pas le déterminer."
+    },
+    "report": {
+      "heading": "Rapport de validation en conditions réelles",
+      "intro": "Comptes sur les revues faites dans ce pilote. Un seul établissement ; aucun classement des relecteurs, des enseignants ou des établissements ; aucun pourcentage d'exactitude.",
+      "scope": "Périmètre",
+      "coverage": "Couverture des preuves",
+      "outcomes": "Résultats des revues",
+      "concerns": "Catégories de réserves",
+      "advanced": "Intelligence avancée",
+      "feedback": "Réponses des élèves",
+      "findings": "Constats",
+      "limitations": "Limites",
+      "tested": "Ce qui a été testé",
+      "notTested": "Ce qui n'a pas été testé",
+      "supports": "Ce que les preuves soutiennent",
+      "unknown": "Ce qui reste inconnu",
+      "notClaimed": "Ce pilote ne montre pas, quel que soit son résultat :",
+      "dates": "{{from}} → {{to}}",
+      "casesReviewers": "{{cases}} cas · {{reviewers}} relecteurs · {{students}} élèves",
+      "cov": {
+        "reviewable": "Cas à revoir",
+        "reviewed": "Cas revus",
+        "multiReviewed": "Cas à revues multiples",
+        "incomplete": "Cas incomplets",
+        "reviewsRecorded": "Revues enregistrées",
+        "reviewsExcluded": "Revues hors du pilote (exclues)",
+        "studentsReviewed": "Élèves revus",
+        "limitations": "Limites de qualité des preuves (codes cités trois fois ou plus)"
+      },
+      "outcome": {
+        "SUPPORTED": "Soutenu",
+        "PARTLY_SUPPORTED": "Partiellement soutenu",
+        "NOT_SUPPORTED": "Non soutenu",
+        "INSUFFICIENT_EVIDENCE": "Preuves insuffisantes",
+        "UNCERTAIN": "Incertain"
+      },
+      "concern": {
+        "INTERPRETATION_DISAGREEMENT": "Désaccord d'interprétation",
+        "DATA_QUALITY": "Qualité des données",
+        "MISSING_EVIDENCE": "Preuves manquantes",
+        "CONTEXTUAL_LIMITATION": "Limite contextuelle"
+      },
+      "examples": "codes répétés",
+      "reviewsN": "{{n}} revue(s)",
+      "adv": {
+        "explanation": "Validation des explications : {{kept}} réponse(s) du modèle conservée(s), {{rejected}} rejetée(s)",
+        "citations": "Validation des citations",
+        "safety": "Constats de sûreté",
+        "providerFailures": "Échecs du fournisseur",
+        "fallback": "Usage du repli",
+        "requests": "Questions posées",
+        "validatorNote": "Les validateurs déterministes restent obligatoires. Le modèle n'est pas évalué comme décideur, seulement sur sa capacité à transmettre la lecture déterministe sans la changer."
+      },
+      "fb": {
+        "responses": "{{n}} élève(s) ont répondu",
+        "withheld": "Détail retenu en dessous de {{min}} réponses.",
+        "q": {
+          "observedClear": "J'ai compris ce que le système a observé",
+          "inferredClear": "J'ai compris ce qu'il a déduit",
+          "uncertaintyClear": "J'ai compris ce qui reste incertain",
+          "evidenceClear": "J'ai pu voir quelles preuves le soutiennent",
+          "explorationClear": "J'ai compris ce que je peux explorer",
+          "choiceClear": "J'ai compris ce que je choisis moi-même"
+        },
+        "a": {
+          "YES": "Oui",
+          "PARTLY": "En partie",
+          "NO": "Non",
+          "NOT_SHOWN": "Pas affiché"
+        }
+      },
+      "lim": {
+        "INTERPRETATION_SUPPORT": "si les relecteurs reconnaissent les preuves derrière l'interprétation déterministe",
+        "CONCERN_CATEGORIES": "les quatre catégories de réserves, tenues à part",
+        "DATA_QUALITY_CITATIONS": "quels problèmes de données les relecteurs citent",
+        "REVIEWER_INDEPENDENCE": "revue indépendante avant de voir la réponse d'un collègue",
+        "EVIDENCE_WINDOW": "seules les revues faites dans le pilote comptent",
+        "ENGINE_VERSION_BOUNDARY": "le pilote est lié aux versions de moteur à son ouverture",
+        "LIVE_OFFLINE_CONSISTENCY": "direct = hors ligne sur un échantillon",
+        "EXPLANATION_LAYER_BEHAVIOUR": "si la couche d'explication a restitué la lecture déterministe sans la changer",
+        "STUDENT_UNDERSTANDING": "si les élèves ont compris ce qui a été observé, déduit, incertain, soutenu et ouvert pour eux",
+        "EDUCATIONAL_EFFECTIVENESS": "si le système améliore les notes, les résultats, la persévérance, la réussite ou le bien-être",
+        "CAREER_PREDICTION": "prédiction de carrière (le système n'en fait aucune)",
+        "PSYCHOLOGICAL_ASSESSMENT": "évaluation psychologique (le système n'en fait aucune)",
+        "INTERVENTION_CAUSALITY": "si une intervention a causé un changement",
+        "CROSS_SCHOOL_VALIDITY": "validité au-delà de cet établissement, de ce trimestre et de ces matières",
+        "LONG_TERM_OUTCOMES": "résultats à long terme",
+        "CURRENT_RULES_FOR_THIS_SCOPE": "le maintien des règles actuelles pour ce périmètre",
+        "RULE_CHANGE_CANDIDATE_FOR_SEPARATE_PROCESS": "une proposition de changement de règle pour un processus de calibration distinct, fondé sur des preuves",
+        "NO_CALIBRATION_CONCLUSION": "aucune conclusion de calibration",
+        "NO_DECISION_YET": "pas encore de décision",
+        "GENERALISATION_BEYOND_SCOPE": "la généralisation au-delà du périmètre",
+        "TEACHER_JUDGEMENT_AS_GROUND_TRUTH": "le jugement enseignant n'est pas une vérité de référence",
+        "EFFECT_ON_ANY_OUTCOME": "tout effet sur tout résultat"
+      },
+      "claim": {
+        "GRADE_IMPROVEMENT": "des notes améliorées",
+        "STUDENT_OUTCOMES": "des résultats d'élèves améliorés",
+        "CAREER_PREDICTION": "une prédiction de carrière",
+        "RETENTION": "une persévérance améliorée",
+        "GRADUATION": "une réussite améliorée",
+        "WELLBEING": "un bien-être amélioré",
+        "INTERVENTION_CAUSALITY": "de meilleures interventions causées par lui",
+        "PSYCHOLOGICAL_ASSESSMENT": "une évaluation psychologique",
+        "UNIVERSAL_VALIDITY": "une validité éducative universelle"
       }
     }
   },

@@ -107,6 +107,15 @@ const intelligenceReviewSchema = new mongoose.Schema(
       default: [],
     },
 
+    // ── The pilot it was made inside, if any ───────────────────────────────
+    // Stamped by the server from the school's open pilot at the moment of
+    // submission; null when no pilot was open. A pilot's evidence snapshot
+    // counts the reviews that carry its id and no others, so a review made
+    // in a synthetic or development exercise can never be counted as real
+    // evidence, and one made before a pilot opened is not that pilot's.
+    pilotRunId: { type: String, default: null, index: true },
+    pilotKind:  { type: String, enum: ["synthetic", "development", "real", null], default: null },
+
     // ── The judgement ──────────────────────────────────────────────────────
     review: { type: formSchema, required: true },
 

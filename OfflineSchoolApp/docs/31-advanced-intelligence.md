@@ -559,6 +559,17 @@ authorised real-school evidence, read with the teachers who were there,
 before any claim of effectiveness — and before any template, screen or
 domain rule moves. **Real-world validation is still pending.**
 
+Stage 18 (docs/25 §22) prepared that validation without adding to this
+layer. Inside a pilot the router counts each answer's mode, fallback
+reason and validation codes on the pilot record — never the question, the
+answer or the pupil — and the pilot report presents them as explanation
+validation, citation validation, safety findings, provider failures and
+fallback usage. A suspected failure is a finding of category
+`ADVANCED_INTELLIGENCE`. The layer is not evaluated as a decision-maker;
+the question asked of it is whether it communicated the deterministic
+interpretation without changing it, and the deterministic validators
+remain mandatory throughout.
+
 ## 19. Future AI possibilities
 
 Within the boundary this stage draws — deterministic engine wins, codes and

@@ -280,10 +280,10 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   const pre = r.body.data;
   check("the preflight answers every automatic precondition for this school",
     [r.status, pre.ready, pre.checks.filter((c) => c.kind === "automatic").length, pre.checks.filter((c) => c.kind === "manual").map((c) => c.key)],
-    [200, false, 9, ["schoolParticipates", "reviewersUnderstandTask"]]);
+    [200, false, 9, ["schoolParticipates", "reviewersUnderstandTask", "noticeRequirementsMet", "retentionAgreed"]]);
   check("technical readiness and operational readiness are answered apart: the application is sound here, the school is not yet ready, and what is missing is said in words",
-    [pre.technicalReady, pre.operationalReady, pre.status, pre.missing, pre.attestationsPending, pre.checks.every((c) => ["technical", "operational"].includes(c.group))],
-    [true, false, "REAL_PILOT_BLOCKED", [`reviewable cases (${pre.counts.cases}/30)`, `multi-review cases (${pre.counts.multiReviewCapable}/3)`].filter((m, i) => (i === 0 ? pre.counts.cases < 30 : pre.counts.multiReviewCapable < 3)), ["attestation: the school participates", "attestation: the reviewers understand the task"], true]);
+    [pre.technicalReady, pre.operationalReady, pre.status, pre.missing, pre.attestationsPending, pre.checks.every((c) => ["technical", "operational", "evidence", "reviewer", "privacy"].includes(c.group))],
+    [true, false, "REAL_PILOT_BLOCKED", [`reviewable cases (${pre.counts.cases}/30)`, `multi-review cases (${pre.counts.multiReviewCapable}/3)`].filter((m, i) => (i === 0 ? pre.counts.cases < 30 : pre.counts.multiReviewCapable < 3)), ["attestation: the school participates", "attestation: the reviewers understand the task", "confirmation: notice/consent requirements met", "confirmation: retention and closure agreed"], true]);
   check("an active school is an operational prerequisite: a closed school is not authorised, and the preflight says so in words",
     await (async () => { await M("School").updateOne({ _id: B }, { $set: { isActive: false } }); const p = await pilots.preflight({ schoolId: B }); await M("School").updateOne({ _id: B }, { $set: { isActive: true } }); return [p.checks.find((c) => c.key === "schoolAuthorized").ok, p.operationalReady, p.missing[0]]; })(),
     [false, false, "authorized school"]);
@@ -321,10 +321,13 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   const finding = r.body.data;
   check("→ 201 with an id, status open, the PILOT's engine version, the raiser named",
     [r.status, typeof finding.findingId, finding.status, finding.engineVersion, finding.raisedBy, finding.affectedCases], [201, "string", "open", "1.0.0", "admin-a", 6]);
-  r = await head.patch(`${fUrl}/${finding.findingId}`, { status: "resolved" });
-  check("its status moves; it is never deleted", [r.status, r.body.data.status, r.body.pilot.findings.length], [200, "resolved", 1]);
-  check("an unknown status → 400", (await head.patch(`${fUrl}/${finding.findingId}`, { status: "gone" })).body.code, "INVALID_FINDING");
-  check("an unknown finding → 404", (await head.patch(`${fUrl}/nope`, { status: "open" })).body.code, "FINDING_NOT_FOUND");
+  check("an amendment without a reason is refused → 400 AMENDMENT_REASON_REQUIRED", (await head.patch(`${fUrl}/${finding.findingId}`, { status: "resolved" })).body.code, "AMENDMENT_REASON_REQUIRED");
+  r = await head.patch(`${fUrl}/${finding.findingId}`, { status: "resolved", reason: "Field carried in cohortSchema; consistency re-run identical" });
+  check("its status moves with the reason on the trail — who, when, what changed, why; it is never deleted",
+    [r.status, r.body.data.status, r.body.pilot.findings.length, r.body.data.amendments.map((a) => [a.by, typeof a.at, a.changes.map((c) => `${c.field}:${c.from}→${c.to}`), a.reason.length > 5, a.pilotClosed])],
+    [200, "resolved", 1, [["admin-a", "string", ["status:open→resolved"], true, false]]]);
+  check("an unknown status → 400", (await head.patch(`${fUrl}/${finding.findingId}`, { status: "gone", reason: "trying an unknown status" })).body.code, "INVALID_FINDING");
+  check("an unknown finding → 404", (await head.patch(`${fUrl}/nope`, { status: "open", reason: "no such finding" })).body.code, "FINDING_NOT_FOUND");
   check("Beta's head cannot reach Alpha's pilot findings", (await headB.post(fUrl, { category: "UX", severity: "low", summary: "Buttons too small for me" })).status, 404);
   check("a teacher's lean view carries no findings", "findings" in (await teacherA.get("/insights/pilot")).body.data.pilot, false);
 

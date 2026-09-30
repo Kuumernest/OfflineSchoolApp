@@ -331,6 +331,11 @@ const EXCLUDED = {
     "decision. Read online by the head and the operator; no classroom machine " +
     "has a use for it offline, and keeping it off every mirror keeps the one " +
     "record of a pilot in one place.",
+  IntelligenceStudentFeedback:
+    "A pupil's six bounded answers about their own intelligence summary, " +
+    "given inside a pilot. Read by nothing but the pilot report, which counts " +
+    "answers and never names a pupil; no classroom machine holds another " +
+    "pupil's answers, so it is never mirrored.",
 
   // The FILE, whose two registered models are in the FEED above as
   // studentAttendance and teacherAttendance. Listed here so the filename-based

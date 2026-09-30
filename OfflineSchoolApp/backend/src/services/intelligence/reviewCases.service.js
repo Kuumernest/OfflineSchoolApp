@@ -248,16 +248,19 @@ const reviewStatusOf = (cases, allReviews) => {
  * @param {object} scope   { schoolId, classIds }
  * @param {object} viewer  { userId, role }
  */
-const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engineVersion = null } = {}) => {
+const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engineVersion = null, pilotRunId = null } = {}) => {
   const { studentIds, students, cohort } = await liveCohort(scope);
   const report = analyse(cohort);
   const allReviews = await reviewsFor({ schoolId: scope.schoolId, studentIds });
-  // A pilot's evidence is the reviews made inside it, on its engine version.
-  // A review recorded before the pilot opened — under an earlier pilot, or a
-  // trial of the workflow — is a school record and stays one, but it is not
-  // evidence for this pilot's decision, and the snapshot must not count it.
-  // Without a window (the review queue itself), every review is visible.
+  // A pilot's evidence is the reviews made inside it — stamped with its id at
+  // submission — on its engine version, since it opened. A review recorded
+  // before the pilot opened, under an earlier pilot, in a synthetic or
+  // development exercise, or with no pilot open, is a school record and
+  // stays one, but it is not evidence for this pilot's decision, and the
+  // snapshot must not count it. Without a window (the review queue itself),
+  // every review is visible.
   const reviews = allReviews.filter((r) =>
+    (!pilotRunId || r.pilotRunId === pilotRunId) &&
     (!reviewedSince || new Date(r.reviewedAt) >= new Date(reviewedSince)) &&
     (!engineVersion || r.engineVersion === engineVersion));
 
@@ -311,7 +314,7 @@ const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engin
     reviewStatus: reviewStatusOf(cases, byCase),
     cases,
     feedback: analyseReviews(feedbackSheet),
-    window: { reviewedSince: reviewedSince ? new Date(reviewedSince) : null, engineVersion: engineVersion ?? null, excluded: allReviews.length - reviews.length },
+    window: { pilotRunId: pilotRunId ?? null, reviewedSince: reviewedSince ? new Date(reviewedSince) : null, engineVersion: engineVersion ?? null, excluded: allReviews.length - reviews.length },
     report,
   };
 };

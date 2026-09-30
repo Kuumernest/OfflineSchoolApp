@@ -7190,6 +7190,44 @@
       "DEVELOPMENT_PLAN": "Plan de développement",
       "PLAN_REVIEW": "Revue du plan",
       "unknown": "Référence de preuve"
+    },
+    "feedback": {
+      "title": "Aider à vérifier ce pilote",
+      "subtitle": "Six questions sur votre propre résumé. Il n'y a pas de bonne réponse.",
+      "cardTitle": "Votre établissement vérifie ce résumé",
+      "cardText": "Six questions rapides pour savoir si cette page était claire pour vous. Rien à écrire, pas de note, rien ne change pour vous.",
+      "cardAnswered": "Vous avez répondu. Vous pouvez changer vos réponses tant que le pilote est en cours.",
+      "cardOpen": "Répondre aux six questions",
+      "cardChange": "Changer mes réponses",
+      "aboutTitle": "À quoi cela sert",
+      "about": "Votre établissement vérifie si les élèves comprennent cette page. On ne vous demande pas si le système a raison à votre sujet — seulement si c'était clair. Vos réponses sont comptées avec celles des autres et jamais montrées avec votre nom.",
+      "alreadyAnswered": "Vous avez déjà répondu ; renvoyer remplace vos réponses précédentes.",
+      "q": {
+        "observedClear": "J'ai compris ce que le système a observé dans mon travail",
+        "inferredClear": "J'ai compris ce qu'il en a déduit",
+        "uncertaintyClear": "J'ai compris ce dont il n'est pas sûr",
+        "evidenceClear": "J'ai pu voir quelles preuves il a utilisées",
+        "explorationClear": "J'ai compris ce que je pouvais explorer",
+        "choiceClear": "J'ai compris ce que je choisis moi-même"
+      },
+      "a": {
+        "YES": "Oui",
+        "PARTLY": "En partie",
+        "NO": "Non",
+        "NOT_SHOWN": "Pas affiché"
+      },
+      "submit": "Envoyer mes réponses",
+      "answerAll": "Répondez aux six pour envoyer.",
+      "thanksTitle": "Merci",
+      "thanks": "Vos réponses ont été comptées. Rien ne change dans votre profil.",
+      "agency": "Cette page parle de l'écran, pas de vous. Ce que vous explorez et choisissez reste à vous.",
+      "notCollecting": "Votre établissement ne recueille pas de réponses en ce moment.",
+      "offlineTitle": "Les réponses ont besoin d'une connexion",
+      "offline": "Le pilote a pu avancer pendant que vous étiez hors ligne ; les réponses ne sont envoyées que connecté. Votre résumé reste sur l'écran précédent.",
+      "error": {
+        "closed": "Le pilote ne recueille plus de réponses.",
+        "generic": "Vos réponses n'ont pas pu être envoyées. Réessayez plus tard."
+      }
     }
   }
 }

@@ -3564,7 +3564,9 @@
         "temporalPatterns": "Temporal patterns represented",
         "repeatedDisagreements": "Repeated disagreements (by category)",
         "dataQualityCitations": "Data problems cited",
-        "byOutcome": "How reviewers answered"
+        "byOutcome": "How reviewers answered",
+        "reviewsExcluded": "Reviews outside this pilot (excluded)",
+        "engineVersionsMatch": "Engines unchanged since opening"
       },
       "req": {
         "reviewers": "reviewers",
@@ -3573,7 +3575,13 @@
       },
       "history": "Previous pilots",
       "trail": "Trail",
-      "advanced": "Pilot updated.",
+      "advanced": {
+        "requests": "Questions asked",
+        "modelValidated": "Model answers kept by the validator",
+        "validatorRejections": "Model answers rejected by the validator",
+        "providerFailures": "Provider failures",
+        "refused": "Questions refused"
+      },
       "opened_ok": "Pilot opened.",
       "error": {
         "generic": "The pilot could not be updated.",
@@ -3586,11 +3594,35 @@
         "CLASS_NOT_FOUND": "A class in the scope is not in this school.",
         "INVALID_PILOT_KIND": "Choose a kind of exercise.",
         "REAL_PILOT_BLOCKED": "A real pilot cannot open here yet — see the preflight.",
-        "ATTESTATION_REQUIRED": "Both attestations must be signed to open a real pilot.",
+        "ATTESTATION_REQUIRED": "All four confirmations must be signed to open a real pilot.",
         "INVALID_FINDING": "The finding is missing a category, a severity or a summary.",
         "PILOT_CLOSED": "A closed pilot takes no new findings.",
-        "FINDING_NOT_FOUND": "No such finding."
-      }
+        "FINDING_NOT_FOUND": "No such finding.",
+        "AMENDMENT_REASON_REQUIRED": "An amendment needs a reason.",
+        "NOTHING_TO_AMEND": "The amendment changes nothing.",
+        "ENGINE_VERSION_CHANGED": "An engine version changed during the pilot; the sample is mixed and cannot support a calibration decision. Record INSUFFICIENT_EVIDENCE or close."
+      },
+      "engineVersions": "Engine versions",
+      "engineName": {
+        "academic": "Academic",
+        "strengths": "Strengths",
+        "exploration": "Exploration",
+        "learningEvidence": "Learning evidence",
+        "learningIntegration": "Learning integration",
+        "development": "Development",
+        "guidance": "Guidance",
+        "intervention": "Intervention",
+        "developmentPlanning": "Development planning",
+        "adaptiveSupport": "Adaptive support",
+        "advancedIntelligence": "Advanced intelligence"
+      },
+      "drift": "Engine drift: {{list}}. The reviews are not all of the same engines; a calibration decision is blocked until this is resolved.",
+      "advancedHeading": "Explanation layer inside this pilot (counts)",
+      "lastPilot": "Last pilot",
+      "showReport": "Show the report",
+      "hideReport": "Hide the report",
+      "yes": "yes",
+      "no": "no"
     },
     "repeatedDisagreements": "Categories where reviewers differed on more than one case",
     "concern": {
@@ -3604,7 +3636,7 @@
     },
     "preflight": {
       "heading": "Before a real pilot can open",
-      "ready": "Every automatic check passes. Sign the two attestations to open.",
+      "ready": "Every automatic check passes. Sign the four confirmations to open.",
       "blocked": "REAL PILOT BLOCKED — {{reason}}",
       "check": {
         "schoolAdminPresent": "An active school administrator exists",
@@ -3620,7 +3652,14 @@
         "operatorSelectionRequired": "Operator must select a school (test suite)",
         "rawExportNotExposed": "No raw export on any route (test suite)",
         "schoolParticipates": "I attest that the school knows it is taking part and has agreed",
-        "reviewersUnderstandTask": "I attest that each reviewer has read the briefing and understands the task"
+        "reviewersUnderstandTask": "I attest that each reviewer has read the briefing and understands the task",
+        "schoolAuthorized": "The school is active on this deployment",
+        "studentDataBoundaries": "Pupil-data access boundaries held (test suite)",
+        "reviewerPrivacy": "Reviewer independence held (test suite)",
+        "dataMinimization": "Record and report carry counts and codes only (test suite)",
+        "closureBehaviour": "Closure is terminal; findings are never deleted (test suite)",
+        "noticeRequirementsMet": "I confirm that the notice or consent requirements applicable to this school have been met",
+        "retentionAgreed": "I confirm that retention of the pilot's reviews, findings and answers, and what closure means, has been agreed with the school"
       }
     },
     "finding": {
@@ -3645,7 +3684,8 @@
         "MISSING_EVIDENCE": "Missing evidence",
         "GUIDANCE": "Guidance",
         "REVIEW_WORKFLOW": "Review workflow",
-        "OFFLINE_CONSISTENCY": "Live/offline consistency"
+        "OFFLINE_CONSISTENCY": "Live/offline consistency",
+        "ADVANCED_INTELLIGENCE": "Advanced intelligence (explanation layer)"
       },
       "severity": {
         "low": "Low",
@@ -3659,6 +3699,146 @@
         "confirmed": "Confirmed",
         "resolved": "Resolved",
         "not_reproduced": "Not reproduced"
+      },
+      "sourceLabel": "Where the disagreement comes from (as far as known)",
+      "source": {
+        "undetermined": "Not yet determined",
+        "data_quality": "Data quality",
+        "missing_context": "Missing context",
+        "insufficient_evidence": "Insufficient evidence",
+        "interpretation_ambiguity": "Interpretation ambiguity",
+        "rule_weakness": "Actual rule weakness (candidate for a separate calibration process)"
+      },
+      "sourceNote": "Observed disagreement is one thing; a proposed rule change is another. No threshold moves because reviewers disagreed.",
+      "reasonLabel": "Reason for the amendment (required)",
+      "amend": "Amend",
+      "amended": "Finding amended.",
+      "amendments": "Amendments",
+      "afterClosure": "after closure"
+    },
+    "readiness": {
+      "heading": "Readiness for a real pilot",
+      "group": {
+        "technical": "Technical readiness",
+        "operational": "Operational readiness",
+        "evidence": "Evidence readiness",
+        "reviewer": "Reviewer readiness",
+        "privacy": "Privacy readiness"
+      },
+      "status": {
+        "READY": "Ready",
+        "BLOCKED": "Blocked",
+        "REQUIRES_CONFIRMATION": "Requires confirmation"
+      },
+      "blocked": "REAL PILOT BLOCKED — Missing: {{missing}}",
+      "awaiting": "Every automatic check passes. A real pilot opens only once the four confirmations below are signed by the person opening it.",
+      "note": "A technically ready application is not a school ready to pilot. Nothing here can be satisfied by fixtures, and no synthetic run is evidence.",
+      "confirmNote": "REQUIRES SCHOOL / OPERATOR CONFIRMATION — the application cannot determine this."
+    },
+    "report": {
+      "heading": "Real-world validation report",
+      "intro": "Counts over the reviews made inside this pilot. One school; no ranking of reviewers, teachers or schools; no accuracy percentage.",
+      "scope": "Scope",
+      "coverage": "Evidence coverage",
+      "outcomes": "Review outcomes",
+      "concerns": "Concern categories",
+      "advanced": "Advanced intelligence",
+      "feedback": "Pupils' answers",
+      "findings": "Findings",
+      "limitations": "Limitations",
+      "tested": "What was tested",
+      "notTested": "What was not tested",
+      "supports": "What the evidence supports",
+      "unknown": "What remains unknown",
+      "notClaimed": "This pilot does not show, whatever its result:",
+      "dates": "{{from}} → {{to}}",
+      "casesReviewers": "{{cases}} cases · {{reviewers}} reviewers · {{students}} pupils",
+      "cov": {
+        "reviewable": "Reviewable cases",
+        "reviewed": "Reviewed cases",
+        "multiReviewed": "Multi-reviewed cases",
+        "incomplete": "Incomplete cases",
+        "reviewsRecorded": "Reviews recorded",
+        "reviewsExcluded": "Reviews outside the pilot (excluded)",
+        "studentsReviewed": "Pupils reviewed",
+        "limitations": "Evidence-quality limitations (codes cited three or more times)"
+      },
+      "outcome": {
+        "SUPPORTED": "Supported",
+        "PARTLY_SUPPORTED": "Partly supported",
+        "NOT_SUPPORTED": "Not supported",
+        "INSUFFICIENT_EVIDENCE": "Insufficient evidence",
+        "UNCERTAIN": "Uncertain"
+      },
+      "concern": {
+        "INTERPRETATION_DISAGREEMENT": "Interpretation disagreement",
+        "DATA_QUALITY": "Data quality",
+        "MISSING_EVIDENCE": "Missing evidence",
+        "CONTEXTUAL_LIMITATION": "Contextual limitation"
+      },
+      "examples": "repeated codes",
+      "reviewsN": "{{n}} review(s)",
+      "adv": {
+        "explanation": "Explanation validation: {{kept}} model answer(s) kept, {{rejected}} rejected",
+        "citations": "Citation validation",
+        "safety": "Safety findings",
+        "providerFailures": "Provider failures",
+        "fallback": "Fallback usage",
+        "requests": "Questions asked",
+        "validatorNote": "The deterministic validators remain mandatory. The model is not evaluated as a decision-maker, only on whether it communicated the deterministic reading without changing it."
+      },
+      "fb": {
+        "responses": "{{n}} pupil(s) answered",
+        "withheld": "Breakdown withheld below {{min}} answers.",
+        "q": {
+          "observedClear": "I understood what the system observed",
+          "inferredClear": "I understood what it inferred",
+          "uncertaintyClear": "I understood what remains uncertain",
+          "evidenceClear": "I could see what evidence supports it",
+          "explorationClear": "I understood what I can explore",
+          "choiceClear": "I understood what I choose myself"
+        },
+        "a": {
+          "YES": "Yes",
+          "PARTLY": "Partly",
+          "NO": "No",
+          "NOT_SHOWN": "Not shown"
+        }
+      },
+      "lim": {
+        "INTERPRETATION_SUPPORT": "whether reviewers recognise the evidence behind the deterministic interpretation",
+        "CONCERN_CATEGORIES": "the four concern categories, kept apart",
+        "DATA_QUALITY_CITATIONS": "which data problems reviewers cite",
+        "REVIEWER_INDEPENDENCE": "independent review before seeing a colleague's answer",
+        "EVIDENCE_WINDOW": "only reviews made inside the pilot count",
+        "ENGINE_VERSION_BOUNDARY": "the pilot is tied to the engine versions it opened on",
+        "LIVE_OFFLINE_CONSISTENCY": "live = offline on a sample",
+        "EXPLANATION_LAYER_BEHAVIOUR": "whether the explanation layer narrated the deterministic reading without changing it",
+        "STUDENT_UNDERSTANDING": "whether pupils understood what was observed, inferred, uncertain, supported and open to them",
+        "EDUCATIONAL_EFFECTIVENESS": "whether the system improves grades, outcomes, retention, graduation or wellbeing",
+        "CAREER_PREDICTION": "career prediction (the system makes none)",
+        "PSYCHOLOGICAL_ASSESSMENT": "psychological assessment (the system makes none)",
+        "INTERVENTION_CAUSALITY": "whether an intervention caused a change",
+        "CROSS_SCHOOL_VALIDITY": "validity beyond this school, term and subjects",
+        "LONG_TERM_OUTCOMES": "long-term outcomes",
+        "CURRENT_RULES_FOR_THIS_SCOPE": "keeping the current rules for this scope",
+        "RULE_CHANGE_CANDIDATE_FOR_SEPARATE_PROCESS": "a rule-change candidate for a separate, evidence-based calibration process",
+        "NO_CALIBRATION_CONCLUSION": "no calibration conclusion",
+        "NO_DECISION_YET": "no decision yet",
+        "GENERALISATION_BEYOND_SCOPE": "generalisation beyond the scope",
+        "TEACHER_JUDGEMENT_AS_GROUND_TRUTH": "teacher judgement is not ground truth",
+        "EFFECT_ON_ANY_OUTCOME": "any effect on any outcome"
+      },
+      "claim": {
+        "GRADE_IMPROVEMENT": "improved grades",
+        "STUDENT_OUTCOMES": "improved student outcomes",
+        "CAREER_PREDICTION": "career prediction",
+        "RETENTION": "improved retention",
+        "GRADUATION": "improved graduation",
+        "WELLBEING": "improved wellbeing",
+        "INTERVENTION_CAUSALITY": "better interventions caused by it",
+        "PSYCHOLOGICAL_ASSESSMENT": "psychological assessment",
+        "UNIVERSAL_VALIDITY": "universal educational validity"
       }
     }
   },

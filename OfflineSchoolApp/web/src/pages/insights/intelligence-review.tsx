@@ -56,11 +56,13 @@ import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/Form
 import api              from "@/services/api";
 import {
   fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration,
-  fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary,
+  fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary, fetchPilotReport,
+  ENGINE_KEYS, ATTESTATION_KEYS,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
   type RecordedReview, type ReviewStatus,
-  type Pilot, type LeanPilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence,
-  type ConcernGroup, type FindingCategory, type FindingSeverity, type FindingStatus,
+  type Pilot, type LeanPilot, type PilotKind, type PilotStatus, type PilotOutcome, type PilotEvidence, type PilotFinding, type PilotReport, type Preflight,
+  type EngineVersions, type Attestations, type AttestationKey, type ReadinessStatus,
+  type ConcernGroup, type FindingCategory, type FindingSeverity, type FindingStatus, type FindingSource,
 } from "@/services/insights.service";
 
 const STATUS_VARIANT: Record<ReviewStatus, "default" | "info" | "success"> = {
@@ -688,8 +690,14 @@ const PILOT_STATUS_VARIANT: Record<PilotStatus, "default" | "info" | "warning" |
 
 /**
  * The head's pilot frame: open one, move it along, read the evidence as it
- * stands, record the decision. Every rule is the server's; a refused move
- * comes back with its code and is shown as a sentence.
+ * stands, record the decision, read the report. Every rule is the server's; a
+ * refused move comes back with its code and is shown as a sentence.
+ *
+ * Stage 18: before a REAL pilot opens, the readiness is shown in five groups,
+ * each READY, BLOCKED or REQUIRES CONFIRMATION, and the page never says
+ * "ready" while any is not. The four confirmations are signed here by the
+ * person opening the pilot. A finding is amended only with a reason. The
+ * report is the server's counts, rendered.
  */
 function PilotPanel({
   pilot, open, classes, schoolId, toast, onChanged,
@@ -704,9 +712,11 @@ function PilotPanel({
   const [note, setNote]   = useState("");
   const [outcome, setOutcome] = useState<PilotOutcome>("KEEP");
   const [summary, setSummary] = useState("");
-  const [attest, setAttest]   = useState({ schoolParticipates: false, reviewersUnderstandTask: false });
-  const [finding, setFinding] = useState<{ category: FindingCategory; severity: FindingSeverity; summary: string; evidence: string; affectedCases: string; recommendedNextAction: string }>(
-    { category: "DATA_QUALITY", severity: "medium", summary: "", evidence: "", affectedCases: "0", recommendedNextAction: "" });
+  const [attest, setAttest]   = useState<Attestations>({ schoolParticipates: false, reviewersUnderstandTask: false, noticeRequirementsMet: false, retentionAgreed: false });
+  const [showReport, setShowReport] = useState(false);
+  const [finding, setFinding] = useState<{ category: FindingCategory; severity: FindingSeverity; summary: string; evidence: string; affectedCases: string; recommendedNextAction: string; disagreementSource: FindingSource }>(
+    { category: "DATA_QUALITY", severity: "medium", summary: "", evidence: "", affectedCases: "0", recommendedNextAction: "", disagreementSource: "undetermined" });
+  const [amend, setAmend] = useState<Record<string, { status: FindingStatus; disagreementSource: FindingSource; reason: string }>>({});
 
   const preflightQ = useQuery({
     queryKey: ["pilot-preflight", schoolId ?? "own", scope.join(",")],
@@ -722,6 +732,13 @@ function PilotPanel({
     staleTime: 30_000,
   });
 
+  const reportQ = useQuery({
+    queryKey: ["pilot-report", schoolId ?? "own", pilot?.pilotRunId ?? "none", pilot?.version ?? 0],
+    queryFn:  () => fetchPilotReport(pilot!.pilotRunId, schoolId),
+    enabled:  Boolean(pilot) && showReport,
+    staleTime: 30_000,
+  });
+
   const onError = (err: unknown) => {
     const code = (err as { response?: { data?: { code?: string } } })?.response?.data?.code;
     toast({ kind: "error", title: t(`intelReview.pilot.error.${code ?? "generic"}`, { defaultValue: t("intelReview.pilot.error.generic") }) });
@@ -730,14 +747,15 @@ function PilotPanel({
     mutationFn: () => addFinding(pilot!.pilotRunId, {
       ...(schoolId ? { schoolId } : {}), category: finding.category, severity: finding.severity, summary: finding.summary,
       evidence: finding.evidence || undefined, affectedCases: Number(finding.affectedCases) || 0,
-      recommendedNextAction: finding.recommendedNextAction || undefined,
+      recommendedNextAction: finding.recommendedNextAction || undefined, disagreementSource: finding.disagreementSource,
     }),
-    onSuccess: async () => { toast({ kind: "success", title: t("intelReview.finding.recorded") }); setFinding((f) => ({ ...f, summary: "", evidence: "", affectedCases: "0", recommendedNextAction: "" })); await onChanged(); },
+    onSuccess: async () => { toast({ kind: "success", title: t("intelReview.finding.recorded") }); setFinding((f) => ({ ...f, summary: "", evidence: "", affectedCases: "0", recommendedNextAction: "", disagreementSource: "undetermined" })); await onChanged(); },
     onError,
   });
-  const moveFinding = useMutation({
-    mutationFn: (p: { findingId: string; status: FindingStatus }) => updateFinding(pilot!.pilotRunId, p.findingId, { ...(schoolId ? { schoolId } : {}), status: p.status }),
-    onSuccess: async () => { await onChanged(); },
+  const amendFinding = useMutation({
+    mutationFn: (p: { findingId: string; status: FindingStatus; disagreementSource: FindingSource; reason: string }) =>
+      updateFinding(pilot!.pilotRunId, p.findingId, { ...(schoolId ? { schoolId } : {}), status: p.status, disagreementSource: p.disagreementSource, reason: p.reason }),
+    onSuccess: async (_f, p) => { toast({ kind: "success", title: t("intelReview.finding.amended") }); setAmend((a) => { const next = { ...a }; delete next[p.findingId]; return next; }); await onChanged(); },
     onError,
   });
   const create = useMutation({
@@ -757,6 +775,16 @@ function PilotPanel({
 
   const concluding = pilot?.status === "ANALYSIS_READY";
   const evidence = pilot?.evidence ?? evidenceQ.data?.evidence ?? null;
+  const allAttested = ATTESTATION_KEYS.every((k) => attest[k]);
+  const engineList = (v: EngineVersions | null) => (v ? ENGINE_KEYS.map((k) => `${t(`intelReview.pilot.engineName.${k}`)} ${v[k]}`).join(" · ") : "—");
+  const amendOf = (f: PilotFinding) => amend[f.findingId] ?? { status: f.status, disagreementSource: f.disagreementSource ?? "undetermined", reason: "" };
+  const reportToggle = pilot && pilot.status !== "READY" && (
+    <div className="space-y-2">
+      <Button variant="ghost" size="sm" onClick={() => setShowReport((s) => !s)}>{t(showReport ? "intelReview.pilot.hideReport" : "intelReview.pilot.showReport")}</Button>
+      {showReport && reportQ.isLoading && <PageSpinner />}
+      {showReport && reportQ.data && <PilotReport report={reportQ.data} classes={classes} />}
+    </div>
+  );
 
   return (
     <Card className="space-y-3">
@@ -787,34 +815,29 @@ function PilotPanel({
           </div>
           {kind === "real" && (
             <div className="space-y-2 rounded-md border border-line p-3">
-              <p className="text-xs font-medium text-ink-faint">{t("intelReview.preflight.heading")}</p>
+              <p className="text-xs font-medium text-ink-faint">{t("intelReview.readiness.heading")}</p>
               {preflightQ.isLoading && <PageSpinner />}
-              {preflightQ.data && (
-                <>
-                  <ul className="space-y-0.5 text-sm">
-                    {preflightQ.data.checks.filter((c) => c.kind !== "manual").map((c) => (
-                      <li key={c.key} className="flex justify-between gap-3">
-                        <span className={c.ok ? "text-ink" : "text-warning"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
-                        <span className="text-right text-xs text-ink-muted">{c.detail}</span>
-                      </li>
-                    ))}
-                  </ul>
-                  <Checkbox label={t("intelReview.preflight.check.schoolParticipates")} checked={attest.schoolParticipates}
-                            onChange={(e) => setAttest((a) => ({ ...a, schoolParticipates: e.target.checked }))} />
-                  <Checkbox label={t("intelReview.preflight.check.reviewersUnderstandTask")} checked={attest.reviewersUnderstandTask}
-                            onChange={(e) => setAttest((a) => ({ ...a, reviewersUnderstandTask: e.target.checked }))} />
-                  <p className={preflightQ.data.ready ? "text-xs text-ink-muted" : "text-xs text-warning"}>
-                    {preflightQ.data.ready
-                      ? t("intelReview.preflight.ready")
-                      : t("intelReview.preflight.blocked", { reason: preflightQ.data.blockers[0] })}
-                  </p>
-                </>
-              )}
+              {preflightQ.data && <Readiness pre={preflightQ.data} attest={attest} setAttest={setAttest} />}
             </div>
           )}
           <Button variant="primary"
-                  disabled={create.isPending || (kind === "real" && (!preflightQ.data?.ready || !attest.schoolParticipates || !attest.reviewersUnderstandTask))}
+                  disabled={create.isPending || (kind === "real" && (!preflightQ.data?.ready || !allAttested))}
                   onClick={() => create.mutate()}>{t("intelReview.pilot.open")}</Button>
+
+          {/* The last pilot, closed: its state, its decision, its report. */}
+          {pilot && (
+            <div className="space-y-2 border-t border-line pt-3">
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span className="text-xs font-medium text-ink-faint">{t("intelReview.pilot.lastPilot")}</span>
+                <Badge variant={PILOT_STATUS_VARIANT[pilot.status]} label={t(`intelReview.pilot.status.${pilot.status}`)} />
+                <Badge variant="default" label={t(`intelReview.pilot.kind.${pilot.kind}`)} />
+                {pilot.label && <span className="text-ink">{pilot.label}</span>}
+                {pilot.endedAt && <span className="text-xs text-ink-muted">{t("intelReview.pilot.ended")} {new Date(pilot.endedAt).toLocaleDateString()}</span>}
+              </div>
+              {pilot.decision && <p className="text-sm text-ink">{t("intelReview.pilot.decisionHeading")}: {t(`intelReview.pilot.outcome.${pilot.decision.outcome}`)} — {pilot.decision.summary}</p>}
+              {reportToggle}
+            </div>
+          )}
         </div>
       )}
 
@@ -832,6 +855,13 @@ function PilotPanel({
             </span>
           </div>
           <p className="text-xs text-ink-muted">{t(`intelReview.pilot.statusHint.${pilot.status}`)}</p>
+          <details className="text-xs text-ink-muted">
+            <summary className="cursor-pointer">{t("intelReview.pilot.engineVersions")}</summary>
+            <p className="mt-1">{engineList(pilot.engineVersions)}</p>
+          </details>
+          {pilot.engineDrift.length > 0 && (
+            <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
+          )}
 
           {evidence && (
             <div>
@@ -849,6 +879,15 @@ function PilotPanel({
               </p>
             </div>
           )}
+
+          {/* The explanation layer inside this pilot: counts, never a question. */}
+          <div className="text-xs text-ink-muted">
+            <p className="font-medium text-ink-faint">{t("intelReview.pilot.advancedHeading")}</p>
+            <p>
+              {(["requests", "modelValidated", "validatorRejections", "providerFailures", "refused"] as const)
+                .map((k) => `${t(`intelReview.pilot.advanced.${k}`)}: ${pilot.advanced[k]}`).join(" · ")}
+            </p>
+          </div>
 
           {pilot.decision && (
             <div className="rounded-md border border-line p-3 text-sm">
@@ -877,7 +916,7 @@ function PilotPanel({
               <div className="flex flex-wrap gap-2">
                 {pilot.allowedTransitions.map((to) => (
                   <Button key={to} variant={to === "CLOSED" ? "secondary" : "primary"} size="sm"
-                          disabled={advance.isPending || ((to === "CALIBRATED" || to === "INSUFFICIENT_EVIDENCE") && summary.trim().length < 20)}
+                          disabled={advance.isPending || ((to === "CALIBRATED" || to === "INSUFFICIENT_EVIDENCE") && summary.trim().length < 20) || (to === "CALIBRATED" && pilot.engineDrift.length > 0)}
                           onClick={() => advance.mutate(to)}>
                     {t("intelReview.pilot.advance", { state: t(`intelReview.pilot.status.${to}`) })}
                   </Button>
@@ -886,25 +925,49 @@ function PilotPanel({
             </div>
           )}
 
-          {/* Findings: what the pilot turned up, by category, never a verdict about a child. */}
+          {/* Findings: what the pilot turned up, by category, never a verdict about a child. Amended only with a reason. */}
           <div className="space-y-2">
             <p className="text-xs font-medium text-ink-faint">{t("intelReview.finding.heading")} ({pilot.findings.length})</p>
+            <p className="text-xs text-ink-muted">{t("intelReview.finding.sourceNote")}</p>
             {pilot.findings.map((f) => (
               <div key={f.findingId} className="rounded-md border border-line p-2 text-sm">
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge variant={f.severity === "high" ? "danger" : f.severity === "medium" ? "warning" : "default"} label={t(`intelReview.finding.severity.${f.severity}`)} />
                   <Badge variant="default" label={t(`intelReview.finding.category.${f.category}`)} />
+                  <Badge variant="info" label={t(`intelReview.finding.status.${f.status}`)} />
                   <span className="font-medium text-ink">{f.summary}</span>
                   <span className="text-xs text-ink-muted">v{f.engineVersion} · {f.affectedCases} {t("intelReview.finding.cases")}</span>
                 </div>
+                <p className="mt-1 text-xs text-ink-muted">{t("intelReview.finding.sourceLabel")}: {t(`intelReview.finding.source.${f.disagreementSource ?? "undetermined"}`)}</p>
                 {f.evidence && <p className="mt-1 text-xs text-ink-muted">{f.evidence}</p>}
                 {f.recommendedNextAction && <p className="mt-1 text-xs text-ink">{t("intelReview.finding.next")}: {f.recommendedNextAction}</p>}
-                {pilot.status !== "CLOSED" && (
-                  <div className="mt-1 flex items-center gap-2 text-xs">
-                    <span className="text-ink-muted">{t("intelReview.finding.status.label")}:</span>
-                    <SelectField value={f.status} onChange={(e) => moveFinding.mutate({ findingId: f.findingId, status: e.target.value as FindingStatus })}
-                      options={(["open", "investigating", "confirmed", "resolved", "not_reproduced"] as FindingStatus[]).map((s) => ({ value: s, label: t(`intelReview.finding.status.${s}`) }))} />
+                <details className="mt-1 text-xs">
+                  <summary className="cursor-pointer text-ink-muted">{t("intelReview.finding.amend")}</summary>
+                  <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                    <FormField label={t("intelReview.finding.status.label")}>
+                      <SelectField value={amendOf(f).status} onChange={(e) => setAmend((a) => ({ ...a, [f.findingId]: { ...amendOf(f), status: e.target.value as FindingStatus } }))}
+                        options={(["open", "investigating", "confirmed", "resolved", "not_reproduced"] as FindingStatus[]).map((s) => ({ value: s, label: t(`intelReview.finding.status.${s}`) }))} />
+                    </FormField>
+                    <FormField label={t("intelReview.finding.sourceLabel")}>
+                      <SelectField value={amendOf(f).disagreementSource} onChange={(e) => setAmend((a) => ({ ...a, [f.findingId]: { ...amendOf(f), disagreementSource: e.target.value as FindingSource } }))}
+                        options={(["undetermined", "data_quality", "missing_context", "insufficient_evidence", "interpretation_ambiguity", "rule_weakness"] as FindingSource[]).map((s) => ({ value: s, label: t(`intelReview.finding.source.${s}`) }))} />
+                    </FormField>
+                    <FormField label={t("intelReview.finding.reasonLabel")} required>
+                      <Textarea rows={1} value={amendOf(f).reason} maxLength={1000} onChange={(e) => setAmend((a) => ({ ...a, [f.findingId]: { ...amendOf(f), reason: e.target.value } }))} />
+                    </FormField>
                   </div>
+                  <Button variant="secondary" size="sm" disabled={amendFinding.isPending || amendOf(f).reason.trim().length < 5}
+                          onClick={() => amendFinding.mutate({ findingId: f.findingId, ...amendOf(f) })}>{t("intelReview.finding.amend")}</Button>
+                </details>
+                {f.amendments?.length > 0 && (
+                  <details className="mt-1 text-xs text-ink-muted">
+                    <summary className="cursor-pointer">{t("intelReview.finding.amendments")} ({f.amendments.length})</summary>
+                    <ul className="mt-1 space-y-0.5">
+                      {f.amendments.map((a, i) => (
+                        <li key={i}>{new Date(a.at).toLocaleString()} · {t("intelReview.pilot.by", { who: a.by })} · {a.changes.map((c) => `${c.field}: ${String(c.from ?? "—")} → ${String(c.to ?? "—")}`).join("; ")} · {a.reason}{a.pilotClosed ? ` · ${t("intelReview.finding.afterClosure")}` : ""}</li>
+                      ))}
+                    </ul>
+                  </details>
                 )}
               </div>
             ))}
@@ -914,7 +977,7 @@ function PilotPanel({
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   <FormField label={t("intelReview.finding.categoryLabel")}>
                     <SelectField value={finding.category} onChange={(e) => setFinding((f) => ({ ...f, category: e.target.value as FindingCategory }))}
-                      options={(["ENGINE", "DATA_QUALITY", "MAPPING", "AUTHORIZATION", "UX", "MISSING_EVIDENCE", "GUIDANCE", "REVIEW_WORKFLOW", "OFFLINE_CONSISTENCY"] as FindingCategory[]).map((c) => ({ value: c, label: t(`intelReview.finding.category.${c}`) }))} />
+                      options={(["ENGINE", "DATA_QUALITY", "MAPPING", "AUTHORIZATION", "UX", "MISSING_EVIDENCE", "GUIDANCE", "REVIEW_WORKFLOW", "OFFLINE_CONSISTENCY", "ADVANCED_INTELLIGENCE"] as FindingCategory[]).map((c) => ({ value: c, label: t(`intelReview.finding.category.${c}`) }))} />
                   </FormField>
                   <FormField label={t("intelReview.finding.severityLabel")}>
                     <SelectField value={finding.severity} onChange={(e) => setFinding((f) => ({ ...f, severity: e.target.value as FindingSeverity }))}
@@ -932,6 +995,10 @@ function PilotPanel({
                   <FormField label={t("intelReview.finding.nextLabel")}>
                     <Textarea rows={1} value={finding.recommendedNextAction} maxLength={1000} onChange={(e) => setFinding((f) => ({ ...f, recommendedNextAction: e.target.value }))} />
                   </FormField>
+                  <FormField label={t("intelReview.finding.sourceLabel")}>
+                    <SelectField value={finding.disagreementSource} onChange={(e) => setFinding((f) => ({ ...f, disagreementSource: e.target.value as FindingSource }))}
+                      options={(["undetermined", "data_quality", "missing_context", "insufficient_evidence", "interpretation_ambiguity", "rule_weakness"] as FindingSource[]).map((s) => ({ value: s, label: t(`intelReview.finding.source.${s}`) }))} />
+                  </FormField>
                 </div>
                 <Button variant="secondary" size="sm" disabled={raise.isPending || finding.summary.trim().length < 10} onClick={() => raise.mutate()}>
                   {t("intelReview.finding.record")}
@@ -939,6 +1006,8 @@ function PilotPanel({
               </details>
             )}
           </div>
+
+          {reportToggle}
 
           <details className="text-xs text-ink-muted">
             <summary className="cursor-pointer">{t("intelReview.pilot.trail")}</summary>
@@ -954,9 +1023,51 @@ function PilotPanel({
   );
 }
 
+const READINESS_VARIANT: Record<ReadinessStatus, "success" | "danger" | "warning"> = { READY: "success", BLOCKED: "danger", REQUIRES_CONFIRMATION: "warning" };
+
+/**
+ * The five readiness groups, each answered on its own. A manual check is a
+ * confirmation the person opening the pilot signs here; the page never calls
+ * the pilot ready while any group is BLOCKED, and says what is missing in the
+ * server's words.
+ */
+function Readiness({ pre, attest, setAttest }: { pre: Preflight; attest: Attestations; setAttest: (f: (a: Attestations) => Attestations) => void }) {
+  const { t } = useTranslation();
+  const groups = ["technical", "operational", "evidence", "reviewer", "privacy"] as const;
+  return (
+    <div className="space-y-3">
+      {groups.map((g) => (
+        <div key={g} className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium text-ink">{t(`intelReview.readiness.group.${g}`)}</span>
+            <Badge variant={READINESS_VARIANT[pre.readiness[g].status]} label={t(`intelReview.readiness.status.${pre.readiness[g].status}`)} />
+          </div>
+          <ul className="space-y-0.5 text-sm">
+            {pre.checks.filter((c) => c.group === g).map((c) => (
+              <li key={c.key} className="flex flex-col gap-0.5 sm:flex-row sm:justify-between sm:gap-3">
+                {c.kind === "manual" ? (
+                  <Checkbox label={t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })} checked={attest[c.key as AttestationKey] ?? false}
+                            onChange={(e) => setAttest((a) => ({ ...a, [c.key]: e.target.checked }))} />
+                ) : (
+                  <span className={c.ok ? "text-ink" : "text-warning"}>{c.ok ? "✓" : "✗"} {t(`intelReview.preflight.check.${c.key}`, { defaultValue: c.key })}</span>
+                )}
+                <span className="text-right text-xs text-ink-muted">{c.kind === "manual" && g === "privacy" ? t("intelReview.readiness.confirmNote") : c.detail}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <p className={pre.ready ? "text-xs text-ink-muted" : "text-xs font-medium text-warning"}>
+        {pre.ready ? t("intelReview.readiness.awaiting") : t("intelReview.readiness.blocked", { missing: pre.missing.join(", ") })}
+      </p>
+      <p className="text-xs text-ink-muted">{t("intelReview.readiness.note")}</p>
+    </div>
+  );
+}
+
 function EvidenceGrid({ evidence }: { evidence: PilotEvidence }) {
   const { t } = useTranslation();
-  const nums = ["casesSelected", "casesReviewed", "casesAwaitingReview", "casesWithMultipleReviews", "studentsReviewed", "reviewsRecorded", "reviewers"] as const;
+  const nums = ["casesSelected", "casesReviewed", "casesAwaitingReview", "casesWithMultipleReviews", "studentsReviewed", "reviewsRecorded", "reviewers", "reviewsExcluded"] as const;
   const lists = ["categories", "subjects", "temporalPatterns", "repeatedDisagreements"] as const;
   const label = (k: string, list: (typeof lists)[number]) =>
     list === "categories" || list === "repeatedDisagreements" ? t(`intelReview.category.${k}`, { defaultValue: k })
@@ -966,9 +1077,13 @@ function EvidenceGrid({ evidence }: { evidence: PilotEvidence }) {
       {nums.map((k) => (
         <div key={k} className="flex justify-between gap-2 border-b border-line py-1">
           <span className="text-ink-muted">{t(`intelReview.pilot.ev.${k}`)}</span>
-          <span className="font-medium text-ink">{evidence[k]}</span>
+          <span className="font-medium text-ink">{evidence[k] ?? 0}</span>
         </div>
       ))}
+      <div className="flex justify-between gap-2 border-b border-line py-1">
+        <span className="text-ink-muted">{t("intelReview.pilot.ev.engineVersionsMatch")}</span>
+        <span className="font-medium text-ink">{t(evidence.engineVersionsMatch === false ? "intelReview.pilot.no" : "intelReview.pilot.yes")}</span>
+      </div>
       {lists.map((k) => (
         <div key={k} className="flex justify-between gap-2 border-b border-line py-1">
           <span className="text-ink-muted">{t(`intelReview.pilot.ev.${k}`)}</span>
@@ -987,6 +1102,114 @@ function EvidenceGrid({ evidence }: { evidence: PilotEvidence }) {
           {Object.entries(evidence.byOutcome).filter(([, v]) => v > 0).map(([k, v]) => `${t(`intelReview.outcome.${k}`, { defaultValue: k })} (${v})`).join(", ") || "—"}
         </span>
       </div>
+    </div>
+  );
+}
+
+const ReportRow = ({ label, value }: { label: string; value: string | number }) => (
+  <div className="flex justify-between gap-2 border-b border-line py-1"><span className="text-ink-muted">{label}</span><span className="text-right font-medium text-ink">{value}</span></div>
+);
+const ReportSection = ({ title, children }: { title: string; children: React.ReactNode }) => (
+  <div className="space-y-1"><p className="text-xs font-medium text-ink-faint">{title}</p>{children}</div>
+);
+
+/**
+ * The real-world validation report, rendered from the server's counts:
+ * scope, coverage, outcomes, the four concerns, the explanation layer, the
+ * pupils' answers, the findings, and what was and was not tested. Nothing on
+ * it is a score, a rank or a winner, and nothing on it names a pupil.
+ */
+function PilotReport({ report, classes }: { report: PilotReport; classes: Array<{ _id: string; name: string }> }) {
+  const { t } = useTranslation();
+  const day = (d: string | null) => (d ? new Date(d).toLocaleDateString() : "—");
+  const cov = report.evidenceCoverage, adv = report.advancedIntelligence, fb = report.studentFeedback;
+  return (
+    <div className="space-y-3 rounded-md border border-line p-3 text-sm">
+      <p className="font-medium text-ink">{t("intelReview.report.heading")}</p>
+      <p className="text-xs text-ink-muted">{t("intelReview.report.intro")}</p>
+
+      <ReportSection title={t("intelReview.report.scope")}>
+        <p className="text-ink">
+          {t(`intelReview.pilot.kind.${report.scope.kind}`)} · {report.scope.classIds?.length ? report.scope.classIds.map((id) => classes.find((c) => c._id === id)?.name ?? id).join(", ") : t("intelReview.pilot.wholeSchool")}
+          {" · "}{t("intelReview.report.dates", { from: day(report.scope.startedAt ?? report.scope.createdAt), to: day(report.scope.endedAt) })}
+        </p>
+        <p className="text-xs text-ink-muted">{t("intelReview.report.casesReviewers", { cases: report.scope.cases, reviewers: report.scope.reviewers, students: report.scope.students })}</p>
+        <p className="text-xs text-ink-muted">{report.scope.engineVersions ? ENGINE_KEYS.map((k) => `${t(`intelReview.pilot.engineName.${k}`)} ${report.scope.engineVersions![k]}`).join(" · ") : "—"}</p>
+        {report.scope.engineDrift.length > 0 && <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: report.scope.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>}
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.coverage")}>
+        <div className="grid gap-x-4 sm:grid-cols-2">
+          {(["reviewable", "reviewed", "multiReviewed", "incomplete", "reviewsRecorded", "reviewsExcluded", "studentsReviewed"] as const).map((k) => <ReportRow key={k} label={t(`intelReview.report.cov.${k}`)} value={cov[k]} />)}
+        </div>
+        {cov.evidenceQualityLimitations.length > 0 && (
+          <p className="text-xs text-ink-muted">{t("intelReview.report.cov.limitations")}: {cov.evidenceQualityLimitations.map((l) => `${t(`intelReview.dataQuality.${l.code}`, { defaultValue: l.code })} (${l.reviews})`).join(", ")}</p>
+        )}
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.outcomes")}>
+        <div className="grid gap-x-4 sm:grid-cols-2">
+          {(Object.keys(report.reviewOutcomes) as Array<keyof typeof report.reviewOutcomes>).map((k) => <ReportRow key={k} label={t(`intelReview.report.outcome.${k}`)} value={report.reviewOutcomes[k]} />)}
+        </div>
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.concerns")}>
+        <p className="text-xs text-ink-muted">{t("intelReview.concern.note")}</p>
+        <div className="grid gap-x-4 sm:grid-cols-2">
+          {(Object.keys(report.concerns) as Array<keyof typeof report.concerns>).map((k) => (
+            <ReportRow key={k} label={t(`intelReview.report.concern.${k}`)}
+                 value={`${t("intelReview.report.reviewsN", { n: report.concerns[k].reviews })}${report.concerns[k].examples.length ? ` · ${t("intelReview.report.examples")}: ${report.concerns[k].examples.map((e) => `${t(`intelReview.dataQuality.${e.code}`, { defaultValue: t(`intelReview.code.${e.code}`, { defaultValue: e.code }) })} (${e.reviews})`).join(", ")}` : ""}`} />
+          ))}
+        </div>
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.advanced")}>
+        <p className="text-xs text-ink-muted">{t("intelReview.report.adv.validatorNote")}</p>
+        <div className="grid gap-x-4 sm:grid-cols-2">
+          <ReportRow label={t("intelReview.report.adv.requests")} value={adv.requests} />
+          <ReportRow label={t("intelReview.report.adv.explanation", { kept: adv.explanationValidation.modelAnswersKept, rejected: adv.explanationValidation.modelAnswersRejected })} value="" />
+          <ReportRow label={t("intelReview.report.adv.citations")} value={Object.entries(adv.citationValidation).map(([k, v]) => `${k} ${v}`).join(" · ")} />
+          <ReportRow label={t("intelReview.report.adv.safety")} value={Object.entries(adv.safety).map(([k, v]) => `${k} ${v}`).join(" · ")} />
+          <ReportRow label={t("intelReview.report.adv.providerFailures")} value={adv.providerFailures} />
+          <ReportRow label={t("intelReview.report.adv.fallback")} value={Object.entries(adv.fallbackUsage).map(([k, v]) => `${t(`explain.mode.${k}`, { defaultValue: k })} ${v}`).join(" · ")} />
+        </div>
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.feedback")}>
+        <p className="text-ink">{t("intelReview.report.fb.responses", { n: fb.responses })}</p>
+        {fb.withheld && fb.responses > 0 && <p className="text-xs text-ink-muted">{t("intelReview.report.fb.withheld", { min: fb.minimumForBreakdown })}</p>}
+        {fb.byQuestion && (
+          <div className="grid gap-x-4">
+            {fb.questions.map((q) => (
+              <ReportRow key={q} label={t(`intelReview.report.fb.q.${q}`, { defaultValue: q })}
+                   value={fb.answers.map((a) => `${t(`intelReview.report.fb.a.${a}`, { defaultValue: a })} ${fb.byQuestion![q]?.[a] ?? 0}`).join(" · ")} />
+            ))}
+          </div>
+        )}
+      </ReportSection>
+
+      <ReportSection title={t("intelReview.report.findings")}>
+        <p className="text-ink">{report.findings.total} · {Object.entries(report.findings.byCategory).map(([k, v]) => `${t(`intelReview.finding.category.${k}`, { defaultValue: k })} ${v}`).join(" · ") || "—"}</p>
+        {Object.keys(report.findings.byDisagreementSource).length > 0 && (
+          <p className="text-xs text-ink-muted">{t("intelReview.finding.sourceLabel")}: {Object.entries(report.findings.byDisagreementSource).map(([k, v]) => `${t(`intelReview.finding.source.${k}`, { defaultValue: k })} ${v}`).join(" · ")}</p>
+        )}
+      </ReportSection>
+
+      {report.decision && (
+        <ReportSection title={t("intelReview.pilot.decisionHeading")}>
+          <p className="text-ink">{t(`intelReview.pilot.outcome.${report.decision.outcome}`)} — {report.decision.summary}</p>
+        </ReportSection>
+      )}
+
+      <ReportSection title={t("intelReview.report.limitations")}>
+        {(["tested", "notTested", "evidenceSupports", "unknown"] as const).map((k) => (
+          <p key={k} className="text-xs text-ink-muted">
+            <span className="font-medium text-ink">{t(`intelReview.report.${k === "evidenceSupports" ? "supports" : k}`)}:</span>{" "}
+            {report.limitations[k].map((c) => t(`intelReview.report.lim.${c}`, { defaultValue: c })).join("; ") || "—"}
+          </p>
+        ))}
+        <p className="text-xs text-ink-muted"><span className="font-medium text-ink">{t("intelReview.report.notClaimed")}</span> {report.notClaimed.map((c) => t(`intelReview.report.claim.${c}`, { defaultValue: c })).join("; ")}</p>
+      </ReportSection>
     </div>
   );
 }

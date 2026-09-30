@@ -1321,3 +1321,229 @@ ADAPTIVE_SUPPORT_ENGINE_VERSION: 1.0.0
 
 REAL-WORLD_VALIDATION: STILL PENDING
 ```
+
+---
+
+## 22. Stage 18 — the first real pilot: readiness, protocol, report
+
+Stage 18 prepares the first real-world validation of the existing Student
+Intelligence system and adds no capability to it. No engine, threshold,
+rule, guidance text or explanation template changed; every engine version
+is what it was. What changed is the frame a real pilot runs in, so that
+when an authorised school, an administrator and two real reviewers exist,
+the exercise needs no developer and cannot be mistaken for anything else.
+
+### What real-world validation is not
+
+Synthetic pupils, synthetic marks, synthetic reviewers, development
+fixtures, Anthropic smoke tests, unit and integration tests, developer
+judgement, one person's opinion and generated evidence are not validation.
+The check scripts described below open a pilot of kind `real` against
+fixtures in an in-memory database; that proves the **gate** works and
+nothing else. A real pilot requires an authorised school, an authorised
+administrator, real published evidence, at least two real reviewers, real
+review cases and human review — and none of those exists in this
+environment.
+
+```
+REAL_PILOT_STATUS: BLOCKED
+REAL_WORLD_VALIDATION: PENDING
+```
+
+### The lifecycle, unchanged
+
+`READY → ACTIVE → REVIEWING → ANALYSIS_READY → CALIBRATED | INSUFFICIENT_EVIDENCE`,
+any state `→ CLOSED`, `CLOSED` terminal. `pilot.service.js` remains the only
+writer of `status`. Nothing calibrates on its own: `CALIBRATED` needs the
+server's evidence snapshot at or above the minimum (≥ 2 reviewers, ≥ 30
+reviewed cases, ≥ 3 multi-reviewed cases), a written decision with an
+outcome, **and** the engine versions unchanged since opening (below).
+`INSUFFICIENT_EVIDENCE` needs a written decision and is the correct outcome
+when the sample cannot answer.
+
+### Readiness in five groups (`GET /api/insights/pilot/preflight`)
+
+Every check carries a `group`; the preflight returns `readiness` with one
+status per group, and the web page renders the five apart:
+
+| Group | Checks | Status when a query cannot answer |
+|---|---|---|
+| **technical** | name-free engine input, live = offline on a sample, salt off the wire, the access suites | — |
+| **operational** | `schoolAuthorized` (active school), `schoolAdminPresent`, attestation `schoolParticipates` | REQUIRES_CONFIRMATION |
+| **evidence** | `publishedEvidence`, `reviewableCases` (≥ 30), `multiReviewCapableCases` (≥ 3) | — |
+| **reviewer** | `reviewersAvailable` (≥ 2 with assignments in scope), attestation `reviewersUnderstandTask` | REQUIRES_CONFIRMATION |
+| **privacy** | suites: `studentDataBoundaries`, `reviewerPrivacy`, `dataMinimization`, `closureBehaviour`; confirmations: `noticeRequirementsMet`, `retentionAgreed` | REQUIRES_CONFIRMATION |
+
+A group is `READY`, `BLOCKED` or `REQUIRES_CONFIRMATION`. The preflight's
+`realPilotStatus` is `BLOCKED` while any check fails and
+`AWAITING_ATTESTATION` otherwise; it is never `READY` on its own, because
+the four attestations are signed by a person at opening. The `missing` list
+is in words: "authorized school", "authorized administrator", "reviewer 2",
+"reviewable cases (18/30)", "confirmation: notice/consent requirements
+met". The web page shows `REAL PILOT BLOCKED — Missing: …` from that list
+and keeps the open button disabled until the server says ready **and** all
+four confirmations are ticked.
+
+**Notice, consent and retention are not determined by the repository.**
+The two privacy confirmations say so on the page: *REQUIRES SCHOOL /
+OPERATOR CONFIRMATION*. No legal or regulatory requirement is invented;
+the person opening the pilot confirms that whatever applies to their school
+has been met and that retention and closure were agreed.
+
+### Four attestations
+
+A pilot of kind `real` opens only with `schoolParticipates`,
+`reviewersUnderstandTask`, `noticeRequirementsMet` and `retentionAgreed`
+all `true` in the request (409 `ATTESTATION_REQUIRED` names the unsigned
+ones), stored with who signed and when. Development and synthetic pilots
+are not gated and never count.
+
+### The engine baseline
+
+A pilot is stamped at opening with all eleven versions
+(`engineVersions`: academic, strengths, exploration, learningEvidence,
+learningIntegration, development, guidance, intervention,
+developmentPlanning, adaptiveSupport, advancedIntelligence), by the
+server, never from the request. Every snapshot compares the engines now
+against that baseline and records `engineVersionsMatch` and `engineDrift`
+(engine, pilot version, current version). A drifted pilot cannot reach
+`CALIBRATED` (409 `ENGINE_VERSION_CHANGED`); `INSUFFICIENT_EVIDENCE` and
+`CLOSED` remain open. The record and the web page show the drift by name.
+Versions are never mixed silently.
+
+### The evidence boundary
+
+Every review is stamped at submission with the school's open pilot
+(`pilotRunId`, `pilotKind`), or with none. A pilot's evidence — the
+snapshot at `ANALYSIS_READY`, `CALIBRATED` and `INSUFFICIENT_EVIDENCE`, the
+live read on `/pilot/evidence`, and the report — counts **only** the
+reviews that carry its id, since it opened, on its engine version, and
+records how many of the school's other reviews were excluded. A review
+made in a synthetic or development exercise, before the pilot opened, or
+with no pilot open, is a school record and stays one; it is never a real
+pilot's evidence. The review queue itself still shows every review to those
+the privacy rules allow. The snapshot records: `pilotRunId`, `since`,
+`engineVersion`, the counts (cases selected / reviewed / awaiting /
+multi-reviewed, pupils, reviews, reviewers), the code lists, the outcome
+tally, the data-quality citations, the engine drift, the explanation
+layer's tally and the pupils' answers — and no pupil, mark, reviewer, word,
+question, credential or secret.
+
+### The explanation layer, watched
+
+After each `explain` / `ask` answer the router increments a tally on the
+school's open pilot from the audit block only: request type, mode, fallback
+reason, validation codes, question category. Not the question, not the
+answer, not the pupil. The record and the report present it as the brief
+asks: explanation validation (model answers kept / rejected), citation
+validation (`MISSING_CITATION`, `UNSUPPORTED_CLAIM`, `CONTRADICTS_EVIDENCE`,
+`FUTURE_EVIDENCE`), safety (`CAREER_PREDICTION`, `PSYCHOLOGICAL_INFERENCE`,
+`MEDICAL_INFERENCE`, `RISK_INFERENCE`, `INTERVENTION_COMMAND`,
+`UNAUTHORIZED_DATA`), provider failures, fallback usage. The deterministic
+validators remain mandatory. Claude is not evaluated as a decision-maker:
+the question the pilot asks of the layer is whether it explained the
+deterministic interpretation without changing it, and a suspected failure
+is a finding of category `ADVANCED_INTELLIGENCE`. The advanced service
+exports no writer; a pilot is moved by nothing but the router on
+`insights.pilot`.
+
+### Pupils' answers (student-facing validation)
+
+Where a pilot includes actual pupil use, a pupil may answer six bounded
+questions about their own summary — whether they understood what was
+observed, inferred, uncertain, supported by evidence, open to explore, and
+theirs to choose — each from four words (`YES`, `PARTLY`, `NO`,
+`NOT_SHOWN`). There is no free text; an extra field is refused. A pupil is
+not asked whether the algorithm is "correct". One row per pupil per pilot
+(`IntelligenceStudentFeedback`), stamped with the pilot; nothing reads it
+but the report, which counts answers per question and withholds the
+breakdown below three responses. It never feeds an engine and no profile is
+built from it. Routes: `GET/POST /api/insights/student/me/pilot-feedback`,
+pupils only; the mobile summary shows the card only while a pilot is
+collecting and the phone is online.
+
+### Teacher-facing validation and findings
+
+Teachers keep the existing structured review (Supported / Partly supported
+/ Not supported / Insufficient evidence, the four concern groups, the
+data-quality codes, optional reason). Teacher feedback is validation
+evidence, never ground truth, and is never fed back into an engine.
+
+Findings carry `findingId`, `pilotRunId`, category (now including
+`ADVANCED_INTELLIGENCE`), severity, summary, evidence, affected cases, the
+pilot's engine version, status, next action — and `disagreementSource`
+(`undetermined`, `data_quality`, `missing_context`, `insufficient_evidence`,
+`interpretation_ambiguity`, `rule_weakness`), which keeps observed
+disagreement apart from any proposed rule change. Findings are never
+deleted. An amendment (status, next action, source) requires a **reason**
+(400 `AMENDMENT_REASON_REQUIRED`) and appends `{ at, by, changes[], reason,
+pilotClosed }` to the finding; on a closed pilot the amendment is the only
+road by which the record changes, and it is marked as made after closure. A
+closed pilot takes no new finding and no move.
+
+### The report (`GET /api/insights/pilot/:id/report`)
+
+Scope (school, classes, dates, the eleven versions, drift, cases,
+reviewers, attestations); evidence coverage (reviewable, reviewed,
+multi-reviewed, incomplete, excluded, the window, data-quality citations,
+evidence-quality limitations as codes cited at or above the pattern
+minimum, the gate and any shortfall); review outcomes as counts under the
+brief's words; the four concern categories, each with a count and repeated
+codes as examples; the explanation layer as above; the pupils' answers;
+findings by category, severity, status and source; the decision; the
+snapshot on record; and limitations — what was tested, what was not, what
+the evidence supports (`CURRENT_RULES_FOR_THIS_SCOPE`,
+`RULE_CHANGE_CANDIDATE_FOR_SEPARATE_PROCESS`, `NO_CALIBRATION_CONCLUSION`,
+`NO_DECISION_YET`), what remains unknown. `aggregation: ONE_SCHOOL`,
+`noRanking: true`. It never produces a winner, a ranking of reviewers,
+teachers or schools, or an "accuracy percentage".
+
+**What the pilot does not claim, whatever its result** (`notClaimed`):
+improved grades, improved student outcomes, career prediction, retention,
+graduation, wellbeing, interventions caused by the system, psychological
+assessment, universal validity. Those require separate outcome studies. The
+pilot validates the interpretation and the system's behaviour, not
+educational causality.
+
+### Threshold changes
+
+Unchanged from §6 and §13: no production threshold moves during a pilot
+because reviewers disagreed. A finding first says where the disagreement
+comes from; only `rule_weakness` is a candidate, and a candidate goes to a
+separate, evidence-based, regression-covered calibration as a new engine
+version.
+
+### Verification (Stage 18)
+
+| | |
+|---|---|
+| `check-real-pilot.js` (new) | 87 assertions, 0 failures — the five groups and their statuses; four attestations; a real pilot blocked at a school with one reviewer and refused without confirmations; school isolation; reviewer separation inside a real pilot; evidence isolation (a synthetic pilot's reviews and an unpiloted review excluded and counted as excluded); the eleven-version baseline, drift named, `CALIBRATED` refused on drift; closed-pilot immutability (no new finding, no move, no delete route) and the amendment trail with who/when/what/why, marked after closure; the human gate (enough evidence still waits for a decision); the insufficient-evidence path; the explanation layer counted and unable to change a reading, a review or a pilot; the pupils' six questions (pupil only, no free text, replaced on resubmit, breakdown withheld below three); the report; no secret, pupil, mark or reviewer's words in the record, the report or on any pilot route |
+| `check-pilot-readiness.js` | 87 (was 86): four attestations pending, five groups, an amendment refused without a reason and recorded with one |
+| backend neighbours | review workflow 55, access 61, sync feed 61, advanced 106, calibration export 51, roles 94, tenant ids 53, orphans 6, cross-school 15 |
+| web | `check-pilot-ui.mjs` (new) 16; `tsc -b` clean; `eslint` 0 errors (one pre-existing warning); i18n 149 keys added in both languages; l10n 70; api; roles 31; normalisers 4; layout 60; intelui 16; `vite build` ok |
+| mobile | `check-intelligence-client.js` 32 (was 22): the six questions through the real router, an extra field never leaves the phone, offline throws and queues nothing, the screen has no text box; `check.js` 62/62; i18n 6,238 keys; l10n 89; lint 0 errors (49 pre-existing warnings); types clean |
+| Engines | all eleven unchanged; `shared/` untouched |
+
+### Status
+
+```
+STAGE 18 — REAL-WORLD PILOT READINESS
+
+ACADEMIC_ENGINE_VERSION: 1.0.0
+STRENGTH_ENGINE_VERSION: 1.2.0
+EXPLORATION_ENGINE_VERSION: 1.0.0
+LEARNING_EVIDENCE_VERSION: 1.0.0
+LEARNING_INTEGRATION_VERSION: 1.0.0
+DEVELOPMENT_ENGINE_VERSION: 1.0.0
+GUIDANCE_ENGINE_VERSION: 1.0.0
+INTERVENTION_ENGINE_VERSION: 1.0.0
+DEVELOPMENT_PLANNING_ENGINE_VERSION: 1.0.0
+ADAPTIVE_SUPPORT_ENGINE_VERSION: 1.0.0
+ADVANCED_INTELLIGENCE_VERSION: 1.0.0
+
+REAL_PILOT_STATUS: BLOCKED — no authorised school, administrator, reviewers or evidence in this environment
+REAL_WORLD_VALIDATION: PENDING
+```
+
+That is not a technical failure. The software is waiting for the
+real-world prerequisite that cannot be created by code.

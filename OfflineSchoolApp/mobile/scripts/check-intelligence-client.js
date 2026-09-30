@@ -209,6 +209,33 @@ const loadModule = (rel, stubs) => {
   const FORBIDDEN = /recommended career|best career|ideal career|career (match|score|ranking|probability|fit)|you should become|you are suited|your future is|the right career|carrière recommandée|meilleure carrière|carrière idéale|vous devriez devenir|vous êtes fait pour|votre avenir est/i;
   check("no intel.* string, in either language, recommends, ranks, scores or predicts a career, or tells a pupil what to become; the agency line says who decides", [[...flatten(en.intel, "intel."), ...flatten(fr.intel, "intel.")].filter(([, v]) => FORBIDDEN.test(v)).map(([k]) => k), /You decide/.test(get(en, "intel.agency")), /Vous décidez/.test(get(fr, "intel.agency")), /not ranked/.test(get(en, "intel.exploreHint")), /sans classement/.test(get(fr, "intel.exploreHint"))], [[], true, true, true, true]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- 5. the pilot's six questions (Stage 18) ---");
+  // ═══════════════════════════════════════════════════════════════════════════
+  const pilots = require(path.join(BSRC, "services/intelligence/pilot.service"));
+  const ANSWERS = { observedClear: "YES", inferredClear: "PARTLY", uncertaintyClear: "YES", evidenceClear: "YES", explorationClear: "NOT_SHOWN", choiceClear: "YES" };
+  const statusCode = async (fn) => { try { await fn(); return 200; } catch (e) { return e.response?.data?.code ?? e.response?.status ?? 0; } };
+  const none = await svc.getMyPilotFeedback();
+  check("with no pilot at the school: not collecting, and an answer is refused with its code", [none.open, none.submitted, await statusCode(() => svc.submitMyPilotFeedback(ANSWERS))], [false, false, "NO_PILOT_COLLECTING"]);
+  const dev = await pilots.createPilot({ schoolId: A, kind: "development", label: "phone trial", actor: "admin-a" });
+  await pilots.transition(dev, "ACTIVE", { actor: "admin-a" });
+  const open = await svc.getMyPilotFeedback();
+  check("with a pilot collecting: open, the six questions and the four words the service also names, not yet answered", [open.open, open.pilotRunId === String(dev._id), open.questions, open.answers, open.submitted], [true, true, svc.FEEDBACK_QUESTIONS, svc.FEEDBACK_ANSWERS, false]);
+  const sent = await svc.submitMyPilotFeedback({ ...ANSWERS, comment: "I typed this anyway", studentId: "st-a2" });
+  check("the service sends the six answers and nothing else — an extra field never leaves the phone; the row is the pilot's", [sent.pilotRunId === String(dev._id), Object.keys(sent.answers).sort(), sent.answers.explorationClear, (await svc.getMyPilotFeedback()).submitted], [true, [...svc.FEEDBACK_QUESTIONS].sort(), "NOT_SHOWN", true]);
+  check("a fifth word is refused by the server", await statusCode(() => svc.submitMyPilotFeedback({ ...ANSWERS, choiceClear: "MAYBE" })), "INVALID_FEEDBACK");
+  check("nothing an answer did changed the summary: same boundary hash, no note's words anywhere", [(await svc.refreshMyIntelligenceSummary("en")).evidenceBoundaryHash === s.evidenceBoundaryHash, PRIVATE.test(flat(await M("IntelligenceStudentFeedback").find({}).lean()))], [true, false]);
+  let offFb = null; try { await off.submitMyPilotFeedback(ANSWERS); } catch (e) { offFb = e; }
+  check("offline: an answer throws with isOffline and nothing is queued", [offFb?.isOffline, fakeDb.rows("mutation_queue").length], [true, 0]);
+  const feedbackScreen = fs.readFileSync(path.join(MOBILE, "app/student/intelligence/feedback.js"), "utf8");
+  const overview2 = fs.readFileSync(path.join(MOBILE, "app/student/intelligence/index.js"), "utf8");
+  check("the feedback screen: no box to type in, four words per question as radio chips, sent only by the button and only once all six are answered, closed offline, a live region for the thanks", [/TextInput/.test(feedbackScreen), /accessibilityRole="radio"/.test(feedbackScreen) && /FEEDBACK_ANSWERS\.map/.test(feedbackScreen), /onPress=\{submit\}/.test(feedbackScreen) && /disabled=\{!complete \|\| busy\}/.test(feedbackScreen), /useEffect\(\(\) => \{ load\(\); \}/.test(feedbackScreen) && !/useEffect\(\(\) => \{ submit/.test(feedbackScreen), /useSyncStatus/.test(feedbackScreen) && /intel\.feedback\.offline/.test(feedbackScreen) && /err\?\.isOffline/.test(feedbackScreen), /accessibilityLiveRegion="polite"/.test(feedbackScreen)], [false, true, true, true, true, true]);
+  check("the overview shows the card only while a pilot is collecting and the phone is online, and links to the screen", [/getMyPilotFeedback\(\)/.test(overview2), /!offline && pilot\?\.open/.test(overview2), /go\("\/student\/intelligence\/feedback"\)/.test(overview2)], [true, true, true]);
+  const usedFb = [...new Set([...(feedbackScreen + overview2).matchAll(/t\(\s*["'`](intel\.feedback\.[\w.]+)["'`]/g)].map((m) => m[1]))];
+  const needFb = [...svc.FEEDBACK_QUESTIONS.map((q) => `intel.feedback.q.${q}`), ...svc.FEEDBACK_ANSWERS.map((a) => `intel.feedback.a.${a}`), "intel.feedback.error.closed", "intel.feedback.error.generic", "intel.feedback.error.offline"].filter((k) => k !== "intel.feedback.error.offline");
+  check("every intel.feedback.* key the screens use, and every question, word and error, exists in both languages", [...usedFb, ...needFb].filter((k) => typeof get(en, k) !== "string" || typeof get(fr, k) !== "string"), []);
+  check("the wording never asks a pupil whether the system is right about them, and says the answers change nothing", [/(is|was) (right|correct) about/i.test(flatten(en.intel.feedback, "").map(([, v]) => v).join(" ").replace(/not asked whether the system is right about you/i, "")), /nothing changes about you|Nothing about your profile changes/.test(get(en, "intel.feedback.cardText") + get(en, "intel.feedback.thanks")), /rien ne change/i.test(get(fr, "intel.feedback.cardText"))], [false, true, true]);
+
   await server.close();
   await mongoose.disconnect();
   await stopQuietly(mongo);

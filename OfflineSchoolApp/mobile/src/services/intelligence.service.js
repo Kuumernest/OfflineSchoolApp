@@ -80,6 +80,32 @@ export const askAboutMyProfile = async (question, { operation = "explain", lang 
   return data?.data ?? null;
 };
 
+// ── The pilot's six questions (Stage 18) ──────────────────────────────────
+//
+// When the school runs a validation pilot, a pupil may answer six bounded
+// questions about their own summary — did they understand what was observed,
+// inferred, uncertain, supported, open to explore, and theirs to choose.
+// Four words per question, no free text, nothing an engine reads; the pilot
+// report counts the answers and never names a pupil. Online only, like a
+// question: a pilot may close while the phone is away, and an answer queued
+// for a closed pilot would be refused hours later to no purpose.
+
+export const FEEDBACK_QUESTIONS = ["observedClear", "inferredClear", "uncertaintyClear", "evidenceClear", "explorationClear", "choiceClear"];
+export const FEEDBACK_ANSWERS = ["YES", "PARTLY", "NO", "NOT_SHOWN"];
+
+/** Is a pilot collecting answers at the school, and has this pupil answered? Throws offline (err.isOffline). */
+export const getMyPilotFeedback = async () => {
+  const { data } = await api.get("/insights/student/me/pilot-feedback");
+  return data?.data ?? null;
+};
+
+/** Record the pupil's six answers; a second submission replaces the first. Throws offline, or 409 NO_PILOT_COLLECTING when none is. */
+export const submitMyPilotFeedback = async (answers) => {
+  const clean = Object.fromEntries(FEEDBACK_QUESTIONS.map((q) => [q, answers?.[q]]));
+  const { data } = await api.post("/insights/student/me/pilot-feedback", { answers: clean });
+  return data?.data ?? null;
+};
+
 /** The vocabulary a screen renders; kept beside the calls so the two cannot drift apart. */
 export const CLAIM_TYPES = ["OBSERVED", "INFERRED_BY_DETERMINISTIC_ENGINE", "SUGGESTED_EXPLORATION", "UNCERTAIN", "NOT_AVAILABLE"];
 export const ANSWER_MODES = ["DETERMINISTIC", "MODEL_VALIDATED", "DETERMINISTIC_FALLBACK", "REFUSED"];

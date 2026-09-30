@@ -7,7 +7,7 @@
  * ── Why a record at all ───────────────────────────────────────────────────
  *
  * Reviews accumulate; a pilot is the frame around them — which school, which
- * classes, under which engine version, from when to when, how far it has got
+ * classes, under which engine versions, from when to when, how far it has got
  * and what was decided at the end. Without the frame, a report cannot tell a
  * developer's test run from a real school's validation, and the calibration
  * protocol in docs/25 §6 needs exactly that distinction to mean anything.
@@ -32,13 +32,23 @@
  * snapshot to meet the minimum gate AND a written decision, both enforced in
  * services/intelligence/pilot.service.js, which is the only writer of `status`.
  *
+ * ── The engine versions (Stage 18) ────────────────────────────────────────
+ *
+ * A pilot is of the engines as they stood when it opened: all eleven, stamped
+ * by the server, never by the request. `engineVersion` alone is the academic
+ * engine's, kept because every review and every earlier record names it;
+ * `engineVersions` is the full baseline the evidence snapshot is checked
+ * against, so a version that moved during the review period is recorded as
+ * drift rather than mixed in.
+ *
  * ── What is deliberately absent ───────────────────────────────────────────
  *
  * The calibration salt, any credential, any export, any pupil row, any mark,
- * any reviewer's answer. The evidence snapshot is counts and code lists; the
+ * any reviewer's answer, any pupil's feedback row, any question a pupil asked
+ * the explanation layer. The evidence snapshot is counts and code lists; the
  * scope is the tenancy key and class ids the application already puts in every
- * URL. scripts/check-pilot-readiness.js asserts the record carries none of the
- * rest.
+ * URL. scripts/check-pilot-readiness.js and scripts/check-real-pilot.js assert
+ * the record carries none of the rest.
  */
 
 const mongoose = require("mongoose");
@@ -48,9 +58,34 @@ const KINDS  = ["synthetic", "development", "real"];
 const STATES = ["READY", "ACTIVE", "REVIEWING", "ANALYSIS_READY", "CALIBRATED", "INSUFFICIENT_EVIDENCE", "CLOSED"];
 const DECISION_OUTCOMES = ["KEEP", "CALIBRATE", "INSUFFICIENT_EVIDENCE"];
 const FINDING_CATEGORIES = ["ENGINE", "DATA_QUALITY", "MAPPING", "AUTHORIZATION", "UX", "MISSING_EVIDENCE",
-                            "GUIDANCE", "REVIEW_WORKFLOW", "OFFLINE_CONSISTENCY"];
+                            "GUIDANCE", "REVIEW_WORKFLOW", "OFFLINE_CONSISTENCY", "ADVANCED_INTELLIGENCE"];
 const FINDING_SEVERITIES = ["low", "medium", "high"];
 const FINDING_STATUSES   = ["open", "investigating", "confirmed", "resolved", "not_reproduced"];
+// Where a disagreement comes from, as far as the pilot could tell (brief §15).
+// Observed disagreement is one thing; a proposed rule change is another, and
+// only the last of these is even a candidate for one.
+const DISAGREEMENT_SOURCES = ["undetermined", "data_quality", "missing_context", "insufficient_evidence", "interpretation_ambiguity", "rule_weakness"];
+
+// The engines a pilot is of. The keys are the vocabulary the brief uses.
+const ENGINE_KEYS = ["academic", "strengths", "exploration", "learningEvidence", "learningIntegration", "development",
+                     "guidance", "intervention", "developmentPlanning", "adaptiveSupport", "advancedIntelligence"];
+
+const engineVersionsSchema = new mongoose.Schema(
+  Object.fromEntries(ENGINE_KEYS.map((k) => [k, { type: String, required: true, maxlength: 20 }])),
+  { _id: false }
+);
+
+/** One amendment of a finding: who, when, what changed, why. Append-only. */
+const amendmentSchema = new mongoose.Schema(
+  {
+    at:      { type: Date, default: Date.now },
+    by:      { type: String, required: true },
+    changes: { type: [new mongoose.Schema({ field: String, from: mongoose.Schema.Types.Mixed, to: mongoose.Schema.Types.Mixed }, { _id: false })], default: [] },
+    reason:  { type: String, required: true, maxlength: 1000 },
+    pilotClosed: { type: Boolean, default: false },
+  },
+  { _id: false }
+);
 
 /**
  * A structured finding from a pilot. Severity says how much of the exercise it
@@ -68,11 +103,13 @@ const findingSchema = new mongoose.Schema(
     affectedCases: { type: Number, default: 0 },
     engineVersion: { type: String, required: true },
     status:        { type: String, enum: FINDING_STATUSES, default: "open" },
+    disagreementSource: { type: String, enum: DISAGREEMENT_SOURCES, default: "undetermined" },
     recommendedNextAction: { type: String, default: null, maxlength: 1000 },
     raisedBy:  { type: String, required: true },
     raisedAt:  { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
     updatedBy: { type: String, default: null },
+    amendments: { type: [amendmentSchema], default: [] },
   },
   { _id: false }
 );
@@ -105,11 +142,21 @@ const evidenceSchema = new mongoose.Schema(
     repeatedDisagreements:    { type: [String], default: [] },
     dataQualityCitations:     { type: Map, of: Number, default: {} },
     byOutcome:                { type: Map, of: Number, default: {} },
-    // The window the counts were taken in: reviews since the pilot opened,
-    // on its engine version; and how many earlier reviews were left out.
+    // The window the counts were taken in: reviews made inside this pilot
+    // (stamped with its id), since it opened, on its engine version; and how
+    // many of the school's other reviews were left out.
+    pilotRunId:               { type: String, default: null },
     since:                    { type: Date, default: null },
     engineVersion:            { type: String, default: null },
     reviewsExcluded:          { type: Number, default: 0 },
+    // The engines at the moment of the snapshot against the pilot's baseline.
+    engineVersionsMatch:      { type: Boolean, default: true },
+    engineDrift:              { type: [new mongoose.Schema({ engine: String, pilot: String, current: String }, { _id: false })], default: [] },
+    // Counts only: how the explanation layer behaved inside the pilot, and
+    // how pupils answered the bounded feedback questions. Never a question,
+    // never an answer text, never a pupil.
+    advanced:                 { type: mongoose.Schema.Types.Mixed, default: null },
+    studentFeedback:          { type: mongoose.Schema.Types.Mixed, default: null },
   },
   { _id: false }
 );
@@ -139,8 +186,10 @@ const intelligencePilotSchema = new mongoose.Schema(
     // not inequality. Maintained by pilot.service alongside status.
     isOpen: { type: Boolean, default: true },
 
-    // The engine the pilot's reviews are of. Stamped by the server at creation.
-    engineVersion: { type: String, required: true, maxlength: 20 },
+    // The engine the pilot's reviews are of (the academic engine, as every
+    // review names it), and the full baseline. Stamped by the server at creation.
+    engineVersion:  { type: String, required: true, maxlength: 20 },
+    engineVersions: { type: engineVersionsSchema, default: null },
 
     startedAt: { type: Date, default: null },
     endedAt:   { type: Date, default: null },
@@ -149,13 +198,17 @@ const intelligencePilotSchema = new mongoose.Schema(
     transitions: { type: [transitionSchema], default: [] },
     findings:    { type: [findingSchema], default: [] },
 
-    // The two preconditions no query can verify, signed by whoever opened a
-    // REAL pilot: that the school knows it is participating, and that the
-    // reviewers understand the task.
+    // The preconditions no query can verify, signed by whoever opened a REAL
+    // pilot: that the school knows it is participating, that the reviewers
+    // understand the task, that the notice or consent requirements which
+    // apply to this school have been met (the repository cannot know what
+    // they are), and that retention and closure expectations were agreed.
     attestations: {
       type: new mongoose.Schema({
         schoolParticipates:      { type: Boolean, default: false },
         reviewersUnderstandTask: { type: Boolean, default: false },
+        noticeRequirementsMet:   { type: Boolean, default: false },
+        retentionAgreed:         { type: Boolean, default: false },
         by: { type: String, default: null },
         at: { type: Date, default: null },
       }, { _id: false }),
@@ -163,6 +216,12 @@ const intelligencePilotSchema = new mongoose.Schema(
     },
     evidence:    { type: evidenceSchema, default: null },
     decision:    { type: decisionSchema, default: null },
+
+    // A running tally of the explanation layer inside this pilot: requests by
+    // type, mode, fallback reason and validation code. Incremented by the
+    // insights router after each answer; counts only. No default on purpose:
+    // an absent field takes a dotted $inc, a null one refuses it.
+    advancedTally: { type: mongoose.Schema.Types.Mixed },
 
     version:   { type: Number, default: 1 },
     deletedAt: { type: Date, default: null },
@@ -187,5 +246,7 @@ IntelligencePilot.DECISION_OUTCOMES = DECISION_OUTCOMES;
 IntelligencePilot.FINDING_CATEGORIES = FINDING_CATEGORIES;
 IntelligencePilot.FINDING_SEVERITIES = FINDING_SEVERITIES;
 IntelligencePilot.FINDING_STATUSES   = FINDING_STATUSES;
+IntelligencePilot.DISAGREEMENT_SOURCES = DISAGREEMENT_SOURCES;
+IntelligencePilot.ENGINE_KEYS = ENGINE_KEYS;
 
 module.exports = IntelligencePilot;

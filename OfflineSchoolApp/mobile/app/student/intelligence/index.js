@@ -21,7 +21,7 @@ import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { useScreenInsets } from "../../../src/hooks/useScreenInsets";
-import { refreshMyIntelligenceSummary, getCachedIntelligenceSummary } from "../../../src/services/intelligence.service";
+import { refreshMyIntelligenceSummary, getCachedIntelligenceSummary, getMyPilotFeedback } from "../../../src/services/intelligence.service";
 
 const day = (d) => (d ? new Date(d).toLocaleDateString() : "—");
 const humanCode = (s) => String(s ?? "").toLowerCase().replace(/_/g, " ");
@@ -36,11 +36,15 @@ export default function StudentIntelligenceScreen() {
   const [offline, setOffline] = useState(false);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // Whether the school's validation pilot is collecting the pupil's answers.
+  // Online only, never mirrored: a pilot may close while the phone is away.
+  const [pilot, setPilot] = useState(null);
 
   const load = useCallback(async () => {
     try {
       const fresh = await refreshMyIntelligenceSummary(lang);
       setData(fresh); setFetchedAt(null); setOffline(false);
+      getMyPilotFeedback().then(setPilot).catch(() => setPilot(null));
     } catch {
       // No server: the last summary taken, and the date it was taken.
       const cached = await getCachedIntelligenceSummary();
@@ -144,6 +148,15 @@ export default function StudentIntelligenceScreen() {
                 <Text style={st.btnText}>{t("intel.askButton")}</Text>
               </TouchableOpacity>
 
+              {/* The pilot's six questions — only while the school's pilot is collecting, only online */}
+              {!offline && pilot?.open && (
+                <View style={st.pilotCard}>
+                  <Text style={st.cardTitle}>{t("intel.feedback.cardTitle")}</Text>
+                  <Text style={st.sub2}>{t(pilot.submitted ? "intel.feedback.cardAnswered" : "intel.feedback.cardText")}</Text>
+                  <TouchableOpacity style={st.link} onPress={() => go("/student/intelligence/feedback")} accessibilityRole="link"><Text style={st.linkText}>{t(pilot.submitted ? "intel.feedback.cardChange" : "intel.feedback.cardOpen")}</Text></TouchableOpacity>
+                </View>
+              )}
+
               {data.limitations?.length > 0 && <Text style={st.hint}>{t("intel.limitations")}: {data.limitations.map((l) => t(`intel.limitation.${String(l).split(":")[0]}`, { defaultValue: humanCode(l) })).join("; ")}</Text>}
               <Text style={st.hint}>{t("intel.asOf", { date: day(data.asOf) })}</Text>
             </>
@@ -166,6 +179,7 @@ const st = StyleSheet.create({
   noteText: { fontSize: 12, color: "#3730A3" },
   sectionTitle: { fontSize: 15, fontWeight: "700", color: "#111827", marginTop: 16, marginBottom: 6 },
   card: { backgroundColor: "#FFFFFF", borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: "#E5E7EB" },
+  pilotCard: { backgroundColor: "#FFFBEB", borderRadius: 12, padding: 14, marginTop: 16, borderWidth: 1, borderColor: "#FDE68A" },
   cardTitle: { fontSize: 15, fontWeight: "700", color: "#111827" },
   rowWrap: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   badge: { fontSize: 11, paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, overflow: "hidden" },
