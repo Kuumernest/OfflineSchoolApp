@@ -36,7 +36,8 @@ const isValidTime = (t) => {
  */
 const resolveSchoolId = (req) => {
   if (req.user?.role === "super_admin") {
-    return req.query.schoolId || req.body.schoolId || req.user?.schoolId || null;
+    // A GET carries no body; reading .schoolId off undefined was a 500 for an operator with no school named (Stage 18A).
+    return req.query?.schoolId || req.body?.schoolId || req.user?.schoolId || null;
   }
   return req.user?.schoolId || null;
 };
@@ -130,6 +131,7 @@ exports.getAll = async (req, res) => {
     });
   } catch (err) {
     console.error("Periods getAll error:", err);
+    if (err?.name === "CastError") return res.status(400).json({ success: false, message: "Invalid request value" });
     res.status(500).json({
       success: false,
       message: "Failed to fetch periods",

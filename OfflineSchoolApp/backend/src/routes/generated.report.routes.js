@@ -181,7 +181,7 @@ router.get("/", readReports, asyncHandler(async (req, res) => {
     filter.isPublished = isPublished === "true";
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, error: "page and limit must be positive integers" });
   const total = await GeneratedReport.countDocuments(filter);
 
   const reports = await GeneratedReport.find(filter)

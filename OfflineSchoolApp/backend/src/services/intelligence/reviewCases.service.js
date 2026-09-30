@@ -68,7 +68,32 @@ const { ROLES }          = require("../../config/roles");
 
 const CAL = path.join(__dirname, "..", "..", "..", "scripts", "calibration");
 const { cohortFromDocuments } = require(path.join(CAL, "cohortSchema"));
-const { analyse }             = require(path.join(CAL, "analyseCohort"));
+const { analyse: analyseCohort } = require(path.join(CAL, "analyseCohort"));
+const crypto = require("crypto");
+
+// ── The analysis, remembered briefly by its input ─────────────────────────
+//
+// analyse() is pure and deterministic, and at a thousand pupils it costs
+// seconds: the sensitivity sweep runs the whole engine forty times. The head's
+// pilot page asks for it three times in a row — the review queue, the
+// calibration summary, the preflight — over the same cohort. So the report is
+// kept for a short while under a digest of the cohort it was computed from.
+// A changed mark changes the cohort, the digest and therefore the entry; a
+// stale report cannot be served, and the time bound only limits memory.
+// Stage 18A.
+const ANALYSIS_TTL_MS = 120_000;
+const ANALYSIS_MAX    = 6;
+/** digest → { at, report } */
+const analysisCache = new Map();
+const analyse = (cohort) => {
+  const key = crypto.createHash("sha1").update(JSON.stringify(cohort)).digest("hex");
+  const hit = analysisCache.get(key);
+  if (hit && Date.now() - hit.at < ANALYSIS_TTL_MS) return hit.report;
+  const report = analyseCohort(cohort);
+  analysisCache.set(key, { at: Date.now(), report });
+  while (analysisCache.size > ANALYSIS_MAX) analysisCache.delete(analysisCache.keys().next().value);
+  return report;
+};
 const { analyseReviews, validateReview } = require(path.join(CAL, "reviewFeedback"));
 
 /** A case is identified by what it is about, not by its position on a sheet. */

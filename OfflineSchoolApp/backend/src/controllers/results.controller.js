@@ -104,7 +104,7 @@ const getExamResults = asyncHandler(async (req, res) => {
     filter.isPublished = isPublished === "true";
   }
 
-  const skip    = (Number(page) - 1) * Number(limit);
+  const skip    = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total   = await ResultSummary.countDocuments(filter);
   const results = await ResultSummary.find(filter)
     .sort({ classPosition: 1 })

@@ -16,6 +16,21 @@ function errorHandler(err, req, res, next) {
     });
   }
 
+  // A value the client sent that the database layer could not use: a malformed
+  // id (mongoose CastError), a string with a NUL byte or a regex the driver
+  // cannot serialise (BSONError), or a query option the server refuses such as a
+  // negative skip (MongoServerError BadValue, code 2). None of these is a server
+  // failure; the request is malformed, and 400 says so without naming a model
+  // or a field. Found by the Stage 18A input probe on twenty-odd routes.
+  if (err.name === "CastError" || err.name === "BSONError" || (err.name === "MongoServerError" && err.code === 2)
+      || /null bytes|embedded null byte/i.test(String(err.message))) {
+    return res.status(400).json({
+      success: false,
+      error:   "Invalid request value",
+      ...(err.name === "CastError" && err.path ? { field: String(err.path) } : {}),
+    });
+  }
+
   if (err.code === 11000) {
     return res.status(409).json({
       success: false,

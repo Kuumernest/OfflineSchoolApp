@@ -157,6 +157,7 @@ router.get("/expenses", canReadExpenses, asyncHandler(async (req, res) => {
 
   const filter = { schoolId, deletedAt: null };
   if (req.query.categoryId) filter.categoryId = req.query.categoryId;
+  for (const k of ["from", "to"]) if (req.query[k] && Number.isNaN(new Date(req.query[k]).getTime())) return res.status(400).json({ success: false, message: `${k} must be a valid date` });
   if (req.query.from || req.query.to) {
     filter.incurredAt = {};
     if (req.query.from) filter.incurredAt.$gte = new Date(req.query.from);

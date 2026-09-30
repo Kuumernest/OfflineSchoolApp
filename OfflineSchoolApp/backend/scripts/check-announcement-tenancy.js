@@ -223,6 +223,21 @@ const main = async () => {
   const nonHex = await call("GET", "/api/announcements/not-a-hex-id-at-all");
   check("and a plainly missing one is a 404, not a 500", nonHex.status, 404);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("--- a pupil reads their announcements, and the server survives the response ---");
+  // The student route once removed headers in a "finish" listener; once the body is
+  // on the wire, Node throws ERR_HTTP_HEADERS_SENT from there, and nothing in the
+  // route can catch it — an uncaught exception after every 200. (Stage 18A.)
+  let uncaught = 0;
+  const onUncaught = (e) => { uncaught++; console.log(`       uncaught: ${e.code ?? e.name}: ${e.message}`); };
+  process.on("uncaughtException", onUncaught);
+  actor = { _id: "stu-a", id: "stu-a", role: ROLES.STUDENT, schoolId: SCHOOL_A, email: "pupil@a.com" };
+  const mine = await call("GET", "/api/announcements/student");
+  await new Promise((r) => setTimeout(r, 100));
+  process.off("uncaughtException", onUncaught);
+  check("a pupil reads their announcements: 200", mine.status, 200);
+  check("and finishing the response raises no uncaught exception", uncaught, 0);
+
   await new Promise((r) => server.close(r));
   await mongoose.disconnect();
   await stopQuietly(mongo);

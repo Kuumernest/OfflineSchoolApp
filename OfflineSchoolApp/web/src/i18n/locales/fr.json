@@ -3582,6 +3582,7 @@
         "providerFailures": "Échecs du fournisseur",
         "refused": "Questions refusées"
       },
+      "advanced_ok": "Pilote mis à jour.",
       "opened_ok": "Pilote ouvert.",
       "error": {
         "generic": "Le pilote n'a pas pu être mis à jour.",

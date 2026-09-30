@@ -769,7 +769,7 @@ function PilotPanel({
       ...(schoolId ? { schoolId } : {}), to, version: pilot!.version, note: note || undefined,
       ...(to === "CALIBRATED" || to === "INSUFFICIENT_EVIDENCE" ? { decision: { outcome, summary } } : {}),
     }),
-    onSuccess: async () => { toast({ kind: "success", title: t("intelReview.pilot.advanced") }); setNote(""); setSummary(""); await onChanged(); },
+    onSuccess: async () => { toast({ kind: "success", title: t("intelReview.pilot.advanced_ok") }); setNote(""); setSummary(""); await onChanged(); },
     onError,
   });
 

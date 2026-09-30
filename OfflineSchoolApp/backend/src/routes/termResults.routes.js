@@ -36,6 +36,7 @@ router.get(
   async (req, res) => {
     try {
       const { academicYear, term, classId, page = 1, limit = 50 } = req.query;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear || !term) {
@@ -53,7 +54,7 @@ router.get(
       };
       if (classId) filter.classId = classId;
 
-      const skip = (Number(page) - 1) * Number(limit);
+      const skip = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, error: "page and limit must be positive integers" });
 
       const [results, total] = await Promise.all([
         TermResult.find(filter)
@@ -128,6 +129,7 @@ router.post(
   async (req, res) => {
     try {
       const { academicYear, term, classId } = req.body;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear || !term) {
@@ -184,6 +186,7 @@ router.post(
   async (req, res) => {
     try {
       const { academicYear, term, classId } = req.body;
+      if (!(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       const filter = {
@@ -229,6 +232,7 @@ router.get(
   async (req, res) => {
     try {
       const { academicYear, term, classId, lang, templateId } = req.query;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
       if (!schoolId || !academicYear || !term || !classId) {
         return res.status(400).json({

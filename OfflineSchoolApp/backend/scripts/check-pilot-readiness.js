@@ -52,7 +52,9 @@ const B = "6a00000000000000000000b2";
 const YEAR = "2026-2027";
 const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   subjectId, subjectName, normalizedMark, score: normalizedMark, maxScore: 20, coefficient: 1,
-  grade: null, points: 0, remark: null, isPassing: normalizedMark >= 10, isAbsent: false, isExempt: false, ...extra,
+  // A letter on every graded mark, as a real school stores it: the live/offline
+  // check must carry it (Stage 18A found the offline contract dropping it).
+  grade: normalizedMark >= 16 ? "A" : normalizedMark >= 10 ? "C" : "F", points: 0, remark: null, isPassing: normalizedMark >= 10, isAbsent: false, isExempt: false, ...extra,
 });
 
 (async () => {
@@ -398,6 +400,15 @@ const row = (subjectId, subjectName, normalizedMark, extra = {}) => ({
   check("a one-hundredth difference in a metric is a difference",
     compareProfiles({ engineVersion: "1.0.0", profile: live, guidance: [] }, { engineVersion: "1.0.0", profile: shifted, guidance: [] }).summary.metrics, true);
   check("the service's own comparison is the same function", typeof reviewCases.liveOfflineConsistency, "function");
+  {
+    // The grade letter is evidence on a mark, an input to no rule, and the offline
+    // contract must carry it exactly as the live loader does.
+    const { cohort } = await reviewCases.liveCohort({ schoolId: A, classIds: null, studentIds: ["st-a1"] });
+    const { toEngineInput } = require(path.join(ROOT, "scripts/calibration/cohortSchema"));
+    const fileMark = cohort.results.find((r) => r.resultId === "s1").subjects[0];
+    const engineMark = toEngineInput(cohort).summaries.find((r) => String(r._id) === "s1").subjectBreakdown[0];
+    check("the grade letter on a mark survives documents → file → engine input, and is never invented", [fileMark.grade, engineMark.grade, typeof fileMark.grade], ["A", "A", "string"]);
+  }
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 6. the operator's picture, and the registries ---");

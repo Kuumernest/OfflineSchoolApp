@@ -3582,6 +3582,7 @@
         "providerFailures": "Provider failures",
         "refused": "Questions refused"
       },
+      "advanced_ok": "Pilot updated.",
       "opened_ok": "Pilot opened.",
       "error": {
         "generic": "The pilot could not be updated.",

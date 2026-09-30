@@ -149,8 +149,12 @@ const keyOf = (c) => `${c.studentId}|${c.subjectId ?? ""}|${c.code}`;
  * Also exported on its own, so a check can compare its output to a direct
  * call of the engine and assert they are the same bytes.
  */
-const runEngine = (cohort, eng = engine) => {
-  const input = toEngineInput(cohort);
+const runEngine = (cohort, eng = engine, precomputedInput = null) => {
+  // The engine input is pure data derived from the cohort alone; a caller that
+  // runs the engine many times over one cohort (the sensitivity sweep) hands it
+  // in once rather than rebuilding it per run. Stage 18A: forty rebuilds per
+  // request were a fifth of the review queue's time at a thousand pupils.
+  const input = precomputedInput ?? toEngineInput(cohort);
   // The isolated copy resolves its own grading context, so an altered
   // strongMark flows through resolveGradingContext exactly as in production.
   const grading = eng === engine
@@ -303,7 +307,7 @@ const NUMERIC_THRESHOLDS = () =>
     .map(([k]) => k)
     .sort();
 
-const sensitivityReport = (cohort, baseline) => {
+const sensitivityReport = (cohort, baseline, input = null) => {
   const baseSet = new Set(baseline.map(keyOf));
   const table = {};
   const flipsByCase = new Map();   // key → Set of "threshold±d" that flipped it
@@ -317,7 +321,7 @@ const sensitivityReport = (cohort, baseline) => {
         table[key].deltas[d] = { value, skipped: "not a meaningful setting" };
         continue;
       }
-      const run = withThresholds({ [key]: value }, (eng) => runEngine(cohort, eng));
+      const run = withThresholds({ [key]: value }, (eng) => runEngine(cohort, eng, input));
       const altered = classificationsOf(run.profiles);
       const alteredSet = new Set(altered.map(keyOf));
       const gained = altered.filter((c) => !baseSet.has(keyOf(c)));
@@ -638,11 +642,12 @@ const reviewCasesReport = (cohort, run, sensitivity) => {
  * @returns {object} machine-readable report
  */
 const analyse = (cohort) => {
-  const run = runEngine(cohort);
+  const input = toEngineInput(cohort);
+  const run = runEngine(cohort, engine, input);
   const baseline = classificationsOf(run.profiles);
   const evidence = evidenceReport(cohort, run);
   const distribution = distributionReport(run);
-  const sensitivity = sensitivityReport(cohort, baseline);
+  const sensitivity = sensitivityReport(cohort, baseline, input);
   const flags = flagsReport(evidence, distribution, sensitivity);
   const reviewCases = reviewCasesReport(cohort, run, sensitivity);
 

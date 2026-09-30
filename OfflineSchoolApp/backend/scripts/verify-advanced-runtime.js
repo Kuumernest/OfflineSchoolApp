@@ -302,7 +302,9 @@ const startMock = async () => {
   console.log("\n--- D. secrets: nothing tracked by git carries a configured secret; .env stays ignored ---");
   // ═══════════════════════════════════════════════════════════════════════════
   const tracked = execFileSync("git", ["ls-files", "-z"], { cwd: path.join(ROOT, "..", ".."), encoding: "utf8" }).split("\0").filter(Boolean);
-  const hits = []; for (const f of tracked) { const p = path.join(ROOT, "..", "..", f); let s; try { s = fs.readFileSync(p, "utf8"); } catch { continue; } if (leaks(s)) hits.push(f); if (/sk-ant-api03-[A-Za-z0-9_-]{20,}/.test(s)) hits.push(`${f} (key shape)`); }
+  // Tracked files are scanned for CONFIGURED secrets and real key shapes only: leaks() also
+  // counts this script's own verification constant, which is of course in this tracked file.
+  const hits = []; for (const f of tracked) { const p = path.join(ROOT, "..", "..", f); let s; try { s = fs.readFileSync(p, "utf8"); } catch { continue; } if (SECRETS.some((secret) => s.includes(secret))) hits.push(f); if (/sk-ant-api03-[A-Za-z0-9_-]{20,}/.test(s)) hits.push(`${f} (key shape)`); }
   check("no tracked file carries a configured secret value or a real key shape; backend/.env is ignored", [hits, execFileSync("git", ["check-ignore", "OfflineSchoolApp/backend/.env"], { cwd: path.join(ROOT, "..", ".."), encoding: "utf8" }).trim()], [[], "OfflineSchoolApp/backend/.env"]);
 
   console.log("");

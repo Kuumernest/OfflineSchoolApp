@@ -1764,7 +1764,7 @@ router.get("/my-content", asyncHandler(async (req, res) => {
   if (req.query.search) {
     // A search term is a literal, not a pattern: unescaped, "(a+)+$" is a
     // regular expression the database evaluates on the caller's behalf.
-    const term = String(req.query.search).slice(0, 100).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const term = String(req.query.search).slice(0, 100).replace(/ /g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.$or = [
       { title:       { $regex: term, $options: "i" } },
       { description: { $regex: term, $options: "i" } },

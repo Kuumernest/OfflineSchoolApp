@@ -199,7 +199,8 @@ router.get("/", staffOnly, asyncHandler(async (req, res) => {
   const query = { schoolId, deletedAt: null };
   if (status)       query.status       = status;
   if (academicYear) query.academicYear = academicYear;
-  if (term)         query.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         query.term         = Number(term);
   if (classId) {
     query.$or = [
       { classId  },
@@ -207,7 +208,7 @@ router.get("/", staffOnly, asyncHandler(async (req, res) => {
     ];
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total = await Exam.countDocuments(query);
   const exams = await Exam.find(query)
     .sort({ createdAt: -1 })
@@ -328,7 +329,8 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
   const { term, academicYear, classId } = req.query;
 
   const base = { schoolId, deletedAt: null };
-  if (term)         base.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         base.term         = Number(term);
   if (academicYear) base.academicYear = academicYear;
   if (classId) {
     base.$or = [{ classId }, { classIds: classId }];
@@ -472,12 +474,13 @@ router.get("/reports", staffOnly, asyncHandler(async (req, res) => {
     status: { $in: ["completed", "published"] },
   };
   if (academicYear) query.academicYear = academicYear;
-  if (term)         query.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         query.term         = Number(term);
   if (classId) {
     query.$or = [{ classId }, { classIds: classId }];
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total = await Exam.countDocuments(query);
   const exams = await Exam.find(query)
     .sort({ createdAt: -1 })
@@ -502,7 +505,7 @@ router.get("/reports/results", staffOnly, asyncHandler(async (req, res) => {
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
-  const skip    = (Number(page) - 1) * Number(limit);
+  const skip    = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total   = await ResultSummary.countDocuments(query);
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })

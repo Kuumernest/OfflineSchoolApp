@@ -254,6 +254,10 @@ const validateCohort = (cohort) => {
         err(`${sat}.normalizedMark must be a number 0–${subjectInsights.SCALE} or null`);
       }
 
+      if (s.grade !== undefined && s.grade !== null && (typeof s.grade !== "string" || s.grade.length > 8)) {
+        err(`${sat}.grade must be a short string or null`);
+      }
+
       if ((s.isAbsent || s.isExempt) && s.score !== null) {
         warn(`${sat} is ${s.isAbsent ? "absent" : "exempt"} but carries a score; the engine will ignore the row`);
       }
@@ -347,6 +351,11 @@ const toEngineInput = (cohort) => {
           // disagree on a field a reviewer can see. Found by the live/offline
           // consistency check in Stage 7D.
           isPassing:      typeof s.isPassing === "boolean" ? s.isPassing : null,
+          // The grade letter, likewise carried on the mark as evidence and an
+          // input to no rule. Found by the same live/offline check on the first
+          // real school (Stage 18A): the live rows carry the letter the school
+          // graded, the file dropped it, and every mark differed.
+          grade:          typeof s.grade === "string" ? s.grade : null,
         })),
       };
     });
@@ -471,6 +480,7 @@ const cohortFromDocuments = ({
       isAbsent:       s.isAbsent === true,
       isExempt:       s.isExempt === true,
       isPassing:      typeof s.isPassing === "boolean" ? s.isPassing : null,
+      grade:          typeof s.grade === "string" ? s.grade : null,
     })),
   })),
   interventions: (interventions ?? []).map((iv) => ({
