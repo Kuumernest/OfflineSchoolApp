@@ -37,7 +37,7 @@ const asOfPlan = (doc, asOf = null) => dp.reconstruct(JSON.parse(JSON.stringify(
 
 /**
  * Create, from a guidance item the current guidance carries. Idempotent on
- * a client-minted _id. A pupil may create only a plan they own themselves.
+ * a client-minted _id. A student may create only a plan they own themselves.
  */
 const create = async ({ schoolId, studentId, classId, actor, actorRole, body, asOf = null }) => {
   const role = actorRoleOf(actorRole);
@@ -56,7 +56,7 @@ const create = async ({ schoolId, studentId, classId, actor, actorRole, body, as
     built = dp.buildPlan({ guidanceItem: item, objectiveCategory, actions: body?.actions ?? null, ownerRole: body?.ownerRole ?? null, startDate: body?.startDate ?? at, reviewDays: body?.reviewDays ?? null,
       evidenceBoundaryHash: profile ? strengthsSvc.boundaryOf(profile).hash : null, sourceInterventionIds: body?.sourceInterventionIds ?? [], engineVersions: engineVersions() });
   } catch (e) { throw fail(400, e.code ?? "INVALID_PLAN", e.message); }
-  if (role === "STUDENT" && built.ownerRole !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "A pupil may create only a plan they own themselves.");
+  if (role === "STUDENT" && built.ownerRole !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "A student may create only a plan they own themselves.");
   const dup = dp.duplicateOf(plans, { dimension: item.dimension ?? null, subjectId: item.subjectId ?? null, objectiveCategory });
   if (dup && !body?.supersedes) throw fail(409, "DUPLICATE_PLAN", "An open plan already exists for this objective.", { existingPlanId: String(dup._id) });
   const now = new Date();
@@ -108,7 +108,7 @@ const milestone = async ({ schoolId, studentId, planId, milestoneId, action, rea
 /** The pupil's reflection: controlled codes, an optional short note. The pupil's own; staff may read it; a parent never. */
 const reflect = async ({ schoolId, studentId, planId, actor, actorRole, codes, note = null }) => {
   const role = actorRoleOf(actorRole);
-  if (role !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "Only the pupil reflects on their plan.");
+  if (role !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "Only the student reflects on their plan.");
   const list = [...new Set((Array.isArray(codes) ? codes : [codes]).map(String))];
   if (!list.length || list.some((c) => !dp.REFLECTION_CODES.includes(c))) throw fail(400, "INVALID_REFLECTION", "Reflection codes must be from the documented list.");
   const doc = await load({ schoolId, studentId, planId });

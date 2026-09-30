@@ -18,7 +18,7 @@ const LABELS = {
   en: {
     // ── Shared ──
     printedOn:      "Printed",
-    teacher:        "Class teacher",
+    teacher:        "Classmaster",
     headTeacher:    "Principal",
     registrar:      "Registrar",
     student:        "Student",

@@ -321,7 +321,7 @@ const upsertReflection = async ({ schoolId, e, actor, body }) => {
 
 const reflect = async ({ schoolId, explorationId, actor, body }) => {
   const e = await load({ schoolId, explorationId });
-  if (String(e.studentId) !== String(body.studentId ?? e.studentId)) throw fail(403, "NOT_OWNER", "A reflection is the pupil's own.");
+  if (String(e.studentId) !== String(body.studentId ?? e.studentId)) throw fail(403, "NOT_OWNER", "A reflection is the student's own.");
   return upsertReflection({ schoolId, e, actor, body });
 };
 

@@ -62,7 +62,7 @@ const propose = async ({ schoolId, studentId, classId, actor, actorRole, body, a
   if (!role) throw fail(403, "ROLE_NOT_ALLOWED", "This role may not propose an intervention.");
   const requestedId = body?._id ? String(body._id) : null;
   if (requestedId) { const existing = await Intervention.findOne({ _id: requestedId, schoolId }).lean(); if (existing) return { intervention: existing, created: false }; }
-  if (!classId) throw fail(400, "NO_CLASS", "The pupil has no class to record the intervention under.");
+  if (!classId) throw fail(400, "NO_CLASS", "The student has no class to record the intervention under.");
   const { triggers } = await proposalsFor({ schoolId, studentId, asOf });
   const trig = triggers.find((t) => t.trigger === body?.trigger && t.dimension === body?.dimension);
   if (!trig) throw fail(409, "TRIGGER_NOT_SUPPORTED", "The current development history does not support that trigger for that dimension.", { supported: triggers.map((t) => `${t.dimension}:${t.trigger}`) });
@@ -72,7 +72,7 @@ const propose = async ({ schoolId, studentId, classId, actor, actorRole, body, a
       ownerRole: body?.ownerRole ?? null, durationDays: body?.durationDays ?? null, startDate: body?.startDate ?? (asOf ?? strengthsSvc.startOfToday()),
       engineVersions: { development: "1.0.0", guidance: "1.0.0" } });
   } catch (e) { throw fail(400, e.code ?? "INVALID_INTERVENTION", e.message); }
-  if (role === "STUDENT" && proposal.ownerRole !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "A pupil may propose only an intervention they own themselves.");
+  if (role === "STUDENT" && proposal.ownerRole !== "STUDENT") throw fail(403, "ROLE_NOT_ALLOWED", "A student may propose only an intervention they own themselves.");
   const doc = await Intervention.create({
     _id: requestedId ?? undefined, schoolId, studentId: String(studentId), classId: String(classId), createdBy: actor, updatedBy: actor,
     sourceType: SOURCE, sourceCode: `${proposal.trigger}`, actionCode: proposal.action, subjectId: body?.subjectId ?? null, notes: role === "STUDENT" ? null : (body?.notes ?? null),

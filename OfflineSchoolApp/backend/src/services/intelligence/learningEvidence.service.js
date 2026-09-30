@@ -133,7 +133,7 @@ const latestSnapshot = ({ schoolId, studentId }) =>
 /** Idempotent on the boundary: unchanged evidence returns the snapshot that covers it. Old snapshots untouched. */
 const rebuild = async ({ schoolId, studentId, classId, actor }) => {
   const r = await readingFor({ schoolId, studentId });
-  if (!r) throw fail(404, "NO_PUPIL", "No such pupil");
+  if (!r) throw fail(404, "NO_PUPIL", "No such student");
   const boundary = boundaryOf(r);
   const last = await latestSnapshot({ schoolId, studentId });
   if (last?.evidenceBoundary?.hash === boundary.hash && last.learningEvidenceVersion === r.learningEvidenceVersion) return { snapshot: last, created: false };

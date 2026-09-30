@@ -693,7 +693,7 @@ ${OFFICIAL_HEADER_HTML}
       <span class="info-val">{{gender}}</span>
     </div>
     <div class="info-row">
-      <span class="info-lbl">Class Teacher:</span>
+      <span class="info-lbl">Classmaster:</span>
       <span class="info-val">{{class_teacher}}</span>
     </div>
     <div class="info-row">

@@ -647,7 +647,7 @@
     "deleteBody": "Supprimer définitivement « {{name}} » de {{className}} ?"
   },
   "classes": {
-    "classTeacher": "Professeur titulaire",
+    "classTeacher": "Professeur principal",
     "classTeacherHint": "Imprimé au-dessus de la ligne de signature sur les bulletins de cette classe.",
     "title": "Classes",
     "add": "Ajouter une classe",
@@ -1528,10 +1528,10 @@
       "schoolAddress": "Adresse de l'école",
       "schoolPhone": "Numéro de téléphone",
       "schoolLogo": "Logo de l'école",
-      "principalName": "Nom du proviseur",
+      "principalName": "Nom du principal",
       "classTeacher": "Nom du professeur principal",
       "teacherComment": "Appréciation de l'enseignant",
-      "principalComment": "Appréciation du proviseur",
+      "principalComment": "Appréciation du principal",
       "subjectsTable": "Tableau complet des matières — généré automatiquement",
       "attendanceTable": "Tableau de présence mensuel",
       "eachSubjects": "Début de la boucle sur les matières",
@@ -1914,7 +1914,7 @@
       "fees.waive": "Au-delà du seuil d'exonération, cette action crée une demande au lieu de réduire la facture.",
       "fees.penalize": "Ajoute de l'argent à la facture d'une famille : jamais automatique, l'économe les crée depuis un aperçu.",
       "fees.plan": "Modifie la date d'exigibilité, jamais le montant dû. Une famille qui respecte son échéancier n'est ni relancée ni pénalisée.",
-      "insights.pilot": "Conclure un pilote est une décision sur des preuves — l'échantillon suffisait, ou non — et le chef d'établissement la signe. Personne à qui il délègue ne doit pouvoir déclarer le moteur calibré."
+      "insights.pilot": "Conclure un pilote est une décision sur des preuves — l'échantillon suffisait, ou non — et le principal la signe. Personne à qui il délègue ne doit pouvoir déclarer le moteur calibré."
     }
   },
   "approvals": {
@@ -2152,7 +2152,7 @@
     "totalMismatch": "Les échéances totalisent {{planned}}, mais {{outstanding}} restent dus",
     "reason": "Motif de l'accord",
     "reasonHint": "Question posée un an plus tard par un auditeur, ou par le prochain économe qui devra décider d'en accorder un autre.",
-    "reasonPlaceholder": "Difficultés — le père a perdu son emploi, accord du chef d'établissement",
+    "reasonPlaceholder": "Difficultés — le père a perdu son emploi, accord du principal",
     "agreed": "Échéancier enregistré",
     "agreeFailed": "L'échéancier n'a pas pu être enregistré",
     "onTrack": "À jour",
@@ -2525,7 +2525,7 @@
       "state": "Région",
       "country": "Pays",
       "website": "Site web",
-      "principal": "Chef d'établissement",
+      "principal": "Principal",
       "verified": "Établissement vérifié",
       "academicYear": "Année scolaire",
       "academicYearHint": "AAAA/AAAA",

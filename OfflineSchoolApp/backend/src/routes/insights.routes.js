@@ -552,7 +552,7 @@ router.post("/reviews", requirePermission("insights.review"), asyncHandler(async
   if (!found) {
     return res.status(404).json({
       success: false, code: "CASE_NOT_FOUND",
-      message: "The engine produces no such case for this pupil today.",
+      message: "The engine produces no such case for this student today.",
     });
   }
 
@@ -895,7 +895,7 @@ const pupilForStrengths = async (req, res, schoolId, studentId) => {
   const own = await Student.findOne({ ...(String(studentId) === "me" ? {} : { _id: String(studentId ?? "") }), schoolId, userId: actor, deletedAt: null })
     .select("classId studentName name firstName lastName enrollmentNo").lean();
   if (!own) {
-    res.status(403).json({ success: false, code: "OWN_PROFILE_ONLY", message: "A pupil may read only their own profile." });
+    res.status(403).json({ success: false, code: "OWN_PROFILE_ONLY", message: "A student may read only their own profile." });
     return null;
   }
   return { student: own, classId: own.classId ? String(own.classId) : null };
@@ -1571,7 +1571,7 @@ const questionRoute = (operation) => asyncHandler(async (req, res) => {
 // and never lists a pupil. Staff have no per-pupil read of this.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const pupilOnly = (req, res, next) => (isStudent(req) ? next() : res.status(403).json({ success: false, code: "PUPIL_ONLY", message: "Only a pupil answers about their own summary." }));
+const pupilOnly = (req, res, next) => (isStudent(req) ? next() : res.status(403).json({ success: false, code: "PUPIL_ONLY", message: "Only a student answers about their own summary." }));
 
 /** GET …/pilot-feedback — is a pilot collecting, the questions and words, and whether this pupil has answered. */
 router.get("/student/:studentId/pilot-feedback", pupilOnly, asyncHandler(async (req, res) => {

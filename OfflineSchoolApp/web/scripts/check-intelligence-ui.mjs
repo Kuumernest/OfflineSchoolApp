@@ -104,8 +104,8 @@ check("every claim type, mode, fallback reason, source type, prompt and error th
 const flatten = (o, p = "") => Object.entries(o).flatMap(([k, v]) => (v && typeof v === "object" ? flatten(v, `${p}${k}.`) : [[`${p}${k}`, String(v)]]));
 const explainStrings = [...flatten(en.explain ?? {}, "explain."), ...flatten(fr.explain ?? {}, "explain.")];
 const FORBIDDEN = /recommended career|best career|ideal career|career (match|score|ranking|probability|fit)|you should become|you are suited|your future is|the right career|carrière recommandée|meilleure carrière|carrière idéale|vous devriez devenir|vous êtes fait pour|votre avenir est/i;
-check("no explain.* string, in either language, recommends, ranks, scores or predicts a career, or tells a pupil what to become", explainStrings.filter(([, v]) => FORBIDDEN.test(v)).map(([k]) => k), []);
-check("the agency line and the exploration hint say who decides", [/pupil decides/i.test(get(en, "explain.agency")), /l'élève décide/i.test(get(fr, "explain.agency")), /not ranked/i.test(get(en, "explain.explorationHint")), /sans classement/i.test(get(fr, "explain.explorationHint"))], [true, true, true, true]);
+check("no explain.* string, in either language, recommends, ranks, scores or predicts a career, or tells a student what to become", explainStrings.filter(([, v]) => FORBIDDEN.test(v)).map(([k]) => k), []);
+check("the agency line and the exploration hint say who decides", [/student decides/i.test(get(en, "explain.agency")), /l'élève décide/i.test(get(fr, "explain.agency")), /not ranked/i.test(get(en, "explain.explorationHint")), /sans classement/i.test(get(fr, "explain.explorationHint"))], [true, true, true, true]);
 check("en and fr explain.* key sets are identical", [flatten(en.explain ?? {}).map(([k]) => k).sort(), flatten(fr.explain ?? {}).map(([k]) => k).sort()].map((a) => a.join("|")).every((s, _, arr) => s === arr[0]), true);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

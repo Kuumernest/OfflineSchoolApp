@@ -213,7 +213,7 @@ const sentence = (f, lang) => {
       : `${v.label} is an area your evidence currently supports (${list(v.whyItAppeared.map(human), "en")}${v.contradictory.length ? `; pointing the other way: ${list(v.contradictory.map(human), "en")}` : ""}; evidence quality ${human(v.evidenceQuality)}). Activities you could use to investigate it: ${list(v.activities.map((a) => a.title), "en")}. To investigate: ${v.questions[0] ?? ""}`;
     case "NO_RANKING": return fr ? `Ces ${v.count} domaines sont listés par ordre alphabétique, sans classement ; aucun n'est « le meilleur ».` : `These ${v.count} areas are listed alphabetically, not ranked; none is "best".`;
     case "GENERAL_NOT_FROM_EVIDENCE": return fr ? `C'est une question générale d'étude ; rien dans vos preuves enregistrées n'y répond. Ce service ne peut décrire que ce que vos preuves montrent.` : `This is a general study question; nothing in your recorded evidence answers it. This service can only describe what your recorded evidence shows.`;
-    case "NOT_AVAILABLE_LAYER": return fr ? `Aucune donnée « ${v.layer} » n'est disponible pour cet élève au ${day(v.asOf)}.` : `No ${v.layer} is available for this pupil as of ${day(v.asOf)}.`;
+    case "NOT_AVAILABLE_LAYER": return fr ? `Aucune donnée « ${v.layer} » n'est disponible pour cet élève au ${day(v.asOf)}.` : `No ${v.layer} is available for this student as of ${day(v.asOf)}.`;
     default: return null;
   }
 };

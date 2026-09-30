@@ -497,7 +497,7 @@ check("  with nothing recorded printing the card's dash, never a zero",
   cellOf(render({ classStats: null }), "Class Average"), "—");
 check("  and conduct as three empty boxes with a line saying who fills them",
   [(panelCard.match(/class="panel-write"/g) || []).length,
-   panelCard.includes("To be completed by the class teacher")], [3, true]);
+   panelCard.includes("To be completed by the classmaster")], [3, true]);
 
 // ── The remarks, immediately before the verification strip ────────────────
 const remarked = render(PANELLED);

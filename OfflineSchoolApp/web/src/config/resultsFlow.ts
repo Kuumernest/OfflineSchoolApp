@@ -58,14 +58,14 @@ export const RESULTS_FLOW: FlowStep[] = [
     key: "marks",
     labelKey: "flow.marks", label: "Enter marks",
     hintKey: "flow.marksHint",
-    hint: "Subject by subject, for every pupil in the class.",
+    hint: "Subject by subject, for every student in the class.",
     path: "/exams",
   },
   {
     key: "calculate",
     labelKey: "flow.calculate", label: "Calculate results",
     hintKey: "flow.calculateHint",
-    hint: "Turns the marks into each pupil's average and position for this exam.",
+    hint: "Turns the marks into each student's average and position for this exam.",
     path: "/exams/results",
   },
   {
@@ -79,7 +79,7 @@ export const RESULTS_FLOW: FlowStep[] = [
     key: "print",
     labelKey: "flow.print", label: "Print report cards",
     hintKey: "flow.printHint",
-    hint: "Sequence, term or annual cards for a whole class or one pupil.",
+    hint: "Sequence, term or annual cards for a whole class or one student.",
     path: "/reports/cards",
   },
 ];

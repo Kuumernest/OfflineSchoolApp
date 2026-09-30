@@ -107,7 +107,7 @@ const LABELS = {
     work:         "Work",
     behaviour:    "Behaviour",
     observation:  "Observation",
-    fillByHand:   "To be completed by the class teacher",
+    fillByHand:   "To be completed by the classmaster",
     notRecorded:  "—",
     verifyTitle:  "Verify this document",
     verifyHint:   "Scan the code, or enter",

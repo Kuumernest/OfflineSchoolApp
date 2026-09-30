@@ -560,7 +560,7 @@ If you did not request this, contact your school administrator immediately.
                         <strong style="font-family:monospace;">${enrollmentNo}</strong>
                         is ${studentName}'s <strong>permanent login ID</strong>.
                         They will use it on every device. If credentials are
-                        lost, ask the class teacher or school office to reset them.
+                        lost, ask the classmaster or school office to reset them.
                       </p>
                     </div>
 
@@ -614,7 +614,7 @@ IMPORTANT:
 - The enrollment number is ${studentName}'s PERMANENT login ID.
 - They use it on every device — NOT an email address.
 - Keep these credentials safe.
-- If lost, contact the class teacher or school office.
+- If lost, contact the classmaster or school office.
 
 Regards,
 ${schoolName} Administration

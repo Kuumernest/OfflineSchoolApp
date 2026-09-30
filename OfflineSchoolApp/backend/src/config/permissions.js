@@ -293,20 +293,20 @@ const PERMISSION_DEFS = [
   // are scoped to the classes they hold an assignment for, through the same
   // utils/teacherScope.js the register and the mark sheet already ask.
   p("insights.viewTaught", "insights", TEACHING_ROLES, true,
-    "Subject strengths and risks for the pupils a teacher takes. No money."),
+    "Subject strengths and risks for the students a teacher takes. No money."),
   // Writing a review is a teacher's act, scoped like every other teacher write
   // to the classes they hold an assignment for. Reading one sits on
   // insights.viewTaught rather than insights.view: a review is a named
   // colleague's judgement about a named child — the same class of record as an
   // intervention note, and the bursar is kept out of it for the same reason.
   p("insights.review", "insights", TEACHING_ROLES, true,
-    "Record whether an intelligence conclusion about a pupil you teach matches what you see."),
+    "Record whether an intelligence conclusion about a student you teach matches what you see."),
   p("insights.pilot", "insights", ADMIN_ROLES, false,
     "Open, advance and conclude a validation pilot of the intelligence engine for the school. " +
-    "Not delegable: concluding a pilot is a decision about evidence, and the head signs it."),
+    "Not delegable: concluding a pilot is a decision about evidence, and the principal signs it."),
   p("interventions.view", "interventions", ADMIN_ROLES, true, "School-wide student-support interventions; bursars are excluded."),
-  p("interventions.viewTaught", "interventions", TEACHING_ROLES, true, "Interventions for pupils a teacher teaches."),
-  p("interventions.create", "interventions", TEACHING_ROLES, true, "Human-created support actions for taught pupils."),
+  p("interventions.viewTaught", "interventions", TEACHING_ROLES, true, "Interventions for students a teacher teaches."),
+  p("interventions.create", "interventions", TEACHING_ROLES, true, "Human-created support actions for taught students."),
   p("interventions.manage", "interventions", ADMIN_ROLES, true, "Manage school interventions and outcomes."),
 
   // ── Coursework ────────────────────────────────────────────────────────────

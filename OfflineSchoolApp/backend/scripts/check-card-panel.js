@@ -318,7 +318,7 @@ const check = (label, actual, expected) => {
   check("  each with an empty box, and no invented value",
     (html.match(/<span class="panel-write"><\/span>/g) || []).length, 3);
   check("  and a line saying who completes them",
-    html.includes("To be completed by the class teacher"), true);
+    html.includes("To be completed by the classmaster"), true);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("\n--- one school's figures ---");

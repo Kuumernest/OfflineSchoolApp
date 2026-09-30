@@ -51,7 +51,7 @@ const svcError = (res, err) => {
 const mayTouch = async (req, res, e) => {
   if (isStudent(req)) {
     const own = await Student.findOne({ _id: e.studentId, schoolId: e.schoolId, userId: actorOf(req), deletedAt: null }).select("_id").lean();
-    if (!own) { res.status(403).json({ success: false, code: "OWN_EXPLORATIONS_ONLY", message: "A pupil acts on their own explorations." }); return false; }
+    if (!own) { res.status(403).json({ success: false, code: "OWN_EXPLORATIONS_ONLY", message: "A student acts on their own explorations." }); return false; }
     return true;
   }
   if (isTeacher(req)) {
@@ -116,7 +116,7 @@ router.post("/:id/submit", read, asyncHandler(async (req, res) => {
 
 /** POST /api/explorations/:id/reflection — the pupil's own account; a pupil only. */
 router.post("/:id/reflection", read, asyncHandler(async (req, res) => {
-  if (!isStudent(req)) return res.status(403).json({ success: false, code: "STUDENT_ONLY", message: "A reflection is written by the pupil." });
+  if (!isStudent(req)) return res.status(403).json({ success: false, code: "STUDENT_ONLY", message: "A reflection is written by the student." });
   const ctx = await loadFor(req, res);
   if (!ctx) return undefined;
   try {

@@ -189,7 +189,7 @@ const latestSnapshot = ({ schoolId, studentId }) =>
  */
 const snapshot = async ({ schoolId, studentId, classId, actor, periodLabel = null, force = false }) => {
   const profile = await profileFor({ schoolId, studentId });
-  if (!profile) throw fail(404, "NO_PROFILE", "The pupil has no academic profile to snapshot.");
+  if (!profile) throw fail(404, "NO_PROFILE", "The student has no academic profile to snapshot.");
   const boundary = boundaryOf(profile);
   const last = await latestSnapshot({ schoolId, studentId });
   if (!force && last?.evidenceBoundary?.hash === boundary.hash && last.strengthEngineVersion === profile.strengthEngineVersion) {
