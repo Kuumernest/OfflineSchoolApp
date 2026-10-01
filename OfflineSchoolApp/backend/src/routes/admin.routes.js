@@ -1339,6 +1339,9 @@ router.post("/teachers/:id/reset-password", requirePermission("teachers.manage")
 router.get("/classes", requirePermission("classes.view"), asyncHandler(async (req, res) => {
   const schoolId        = resolveSchoolId(req, req.query.schoolId);
   const includeInactive = req.query.includeInactive === "true";
+  // An operator who has named no school is not asking about every school; the
+  // sibling handlers below say the same. A school administrator always has one.
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
 
   let query = {};
   if (schoolId) query.schoolId = schoolId;

@@ -150,6 +150,9 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
   app.use("/api/insights",      auth.authenticate, require(path.join(SRC, "routes/insights.routes")));
   app.use("/api/interventions", auth.authenticate, require(path.join(SRC, "routes/interventions.routes")));
   app.use("/api/super-admin",   auth.authenticate, require(path.join(SRC, "routes/superAdmin.routes")));
+  // The two routers the staff intelligence pages take their class picker from.
+  app.use("/api/teacher",       auth.authenticate, require(path.join(SRC, "routes/teacher.routes")));
+  app.use("/api/admin",         auth.authenticate, require(path.join(SRC, "routes/admin.routes")));
   app.use((err, _req, res, _next) =>
     res.status(err.statusCode || 500).json({ success: false, message: err.message }));
   const server = app.listen(0);
@@ -210,6 +213,8 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
   check("the unfiltered review sheet is scoped to the classes they take",
     [r.status, [...new Set(r.body.data.cases.map((c) => c.studentId))].sort()], [200, ["st-a1"]]);
   check("and the summary says so", (await teacher.get("/insights/calibration-summary")).body.data.scope.classIds, ["form3a"]);
+  check("their class picker is their roster: GET /teacher/my-classes → the class they take; the school's list is not theirs → 403",
+    [(await teacher.get("/teacher/my-classes")).body?.classes?.map((c) => c._id), (await teacher.get("/admin/classes")).status], [["form3a"], 403]);
 
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- 2. the school administrator: the whole school, no other ---");
@@ -224,6 +229,15 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
     [...new Set(r.body.data.cases.map((c) => c.studentId))].sort(), ["st-a1", "st-a2"]);
   check("and the summary scope is the whole school",
     (await adminA.get("/insights/calibration-summary")).body.data.scope.classIds, null);
+  // The head holds no teaching assignment, so the teacher roster answers
+  // "none" — and that answer is not the head's scope. The staff pages take an
+  // administrator's class picker from the school's list; the sheet above is
+  // already the whole school. (A page that asked the roster told a principal
+  // they were "not assigned to any class yet".)
+  r = await adminA.get("/teacher/my-classes");
+  check("the teacher roster answers the head with no classes — it is a roster, not a scope", [r.status, r.body?.classes?.length], [200, 0]);
+  r = await adminA.get("/admin/classes");
+  check("the school's class list answers the head with every class of the school", [r.status, (r.body?.classes ?? []).map((c) => c._id).sort()], [200, ["form3a", "form4b"]]);
 
   check("another school's pupil → 404 on every pupil read",
     await statuses(adminA, pupilReads("st-b1")), [404, 404, 404, 404]);
@@ -247,6 +261,8 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
   r = await operator.get(inA("/insights/review-cases"));
   check("the selected school's whole sheet",
     [...new Set(r.body.data.cases.map((c) => c.studentId))].sort(), ["st-a1", "st-a2"]);
+  check("and the selected school's class list, and only that school's", [(await operator.get(inA("/admin/classes"))).body?.classes?.map((c) => c._id).sort()], [["form3a", "form4b"]]);
+  check("with no school selected the class list is refused — not every school's classes", (await operator.get("/admin/classes")).status, 400);
 
   check("a school that does not exist → 404 SCHOOL_NOT_FOUND at the door",
     (await operator.get(`/insights/student/st-a1?schoolId=${NOWHERE}`)).body?.code, "SCHOOL_NOT_FOUND");

@@ -108,5 +108,38 @@ check("no explain.* string, in either language, recommends, ranks, scores or pre
 check("the agency line and the exploration hint say who decides", [/student decides/i.test(get(en, "explain.agency")), /l'élève décide/i.test(get(fr, "explain.agency")), /not ranked/i.test(get(en, "explain.explorationHint")), /sans classement/i.test(get(fr, "explain.explorationHint"))], [true, true, true, true]);
 check("en and fr explain.* key sets are identical", [flatten(en.explain ?? {}).map(([k]) => k).sort(), flatten(fr.explain ?? {}).map(([k]) => k).sort()].map((a) => a.join("|")).every((s, _, arr) => s === arr[0]), true);
 
+console.log("--- the class picker: a roster for a teacher, the school for an administrator ---");
+// A principal was told "You are not assigned to any class yet" because both
+// staff pages took their class list from the teacher roster, which holds no
+// row for an administrator. The picker's source is decided by role in one
+// place, the server still scopes the data, and the three empty facts — no
+// school selected, a school with no classes, a teacher with no assignment —
+// each have their own sentence.
+const classPage  = read("src/pages/insights/class-intelligence.tsx");
+const reviewPage = read("src/pages/insights/intelligence-review.tsx");
+const staff = service.slice(service.indexOf("export async function fetchStaffClasses("), service.indexOf("export async function fetchClassIntelligence("));
+check("fetchStaffClasses: a teacher's roster, an administrator's or operator's school, and no school is no classes", [
+  /if \(user\.role === "teacher"\) \{[\s\S]{0,160}?api\.get\("\/teacher\/my-classes"\)/.test(staff),
+  /if \(!user\.schoolId\) return \[\];/.test(staff),
+  /return \(await fetchClasses\(user\.schoolId\)\)/.test(staff),
+], [true, true, true]);
+check("neither staff page asks the teacher roster directly any more; both take the picker from the service", [
+  /\/teacher\/my-classes/.test(classPage), /\/teacher\/my-classes/.test(reviewPage),
+  /queryFn:\s*\(\) => fetchStaffClasses\(user\)/.test(classPage), /queryFn: \(\) => fetchStaffClasses\(user\)/.test(reviewPage),
+], [false, false, true, true]);
+check("the class page names each empty fact: no school selected, a school with no classes, a teacher with no assignment", [
+  /t\(blocked \? "intelReview\.selectSchool" : isAdmin \? "classIntel\.noClassesSchool" : "classIntel\.noClasses"\)/.test(classPage),
+  /const blocked\s*=\s*isOperator && !user\?\.schoolId;/.test(classPage),
+], [true, true]);
+check("the three sentences exist in both languages and the teacher's says 'assigned' while the administrator's does not", [
+  typeof get(en, "classIntel.noClassesSchool") === "string" && typeof get(fr, "classIntel.noClassesSchool") === "string",
+  /assigned/i.test(get(en, "classIntel.noClasses")), /assigned/i.test(get(en, "classIntel.noClassesSchool")),
+  typeof get(en, "intelReview.selectSchool") === "string" && typeof get(fr, "intelReview.selectSchool") === "string",
+], [true, true, false, true]);
+check("the review page offers an administrator the whole school and a teacher all their classes", [
+  /t\(isAdmin \? "intelReview\.wholeSchool" : "intelReview\.allMyClasses"\)/.test(reviewPage),
+  typeof get(en, "intelReview.wholeSchool") === "string" && typeof get(fr, "intelReview.wholeSchool") === "string",
+], [true, true]);
+
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail === 0 ? 0 : 1);

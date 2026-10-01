@@ -53,9 +53,8 @@ import { Modal }        from "@/components/ui/Modal";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useToast }     from "@/components/ui/Toast";
 import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/FormField";
-import api              from "@/services/api";
 import {
-  fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration,
+  fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration, fetchStaffClasses,
   fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary, fetchPilotReport,
   ENGINE_KEYS, ATTESTATION_KEYS,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
@@ -86,11 +85,6 @@ const METRIC_LABELS: Array<[keyof NonNullable<ReviewCase["metrics"]>, string]> =
 
 type Filter = "all" | "mine_pending" | "mine_done" | "unreviewed";
 
-async function fetchMyClasses(): Promise<Array<{ _id: string; name: string }>> {
-  const { data } = await api.get("/teacher/my-classes");
-  return ((data as { classes?: Array<{ _id: string; name: string }> }).classes ?? []);
-}
-
 const emptyForm = (contract: ReviewFormContract, c: ReviewCase): ReviewForm => ({
   observedPattern: null, classificationAppropriate: null, evidenceSufficient: null,
   guidanceAppropriate: null, reason: null, notes: null, dataQuality: [],
@@ -115,7 +109,10 @@ export default function IntelligenceReviewPage() {
   const [filter,  setFilter]  = useState<Filter>("all");
   const [openId,  setOpenId]  = useState<string | null>(null);
 
-  const classesQ = useQuery({ queryKey: ["my-classes"], queryFn: fetchMyClasses, enabled: !blocked });
+  // The class picker: a teacher's assignments, an administrator's school, the
+  // operator's selected school — the service decides by role. The sheet itself
+  // is scoped by the server: an administrator's is the whole school.
+  const classesQ = useQuery({ queryKey: ["staff-classes", user?.role ?? "", user?.schoolId ?? ""], queryFn: () => fetchStaffClasses(user), enabled: !blocked });
   const sheetQ = useQuery({
     queryKey: ["review-cases", schoolId ?? "own", classId],
     queryFn:  () => fetchReviewCases({ ...(schoolId ? { schoolId } : {}), ...(classId ? { classId } : {}) }),

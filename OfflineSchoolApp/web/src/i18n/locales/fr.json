@@ -3218,6 +3218,7 @@
     "class": "Classe",
     "review": "Examiner",
     "noClasses": "Aucune classe ne vous est encore attribuée.",
+    "noClassesSchool": "Cet établissement n’a pas encore de classe.",
     "empty": "Aucun élève approuvé dans cette classe.",
     "stale": "Affichage des dernières informations reçues par cet appareil. Elles peuvent ne plus être à jour.",
     "nothingToNote": "Rien à signaler à partir des notes enregistrées.",

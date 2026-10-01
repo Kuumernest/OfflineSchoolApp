@@ -47,9 +47,8 @@ import { Modal }        from "@/components/ui/Modal";
 import { PageSpinner }  from "@/components/ui/Spinner";
 import { useToast }     from "@/components/ui/Toast";
 import { cn }           from "@/utils/cn";
-import api              from "@/services/api";
 import {
-  fetchClassIntelligence, fetchStudentGuidance,
+  fetchClassIntelligence, fetchStudentGuidance, fetchStaffClasses,
   type ClassStudentRow, type GuidanceItem, type GuidanceSummary,
 } from "@/services/insights.service";
 import {
@@ -74,11 +73,10 @@ const STATUS_VARIANT: Record<InterventionStatus, "info" | "warning" | "success" 
   cancelled: "default",
 };
 
-/** A teacher's own classes. Admins get the same screen through their roster. */
-async function fetchMyClasses(): Promise<Array<{ _id: string; name: string }>> {
-  const { data } = await api.get("/teacher/my-classes");
-  return ((data as { classes?: Array<{ _id: string; name: string }> }).classes ?? []);
-}
+// The class picker: a teacher's assignments, an administrator's school, an
+// operator's selected school — fetchStaffClasses in the service decides.
+// Asking the teacher roster for an administrator answered "none" and this
+// page told a principal they were not assigned to any class.
 
 export default function ClassIntelligencePage() {
   const { t }    = useTranslation();
@@ -89,10 +87,20 @@ export default function ClassIntelligencePage() {
   const [classId, setClassId] = useState("");
   const [openStudent, setOpenStudent] = useState<ClassStudentRow | null>(null);
 
-  const classesQ = useQuery({ queryKey: ["my-classes"], queryFn: fetchMyClasses });
+  const isOperator = user?.role === "super_admin";
+  const isAdmin    = isOperator || user?.role === "school_admin";
+  // The operator reads the school they have selected (mirrored into
+  // user.schoolId by the auth store). No selection is no school, not all.
+  const blocked    = isOperator && !user?.schoolId;
 
-  // Default to the first class the teacher takes, so the screen is useful on
-  // arrival rather than asking a question before showing anything.
+  const classesQ = useQuery({
+    queryKey: ["staff-classes", user?.role ?? "", user?.schoolId ?? ""],
+    queryFn:  () => fetchStaffClasses(user),
+    enabled:  !blocked,
+  });
+
+  // Default to the first class, so the screen is useful on arrival rather
+  // than asking a question before showing anything.
   const classes = classesQ.data ?? [];
   const activeClassId = classId || classes[0]?._id || "";
 
@@ -107,11 +115,14 @@ export default function ClassIntelligencePage() {
 
   if (classesQ.isLoading) return <PageSpinner />;
 
-  if (!classes.length) {
+  // Three different facts, three different sentences: the operator has not
+  // selected a school; the school has no classes; the teacher holds no
+  // assignment. An administrator is never told they are "not assigned".
+  if (blocked || !classes.length) {
     return (
       <div className="space-y-5">
         <PageHeader title={t("classIntel.title")} description={t("classIntel.blurb")} />
-        <Card><p className="text-sm text-ink-muted">{t("classIntel.noClasses")}</p></Card>
+        <Card><p className="text-sm text-ink-muted">{t(blocked ? "intelReview.selectSchool" : isAdmin ? "classIntel.noClassesSchool" : "classIntel.noClasses")}</p></Card>
       </div>
     );
   }

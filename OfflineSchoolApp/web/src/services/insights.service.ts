@@ -4,6 +4,7 @@
 // joining and scoring; this file only names the shapes.
 
 import api from "@/services/api";
+import { fetchClasses } from "@/services/class.service";
 
 export type WatchTier = "high" | "medium" | "low";
 
@@ -116,6 +117,28 @@ export interface StudentGuidance {
   studentId:   string;
   classId:     string | null;
   guidance:    GuidanceItem[];
+}
+
+/**
+ * The classes a staff member may pick from on the intelligence pages.
+ *
+ * A teacher's are the classes they hold an assignment in — the roster the
+ * teacher router keeps. An administrator's are the school's classes, and an
+ * operator's are the selected school's; neither holds a teaching assignment,
+ * so asking the teacher roster for them answers "none" and a page built on
+ * that answer told a principal they were "not assigned to any class yet".
+ * No selected school is no school, never all of them.
+ */
+export async function fetchStaffClasses(
+  user: { role?: string; schoolId?: string } | null | undefined,
+): Promise<Array<{ _id: string; name: string }>> {
+  if (!user) return [];
+  if (user.role === "teacher") {
+    const { data } = await api.get("/teacher/my-classes");
+    return ((data as { classes?: Array<{ _id: string; name: string }> }).classes ?? []);
+  }
+  if (!user.schoolId) return [];
+  return (await fetchClasses(user.schoolId)).map((c) => ({ _id: String(c._id), name: c.name }));
 }
 
 export async function fetchClassIntelligence(classId: string): Promise<ClassIntelligence> {
