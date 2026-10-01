@@ -211,6 +211,29 @@ const check = (label, actual, expected) => {
   r = await root.post(`/exams/ex-a/scores/bulk?schoolId=${A}`, { ...sheet("form3a", "maths-3a", [["st-a2", 17]]), schoolId: A });
   check("the super admin, naming the school, writes", [r.status, (await scoreOf("st-a2", "maths-3a"))?.score], [201, 17]);
 
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("\n--- N2b: reading the marks back — GET /teacher/results is the teacher's own pairs, letters as graded ---");
+  // The route once answered from a model that did not exist and was always
+  // empty; the mobile class-results screen then invented letters of its own.
+  const { GRADE_SCALE } = require(path.join(ROOT, "..", "shared", "gradeScale"));
+  const letter = (m) => GRADE_SCALE.find((b) => m >= b.min)?.grade ?? null;
+  const mine = async (who) => { const rr = await who.get("/teacher/results"); return [rr.status, (rr.body?.results ?? []).map((x) => `${x.classId}|${x.subjectId}|${x.studentId}|${x.score}|${x.grade}`).sort()]; };
+  // What exists at this point: the Mathematics teacher's own 15 and the super
+  // admin's 17 in 3A Mathematics (their pair); the 4B Mathematics write above
+  // was refused (they take Physics in 4B, not Mathematics) and minted nothing.
+  check("the Mathematics teacher reads Mathematics in 3A — their own mark and the office's — every row with the letter the school's scale gave the mark",
+    await mine(maths), [200, [`form3a|maths-3a|st-a1|15|${letter(15)}`, `form3a|maths-3a|st-a2|17|${letter(17)}`].sort()]);
+  check("  and no letter is computed client-side: the row's grade equals the stored StudentScore grade",
+    (await scoreOf("st-a2", "maths-3a"))?.grade, letter(17));
+  // The Physics teacher's own 11 was refused above (it named the Mathematics
+  // ExamSubject); the office's 12 in 3A Physics is the one row in their pair.
+  check("the Physics teacher reads Physics in 3A only — not the Mathematics marks of the same class",
+    await mine(physics), [200, [`form3a|physics-3a|st-a2|12|${letter(12)}`]]);
+  check("a teacher with no assignment reads nothing; Beta's teacher reads nothing of Alpha", [await mine(idle), (await mine(beta))[1].some((k) => k.includes("form3a"))], [[200, []], false]);
+  r = await maths.get("/teacher/results");
+  check("the rows carry what the screen needs and no credential: names, exam title, score, max, percentage, grade, pass",
+    [["studentName", "subjectName", "examTitle", "score", "maxScore", "percentage", "grade", "isPassing", "className"].every((k) => k in r.body.results[0]), JSON.stringify(r.body).includes("password")], [true, false]);
+
   // ═══════════════════════════════════════════════════════════════════════════
   console.log("\n--- N3: the single-mark route, anchored on the exam ---");
 

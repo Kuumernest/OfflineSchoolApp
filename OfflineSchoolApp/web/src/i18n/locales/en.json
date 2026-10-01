@@ -1395,6 +1395,8 @@
     "admissionNumber": "Admission number",
     "passwordNotChanged": "Password not changed",
     "passwordNotChangedYet": "Password not yet changed.",
+    "openStrengths": "Strengths & intelligence",
+    "openStrengthsHint": "What the published marks say about this student: strengths, exploration, development and plans.",
     "moveToClass": "Move to class",
     "moveHint": "Transfer this student to a different class",
     "noOtherClasses": "No other classes available. Create more classes first.",

@@ -320,8 +320,6 @@ export default function App() {
                 they read from /admin/students, which is admin-only. */}
             <Route path="/students"              element={page(<StudentsPage />)} />
             <Route path="/students/new"          element={page(<AddStudentPage />)} />
-            <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
-            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
             {/* Last: ":id" would otherwise swallow "new" / "admissions". */}
             <Route path="/students/:id"          element={page(<StudentDetail />)} />
             <Route path="/students/:id/edit"     element={page(<EditStudentPage />)} />
@@ -353,6 +351,11 @@ export default function App() {
 
           {/* ── Governance, configuration, academic authority ───────────── */}
           <Route element={gate(ADMIN)}>
+            {/* Admission and application screens: students.admit is an ADMIN
+                capability on the server, and the navigation lists them for
+                administrators only; a teacher reaching them by URL met 403s. */}
+            <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
+            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
             <Route path="/teachers"                    element={page(<TeachersPage />)} />
             <Route path="/teachers/new"                element={page(<AddTeacherPage />)} />
             <Route path="/teachers/assignments"        element={page(<AssignmentsPage />)} />

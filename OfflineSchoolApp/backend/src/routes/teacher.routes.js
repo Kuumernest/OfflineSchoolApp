@@ -274,7 +274,6 @@ const getQuiz          = lazyModel("../db/models/Quiz",          "Quiz");
 const getContent       = lazyModel("../db/models/Content",       "Content");
 const getExam          = lazyModel("../db/models/Exam",          "Exam");
 const getExamMark      = lazyModel("../db/models/ExamMark",      "ExamMark");
-const getResult        = lazyModel("../db/models/Result",        "Result");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ASYNC HANDLER
@@ -1978,27 +1977,59 @@ router.get("/subjects-classes", asyncHandler(async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 router.get("/results", asyncHandler(async (req, res) => {
-  const teacherId  = resolveTeacherId(req);
-  const R          = getResult();
+  // The marks a teacher entered, read back. This answered from a "Result"
+  // model that does not exist, so it was always an empty list and the mobile
+  // class-results screen showed quizzes only. The rows are StudentScore, the
+  // same documents the office reads, carrying the grade the school's scale gave
+  // them at entry — no client recomputes a letter. Scope is the teacher's
+  // assignment PAIRS (class + subject), as the mark sheet and the register ask.
+  const teacherId = resolveTeacherId(req);
+  const schoolId  = req.user?.schoolId || null;
+  if (!schoolId) return res.json({ success: true, results: [] });
+  const tid = String(teacherId);
+  const rows = await TeacherAssignment.find({ $or: [{ teacher: tid }, { teacherId: tid }], isActive: { $ne: false }, schoolId: String(schoolId) })
+    .select("subject subjectId subject_id class classId class_id").lean();
+  const pairs = new Set(rows.map((r) => `${String(r.class || r.classId || r.class_id || "")}|${String(r.subject || r.subjectId || r.subject_id || "")}`).filter((k) => !k.startsWith("|") && !k.endsWith("|")));
+  if (!pairs.size) return res.json({ success: true, results: [] });
 
-  if (!R) return res.json({ success: true, results: [] });
-
-  const schoolId       = req.user?.schoolId || null;
-  const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-
-  if (!subjectIds.length) return res.json({ success: true, results: [] });
-
+  const StudentScore = require("../db/models/StudentScore");
+  const Exam         = require("../db/models/Exam");
+  const S            = getStudent();
+  const classIds   = [...new Set([...pairs].map((k) => k.split("|")[0]))];
+  const subjectIds = [...new Set([...pairs].map((k) => k.split("|")[1]))];
+  const filter = { schoolId: String(schoolId), deletedAt: null, classId: { $in: classIds }, subjectId: { $in: subjectIds } };
   const { classId, examId } = req.query;
-  const filter = { subjectId: { $in: subjectIds } };
   if (classId) filter.classId = String(classId).trim();
   if (examId)  filter.examId  = String(examId).trim();
+  const scores = (await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean())
+    .filter((sc) => pairs.has(`${String(sc.classId)}|${String(sc.subjectId)}`));
+  if (!scores.length) return res.json({ success: true, results: [] });
 
-  const results = await R.find(filter)
-    .populate("studentId", "studentName")
-    .populate("subjectId", "name code")
-    .sort({ createdAt: -1 })
-    .lean();
+  const ids = (xs) => [...new Set(xs.filter(Boolean).map(String))];
+  const [students, subjects, classes, exams] = await Promise.all([
+    S ? S.find({ _id: { $in: ids(scores.map((x) => x.studentId)) } }).select("studentName name firstName lastName enrollmentNo admissionNo").lean() : [],
+    Subject.find({ _id: { $in: ids(scores.map((x) => x.subjectId)) } }).select("name code").lean(),
+    Class.find({ _id: { $in: ids(scores.map((x) => x.classId)) } }).select("name").lean(),
+    Exam.find({ _id: { $in: ids(scores.map((x) => x.examId)) } }).select("name title type startDate date academicYear term").lean(),
+  ]);
+  const by = (list) => new Map(list.map((d) => [String(d._id), d]));
+  const st = by(students), su = by(subjects), cl = by(classes), ex = by(exams);
+  const nameOf = (p) => p ? (p.studentName || p.name || [p.firstName, p.lastName].filter(Boolean).join(" ") || null) : null;
 
+  const results = scores.map((sc) => {
+    const e = ex.get(String(sc.examId));
+    return {
+      _id: sc._id, type: "exam", examId: sc.examId, examTitle: e?.name || e?.title || null, examType: e?.type || null,
+      examDate: e?.startDate || e?.date || sc.createdAt || null, academicYear: e?.academicYear || null, term: e?.term ?? null,
+      subjectId: sc.subjectId, subjectName: su.get(String(sc.subjectId))?.name || null,
+      classId: sc.classId, className: cl.get(String(sc.classId))?.name || null,
+      studentId: sc.studentId, studentName: nameOf(st.get(String(sc.studentId))),
+      admissionNo: st.get(String(sc.studentId))?.admissionNo || st.get(String(sc.studentId))?.enrollmentNo || null,
+      score: sc.score ?? null, maxScore: sc.maxScore ?? null, percentage: sc.percentage ?? null,
+      grade: sc.grade ?? null, remark: sc.remark ?? null, isPassing: sc.isPassing ?? null,
+      isAbsent: sc.isAbsent === true, isExempt: sc.isExempt === true, createdAt: sc.createdAt,
+    };
+  });
   return res.json({ success: true, results });
 }));
 

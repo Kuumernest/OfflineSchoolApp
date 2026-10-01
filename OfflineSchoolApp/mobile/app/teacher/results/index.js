@@ -101,15 +101,16 @@ const CLASS_ACCENT_COLORS = [
 // GRADE / PERFORMANCE HELPERS
 // ═════════════════════════════════════════════════════════════════════════════
 
-const getGrade = (percentage) => {
-  if (percentage == null) return { grade: "N/A", color: C.gray400 };
-  if (percentage >= 90)   return { grade: "A+",  color: "#059669" };
-  if (percentage >= 80)   return { grade: "A",   color: "#059669" };
-  if (percentage >= 70)   return { grade: "B",   color: "#2563EB" };
-  if (percentage >= 60)   return { grade: "C",   color: "#D97706" };
-  if (percentage >= 50)   return { grade: "D",   color: "#EA580C" };
-  return                         { grade: "F",   color: "#DC2626" };
-};
+// The letter is the SERVER'S. Every mark is graded once, at entry, on the
+// school's own scale (shared/gradeScale through grading.service), and the row
+// this screen receives carries that letter. This screen used to recompute one
+// from the percentage with a scale of its own (90/80/70/60/50) that disagreed
+// with the school's — 14/20 read "B" here and "B+" on the report card. A row
+// with no letter (a quiz, an absence) shows none; nothing is invented.
+const letterOf = (result) => ({
+  grade: result?.grade || "—",
+  color: result?.grade ? getPerformanceColor(result?.percentage) : C.gray400,
+});
 
 const getPerformanceColor = (percentage) => {
   if (percentage == null) return C.gray400;
@@ -595,10 +596,10 @@ const calculateAnalytics = (results) => {
   const failed   = pcts.length - passed;
   const passRate = Math.round((passed / pcts.length) * 100);
 
-  const gradeDist = { "A+": 0, A: 0, B: 0, C: 0, D: 0, F: 0 };
-  for (const p of pcts) {
-    const { grade } = getGrade(p);
-    if (grade in gradeDist) gradeDist[grade]++;
+  // Letters as the server graded them; a row with none is not counted.
+  const gradeDist = {};
+  for (const r of withPct) {
+    if (r.grade) gradeDist[r.grade] = (gradeDist[r.grade] || 0) + 1;
   }
 
   const ranges = {
@@ -736,7 +737,7 @@ const sas = StyleSheet.create({
 function ResultRow({ result, onPress }) {
   const { t }   = useTranslation();
   const pct     = result.percentage;
-  const grade   = getGrade(pct);
+  const grade   = letterOf(result);
   const perfCol = getPerformanceColor(pct);
   const isQuiz  = result.source === "quiz";
 
@@ -799,7 +800,7 @@ const rr = StyleSheet.create({
 function ResultCard({ result, onPress }) {
   const { t }   = useTranslation();
   const pct     = result.percentage;
-  const grade   = getGrade(pct);
+  const grade   = letterOf(result);
   const perfCol = getPerformanceColor(pct);
   const isQuiz  = result.source === "quiz";
 
@@ -1148,7 +1149,7 @@ function ResultDetailModal({ result, visible, onClose }) {
   if (!result) return null;
 
   const pct    = result.percentage;
-  const grade  = getGrade(pct);
+  const grade   = letterOf(result);
   const isQuiz = result.source === "quiz";
 
   const rows = [
