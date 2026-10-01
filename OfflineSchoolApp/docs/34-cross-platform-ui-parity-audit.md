@@ -256,8 +256,8 @@ mobile: `app/teacher/results/index.js`, `scripts/check-teacher-results-grade.js`
 
 ## 17. Commit
 
-COMMIT_HASH
+`30b0f32` — fix(parity): one grade letter on every platform; teacher results endpoint answers; desktop offline marks graded against the paper; cross-platform parity audit. The hash is recorded in the follow-up commit that completes this section.
 
 ## 18. Working tree
 
-Clean after the commit.
+Clean after the two commits; nothing pushed.
