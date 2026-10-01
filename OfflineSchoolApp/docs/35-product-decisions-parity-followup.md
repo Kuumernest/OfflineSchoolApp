@@ -155,4 +155,4 @@ decisions above now implemented as decided.
 
 ## Commit
 
-COMMIT_HASH
+`c3a7e69` — recorded by the follow-up commit that completes this section.
