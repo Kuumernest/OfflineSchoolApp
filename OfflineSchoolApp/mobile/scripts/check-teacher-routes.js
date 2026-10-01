@@ -64,27 +64,30 @@ const resolves = (route) => {
   return false;
 };
 
-// The ways a screen names a destination. Only literals; a computed route
-// cannot be checked statically and is out of scope on purpose.
-const ROUTE = /(?:route|pathname|href):\s*["'`](\/[a-zA-Z0-9\-_/[\]?=&.]+)["'`]|router\.(?:push|replace|navigate)\(\s*["'`](\/[a-zA-Z0-9\-_/[\]?=&.]+)["'`]/g;
+// The ways a screen names a destination. Literals, and template literals
+// whose ${…} parts are read as one dynamic segment each: `/admin/teachers/${id}`
+// is /admin/teachers/[x], which an [id].js would answer and nothing else
+// does. A route held in a variable cannot be checked statically and is out
+// of scope on purpose.
+const ROUTE = /(?:route|pathname|href):\s*["'](\/[a-zA-Z0-9\-_/[\]?=&.]+)["']|router\.(?:push|replace|navigate)\(\s*["'](\/[a-zA-Z0-9\-_/[\]?=&.]+)["']|(?:route|pathname|href):\s*`(\/[^`]+)`|router\.(?:push|replace|navigate)\(\s*`(\/[^`]+)`/g;
+const asRoute = (raw) => raw.split("?")[0].replace(/\$\{[^}]*\}/g, "[x]");
 
 console.log("--- every literal route under app/ opens a screen ---");
 const seen = new Map();
 for (const file of walk(APP)) {
   const text = fs.readFileSync(file, "utf8");
   for (const m of text.matchAll(ROUTE)) {
-    const route = m[1] ?? m[2];
+    const route = asRoute(m[1] ?? m[2] ?? m[3] ?? m[4] ?? "");
     if (!route || route.startsWith("/(")) continue;
     if (!seen.has(route)) seen.set(route, path.relative(ROOT, file).replace(/\\/g, "/"));
   }
 }
-// Dead routes this check found on its first run that are somebody else's
-// feature. Listed so the check is a ratchet — a NEW dead route fails, these
-// are reported — rather than a bar nobody can clear. Remove an entry the day
-// its screen is written.
-const KNOWN_DEAD = new Set([
-  "/teacher/students/[id]",   // the teacher's student list links to a detail screen that does not exist
-]);
+// Dead routes this check tolerates. None: the roster row that pointed at a
+// pupil screen no teacher has is a row now, the subject pencil opens the form
+// on the subject, and "view profile" after adding a teacher opens the
+// teacher's edit screen (docs/35). The set stays so a future entry is a
+// deliberate, visible decision rather than a silent failure.
+const KNOWN_DEAD = new Set([]);
 const dead  = [...seen].filter(([route]) => !resolves(route));
 const fresh = dead.filter(([route]) => !KNOWN_DEAD.has(route));
 const known = dead.filter(([route]) =>  KNOWN_DEAD.has(route));
@@ -93,6 +96,19 @@ else bad("routes that open nothing", fresh.map(([r, f]) => `${r}   (first seen i
 for (const [r, f] of known) console.log(`  note  ${r} is still dead (first seen in ${f}) — known, outside this check's scope`);
 const healed = [...KNOWN_DEAD].filter((r) => resolves(r));
 if (healed.length) bad("known-dead routes that now resolve — remove them from KNOWN_DEAD", healed.join("\n"));
+
+console.log("--- the three links the parity audit found dead, and the orphan, in particular ---");
+for (const [route, label] of [
+  ["/admin/subjects/add", "the subject pencil's destination"],
+  ["/admin/teachers/edit", "the destination of \"view profile\" after adding a teacher"],
+  ["/teacher/explorations/[studentId]", "the pupil's explorations, from the class intelligence card"],
+  ["/student/fees", "the pupil's fees"],
+]) { if (resolves(route)) ok(`${route} is a screen (${label})`); else bad(`${route} is not a screen (${label})`); }
+const roster = fs.readFileSync(path.join(APP, "teacher", "students", "index.js"), "utf8");
+if (!/\/teacher\/students\/\[id\]/.test(roster)) ok("the teacher's roster no longer points at a pupil screen that does not exist");
+else bad("the teacher's roster still points at /teacher/students/[id]");
+if (!fs.existsSync(path.join(APP, "admin", "timetable", "periods.js"))) ok("the unlinked duplicate of /admin/periods is gone");
+else bad("app/admin/timetable/periods.js is back: an orphan duplicate of the linked /admin/periods screens");
 
 console.log("--- the teacher's homework, in particular ---");
 for (const route of ["/teacher/homework", "/teacher/homework/create", "/teacher/homework/[id]"]) {

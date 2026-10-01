@@ -289,3 +289,74 @@ export const submitExploration = (id, { outputs, completionMode = null, reflecti
 
 export const reviseReflection = (id, reflection) =>
   post(id, "reflection", reflection, (e) => ({ reflection: { ...(e.reflection ?? {}), ...reflection } }));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// THE TEACHER'S SIDE
+// ─────────────────────────────────────────────────────────────────────────────
+//
+// What the web's strengths page lets a teacher do, on the phone: read a
+// pupil's explorations, record an observation of one, rate an output against
+// the activity's own criteria. The server validates and stores exactly as it
+// does for the web — the same two routes, the same bodies — and refuses a
+// teacher who is not assigned to the pupil's class. Nothing is scored here;
+// a level is read from the server's answer, never computed on the handset.
+//
+// Reads are fetched when online and kept per pupil; writes go through the
+// outbox like every other mutation, so a corridor with no signal still takes
+// the observation and the server hears it on the next sync.
+
+const PUPIL_EXPLORATIONS = "teacher_pupil_explorations";
+
+const ensureTeacherSchema = async (db) => {
+  await db.execAsync(`CREATE TABLE IF NOT EXISTS ${PUPIL_EXPLORATIONS} (
+    id TEXT PRIMARY KEY, ownerId TEXT NOT NULL, json TEXT NOT NULL, fetchedAt TEXT NOT NULL
+  );`);
+};
+
+/** The pupil's explorations as the staff view returns them, cached under this teacher. */
+export const refreshPupilExplorations = async (studentId, lang = "en") => {
+  const db = await getDatabase();
+  await ensureTeacherSchema(db);
+  const { data } = await api.get(`/insights/student/${studentId}/explorations`, { params: { lang } });
+  const rows = data?.data?.explorations ?? [];
+  await db.runAsync(`INSERT OR REPLACE INTO ${PUPIL_EXPLORATIONS} (id, ownerId, json, fetchedAt) VALUES (?, ?, ?, ?)`,
+    [`${ownerOf()}:${studentId}`, ownerOf(), JSON.stringify(rows), new Date().toISOString()]);
+  return rows;
+};
+
+/** @returns {Promise<{ rows: object[], fetchedAt: string } | null>} the last answer, or null */
+export const getPupilExplorations = async (studentId) => {
+  const db = await getDatabase();
+  await ensureTeacherSchema(db);
+  const row = await db.getFirstAsync(`SELECT json, fetchedAt FROM ${PUPIL_EXPLORATIONS} WHERE id = ?`, [`${ownerOf()}:${studentId}`]);
+  return row ? { rows: JSON.parse(row.json), fetchedAt: row.fetchedAt } : null;
+};
+
+/** The criteria an output is rated against: the activity's own, from the cached catalog. */
+export const criteriaFor = async (activityId, lang = "en") =>
+  (await getActivity(activityId, lang))?.performanceCriteria ?? [];
+
+/**
+ * Record what was observed. Body as the web sends it: { level, codes, note? }.
+ * One observation per teacher per exploration on the server; posting again
+ * revises it, so the entity key is per teacher and exploration too.
+ */
+export const observeExploration = (explorationId, { level, codes = [], note = null }) =>
+  MutationQueue.enqueue({
+    entityKey: `exploration:${explorationId}:observation:${ownerOf()}`,
+    method: "POST", endpoint: `/explorations/${explorationId}/observation`,
+    payload: { level, codes, ...(note ? { note } : {}) },
+  });
+
+/**
+ * Rate the output. Body as the web sends it: { version, ratings: [{ criterion, rating }] }.
+ * The version is the row's, so a rating queued against a stale row is refused
+ * as a conflict rather than overwriting what someone else recorded.
+ */
+export const rateExploration = (explorationId, { version, ratings }) =>
+  MutationQueue.enqueue({
+    entityKey: `exploration:${explorationId}:performance`,
+    method: "POST", endpoint: `/explorations/${explorationId}/performance`,
+    payload: { version, ratings },
+    baseVersion: version ?? null,
+  });

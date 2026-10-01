@@ -36,6 +36,7 @@ const photoStorage  = require("../utils/photoStorage");
 const { sendEmail } = require("../services/email.service");
 const {
   applyActiveStructuresForStudent: billStudentForClass,
+  familyLedger,
 } = require("../services/fees.service");
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -1307,6 +1308,30 @@ router.put(
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 8 — STUDENT-FACING ROUTES
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ── GET /api/student/fees ──────────────────────────────────────────────────
+// The pupil's own fee account: what was billed, what was paid, what is owed.
+// The same redacted ledger the guardian portal shows (fees.service
+// familyLedger), read for the record the signed-in account owns and no
+// other: there is no student id to ask for, and the finance capabilities
+// (/api/fees/*) stay with the bursar's office.
+router.get(
+  "/fees",
+  authenticate, studentOnly,
+  asyncHandler(async (req, res) => {
+    const schoolId     = resolveSchoolId(req);
+    const academicYear = req.query.academicYear ? String(req.query.academicYear) : null;
+    const student      = await resolveStudentRecord(req.user._id?.toString(), schoolId);
+
+    if (!student) {
+      return sendSuccess(res, {
+        data: { charges: [], payments: [], totals: { charged: 0, waived: 0, paid: 0, balance: 0 }, academicYear },
+      });
+    }
+    const ledger = await familyLedger({ schoolId: student.schoolId, studentId: student._id, academicYear });
+    return sendSuccess(res, { data: { ...ledger, academicYear } });
+  })
+);
 
 router.get(
   "/me",

@@ -652,6 +652,7 @@ export default function StudentDashboard() {
     { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
     { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
     { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
+    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        color: "#0D9488", route: "/student/fees"            },
     { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
   ], [t]);
 

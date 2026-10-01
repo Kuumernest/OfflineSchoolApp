@@ -45,4 +45,31 @@ const teacherAssigned = async (
   return Boolean(await TeacherAssignment.exists(filter));
 };
 
-module.exports = { teacherAssigned };
+/**
+ * The classes this teacher holds an active assignment in, as String ids.
+ *
+ * The CLASS-level set, for the reads that are class-wide rather than pair-wide:
+ * a term or annual result is one pupil's average across every subject, so the
+ * teacher of Mathematics in 3A reads 3A's term results, not only the
+ * Mathematics column. Same rows, same spellings and same "active only" rule as
+ * teacherAssigned above. An empty array is a teacher with no class, and a
+ * filter built on it matches nothing.
+ */
+const teacherClassIds = async (TeacherAssignment, { teacherId, schoolId }) => {
+  if (!teacherId || !schoolId) return [];
+  const rows = await TeacherAssignment.find({
+    schoolId: String(schoolId),
+    isActive: { $ne: false },
+    $or: [{ teacher: String(teacherId) }, { teacherId: String(teacherId) }],
+  })
+    .select("class classId")
+    .lean();
+  const ids = new Set();
+  for (const r of rows) {
+    const id = String(r.class || r.classId || "");
+    if (id && id !== "null" && id !== "undefined") ids.add(id);
+  }
+  return [...ids];
+};
+
+module.exports = { teacherAssigned, teacherClassIds };

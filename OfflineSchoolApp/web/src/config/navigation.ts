@@ -482,14 +482,16 @@ export const NAV_ITEMS: NavItem[] = [
         labelKey: "nav.termResults",
         path:  "/exams/term-results",
         icon:  BarChart3,
-        roles: ["super_admin", "school_admin"],
+        // A teacher reads the published term results of the classes they are
+        // assigned to; the server scopes the rows (periodResultScope.js).
+        roles: ["super_admin", "school_admin", "teacher"],
       },
       {
         label: "Annual Results",
         labelKey: "nav.annualResults",
         path:  "/exams/annual-results",
         icon:  BarChart3,
-        roles: ["super_admin", "school_admin"],
+        roles: ["super_admin", "school_admin", "teacher"],
       },
       // Report cards are deliberately NOT listed here. They used to appear
       // both under Exams and under Reports, which read as two features and

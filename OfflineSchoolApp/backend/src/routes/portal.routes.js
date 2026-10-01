@@ -52,6 +52,7 @@ const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
 
 const portal = require("../services/portal.service");
+const fees   = require("../services/fees.service");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const { displayName } = require("../utils/studentName");
@@ -317,38 +318,14 @@ router.get("/me", asyncHandler(async (req, res) => {
 /** The fee account: what was charged, what has been paid, what is left. */
 router.get("/fees", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
-  const filter = { schoolId, studentId, deletedAt: null };
-  // String(), because the extended query parser turns ?academicYear[$ne]=x
-  // into an object, and an operator in a filter is not a year.
-  if (req.query.academicYear) filter.academicYear = String(req.query.academicYear);
-
-  const [charges, payments] = await Promise.all([
-    FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1 }).lean(),
-    FeePayment.find(filter).sort({ receivedAt: 1 }).lean(),
-  ]);
-
-  const charged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);
-  const waived  = charges.reduce((s, c) => s + (c.waivedAmount ?? 0), 0);
-  // Reversals are negative rows, so a plain sum is already net of them.
-  const paid    = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
-
-  return res.json({
-    success: true,
-    data: {
-      charges: charges.map((c) => ({
-        _id: c._id, label: c.label, code: c.code,
-        amount: c.amount, waivedAmount: c.waivedAmount,
-        academicYear: c.academicYear, term: c.term,
-      })),
-      payments: payments.map((p) => ({
-        _id: p._id, receiptNo: p.receiptNo, amount: p.amount,
-        method: p.method, reference: p.reference, receivedAt: p.receivedAt,
-        academicYear: p.academicYear,
-        isReversal: Boolean(p.reversesId) || (p.amount ?? 0) < 0,
-      })),
-      totals: { charged, waived, paid, balance: charged - waived - paid },
-    },
+  // The family's ledger is the one function in fees.service — the pupil's own
+  // route reads the same one. String(), because the extended query parser
+  // turns ?academicYear[$ne]=x into an object, and an operator is not a year.
+  const data = await fees.familyLedger({
+    schoolId, studentId,
+    academicYear: req.query.academicYear ? String(req.query.academicYear) : null,
   });
+  return res.json({ success: true, data });
 }));
 
 /**

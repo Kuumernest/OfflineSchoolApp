@@ -163,7 +163,7 @@ export default function AddTeacherScreen() {
           title={t("teachersAdd.addedTitle")}
           onBack={() =>
             success.teacherId
-              ? router.push(`/admin/teachers/${success.teacherId}`)
+              ? router.push(`/admin/teachers/edit?id=${success.teacherId}`)
               : router.push("/admin/teachers")
           }
         />
@@ -248,7 +248,7 @@ export default function AddTeacherScreen() {
             <TouchableOpacity
               onPress={() =>
                 success.teacherId
-                  ? router.push(`/admin/teachers/${success.teacherId}`)
+                  ? router.push(`/admin/teachers/edit?id=${success.teacherId}`)
                   : router.push("/admin/teachers")
               }
               style={styles.secondaryBtn}

@@ -242,7 +242,7 @@ export default function AdminSubjects() {
   );
 
   const handleEdit = useCallback(
-    (subject) => router.push(`/admin/subjects/edit?id=${subject.id}`),
+    (subject) => router.push(`/admin/subjects/add?id=${subject.id}`),
     [router]
   );
 

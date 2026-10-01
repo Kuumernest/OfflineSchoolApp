@@ -32,6 +32,7 @@ import {
   ActivityIndicator, RefreshControl, Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+import { router }   from "expo-router";
 
 import api                 from "../../../src/services/api";
 import { useTranslation }  from "../../../src/i18n/useTranslation";
@@ -226,6 +227,17 @@ export default function ClassIntelligenceScreen() {
 
               {openId === row.studentId && (
                 <View style={styles.detail}>
+                  {/* The pupil's explorations: observe, rate — the web's staff actions, here. */}
+                  <TouchableOpacity
+                    style={styles.action}
+                    onPress={() => router.push({
+                      pathname: "/teacher/explorations/[studentId]",
+                      params:   { studentId: row.studentId, name: row.name ?? "", classId },
+                    })}
+                  >
+                    <Ionicons name="compass-outline" size={14} color={C.primary} />
+                    <Text style={styles.actionText}>{t("classIntel.explorations")}</Text>
+                  </TouchableOpacity>
                   {!guidance[row.studentId] && <ActivityIndicator color={C.primary} />}
                   {(guidance[row.studentId] ?? []).map((item, i) => (
                     <View key={`${item.rationaleCode}-${i}`} style={styles.guidanceBlock}>

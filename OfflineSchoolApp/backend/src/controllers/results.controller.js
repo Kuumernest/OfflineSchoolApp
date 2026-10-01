@@ -173,6 +173,7 @@ const getExamStats = asyncHandler(async (req, res) => {
     schoolId: resolveSchoolId(req, qSchoolId),
     examId,
     classId,
+    onlyPublished: !isAdmin(req.user?.role),
   });
 
   return res.json({ success: true, data });
@@ -201,7 +202,7 @@ const getExamRankings = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Exam not found" });
   }
 
-  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId);
+  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role) });
   rankings     = rankings.slice(0, Number(limit));
 
   return res.json({
@@ -239,6 +240,15 @@ const getStudentResult = asyncHandler(async (req, res) => {
     ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
     StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
+
+  // Published or not there, for anyone who is not an administrator — the rule
+  // GET /results/:examId applies one route up, applied to the single pupil too.
+  if (!isAdmin(req.user?.role) && !summary?.isPublished) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result found for this student in this exam",
+    });
+  }
 
   if (!summary && !scores.length) {
     return res.status(404).json({
@@ -302,6 +312,10 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     ExamSubject.find({ examId, schoolId, deletedAt: null }).lean(),
     ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
+
+  // A card is a published result, printed. Anyone who is not an administrator
+  // gets no card for a result the school has not published.
+  if (req?.user && !isAdmin(req.user.role) && !summary?.isPublished) return { ok: false };
 
   /*
    * The continuous assessment beside this paper.

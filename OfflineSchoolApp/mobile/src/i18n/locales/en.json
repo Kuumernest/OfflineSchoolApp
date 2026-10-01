@@ -865,7 +865,10 @@
     "creatingIn": {
       "one": "Creating in {{count}} class…",
       "other": "Creating in {{count}} classes…"
-    }
+    },
+    "editTitle": "Edit subject",
+    "editBlurb": "Change the name, code or coefficient. The class stays as it is.",
+    "notFound": "This subject is not on this device yet. Sync, then try again."
   },
   "subjectsEdit": {
     "title": "Edit subject",
@@ -2540,7 +2543,8 @@
     "reportCardsSub": "View your exam results and report cards",
     "annMore": "+{{count}} more",
     "logout": "Logout",
-    "hwGraded": "{{score}}/{{max}} ({{pct}}%)"
+    "hwGraded": "{{score}}/{{max}} ({{pct}}%)",
+    "qaFees": "Fees"
   },
   "profileTeacher": {
     "title": "Profile Setup",
@@ -6026,7 +6030,8 @@
     "staleAt": "Last updated {{time}}. May not be current.",
     "recordedTitle": "Action recorded",
     "recordedBody": "Saved on this device. It will sync when you are back online.",
-    "recordFailed": "The action could not be recorded."
+    "recordFailed": "The action could not be recorded.",
+    "explorations": "Explorations & observations"
   },
   "guidance": {
     "RECENT_DECLINE": "Recent performance has declined",
@@ -6257,8 +6262,14 @@
       "INVALID_OBSERVATION": "Choose a level and known codes.",
       "INVALID_PERFORMANCE": "Rate only this activity's criteria.",
       "NO_PERFORMANCE_CRITERIA": "This activity has no rated output.",
-      "NOT_SUBMITTED": "Rate after the student submits."
-    }
+      "NOT_SUBMITTED": "Rate after the student submits.",
+      "CLASS_NOT_ASSIGNED": "You are not assigned to this pupil's class.",
+      "EXPLORATION_NOT_FOUND": "This exploration no longer exists."
+    },
+    "pupilHeading": "{{name}}'s explorations",
+    "teacherBlurb": "What this pupil chose to explore. Record what you observed, and rate an output against the activity's own criteria.",
+    "queued": "Saved on this device; it reaches the school on the next sync.",
+    "pending": "waiting to sync"
   },
   "strengths": {
     "fusion": {
@@ -7229,5 +7240,17 @@
         "generic": "Your answers could not be sent. Try again later."
       }
     }
+  },
+  "studentFees": {
+    "title": "My fees",
+    "blurb": "What the school has billed you, and what has been paid.",
+    "owing": "Balance owing",
+    "settled": "Fees are settled",
+    "credit": "In credit",
+    "term": "Term {{n}}",
+    "empty": "Nothing has been billed to you yet.",
+    "loadFailed": "Could not load your fees",
+    "staleAt": "Shown as of {{time}} — no connection.",
+    "askOffice": "Questions about a charge or a payment go to the bursar's office."
   }
 }

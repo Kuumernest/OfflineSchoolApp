@@ -74,8 +74,11 @@ const cohortFigures = (values) => {
  * @param {string}  args.examId
  * @param {string}  [args.classId]
  */
-async function examStatistics({ schoolId, examId, classId } = {}) {
+async function examStatistics({ schoolId, examId, classId, onlyPublished = false } = {}) {
   const filter = { examId, deletedAt: null };
+  // A teacher's or a bursar's statistics are of published results; a draft
+  // average seen early is a grade argued about before the school decided it.
+  if (onlyPublished) filter.isPublished = true;
   if (schoolId) filter.schoolId = String(schoolId);
   if (classId)  filter.classId  = String(classId);
 

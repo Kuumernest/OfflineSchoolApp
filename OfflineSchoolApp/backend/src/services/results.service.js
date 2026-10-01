@@ -495,10 +495,11 @@ async function getExamResults(examId, classId = null, options = {}) {
 
 // ─── Get Rankings ─────────────────────────────────────────────────────────
 
-async function getRankings(examId, scope = "class", classId = null, schoolId = null) {
+async function getRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false } = {}) {
   // schoolId is the caller's; the controller resolves it and checks the exam
-  // belongs to it first. The filter used to be examId alone.
-  const filter = { examId, deletedAt: null, ...(schoolId ? { schoolId: String(schoolId) } : {}) };
+  // belongs to it first. The filter used to be examId alone. onlyPublished is
+  // the non-administrator's table: positions the school has published.
+  const filter = { examId, deletedAt: null, ...(schoolId ? { schoolId: String(schoolId) } : {}), ...(onlyPublished ? { isPublished: true } : {}) };
 
   if (scope === "class") {
     filter.classPosition  = { $ne: null };

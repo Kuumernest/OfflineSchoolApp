@@ -263,9 +263,49 @@ const applyActiveStructuresForStudent = async ({ schoolId, student, raisedBy }) 
   }
 };
 
+/**
+ * The ledger as a family — or the pupil — reads it.
+ *
+ * Non-voided charges with what was waived, every payment with its receipt
+ * number and whether it reverses another, and the totals; no cashier's name,
+ * no internal note, no voided row. The redaction lives here once: the guardian
+ * portal and the pupil's own route both answer with this, so the two cannot
+ * drift into one of them showing what the other hides.
+ */
+async function familyLedger({ schoolId, studentId, academicYear = null }) {
+  const filter = { schoolId: String(schoolId), studentId: String(studentId), deletedAt: null };
+  if (academicYear) filter.academicYear = String(academicYear);
+
+  const [charges, payments] = await Promise.all([
+    FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1 }).lean(),
+    FeePayment.find(filter).sort({ receivedAt: 1 }).lean(),
+  ]);
+
+  const charged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);
+  const waived  = charges.reduce((s, c) => s + (c.waivedAmount ?? 0), 0);
+  // Reversals are negative rows, so a plain sum is already net of them.
+  const paid    = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
+
+  return {
+    charges: charges.map((c) => ({
+      _id: c._id, label: c.label, code: c.code,
+      amount: c.amount, waivedAmount: c.waivedAmount,
+      academicYear: c.academicYear, term: c.term, dueDate: c.dueDate ?? null,
+    })),
+    payments: payments.map((p) => ({
+      _id: p._id, receiptNo: p.receiptNo, amount: p.amount,
+      method: p.method, reference: p.reference, receivedAt: p.receivedAt,
+      academicYear: p.academicYear,
+      isReversal: Boolean(p.reversesId) || (p.amount ?? 0) < 0,
+    })),
+    totals: { charged, waived, paid, balance: charged - waived - paid },
+  };
+}
+
 module.exports = {
   nextReceiptNo,
   balanceFor,
+  familyLedger,
   balancesFor,
   applyStructure,
   applyActiveStructuresForStudent,

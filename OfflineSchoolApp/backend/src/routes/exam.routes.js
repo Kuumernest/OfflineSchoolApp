@@ -22,6 +22,7 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
+const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
   logResultChange,
@@ -1746,7 +1747,9 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
 router.get("/:examId/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
-  const query = { examId: req.params.examId, schoolId, deletedAt: null };
+  // Published unless the caller is an administrator — the feed's rule for
+  // this collection and GET /api/results/:examId's, applied here too.
+  const query = { examId: req.params.examId, schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (classId) query.classId = classId;
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })

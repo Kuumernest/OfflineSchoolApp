@@ -379,6 +379,19 @@ const profileOf = (marks, interest = []) => {
     [200, 1, 2, "org-intro-plan", 12, false]);
   check("a teacher's summary is scoped to their classes; the bursar has none", [(await teacherC.get("/insights/explorations/summary")).body.data.explorations, (await bursar.get("/insights/explorations/summary")).status], [0, 403]);
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  console.log("\n--- 9. the teacher's writes are the class's teacher's, and the output must be in ---");
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  rr = await teacherC.post(`/explorations/${clientId}/observation`, { level: "OBSERVED" });
+  check("a teacher of another class cannot observe → 403 CLASS_NOT_ASSIGNED", [rr.status, rr.body.code], [403, "CLASS_NOT_ASSIGNED"]);
+  rr = await teacherC.post(`/explorations/${clientId}/performance`, { ratings: [{ criterion: "task_completion", rating: "met" }] });
+  check("nor rate → 403 CLASS_NOT_ASSIGNED", [rr.status, rr.body.code], [403, "CLASS_NOT_ASSIGNED"]);
+  check("the bursar neither → 403", (await bursar.post(`/explorations/${clientId}/observation`, { level: "OBSERVED" })).status, 403);
+  check("an unknown level → 400 INVALID_OBSERVATION", (await teacherA.post(`/explorations/${clientId}/observation`, { level: "SEEN" })).body.code, "INVALID_OBSERVATION");
+  rr = await pupilA1.post("/insights/student/st-a1/explorations", { activityId: "comp-intro-algorithm", action: "start" });
+  check("an output not yet submitted cannot be rated → 409 NOT_SUBMITTED", (await teacherA.post(`/explorations/${rr.body.data._id}/performance`, { ratings: [{ criterion: "task_completion", rating: "met" }] })).body.code, "NOT_SUBMITTED");
+
   const feed = require(path.join(SRC, "config/syncFeed"));
   check("explorations and observations mirror on the intelligence capabilities scoped to taught pupils; reflections and school activities stay online with reasons",
     [feed.required(feed.byCollection.get("studentExploration")), typeof feed.byCollection.get("explorationObservation").scope, typeof feed.EXCLUDED.ExplorationReflection, typeof feed.EXCLUDED.ExplorationActivity],

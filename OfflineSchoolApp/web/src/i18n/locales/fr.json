@@ -3120,7 +3120,9 @@
     "staleBody": "Une note de séquence a été modifiée après le calcul de ce trimestre. Les bulletins afficheront les nouvelles notes par matière mais l’ancienne moyenne trimestrielle jusqu’au recalcul.",
     "recompute": "Recalculer",
     "staleTag": "à recalculer",
-    "staleRow": "Une note de séquence de cet élève a changé après le calcul du trimestre."
+    "staleRow": "Une note de séquence de cet élève a changé après le calcul du trimestre.",
+    "allClasses": "Toutes les classes",
+    "pickClassToCompute": "Choisissez une de vos classes pour la calculer"
   },
   "annualResults": {
     "title": "Résultats annuels",
@@ -3155,7 +3157,9 @@
     "staleBody": "Un trimestre a été recalculé après cette année. Recalculez l’année pour que la moyenne annuelle et la décision de passage correspondent aux trimestres.",
     "recompute": "Recalculer",
     "staleTag": "à recalculer",
-    "staleRow": "Un résultat trimestriel de cet élève a été recalculé après l’année."
+    "staleRow": "Un résultat trimestriel de cet élève a été recalculé après l’année.",
+    "allClasses": "Toutes les classes",
+    "pickClassToCompute": "Choisissez une de vos classes pour la calculer"
   },
   "errors": {
     "unexpected": "Une erreur s'est produite. Veuillez réessayer.",
@@ -4395,7 +4399,9 @@
       "INVALID_OBSERVATION": "Choisissez un niveau et des codes connus.",
       "INVALID_PERFORMANCE": "N'évaluez que les critères de cette activité.",
       "NO_PERFORMANCE_CRITERIA": "Cette activité n'a pas de résultat évalué.",
-      "NOT_SUBMITTED": "Évaluez après l'envoi par l'élève."
+      "NOT_SUBMITTED": "Évaluez après l'envoi par l'élève.",
+      "CLASS_NOT_ASSIGNED": "Vous n'êtes pas affecté(e) à la classe de cet élève.",
+      "EXPLORATION_NOT_FOUND": "Cette exploration n'existe plus."
     }
   },
   "devPlan": {

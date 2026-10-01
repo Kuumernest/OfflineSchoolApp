@@ -3120,7 +3120,9 @@
     "staleBody": "A sequence mark was changed after this term was computed. The report cards will show the new subject marks but the old term average until you recompute.",
     "recompute": "Recompute",
     "staleTag": "needs recomputing",
-    "staleRow": "A sequence mark for this student changed after the term was computed."
+    "staleRow": "A sequence mark for this student changed after the term was computed.",
+    "allClasses": "All classes",
+    "pickClassToCompute": "Pick one of your classes to compute it"
   },
   "annualResults": {
     "title": "Annual Results",
@@ -3155,7 +3157,9 @@
     "staleBody": "A term was recomputed after this year was. Recompute the year so the annual average and the promotion decision match the terms.",
     "recompute": "Recompute",
     "staleTag": "needs recomputing",
-    "staleRow": "A term result for this student was recomputed after the year was."
+    "staleRow": "A term result for this student was recomputed after the year was.",
+    "allClasses": "All classes",
+    "pickClassToCompute": "Pick one of your classes to compute it"
   },
   "errors": {
     "unexpected": "Something went wrong. Please try again.",
@@ -4395,7 +4399,9 @@
       "INVALID_OBSERVATION": "Choose a level and known codes.",
       "INVALID_PERFORMANCE": "Rate only this activity's criteria.",
       "NO_PERFORMANCE_CRITERIA": "This activity has no rated output.",
-      "NOT_SUBMITTED": "Rate after the student submits."
+      "NOT_SUBMITTED": "Rate after the student submits.",
+      "CLASS_NOT_ASSIGNED": "You are not assigned to this student's class.",
+      "EXPLORATION_NOT_FOUND": "This exploration no longer exists."
     }
   },
   "devPlan": {

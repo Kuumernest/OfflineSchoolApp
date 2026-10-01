@@ -865,7 +865,10 @@
     "creatingIn": {
       "one": "Création dans {{count}} classe…",
       "other": "Création dans {{count}} classes…"
-    }
+    },
+    "editTitle": "Modifier la matière",
+    "editBlurb": "Modifiez le nom, le code ou le coefficient. La classe reste inchangée.",
+    "notFound": "Cette matière n'est pas encore sur cet appareil. Synchronisez, puis réessayez."
   },
   "subjectsEdit": {
     "title": "Modifier la matière",
@@ -2540,7 +2543,8 @@
     "reportCardsSub": "Consultez vos résultats et bulletins",
     "annMore": "+{{count}} de plus",
     "logout": "Déconnexion",
-    "hwGraded": "{{score}}/{{max}} ({{pct}} %)"
+    "hwGraded": "{{score}}/{{max}} ({{pct}} %)",
+    "qaFees": "Frais"
   },
   "profileTeacher": {
     "title": "Configuration du profil",
@@ -6026,7 +6030,8 @@
     "staleAt": "Dernière mise à jour {{time}}. Peut ne plus être à jour.",
     "recordedTitle": "Action enregistrée",
     "recordedBody": "Enregistrée sur cet appareil. Elle sera synchronisée une fois en ligne.",
-    "recordFailed": "L’action n’a pas pu être enregistrée."
+    "recordFailed": "L’action n’a pas pu être enregistrée.",
+    "explorations": "Explorations et observations"
   },
   "guidance": {
     "RECENT_DECLINE": "Les résultats récents ont diminué",
@@ -6257,8 +6262,14 @@
       "INVALID_OBSERVATION": "Choisissez un niveau et des codes connus.",
       "INVALID_PERFORMANCE": "N'évaluez que les critères de cette activité.",
       "NO_PERFORMANCE_CRITERIA": "Cette activité n'a pas de résultat évalué.",
-      "NOT_SUBMITTED": "Évaluez après l'envoi par l'élève."
-    }
+      "NOT_SUBMITTED": "Évaluez après l'envoi par l'élève.",
+      "CLASS_NOT_ASSIGNED": "Vous n'êtes pas affecté(e) à la classe de cet élève.",
+      "EXPLORATION_NOT_FOUND": "Cette exploration n'existe plus."
+    },
+    "pupilHeading": "Explorations de {{name}}",
+    "teacherBlurb": "Ce que cet élève a choisi d'explorer. Notez ce que vous avez observé et évaluez une production selon les critères propres à l'activité.",
+    "queued": "Enregistré sur cet appareil ; transmis à l'école à la prochaine synchronisation.",
+    "pending": "en attente de synchronisation"
   },
   "strengths": {
     "fusion": {
@@ -7229,5 +7240,17 @@
         "generic": "Vos réponses n'ont pas pu être envoyées. Réessayez plus tard."
       }
     }
+  },
+  "studentFees": {
+    "title": "Mes frais",
+    "blurb": "Ce que l'école vous a facturé, et ce qui a été payé.",
+    "owing": "Solde à payer",
+    "settled": "Frais soldés",
+    "credit": "En crédit",
+    "term": "Trimestre {{n}}",
+    "empty": "Rien ne vous a encore été facturé.",
+    "loadFailed": "Impossible de charger vos frais",
+    "staleAt": "Affiché tel qu'à {{time}} — pas de connexion.",
+    "askOffice": "Pour toute question sur un frais ou un paiement, adressez-vous à l'économat."
   }
 }

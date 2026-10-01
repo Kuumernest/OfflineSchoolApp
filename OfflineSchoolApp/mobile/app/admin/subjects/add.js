@@ -5,7 +5,7 @@ import {
   ScrollView, ActivityIndicator, Alert,
   StyleSheet, KeyboardAvoidingView, Platform,
 } from "react-native";
-import { useRouter }    from "expo-router";
+import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons }     from "@expo/vector-icons";
 import { useAuthStore } from "@/store/auth.store";
 import { getDatabase }    from "@/db/database";
@@ -42,7 +42,7 @@ const mapRowsToObjects = (rows) =>
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const validate = (form, t) => {
+const validate = (form, t, { isEdit = false } = {}) => {
   const errors = {};
   const name   = form.name.trim();
 
@@ -51,7 +51,7 @@ const validate = (form, t) => {
   else if (name.length > MAX_NAME)
     errors.name = t("subjectsAdd.errNameLong", { max: MAX_NAME });
 
-  if (form.classIds.length === 0)
+  if (!isEdit && form.classIds.length === 0)
     errors.classIds = t("subjectsAdd.errNoClass");
 
   // Optional, but a coefficient of 0 or a typo would rescale every average in
@@ -134,6 +134,15 @@ export default function AddSubjectScreen() {
   const { user } = useAuthStore();
   const schoolId = user?.schoolId ?? "";
 
+  // ?id= opens this same form on an existing subject. Name, code and
+  // coefficient can change; the class it belongs to and its teacher are set
+  // elsewhere (assignments), so those sections stay out of the way. The
+  // subject is read from the device's mirror, which is where the list that
+  // opened this screen read it from.
+  const { id: editId } = useLocalSearchParams();
+  const isEdit  = Boolean(editId);
+  const [missing, setMissing] = useState(false);
+
   const [form,        setForm]        = useState(INITIAL);
   const [errors,      setErrors]      = useState({});
   const [classes,     setClasses]     = useState([]);
@@ -164,13 +173,26 @@ export default function AddSubjectScreen() {
 
         setClasses(mapRowsToObjects(cls));
         setTeachers(mapRowsToObjects(tch));
+
+        if (editId) {
+          const row = await db.getFirstAsync("SELECT * FROM subjects WHERE id = ?", [String(editId)]).catch(() => null);
+          const own = row && String(row.school_id ?? row.schoolId ?? "") === String(schoolId);
+          if (own) {
+            setForm({
+              name: row.name ?? "", code: row.code ?? "", coefficient: "",
+              classIds: [row.class_id ?? row.classId].filter(Boolean), teacherId: "",
+            });
+          } else {
+            setMissing(true);
+          }
+        }
       } catch (err) {
         console.warn("AddSubject: failed to load data", err);
       } finally {
         setLoadingData(false);
       }
     })();
-  }, [schoolId]);
+  }, [schoolId, editId]);
 
   // ── Class toggle helpers ────────────────────────────────
 
@@ -205,13 +227,37 @@ export default function AddSubjectScreen() {
   // ── Submit ──────────────────────────────────────────────
 
   const handleSubmit = useCallback(async () => {
-    const errs = validate(form, t);
+    const errs = validate(form, t, { isEdit });
     if (Object.keys(errs).length > 0) {
       setErrors(errs);
       return;
     }
     setErrors({});
     setSubmitting(true);
+
+    if (isEdit) {
+      // PUT /admin/subjects/:id — the route the console's edit page calls. A
+      // blank coefficient leaves the stored one alone.
+      try {
+        await api.put(`/admin/subjects/${editId}`, {
+          name:        form.name.trim(),
+          code:        form.code.trim(),
+          coefficient: form.coefficient.trim() || undefined,
+          schoolId,
+        });
+        // The mirror catches up on the next pull; the list reads it meanwhile.
+        try {
+          const db = await getDatabase();
+          await db.runAsync("UPDATE subjects SET name = ?, code = ? WHERE id = ?", [form.name.trim(), form.code.trim(), String(editId)]);
+        } catch { /* the next pull sets it right */ }
+        router.push("/admin/subjects");
+      } catch (err) {
+        Alert.alert(t("common.error"), err?.response?.data?.message || errorText(t, err, "subjectsAdd.unknownError"));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
 
     const outcomes = [];
 
@@ -246,7 +292,7 @@ export default function AddSubjectScreen() {
     }
 
     setResults(outcomes);
-  }, [form, t, classes, schoolId, router]);
+  }, [form, t, classes, schoolId, router, isEdit, editId]);
 
   // ── Discard ─────────────────────────────────────────────
 
@@ -305,8 +351,8 @@ export default function AddSubjectScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <ScreenHeader
-        title={t("subjectsAdd.title")}
-        subtitle={t("subjectsAdd.blurb")}
+        title={isEdit ? t("subjectsAdd.editTitle") : t("subjectsAdd.title")}
+        subtitle={isEdit ? t("subjectsAdd.editBlurb") : t("subjectsAdd.blurb")}
         onBack={handleDiscard}
       />
 
@@ -315,12 +361,20 @@ export default function AddSubjectScreen() {
         keyboardShouldPersistTaps="handled"
       >
         {/* Info banner */}
-        <View style={styles.infoBanner}>
-          <Ionicons name="book-outline" size={15} color="#1D4ED8" />
-          <Text style={styles.infoBannerText}>
-            {t("subjectsAdd.multiHint")}
-          </Text>
-        </View>
+        {!isEdit && (
+          <View style={styles.infoBanner}>
+            <Ionicons name="book-outline" size={15} color="#1D4ED8" />
+            <Text style={styles.infoBannerText}>
+              {t("subjectsAdd.multiHint")}
+            </Text>
+          </View>
+        )}
+        {isEdit && missing && (
+          <View style={styles.infoBanner}>
+            <Ionicons name="alert-circle-outline" size={15} color="#1D4ED8" />
+            <Text style={styles.infoBannerText}>{t("subjectsAdd.notFound")}</Text>
+          </View>
+        )}
 
         <View style={styles.card}>
 
@@ -369,7 +423,7 @@ export default function AddSubjectScreen() {
             )}
 
             {/* Example chips */}
-            <View style={styles.examplesRow}>
+            {!isEdit && <View style={styles.examplesRow}>
               <Text style={styles.examplesLabel}>{t("subjectsAdd.examples")}</Text>
               {EXAMPLE_KEYS.map((exKey) => (
                 <TouchableOpacity
@@ -383,7 +437,7 @@ export default function AddSubjectScreen() {
                   <Text style={styles.exampleChipText}>{t(exKey)}</Text>
                 </TouchableOpacity>
               ))}
-            </View>
+            </View>}
           </View>
 
           {/* Subject code */}
@@ -430,8 +484,8 @@ export default function AddSubjectScreen() {
             )}
           </View>
 
-          {/* Classes multi-select */}
-          <View style={styles.fieldWrap}>
+          {/* Classes multi-select — the class is set when the subject is created */}
+          {!isEdit && <View style={styles.fieldWrap}>
             <Text style={styles.fieldLabel}>
               {t("subjectsAdd.classesLabel")} <Text style={{ color: "#EF4444" }}>*</Text>
             </Text>
@@ -530,10 +584,10 @@ export default function AddSubjectScreen() {
                 })}
               </View>
             )}
-          </View>
+          </View>}
 
-          {/* Teacher picker */}
-          {teachers.length > 0 && (
+          {/* Teacher picker — assignments are edited on their own screen */}
+          {!isEdit && teachers.length > 0 && (
             <View style={styles.fieldWrap}>
               <Text style={styles.fieldLabel}>{t("subjectsAdd.teacherLabel")}</Text>
               <Text style={styles.hint}>
@@ -604,15 +658,15 @@ export default function AddSubjectScreen() {
               <>
                 <ActivityIndicator size="small" color="#fff" />
                 <Text style={styles.submitText}>
-                  {t("subjectsAdd.creatingIn", { count: form.classIds.length })}
+                  {isEdit ? t("common.save") : t("subjectsAdd.creatingIn", { count: form.classIds.length })}
                 </Text>
               </>
             ) : (
               <>
-                <Ionicons name="add-circle-outline" size={18} color="#fff" />
+                <Ionicons name={isEdit ? "save-outline" : "add-circle-outline"} size={18} color="#fff" />
                 <Text style={styles.submitText}>
-                  {t("subjectsAdd.submit")}
-                  {form.classIds.length > 1
+                  {isEdit ? t("common.save") : t("subjectsAdd.submit")}
+                  {!isEdit && form.classIds.length > 1
                     ? ` (${form.classIds.length} classes)`
                     : ""}
                 </Text>

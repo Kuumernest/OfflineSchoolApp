@@ -215,6 +215,8 @@ school letter.
 
 ## 12. Ambiguous items requiring a product decision
 
+Decided and implemented after this audit; see docs/35 for each one.
+
 1. Term and annual result pages for teachers on the web: the server allows,
    the nav hides, the route gate allows.
 2. A fees screen for students on mobile (parents have one).

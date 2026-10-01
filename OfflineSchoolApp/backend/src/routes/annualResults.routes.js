@@ -9,6 +9,7 @@ const annualGrading    = require("../services/annualGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
 const { fillResultNames } = require("../utils/resultNames");
+const { readScope, applyReadScope, computeRefusal } = require("../utils/periodResultScope");
 const { buildAnnualCard, loadReportTemplate, loadSchoolForCard,
         cardVerification, periodDocumentKey, absoluteLogoUrl } =
   require("../services/reportCardData.service");
@@ -26,6 +27,10 @@ const { buildAnnualCard, loadReportTemplate, loadSchoolForCard,
 // a super_admin may name a school, everybody else is their own.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// WHO READS WHICH ROWS — utils/periodResultScope.js, shared with the term
+// router and the sync feed: administrators every row, a bursar the published
+// ones, a teacher the published ones of the classes they are assigned to; a
+// teacher computes one of their classes, never the school.
 const canView    = requirePermission("results.view");
 const canCompute = requirePermission("results.edit");
 const canPublish = requirePermission("results.publish");
@@ -44,12 +49,11 @@ router.get(
         });
       }
 
-      const filter = {
-        schoolId,
-        academicYear,
-        deletedAt: null,
-      };
-      if (classId) filter.classId = classId;
+      const filter = applyReadScope(
+        { schoolId, academicYear, deletedAt: null },
+        await readScope(req, schoolId),
+        classId,
+      );
 
       const skip = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, error: "page and limit must be positive integers" });
 
@@ -100,10 +104,16 @@ router.get(
       const { studentId } = req.params;
       const { academicYear } = req.query;
       const schoolId = resolveSchoolId(req);
+      // No school is no school. An operator who has not entered one used to
+      // get this pupil's row from whichever school held it.
+      if (!schoolId) {
+        return res.status(400).json({ success: false, error: "schoolId is required" });
+      }
 
-      const filter = { studentId, deletedAt: null };
-      if (schoolId)     filter.schoolId = schoolId;
-      if (academicYear) filter.academicYear = academicYear;
+      const filter = applyReadScope(
+        { schoolId, studentId, deletedAt: null, ...(academicYear ? { academicYear } : {}) },
+        await readScope(req, schoolId),
+      );
 
       const result = await AnnualResult.findOne(filter).lean();
 
@@ -130,6 +140,9 @@ router.post(
           error: "schoolId and academicYear are required",
         });
       }
+
+      const refusal = await computeRefusal(req, schoolId, classId);
+      if (refusal) return res.status(403).json(refusal);
 
       let result;
       if (classId) {
@@ -207,6 +220,19 @@ router.get(
           success: false,
           error: "schoolId, academicYear and classId are required",
         });
+      }
+
+      // The card is the row, printed: a caller who may not read the row may
+      // not print it either, and learns nothing about whether it exists.
+      const scope = await readScope(req, schoolId);
+      if (Object.keys(scope).length) {
+        const visible = await AnnualResult.exists(applyReadScope(
+          { schoolId, studentId: req.params.studentId, academicYear, deletedAt: null },
+          scope, classId,
+        ));
+        if (!visible) {
+          return res.status(404).json({ success: false, error: "No annual result for this student" });
+        }
       }
 
       const data = await buildAnnualCard({

@@ -229,19 +229,26 @@ const FEED = [
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
   { collection: "studentScore", model: "StudentScore", permission: "results.view" },
-  { collection: "resultSummary", model: "ResultSummary", permission: "results.view" },
+  {
+    collection: "resultSummary", model: "ResultSummary",
+    permission: "results.view",
+    scope: publishedUnlessAdmin,
+    why: "The exam result as processed. Non-admins mirror the published ones " +
+         "only — the rule GET /api/results/:examId applies, and the one the " +
+         "entry lost when ExamResult was replaced by this model (docs/35).",
+  },
   {
     collection: "termResult", model: "TermResult",
     permission: "results.view",
     scope: publishedUnlessAdmin,
-    why: "Scoped like ExamResult: non-admins only see published term results. " +
+    why: "Scoped like resultSummary: non-admins only see published term results. " +
          "Mirrored so the desktop can render term report cards offline.",
   },
   {
     collection: "annualResult", model: "AnnualResult",
     permission: "results.view",
     scope: publishedUnlessAdmin,
-    why: "Scoped like ExamResult: non-admins only see published annual results. " +
+    why: "Scoped like resultSummary: non-admins only see published annual results. " +
          "Mirrored so the desktop can render annual report cards offline.",
   },
   {
