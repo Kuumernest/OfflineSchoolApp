@@ -185,3 +185,26 @@ list. Reversal: every affected pupil carries `deletedAt` equal to
 
 A real pilot is opened by a person, after this readiness result is
 reviewed. This stage stops at `REAL PILOT: BLOCKED`.
+
+## Addendum, 2026-10-01 — seeded evidence rows and the live check
+
+The 48 confirmed seeded pupils kept their result rows on record after the
+soft delete above; the cohort, the review sheet and the preflight already
+excluded them. Those rows are now soft-deleted too, the way the application
+deletes a score (`deletedAt` set, nothing removed): 96 result summaries,
+1,392 score rows and 48 term results, at 2026-10-01T10:41:23Z. Audit rows
+stay: 1,489 result change-log entries, 105 document verifications, 44 gate
+events, and the synthetic pilot's one review. Finance stays for the bursar:
+144 charges and 1 payment. One seed-batch pupil soft-deleted before Stage
+18B still carried `isActive: true` and a dangling account reference; the
+flag is now cleared as the delete route would have left it. Nothing of the
+22 remaining pupils was touched: their 4 published results and 73 score rows
+are intact.
+
+`scripts/check-real-school-seed.js` (opt-in, live: `npm run check:realschool
+-- <schoolId>`) re-derives the seeded population from the seed's own
+signature and asserts, counts only, that none of it is active in the
+evidence population. The preflight afterwards: TECHNICAL READY, EVIDENCE
+BLOCKED (22 of 30 reviewable cases, 4 published results for 22 pupils), the
+four attestations and the notice/retention confirmations pending.
+REAL PILOT: BLOCKED.

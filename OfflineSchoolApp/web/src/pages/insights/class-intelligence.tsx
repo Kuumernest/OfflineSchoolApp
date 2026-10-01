@@ -51,6 +51,7 @@ import {
   fetchClassIntelligence, fetchStudentGuidance, fetchStaffClasses,
   type ClassStudentRow, type GuidanceItem, type GuidanceSummary,
 } from "@/services/insights.service";
+import { groupGuidanceBySubject } from "@/services/guidanceGrouping";
 import {
   fetchStudentInterventions, createIntervention, updateIntervention,
   fetchOutcomeEvidence, NEXT_STATUSES,
@@ -254,18 +255,29 @@ function StudentCard({ row, onOpen }: { row: ClassStudentRow; onOpen: () => void
   );
 }
 
+/**
+ * One badge per SUBJECT, not per finding. The guidance engine emits one item
+ * per insight and the academic engine may say two distinct things about one
+ * subject (a decline over the window and a sudden change); rendered one badge
+ * each, the subject's name repeated with two near-identical sentences. Grouped,
+ * the subject is named once and every distinct finding follows it — nothing is
+ * dropped, nothing is merged across subjects, and the badge carries the
+ * highest priority among the subject's findings. The engine output is
+ * untouched; this is presentation (groupGuidanceBySubject, tested on its own).
+ */
 function GuidanceRow({ icon, items }: { icon: React.ReactNode; items: GuidanceSummary[] }) {
   const { t } = useTranslation();
   return (
     <div className="flex items-start gap-2">
       <span className="mt-0.5 shrink-0">{icon}</span>
       <div className="flex flex-wrap gap-1.5">
-        {items.map((g, i) => (
+        {groupGuidanceBySubject(items).map((g) => (
           <Badge
-            key={`${g.subjectId}-${g.rationaleCode}-${i}`}
+            key={g.key}
             variant={PRIORITY_VARIANT[g.priority]}
-            label={g.subjectName ? `${g.subjectName} · ${t(`guidance.${g.rationaleCode}`)}`
-                                 : t(`guidance.${g.rationaleCode}`)}
+            label={g.subjectName
+              ? `${g.subjectName} · ${g.rationaleCodes.map((code) => t(`guidance.${code}`)).join(" ")}`
+              : g.rationaleCodes.map((code) => t(`guidance.${code}`)).join(" ")}
           />
         ))}
       </div>

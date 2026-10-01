@@ -64,6 +64,7 @@
     "check:realpilot": "node scripts/check-real-pilot.js",
     "check:inputs": "node scripts/check-input-hardening.js",
     "check:routers": "node scripts/check-routers-load.js",
+    "check:realschool": "node scripts/check-real-school-seed.js",
     "check:strengths": "node scripts/check-strengths.js",
     "check:exploration": "node scripts/check-exploration.js",
     "check:fusion": "node scripts/check-strength-fusion.js",
