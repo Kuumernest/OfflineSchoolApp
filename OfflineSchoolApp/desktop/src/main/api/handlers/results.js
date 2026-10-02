@@ -372,6 +372,16 @@ module.exports = [
 
       if (!summary && scores.length === 0) return null;
 
+      // The server's rule, applied to what is drawn: a result the school has
+      // not published is a 404 for anyone who is not an administrator, marks
+      // included (results.controller getStudentResult). The mirror of a
+      // non-administrator holds no unpublished summary, but a machine that
+      // pulled as an administrator and is now read by a teacher or a bursar
+      // does — so the request goes to the server, which answers 404, rather
+      // than being answered here from rows the caller may not read.
+      if (!session?.role) return null;
+      if (!ADMIN_ROLES.includes(session.role) && !summary?.isPublished) return null;
+
       return ok({ data: { summary: summary ?? null, scores } });
     },
   },

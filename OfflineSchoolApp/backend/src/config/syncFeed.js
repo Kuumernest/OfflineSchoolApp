@@ -116,6 +116,31 @@ const taughtStudentsOnly = async (req, models) => {
 const publishedUnlessAdmin = (req) =>
   ADMIN_ROLES.includes(req.user?.role) ? {} : { isPublished: true };
 
+/**
+ * Raw marks (StudentScore) mirror exactly as the caller may read them online.
+ *
+ * A StudentScore has no isPublished of its own; publication is the
+ * ResultSummary's. Online, a holder of exams.view reads the whole school's
+ * sheet for any exam, draft or not (GET /api/exams/:examId/scores — the
+ * recorded teacher read policy, docs/20 §7b). A holder of results.view
+ * WITHOUT exams.view — the bursar — reaches a raw mark only inside a
+ * published result (GET /api/results/:examId/student/:id). The feed used to
+ * send the bursar every mark in the school, published or not: more offline
+ * than they could ever see online, which is the gap this file's header warns
+ * against. So: administrators and exams.view holders mirror the collection
+ * whole; everyone else mirrors the marks of exams with a published result.
+ */
+const marksAsReadOnline = async (req, models) => {
+  if (ADMIN_ROLES.includes(req.user?.role)) return {};
+  const permissions = require("../services/permissions.service");
+  const held = await permissions.effectiveFor(req.user?.role, req.user?.schoolId);
+  if (held.includes("exams.view")) return {};
+  const published = await models.ResultSummary.distinct("examId", {
+    schoolId: req.user?.schoolId, isPublished: true, deletedAt: null,
+  });
+  return { examId: { $in: published.map(String) } };
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
 // THE FEED
 // ─────────────────────────────────────────────────────────────────────────────
@@ -228,7 +253,14 @@ const FEED = [
   { collection: "teacherAttendance", model: "TeacherAttendance", permission: "attendance.view" },
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
-  { collection: "studentScore", model: "StudentScore", permission: "results.view" },
+  {
+    collection: "studentScore", model: "StudentScore",
+    permission: "results.view",
+    scope: marksAsReadOnline,
+    why: "Raw marks, mirrored as the caller reads them online: whole for the " +
+         "teaching roles (the recorded school-wide read policy), the marks of " +
+         "published exams only for a results.view holder without exams.view.",
+  },
   {
     collection: "resultSummary", model: "ResultSummary",
     permission: "results.view",
@@ -540,12 +572,14 @@ const satisfies = (entry, held) => required(entry).some((k) => held.has(k));
  * belongs in its own commit with its own thought — not as a side effect of
  * building a sync feed.
  *
- * A BURSAR CAN MIRROR EVERY EXAM MARK, because results.view defaults to include
- * the bursar. That is the existing model and this feed follows it faithfully,
- * but it is worth a second look precisely BECAUSE of offline: online it means a
- * screen a bursar would never visit, and offline it means a permanent copy of
- * the school's marks on the finance office machine. Mirroring makes an
- * over-broad capability more consequential than it was.
+ * A BURSAR USED TO MIRROR EVERY EXAM MARK, because results.view defaults to
+ * include the bursar and the studentScore entry had no scope. Online that
+ * capability reaches a raw mark only inside a published result; offline it
+ * was a permanent copy of every mark, drafts included, on the finance office
+ * machine. The entry now mirrors the marks of published exams only for a
+ * results.view holder without exams.view (marksAsReadOnline), which is what
+ * they can read. Whether the bursar should hold results.view at all remains
+ * the role matrix's question, not the feed's.
  */
 const KNOWN_GAPS = [
   {
@@ -585,5 +619,5 @@ module.exports = {
   byCollection,
   modelNames,
   assertEveryModelIsClassified,
-  scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin },
+  scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin, marksAsReadOnline },
 };

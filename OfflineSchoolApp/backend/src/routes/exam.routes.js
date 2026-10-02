@@ -500,9 +500,12 @@ router.get("/reports", staffOnly, asyncHandler(async (req, res) => {
 
 router.get("/reports/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { examId, classId, page = 1, limit = 50 } = req.query;
 
-  const query = { schoolId, deletedAt: null };
+  // Published unless the caller is an administrator — the rule every other
+  // read of a ResultSummary applies (docs/35 §5); this list had been left out.
+  const query = { schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
@@ -569,9 +572,11 @@ router.get("/submissions", staffOnly, asyncHandler(async (req, res) => {
 
 router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { classId, examId } = req.query;
 
-  const query = { schoolId, deletedAt: null };
+  // Published unless the caller is an administrator, as above.
+  const query = { schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
@@ -1188,8 +1193,17 @@ router.delete(
 // The whole cohort’s marks for one exam. Its sibling POST .../scores/bulk was
 // staffOnly and this read was not, so a pupil could fetch every classmate’s
 // score for any exam in their school by asking for it.
+//
+// WHO READS THIS SHEET: every holder of exams.view in the school — the
+// teaching roles, the bursar excluded — for every class, published or not.
+// That breadth is the recorded policy for teachers' reads of marks (docs/20
+// §7b, §11.7; docs/22 §4), recorded there as a product decision still to be
+// taken, and it is not taken here: the write below is confined to the
+// teacher's own (class, subject) pair, the read is the school's. An operator
+// names the school first; no school is no school, never every school.
 router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { classId, subjectId } = req.query;
   const query = {
     examId:    req.params.examId,

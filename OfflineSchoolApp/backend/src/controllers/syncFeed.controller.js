@@ -114,12 +114,16 @@ const encodeCursor = (doc) =>
  * school; nobody else may, and for everybody else the parameter is ignored
  * rather than validated — there is no reading of it that should change what
  * they get.
+ *
+ * A super_admin who names NO school mirrors nothing. The filter used to be
+ * empty for them, which was every school's rows on one machine; an operator
+ * who has not entered a school has no school's data to carry (docs/36).
  */
 const tenantFilter = (req) => {
   const { ROLES } = require("../config/roles");
   if (req.user?.role === ROLES.SUPER_ADMIN) {
     const asked = req.query.schoolId ? String(req.query.schoolId).trim() : null;
-    return asked ? { schoolId: asked } : {};
+    return { schoolId: asked ?? "__no-school-selected__" };
   }
   return { schoolId: req.user?.schoolId ?? "__never-matches__" };
 };
