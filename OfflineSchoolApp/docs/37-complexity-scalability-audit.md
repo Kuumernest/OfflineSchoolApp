@@ -471,7 +471,7 @@ developer machine, in-memory MongoDB. Larger sizes were not run.
 
 ## 17. Classification
 
-Commit: COMMIT_HASH
+Commit: `0f9f9f3`, recorded by the follow-up commit that completes this line.
 
 
 | Level | Items |
