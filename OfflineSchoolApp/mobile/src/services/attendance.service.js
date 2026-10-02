@@ -198,7 +198,8 @@ const ensureSchema = (db) =>
         `CREATE INDEX IF NOT EXISTS idx_ta_teacher_date ON teacher_attendance(teacherId, date)`
       ).catch(() => {});
       await db.execAsync(
-        `CREATE INDEX IF NOT EXISTS idx_ta_synced ON teacher_attendance(_synced)`
+        // Its own name: idx_ta_synced already names teacher_assignments(_synced) in the core schema, so this index never existed.
+        `CREATE INDEX IF NOT EXISTS idx_teacher_att_synced ON teacher_attendance(_synced)`
       ).catch(() => {});
 
       await db.execAsync(

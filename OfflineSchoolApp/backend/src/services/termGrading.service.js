@@ -331,6 +331,29 @@ async function computeClassTermAverages({
   };
 }
 
+
+/**
+ * Competition places for a list of averages: one more than the number
+ * strictly ahead, ties sharing a place — the same answer as counting, for
+ * each pupil, every pupil with a higher average, without doing that count
+ * once per pupil (which made a class of n cost n² and a school of forty
+ * classes a visible pause). Values are read the way the count read them,
+ * Number(x) || 0, so a missing average places as zero exactly as before.
+ *
+ * @param {number[]} averages  in any order
+ * @returns {number[]}         the place of each, in the same order
+ */
+function competitionPlaces(averages) {
+  const values = averages.map((a) => Number(a) || 0);
+  const distinct = [...new Set(values)].sort((a, b) => b - a);
+  const count = new Map();
+  for (const v of values) count.set(v, (count.get(v) ?? 0) + 1);
+  const place = new Map();
+  let ahead = 0;
+  for (const v of distinct) { place.set(v, ahead + 1); ahead += count.get(v); }
+  return values.map((v) => place.get(v));
+}
+
 /**
  * Compute term positions (dense ranking) for a class.
  */
@@ -360,16 +383,13 @@ async function computeTermPositions({ schoolId, academicYear, term, classId }) {
    * One more than the number of pupils strictly ahead, which is the same rule
    * expressed against the averages rather than the sorted index.
    */
-  const bulkOps = results.map((r) => {
-    const mine  = Number(r.termAverage) || 0;
-    const ahead = results.filter((o) => (Number(o.termAverage) || 0) > mine).length;
-    return {
-      updateOne: {
-        filter: { _id: r._id },
-        update: { $set: { classPosition: ahead + 1, totalInClass } },
-      },
-    };
-  });
+  const places = competitionPlaces(results.map((r) => r.termAverage));
+  const bulkOps = results.map((r, i) => ({
+    updateOne: {
+      filter: { _id: r._id },
+      update: { $set: { classPosition: places[i], totalInClass } },
+    },
+  }));
 
   if (bulkOps.length > 0) {
     await TermResult.bulkWrite(bulkOps);
@@ -420,6 +440,7 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
 }
 
 module.exports = {
+  competitionPlaces,
   loadTermContext,
   termResultFields,
   computeStudentTermAverage,

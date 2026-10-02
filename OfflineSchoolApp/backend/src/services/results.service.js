@@ -495,7 +495,7 @@ async function getExamResults(examId, classId = null, options = {}) {
 
 // ─── Get Rankings ─────────────────────────────────────────────────────────
 
-async function getRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false } = {}) {
+async function getRankings(examId, scope = "class", classId = null, schoolId = null, { onlyPublished = false, limit = null } = {}) {
   // schoolId is the caller's; the controller resolves it and checks the exam
   // belongs to it first. The filter used to be examId alone. onlyPublished is
   // the non-administrator's table: positions the school has published.
@@ -516,9 +516,13 @@ async function getRankings(examId, scope = "class", classId = null, schoolId = n
     scope === "grade"  ? "gradePosition"  :
                          "classPosition";
 
-  const results = await ResultSummary.find(filter)
-    .sort({ [sortField]: 1 })
-    .lean();
+  // The sort is the database's, so cutting the page there answers exactly
+  // what sorting the whole table and slicing it answered — without reading
+  // the whole school's positions, and backfilling names on all of them, for
+  // a page of a hundred.
+  let q = ResultSummary.find(filter).sort({ [sortField]: 1 });
+  if (Number.isFinite(Number(limit)) && Number(limit) > 0) q = q.limit(Number(limit));
+  const results = await q.lean();
 
   // Backfill studentName, admissionNo and className for rows that predate
   // denormalisation. Without this, old ranking rows render with no class,

@@ -63,6 +63,14 @@ const wholeSchool = () => ({});
  */
 const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
+  // Six collections carry this scope, and a page of the feed asks each of
+  // them; the teacher's assignments do not change between those six asks.
+  // Memoised on the request, never across requests.
+  if (req._taughtScope) return req._taughtScope;
+  req._taughtScope = taughtScopeOf(req, models);
+  return req._taughtScope;
+};
+const taughtScopeOf = async (req, models) => {
 
   const teacherId = String(req.user._id ?? req.user.id);
   // Active rows only, as utils/teacherScope.js asks on every write: an

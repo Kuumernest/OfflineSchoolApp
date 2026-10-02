@@ -202,7 +202,7 @@ const getExamRankings = asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, error: "Exam not found" });
   }
 
-  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role) });
+  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role), limit: Number(limit) });
   rankings     = rankings.slice(0, Number(limit));
 
   return res.json({
@@ -293,6 +293,21 @@ const getStudentResult = asyncHandler(async (req, res) => {
  *   to resolve against. Optional: a caller without a request gets the stored
  *   relative path, which is still correct data.
  */
+/**
+ * The filter that selects every row sharing a ranking key with these scores:
+ * their examSubjectIds, and — for any row of theirs without one — their
+ * subjectIds, which is the key subjectRanking falls back to. A pupil with no
+ * scores matches nothing, as nothing could place them.
+ */
+const cohortKeysFor = (pupilScores) => {
+  const es = [...new Set(pupilScores.map((s) => s.examSubjectId).filter((x) => x != null).map(String))];
+  const su = [...new Set(pupilScores.filter((s) => s.examSubjectId == null && s.subjectId != null).map((s) => String(s.subjectId)))];
+  const or = [];
+  if (es.length) or.push({ examSubjectId: { $in: es } });
+  if (su.length) or.push({ subjectId: { $in: su } });
+  return or.length ? { $or: or } : { _id: { $in: [] } };
+};
+
 const buildStudentReportCardData = async (examId, studentId, req) => {
   // ✅ Phase 0 repoint: reads the LIVE pipeline collections (StudentScore +
   //    ResultSummary, written by processResults) instead of ExamResult/ExamScore.
@@ -366,8 +381,17 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       ? GradingConfig.findOne({ schoolId: String(exam.schoolId) }).lean()
           .catch(() => null)
       : Promise.resolve(null),
-    // Every score for this exam — needed to rank the student per subject (§5)
-    StudentScore.find({ examId, schoolId, deletedAt: null })
+    // The scores the pupil is ranked among (§5). subjectRanking groups by
+    // examSubjectId when a row carries one and by subjectId otherwise, and
+    // positionOf looks a pupil's row up in its own group only — so the rows
+    // that can move this pupil's place are those sharing one of their keys.
+    // Reading the whole exam (every class the exam covers) answered the same
+    // positions at the cost of S×M rows per card; a class print of forty
+    // cards read the school forty times.
+    StudentScore.find({
+      examId, schoolId, deletedAt: null,
+      ...cohortKeysFor(scores),
+    })
       .select("studentId examSubjectId subjectId score maxScore isAbsent isExempt")
       .lean(),
   ]);

@@ -89,7 +89,15 @@ const analyse = (cohort) => {
   const key = crypto.createHash("sha1").update(JSON.stringify(cohort)).digest("hex");
   const hit = analysisCache.get(key);
   if (hit && Date.now() - hit.at < ANALYSIS_TTL_MS) return hit.report;
-  const report = analyseCohort(cohort);
+  const full = analyseCohort(cohort);
+  // The per-pupil profiles are consumed inside analyseCohort (the review
+  // sheet, the evidence and distribution reports are built from them there)
+  // and read by nothing after it: the route voids the report before
+  // answering, the calibration summary and the pilot read its reports and
+  // its sensitivity table. Held, they were the bulk of each cached entry —
+  // at five thousand pupils some hundreds of megabytes, six times over
+  // (docs/37). Dropped before the entry is kept.
+  const report = { ...full, profiles: undefined };
   analysisCache.set(key, { at: Date.now(), report });
   while (analysisCache.size > ANALYSIS_MAX) analysisCache.delete(analysisCache.keys().next().value);
   return report;

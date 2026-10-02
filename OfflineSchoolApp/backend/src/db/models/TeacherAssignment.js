@@ -39,6 +39,13 @@ teacherAssignmentSchema.index({ schoolId: 1, teacher: 1 });
 teacherAssignmentSchema.index({ schoolId: 1, class:   1 });
 teacherAssignmentSchema.index({ schoolId: 1, subject: 1 });
 
+
+// The change feed's page (GET /api/sync/changes, config/syncFeed.js): filtered
+// on schoolId and a keyset of (updatedAt, _id), sorted the same way. Without
+// this the planner walked the school's rows in full for every page and every
+// idle poll, examining N documents to return none (docs/37). The mobile pull
+// (updatedAt >= since) is served by the same prefix.
+teacherAssignmentSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
 module.exports =
   mongoose.models.TeacherAssignment ||
   mongoose.model("TeacherAssignment", teacherAssignmentSchema);

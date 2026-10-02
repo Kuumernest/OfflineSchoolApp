@@ -276,9 +276,13 @@ async function familyLedger({ schoolId, studentId, academicYear = null }) {
   const filter = { schoolId: String(schoolId), studentId: String(studentId), deletedAt: null };
   if (academicYear) filter.academicYear = String(academicYear);
 
+  // Ordered by time and then by id: rows raised together (one structure's
+  // items share a createdAt) came back in whichever order the chosen index
+  // walked them, which changed when an index was added. A ledger a family
+  // reads should not reorder itself between two visits.
   const [charges, payments] = await Promise.all([
-    FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1 }).lean(),
-    FeePayment.find(filter).sort({ receivedAt: 1 }).lean(),
+    FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1, _id: 1 }).lean(),
+    FeePayment.find(filter).sort({ receivedAt: 1, _id: 1 }).lean(),
   ]);
 
   const charged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);

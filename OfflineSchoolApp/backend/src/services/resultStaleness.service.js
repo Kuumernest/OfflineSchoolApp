@@ -33,11 +33,16 @@ const Exam         = require("../db/models/Exam");
 const StudentScore = require("../db/models/StudentScore");
 const TermResult   = require("../db/models/TermResult");
 
-/** The latest updatedAt per student, over a set of exams. */
-async function latestMarkPerStudent(examIds) {
-  if (!examIds.length) return new Map();
+/**
+ * The latest updatedAt per student, over a set of exams — for the pupils
+ * asked about. Both callers below look a pupil up only if that pupil is on
+ * the page they are stamping, so grouping the whole school's marks for every
+ * page of fifty answered nothing the page's own pupils' marks do not.
+ */
+async function latestMarkPerStudent(examIds, studentIds) {
+  if (!examIds.length || !studentIds.length) return new Map();
   const rows = await StudentScore.aggregate([
-    { $match: { examId: { $in: examIds }, deletedAt: null } },
+    { $match: { examId: { $in: examIds }, studentId: { $in: studentIds }, deletedAt: null } },
     { $group: { _id: "$studentId", latest: { $max: "$updatedAt" } } },
   ]);
   return new Map(rows.map((r) => [String(r._id), r.latest]));
@@ -65,7 +70,10 @@ async function termStaleness({ schoolId, academicYear, term, results }) {
     schoolId: String(schoolId), academicYear, term: Number(term), deletedAt: null,
   }).select("_id").lean();
 
-  const perStudent = await latestMarkPerStudent(exams.map((e) => String(e._id)));
+  const perStudent = await latestMarkPerStudent(
+    exams.map((e) => String(e._id)),
+    [...new Set(results.map((r) => String(r.studentId)))],
+  );
 
   const staleIds = new Set();
   let latestMark = null;
@@ -99,7 +107,7 @@ async function annualStaleness({ schoolId, academicYear, results }) {
   }
 
   const rows = await TermResult.aggregate([
-    { $match: { schoolId: String(schoolId), academicYear, deletedAt: null } },
+    { $match: { schoolId: String(schoolId), academicYear, deletedAt: null, studentId: { $in: [...new Set(results.map((r) => String(r.studentId)))] } } },
     { $group: { _id: "$studentId", latest: { $max: "$updatedAt" } } },
   ]);
   const perStudent = new Map(rows.map((r) => [String(r._id), r.latest]));

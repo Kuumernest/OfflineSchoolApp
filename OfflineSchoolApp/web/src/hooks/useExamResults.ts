@@ -154,8 +154,8 @@ export const useAllResults = (
 // ─── TERM RESULTS ────────────────────────────────────────────────────────────
 
 const termResultKeys = {
-  list: (schoolId: string, year: string, term: number, classId?: string) =>
-    ["term-results", schoolId, year, term, classId ?? "all"] as const,
+  list: (schoolId: string, year: string, term: number, classId?: string, page?: number) =>
+    ["term-results", schoolId, year, term, classId ?? "all", page ?? 1] as const,
 };
 
 export const useTermResults = (
@@ -167,7 +167,7 @@ export const useTermResults = (
 ) => {
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   return useQuery({
-    queryKey: termResultKeys.list(schoolId, academicYear, term, classId),
+    queryKey: termResultKeys.list(schoolId, academicYear, term, classId, page),
     queryFn: () => ExamService.getTermResults({ schoolId, academicYear, term, classId, page, limit }),
     enabled: !!academicYear && !!term && !!schoolId,
     staleTime: 2 * 60_000,
@@ -217,8 +217,8 @@ export const usePublishTermResults = () => {
 // ─── ANNUAL RESULTS ──────────────────────────────────────────────────────────
 
 const annualResultKeys = {
-  list: (schoolId: string, year: string, classId?: string) =>
-    ["annual-results", schoolId, year, classId ?? "all"] as const,
+  list: (schoolId: string, year: string, classId?: string, page?: number) =>
+    ["annual-results", schoolId, year, classId ?? "all", page ?? 1] as const,
 };
 
 export const useAnnualResults = (
@@ -229,7 +229,7 @@ export const useAnnualResults = (
 ) => {
   const schoolId = useAuthStore((s) => s.user?.schoolId ?? "");
   return useQuery({
-    queryKey: annualResultKeys.list(schoolId, academicYear, classId),
+    queryKey: annualResultKeys.list(schoolId, academicYear, classId, page),
     queryFn: () => ExamService.getAnnualResults({ schoolId, academicYear, classId, page, limit }),
     enabled: !!academicYear && !!schoolId,
     staleTime: 2 * 60_000,

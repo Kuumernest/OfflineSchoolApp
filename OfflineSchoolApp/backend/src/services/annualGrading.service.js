@@ -22,6 +22,7 @@ const AnnualResult      = require("../db/models/AnnualResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig     = require("../db/models/GradingConfig");
 const grading           = require("./grading.service");
+const { competitionPlaces } = require("./termGrading.service");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -51,16 +52,15 @@ function getTermWeights(structure) {
  * @param {string} [opts.className]
  * @returns {Object} AnnualResult document (upserted)
  */
-async function computeStudentAnnualAverage({
-  schoolId,
-  academicYear,
-  classId,
-  studentId,
-  studentName,
-  admissionNo,
-  className,
-}) {
-  // 1. Load academic structure
+/**
+ * What every pupil of a class shares: the year's structure, the pass mark and
+ * the promotion exams. Loaded once per class rather than once per pupil — the
+ * per-pupil version read the structure, the config, the term results and the
+ * promotion exams for each pupil in turn, so a school of forty classes made
+ * about five sequential round trips per pupil, four of them for documents
+ * that are the same for everyone in the class.
+ */
+async function annualContextFor({ schoolId, academicYear }) {
   const structure = await AcademicStructure.findOne({
     schoolId,
     academicYear,
@@ -71,21 +71,34 @@ async function computeStudentAnnualAverage({
     throw new Error(`No academic structure found for ${schoolId} / ${academicYear}`);
   }
 
-  // 2. Load grading config
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
   const passMark = gradingConfig?.passMark ?? 10;
-
-  // 3. Get term weights
   const termWeights = getTermWeights(structure);
 
-  // 4. Load all 3 TermResults for this student
-  const termResults = await TermResult.find({
-    schoolId,
-    academicYear,
-    classId,
-    studentId,
-    deletedAt: null,
-  }).lean();
+  const promotionExams = structure.promotionExams ?? [];
+  let promotionExamIds = [];
+  if (promotionExams.length > 0) {
+    const Exam = mongoose.model("Exam");
+    const promotionExamDocs = await Exam.find({
+      schoolId,
+      academicYear,
+      sequenceNumber: { $in: promotionExams },
+      type: "promotion_exam",
+      deletedAt: null,
+    }).lean();
+    promotionExamIds = promotionExamDocs.map((e) => e._id);
+  }
+
+  return { structure, passMark, termWeights, promotionExamIds };
+}
+
+/**
+ * The annual row for one pupil, from the term results and promotion results
+ * already in hand. Pure: no database. The arithmetic and the promotion rule
+ * are exactly those of the per-pupil function this replaced.
+ */
+function annualRowFor(ctx, { termResults, promotionResults }) {
+  const { structure, passMark, termWeights } = ctx;
 
   // 5. Build per-term averages
   const termAverages = [];
@@ -123,47 +136,16 @@ async function computeStudentAnnualAverage({
   // 7. Determine promotion status
   let promotionStatus = "pending";
   if (completedTerms >= 3) {
-    // Check if student passed all terms
     const allTermsPassed = termAverages.every(
       (ta) => ta.isComplete && ta.average >= passMark
     );
-
-    // Check promotion exams (if configured)
-    const promotionExams = structure.promotionExams ?? [];
     let promotionExamsPassed = true;
-
-    if (promotionExams.length > 0) {
-      // Find exams that are promotion exams
-      const Exam = mongoose.model("Exam");
-      const promotionExamDocs = await Exam.find({
-        schoolId,
-        academicYear,
-        sequenceNumber: { $in: promotionExams },
-        type: "promotion_exam",
-        deletedAt: null,
-      }).lean();
-
-      const promotionExamIds = promotionExamDocs.map((e) => e._id);
-
-      if (promotionExamIds.length > 0) {
-        const ResultSummary = require("../db/models/ResultSummary");
-        const promotionResults = await ResultSummary.find({
-          examId: { $in: promotionExamIds },
-          studentId,
-          classId,
-          schoolId,
-          deletedAt: null,
-        }).lean();
-
-        for (const pr of promotionResults) {
-          if (pr.average < structure.promotionThreshold) {
-            promotionExamsPassed = false;
-            break;
-          }
-        }
+    for (const pr of promotionResults) {
+      if (pr.average < structure.promotionThreshold) {
+        promotionExamsPassed = false;
+        break;
       }
     }
-
     if (allTermsPassed && promotionExamsPassed) {
       promotionStatus = "promoted";
     } else if (!allTermsPassed) {
@@ -173,6 +155,63 @@ async function computeStudentAnnualAverage({
     }
   }
 
+  return { termAverages, annualAverage, annualGrade, promotionStatus, isPassing };
+}
+
+/** The $set an annual result is written with. */
+const annualSetFor = ({ studentName, admissionNo, className }, ctx, row) => ({
+  studentName:         studentName ?? null,
+  admissionNo:         admissionNo ?? null,
+  className:           className ?? null,
+  termAverages:        row.termAverages,
+  annualAverage:       row.annualAverage,
+  overallGrade:        row.annualGrade.grade,
+  overallRemark:       row.annualGrade.remark,
+  promotionStatus:     row.promotionStatus,
+  promotionThreshold:  ctx.structure.promotionThreshold ?? null,
+  isPassing:           row.isPassing,
+  syncStatus:          "pending",
+});
+
+async function computeStudentAnnualAverage({
+  schoolId,
+  academicYear,
+  classId,
+  studentId,
+  studentName,
+  admissionNo,
+  className,
+}) {
+  const ctx = await annualContextFor({ schoolId, academicYear });
+  const { structure, passMark, termWeights } = ctx;
+  void passMark; void termWeights;
+
+  // 4. Load all 3 TermResults for this student
+  const termResults = await TermResult.find({
+    schoolId,
+    academicYear,
+    classId,
+    studentId,
+    deletedAt: null,
+  }).lean();
+
+  // The promotion results, read only when the structure names promotion
+  // exams, as before.
+  let promotionResults = [];
+  if (ctx.promotionExamIds.length > 0) {
+    const ResultSummary = require("../db/models/ResultSummary");
+    promotionResults = await ResultSummary.find({
+      examId: { $in: ctx.promotionExamIds },
+      studentId,
+      classId,
+      schoolId,
+      deletedAt: null,
+    }).lean();
+  }
+  void structure;
+
+  const row = annualRowFor(ctx, { termResults, promotionResults });
+
   // 8. Upsert AnnualResult
   const filter = {
     schoolId,
@@ -181,21 +220,7 @@ async function computeStudentAnnualAverage({
     studentId,
   };
 
-  const update = {
-    $set: {
-      studentName:         studentName ?? null,
-      admissionNo:         admissionNo ?? null,
-      className:           className ?? null,
-      termAverages,
-      annualAverage,
-      overallGrade:        annualGrade.grade,
-      overallRemark:       annualGrade.remark,
-      promotionStatus,
-      promotionThreshold:  structure.promotionThreshold ?? null,
-      isPassing,
-      syncStatus:          "pending",
-    },
-  };
+  const update = { $set: annualSetFor({ studentName, admissionNo, className }, ctx, row) };
 
   const result = await AnnualResult.findOneAndUpdate(filter, update, {
     upsert: true,
@@ -250,25 +275,63 @@ async function computeClassAnnualAverages({
   let computed = 0;
   let skipped  = 0;
 
-  for (const student of students) {
-    try {
-      await computeStudentAnnualAverage({
-        schoolId,
-        academicYear,
-        classId,
-        // Student._id, which is what TermResult.studentId holds and what
-        // buildAnnualCard looks the pupil up by. Reading the login id here
-        // matched no term results at all for any pupil who had an account.
-        studentId:   student._id,
-        studentName: student.studentName,
-        admissionNo: student.enrollmentNo,
-        className:   student.className || resolvedClassName,
-      });
-      computed++;
-    } catch (err) {
-      console.error(`[annualGrading] Skipped ${student.studentName}:`, err.message);
-      skipped++;
+  if (students.length > 0) {
+    // One context for the class (an absent structure fails the whole class,
+    // as it failed every pupil of it before), one read of the class's term
+    // results grouped by pupil, one read of the promotion results, one write.
+    const ctx = await annualContextFor({ schoolId, academicYear });
+    // Student._id, which is what TermResult.studentId holds and what
+    // buildAnnualCard looks the pupil up by. Reading the login id here
+    // matched no term results at all for any pupil who had an account.
+    const ids = students.map((s) => String(s._id));
+    const termRows = await TermResult.find({
+      schoolId, academicYear, classId, studentId: { $in: ids }, deletedAt: null,
+    }).lean();
+    const termsByStudent = new Map();
+    for (const tr of termRows) {
+      const k = String(tr.studentId);
+      if (!termsByStudent.has(k)) termsByStudent.set(k, []);
+      termsByStudent.get(k).push(tr);
     }
+    const promoByStudent = new Map();
+    if (ctx.promotionExamIds.length > 0) {
+      const ResultSummary = require("../db/models/ResultSummary");
+      const promoRows = await ResultSummary.find({
+        examId: { $in: ctx.promotionExamIds }, studentId: { $in: ids }, classId, schoolId, deletedAt: null,
+      }).lean();
+      for (const pr of promoRows) {
+        const k = String(pr.studentId);
+        if (!promoByStudent.has(k)) promoByStudent.set(k, []);
+        promoByStudent.get(k).push(pr);
+      }
+    }
+
+    const ops = [];
+    for (const student of students) {
+      try {
+        const k = String(student._id);
+        const row = annualRowFor(ctx, {
+          termResults:      termsByStudent.get(k) ?? [],
+          promotionResults: promoByStudent.get(k) ?? [],
+        });
+        ops.push({
+          updateOne: {
+            filter: { schoolId, academicYear, classId, studentId: student._id },
+            update: { $set: annualSetFor({
+              studentName: student.studentName,
+              admissionNo: student.enrollmentNo,
+              className:   student.className || resolvedClassName,
+            }, ctx, row) },
+            upsert: true,
+          },
+        });
+        computed++;
+      } catch (err) {
+        console.error(`[annualGrading] Skipped ${student.studentName}:`, err.message);
+        skipped++;
+      }
+    }
+    if (ops.length > 0) await AnnualResult.bulkWrite(ops, { ordered: false });
   }
 
   // Compute class positions
@@ -295,16 +358,13 @@ async function computeAnnualPositions({ schoolId, academicYear, classId }) {
   // Ties share a place, as they do for a subject and for a term — see the note
   // in termGrading.service.js. Ranking by sorted index gave two pupils on the
   // same annual average different positions.
-  const bulkOps = results.map((r) => {
-    const mine  = Number(r.annualAverage) || 0;
-    const ahead = results.filter((o) => (Number(o.annualAverage) || 0) > mine).length;
-    return {
-      updateOne: {
-        filter: { _id: r._id },
-        update: { $set: { classPosition: ahead + 1, totalInClass } },
-      },
-    };
-  });
+  const places = competitionPlaces(results.map((r) => r.annualAverage));
+  const bulkOps = results.map((r, i) => ({
+    updateOne: {
+      filter: { _id: r._id },
+      update: { $set: { classPosition: places[i], totalInClass } },
+    },
+  }));
 
   if (bulkOps.length > 0) {
     await AnnualResult.bulkWrite(bulkOps);

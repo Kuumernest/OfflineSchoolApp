@@ -1410,10 +1410,16 @@ router.get("/report/class/:classId", staffRead, async (req, res) => {
         .lean(),
     ]);
 
+    // One pass to group the term's rows by pupil; the filter-per-pupil this
+    // replaces was roster × records for every report.
+    const byStudent = new Map();
+    for (const r of records) {
+      const k = String(r.studentId);
+      if (!byStudent.has(k)) byStudent.set(k, []);
+      byStudent.get(k).push(r);
+    }
     const studentSummary = roster.map((student) => {
-      const studentRecords = records.filter(
-        (r) => r.studentId === String(student._id)
-      );
+      const studentRecords = byStudent.get(String(student._id)) ?? [];
       const present = studentRecords.filter((r) => r.status === "present").length;
       const absent  = studentRecords.filter((r) => r.status === "absent").length;
       const late    = studentRecords.filter((r) => r.status === "late").length;

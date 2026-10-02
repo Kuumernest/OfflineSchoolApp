@@ -195,7 +195,7 @@ export const fixStudentIndexes = async () => {
       .execAsync(`
         CREATE INDEX IF NOT EXISTS idx_students_user_id_nonuniq
           ON students(user_id);
-        CREATE INDEX IF NOT EXISTS idx_students_class
+        CREATE INDEX IF NOT EXISTS idx_students_class_id
           ON students(class_id);
         CREATE INDEX IF NOT EXISTS idx_students_classId
           ON students(classId);
@@ -467,7 +467,7 @@ const ensureStudentSchema = async (db) => {
       .execAsync(`
         CREATE INDEX IF NOT EXISTS idx_students_user_id_nonuniq
           ON students(user_id);
-        CREATE INDEX IF NOT EXISTS idx_students_class
+        CREATE INDEX IF NOT EXISTS idx_students_class_id
           ON students(class_id);
         CREATE INDEX IF NOT EXISTS idx_students_classId
           ON students(classId);

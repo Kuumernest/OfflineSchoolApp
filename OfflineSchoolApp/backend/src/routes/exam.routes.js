@@ -591,6 +591,24 @@ router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   return res.json({ success: true, results, total: results.length });
 }));
 
+
+/**
+ * Marks entered per (exam, class, subject), in one grouped query.
+ *
+ * The two submission views asked StudentScore.countDocuments once per
+ * ExamSubject — a school of a hundred classes and twelve subjects made 1,200
+ * counts to draw one screen. One $group over the same filter gives the same
+ * numbers; a key with no entry counts as zero, as an empty count did.
+ */
+const enteredCountsFor = async (match) => {
+  const rows = await StudentScore.aggregate([
+    { $match: { ...match, score: { $ne: null }, deletedAt: null } },
+    { $group: { _id: { examId: "$examId", classId: "$classId", subjectId: "$subjectId" }, n: { $sum: 1 } } },
+  ]);
+  const counts = new Map(rows.map((r) => [`${r._id.examId}|${r._id.classId}|${r._id.subjectId}`, r.n]));
+  return (es) => counts.get(`${es.examId}|${es.classId}|${es.subjectId}`) ?? 0;
+};
+
 router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
@@ -600,19 +618,8 @@ router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) 
   if (classId) query.classId = classId;
 
   const subjects = await ExamSubject.find(query).lean();
-  const enriched = await Promise.all(
-    subjects.map(async (es) => {
-      const count = await StudentScore.countDocuments({
-        examId:    es.examId,
-        subjectId: es.subjectId,
-        classId:   es.classId,
-        schoolId,
-        score:     { $ne: null },
-        deletedAt: null,
-      });
-      return { ...es, totalScoresEntered: count };
-    })
-  );
+  const entered  = await enteredCountsFor({ schoolId, ...(examId ? { examId } : {}), ...(classId ? { classId } : {}) });
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
   return res.json({
     success:     true,
     submissions: enriched,
@@ -1790,20 +1797,8 @@ router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
   if (teacherId) query.teacherId = teacherId;
 
   const subjects = await ExamSubject.find(query).lean();
-
-  const enriched = await Promise.all(
-    subjects.map(async (es) => {
-      const count = await StudentScore.countDocuments({
-        examId:    req.params.examId,
-        subjectId: es.subjectId,
-        classId:   es.classId,
-        schoolId,
-        score:     { $ne: null },
-        deletedAt: null,
-      });
-      return { ...es, totalScoresEntered: count };
-    })
-  );
+  const entered  = await enteredCountsFor({ examId: req.params.examId, schoolId });
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
 
   return res.json({ success: true, submissions: enriched });
 }));

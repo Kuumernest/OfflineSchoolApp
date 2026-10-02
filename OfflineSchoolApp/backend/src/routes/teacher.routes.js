@@ -398,7 +398,10 @@ const getTeacherScope = async (teacherId, schoolId) => {
   }
 
   try {
+    // Scoped to the school: without it this read walked every school's
+    // subjects on the platform for one teacher's ids, on fourteen routes.
     const rows = await Subject.find({
+      ...(schoolId ? { schoolId: String(schoolId) } : {}),
       $or: [{ teacher_id: tid }, { teacherId: tid }, { teacher: tid }],
     })
       .select("_id class classId class_id")

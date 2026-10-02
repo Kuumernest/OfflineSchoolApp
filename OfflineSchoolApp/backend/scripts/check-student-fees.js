@@ -57,8 +57,9 @@ const check = (label, actual, expected) => {
     _id: id, schoolId: A, studentId, academicYear: YEAR, term: 1, code, label: code, amount, raisedBy: "bursar-a", ...extra,
   });
   await M("FeeCharge").create([
-    charge("c-a1-tuition", "st-a1", "TUITION", 50000, { dueDate: new Date("2026-10-15") }),
-    charge("c-a1-books",   "st-a1", "BOOKS",   10000, { waivedAmount: 2000, waiverReason: "sibling" }),
+    // Raised a day apart, so the ledger's chronological order is what is asserted.
+    charge("c-a1-tuition", "st-a1", "TUITION", 50000, { dueDate: new Date("2026-10-15"), createdAt: new Date("2026-09-01") }),
+    charge("c-a1-books",   "st-a1", "BOOKS",   10000, { waivedAmount: 2000, waiverReason: "sibling", createdAt: new Date("2026-09-02") }),
     charge("c-a1-void",    "st-a1", "LAB",     99999, { voidedAt: new Date(), voidedBy: "bursar-a", voidReason: "raised in error" }),
     charge("c-a2-tuition", "st-a2", "TUITION", 70000),
   ]);

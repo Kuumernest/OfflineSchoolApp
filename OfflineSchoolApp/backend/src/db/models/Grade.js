@@ -66,4 +66,11 @@ gradeSchema.index(
 gradeSchema.index({ schoolId: 1, classId: 1 });
 gradeSchema.index({ deletedAt: 1 });
 
+
+// The change feed's page (GET /api/sync/changes, config/syncFeed.js): filtered
+// on schoolId and a keyset of (updatedAt, _id), sorted the same way. Without
+// this the planner walked the school's rows in full for every page and every
+// idle poll, examining N documents to return none (docs/37). The mobile pull
+// (updatedAt >= since) is served by the same prefix.
+gradeSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
 module.exports = mongoose.model("Grade", gradeSchema);

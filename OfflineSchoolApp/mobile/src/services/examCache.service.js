@@ -155,15 +155,21 @@ export const ensureExamTables = async () => {
     )`);
 
     const indexes = [
-      "CREATE INDEX IF NOT EXISTS idx_exams_school     ON exams(schoolId, deleted_at)",
-      "CREATE INDEX IF NOT EXISTS idx_exams_status     ON exams(status)",
-      "CREATE INDEX IF NOT EXISTS idx_exsub_exam       ON exam_subjects(examId)",
-      "CREATE INDEX IF NOT EXISTS idx_exsub_teacher    ON exam_subjects(teacherId)",
-      "CREATE INDEX IF NOT EXISTS idx_scores_exam      ON exam_scores(examId, classId, subjectId)",
-      "CREATE INDEX IF NOT EXISTS idx_scores_student   ON exam_scores(studentId)",
-      "CREATE INDEX IF NOT EXISTS idx_scores_synced    ON exam_scores(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_results_exam     ON exam_results(examId, classId)",
-      "CREATE INDEX IF NOT EXISTS idx_results_student  ON exam_results(studentId)",
+      // Index names are global in SQLite. Five of these once reused names the
+      // core schema (src/db/database.js) had already given to indexes on
+      // student_scores, result_summaries and exams, so CREATE INDEX IF NOT
+      // EXISTS did nothing and the mark sheet, the per-pupil reads and the
+      // exam list scanned their tables in full (docs/37). Named for their own
+      // tables now; the earlier names stay where they were, on theirs.
+      "CREATE INDEX IF NOT EXISTS idx_exams_school_deleted   ON exams(schoolId, deleted_at)",
+      "CREATE INDEX IF NOT EXISTS idx_exams_status           ON exams(status)",
+      "CREATE INDEX IF NOT EXISTS idx_exsub_exam             ON exam_subjects(examId)",
+      "CREATE INDEX IF NOT EXISTS idx_exsub_teacher          ON exam_subjects(teacherId)",
+      "CREATE INDEX IF NOT EXISTS idx_exam_scores_sheet      ON exam_scores(examId, classId, subjectId)",
+      "CREATE INDEX IF NOT EXISTS idx_exam_scores_student    ON exam_scores(studentId)",
+      "CREATE INDEX IF NOT EXISTS idx_scores_synced          ON exam_scores(_synced)",
+      "CREATE INDEX IF NOT EXISTS idx_exam_results_exam      ON exam_results(examId, classId)",
+      "CREATE INDEX IF NOT EXISTS idx_exam_results_student   ON exam_results(studentId)",
     ];
     for (const sql of indexes) await database.execAsync(sql).catch(() => {});
 
