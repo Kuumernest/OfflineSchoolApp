@@ -141,4 +141,4 @@ No pre-existing or unrelated failures were observed in any run.
 
 ## D. Commit
 
-COMMIT_HASH
+Portal-session stamps: `d18c3fa`. Raw marks: `e5b2443`. The hashes are recorded by the follow-up commit that completes this section.
