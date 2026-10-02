@@ -43,6 +43,18 @@ const bad = (label, detail) => {
 };
 const note = (label) => console.log(`       ${label}`);
 
+/**
+ * Every phase is stamped with the wall clock. The suite runs in about fifteen
+ * seconds; the one run that took twenty-nine minutes (2026-10-01) did so
+ * because the machine slept from sixteen seconds in until five seconds before
+ * the end — the Windows power log said so, the suite could not. With a stamp
+ * per phase the next outlier names its phase, and a gap that is not in any
+ * phase's work is the host's, not the session's.
+ */
+const T0 = Date.now();
+const stamp = () => `[+${((Date.now() - T0) / 1000).toFixed(1)}s ${new Date().toISOString().slice(11, 19)}Z]`;
+const section = (label) => console.log(`\n--- ${label} --- ${stamp()}`);
+
 const DAY = 86_400_000;
 
 (async () => {
@@ -105,12 +117,12 @@ const DAY = 86_400_000;
   const isOk    = (r) => r.status === 200 && r.body?.success === true;
   const refused = (r, code) => r.status === 401 && r.body?.code === code;
 
-  console.log("\n=== the arrangement under test ===");
+  console.log(`\n=== the arrangement under test === ${stamp()} (mongod and the router up)`);
   note(`access token   ${portal.ACCESS_TOKEN_MINUTES} minutes`);
   note(`session        ${portal.SESSION_DAYS} days, at most ${portal.MAX_SESSIONS} per code`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- sign-in hands out a session, not just a token ---");
+  section("sign-in hands out a session, not just a token");
   const phone = (await signIn()).body;
 
   if (phone.token && phone.refreshToken) ok("login returns an access token AND a refresh token");
@@ -155,7 +167,7 @@ const DAY = 86_400_000;
   else bad("the access token opens the portal", `${res.status} ${JSON.stringify(res.body).slice(0, 160)}`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- twenty minutes pass; nobody types anything ---");
+  section("twenty minutes pass; nobody types anything");
   const lapsed = jwt.sign(
     { aud: "portal", accessId, schoolId: S, sid: claims.sid, exp: Math.floor(Date.now() / 1000) - 60 },
     process.env.JWT_SECRET
@@ -185,7 +197,7 @@ const DAY = 86_400_000;
   else bad("a refresh token is reusable", `${ref.status} ${ref.body?.code}`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- offline for a month ---");
+  section("offline for a month");
   await GuardianAccess.updateOne(
     { _id: accessId, "sessions._id": claims.sid },
     { $set: { "sessions.$.lastUsedAt": new Date(Date.now() - 30 * DAY) } }
@@ -206,7 +218,7 @@ const DAY = 86_400_000;
   else bad("expired session is pruned", String(r.sessions.length));
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- tokens that are not a session ---");
+  section("tokens that are not a session");
   for (const [label, bogus] of [
     ["no token",         undefined],
     ["an empty string",  ""],
@@ -223,7 +235,7 @@ const DAY = 86_400_000;
   else bad("refresh token is not an access token", `${res.status} ${res.body?.code}`);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- two phones, one code ---");
+  section("two phones, one code");
   const a = (await signIn()).body;
   const b = (await signIn()).body;
   r = await row();
@@ -232,7 +244,7 @@ const DAY = 86_400_000;
   if (isOk(await renew(a.refreshToken)) && isOk(await renew(b.refreshToken))) ok("both renew");
   else bad("both sessions renew");
 
-  console.log("\n--- sign out on one of them ---");
+  section("sign out on one of them");
   let out = await call("POST", "/logout", { body: { refreshToken: a.refreshToken } });
   if (isOk(out) && out.body.ended === true) ok("POST /logout → 200, ended");
   else bad("logout succeeds", `${out.status} ${JSON.stringify(out.body)}`);
@@ -251,7 +263,7 @@ const DAY = 86_400_000;
   else bad("logout removed exactly one session", String(r.sessions.length));
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- a family that signs in on many phones ---");
+  section("a family that signs in on many phones");
   const many = [];
   for (let i = 0; i < portal.MAX_SESSIONS + 2; i++) {
     many.push((await signIn()).body);
@@ -267,7 +279,7 @@ const DAY = 86_400_000;
   else bad("the oldest session is dropped first");
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- the office re-issues the code (the slip was lost) ---");
+  section("the office re-issues the code (the slip was lost)");
   const keep = many[many.length - 1];
   const reissued = await portal.issueAccess({ schoolId: S, accessId });
   r = await row();
@@ -286,7 +298,7 @@ const DAY = 86_400_000;
   else bad("the new code works", JSON.stringify(c));
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- the office revokes the code ---");
+  section("the office revokes the code");
   await portal.revokeAccess({ schoolId: S, accessId });
   res = await me(c.token);
   if (refused(res, "ACCESS_REVOKED")) ok("a live access token is refused on the very next request — not in twenty minutes");
@@ -304,7 +316,7 @@ const DAY = 86_400_000;
   else bad("a revoked code is dead");
 
   // ═══════════════════════════════════════════════════════════════════════════
-  console.log("\n--- the controls around the code are as they were ---");
+  section("the controls around the code are as they were");
   const staff = jwt.sign({ id: "usr-1", role: "teacher", schoolId: S }, process.env.JWT_SECRET, { expiresIn: "1h" });
   if (refused(await me(staff), "INVALID_TOKEN")) ok("a staff token is still refused by the portal (audience check)");
   else bad("a staff token does not open the portal");
@@ -324,7 +336,7 @@ const DAY = 86_400_000;
   else bad("failed sign-ins create no sessions", String(r.sessions.length));
 
   console.log("");
-  console.log(`  ${pass} passed, ${fail} failed`);
+  console.log(`  ${pass} passed, ${fail} failed   ${stamp()}`);
 
   server.close();
   await mongoose.disconnect();
