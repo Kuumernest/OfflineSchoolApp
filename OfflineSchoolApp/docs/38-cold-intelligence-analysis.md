@@ -478,16 +478,42 @@ local uploads and backups out of the build context (7.4 MB).
 | The built image run with host networking, `NODE_ENV=production`, against the Compose stack's MongoDB 7 (authentication on), a fresh named volume at `/app/src/uploads` | `GET /api/health` 200 `{"status":"ok","database":"connected","env":"production"}`; boot log: `MongoDB connected`, `intelligenceanalysisruns activeKey is unique ✅` (with `autoIndex` off), `Indexes verified` |
 | A synthetic school seeded through the image's own models; a test-only token | `GET /insights/review-cases` 200 (cold, run executed in the image's worker thread; 8 cases, names joined) then 200 warm in 29 ms; `GET /insights/calibration-summary` 200; `GET /insights/analysis-runs/latest` 200 — `succeeded`, 3,425-byte report, current; `GET /insights/pilot/preflight` 200; `GET /templates` 200 (engine loaded); no token 401; no module-load, `ENOENT` or 503 lines in the log |
 | `appuser` writing into `/app/src/uploads/logos` on the fresh volume | succeeded |
-| `GET /` through nginx | HTTP 500 — the console is not served by this stack; the pre-existing defect in `docs/17-deployment.md` ("the web console is not served"), not changed here |
+| `GET /` through nginx (before the fix below) | HTTP 500; nginx's log: `rewrite or internal redirection cycle while internally redirecting to "/index.html"` — `/app/public/web` did not exist in the nginx container |
 
 Everything was torn down afterwards (containers, volumes, network, the
 test-only secrets).
 
+**The web console (fixed after the commit above).** The web build existed only
+in the backend image, where nothing serves it, and the `nginx` service had
+nothing but its config, so `try_files` cycled to a 500 on every page. The
+Dockerfile now has a `web` stage — `nginx:alpine` plus
+`COPY --from=web-builder /app/web/dist /app/public/web` — placed before the
+backend stage so a plain `docker build` still builds the backend, and the
+`nginx` service in `docker-compose.yml` builds that target. `nginx.conf` is
+unchanged and still mounted. A named volume shared with the backend was
+rejected: Docker fills one only when empty, so it would keep serving the
+first build after every deploy.
+
+| Step | Result |
+|---|---|
+| `docker compose up --build` | nginx rebuilt from target `web` and recreated |
+| `GET /` through nginx | 200 `text/html`, the console's `index.html` |
+| `GET /assets/index-wJzPah24.js` (named in that page) | 200 `application/javascript`, 109,570 bytes |
+| `GET /dashboard` (an SPA route) | 200 `text/html` (the `try_files` fallback) |
+| `GET /api/health` through nginx **on the Compose network** | **no answer**: the backend could not reach `mongo` and restarted; a probe container on the network timed out to both `mongo:27017` and `nginx:80`. **Not verified here.** |
+| Both built images on host networking, unmodified `nginx.conf`, `backend` resolved to `127.0.0.1` | `GET /api/health` via nginx 200 (`database: connected`); `GET /` 200; unauthenticated `GET /api/insights/review-cases` 401; `GET /uploads/logos/none.png` reached the backend (its JSON 404) |
+| `docker build` with no target | the backend image (`appuser`, `node src/server.js`) |
+
+Note, unchanged: a missing asset path (for example `/assets/missing.js`) also
+answers 200 with `index.html`, from the same `try_files` fallback.
+
 **Not verified (assumptions):**
 
-- The Compose stack end to end (backend → `mongo` over the Compose network,
-  nginx → backend). Blocked by this environment's networking, not by the
-  image; it must be confirmed on the target host.
+- The Compose stack end to end over the Compose network (backend → `mongo`,
+  nginx → backend). Blocked by this environment's networking — a plain probe
+  container cannot reach any other container — not by the images. The same
+  images and config work with host networking (above). It must be confirmed
+  on the target host.
 - A named `uploads_data` volume **created by an earlier image** keeps that
   image's root ownership — Docker copies the image's ownership only into an
   empty, new volume. Such a deployment needs a one-time
@@ -495,8 +521,9 @@ test-only secrets).
   server cannot write uploads. Because the earlier image could not start at
   all (above), this should only concern volumes made by hand or by an older
   build.
-- TLS, the web console through nginx, and production MongoDB (Atlas or
-  replica set) — none was exercised.
+- TLS and production MongoDB (Atlas or replica set) — neither was exercised.
+- The console in a browser: `index.html` and its assets are served; nobody
+  has logged in through it on this stack.
 
 **Rollback.**
 

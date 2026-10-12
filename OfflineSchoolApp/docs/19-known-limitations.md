@@ -27,6 +27,15 @@ documented elsewhere as working.
 **Fix:** mount the build into nginx, or serve it from Express and point
 `location /` at the backend. Keep `try_files … /index.html` either way.
 
+**Fixed on `cold-intelligence-analysis` (docs/38 §11).** The actual response
+was HTTP 500, not 404: with `/app/public/web` absent, `try_files` fell through
+to `/index.html`, which matched `location /` again, and nginx logged
+`rewrite or internal redirection cycle while internally redirecting to
+"/index.html"`. The `nginx` service now builds the Dockerfile's `web` target —
+`nginx:alpine` with the web build at `/app/public/web`. `GET /` answers the
+console (verified); Compose networking itself remains unverified in the
+Codespace where it was tested.
+
 ### A2. Production credentials have not been rotated
 
 The credentials in the working `.env` are development credentials. `MONGODB_URI`

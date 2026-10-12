@@ -170,7 +170,7 @@ Three services:
 |---|---|---|---|
 | `mongo` | `mongo:7` | **none published** | `mongo_data:/data/db` |
 | `backend` | built from `Dockerfile` | `5000:5000` | `uploads_data:/app/src/uploads` |
-| `nginx` | `nginx:alpine` | `80:80` | `./nginx.conf` only |
+| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80` | `./nginx.conf` only |
 
 ### The Dockerfile
 
@@ -195,7 +195,14 @@ The upload path is deliberate and was a real bug:
 > mounting the volume there meant every uploaded file was written to the
 > container's writable layer and lost on the next deploy.
 
-### CONFIRMED DEFECT — the web console is not served by this stack
+### FIXED — the web console is not served by this stack
+
+*Fixed on `cold-intelligence-analysis`: the `nginx` service now builds the
+Dockerfile's `web` target (`nginx:alpine` with the web build at
+`/app/public/web`), and `GET /` serves the console. The cause of the HTTP 500
+was an internal redirection cycle: with the root missing, `try_files` fell
+through to `/index.html`, which matched `location /` again. See docs/38 §11
+for what was and was not verified. The original finding follows.*
 
 Three facts, each verified:
 

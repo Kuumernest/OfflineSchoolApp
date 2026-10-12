@@ -53,7 +53,12 @@ services:
 
   # ── Nginx (reverse proxy) ────────────────────────────────────────────────────
   nginx:
-    image: nginx:alpine
+    # nginx:alpine with the web build at /app/public/web, where nginx.conf
+    # serves it from (Dockerfile, target `web`).
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
     restart: unless-stopped
     depends_on:
       - backend

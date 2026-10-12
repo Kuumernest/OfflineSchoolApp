@@ -10,7 +10,21 @@ COPY web/ ./
 COPY shared/requestPath.js /app/shared/requestPath.js
 RUN npm run build
 
-# ── Stage 2: Production backend ───────────────────────────────────────────────
+# ── Stage 2: Nginx with the web build ─────────────────────────────────────────
+#
+# The `nginx` service in docker-compose.yml builds this target. nginx.conf
+# roots `location /` at /app/public/web; without the build there, try_files
+# fell through to /index.html, which matched `location /` again, and nginx
+# answered every page with 500 (an internal redirection cycle). Baked into the
+# image, not shared through a volume: Docker fills a named volume only when it
+# is empty, so a volume would keep serving the first build after every deploy.
+#
+# Kept before the backend stage on purpose: a plain `docker build` builds the
+# last stage, and that must stay the backend.
+FROM nginx:alpine AS web
+COPY --from=web-builder /app/web/dist /app/public/web
+
+# ── Stage 3: Production backend ───────────────────────────────────────────────
 FROM node:20-alpine AS production
 
 WORKDIR /app
