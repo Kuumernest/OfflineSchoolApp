@@ -56,6 +56,7 @@ import { FormField, Textarea, SelectField, Checkbox } from "@/components/ui/Form
 import {
   fetchReviewCases, submitReview, reviseReview, fetchPlatformCalibration, fetchStaffClasses,
   fetchPilot, fetchPilotEvidence, openPilot, advancePilot, fetchConsistency, fetchPreflight, addFinding, updateFinding, fetchExplorationSummary, fetchPilotReport,
+  AnalysisPendingError, apiErrorCode, pollWhileAnalysisPending,
   ENGINE_KEYS, ATTESTATION_KEYS,
   type ReviewCase, type ReviewForm, type ReviewFormContract, type ReviewPackage,
   type RecordedReview, type ReviewStatus,
@@ -118,6 +119,7 @@ export default function IntelligenceReviewPage() {
     queryFn:  () => fetchReviewCases({ ...(schoolId ? { schoolId } : {}), ...(classId ? { classId } : {}) }),
     enabled:  !blocked,
     staleTime: 30_000,
+    ...pollWhileAnalysisPending,
   });
 
   const pilotQ = useQuery({
@@ -195,9 +197,14 @@ export default function IntelligenceReviewPage() {
         </div>
       </Card>
 
+      {sheetQ.failureReason instanceof AnalysisPendingError && !sheetQ.isError && (
+        <Card><AnalysisState query={sheetQ} /></Card>
+      )}
       {sheetQ.isError && (
         <Card className="ring-warning-line">
-          <p className="text-sm text-warning">{t("intelReview.stale")}</p>
+          {apiErrorCode(sheetQ.error) === "ANALYSIS_FAILED" || sheetQ.error instanceof AnalysisPendingError
+            ? <AnalysisState query={sheetQ} />
+            : <p className="text-sm text-warning">{t("intelReview.stale")}</p>}
         </Card>
       )}
       {sheetQ.isLoading && <PageSpinner />}
@@ -720,6 +727,7 @@ function PilotPanel({
     queryFn:  () => fetchPreflight(schoolId, scope),
     enabled:  !open && kind === "real",
     staleTime: 30_000,
+    ...pollWhileAnalysisPending,
   });
 
   const evidenceQ = useQuery({
@@ -727,6 +735,7 @@ function PilotPanel({
     queryFn:  () => fetchPilotEvidence(schoolId),
     enabled:  open,
     staleTime: 30_000,
+    ...pollWhileAnalysisPending,
   });
 
   const reportQ = useQuery({
@@ -734,6 +743,7 @@ function PilotPanel({
     queryFn:  () => fetchPilotReport(pilot!.pilotRunId, schoolId),
     enabled:  Boolean(pilot) && showReport,
     staleTime: 30_000,
+    ...pollWhileAnalysisPending,
   });
 
   const onError = (err: unknown) => {
@@ -778,6 +788,7 @@ function PilotPanel({
   const reportToggle = pilot && pilot.status !== "READY" && (
     <div className="space-y-2">
       <Button variant="ghost" size="sm" onClick={() => setShowReport((s) => !s)}>{t(showReport ? "intelReview.pilot.hideReport" : "intelReview.pilot.showReport")}</Button>
+      {showReport && <AnalysisState query={reportQ} />}
       {showReport && reportQ.isLoading && <PageSpinner />}
       {showReport && reportQ.data && <PilotReport report={reportQ.data} classes={classes} />}
     </div>
@@ -813,6 +824,7 @@ function PilotPanel({
           {kind === "real" && (
             <div className="space-y-2 rounded-md border border-line p-3">
               <p className="text-xs font-medium text-ink-faint">{t("intelReview.readiness.heading")}</p>
+              <AnalysisState query={preflightQ} />
               {preflightQ.isLoading && <PageSpinner />}
               {preflightQ.data && <Readiness pre={preflightQ.data} attest={attest} setAttest={setAttest} />}
             </div>
@@ -860,6 +872,7 @@ function PilotPanel({
             <p className="text-xs text-warning">{t("intelReview.pilot.drift", { list: pilot.engineDrift.map((d) => `${t(`intelReview.pilot.engineName.${d.engine}`)} ${d.pilot} → ${d.current}`).join(", ") })}</p>
           )}
 
+          {!pilot.evidence && <AnalysisState query={evidenceQ} />}
           {evidence && (
             <div>
               <p className="text-xs font-medium text-ink-faint">
@@ -1244,4 +1257,20 @@ function Section({ heading, hint, children }: { heading: string; hint?: string; 
       {children}
     </section>
   );
+}
+
+/**
+ * The school analysis behind a read is still being prepared, or failed
+ * (docs/38). Renders nothing otherwise. A pending read keeps polling on its
+ * own (pollWhileAnalysisPending); this only says why the page is waiting.
+ */
+function AnalysisState({ query }: { query: { failureReason: unknown; error: unknown; isError: boolean } }) {
+  const { t } = useTranslation();
+  const pending = !query.isError && query.failureReason instanceof AnalysisPendingError;
+  const timedOut = query.isError && query.error instanceof AnalysisPendingError;
+  const failed = query.isError && apiErrorCode(query.error) === "ANALYSIS_FAILED";
+  if (pending) return <p className="text-sm text-ink-muted">{t("intelReview.analysis.pending")}</p>;
+  if (timedOut) return <p className="text-sm text-warning">{t("intelReview.analysis.stillPending")}</p>;
+  if (failed) return <p className="text-sm text-warning">{t("intelReview.analysis.failed")}</p>;
+  return null;
 }

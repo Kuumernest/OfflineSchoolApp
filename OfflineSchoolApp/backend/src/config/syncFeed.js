@@ -383,6 +383,12 @@ const EXCLUDED = {
     "given inside a pilot. Read by nothing but the pilot report, which counts " +
     "answers and never names a pupil; no classroom machine holds another " +
     "pupil's answers, so it is never mirrored.",
+  IntelligenceAnalysisRun:
+    "A server-side run of the school-wide calibration analysis and its " +
+    "compressed report (docs/38). Recomputable from documents that ARE " +
+    "mirrored, megabytes per school, and meaningful only to the server that " +
+    "fingerprints the evidence it was computed from; the review queue and the " +
+    "pilot read it online.",
 
   // The FILE, whose two registered models are in the FEED above as
   // studentAttendance and teacherAttendance. Listed here so the filename-based

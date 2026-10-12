@@ -1109,6 +1109,20 @@ async function startServer() {
     // looking as though it is protecting them. See the module docstring.
     await ensureIdempotencyIndex();
 
+    // The school-wide analysis runs (docs/38): the unique index that keeps two
+    // servers from running the same analysis at once, then the runs a stopped
+    // process left queued or running, whose leases have expired.
+    // Neither stops the server: without them the analysis may run twice or
+    // a stale run waits out its lease, which costs work, not a school's day.
+    const analysisRuns = require("./services/intelligence/analysisRuns.service");
+    await analysisRuns.ensureIndexes();
+    try {
+      const interrupted = await analysisRuns.recoverStale();
+      if (interrupted) console.log(`[analysis] ${interrupted} interrupted run(s) from a previous process marked INTERRUPTED`);
+    } catch (err) {
+      console.error("[analysis] could not sweep interrupted runs at boot — " + err.message + " (they expire with their lease)");
+    }
+
     console.log("✅ Indexes verified");
 
     /*

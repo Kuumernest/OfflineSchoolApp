@@ -267,9 +267,56 @@ export interface ReviewPackage {
 
 export interface ReviewScopeParams { schoolId?: string; classId?: string; limit?: number }
 
+/**
+ * The school analysis behind the review queue and the pilot is still being
+ * prepared (docs/38): the server answered 202 ANALYSIS_PENDING with the run it
+ * started. Thrown — never returned — so a pending answer cannot be read as a
+ * report. Queries retry on it at the server's Retry-After.
+ */
+export interface AnalysisPendingInfo {
+  runId: string | null;
+  status: string | null;
+  stage: string | null;
+  statusUrl: string | null;
+  retryAfterSeconds: number | null;
+}
+
+export class AnalysisPendingError extends Error {
+  readonly info: AnalysisPendingInfo;
+  constructor(info: AnalysisPendingInfo) {
+    super("ANALYSIS_PENDING");
+    this.name = "AnalysisPendingError";
+    this.info = info;
+  }
+}
+
+/** The report from a response, or AnalysisPendingError for a 202 ANALYSIS_PENDING. */
+function analysisReady<T>(res: { status: number; data: unknown }): T {
+  const body = res.data as { code?: string; data?: unknown } | undefined;
+  if (res.status === 202 && body?.code === "ANALYSIS_PENDING") {
+    throw new AnalysisPendingError((body.data ?? {}) as AnalysisPendingInfo);
+  }
+  return (body as { data: T }).data;
+}
+
+/** The server's code on a failed request (e.g. ANALYSIS_FAILED, 503), if any. */
+export function apiErrorCode(err: unknown): string | null {
+  return (err as { response?: { data?: { code?: string } } })?.response?.data?.code ?? null;
+}
+
+/**
+ * Query options for a read that may answer ANALYSIS_PENDING: keep asking at
+ * the server's pace while the run works (up to ten minutes), and not at all
+ * for anything else — a refusal is an answer.
+ */
+export const pollWhileAnalysisPending = {
+  retry: (count: number, err: unknown) => err instanceof AnalysisPendingError && count < 120,
+  retryDelay: (_count: number, err: unknown) =>
+    err instanceof AnalysisPendingError ? Math.max(1, err.info.retryAfterSeconds ?? 5) * 1000 : 1000,
+};
+
 export async function fetchReviewCases(params: ReviewScopeParams): Promise<ReviewPackage> {
-  const { data } = await api.get("/insights/review-cases", { params });
-  return (data as { data: ReviewPackage }).data;
+  return analysisReady<ReviewPackage>(await api.get("/insights/review-cases", { params }));
 }
 
 export interface SubmitReviewInput {
@@ -446,8 +493,7 @@ export async function fetchPilot(schoolId?: string): Promise<{ open: boolean; pi
 }
 
 export async function fetchPilotEvidence(schoolId?: string): Promise<{ evidence: PilotEvidence; minimum: Record<string, number>; shortfalls: PilotShortfall[] }> {
-  const { data } = await api.get("/insights/pilot/evidence", sp(schoolId));
-  return (data as { data: { evidence: PilotEvidence; minimum: Record<string, number>; shortfalls: PilotShortfall[] } }).data;
+  return analysisReady(await api.get("/insights/pilot/evidence", sp(schoolId)));
 }
 
 export async function fetchPilotHistory(schoolId?: string): Promise<Pilot[]> {
@@ -456,13 +502,11 @@ export async function fetchPilotHistory(schoolId?: string): Promise<Pilot[]> {
 }
 
 export async function fetchPilotReport(pilotId: string, schoolId?: string): Promise<PilotReport> {
-  const { data } = await api.get(`/insights/pilot/${pilotId}/report`, sp(schoolId));
-  return (data as { data: PilotReport }).data;
+  return analysisReady<PilotReport>(await api.get(`/insights/pilot/${pilotId}/report`, sp(schoolId)));
 }
 
 export async function fetchPreflight(schoolId?: string, classIds?: string[]): Promise<Preflight> {
-  const { data } = await api.get("/insights/pilot/preflight", { params: { ...(schoolId ? { schoolId } : {}), ...(classIds?.length ? { classId: classIds.join(",") } : {}) } });
-  return (data as { data: Preflight }).data;
+  return analysisReady<Preflight>(await api.get("/insights/pilot/preflight", { params: { ...(schoolId ? { schoolId } : {}), ...(classIds?.length ? { classId: classIds.join(",") } : {}) } }));
 }
 
 export async function addFinding(pilotId: string, input: { schoolId?: string; category: FindingCategory; severity: FindingSeverity; summary: string; evidence?: string; affectedCases?: number; recommendedNextAction?: string; disagreementSource?: FindingSource }): Promise<PilotFinding> {

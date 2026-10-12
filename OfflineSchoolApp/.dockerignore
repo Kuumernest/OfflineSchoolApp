@@ -1,0 +1,16 @@
+# Build context for the root Dockerfile (docker-compose.yml: context ".").
+#
+# Dependencies are installed inside the image by `npm ci`, for the image's own
+# platform (Alpine/musl). A host node_modules copied in by `COPY web/ ./` would
+# overwrite them with binaries built for another libc and Node — and it is
+# hundreds of megabytes of context for nothing.
+**/node_modules
+
+# Rebuilt inside the image by `npm run build`.
+web/dist
+
+# A developer's local uploads and template backups: school documents and
+# children's photographs. The image creates the upload directories empty and
+# docker-compose.yml mounts a volume over them.
+backend/src/uploads
+backend/backups

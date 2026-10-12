@@ -410,12 +410,18 @@ The sequence-card cohort read, annual compute, submissions counts and staleness 
   +1.1 GB heap. Mitigations that keep the semantics: serve the analysis from
   a worker or a job so it does not block; de-duplicate in-flight misses;
   start the process with a heap of 2 GB or more for schools above ~2,500.
-  Infrastructure decision.
+  Infrastructure decision. *Since addressed on `cold-intelligence-analysis`:
+  the analysis runs in a worker thread with a capped heap, de-duplicated
+  across requests and processes, and a cold miss answers 202 after 8 s —
+  docs/38.*
 - **P2** The memo's key costs a full cohort load, copy, serialisation and
   hash per hit (3.7 s, 217 MB at 5,000). A two-level key — a cheap
   fingerprint over `(updatedAt, _id)` of the scope's summaries and exams
   with a projection, the full load only when the fingerprint changes — would
-  make a hit a few milliseconds. Design change; not made here.
+  make a hit a few milliseconds. Design change; not made here. *Since made
+  on `cold-intelligence-analysis` (docs/38 §4): the fingerprint is that
+  projection, and a hit reads a stored compressed report — 0.21 s and
+  +50 MB at 5,000 pupils on the machine docs/38 §8 measured.*
 - **P1 (decision)** Term and annual report cards read the whole school's
   marks for the period; a class print multiplies that by the class. Per-class
   subject positions would make the read O(S_c); school-wide positions need a

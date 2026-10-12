@@ -18,6 +18,7 @@ const IntelligenceReview = require("../db/models/IntelligenceReview");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const reviewCases     = require("../services/intelligence/reviewCases.service");
 const pilots          = require("../services/intelligence/pilot.service");
+const analysisRuns    = require("../services/intelligence/analysisRuns.service");
 const strengthsSvc    = require("../services/intelligence/strengths.service");
 const explorationSvc  = require("../services/intelligence/exploration.service");
 const learningSvc     = require("../services/intelligence/learningEvidence.service");
@@ -371,7 +372,7 @@ const viewerOf = (req) => ({ userId: String(req.user._id ?? req.user.id), role: 
  * `?classId=` narrows to one class; for a teacher it must be one they teach.
  * Answers the response itself when it cannot resolve, and returns null.
  */
-const reviewScope = async (req, res) => {
+const reviewScope = async (req, res, { classParam = true } = {}) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId ?? req.body?.schoolId);
   if (!schoolId) {
     res.status(400).json({ success: false, message: "schoolId is required" });
@@ -384,7 +385,7 @@ const reviewScope = async (req, res) => {
     classIds = filter.classId?.$in ?? [];
   }
 
-  const asked = req.query.classId ? String(req.query.classId) : null;
+  const asked = classParam && req.query.classId ? String(req.query.classId) : null;
   if (asked) {
     const klass = await Class.findOne({ _id: asked, schoolId, deletedAt: null }).select("_id").lean();
     if (!klass) {
@@ -422,7 +423,8 @@ router.get("/review-cases", reviewRead, asyncHandler(async (req, res) => {
   const scope = await reviewScope(req, res);
   if (!scope) return undefined;
 
-  const pkg = await reviewCases.reviewPackage(scope, viewerOf(req));
+  let pkg;
+  try { pkg = await reviewCases.reviewPackage(scope, viewerOf(req)); } catch (err) { return analysisNotReady(req, res, err); }
   const { report, ...sheet } = pkg;
   void report;
 
@@ -445,10 +447,147 @@ router.get("/review-cases", reviewRead, asyncHandler(async (req, res) => {
 router.get("/calibration-summary", reviewRead, asyncHandler(async (req, res) => {
   const scope = await reviewScope(req, res);
   if (!scope) return undefined;
+  let summary;
+  try { summary = await reviewCases.calibrationSummary(scope, viewerOf(req)); } catch (err) { return analysisNotReady(req, res, err); }
+  return res.json({ success: true, data: { generatedAt: new Date(), ...summary } });
+}));
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ANALYSIS RUNS (docs/38)
+//
+// The school- or class-wide analysis behind the queue, the summary and the
+// pilot is a persisted run, executed off the request thread. A request that
+// finds no current report waits a bounded time and then answers 202 with the
+// run; the run carries on. These routes let a client start a run for its own
+// scope and watch it. Every one resolves the scope again from the caller's
+// role and assignments: a run is never reached by id alone.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Where a client polls a run. Carries the run's school for an operator, who must always name one. */
+const runStatusUrl = (req, run) => {
+  const base = `${req.baseUrl}/analysis-runs/${encodeURIComponent(String(run.runId ?? run._id))}`;
+  const schoolId = run.scope?.schoolId ?? run.schoolId;
+  return req.user?.role === ROLES.SUPER_ADMIN && schoolId
+    ? `${base}?schoolId=${encodeURIComponent(String(schoolId))}` : base;
+};
+
+/**
+ * Answer an AnalysisNotReady; rethrow anything else.
+ *
+ * A read answers 202 ANALYSIS_PENDING: accepted, not done, here is the run.
+ * A write answers 409 ANALYSIS_PENDING: nothing was changed, try again.
+ * A failed run is 503 ANALYSIS_FAILED either way. None of them is a report:
+ * `success` is false, so no client can mistake the body for one.
+ */
+const analysisNotReady = (req, res, err, { write = false } = {}) => {
+  if (!(err instanceof analysisRuns.AnalysisNotReady)) throw err;
+  const run = err.run ?? null;
+  const pending = err.code === "ANALYSIS_PENDING";
+  const status = pending ? (write ? 409 : 202) : 503;
+  if (pending) res.set("Retry-After", String(err.retryAfterSeconds ?? 5));
+  return res.status(status).json({
+    success: false,
+    code: err.code,
+    message: err.message,
+    data: {
+      runId: run?.runId ?? null,
+      status: run?.status ?? null,
+      stage: run?.stage ?? null,
+      statusUrl: run?.runId ? runStatusUrl(req, run) : null,
+      retryAfterSeconds: pending ? (err.retryAfterSeconds ?? 5) : null,
+      error: run?.error ?? null,
+      run,
+    },
+  });
+};
+
+/** Whether this caller's scope, resolved now, covers a run's scope. */
+const mayViewRun = (scope, run) => {
+  if (!run || String(run.schoolId) !== String(scope.schoolId)) return false;
+  if (scope.classIds === null) return true;                 // the school's office, or the operator for it
+  if (!run.classIds) return false;                          // a whole-school run, and a class-scoped caller
+  const mine = new Set(scope.classIds.map(String));
+  return run.classIds.every((c) => mine.has(String(c)));
+};
+
+/** The run's scope as the caller is allowed it, or 404 — existence is not disclosed. */
+const runInScope = async (req, res) => {
+  // The caller's whole reach, not one class of it: a teacher may read a run
+  // over any set of classes they teach now.
+  const scope = await reviewScope(req, res, { classParam: false });
+  if (!scope) return null;
+  const run = await analysisRuns.findRun(scope.schoolId, String(req.params.runId));
+  if (!mayViewRun(scope, run)) {
+    res.status(404).json({ success: false, message: "Analysis run not found" });
+    return null;
+  }
+  return run;
+};
+
+/**
+ * POST /api/insights/analysis-runs?classId=
+ * Start the analysis for the caller's scope, or join the one already running
+ * over the same evidence. 200 when a current report already exists; 202 with
+ * the run otherwise.
+ */
+router.post("/analysis-runs", reviewRead, asyncHandler(async (req, res) => {
+  const scope = await reviewScope(req, res);
+  if (!scope) return undefined;
+  const { run, current } = await analysisRuns.ensure(scope, viewerOf(req), { trigger: "explicit" });
+  // Past the automatic retry limit the newest run is a failure, and asking
+  // again does not start another: that is the head's explicit retry.
+  if (!current && run.status === "failed") {
+    return analysisNotReady(req, res, new analysisRuns.AnalysisNotReady("ANALYSIS_FAILED", analysisRuns.publicRun(run)));
+  }
+  const shown = current ?? run;
+  const body = { success: true, data: { run: analysisRuns.publicRun(shown), current: Boolean(current), statusUrl: runStatusUrl(req, shown) } };
+  if (current) return res.json(body);
+  return res.status(202).set("Retry-After", "5").json(body);
+}));
+
+/**
+ * GET /api/insights/analysis-runs/latest?classId=
+ * The newest run for the caller's scope, and whether it is of the evidence as
+ * it stands now.
+ */
+router.get("/analysis-runs/latest", reviewRead, asyncHandler(async (req, res) => {
+  const scope = await reviewScope(req, res);
+  if (!scope) return undefined;
+  const [run, fingerprint] = await Promise.all([analysisRuns.latestRun(scope), analysisRuns.fingerprintOf(scope)]);
   return res.json({
     success: true,
-    data: { generatedAt: new Date(), ...(await reviewCases.calibrationSummary(scope, viewerOf(req))) },
+    data: { run: analysisRuns.publicRun(run), current: Boolean(run && run.status === "succeeded" && run.fingerprint === fingerprint && !run.reportPrunedAt) },
   });
+}));
+
+/**
+ * GET /api/insights/analysis-runs/:runId
+ * One run's status: stage, times, counts, error code. Never the report — the
+ * report is read through the queue, the summary or the pilot, shaped for the
+ * viewer.
+ */
+router.get("/analysis-runs/:runId", reviewRead, asyncHandler(async (req, res) => {
+  const run = await runInScope(req, res);
+  if (!run) return undefined;
+  return res.json({ success: true, data: analysisRuns.publicRun(run) });
+}));
+
+/**
+ * POST /api/insights/analysis-runs/:runId/retry
+ * Start a failed analysis again, past the automatic retry limit. The head's
+ * and the operator's (insights.pilot): a failure that repeated is worth a
+ * person deciding to spend the CPU again. Runs over the evidence as it is now.
+ */
+router.post("/analysis-runs/:runId/retry", requirePermission("insights.pilot"), asyncHandler(async (req, res) => {
+  const run = await runInScope(req, res);
+  if (!run) return undefined;
+  if (run.status !== "failed") {
+    return res.status(409).json({ success: false, code: "RUN_NOT_FAILED", message: "Only a failed analysis run can be retried.", data: analysisRuns.publicRun(run) });
+  }
+  const scope = { schoolId: run.schoolId, classIds: run.classIds ?? null };
+  const { run: next, current } = await analysisRuns.ensure(scope, viewerOf(req), { trigger: "retry" });
+  const shown = current ?? next;
+  return res.status(current ? 200 : 202).json({ success: true, data: { run: analysisRuns.publicRun(shown), current: Boolean(current), statusUrl: runStatusUrl(req, shown) } });
 }));
 
 /**
@@ -673,7 +812,9 @@ router.get("/pilot/preflight", pilotManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const classIds = req.query.classId ? String(req.query.classId).split(",").filter(Boolean) : null;
-  return res.json({ success: true, data: { generatedAt: new Date(), ...(await pilots.preflight({ schoolId, classIds })) } });
+  let pre;
+  try { pre = await pilots.preflight({ schoolId, classIds }); } catch (err) { return analysisNotReady(req, res, err); }
+  return res.json({ success: true, data: { generatedAt: new Date(), ...pre } });
 }));
 
 /** POST /api/insights/pilot/:id/findings — record a finding. PATCH …/:findingId — move its status. */
@@ -721,7 +862,9 @@ router.get("/pilot/:id/report", pilotManage, asyncHandler(async (req, res) => {
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const pilot = await IntelligencePilot.findOne({ _id: String(req.params.id), schoolId, deletedAt: null });
   if (!pilot) return res.status(404).json({ success: false, message: "Pilot not found" });
-  return res.json({ success: true, data: await pilots.reportFor(pilot) });
+  let report;
+  try { report = await pilots.reportFor(pilot); } catch (err) { return analysisNotReady(req, res, err); }
+  return res.json({ success: true, data: report });
 }));
 
 /** GET /api/insights/pilot/history — every pilot the school has run, newest first. */
@@ -742,7 +885,8 @@ router.get("/pilot/evidence", pilotManage, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const open = await pilots.openPilot(schoolId);
-  const evidence = await pilots.evidenceFor({ schoolId, classIds: open?.classIds ?? null, ...(open ? pilots.windowOf(open) : {}) });
+  let evidence;
+  try { evidence = await pilots.evidenceFor({ schoolId, classIds: open?.classIds ?? null, ...(open ? pilots.windowOf(open) : {}) }); } catch (err) { return analysisNotReady(req, res, err); }
   return res.json({
     success: true,
     data: {
@@ -774,7 +918,11 @@ router.post("/pilot", pilotManage, asyncHandler(async (req, res) => {
       attestations: req.body.attestations && typeof req.body.attestations === "object" ? req.body.attestations : null,
     });
     return res.status(201).json({ success: true, data: pilots.publicPilot(pilot) });
-  } catch (err) { return pilotErr(res, err); }
+  } catch (err) {
+    // A real pilot's preflight needs the current analysis. Nothing was created.
+    if (err instanceof analysisRuns.AnalysisNotReady) return analysisNotReady(req, res, err, { write: true });
+    return pilotErr(res, err);
+  }
 }));
 
 /**
@@ -796,7 +944,13 @@ router.patch("/pilot/:id", pilotManage, asyncHandler(async (req, res) => {
       decision: req.body.decision && typeof req.body.decision === "object" ? req.body.decision : null,
     });
     return res.json({ success: true, data: pilots.publicPilot(pilot) });
-  } catch (err) { return pilotErr(res, err); }
+  } catch (err) {
+    // The evidence snapshot needs the current analysis. transition() throws
+    // before it touches the pilot, so nothing was recorded: the same request,
+    // repeated once the run has finished, is safe (and carries the same version).
+    if (err instanceof analysisRuns.AnalysisNotReady) return analysisNotReady(req, res, err, { write: true });
+    return pilotErr(res, err);
+  }
 }));
 
 /**

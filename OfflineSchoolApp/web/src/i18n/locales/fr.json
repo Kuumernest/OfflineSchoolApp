@@ -3608,7 +3608,9 @@
         "FINDING_NOT_FOUND": "Constat introuvable.",
         "AMENDMENT_REASON_REQUIRED": "Une modification exige un motif.",
         "NOTHING_TO_AMEND": "La modification ne change rien.",
-        "ENGINE_VERSION_CHANGED": "Une version de moteur a changé pendant le pilote ; l'échantillon est mixte et ne peut fonder une décision de calibration. Consignez PREUVES INSUFFISANTES ou fermez."
+        "ENGINE_VERSION_CHANGED": "Une version de moteur a changé pendant le pilote ; l'échantillon est mixte et ne peut fonder une décision de calibration. Consignez PREUVES INSUFFISANTES ou fermez.",
+        "ANALYSIS_PENDING": "L'analyse de l'établissement est encore en préparation. Rien n'a été modifié — réessayez dans un instant.",
+        "ANALYSIS_FAILED": "L'analyse de l'établissement n'a pas pu être terminée ; rien n'a été modifié."
       },
       "engineVersions": "Versions des moteurs",
       "engineName": {
@@ -3848,6 +3850,11 @@
         "PSYCHOLOGICAL_ASSESSMENT": "une évaluation psychologique",
         "UNIVERSAL_VALIDITY": "une validité éducative universelle"
       }
+    },
+    "analysis": {
+      "pending": "L'analyse de l'établissement est en cours de préparation. Cette page se mettra à jour d'elle-même lorsqu'elle sera prête.",
+      "stillPending": "L'analyse de l'établissement prend plus de temps que d'habitude. Rechargez la page pour vérifier à nouveau.",
+      "failed": "L'analyse de l'établissement n'a pas pu être terminée. Le chef d'établissement ou l'opérateur de la plateforme peut la relancer."
     }
   },
   "strengths": {

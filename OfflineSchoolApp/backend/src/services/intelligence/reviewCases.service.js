@@ -69,39 +69,20 @@ const { ROLES }          = require("../../config/roles");
 const CAL = path.join(__dirname, "..", "..", "..", "scripts", "calibration");
 const { cohortFromDocuments } = require(path.join(CAL, "cohortSchema"));
 const { analyse: analyseCohort } = require(path.join(CAL, "analyseCohort"));
-const crypto = require("crypto");
+const analysisRuns = require("./analysisRuns.service");
 
-// ── The analysis, remembered briefly by its input ─────────────────────────
+// ── The analysis ──────────────────────────────────────────────────────────
 //
-// analyse() is pure and deterministic, and at a thousand pupils it costs
-// seconds: the sensitivity sweep runs the whole engine forty times. The head's
-// pilot page asks for it three times in a row — the review queue, the
-// calibration summary, the preflight — over the same cohort. So the report is
-// kept for a short while under a digest of the cohort it was computed from.
-// A changed mark changes the cohort, the digest and therefore the entry; a
-// stale report cannot be served, and the time bound only limits memory.
-// Stage 18A.
-const ANALYSIS_TTL_MS = 120_000;
-const ANALYSIS_MAX    = 6;
-/** digest → { at, report } */
-const analysisCache = new Map();
-const analyse = (cohort) => {
-  const key = crypto.createHash("sha1").update(JSON.stringify(cohort)).digest("hex");
-  const hit = analysisCache.get(key);
-  if (hit && Date.now() - hit.at < ANALYSIS_TTL_MS) return hit.report;
-  const full = analyseCohort(cohort);
-  // The per-pupil profiles are consumed inside analyseCohort (the review
-  // sheet, the evidence and distribution reports are built from them there)
-  // and read by nothing after it: the route voids the report before
-  // answering, the calibration summary and the pilot read its reports and
-  // its sensitivity table. Held, they were the bulk of each cached entry —
-  // at five thousand pupils some hundreds of megabytes, six times over
-  // (docs/37). Dropped before the entry is kept.
-  const report = { ...full, profiles: undefined };
-  analysisCache.set(key, { at: Date.now(), report });
-  while (analysisCache.size > ANALYSIS_MAX) analysisCache.delete(analysisCache.keys().next().value);
-  return report;
-};
+// The school- or class-wide analysis is not run here any more. It is a
+// persisted run, executed in a worker thread and served under a fingerprint of
+// the scope's evidence (analysisRuns.service, docs/38): a cold scope is a run
+// a request waits a bounded time for, a warm one is a stored report. Either
+// way it is analyseCohort.analyse over the same mapping, minus the per-pupil
+// profiles nothing read after it.
+//
+// One pupil (caseFor) is still analysed here, in-thread: that cohort is one
+// pupil's history and costs milliseconds.
+
 const { analyseReviews, validateReview } = require(path.join(CAL, "reviewFeedback"));
 
 /** A case is identified by what it is about, not by its position on a sheet. */
@@ -281,9 +262,32 @@ const reviewStatusOf = (cases, allReviews) => {
  * @param {object} scope   { schoolId, classIds }
  * @param {object} viewer  { userId, role }
  */
-const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engineVersion = null, pilotRunId = null } = {}) => {
-  const { studentIds, students, cohort } = await liveCohort(scope);
-  const report = analyse(cohort);
+/**
+ * The pupils in scope with the fields a reader is shown. Loaded per request,
+ * after authorisation, and joined to the stored report here — the report
+ * itself never holds a name.
+ */
+const scopeStudents = async ({ schoolId, classIds }) => {
+  const filter = { schoolId, status: "approved", deletedAt: null };
+  if (classIds) filter.classId = { $in: classIds };
+  const students = await Student.find(filter)
+    .select("_id classId studentName name firstName lastName enrollmentNo").lean();
+  return { students, studentIds: students.map((s) => String(s._id)) };
+};
+
+/**
+ * @param {object} scope   { schoolId, classIds }
+ * @param {object} viewer  { userId, role }
+ * @param {object} [opts]  { reviewedSince, engineVersion, pilotRunId, waitMs }
+ * @throws {analysisRuns.AnalysisNotReady} when no current analysis is ready within the wait
+ */
+const reviewPackage = async (scope, viewer = null, { reviewedSince = null, engineVersion = null, pilotRunId = null, waitMs } = {}) => {
+  const { report } = await analysisRuns.reportFor(
+    { schoolId: scope.schoolId, classIds: scope.classIds ?? null },
+    viewer ? { userId: viewer.userId ?? null, role: viewer.role ?? null } : null,
+    waitMs !== undefined ? { waitMs } : {}
+  );
+  const { studentIds, students } = await scopeStudents(scope);
   const allReviews = await reviewsFor({ schoolId: scope.schoolId, studentIds });
   // A pilot's evidence is the reviews made inside it — stamped with its id at
   // submission — on its engine version, since it opened. A review recorded
@@ -367,7 +371,7 @@ const caseFor = async ({ schoolId, studentId, category, subjectId }) => {
     .select("_id classId").lean();
   if (!student) return null;
   const { cohort } = await liveCohort({ schoolId, classIds: null, studentIds: [String(student._id)] });
-  const report = analyse(cohort);
+  const report = analyseCohort(cohort);
   const wanted = caseKey({ category, studentId: String(student._id), subjectId: subjectId ?? null });
   return report.reviewCases.cases.find((c) => caseKey(c) === wanted) ?? null;
 };

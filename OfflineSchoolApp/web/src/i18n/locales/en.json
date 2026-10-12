@@ -3608,7 +3608,9 @@
         "FINDING_NOT_FOUND": "No such finding.",
         "AMENDMENT_REASON_REQUIRED": "An amendment needs a reason.",
         "NOTHING_TO_AMEND": "The amendment changes nothing.",
-        "ENGINE_VERSION_CHANGED": "An engine version changed during the pilot; the sample is mixed and cannot support a calibration decision. Record INSUFFICIENT_EVIDENCE or close."
+        "ENGINE_VERSION_CHANGED": "An engine version changed during the pilot; the sample is mixed and cannot support a calibration decision. Record INSUFFICIENT_EVIDENCE or close.",
+        "ANALYSIS_PENDING": "The school analysis is still being prepared. Nothing was changed — try again in a moment.",
+        "ANALYSIS_FAILED": "The school analysis could not be completed, so nothing was changed."
       },
       "engineVersions": "Engine versions",
       "engineName": {
@@ -3848,6 +3850,11 @@
         "PSYCHOLOGICAL_ASSESSMENT": "psychological assessment",
         "UNIVERSAL_VALIDITY": "universal educational validity"
       }
+    },
+    "analysis": {
+      "pending": "The school analysis is being prepared. This page will update by itself when it is ready.",
+      "stillPending": "The school analysis is taking longer than usual. Reload the page to check again.",
+      "failed": "The school analysis could not be completed. The head or the platform operator can retry it."
     }
   },
   "strengths": {
