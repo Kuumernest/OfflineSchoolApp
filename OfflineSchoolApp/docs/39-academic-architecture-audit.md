@@ -16,12 +16,25 @@ result means.
   a fact (§4.1, §17.3). Every claim below carries a `file:line` reference or
   says it was not verified.
 
-> **Read §4.1 first.** The audit found that the stored sequence average is
-> on a different scale from the term, annual and promotion calculations that
-> consume it. This was reproduced end to end. It changes the migration plan:
-> the current behaviour cannot simply be "represented as configuration"
-> without a decision on that defect, because the configuration would encode
-> it.
+> **Correction (found while starting Phase 2c, pinned in `check:academic`).**
+> There are **two** code paths that compute sequence results, and this audit
+> first described the wrong one as live:
+>
+> - `results.service.processResults` (CA blend, coefficients, GPA-point
+>   average) is **not reachable over HTTP and never has been**. Its only
+>   caller, `results.controller.computeResults`, is not mounted on any
+>   router. `git log -S` over every branch finds no route that ever
+>   referenced it.
+> - **`POST /api/exams/:examId/process`** (`exam.routes.js:1539-1760`) is
+>   what web, mobile and desktop call. Every real `ResultSummary` came from
+>   it. It ignores CA and coefficients, counts an absent subject as zero,
+>   stores a whole-number raw-mark mean, and writes no `academicYear`, so
+>   the promotion run sees no results at all.
+>
+> So **§4.1 is real but describes the unrouted path**, and the defects that
+> affect real data are in **§4.7**. Read §4.7 first. The conclusion stands:
+> the current behaviour cannot be "represented as configuration" without
+> first deciding which calculation is authoritative (§21 D1, revised).
 
 ---
 
@@ -83,6 +96,18 @@ Evidence:
 | `Grade` model (`examType: test/midterm/final/assignment/quiz`) is legacy: synced (`syncFeed.js:300`) but read by no backend code | grep, this audit |
 
 ### 1.2 The calculations, as they run
+
+**Two writers of the sequence result (see the correction at the top).**
+The table below is `results.service.processResults`, which is **unrouted**.
+The live writer is `POST /exams/:examId/process`. Per subject it computes
+`normalizedMark = round(round(score/max·100)/100·20, 1 dp)`; grade and pass
+come from `computeGrade`, which uses the school's bands (falling back to the
+built-in table) and the school's `passMark`. The summary `average` is
+`Math.round(Σ raw scores / number of subjects)`, counting absent subjects as
+zero. Overall grade and pass come from `computeGrade(Σ score, Σ max)`.
+Positions are competition ranking on integer `percentage`, class only. There
+is no CA, no coefficient, and no `academicYear`/`term` on the row. Term,
+annual, cards and promotion (rows below "Term average") are shared by both.
 
 | Step | Function | Rule |
 |---|---|---|
@@ -185,7 +210,13 @@ Ordered by consequence. §4.1–§4.4 are defects in current behaviour, found
 during the audit. They are **reported, not fixed**: fixing any of them
 changes stored or printed results, which this task forbids.
 
-### 4.1 The sequence average is GPA points; everything above it reads it as /20 — **reproduced**
+### 4.1 The sequence average is GPA points; everything above it reads it as /20 — **reproduced, on the unrouted path**
+
+> Applies to results computed by `results.service.processResults`, which no
+> route reaches (correction at the top). Real data comes from
+> `POST /exams/:examId/process`, whose average is on a raw-mark scale (§4.7).
+> This section stays as the description of the path the tests exercise and
+> that `check:ca` relies on.
 
 `calculateOverallResult` stores `ResultSummary.average` as the
 coefficient-weighted mean of **GPA points** (0–4) (`grading.service.js:240-256`,
@@ -308,6 +339,56 @@ acts on (2). They can disagree, and both are affected by §4.1.
 | l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
 
 ---
+
+### 4.7 The live route: what real results are made of — **reproduced over HTTP**
+
+`check:academic` builds the same synthetic school twice. The second copy is
+processed through `POST /api/exams/:examId/process` with the real router and
+auth, exactly as the apps send it. One pupil, Ama, has Maths 15/20
+(coefficient 2) with CA 8/10, and English 9/20 with CA 6/10:
+
+| | Unrouted `processResults` | **Live `/process`** |
+|---|---|---|
+| Maths / English subject mark | 15.4 / 10.2 (CA blended) | **15 / 9** (paper only) |
+| Coefficient carried | 2 | **1** (not set) |
+| Stored `average` | 2.87 (GPA points) | **12** = `round((15+9)/2)` |
+| English | C, passing | **D, failing** |
+| Term 1 | 3.09, F, failing | **13, B, passing** |
+| Annual | 2.73, F, repeated | **12, B, promoted** |
+
+Defects on the live route, each pinned:
+
+- **(a) CA is ignored in every stored figure.** `GradingConfig.caEnabled`
+  defaults to `true`, and CA exams are created alongside sequence papers.
+  Their marks reach the sequence **card**, which rebuilds rows from marks,
+  but never the stored summary, term or annual result, ranks, promotion, or
+  intelligence.
+- **(b) Coefficients are ignored** in every stored figure. The card applies
+  them.
+- **(c) An absent subject counts as zero** in the average (`round(11/2) = 6`
+  for a pupil absent in Maths, giving F). Its maximum also stays in the
+  percentage.
+- **(d) Averages are whole numbers.** `Math.round` of a raw-mark mean, on the
+  scale the papers are marked on (/20 here; /100 if papers are /100, the
+  `ExamSubject.maxScore` default). Term and annual results then read it as
+  /20.
+- **(e) No `academicYear` or `term` on the summary**, and nothing backfills
+  them. `promotion.resultsByStudent` selects published summaries by
+  `academicYear`, so **the promotion run finds no results for any pupil**.
+  Every pupil is proposed on basis `no_results`, which means "promoted"
+  wherever the class has a next class. That includes a pupil the annual
+  results mark "repeated".
+- **(f) The sequence card contradicts the stored result.** It prints 13.67
+  (rebuilt from marks, with CA and coefficients) as the average, above a
+  grade (B) and position taken from the stored 12.
+- **(g) Re-processing a published exam rewrites its figures** with no guard
+  and no `ResultChangeLog` row. Unlike `processResults`, it leaves
+  `isPublished` alone.
+
+The intelligence layer reads `subjectBreakdown.normalizedMark`. On real data
+that is the paper-only mark, rounded to one decimal, not the CA-blended mark
+that §15 assumed. The engines' semantics are unchanged; their input is
+simply not what the CA work intended.
 
 ## 5. Proposed target architecture
 
@@ -582,14 +663,19 @@ Rules:
 
 **How legacy rows are read** (`policyHash: null` = "legacy-v0"):
 
-- `ResultSummary.average` is GPA points (0–4). Sequence cards keep printing
-  ×5, as `shared/reportCard.js` does.
-- `TermResult.termAverage` and `AnnualResult.annualAverage` were computed from
-  GPA points (§4.1) when their summaries came from `processResults`. Their
-  stored values are what was published. They are shown as stored and never
-  silently recomputed.
-- Legacy grades on `StudentScore` and `ResultSummary` were produced by the
-  built-in scale.
+- **Corrected:** in a real database, `ResultSummary` rows come from
+  `POST /exams/:examId/process` (§4.7). `average` is a whole-number
+  raw-mark mean with absent subjects counted as zero. There is no CA, no
+  coefficient, and no `academicYear`. A row with `academicYear` set and
+  `subjectBreakdown[].caWeight` present came from `processResults`, which
+  only tests and scripts reach. On such rows `average` is GPA points, and
+  sequence cards print it ×5 (`shared/reportCard.js`).
+- `TermResult.termAverage` and `AnnualResult.annualAverage` are means of
+  whichever average their summaries held. On real data that is the
+  raw-mark mean (§4.7). Their stored values are what was published. They
+  are shown as stored and never silently recomputed.
+- Grades on `StudentScore` were written by whichever path last saved the
+  mark (`computeGrade` in `exam.routes.js`, using the school's bands).
 
 **Annotation, not rewrite.** A one-off read-only script can classify legacy
 term/annual rows by recomputing their expected value both ways and record
@@ -1048,7 +1134,20 @@ Checked against docs/37:
   `check:academic` is unchanged at 30/30. Mutation-tested: dropping the
   pass mark from the policy fails 5 checks, and hashing an inert field
   fails 1.
-- Phase 2(c)–(e): not started.
+- **Phase 2(a), extended (Phase 2c investigation):** the 2(a) suite pinned
+  only `processResults`, which turned out to be unrouted. `check:academic`
+  now also builds the same school a second time and processes it through
+  the live `POST /exams/:examId/process` route over HTTP. It pins that
+  route's summaries, term and annual results, card headline, promotion run,
+  and re-process behaviour: 13 more pins, 43 in total, all hand-checked.
+  This led to the correction at the top of this document and to §4.7.
+- **Phase 2(b) needs a correction before 2(c) stamps anything:** its
+  policy's `grading.calcBands` and `subjectPassMark` describe
+  `grading.service` (the unrouted path). On the live route, subject grades
+  and passes come from the school's bands and `passMark` via `computeGrade`.
+  The policy must say which calculation it describes. Nothing has stored a
+  hash yet, so changing the policy content now costs nothing.
+- Phase 2(c)–(e): not started. 2(c) must stamp the **live** route first.
 
 ### 20.1 Safest first implementation slice
 
@@ -1100,14 +1199,26 @@ consequence:**
 
 ### 21.1 Decisions needed before Phase 3
 
-- **D1. Sequence-average scale (§4.1).** Which figure is the official
-  sequence average, and the basis of term averages, ranks and promotion: the
-  GPA-point mean (stored today) or the coefficient-weighted /20 mean
-  (printed today on sequence cards)? Recommendation: the /20 mean, shipped as
-  `calcVersion "results/2"` for new computations only. Published rows stay
-  as issued, with an annotation report (§9) for the school to review. **This
-  needs the school's authorised academic review.** It changes published
-  meaning for future results and possibly for reissues.
+- **D1 (revised). Which sequence calculation is authoritative (§4.1, §4.7).**
+  Real results are the live route's: a whole-number raw mean, with no CA, no
+  coefficients, and absent counted as zero. The sequence card prints a
+  different figure: the coefficient-weighted, CA-blended /20 mean (13.67
+  against a stored 12 in the pinned case). The unrouted `processResults`
+  computes a third: GPA points. Which is the school's official sequence
+  average, and therefore the basis of ranks, term and annual results, and
+  promotion?
+
+  Recommendation: the coefficient-weighted, CA-blended /20 mean, with
+  absent subjects excluded rather than zeroed. That is what the CA and
+  coefficient features were built to produce, and what the card already
+  prints. Ship it as a new `calcVersion` for new computations only.
+  Published rows stay as issued, with an annotation report (§9). **This
+  needs the school's authorised academic review.** It will move term and
+  annual figures and promotion outcomes relative to today.
+- **D1b. Promotion is blind on real data (§4.7e).** Until summaries carry
+  `academicYear`, every proposal is "no results". Decide whether the run
+  should read `AnnualResult` (the §14 recommendation) or summaries with a
+  backfilled year. Either changes which pupils a run proposes to hold back.
 - **D2. Which promotion rule is authoritative** (§4.4), and whether
   `Class.promotionAverage` was entered meaning /20, a percentage, or
   something else, since it is compared against GPA points today.

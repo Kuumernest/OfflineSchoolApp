@@ -13,8 +13,22 @@
  * by hand, on /20, which is not what processResults writes. A refactor could
  * keep those green and still move every term average in the school.
  *
- * So nothing here is seeded below the marks. One synthetic school is marked,
- * and every layer above is produced by the real services:
+ * There are TWO code paths that compute a sequence result, and they disagree:
+ *
+ *   - results.service.processResults (CA blended, coefficients, GPA-point
+ *     average). No router has ever mounted it (git log -S); it is reached
+ *     only from tests and the unrouted results.controller.computeResults.
+ *   - POST /api/exams/:examId/process (exam.routes.js). What web, mobile and
+ *     desktop call — so what every real result in a database came from.
+ *     Raw-mark integer mean, no CA, no coefficients, absent as zero, and no
+ *     academicYear on the summary.
+ *
+ * Both are pinned: the first half of this file runs processResults, the last
+ * section ("the live route") builds the same school again and processes it
+ * over HTTP through the real router and auth.
+ *
+ * Nothing is seeded below the marks. A synthetic school is marked, and every
+ * layer above is produced by the real services:
  *
  *   StudentScore → processResults → ResultSummary (+ grades written back)
  *               → termGrading     → TermResult
@@ -36,6 +50,9 @@
  *   [docs/39 §4.6k] a pupil with no term result gets an annual row of 0
  *   [docs/39 §4.6l] the sequence card's subject pass flag is the paper's,
  *                   not the blended mark it prints
+ *   [docs/39 §4.7]  the live route: CA and coefficients ignored, absent as
+ *                   zero, whole-number averages, no academicYear (so the
+ *                   promotion run sees no results), card average ≠ stored
  *
  * When a decision (docs/39 §21) changes one of those on purpose, its pins are
  * updated in the same change and the commit says so. Any OTHER pin moving is
@@ -89,11 +106,6 @@ const main = async () => {
   const SCHOOL = "sch-char", YEAR = "2026/2027", NEXT_YEAR = "2027/2028";
   const FORM3 = "cls-f3", FORM4 = "cls-f4";
 
-  await Structure.create({ schoolId: SCHOOL, academicYear: YEAR });
-  await GradingConfig.create({ schoolId: SCHOOL, caEnabled: true, caWeight: 40, testWeight: 60 });
-  await Class.create({ _id: FORM4, schoolId: SCHOOL, name: "Form 4" });
-  await Class.create({ _id: FORM3, schoolId: SCHOOL, name: "Form 3", nextClassId: FORM4 });
-
   const PUPILS = [
     ["stu-ama", "Ama Synthetic"],
     ["stu-bih", "Bih Synthetic"],
@@ -101,12 +113,6 @@ const main = async () => {
     ["stu-dan", "Dan Synthetic"],   // Ama's marks exactly: the tie
     ["stu-eve", "Eve Synthetic"],   // never marked: must get no term row, no zero
   ];
-  for (const [id, name] of PUPILS) {
-    await Student.create({
-      _id: id, userId: `usr-${id}`, schoolId: SCHOOL, classId: FORM3, className: "Form 3",
-      studentName: name, enrollmentNo: `ENR-${id}`, status: "approved", isActive: true,
-    });
-  }
 
   // Maths carries coefficient 2 (ExamSubject.weight 200), English 1.
   const SUBJECTS = [["sub-math", "Mathematics", 200], ["sub-eng", "English", 100]];
@@ -131,57 +137,80 @@ const main = async () => {
     "stu-dan": { "sub-math": 8, "sub-eng": 6 },
   };
 
-  const paperId = (seq) => `ex-seq${seq}`;
-  const caId    = (seq) => `ex-ca${seq}`;
   const termOf  = (seq) => Math.ceil(seq / 2);
 
-  const addSubjects = async (examId, maxScore) => {
-    const ids = {};
-    for (const [subjectId, subjectName, weight] of SUBJECTS) {
-      const es = await ExamSubject.create({
-        examId, subjectId, subjectName, classId: FORM3, schoolId: SCHOOL,
-        maxScore, passMark: maxScore / 2, weight, submissionStatus: "approved",
+  /*
+   * One school with the data above. Every document id carries the prefix `p`,
+   * so the same school can be built twice side by side — once for each of the
+   * two routes that compute sequence results (see "The live route" below).
+   */
+  const seedSchool = async ({ schoolId, p }) => {
+    const form3 = `${p}${FORM3}`, form4 = `${p}${FORM4}`;
+    await Structure.create({ schoolId, academicYear: YEAR });
+    await GradingConfig.create({ schoolId, caEnabled: true, caWeight: 40, testWeight: 60 });
+    await Class.create({ _id: form4, schoolId, name: "Form 4" });
+    await Class.create({ _id: form3, schoolId, name: "Form 3", nextClassId: form4 });
+
+    for (const [id, name] of PUPILS) {
+      await Student.create({
+        _id: `${p}${id}`, userId: `usr-${p}${id}`, schoolId, classId: form3, className: "Form 3",
+        studentName: name, enrollmentNo: `ENR-${p}${id}`, status: "approved", isActive: true,
       });
-      ids[subjectId] = es._id;
     }
-    return ids;
+
+    const addSubjects = async (examId, maxScore) => {
+      const ids = {};
+      for (const [subjectId, subjectName, weight] of SUBJECTS) {
+        const es = await ExamSubject.create({
+          examId, subjectId, subjectName, classId: form3, schoolId,
+          maxScore, passMark: maxScore / 2, weight, submissionStatus: "approved",
+        });
+        ids[subjectId] = es._id;
+      }
+      return ids;
+    };
+
+    for (let seq = 1; seq <= 6; seq++) {
+      const paper = `${p}ex-seq${seq}`;
+      await Exam.create({
+        _id: paper, schoolId, name: `Sequence ${seq}`, type: "test",
+        academicYear: YEAR, term: termOf(seq), sequenceNumber: seq, status: "completed",
+        classId: form3, classIds: [form3], totalMarks: 20, passMark: 10,
+        startDate: `2026-${String(8 + seq).padStart(2, "0")}-15`,
+      });
+      const paperSubjects = await addSubjects(paper, 20);
+      for (const [studentId, marks] of Object.entries(PAPER)) {
+        for (const [subjectId, base] of Object.entries(marks)) {
+          await StudentScore.create({
+            examId: paper, examSubjectId: paperSubjects[subjectId], studentId: `${p}${studentId}`, subjectId,
+            classId: form3, schoolId, maxScore: 20,
+            score: base == null ? null : Math.max(0, Math.min(20, base + DELTA[seq])),
+            isAbsent: base == null,
+          });
+        }
+      }
+
+      if (termOf(seq) !== 1) continue;
+      const ca = `${p}ex-ca${seq}`;
+      await Exam.create({
+        _id: ca, schoolId, name: `CA ${seq}`, type: "ca", parentExamId: paper,
+        academicYear: YEAR, term: 1, sequenceNumber: seq, status: "completed",
+        classId: form3, classIds: [form3], totalMarks: 10, passMark: 5,
+      });
+      const caSubjects = await addSubjects(ca, 10);
+      for (const [studentId, marks] of Object.entries(CA_MARKS)) {
+        for (const [subjectId, score] of Object.entries(marks)) {
+          await StudentScore.create({
+            examId: ca, examSubjectId: caSubjects[subjectId], studentId: `${p}${studentId}`, subjectId,
+            classId: form3, schoolId, maxScore: 10, score,
+          });
+        }
+      }
+    }
   };
 
-  for (let seq = 1; seq <= 6; seq++) {
-    await Exam.create({
-      _id: paperId(seq), schoolId: SCHOOL, name: `Sequence ${seq}`, type: "test",
-      academicYear: YEAR, term: termOf(seq), sequenceNumber: seq, status: "completed",
-      classId: FORM3, classIds: [FORM3], totalMarks: 20, passMark: 10,
-      startDate: `2026-${String(8 + seq).padStart(2, "0")}-15`,
-    });
-    const paperSubjects = await addSubjects(paperId(seq), 20);
-    for (const [studentId, marks] of Object.entries(PAPER)) {
-      for (const [subjectId, base] of Object.entries(marks)) {
-        await StudentScore.create({
-          examId: paperId(seq), examSubjectId: paperSubjects[subjectId], studentId, subjectId,
-          classId: FORM3, schoolId: SCHOOL, maxScore: 20,
-          score: base == null ? null : Math.max(0, Math.min(20, base + DELTA[seq])),
-          isAbsent: base == null,
-        });
-      }
-    }
-
-    if (termOf(seq) !== 1) continue;
-    await Exam.create({
-      _id: caId(seq), schoolId: SCHOOL, name: `CA ${seq}`, type: "ca", parentExamId: paperId(seq),
-      academicYear: YEAR, term: 1, sequenceNumber: seq, status: "completed",
-      classId: FORM3, classIds: [FORM3], totalMarks: 10, passMark: 5,
-    });
-    const caSubjects = await addSubjects(caId(seq), 10);
-    for (const [studentId, marks] of Object.entries(CA_MARKS)) {
-      for (const [subjectId, score] of Object.entries(marks)) {
-        await StudentScore.create({
-          examId: caId(seq), examSubjectId: caSubjects[subjectId], studentId, subjectId,
-          classId: FORM3, schoolId: SCHOOL, maxScore: 10, score,
-        });
-      }
-    }
-  }
+  await seedSchool({ schoolId: SCHOOL, p: "" });
+  const paperId = (seq) => `ex-seq${seq}`;
 
   // ── Layer 1: sequence results ───────────────────────────────────────────
 
@@ -460,6 +489,162 @@ const main = async () => {
       pick(before, ["average", "overallGrade", "classPosition"]));
     // [docs/39 §4.3, §21 D3] and silently unpublishes.
     check("recompute after publication [isPublished before, after]", [before?.isPublished, after?.isPublished], [true, false]);
+  }
+
+  // ── The live route: POST /api/exams/:examId/process ─────────────────────
+  //
+  // Everything above runs results.service.processResults. No router mounts
+  // it: its one caller, results.controller.computeResults, is not routed.
+  // What web, mobile and desktop actually call to compute a sequence is
+  // POST /api/exams/:examId/process (exam.routes.js), which writes
+  // ResultSummary by arithmetic of its own. The same school, built again,
+  // goes through that route over HTTP exactly as the clients send it.
+
+  console.log("--- the live route: POST /exams/:examId/process ---");
+  {
+    process.env.JWT_SECRET = process.env.JWT_SECRET || "check-only-secret";
+    require("../src/db/models");
+    const express = require("express");
+    const jwt     = require("jsonwebtoken");
+    const auth    = require("../middleware/auth");
+    const User    = mongoose.model("User");
+
+    const LIVE = "sch-live", L = "L-";
+    await seedSchool({ schoolId: LIVE, p: L });
+    await User.create({
+      _id: "adm-live", name: "Live Admin", email: "adm-live@example.test", password: "check-only-password",
+      role: "school_admin", schoolId: LIVE, isActive: true,
+    });
+
+    const app = express(); app.use(express.json());
+    app.use("/api/exams", auth.authenticate, require("../src/routes/exam.routes"));
+    app.use((err, _req, res, _next) => res.status(err.statusCode || 500).json({ success: false, message: err.message }));
+    const server = app.listen(0);
+    const API = `http://127.0.0.1:${server.address().port}/api`;
+    const token = jwt.sign({ id: "adm-live", role: "school_admin", schoolId: LIVE }, process.env.JWT_SECRET, { expiresIn: "1h" });
+    const post = (url, body = {}) => fetch(`${API}${url}`, {
+      method: "POST", headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" }, body: JSON.stringify(body),
+    }).then(async (r) => ({ status: r.status, body: await r.json().catch(() => ({})) }));
+
+    const statuses = [];
+    for (let seq = 1; seq <= 6; seq++) statuses.push((await post(`/exams/${L}ex-seq${seq}/process`, {})).status);
+    check("live: every paper processes", statuses, [200, 200, 200, 200, 200, 200]);
+
+    const live = (seq, id) => ResultSummary.findOne({ examId: `${L}ex-seq${seq}`, studentId: `${L}${id}` }).lean();
+    const ama = await live(1, "stu-ama");
+    check("live: Ama S1 Maths breakdown", pick(subjectRow(ama, "sub-math"),
+      ["score", "maxScore", "normalizedMark", "coefficient", "weightedMark", "caMark", "testMark", "grade", "points", "isPassing"]),
+      /*
+       * [docs/39 §4.7] The paper alone: CA 8/10 is not blended in (processResults
+       * gives 15.4), and the Maths coefficient 2 is not carried (coefficient is
+       * the schema default 1).
+       */
+      { score: 15, maxScore: 20, normalizedMark: 15, coefficient: 1, weightedMark: null, caMark: null, testMark: null,
+        grade: "B+", points: 3.3, isPassing: true });
+    check("live: Ama S1 English breakdown", pick(subjectRow(ama, "sub-eng"),
+      ["score", "normalizedMark", "coefficient", "caMark", "grade", "points", "isPassing"]),
+      // Paper 9/20 → D, failing; with its CA it would be 10.2, C, passing.
+      { score: 9, normalizedMark: 9, coefficient: 1, caMark: null, grade: "D", points: 1, isPassing: false });
+    check("live: Ama S1 summary", pick(ama,
+      ["average", "overallGrade", "isPassing", "gpa", "totalScore", "maxTotalScore", "percentage", "subjectsPassed", "subjectsFailed", "subjectsTotal"]),
+      /*
+       * average = Math.round(raw total / subjects) = round(24 / 2) = 12: raw
+       * marks, unweighted, rounded to a whole number. Grade from 24/40 → 12/20 → B.
+       */
+      { average: 12, overallGrade: "B", isPassing: true, gpa: 3, totalScore: 24, maxTotalScore: 40, percentage: 60,
+        subjectsPassed: 1, subjectsFailed: 1, subjectsTotal: 2 });
+    const rows = {};
+    for (const [id] of PUPILS) {
+      const s = await live(1, id);
+      rows[id] = s ? [s.average, s.percentage, s.overallGrade, s.isPassing, s.classPosition, s.totalInClass] : null;
+    }
+    /*
+     * [docs/39 §4.7] Cho's absent Maths counts as zero: round(11 / 2) = 6, and
+     * its 20 marks stay in the maximum (11/40 → 28 %) → F, failing. Positions
+     * rank on percentage: Bih 65, Ama = Dan 60 (shared 2nd), Cho 4th.
+     */
+    check("live: S1 every pupil [average, percentage, grade, passing, position, ofClass]", rows, {
+      "stu-ama": [12, 60, "B", true, 2, 4], "stu-bih": [13, 65, "B", true, 1, 4], "stu-cho": [6, 28, "F", false, 4, 4],
+      "stu-dan": [12, 60, "B", true, 2, 4], "stu-eve": null,
+    });
+    const seqAvg = {};
+    for (let seq = 1; seq <= 6; seq++) seqAvg[seq] = (await live(seq, "stu-ama"))?.average ?? null;
+    // S2 (17+11)/2 = 14; S3 22/2 = 11; S4 26/2 = 13; S5 24/2 = 12; S6 20/2 = 10.
+    check("live: Ama sequence averages S1..S6", seqAvg, { 1: 12, 2: 14, 3: 11, 4: 13, 5: 12, 6: 10 });
+
+    for (const term of [1, 2, 3]) {
+      await termGrading.computeClassTermAverages({ schoolId: LIVE, academicYear: YEAR, term, classId: `${L}${FORM3}` });
+    }
+    const terms = {};
+    for (const term of [1, 2, 3]) {
+      for (const [id] of PUPILS) {
+        const r = await TermResult.findOne({ schoolId: LIVE, academicYear: YEAR, term, studentId: `${L}${id}` }).lean();
+        terms[`T${term} ${id}`] = r ? [r.termAverage, r.overallGrade, r.isPassing, r.classPosition] : null;
+      }
+    }
+    // On the live route the term layer reads a /20-like average: Ama T1 (12 + 14)/2 = 13, B, passing.
+    // Cho T1 (6 + round(13/2) = 7)/2 = 6.5.
+    check("live: every term row [average, grade, passing, position]", terms, {
+      "T1 stu-ama": [13, "B", true, 2], "T1 stu-bih": [14, "B+", true, 1], "T1 stu-cho": [6.5, "F", false, 4],
+      "T1 stu-dan": [13, "B", true, 2], "T1 stu-eve": null,
+      "T2 stu-ama": [12, "B", true, 2], "T2 stu-bih": [13, "B", true, 1], "T2 stu-cho": [5.5, "F", false, 4],
+      "T2 stu-dan": [12, "B", true, 2], "T2 stu-eve": null,
+      "T3 stu-ama": [11, "C+", true, 2], "T3 stu-bih": [12, "B", true, 1], "T3 stu-cho": [5.5, "F", false, 4],
+      "T3 stu-dan": [11, "C+", true, 2], "T3 stu-eve": null,
+    });
+
+    await annualGrading.computeClassAnnualAverages({ schoolId: LIVE, academicYear: YEAR, classId: `${L}${FORM3}` });
+    const annual = {};
+    for (const [id] of PUPILS) {
+      const r = await AnnualResult.findOne({ schoolId: LIVE, academicYear: YEAR, studentId: `${L}${id}` }).lean();
+      annual[id] = r ? [r.annualAverage, r.overallGrade, r.isPassing, r.promotionStatus, r.classPosition] : null;
+    }
+    // Ama (13·33.33 + 12·33.33 + 11·33.34)/100 = 12.00. Eve: the §4.6k zero row again.
+    check("live: annual rows [average, grade, passing, promotion, position]", annual, {
+      "stu-ama": [12, "B", true, "promoted", 2], "stu-bih": [13, "B", true, "promoted", 1],
+      "stu-cho": [5.83, "F", false, "repeated", 4], "stu-dan": [12, "B", true, "promoted", 2],
+      "stu-eve": [0, "F", false, "pending", 5],
+    });
+
+    const card = await buildStudentReportCardData(`${L}ex-seq1`, `${L}stu-ama`);
+    check("live: sequence card headline", {
+      average: card.data?.summary?.average ?? null, overallGrade: card.data?.summary?.overallGrade ?? null,
+      isPassing: card.data?.summary?.isPassing ?? null, classPosition: card.data?.summary?.classPosition ?? null,
+      weightedAverage: card.data?.computed?.weightedAverage ?? null,
+    },
+    /*
+     * [docs/39 §4.7] The card rebuilds its rows from the marks — CA blended,
+     * coefficients applied — and prints 13.67 as the average, above a grade (B)
+     * and a position taken from the stored 12.
+     */
+    { average: 12, overallGrade: "B", isPassing: true, classPosition: 2, weightedAverage: 13.67 });
+
+    for (let seq = 1; seq <= 6; seq++) await results.publishResults(`${L}ex-seq${seq}`);
+    const byStudent = await promotion.resultsByStudent(LIVE, YEAR);
+    /*
+     * [docs/39 §4.7] Nothing. The live route never writes academicYear onto a
+     * summary, and the promotion run selects published summaries BY
+     * academicYear — so it sees no results for any pupil.
+     */
+    check("live: resultsByStudent", Object.fromEntries([...byStudent.entries()].sort()), {});
+    const { decisions } = await promotion.generateRun({ schoolId: LIVE, fromYear: YEAR, toYear: NEXT_YEAR, generatedBy: null });
+    // So every pupil is proposed on "no_results" — promoted, Cho (annual: repeated) included.
+    check("live: promotion decisions [outcome, basis]", Object.fromEntries(decisions
+      .map((x) => [x.studentId, [x.outcome, x.basis]]).sort()), {
+      "L-stu-ama": ["promoted", "no_results"], "L-stu-bih": ["promoted", "no_results"], "L-stu-cho": ["promoted", "no_results"],
+      "L-stu-dan": ["promoted", "no_results"], "L-stu-eve": ["promoted", "no_results"],
+    });
+    check("live: summaries carry no academicYear or term", pick(await live(1, "stu-ama"), ["academicYear", "term"]),
+      { academicYear: null, term: null });
+
+    // A re-process after publication.
+    const before = await live(1, "stu-ama");
+    await post(`/exams/${L}ex-seq1/process`, {});
+    const after = await live(1, "stu-ama");
+    // Unlike processResults (§4.3), the live route leaves publication alone — and rewrites the figures unguarded.
+    check("live: re-process after publication [isPublished before, after]", [before?.isPublished, after?.isPublished], [true, true]);
+
+    server.close();
   }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
