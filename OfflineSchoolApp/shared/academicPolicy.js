@@ -14,39 +14,61 @@
  * into a single canonical description of the rules, so the backend can freeze
  * it (AcademicPolicySnapshot) and, from Phase 2c, stamp its hash on results.
  *
- * ── It DESCRIBES, it does not decide ──────────────────────────────────────
+ * ── Configuration, not code ───────────────────────────────────────────────
  *
- * Nothing here is read by a calculation. Under calcVersion "results/1" the
- * arithmetic is exactly the code's: grading.service, termGrading,
- * annualGrading, promotion. The policy records the inputs those read, with
- * the meaning they have there — including where the code does not do what the
- * configuration suggests (docs/39 §4.2): stored grades come from the built-in
- * scale (`calcBands`) and a hard-coded 10/20 subject pass mark, while cards
- * re-grade with the school's bands (`schoolBands`). Writing that down
- * faithfully is the point; tidying it is Phase 4.
+ * The policy records the CONFIGURATION a computation read — never what the
+ * code does with it. Four different pieces of code read the same documents
+ * and do different things with them (docs/39 §4.7): the live sequence route
+ * ignores the CA split the unrouted one blends, and grades with the school's
+ * bands where the unrouted one uses the built-in table. A policy that tried
+ * to describe that would be true of one writer and false of the others.
+ *
+ * What the code does is named separately, per writer, by CALC_VERSIONS and
+ * stamped beside the policy hash on every row. (policy, calcVersion) is the
+ * whole answer to "what produced this result?". Nothing here is read by a
+ * calculation.
  *
  * ── What changes the hash, and what deliberately does not ─────────────────
  *
- * Only fields some calculation or printed card reads. The fields no code
+ * Only fields a result row or a printed card depends on. The fields no code
  * reads (INERT_FIELDS) are left out, so editing one does not make every
  * result in the school look stale. If a later change makes one of them live,
- * it moves into the policy and calcVersion says so.
+ * it moves into the policy and POLICY_FORMAT says so.
+ *
+ * Class promotion bars (Class.promotionAverage) are left out too: no result
+ * row depends on them, only the promotion run does, and reading every class
+ * on every computation would cost a query on paths that are held to a fixed
+ * count (check-term-compute, check-complexity). When promotion decisions are
+ * stamped they carry their own record of the bars they used.
  *
  * Pure: no database, no clock, no crypto (the backend hashes canonicalJson).
  */
 
-const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("./gradeScale");
+const { DEFAULT_PASS_MARK } = require("./gradeScale");
 const CA = require("./caAssessment");
 
 /**
- * The arithmetic's own version. It names the code that turns a policy into
- * results, and moves only when a formula does (docs/39 §8) — e.g. the
- * sequence-average decision, D1, would be "results/2".
+ * The code that wrote a result row, one name per writer. Each moves only when
+ * that writer's arithmetic does (docs/39 §8) — a D1 decision would ship as,
+ * say, "exam-process/2" for new computations.
+ *
+ *   examProcess     POST /exams/:examId/process (exam.routes.js) — the live
+ *                   sequence route: raw-mark whole-number mean, no CA, no
+ *                   coefficients, absent as zero (docs/39 §4.7)
+ *   resultsService  results.service.processResults — unrouted: CA blended,
+ *                   coefficients, GPA-point average (docs/39 §4.1)
+ *   term            termGrading — term average from the sequence summaries
+ *   annual          annualGrading — annual average and promotion status
  */
-const CALC_VERSION = "results/1";
+const CALC_VERSIONS = Object.freeze({
+  examProcess:    "exam-process/1",
+  resultsService: "results-service/1",
+  term:           "term/1",
+  annual:         "annual/1",
+});
 
 /** The shape of the object below. Moves only if the shape does. */
-const POLICY_FORMAT = 1;
+const POLICY_FORMAT = 2;
 
 /**
  * Fields stored on the configuration documents that no calculation reads
@@ -140,10 +162,9 @@ const periodsFromLegacy = (structure, ca) => {
  * @param {string}  input.academicYear
  * @param {object|null} input.structure      AcademicStructure for that year (lean), or null
  * @param {object|null} input.gradingConfig  the school's GradingConfig (lean), or null
- * @param {Array}  [input.classes]           the school's classes: [{ _id, promotionAverage }]
  * @returns {object} the policy; canonicalJson() of it is what gets hashed
  */
-const resolvePolicy = ({ schoolId, academicYear, structure = null, gradingConfig = null, classes = [] }) => {
+const resolvePolicy = ({ schoolId, academicYear, structure = null, gradingConfig = null }) => {
   if (!schoolId)     throw new Error("resolvePolicy: schoolId is required");
   if (!academicYear) throw new Error("resolvePolicy: academicYear is required");
 
@@ -151,74 +172,37 @@ const resolvePolicy = ({ schoolId, academicYear, structure = null, gradingConfig
   const schoolBands = Array.isArray(gradingConfig?.grades) && gradingConfig.grades.length > 0
     ? gradingConfig.grades.map(band) : null;
 
-  // The pass mark a TERM or YEAR, and a card's subject row, is judged against:
-  // termGrading, annualGrading and reportCardData all read `passMark ?? 10`.
-  const periodPassMark = num(gradingConfig?.passMark, DEFAULT_PASS_MARK);
-
-  // Classes with their own promotion bar, by id. Entered 0–100 and compared,
-  // under results/1, against the GPA-point mean of the year's sequence
-  // averages (docs/39 §4.1) — recorded as entered, never converted.
-  const classOverrides = {};
-  for (const c of [...classes].sort((a, b) => String(a._id).localeCompare(String(b._id)))) {
-    const bar = num(c.promotionAverage);
-    if (bar !== null) classOverrides[String(c._id)] = { promotionAverage: bar };
-  }
+  // The school's pass mark as every live writer reads it: the live sequence
+  // route (subject and overall pass), term, annual and the cards all use
+  // `passMark ?? 10`. (The unrouted processResults uses a fixed 10 — that is
+  // its calcVersion's business, not configuration.)
+  const passMark = num(gradingConfig?.passMark, DEFAULT_PASS_MARK);
 
   return {
-    format:      POLICY_FORMAT,
-    calcVersion: CALC_VERSION,
-    schoolId:    String(schoolId),
+    format:       POLICY_FORMAT,
+    schoolId:     String(schoolId),
     academicYear: String(academicYear),
 
-    structure: structure ? {
-      periods: periodsFromLegacy(structure, ca),
-      assessmentTypes: ["test", "practical", "promotion_exam", CA.CA_TYPE],
-    } : null,
+    structure: structure ? { periods: periodsFromLegacy(structure, ca) } : null,
 
     grading: {
-      scale:    { max: 20 },
-      rounding: { decimals: 2, mode: "half_up" },
-      // What grading.service grades every stored mark with: the built-in
-      // table and a hard-coded 10/20, whatever the school configured.
-      calcBands:       DEFAULT_GRADES.map(band),
-      subjectPassMark: DEFAULT_PASS_MARK,
-      // What term/annual pass decisions and card subject rows use.
-      periodPassMark,
-      periodPassMarkSource: num(gradingConfig?.passMark) !== null ? "gradingConfig" : "default",
+      // The school's own bands; null = it has none and every writer falls
+      // back to the built-in table (shared/gradeScale DEFAULT_GRADES).
+      schoolBands,
+      passMark,
+      passMarkSource: num(gradingConfig?.passMark) !== null ? "gradingConfig" : "default",
       // AcademicStructure's own pass mark: read by intelligence when the
       // grading config has none (shared/intelligence/subjectInsights.js).
       structurePassMark: num(structure?.passMark),
-      // What cards grade with at render time; null = the built-in table.
-      schoolBands,
       showGrades: gradingConfig?.showGrades ?? true,
       ca,
     },
 
-    // Constant under results/1 — written out so that a policy that ranks
-    // differently is a different policy rather than an unrecorded one.
-    ranking: {
-      enabled: true,
-      basis:   "average",
-      ties:    "competition",
-      scopes:  { sequence: ["class", "className", "school"], term: ["class"], annual: ["class"] },
-      // Who gets a place, per level, as check:academic pins it: a sequence
-      // leaves fully-absent pupils unranked; a term writes no row (so no
-      // place) for an unmarked pupil; the year ranks every active pupil,
-      // the unmarked included (docs/39 §4.6k).
-      ranked: { sequence: "not_fully_absent", term: "has_term_result", annual: "every_active_pupil" },
-    },
-
+    // annualGrading's promotion status: every promotion exam at or above
+    // the threshold (/20), alongside every term passed.
     promotion: {
-      // annualGrading: every term passed, and every promotion exam at or
-      // above the threshold.
-      annual: {
-        rule:               "all_terms_passed_and_promotion_exams",
-        promotionExams:     [...(structure?.promotionExams || [])].map(Number).sort((a, b) => a - b),
-        promotionThreshold: num(structure?.promotionThreshold),
-      },
-      // promotion.proposeFor: the class's bar when set, else the majority of
-      // published sequence results.
-      proposal: { rule: "class_average_else_majority_passed", classOverrides },
+      promotionExams:     [...(structure?.promotionExams || [])].map(Number).sort((a, b) => a - b),
+      promotionThreshold: num(structure?.promotionThreshold),
     },
   };
 };
@@ -245,7 +229,7 @@ const canonicalJson = (value) => {
 };
 
 module.exports = {
-  CALC_VERSION,
+  CALC_VERSIONS,
   POLICY_FORMAT,
   INERT_FIELDS,
   periodsFromLegacy,

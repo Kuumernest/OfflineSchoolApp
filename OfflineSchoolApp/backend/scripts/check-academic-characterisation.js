@@ -644,6 +644,58 @@ const main = async () => {
     // Unlike processResults (§4.3), the live route leaves publication alone — and rewrites the figures unguarded.
     check("live: re-process after publication [isPublished before, after]", [before?.isPublished, after?.isPublished], [true, true]);
 
+    // ── Provenance (docs/39 §8, Phase 2c) ───────────────────────────────
+    //
+    // Every row above now says what produced it: the snapshot of the
+    // configuration it was computed under, and the code that computed it.
+    // Stamping is additive — every figure pinned above is unchanged.
+
+    console.log("--- provenance: policyHash and calcVersion on every row ---");
+    const policySvc = require("../src/services/academicPolicy.service");
+    const stamps = async (Model, filter) =>
+      [...new Set((await Model.find(filter).select("policyHash calcVersion").lean())
+        .map((r) => `${r.policyHash}|${r.calcVersion}`))].sort();
+
+    const snapUnrouted = await policySvc.resolve({ schoolId: SCHOOL, academicYear: YEAR });
+    const snapLive     = await policySvc.resolve({ schoolId: LIVE,   academicYear: YEAR });
+    check("each school's snapshot is its own, intact",
+      [snapUnrouted.schoolId, snapLive.schoolId, snapUnrouted._id === snapLive._id, policySvc.verify(snapUnrouted), policySvc.verify(snapLive)],
+      [SCHOOL, LIVE, false, true, true]);
+
+    const paperIds = (prefix) => ({ $in: [1, 2, 3, 4, 5, 6].map((q) => `${prefix}ex-seq${q}`) });
+    check("unrouted path: every summary stamped results-service/1",
+      await stamps(ResultSummary, { examId: paperIds("") }), [`${snapUnrouted._id}|results-service/1`]);
+    check("live route: every summary stamped exam-process/1",
+      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/1`]);
+    check("term rows stamped term/1, per school",
+      [await stamps(TermResult, { schoolId: SCHOOL }), await stamps(TermResult, { schoolId: LIVE })],
+      [[`${snapUnrouted._id}|term/1`], [`${snapLive._id}|term/1`]]);
+    check("annual rows stamped annual/1, per school",
+      [await stamps(AnnualResult, { schoolId: SCHOOL }), await stamps(AnnualResult, { schoolId: LIVE })],
+      [[`${snapUnrouted._id}|annual/1`], [`${snapLive._id}|annual/1`]]);
+
+    /*
+     * A configuration edit touches no result. A recompute after it is stamped
+     * with the new configuration — and on the live route, which ignores the CA
+     * split (§4.7a), the figures do not move even though the stamp does.
+     */
+    await GradingConfig.updateOne({ schoolId: LIVE }, { $set: { caWeight: 30, testWeight: 70 } });
+    const s2Before = await live(2, "stu-ama");
+    check("after a config edit, existing rows keep their stamp",
+      await stamps(ResultSummary, { examId: paperIds(L) }), [`${snapLive._id}|exam-process/1`]);
+    await post(`/exams/${L}ex-seq2/process`, {});
+    const s2After = await live(2, "stu-ama");
+    const snapEdited = await policySvc.resolve({ schoolId: LIVE, academicYear: YEAR });
+    check("a re-process is stamped with the new configuration; the others keep theirs", [
+      s2After.policyHash === snapEdited._id, snapEdited._id !== snapLive._id,
+      (await live(1, "stu-ama")).policyHash === snapLive._id,
+    ], [true, true, true]);
+    check("and its figures did not move (the live route ignores the CA split)",
+      pick(s2After, ["average", "overallGrade", "isPassing", "classPosition"]),
+      pick(s2Before, ["average", "overallGrade", "isPassing", "classPosition"]));
+    check("the earlier snapshot is still there to answer for the rows that used it",
+      (await policySvc.get(snapLive._id, { schoolId: LIVE }))?._id, snapLive._id);
+
     server.close();
   }
 

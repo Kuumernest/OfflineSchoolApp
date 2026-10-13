@@ -22,6 +22,8 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
+const academicPolicy = require("../services/academicPolicy.service");
+const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -1545,6 +1547,13 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+
+  // The configuration this run reads, frozen and named, so every summary it
+  // writes can say what produced it (docs/39 §8). Stamped only: nothing below
+  // reads it, and the arithmetic is unchanged.
+  const policy = await academicPolicy.resolve({
+    schoolId, academicYear: exam.academicYear, gradingConfig, createdBy: req.user?._id ?? null,
+  });
   const scoreQuery    = { examId, schoolId, deletedAt: null };
   if (classId) scoreQuery.classId = classId;
 
@@ -1697,6 +1706,8 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
       subjectsTotal:  scores.length,
       isPassing:      computed.isPassing,
       subjectBreakdown,
+      policyHash:     policy._id,
+      calcVersion:    CALC_VERSIONS.examProcess,
       syncStatus:     "synced",
       lastSyncedAt:   new Date(),
     };

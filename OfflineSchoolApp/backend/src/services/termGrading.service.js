@@ -25,6 +25,8 @@ const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig    = require("../db/models/GradingConfig");
 const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
+const academicPolicy   = require("./academicPolicy.service");
+const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -73,6 +75,11 @@ async function loadTermContext({ schoolId, academicYear, term }) {
 
   const sequenceNumbers = termConfig.sequences.map((s) => s.number);
 
+  // The configuration this term is computed under, frozen and named (docs/39
+  // §8), from the two documents just read — no further query on a warm
+  // process, which keeps the per-class cost fixed (check-term-compute).
+  const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
+
   // Every exam of the term, so the ones missing a sequence can be REPORTED
   // rather than silently ignored. An exam created before the server stored
   // sequenceNumber belongs to no sequence and contributes to no term average,
@@ -110,6 +117,7 @@ async function loadTermContext({ schoolId, academicYear, term }) {
       .filter((e) => e.sequenceNumber == null && e.type !== CA_TYPE)
       .map((e) => ({ _id: String(e._id), name: e.name || null })),
     passMark: gradingConfig?.passMark ?? 10,
+    policyHash: policy._id,
   };
 }
 
@@ -169,6 +177,10 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
       overallGrade:  termGrade.grade,
       overallRemark: termGrade.remark,
       isPassing:     termAverage >= passMark,
+      // A context built by hand (a caller outside loadTermContext) has no
+      // policy, and its rows say so rather than claiming one.
+      policyHash:    context.policyHash ?? null,
+      calcVersion:   CALC_VERSIONS.term,
       syncStatus:    "pending",
     },
   };

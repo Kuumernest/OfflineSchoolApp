@@ -42,6 +42,9 @@ const {
 // result. What changes below is only WHICH mark a subject contributes.
 const sequenceAssessment = require("./sequenceAssessment.service");
 
+const academicPolicy = require("./academicPolicy.service");
+const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+
 // ─── Main Processing Function ─────────────────────────────────────────────
 
 /**
@@ -106,6 +109,10 @@ async function processResults(examId, classId = null, processedBy = null) {
    * school its teachers had entered nothing.
    */
   const ca = await sequenceAssessment.loadSequenceContext(exam, classId);
+
+  // The configuration this run reads, frozen and named (docs/39 §8). Stamped
+  // only: the arithmetic below does not read it.
+  const policy = await academicPolicy.resolve({ schoolId: exam.schoolId, academicYear: exam.academicYear });
 
   if (allScores.length === 0 && ca.caByKey.size === 0) {
     throw new Error("NO_SCORES_FOUND");
@@ -305,6 +312,8 @@ async function processResults(examId, classId = null, processedBy = null) {
       subjectsTotal:    overall.subjectsTotal,
       isPassing:        overall.isPassing,
       subjectBreakdown: overall.subjectBreakdown,
+      policyHash:       policy._id,
+      calcVersion:      CALC_VERSIONS.resultsService,
       isPartial,
       isPublished: false,
       isLocked:    false,

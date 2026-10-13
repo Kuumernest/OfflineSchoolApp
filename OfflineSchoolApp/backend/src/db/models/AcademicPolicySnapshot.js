@@ -7,8 +7,8 @@ const mongoose = require("mongoose");
  * One school's academic rules for one year, frozen (docs/39 §6.3).
  *
  * The configuration a result is computed under — the structure and its
- * weights, the CA split, the grade bands, the pass marks, the ranking and
- * promotion rules — lives in documents a school edits in place. This is a
+ * weights, the CA split, the grade bands, the pass marks, the promotion-exam
+ * rule — lives in documents a school edits in place. This is a
  * copy of their EFFECTIVE content at the moment something was computed under
  * them, so that a result can say which rules produced it long after the
  * documents have moved on (shared/academicPolicy.js builds the content).
@@ -28,9 +28,9 @@ const mongoose = require("mongoose");
  * with whatever somebody wrote later. Same enforcement as ResultChangeLog:
  * the mutating entry points throw at the model layer.
  *
- * Nothing reads or writes this outside services/academicPolicy.service.js,
- * and in Phase 2b nothing computes under it yet — results start carrying its
- * hash in Phase 2c.
+ * Nothing reads or writes this outside services/academicPolicy.service.js.
+ * Result rows point at it by `policyHash`, beside their own `calcVersion`
+ * (docs/39 §8).
  */
 
 const academicPolicySnapshotSchema = new mongoose.Schema(
@@ -41,8 +41,9 @@ const academicPolicySnapshotSchema = new mongoose.Schema(
     schoolId:     { type: String, required: true },
     academicYear: { type: String, required: true },
 
-    format:      { type: Number, required: true },
-    calcVersion: { type: String, required: true },
+    // The policy's shape (shared/academicPolicy POLICY_FORMAT). What the CODE
+    // did with it is not here: each result row carries its own calcVersion.
+    format: { type: Number, required: true },
 
     // The canonical policy itself, exactly as hashed.
     policy: { type: mongoose.Schema.Types.Mixed, required: true },

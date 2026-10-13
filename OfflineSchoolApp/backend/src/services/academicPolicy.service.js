@@ -4,21 +4,25 @@
 /**
  * Freezing a school's academic rules (docs/39 §6.3, Phase 2b).
  *
- *   resolve({ schoolId, academicYear })  → the snapshot of the rules in force now
+ *   resolve({ schoolId, academicYear, structure?, gradingConfig? })
+ *                                        → the snapshot of the rules in force now
  *   get(hash, { schoolId })              → a snapshot by its hash, in that school only
  *   hashOf(policy)                       → the content hash
  *
- * resolve() reads the documents the calculations read, with the filters they
+ * resolve() takes the documents the calculations read, with the filters they
  * read them by — the year's AcademicStructure as termGrading.loadTermContext
- * finds it, the school's GradingConfig, the classes' promotion bars as
- * promotion.generateRun finds them — builds the canonical policy
+ * finds it, the school's GradingConfig — builds the canonical policy
  * (shared/academicPolicy.js) and stores it once under its hash.
  *
- * ── Nothing calls this yet ────────────────────────────────────────────────
+ * ── Free on the paths that call it ────────────────────────────────────────
  *
- * Phase 2b adds the snapshot and nothing that depends on it. Phase 2c stamps
- * its hash on newly computed results. Until then no result, card or screen
- * can differ because this file exists.
+ * The writers that stamp results (exam.routes /process, results.service,
+ * termGrading, annualGrading) have already loaded those two documents, and
+ * pass them in: a key present — even as null — is used as given, a key
+ * absent is read here. Snapshots are immutable and cached by hash, so on a
+ * warm process stamping a result costs no query at all; term and annual
+ * compute are held to fixed query counts (check-term-compute,
+ * check-complexity) and stay there.
  *
  * ── A school, always ──────────────────────────────────────────────────────
  *
@@ -32,7 +36,6 @@ const crypto = require("crypto");
 const AcademicPolicySnapshot = require("../db/models/AcademicPolicySnapshot");
 const AcademicStructure      = require("../db/models/AcademicStructure");
 const GradingConfig          = require("../db/models/GradingConfig");
-const Class                  = require("../db/models/Class");
 
 const { resolvePolicy, canonicalJson } = require("../../../shared/academicPolicy");
 
@@ -72,22 +75,29 @@ const remember = (doc) => {
  * @param {object} input
  * @param {string} input.schoolId
  * @param {string} input.academicYear
+ * @param {object|null} [input.structure]      already loaded; omit to read it
+ * @param {object|null} [input.gradingConfig]  already loaded; omit to read it
  * @param {string} [input.createdBy]
  * @returns {Promise<object>} the snapshot (plain object)
  */
-async function resolve({ schoolId, academicYear, createdBy = null } = {}) {
+async function resolve(input = {}) {
+  let { schoolId, academicYear } = input;
+  const createdBy = input.createdBy ?? null;
   if (!schoolId)     throw required("SCHOOL_REQUIRED", "A school must be selected");
   if (!academicYear) throw required("ACADEMIC_YEAR_REQUIRED", "An academic year is required");
   schoolId = String(schoolId);
   academicYear = String(academicYear);
 
-  const [structure, gradingConfig, classes] = await Promise.all([
-    AcademicStructure.findOne({ schoolId, academicYear, deletedAt: null }).lean(),
-    GradingConfig.findOne({ schoolId }).lean(),
-    Class.find({ schoolId, deletedAt: null }).select("_id promotionAverage").lean(),
+  const [structure, gradingConfig] = await Promise.all([
+    "structure" in input
+      ? input.structure
+      : AcademicStructure.findOne({ schoolId, academicYear, deletedAt: null }).lean(),
+    "gradingConfig" in input
+      ? input.gradingConfig
+      : GradingConfig.findOne({ schoolId }).lean(),
   ]);
 
-  const policy = resolvePolicy({ schoolId, academicYear, structure, gradingConfig, classes });
+  const policy = resolvePolicy({ schoolId, academicYear, structure, gradingConfig });
   const json   = canonicalJson(policy);
   const hash   = crypto.createHash("sha256").update(json).digest("hex");
 
@@ -102,7 +112,6 @@ async function resolve({ schoolId, academicYear, createdBy = null } = {}) {
       schoolId,
       academicYear,
       format:       policy.format,
-      calcVersion:  policy.calcVersion,
       // Stored as the canonical form, so what is kept is byte-for-byte what
       // was hashed, and get() can re-verify it.
       policy:       JSON.parse(json),

@@ -6,11 +6,12 @@
  *
  * ── What this pins ────────────────────────────────────────────────────────
  *
- * 1. FAITHFUL. The policy says what the calculations actually read: the CA
- *    split sequenceAssessment.loadCaSettings returns, the weights and pass
- *    mark termGrading.loadTermContext uses, the table grading.service grades
- *    with. A snapshot that described rules the code does not follow would be
- *    worse than none.
+ * 1. FAITHFUL. The policy records the configuration the calculations read:
+ *    the CA split sequenceAssessment.loadCaSettings returns, the weights and
+ *    pass mark termGrading.loadTermContext uses. It records configuration
+ *    only — what each writer's code does with it is its calcVersion, stamped
+ *    beside the hash (docs/39 §8) — and documents passed in are used as
+ *    given, at no query on a warm process.
  * 2. SENSITIVE to every rule a result or card depends on, and INSENSITIVE to
  *    the fields nothing reads — or every inert edit would make a school's
  *    results look stale.
@@ -42,7 +43,6 @@ const main = async () => {
   const policySvc   = require("../src/services/academicPolicy.service");
   const termGrading = require("../src/services/termGrading.service");
   const sequenceAssessment = require("../src/services/sequenceAssessment.service");
-  const grading     = require("../src/services/grading.service");
   const shared      = require("../../shared/academicPolicy");
   const { DEFAULT_GRADES } = require("../../shared/gradeScale");
 
@@ -113,7 +113,7 @@ const main = async () => {
         .map((p) => [p.legacy.sequence, p.weight]);
       check(`term ${term} sequences and weights = loadTermContext`,
         fromPolicy, ctx.termConfig.sequences.map((s) => [s.number, s.weight ?? 50]));
-      check(`term ${term} pass mark = loadTermContext`, policy.grading.periodPassMark, ctx.passMark);
+      check(`term ${term} pass mark = loadTermContext`, policy.grading.passMark, ctx.passMark);
     }
 
     const structure = await Structure.findOne({ schoolId: SCHOOL }).lean();
@@ -121,16 +121,13 @@ const main = async () => {
       policy.structure.periods.filter((p) => p.kind === "term").map((p) => [p.legacy.term, p.weight]),
       structure.terms.map((t) => [t.number, t.weight]));
 
-    check("calcBands = the table grading.service grades with",
-      policy.grading.calcBands.map((b) => [b.grade, b.minMark, b.maxMark, b.gpaPoints]),
-      grading.GRADE_SCALE.map((b) => [b.grade, b.min, b.max, b.points]));
-    check("subject pass mark = grading.service's", policy.grading.subjectPassMark, grading.PASSING_MARK_OUT_OF_20);
-    check("no school bands configured → null (cards use the built-in table)", policy.grading.schoolBands, null);
-    check("class promotion bars, as entered", policy.promotion.proposal.classOverrides, { "cls-a": { promotionAverage: 50 } });
-    check("annual promotion rule inputs", policy.promotion.annual,
-      // Stored canonical: keys sorted.
-      { promotionExams: [], promotionThreshold: 10, rule: "all_terms_passed_and_promotion_exams" });
-    check("calcVersion and format", [snap.calcVersion, snap.format, policy.calcVersion], ["results/1", 1, "results/1"]);
+    check("no school bands configured → null (every writer falls back to the built-in table)", policy.grading.schoolBands, null);
+    check("annual promotion-exam inputs", policy.promotion, { promotionExams: [], promotionThreshold: 10 });
+    check("configuration only: no code description in the policy",
+      ["calcVersion", "ranking", "calcBands", "subjectPassMark", "classOverrides"].filter((k) => JSON.stringify(policy).includes(`"${k}"`)), []);
+    check("format", [snap.format, policy.format], [2, 2]);
+    check("one calcVersion per writer, all distinct", [Object.keys(shared.CALC_VERSIONS).sort(), new Set(Object.values(shared.CALC_VERSIONS)).size],
+      [["annual", "examProcess", "resultsService", "term"], 4]);
     check("the stored policy re-hashes to its id", policySvc.verify(snap), true);
     check("id is a sha256", /^[0-9a-f]{64}$/.test(snap._id), true);
     check("provenance recorded", [!!snap.sources.structureId, !!snap.sources.structureUpdatedAt, !!snap.sources.gradingConfigUpdatedAt],
@@ -165,9 +162,6 @@ const main = async () => {
   await sameAfter("the structure pass mark", () => st({ passMark: 11 }), () => st({ passMark: 10 }), false);
   await sameAfter("the promotion threshold", () => st({ promotionThreshold: 11 }), () => st({ promotionThreshold: 10 }), false);
   await sameAfter("the promotion exams", () => st({ promotionExams: [6] }), () => st({ promotionExams: [] }), false);
-  await sameAfter("a class promotion bar",
-    () => Class.updateOne({ _id: "cls-b" }, { $set: { promotionAverage: 60 } }),
-    () => Class.updateOne({ _id: "cls-b" }, { $set: { promotionAverage: null } }), false);
 
   // Fields nothing reads (shared/academicPolicy.INERT_FIELDS).
   await sameAfter("useGpa/gpaScale/gradingType", () => gc({ useGpa: true, gpaScale: 5, gradingType: "gpa" }),
@@ -179,8 +173,11 @@ const main = async () => {
   await sameAfter("maxAbsences", () => st({ maxAbsences: 30 }), () => st({ maxAbsences: null }), true);
   await sameAfter("a sequence's assessment label", () => st({ "terms.0.sequences.0.assessment.label": "Mid-term" }),
     () => st({ "terms.0.sequences.0.assessment.label": "Test 1" }), true);
-  await sameAfter("a class with no promotion bar", () => Class.create({ _id: "cls-c", schoolId: SCHOOL, name: "Form 3" }),
-    () => Class.deleteOne({ _id: "cls-c" }), true);
+  // No result row depends on a class's promotion bar — only the promotion
+  // run does, which will carry its own record (shared/academicPolicy).
+  await sameAfter("a class promotion bar",
+    () => Class.updateOne({ _id: "cls-b" }, { $set: { promotionAverage: 60 } }),
+    () => Class.updateOne({ _id: "cls-b" }, { $set: { promotionAverage: null } }), true);
   await sameAfter("re-saving the same values (updatedAt only)",
     () => gc({ caWeight: 40 }), async () => {}, true);
   {
@@ -193,6 +190,33 @@ const main = async () => {
     shared.canonicalJson({ b: 1, a: { d: [3, { y: 1, x: 2 }], c: null } }),
     shared.canonicalJson({ a: { c: null, d: [3, { x: 2, y: 1 }] }, b: 1 }));
   check("canonicalJson keeps array order", shared.canonicalJson([1, 2]) === shared.canonicalJson([2, 1]), false);
+
+  // ── 3b. Documents passed in are used as given, and cost nothing warm ────
+
+  console.log("--- preloaded documents ---");
+  {
+    const structure = await Structure.findOne({ schoolId: SCHOOL, academicYear: YEAR, deletedAt: null }).lean();
+    const gradingConfig = await GradingConfig.findOne({ schoolId: SCHOOL }).lean();
+    check("preloaded documents give the same snapshot as reading them",
+      (await policySvc.resolve({ schoolId: SCHOOL, academicYear: YEAR, structure, gradingConfig }))._id, base);
+
+    // Warm (the line above cached it): no query at all.
+    let queries = 0;
+    const onCmd = (e) => { if (["find", "insert", "update", "aggregate"].includes(e.commandName)) queries += 1; };
+    const client = mongoose.connection.getClient();
+    client.on("commandStarted", onCmd);
+    await policySvc.resolve({ schoolId: SCHOOL, academicYear: YEAR, structure, gradingConfig });
+    client.off("commandStarted", onCmd);
+    check("warm, with both documents passed in: zero queries", queries, 0);
+
+    // Passed in means used, even when the database says otherwise — the
+    // snapshot must describe what the CALLER computed with.
+    const passed = await policySvc.resolve({ schoolId: SCHOOL, academicYear: YEAR, structure,
+      gradingConfig: { ...gradingConfig, caWeight: 25, testWeight: 75 } });
+    check("a passed-in document is what the snapshot describes", passed.policy.grading.ca, { caEnabled: true, caWeight: 25, testWeight: 75 });
+    check("and null passed in means none, not 'go and read it'",
+      (await policySvc.resolve({ schoolId: SCHOOL, academicYear: YEAR, structure: null, gradingConfig })).policy.structure, null);
+  }
 
   // ── 4. Stable: one document per policy, concurrently too ────────────────
 
@@ -236,11 +260,11 @@ const main = async () => {
     // A year with no structure: sequence results still compute without one.
     const bare = await resolve(SCHOOL, "2030/2031");
     check("no structure for the year → structure null, grading still recorded",
-      [bare.policy.structure, bare.policy.grading.periodPassMark, bare.academicYear], [null, 10, "2030/2031"]);
+      [bare.policy.structure, bare.policy.grading.passMark, bare.academicYear], [null, 10, "2030/2031"]);
 
     // A school with no grading config at all: the shipped defaults.
     const blank = await resolve("sch-pol-blank", YEAR);
-    check("no grading config → defaults", [blank.policy.grading.ca, blank.policy.grading.periodPassMarkSource, blank.policy.grading.schoolBands],
+    check("no grading config → defaults", [blank.policy.grading.ca, blank.policy.grading.passMarkSource, blank.policy.grading.schoolBands],
       [{ caEnabled: true, caWeight: 40, testWeight: 60 }, "default", null]);
   }
 
@@ -248,20 +272,20 @@ const main = async () => {
 
   console.log("--- append-only ---");
   {
-    await rejects("updateOne", () => Snapshot.updateOne({ _id: base }, { $set: { calcVersion: "x" } }), /append-only/);
-    await rejects("updateMany", () => Snapshot.updateMany({}, { $set: { calcVersion: "x" } }), /append-only/);
-    await rejects("findOneAndUpdate", () => Snapshot.findOneAndUpdate({ _id: base }, { $set: { calcVersion: "x" } }), /append-only/);
-    await rejects("replaceOne", () => Snapshot.replaceOne({ _id: base }, { calcVersion: "x" }), /append-only/);
+    await rejects("updateOne", () => Snapshot.updateOne({ _id: base }, { $set: { format: 99 } }), /append-only/);
+    await rejects("updateMany", () => Snapshot.updateMany({}, { $set: { format: 99 } }), /append-only/);
+    await rejects("findOneAndUpdate", () => Snapshot.findOneAndUpdate({ _id: base }, { $set: { format: 99 } }), /append-only/);
+    await rejects("replaceOne", () => Snapshot.replaceOne({ _id: base }, { format: 99 }), /append-only/);
     await rejects("deleteOne", () => Snapshot.deleteOne({ _id: base }), /append-only/);
     await rejects("deleteMany", () => Snapshot.deleteMany({}), /append-only/);
     await rejects("findOneAndDelete", () => Snapshot.findOneAndDelete({ _id: base }), /append-only/);
     await rejects("save of a loaded document", async () => {
       const doc = await Snapshot.findById(base);
-      doc.calcVersion = "x";
+      doc.format = 99;
       await doc.save();
     }, /append-only/);
     const still = await Snapshot.findById(base).lean();
-    check("and the snapshot is untouched", [still.calcVersion, policySvc.verify(still)], ["results/1", true]);
+    check("and the snapshot is untouched", [still.format, policySvc.verify(still)], [2, true]);
   }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);

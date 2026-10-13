@@ -633,7 +633,7 @@ Scope rules:
 | Boundary | Mechanism | Changes when |
 |---|---|---|
 | Academic structure + grading + ranking + promotion | `AcademicPolicySnapshot._id` (content hash) | any effective rule changes |
-| Arithmetic | `calcVersion` constant in code (`"results/1"`) | a formula changes (e.g. the §4.1 decision) |
+| Arithmetic | `calcVersion` per writer (`shared/academicPolicy.CALC_VERSIONS`: `exam-process/1`, `results-service/1`, `term/1`, `annual/1`) | that writer's formula changes (e.g. a D1 decision) |
 | Template | `ReportTemplateVersion` | each template save |
 | Issued document | `GeneratedReport.payloadHash` | never (first issue wins; reissue = new row) |
 | Evidence | `ResultChangeLog` (exists) | each mark change |
@@ -1141,13 +1141,48 @@ Checked against docs/37:
   route's summaries, term and annual results, card headline, promotion run,
   and re-process behaviour: 13 more pins, 43 in total, all hand-checked.
   This led to the correction at the top of this document and to §4.7.
-- **Phase 2(b) needs a correction before 2(c) stamps anything:** its
-  policy's `grading.calcBands` and `subjectPassMark` describe
-  `grading.service` (the unrouted path). On the live route, subject grades
-  and passes come from the school's bands and `passMark` via `computeGrade`.
-  The policy must say which calculation it describes. Nothing has stored a
-  hash yet, so changing the policy content now costs nothing.
-- Phase 2(c)–(e): not started. 2(c) must stamp the **live** route first.
+- **Phase 2(b), corrected in 2(c): the policy is configuration only.** As
+  first committed it described what `grading.service` (the unrouted path)
+  does with the configuration (`calcBands`, a fixed 10/20, ranking
+  constants, one `calcVersion`). That was false of the live route. Now
+  (`POLICY_FORMAT 2`):
+  - The policy holds only configuration: periods with their components, the
+    school's bands, pass mark and source, the structure's pass mark,
+    `showGrades`, the CA settings, and the promotion-exam inputs.
+  - What the code does is named per writer by `CALC_VERSIONS`:
+    `exam-process/1`, `results-service/1`, `term/1`, `annual/1`.
+  - Class promotion bars are no longer in the policy. No result row depends
+    on them, only the promotion run does, and reading every class would cost
+    a query on the fixed-count paths. Promotion decisions will carry their
+    own record when they are stamped (Phase 4).
+  - `resolve()` accepts the structure and grading config the caller has
+    already loaded. On a warm process stamping costs zero queries, and this
+    is tested.
+
+  No hash had been stored, so the change cost nothing.
+- **Phase 2(c), done:**
+  - `ResultSummary`, `TermResult` and `AnnualResult` gain `policyHash` and
+    `calcVersion`, both null on older rows.
+  - Every computing writer stamps them: `POST /exams/:examId/process` (the
+    live route), `results.service.processResults`, `termGrading`
+    (`loadTermContext` → every row) and `annualGrading`
+    (`annualContextFor` → every row).
+  - Not stamped: the bare summary created at per-summary publication
+    (`results.controller` `publishResult`), because no computation produced
+    it.
+  - `check:academic` (now 52) pins that every row on both paths carries its
+    school's snapshot and its writer's version. A configuration edit leaves
+    earlier stamps alone. A re-process restamps with the new snapshot
+    while, on the live route, its figures stay put (it ignores the CA
+    split, §4.7a). The earlier snapshot still answers for the rows that
+    used it.
+  - All 43 earlier pins are unchanged, so no figure moved. Mutation:
+    dropping the live route's `calcVersion` fails 2 checks.
+  - Dropped from the §6.4 sketch: `averageScale`, because `calcVersion`
+    determines how `average` is read; and `averageOn20`, because choosing
+    *which* /20 figure to store is decision D1, not provenance.
+- Phase 2(d) (`ReportTemplateVersion`) and 2(e) (explicit missing-school
+  guard on exam/template routes): not started.
 
 ### 20.1 Safest first implementation slice
 

@@ -130,6 +130,19 @@ const resultSummarySchema = new mongoose.Schema(
     isLocked:    { type: Boolean, default: false },
     lockedAt:    { type: Date,    default: null  },
 
+    /*
+     * ── Provenance (docs/39 §8) ─────────────────────────────────────────
+     *
+     * What produced this row: the AcademicPolicySnapshot of the configuration
+     * it was computed under, and the code that computed it
+     * (shared/academicPolicy CALC_VERSIONS). Both null on every row written
+     * before they existed — "legacy", read as docs/39 §9 describes — and on
+     * rows no computation wrote (a summary created bare at publication).
+     * Read by nothing yet; stamped so the answer exists from now on.
+     */
+    policyHash:  { type: String, default: null },
+    calcVersion: { type: String, default: null },
+
     // ── Sync ─────────────────────────────────────────────────
     syncStatus:   { type: String, enum: ["synced", "pending", "conflict"], default: "pending" },
     lastSyncedAt: { type: Date,   default: null },

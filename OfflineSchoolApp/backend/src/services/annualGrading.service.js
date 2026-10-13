@@ -23,6 +23,8 @@ const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig     = require("../db/models/GradingConfig");
 const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
+const academicPolicy    = require("./academicPolicy.service");
+const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,7 +91,12 @@ async function annualContextFor({ schoolId, academicYear }) {
     promotionExamIds = promotionExamDocs.map((e) => e._id);
   }
 
-  return { structure, passMark, termWeights, promotionExamIds };
+  // The configuration this year is computed under, frozen and named (docs/39
+  // §8), from the documents just read — no further query on a warm process,
+  // which keeps a class's cost fixed (check-complexity).
+  const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
+
+  return { structure, passMark, termWeights, promotionExamIds, policyHash: policy._id };
 }
 
 /**
@@ -170,6 +177,8 @@ const annualSetFor = ({ studentName, admissionNo, className }, ctx, row) => ({
   promotionStatus:     row.promotionStatus,
   promotionThreshold:  ctx.structure.promotionThreshold ?? null,
   isPassing:           row.isPassing,
+  policyHash:          ctx.policyHash ?? null,
+  calcVersion:         CALC_VERSIONS.annual,
   syncStatus:          "pending",
 });
 
