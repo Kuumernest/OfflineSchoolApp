@@ -1014,7 +1014,41 @@ Checked against docs/37:
   mutation, changing the CA split from 40/60 to 50/50, fails 8 pins across
   the sequence, term and annual layers. The run also surfaced §4.6(k) and
   §4.6(l), which this audit had not caught by reading.
-- Phase 2(b)–(e): not started.
+- **Phase 2(b), done:**
+  - `shared/academicPolicy.js` (pure functions `periodsFromLegacy`,
+    `resolvePolicy`, `canonicalJson`, plus `CALC_VERSION "results/1"` and
+    `INERT_FIELDS`).
+  - Model `AcademicPolicySnapshot`, with `_id` = SHA-256 of the canonical
+    policy including school and year. It is append-only, enforced by
+    pre-hooks.
+  - `services/academicPolicy.service.js` (`resolve`, `get`, `hashOf`,
+    `verify`). Both entry points refuse a missing school.
+  - The model is listed in the sync feed's `EXCLUDED` with its reason.
+  - Tests: `check:academicpolicy`, 85 checks, in `check:all` after `check:academic`.
+
+  Differences from the §6.3 sketch, made on purpose:
+  1. The grading section records **both** authorities as results/1 actually
+     uses them (§4.2): `calcBands` and `subjectPassMark` (what stored
+     results are graded with), and `schoolBands` and `periodPassMark` (what
+     term/annual pass and card rows use). It also records
+     `structurePassMark`, which intelligence falls back to. Tidying this is
+     Phase 4, under a new `calcVersion`.
+  2. Fields no code reads (`INERT_FIELDS`: `annualAverageMethod`,
+     `maxAbsences`, sequence assessment labels, `useGpa`, `gpaScale`,
+     `gradingType`, the dead weight fields) are **not hashed**, so editing
+     them does not make results look stale. Term and sequence names are
+     hashed, because cards print them.
+  3. Ranking and promotion are recorded as the constants and inputs
+     results/1 uses, including the per-level difference in who is ranked
+     (§4.6k).
+  4. Provenance (`sources`) is stored but not hashed. Changing a value and
+     changing it back yields the same snapshot.
+
+  Not wired into any calculation. No result, card or screen can differ:
+  `check:academic` is unchanged at 30/30. Mutation-tested: dropping the
+  pass mark from the policy fails 5 checks, and hashing an inert field
+  fails 1.
+- Phase 2(c)–(e): not started.
 
 ### 20.1 Safest first implementation slice
 

@@ -383,6 +383,13 @@ const EXCLUDED = {
     "given inside a pilot. Read by nothing but the pilot report, which counts " +
     "answers and never names a pupil; no classroom machine holds another " +
     "pupil's answers, so it is never mirrored.",
+  AcademicPolicySnapshot:
+    "The frozen academic rules a result was computed under (docs/39 §6.3). " +
+    "Nothing on a client reads it yet, and no result carries its hash until " +
+    "Phase 2c; whether the desktop mirrors it — it is immutable and small, so " +
+    "the cursor is trivial — is decided when a client screen needs it, not " +
+    "before.",
+
   IntelligenceAnalysisRun:
     "A server-side run of the school-wide calibration analysis and its " +
     "compressed report (docs/38). Recomputable from documents that ARE " +
