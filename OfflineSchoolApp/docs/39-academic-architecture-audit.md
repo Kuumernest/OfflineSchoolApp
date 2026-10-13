@@ -304,6 +304,8 @@ acts on (2). They can disagree, and both are affected by §4.1.
 | h | Annual card's French remark reads `termAverage ?? annualAverage` | `reportCardData.service.js:580` | code reading |
 | i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design | `exam.routes.js:20-23,194-200`; scratch probe | probe |
 | j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | code reading |
+| k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **pinned** in `check:academic` |
+| l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
 
 ---
 
@@ -1001,6 +1003,18 @@ Checked against docs/37:
 | **4. Configuration-driven calculation** | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
 | **5. Admin configuration UI** | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
 | **6. Genuinely custom structures** | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
+
+### 20.0 Progress
+
+- **Phase 2(a), done:** `backend/scripts/check-academic-characterisation.js`
+  (`npm run check:academic`, in `check:all` after `check:term`). It marks one
+  synthetic school and runs the real pipeline: `processResults` → term →
+  annual → card payloads → publish → `generateRun`. It pins 30 outputs, each
+  checked by hand. Pins that encode a defect are tagged with their §. A
+  mutation, changing the CA split from 40/60 to 50/50, fails 8 pins across
+  the sequence, term and annual layers. The run also surfaced §4.6(k) and
+  §4.6(l), which this audit had not caught by reading.
+- Phase 2(b)–(e): not started.
 
 ### 20.1 Safest first implementation slice
 
