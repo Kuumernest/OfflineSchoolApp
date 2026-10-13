@@ -798,7 +798,14 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  return res.json({ success: true, data: built.data });
+  // The sections this card prints — the layout it was issued with, or the
+  // school's current one — for a client that draws a card from this payload
+  // rather than printing the server's HTML (docs/39 §10). Beside the data,
+  // not inside it: the payload is what results produced, the layout is how
+  // the school chose to print it.
+  const layout = await reportLayout.layoutForSequenceCard({ schoolId: built.schoolId, examId, studentId });
+
+  return res.json({ success: true, data: built.data, layout: reportLayout.describe(layout) });
 });
 
 // ─────────────────────────────────────────────────────────
@@ -828,6 +835,8 @@ const { cardVerification } = require("../services/reportCardData.service");
 const classStats = require("../services/classStats.service");
 const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers } =
   require("../services/reportCardData.service");
+// Which sections a card prints (docs/39 §10, Phase 2d).
+const reportLayout = require("../services/reportLayout.service");
 
 /**
  * Freeze what was just issued.
@@ -845,7 +854,7 @@ const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers 
  * the report card they asked for.
  */
 const archiveGeneratedReport = ({
-  schoolId, examId, studentId, data, html, template, source, userId,
+  schoolId, examId, studentId, data, html, template, source, userId, layout,
 }) => {
   if (!schoolId) return;
 
@@ -869,6 +878,8 @@ const archiveGeneratedReport = ({
         studentId,
         templateId:      source === "template" ? String(template._id) : null,
         templateVersion: source === "template" ? template.version ?? 1 : 1,
+        // The sections it was printed with, so it reprints with them.
+        ...reportLayout.issuedFields(layout),
         renderedHtml:    html,
         variablePayload: data,
         term:            data.term         || null,
@@ -935,6 +946,15 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     req.query.templateId
   );
 
+  /*
+   * Which sections it prints (docs/39 §10). A card already issued prints
+   * with the layout it was issued with — a school that hides a section today
+   * does not change a card a family already holds. One issued before layouts
+   * existed prints every section, as it was issued. Anything else prints
+   * with the school's current layout, and records it if this is its issue.
+   */
+  const layout = await reportLayout.layoutForSequenceCard({ schoolId, examId, studentId });
+
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
@@ -942,6 +962,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     school: { ...letterhead.school, name: schoolName || "" },
     verify,
     template,
+    sections: layout.sections,
   });
 
   archiveGeneratedReport({
@@ -953,6 +974,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     template,
     source:    rendered.source,
     userId:    req.user?._id,
+    layout,
   });
 
   return res.json({
@@ -969,6 +991,9 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
       // Tokens in the school's template that the engine does not know. The
       // card still printed; this lets the UI tell the admin to fix the typo.
       ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
+      // The layout it printed with, and any switched-off section the school's
+      // template printed anyway because it does not gate it.
+      layout: reportLayout.describe(layout, rendered.source === "template" ? template : null),
     },
   });
 });
@@ -1035,10 +1060,15 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
 
   const template = await loadReportTemplate(schoolId, req.body.templateId);
 
+  // A reissue is the deliberate act that supersedes an issued card, so it
+  // takes the school's CURRENT layout and records it (docs/39 §10).
+  const layout = { ...(await reportLayout.currentLayout(schoolId)) };
+
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
     template,
+    sections: layout.sections,
   });
 
   await GeneratedReport.updateOne(
@@ -1047,6 +1077,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       $set: {
         templateId:      rendered.source === "template" ? String(template._id) : null,
         templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
+        ...reportLayout.issuedFields(layout),
         renderedHtml:    rendered.html,
         variablePayload: built.data,
         term:            built.data.term         || null,
@@ -1074,6 +1105,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       templateId:      rendered.source === "template" ? String(template._id) : null,
       templateVersion: rendered.source === "template" ? template.version ?? 1 : null,
       ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
+      layout: reportLayout.describe(layout, rendered.source === "template" ? template : null),
     },
   });
 });

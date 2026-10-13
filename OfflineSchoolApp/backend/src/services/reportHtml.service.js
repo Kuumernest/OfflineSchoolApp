@@ -32,6 +32,7 @@
 
 const { officialHeader, reportTitle } = require("../../../shared/officialHeader");
 const { periodName, averageOutOf20 }  = require("../../../shared/reportCard");
+const { resolveSections, ungatedDisabledSections } = require("../../../shared/reportSections");
 
 const LABELS = {
   en: {
@@ -323,6 +324,17 @@ function schoolWatermark(school) {
 function renderReportCardHtml(payload, opts = {}) {
   const lang = opts.lang === "fr" ? "fr" : "en";
   const t    = LABELS[lang];
+
+  /*
+   * Which sections this card prints (shared/reportSections.js, docs/39 §10).
+   * The school's layout, resolved by the caller — the version an issued card
+   * was printed under, or the school's current one. Absent means every
+   * section, which is this card exactly as it was before layouts existed.
+   * Presentation only: a hidden section's figures are still computed and
+   * stored exactly as before; they are simply not printed.
+   */
+  const sections = resolveSections(opts.sections);
+  const on = (id) => sections[id] !== false;
   // Both spellings, because toTemplateData() below already accepts both and a
   // caller that passes only `school` — the object the logo and motto come from
   // — would otherwise print the word "School" as the school's name.
@@ -604,20 +616,30 @@ function renderReportCardHtml(payload, opts = {}) {
 
   const conductRows = [writeIn(t.work), writeIn(t.behaviour), writeIn(t.observation)].join("");
 
-  const infoPanel = `<div class="info-panel">
+  // Each column is its own section. With all three on this is the panel it
+  // has always been, byte for byte; with fewer, the grid narrows to the
+  // columns left; with none, there is no panel.
+  const panelCols = [
+    on("performance") ? `
     <div class="panel-col">
       <div class="panel-head">${t.perfPanel}</div>
       ${perfRows}
-    </div>
+    </div>` : "",
+    on("classProfile") ? `
     <div class="panel-col">
       <div class="panel-head">${t.classPanel}</div>
       ${classRows}
-    </div>
+    </div>` : "",
+    on("conduct") ? `
     <div class="panel-col">
       <div class="panel-head">${t.conductPanel}</div>
       ${conductRows}
       <div class="panel-note">${t.fillByHand}</div>
-    </div>
+    </div>` : "",
+  ].filter(Boolean);
+  const infoPanel = panelCols.length === 0 ? ""
+    : `<div class="info-panel"${panelCols.length < 3
+        ? ` style="grid-template-columns:repeat(${panelCols.length}, 1fr)"` : ""}>${panelCols.join("")}
   </div>`;
 
   // School branding pulled from the school's settings, never hard-coded.
@@ -891,8 +913,8 @@ ${watermark.css}
   </style>
 </head>
 <body>
-  ${watermark.html}
-  <header class="report-header">
+  ${on("watermark") ? watermark.html : ""}
+  ${on("header") ? `<header class="report-header">
     <div class="report-header-top">
       ${ministryColumn("en")}
 
@@ -915,18 +937,18 @@ ${watermark.css}
     ${payload.academicYear
       ? `${payload.examName ? " · " : ""}${esc(payload.academicYear)}`
       : ""}
-  </p>
+  </p>` : ""}
 
-  <div class="info-grid">
+  ${on("studentInfo") ? `<div class="info-grid">
     <div><div class="lbl">${t.studentName}</div><div class="val">${esc(payload.studentName || "—")}</div></div>
     <div><div class="lbl">${t.admissionNo}</div><div class="val">${payload.admissionNo ? "#" + esc(payload.admissionNo) : "—"}</div></div>
     <div><div class="lbl">${t.gender}</div><div class="val">${genderVal ? esc(genderVal) : "—"}</div></div>
     <div><div class="lbl">${t.dob}</div><div class="val">${dobDisplay}</div></div>
     <div><div class="lbl">${t.classLabel}</div><div class="val">${esc(payload.className || "—")}</div></div>
     <div><div class="lbl">${t.academicYear}</div><div class="val">${esc(payload.academicYear || "—")}</div></div>
-  </div>
+  </div>` : ""}
 
-  <table>
+  ${on("results") ? `<table>
     <thead>
       <tr>
         <th>${t.subject}</th>
@@ -947,13 +969,13 @@ ${watermark.css}
       `<tr><td colspan="${columnCount}" style="text-align:center;color:#9ca3af;padding:16px">${t.noScores}</td></tr>`}</tbody>
     ${totalRow}${statusRow}
   </table>
-  ${caNote}
+  ${caNote}` : ""}
 
   ${infoPanel}
 
-  ${remarksBlock}
+  ${on("remarks") ? remarksBlock : ""}
 
-  ${opts.verify
+  ${opts.verify && on("verification")
     ? `<div class="verify">
          <div class="verify-qr">${opts.verify.qrSvg ?? ""}</div>
          <div>
@@ -967,11 +989,11 @@ ${watermark.css}
        </div>`
     : ""}
 
-  <div class="footer">
+  ${on("footer") ? `<div class="footer">
     ${t.generatedOn}
     ${new Date().toLocaleDateString(t.locale, { day: "numeric", month: "long", year: "numeric" })}
     &nbsp;·&nbsp; ${esc(schoolName)} — ${t.official}
-  </div>
+  </div>` : ""}
 </body>
 </html>`;
 }
@@ -1018,6 +1040,11 @@ function toTemplateData(payload, opts = {}) {
     // The language the card is printed in: the labels above are resolved
     // already, and this lets the engine format its ordinals to match.
     lang,
+
+    // Which sections the school's layout prints. The engine turns these into
+    // {{if section_results}}-style flags; a template that gates a block on
+    // its flag hides it when the section is off (docs/39 §10).
+    sections: resolveSections(opts.sections),
 
     /*
      * The level this card is for, so the table the engine draws has the
@@ -1327,8 +1354,11 @@ function attendanceFigure(value, t) {
  * built-in layout — see schoolWatermark. A template author who does not want
  * it hides .school-watermark in their own CSS, which is appended after it.
  */
-function wrapTemplateHtml(body, css, { lang, title, school }) {
+function wrapTemplateHtml(body, css, { lang, title, school, sections }) {
   const watermark = schoolWatermark(school);
+  // The one section the server draws around a school's own template, so the
+  // one it hides itself when the layout switches it off (docs/39 §10).
+  const showWatermark = resolveSections(sections).watermark !== false;
   return `<!DOCTYPE html>
 <html lang="${lang}">
 <head>
@@ -1365,7 +1395,7 @@ ${watermark.css}
     ${css || ""}
   </style>
 </head>
-<body>${watermark.html}${body}</body>
+<body>${showWatermark ? watermark.html : ""}${body}</body>
 </html>`;
 }
 
@@ -1413,6 +1443,7 @@ function renderReportCard(payload, opts = {}) {
         lang,
         title:  `${LABELS[lang].title} — ${payload.studentName || ""}`,
         school: opts.school,
+        sections: opts.sections,
       });
 
       // Tokens the engine did not recognise survive as literal text. The
@@ -1420,10 +1451,16 @@ function renderReportCard(payload, opts = {}) {
       // layout — but the caller is told so it can warn the admin.
       const unknown = [...new Set(html.match(/\{\{[^{}]+\}\}/g) || [])];
 
+      // Sections the layout switches off that this template prints without
+      // a {{if section_x}}: the school's own HTML decides those, and they
+      // printed. Said, never silently ignored (docs/39 §10).
+      const notHidden = ungatedDisabledSections(tpl.html, opts.sections);
+
       return {
         html,
         source: "template",
         ...(unknown.length ? { unknownTokens: unknown } : {}),
+        ...(notHidden.length ? { sectionsNotHidden: notHidden } : {}),
       };
     } catch (err) {
       // A school's template must never be able to deny them a report card.

@@ -734,6 +734,171 @@ weights v-y") and what let a reissue be compared with the original.
 
 ---
 
+### 10.3 As implemented: school section layouts (Phase 2d)
+
+**What it is.** Each school chooses which **sections** its report cards
+print. The choice is a versioned, immutable record per school
+(`ReportTemplateVersion`). It is **presentation only**: a hidden section's
+figures are still computed, stored, ranked, published and read by
+intelligence exactly as before; they are simply not printed. Switching the
+section back on prints them again. Nothing is deleted.
+
+**Sections** (`shared/reportSections.js`, `SECTIONS`). These are the blocks
+the built-in layout already printed, in its order. None is new: attendance,
+stamp, signature images and custom fields are not sections, because no
+renderer prints them today.
+
+| Id | Prints |
+|---|---|
+| `watermark` | The school's logo, faint, behind the card. The server draws it around every card, including a school's own template, so the server hides it. |
+| `header` | Ministry and delegations, school name, logo, motto, the card's title, and the exam/year subtitle. |
+| `studentInfo` | Name, admission number, gender, date of birth, class, year (and photo on the shipped template). |
+| `results` | The subject table: marks, CA/paper or sequence columns, coefficients, grades, remarks, subject positions, the totals, pass and decision rows under it, and the CA note. |
+| `performance` | Rank, average, overall grade, and (annual card only) the decision, in the information panel. |
+| `classProfile` | Class average, best, lowest. |
+| `conduct` | The work, behaviour and observation boxes filled in by hand. |
+| `remarks` | Class teacher's and head's remarks with signature lines. |
+| `verification` | The QR code and verification code. It prints only when a code exists, whatever the layout says. |
+| `footer` | Date of issue and school name. |
+
+The three information-panel sections (`performance`, `classProfile`,
+`conduct`) are independent. The grid narrows to the columns left, and
+disappears when none are left.
+
+**Default and compatibility.** A school with no version has the default:
+every section on (version 0, source `default`). That is the card every
+school printed before this existed. With no layout, the built-in card is
+**byte-identical** to the renderer at `abdb150`. This was checked against
+the committed renderer for sequence, term and annual cards, in English and
+French. `check:reportlayout` pins that "no layout" and "every section on"
+are the same document. No school sees a change until it switches a section
+off itself, and nothing new is printed.
+
+**Versions and issued cards.**
+- A change (`PUT /api/templates/layout`) inserts version n+1 with every
+  section stated explicitly. Earlier versions are never edited:
+  append-only hooks enforce this at the model layer.
+- `_id` is `${schoolId}:v${n}`, so concurrent saves race on the `_id`
+  index. The loser re-reads and applies its change on top, so no change is
+  lost. Pinned: five concurrent changes give five versions and keep all
+  five. A save that changes nothing inserts nothing.
+- **Sequence cards** are archived when first printed after publication
+  (`GeneratedReport`). The archive now records `layoutVersionId`,
+  `layoutVersion` and a copy of `layoutSections`. Every later print of that
+  card uses that layout, whatever the school changed since. The frozen
+  `renderedHtml` the portal serves is untouched.
+- A **reissue** is the deliberate supersede. It takes the current layout and
+  records it.
+- **Legacy archives**, written before this, have no layout fields. They
+  reprint with every section, which is what they were issued with (source
+  `legacy`), and are not rewritten.
+- **Term and annual cards** are never archived today: they re-render from
+  live results on every request. So they print with the school's
+  **current** layout, and the version is sent in an `x-report-layout-version`
+  response header. Freezing them is the §10.2(4) work, not done here.
+
+**Integration points.**
+- `reportHtml.service.renderReportCardHtml` gates each block on
+  `opts.sections`.
+- `wrapTemplateHtml` gates the watermark.
+- `toTemplateData` passes the sections to token templates.
+- `placeholder.engine.buildReplacementMap` exposes `section_<id>` flags,
+  which are also in `shared/reportTokens` so the builder lists them.
+- The four places that render a card all resolve the layout through
+  `services/reportLayout.service.js`:
+  - `results.controller` `getStudentReportCardHtml` (issued, legacy or
+    current, recorded by `archiveGeneratedReport`)
+  - `reissueStudentReportCard` (current, recorded)
+  - `termResults.routes` and `annualResults.routes` `/:studentId/report-card`
+    (current)
+- The JSON payload (`GET …/reportcard`) carries `layout` beside `data`,
+  with the data unchanged.
+- The template preview shows the current layout.
+
+**Token templates.** A school's own template is its own document and is
+never rewritten (`scripts/repair-report-templates.js` explains why). It
+honours a section by gating the block: `{{if section_results}} … {{endif}}`.
+- The **shipped default template** now gates every block, so a school that
+  seeds it after this change gets layouts honoured in full.
+- A stored template that does not gate a section **cannot hide it from
+  inside the school's HTML**. That is reported, never silently ignored:
+  - `GET`/`PUT /api/templates/layout` return
+    `sectionsNotHiddenByTemplate` for the school's default template.
+  - The card response's `layout.sectionsNotHiddenByTemplate` does the same.
+  - `renderReportCard` returns `sectionsNotHidden`.
+- **Existing seeded copies predate the flags and gate nothing.** Making
+  them honour layouts is either a template edit by the school, or a
+  repair-script patch in the existing style. That patch is not written
+  here, because it would edit schools' documents.
+
+**API contract** (for a future settings screen). `reports.manage` (ADMIN
+roles), like every route under `/api/templates`. The school comes from
+`utils/tenant.resolveSchoolId`, with an explicit 400 `SCHOOL_REQUIRED` when
+none is resolved. A super_admin must name the school. A write naming
+another school gets 403.
+
+| Route | Answer |
+|---|---|
+| `GET /api/templates/sections` | `{ sections: [{ id, label, description, default: true }] }` |
+| `GET /api/templates/layout` | `{ layout: { id, schoolId, version, sections, basedOnVersion, createdBy, createdAt, source }, sectionsNotHiddenByTemplate }` |
+| `PUT /api/templates/layout` | body `{ sections: { <id>: true\|false, … } }`, partial allowed. 201 `{ changed: true, layout }` for a new version, 200 `{ changed: false }` if nothing changed. 400 `INVALID_BODY` / `UNKNOWN_FIELD` / `INVALID_SECTIONS` / `UNKNOWN_SECTION` / `INVALID_SECTION_VALUE`. 409 `LAYOUT_CONFLICT` after 5 lost races. |
+| `GET /api/templates/layout/versions` | every version, newest first |
+| `GET /api/templates/layout/versions/:n` | one version of this school's, or 404 |
+
+There is no client UI for this. No existing screen manages sections: the
+web Reports → Builder edits token-template HTML only. The settings screen is
+future work (Phase 5, §20.2), against the contract above.
+
+**Tests.** `check:reportlayout` (64 checks; in `check:all` after
+`check:academicpolicy`) runs through the real routers and auth over HTTP. It
+covers:
+1. Two schools with different layouts and different cards.
+2. Results switched off while every other block stays.
+3. Presentation only: every `ResultSummary`, `StudentScore`, `TermResult`
+   and `GradingConfig` row, and the intelligence layer's
+   `publishedHistory`, are identical before and after layouts are changed
+   and cards printed.
+4. Switched back on, a section prints again when its data exists, and not
+   when it doesn't.
+5. 8 malformed or unknown inputs refused, and nothing stored. Teacher and
+   bursar get 403. A super_admin with no school gets 400 for reads and
+   writes.
+6. Another school's write and read refused; its template not attachable
+   by `?templateId`; a layout not attachable by any request parameter.
+7. Versions immutable and listed, no-op saves insert nothing, concurrent
+   saves lose nothing.
+8. An issued card reprints with its layout; the archive is unchanged; a
+   reissue records the current layout.
+9. A legacy archive reprints with every section, unchanged.
+10. "No layout" and "every section on" are the same document.
+
+The shipped template honours every section, and a school's ungated
+template is reported.
+
+Mutations:
+- Ignoring the issued layout fails 3 checks.
+- Accepting unknown ids fails 7.
+
+**Limitations and open points.**
+- **Term and annual cards** use the current layout, because they are not
+  issued today (above).
+- **Stored token templates** made before this gate nothing, and are
+  reported, not changed (above).
+- **Token-template HTML is still edited in place.** `ReportTemplateVersion`
+  versions the *section layout*. A template's HTML/CSS history is still
+  only `ReportTemplate.version` (a counter) plus the issued card's frozen
+  `renderedHtml`. Versioning template HTML on save is the remaining part of
+  §6.5.
+- **Hiding `verification` hides the strip only.** A verification code is
+  still minted on render, as before. Whether a school that hides the strip
+  should get no public record is a product decision, not taken here.
+- **Mobile's offline fallback card** (`ReportCard.js` `buildPdfHtml`, used
+  only when the server is unreachable) and its **on-screen results views**
+  do not read the layout. Every printed card comes from the server. The
+  JSON payload carries `layout` for a client that wants it.
+- **Not changed:** §4.6(f) (reissue omits letterhead and QR) and §4.6(g)
+  (`POST /api/generated-reports` can overwrite a frozen card).
+
 ## 11. Assessment strategy
 
 ### 11.1 Field inventory for "Assessment" (= `Exam` + `ExamSubject`)
@@ -1181,8 +1346,15 @@ Checked against docs/37:
   - Dropped from the §6.4 sketch: `averageScale`, because `calcVersion`
     determines how `average` is read; and `averageOn20`, because choosing
     *which* /20 figure to store is decision D1, not provenance.
-- Phase 2(d) (`ReportTemplateVersion`) and 2(e) (explicit missing-school
-  guard on exam/template routes): not started.
+- **Phase 2(d), done: school section
+  layouts.** `ReportTemplateVersion` versions which sections each school's
+  cards print. It is honoured by the built-in renderer, the shipped token
+  template, and every card route. Issued sequence cards keep their layout.
+  See §10.3 for the model, sections, default, versioning, integration, API,
+  tests and limitations.
+- Phase 2(e) (explicit missing-school guard on the existing exam/template
+  routes): not started. The new layout routes already refuse a missing
+  school.
 
 ### 20.1 Safest first implementation slice
 

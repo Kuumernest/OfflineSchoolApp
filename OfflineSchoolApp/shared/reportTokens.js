@@ -113,6 +113,10 @@ const SIMPLE_TOKENS = [
   // Blank when a card is printed without verification, so gate them.
   "verification_code",
   "verification_url",
+
+  // The school's report-card layout, one boolean per section, for gating a
+  // block: {{if section_results}} … {{endif}} (shared/reportSections.js).
+  ...require("./reportSections").SECTION_IDS.map((id) => `section_${id}`),
 ];
 
 // ─── Composite tokens (resolved by dedicated functions) ─────────────────────

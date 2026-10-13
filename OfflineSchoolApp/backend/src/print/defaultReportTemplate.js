@@ -382,6 +382,7 @@ const REMARKS_BLOCK_CSS = `
 const INFO_PANEL_HTML = `  <!-- What the pupil did, what the class did, what the register says, and
        the conduct the class teacher completes by hand. -->
   <div class="info-panel">
+    {{if section_performance}}
     <div class="panel-col">
       <div class="panel-head">{{label_performance}}</div>
       <div class="panel-row"><span class="panel-lbl">{{label_rank}}</span><span class="panel-val">{{position}} / {{total_students}}</span></div>
@@ -393,12 +394,16 @@ const INFO_PANEL_HTML = `  <!-- What the pupil did, what the class did, what the
         {{endif}}
       {{endif}}
     </div>
+    {{endif}}
+    {{if section_classProfile}}
     <div class="panel-col">
       <div class="panel-head">{{label_class_profile}}</div>
       <div class="panel-row"><span class="panel-lbl">{{label_class_average}}</span><span class="panel-val">{{class_average}}</span></div>
       <div class="panel-row"><span class="panel-lbl">{{label_best}}</span><span class="panel-val">{{class_best}}</span></div>
       <div class="panel-row"><span class="panel-lbl">{{label_lowest}}</span><span class="panel-val">{{class_lowest}}</span></div>
     </div>
+    {{endif}}
+    {{if section_conduct}}
     <div class="panel-col">
       <div class="panel-head">{{label_conduct}}</div>
       <div class="panel-row"><span class="panel-lbl">{{label_work}}</span><span class="panel-write"></span></div>
@@ -406,6 +411,7 @@ const INFO_PANEL_HTML = `  <!-- What the pupil did, what the class did, what the
       <div class="panel-row"><span class="panel-lbl">{{label_observation}}</span><span class="panel-write"></span></div>
       <div class="panel-note">{{label_fill_by_hand}}</div>
     </div>
+    {{endif}}
   </div>`;
 
 /** The panel's rules, in the card's own borders and type. */
@@ -673,7 +679,13 @@ ${PRINT_CSS}
 
 const DEFAULT_TEMPLATE_HTML = `<div class="report-wrapper">
 
+  <!-- Each block is gated on its section of the school's layout
+       (shared/reportSections.js): every flag is true unless the school has
+       switched that section off. -->
+{{if section_header}}
 ${OFFICIAL_HEADER_HTML}
+{{endif}}
+  {{if section_studentInfo}}
   <!-- Student information -->
   <div class="student-info-grid">
     <div class="info-row">
@@ -706,7 +718,9 @@ ${OFFICIAL_HEADER_HTML}
   <div style="float:right;margin:-120px 0 12px 12px">
     {{student_photo}}
   </div>
+  {{endif}}
 
+  {{if section_results}}
   <!-- Academic performance -->
   <h3 style="font-size:13px;border-bottom:1px solid #e5e7eb;
              padding-bottom:4px;margin-bottom:8px">
@@ -714,19 +728,26 @@ ${OFFICIAL_HEADER_HTML}
   </h3>
 
   {{subjects_table}}
+  {{endif}}
 
 ${INFO_PANEL_HTML}
 
+{{if section_remarks}}
 ${REMARKS_BLOCK_HTML}
+{{endif}}
 
   <!-- Footer -->
   <div class="footer">
+    {{if section_verification}}
     ${VERIFY_BLOCK_HTML}
+    {{endif}}
+    {{if section_footer}}
     <div style="text-align:right">
       <p>Next Term Begins: <strong>{{next_term_date}}</strong></p>
       <p style="margin-top:4px">Report Generated: {{report_date}}</p>
       <p style="margin-top:4px">{{school_name}} &mdash; Official Academic Record</p>
     </div>
+    {{endif}}
   </div>
 
 </div>

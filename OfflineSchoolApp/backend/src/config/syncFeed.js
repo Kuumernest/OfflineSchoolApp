@@ -383,6 +383,13 @@ const EXCLUDED = {
     "given inside a pilot. Read by nothing but the pilot report, which counts " +
     "answers and never names a pupil; no classroom machine holds another " +
     "pupil's answers, so it is never mirrored.",
+  ReportTemplateVersion:
+    "Which sections a school's report cards print, one immutable row per " +
+    "change (docs/39 §10). Report cards are rendered by the server on every " +
+    "client — the desktop marks both card endpoints online-only — so no " +
+    "client screen reads it; the card payload carries the layout it printed " +
+    "with for any client that draws a card itself.",
+
   AcademicPolicySnapshot:
     "The frozen academic rules a result was computed under (docs/39 §6.3). " +
     "Nothing on a client reads it yet, and no result carries its hash until " +

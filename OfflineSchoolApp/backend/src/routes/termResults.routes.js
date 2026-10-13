@@ -8,6 +8,7 @@ const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
+const reportLayout     = require("../services/reportLayout.service");
 const { fillResultNames } = require("../utils/resultNames");
 const { readScope, applyReadScope, computeRefusal } = require("../utils/periodResultScope");
 const { buildTermCard, loadReportTemplate, loadSchoolForCard,
@@ -278,7 +279,10 @@ router.get(
       // own origin or the image 404s. Same treatment as the school logo.
       data.photoUrl = absoluteLogoUrl(data.photoUrl, req);
 
-      const [letterhead, template, verify] = await Promise.all([
+      // Which sections it prints (docs/39 §10). A term or annual card is
+      // never archived — it is drawn from live results on every request — so
+      // it always prints with the school's current layout.
+      const [letterhead, template, verify, layout] = await Promise.all([
         loadSchoolForCard(schoolId, req),
         loadReportTemplate(schoolId, templateId),
         // The QR and the code. This card had neither: {{qr_code}} rendered the
@@ -287,6 +291,7 @@ router.get(
           data: data, schoolId, studentId: req.params.studentId,
           documentKey: periodDocumentKey(data), req,
         }),
+        reportLayout.currentLayout(schoolId),
       ]);
 
       const rendered = renderReportCard(data, {
@@ -295,8 +300,12 @@ router.get(
         school:     letterhead.school,
         template,
         verify,
+        sections: layout.sections,
       });
 
+      // The layout it printed with, for a caller that needs to trace it; the
+      // body stays the HTML these routes have always returned.
+      res.set("x-report-layout-version", String(layout.version ?? 0));
       res.set("content-type", "text/html; charset=utf-8");
       return res.send(rendered.html);
     } catch (err) {

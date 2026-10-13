@@ -32,6 +32,8 @@
 
 // ── HTML Escape ───────────────────────────────────────────────────────────
 
+const { sectionFlags } = require("../../shared/reportSections");
+
 const escapeHtml = (str) => {
   if (str == null) return "";
   return String(str)
@@ -487,6 +489,12 @@ function buildReplacementMap(data) {
     // nobody had taken yet, on paper a family keeps. A template needs a
     // flag it can ask about, and isPassing was the only one there was.
     is_annual:          data.reportType === "annual",
+
+    // The school's report-card layout, one flag per section (docs/39 §10):
+    // {{if section_results}} … {{endif}} hides a block the school has
+    // switched off. Every flag is true when no layout was passed, so a
+    // template that gates on them prints exactly what it printed before.
+    ...sectionFlags(data.sections),
     is_term:            data.reportType === "term",
     is_sequence:        data.reportType === "sequence",
     isRepeating:        performance.promotionStatus === "Repeated",
