@@ -1,0 +1,117 @@
+// backend/scripts/calibration/consistency.js
+"use strict";
+
+/**
+ * Are the live path and the offline path saying the same thing about a pupil?
+ *
+ * ── The two paths ─────────────────────────────────────────────────────────
+ *
+ *   live      academicHistory.service → shared/intelligence     (/insights)
+ *   offline   cohortFromDocuments → toEngineInput → runEngine → shared/intelligence
+ *             (the exporter's file, the in-app review sheet)
+ *
+ * Both end in the same engine. What could differ is everything before it: the
+ * document loader, the mapping, a filter applied on one side and not the
+ * other. The calibration protocol needs the two to be semantically identical,
+ * because a review is made against the sheet and a decision is applied to the
+ * application; if they disagree, the review was of something the application
+ * never said.
+ *
+ * ── What this does ────────────────────────────────────────────────────────
+ *
+ * A plain structural diff, path by path, over the two profiles and the two
+ * guidance lists — classification codes and confidence, metrics, evidence,
+ * coverage, engine version, guidance. It normalises nothing: an ordering
+ * difference is a difference, a null against an undefined is a difference, a
+ * rounding difference is a difference. The person reading the report decides
+ * what a difference means; this file never decides it away.
+ *
+ * Pure. No database, no HTTP. The server and the check script both call it.
+ */
+
+const isObject = (v) => v !== null && typeof v === "object";
+
+/**
+ * Every path at which `a` and `b` differ.
+ *
+ * @returns {Array<{path: string, live: unknown, offline: unknown}>}
+ */
+const diff = (a, b, path = "$", out = []) => {
+  if (a === b) return out;
+  if (isObject(a) && isObject(b) && Array.isArray(a) === Array.isArray(b)) {
+    const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+    for (const k of [...keys].sort()) {
+      const p = Array.isArray(a) ? `${path}[${k}]` : `${path}.${k}`;
+      if (!(k in a)) out.push({ path: p, live: undefined, offline: b[k] });
+      else if (!(k in b)) out.push({ path: p, live: a[k], offline: undefined });
+      else diff(a[k], b[k], p, out);
+    }
+    return out;
+  }
+  // Dates arrive as Date objects from one side and strings from the other
+  // only if a caller serialised one of them; both sides here are in-process.
+  if (a instanceof Date && b instanceof Date && a.getTime() === b.getTime()) return out;
+  out.push({ path, live: a, offline: b });
+  return out;
+};
+
+/**
+ * Compare one pupil across the two paths.
+ *
+ * @param {object} live     { engineVersion, profile, guidance }
+ * @param {object} offline  { engineVersion, profile, guidance }
+ */
+const compareProfiles = (live, offline) => {
+  const differences = [
+    ...diff(live.engineVersion, offline.engineVersion, "$.engineVersion"),
+    ...diff(live.profile ?? null, offline.profile ?? null, "$.profile"),
+    ...diff(live.guidance ?? null, offline.guidance ?? null, "$.guidance"),
+  ];
+  // A summary a reader can scan before the paths: which of the things the
+  // protocol names differ at all.
+  const touches = (prefix) => differences.some((d) => d.path.startsWith(prefix));
+  return {
+    identical: differences.length === 0,
+    engineVersion: { live: live.engineVersion ?? null, offline: offline.engineVersion ?? null },
+    summary: {
+      engineVersion:  touches("$.engineVersion"),
+      classification: differences.some((d) => /\.insights\[|\.code$|\.confidence$/.test(d.path)),
+      metrics:        differences.some((d) => /\.(recentAverage|priorAverage|overallAverage|delta|spread|consistency|latestStep|belowPass|strongMarks|observations)\b/.test(d.path)),
+      evidence:       differences.some((d) => /\.evidence\[/.test(d.path)),
+      guidance:       touches("$.guidance"),
+      coverage:       differences.some((d) => /\.coverage\./.test(d.path)),
+      // Strength Reading 1.2.0: the learning-evidence integration, class by class.
+      state:          differences.some((d) => /\.(state|baseState|fusedState)$/.test(d.path)),
+      relationship:   differences.some((d) => /\.relationship$/.test(d.path)),
+      reasonCodes:    differences.some((d) => /\.(reasonCodes|reasons)\[/.test(d.path)),
+      eventCounts:    differences.some((d) => /\.(independentEventCount|currentEventCount|historicalEventCount|staleEventCount|supportingEvents|contradictingEvents|independentLearningItems)\b/.test(d.path)),
+      sources:        differences.some((d) => /\.(sourceFamilies|supportingSources|contradictingSources|missingModalities|modalities)\b/.test(d.path)),
+      contradictions: differences.some((d) => /\.contradictions\[/.test(d.path)),
+      versions:       differences.some((d) => /Version$/.test(d.path) || /\.version$/.test(d.path) || /\.versions\./.test(d.path)),
+      // Development Engine 1.0.0: the longitudinal reading, class by class.
+      trajectory:     differences.some((d) => /\.(trajectory|direction)$/.test(d.path)),
+      transitions:    differences.some((d) => /\.(stateTransitions|relationshipTransitions)\[/.test(d.path)),
+      changeTypes:    differences.some((d) => /\.changeTypes\[/.test(d.path)),
+      changeReasons:  differences.some((d) => /\.(reasonCodes|reasons)\[/.test(d.path) && /changes|trajectories/.test(d.path)),
+      quality:        differences.some((d) => /\.quality\./.test(d.path)),
+      persistence:    differences.some((d) => /\.persistence\b/.test(d.path)),
+      // Guidance 1.0.0 and Intervention 1.0.0: the categories, the reasons, the evidence, the triggers, the rules.
+      guidanceState:      differences.some((d) => /\.(category|evidenceQuality|byCategory|byDimension)\b/.test(d.path)),
+      guidanceReason:     differences.some((d) => /\.(reasons|why)\b/.test(d.path) && /items/.test(d.path)),
+      guidanceEvidence:   differences.some((d) => /items\[\d+\]\.(evidence|explanation|evidenceToWatch|suggestedActions)\b/.test(d.path)),
+      interventionTrigger: differences.some((d) => /\.triggers\[\d+\]\.(trigger|dimension)\b/.test(d.path)),
+      interventionRule:   differences.some((d) => /\.triggers\[\d+\]\.(evidence|independentObservations)\b/.test(d.path) || /\.(lifecycle|outcome)\b/.test(d.path)),
+      // Development Planning 1.0.0 and Adaptive Support 1.0.0: the plan and its review, class by class.
+      planState:            differences.some((d) => /\.plan\.(status|statusHistory)\b/.test(d.path)),
+      planObjective:        differences.some((d) => /\.plan\.(objective|rationale|actions)\b/.test(d.path)),
+      planMilestone:        differences.some((d) => /\.plan\.milestones\b|\.contract\.milestones\b/.test(d.path)),
+      planEvidenceBoundary: differences.some((d) => /\.(evidenceBoundaryHash|developmentObservationBoundary)\b/.test(d.path)),
+      planReview:           differences.some((d) => /\.review\.(outcome|reasons|contract|statement|contradiction)\b/.test(d.path)),
+      planAdaptation:       differences.some((d) => /\.(adaptation|adaptations)\b/.test(d.path)),
+      planVersion:          differences.some((d) => /\.(adaptiveSupportEngineVersion|engineVersions)\b/.test(d.path)),
+    },
+    differences,
+  };
+};
+
+module.exports = { diff, compareProfiles };

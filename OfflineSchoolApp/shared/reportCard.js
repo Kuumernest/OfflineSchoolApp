@@ -157,7 +157,34 @@ const periodName = ({ reportType, sequenceNumber, term, name } = {}, lang = "en"
   return null;
 };
 
+/**
+ * A stored average, out of twenty.
+ *
+ * ── Why a sequence is multiplied and a term is not ────────────────────────
+ *
+ * ResultSummary.average holds GPA POINTS for a sequence — the 0-4 scale the
+ * grading bands are defined on — while TermResult.termAverage and
+ * AnnualResult.annualAverage are already out of twenty. Five times the one,
+ * as it stands for the other two.
+ *
+ * It lives here because three places need the same answer and had three
+ * copies of it: the card's own average (reportHtml.resolveAverage20), the
+ * figure the verification page must agree with, and the class average the
+ * card prints beside the pupil's own. Two of those disagreeing is a
+ * document that contradicts itself.
+ *
+ * @param {number|null|undefined} stored
+ * @param {string} reportType  "sequence" | "term" | "annual"
+ */
+const averageOutOf20 = (stored, reportType) => {
+  if (stored == null || !Number.isFinite(Number(stored))) return null;
+  const n = Number(stored);
+  return reportType === "term" || reportType === "annual"
+    ? n
+    : Math.round(n * 5 * 100) / 100;
+};
+
 module.exports = {
-  reportTypeFor, carriesPromotion, subjectRanking, periodName,
+  reportTypeFor, carriesPromotion, subjectRanking, periodName, averageOutOf20,
   ORDINALS, TERM_ORDINALS, PERIOD_WORDS,
 };

@@ -24,9 +24,13 @@ import {
   FileSpreadsheet,
   KeyRound,
   Eye,
+  Lightbulb,
   MessageSquare,
   ShieldAlert,
   ShieldCheck,
+  Globe,
+  Building2,
+  ScrollText,
 } from "lucide-react";
 import { type LucideIcon } from "lucide-react";
 import { type UserRole }   from "@/types";
@@ -81,9 +85,68 @@ export interface NavItem {
   roles:     UserRole[];
   children?: NavItem[];
   badge?:    string;
+  /**
+   * Above any school. Shown to super_admin whether or not they are inside a
+   * school; every entry WITHOUT this flag is a school's screen and appears
+   * for super_admin only once a school has been entered. Other roles are
+   * never shown a platform entry — their `roles` list does not include them.
+   */
+  platform?: boolean;
 }
 
 export const NAV_ITEMS: NavItem[] = [
+  // ── The platform (super_admin only) ─────────────────────
+  {
+    label: "Platform dashboard",
+    labelKey: "nav.platform",
+    path:  "/platform",
+    icon:  Globe,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Schools",
+    labelKey: "nav.schools",
+    path:  "/platform/schools",
+    icon:  Building2,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Cross-school performance",
+    labelKey: "nav.platformPerformance",
+    path:  "/platform/performance",
+    icon:  BarChart3,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Platform reports",
+    labelKey: "nav.platformReports",
+    path:  "/platform/reports",
+    icon:  FileSpreadsheet,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  {
+    label: "Audit log",
+    labelKey: "nav.platformAudit",
+    path:  "/platform/audit",
+    icon:  ScrollText,
+    roles: ["super_admin"],
+    platform: true,
+  },
+  // The operator's own account and the platform's other administrators. Not
+  // /settings: that page is a school's, and an operator outside a school is
+  // sent back to the platform before it can render.
+  {
+    label: "Platform settings",
+    labelKey: "nav.platformSettings",
+    path:  "/platform/settings",
+    icon:  Settings,
+    roles: ["super_admin"],
+    platform: true,
+  },
 
   // ── Dashboard ───────────────────────────────────────────
   // One path, two pages. /dashboard resolves by role in App.tsx: an admin gets
@@ -111,6 +174,29 @@ export const NAV_ITEMS: NavItem[] = [
     path:  "/watchlist",
     icon:  Eye,
     roles: ["super_admin", "school_admin", "bursar"],
+  },
+
+  // ── Class intelligence ───────────────────────────────────
+  // The staffroom's counterpart to the watch list above, and the reason
+  // teachers can have this one: it is computed from marks alone. No balance,
+  // no arrears, no fee ledger anywhere in the module that answers it.
+  //
+  // The bursar is absent for the mirror-image reason — subject strengths and
+  // support plans for a named child are staffroom and office knowledge, and
+  // holding the school's money is not a reason to read them.
+  {
+    label: "Class intelligence",
+    labelKey: "nav.classIntelligence",
+    path:  "/class-intelligence",
+    icon:  Lightbulb,
+    roles: ["super_admin", "school_admin", "teacher"],
+  },
+  {
+    label: "Intelligence review",
+    labelKey: "nav.intelligenceReview",
+    path:  "/intelligence-review",
+    icon:  ClipboardCheck,
+    roles: ["super_admin", "school_admin", "teacher"],
   },
 
   // ── Students ─────────────────────────────────────────────
@@ -396,14 +482,16 @@ export const NAV_ITEMS: NavItem[] = [
         labelKey: "nav.termResults",
         path:  "/exams/term-results",
         icon:  BarChart3,
-        roles: ["super_admin", "school_admin"],
+        // A teacher reads the published term results of the classes they are
+        // assigned to; the server scopes the rows (periodResultScope.js).
+        roles: ["super_admin", "school_admin", "teacher"],
       },
       {
         label: "Annual Results",
         labelKey: "nav.annualResults",
         path:  "/exams/annual-results",
         icon:  BarChart3,
-        roles: ["super_admin", "school_admin"],
+        roles: ["super_admin", "school_admin", "teacher"],
       },
       // Report cards are deliberately NOT listed here. They used to appear
       // both under Exams and under Reports, which read as two features and

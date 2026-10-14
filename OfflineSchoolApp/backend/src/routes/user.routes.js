@@ -118,8 +118,13 @@ router.get("/:id", requireAuth, async (req, res) => {
     // FIX #SCOPE — scope the query to the caller's school for non-super-admins
     // so a school_admin cannot fetch users from other schools
     const query = { _id: targetId };
-    if (role !== "super_admin" && req.user.schoolId) {
-      query.schoolId = req.user.schoolId;
+    if (role !== "super_admin") {
+      // Fail closed: a school-scoped account with no school on it reads
+      // nobody, not everybody. (User.schoolId is not required by the schema.)
+      if (!req.user.schoolId) {
+        return res.status(403).json({ success: false, message: "No school on this session" });
+      }
+      query.schoolId = String(req.user.schoolId);
     }
 
     const user = await User.findOne(query)

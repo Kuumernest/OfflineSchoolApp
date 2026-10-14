@@ -27,7 +27,9 @@ is not. Unverified items are listed as unverified.*
 | Alphabet | 30 characters, ambiguous pairs (`O/0`, `I/1`, `S/5`) removed |
 | Length | 8, formatted `XXXX-XXXX` |
 | Max attempts | 6, then a **15-minute lockout** |
-| Session | 12 hours |
+| Access token | 20 minutes, `aud: portal`, HS256 |
+| Session | 90 days per device; SHA-256 of the refresh token on the `GuardianAccess` row; ended by sign-out, revoke, re-issue |
+| Revocation | immediate — the row is re-read on every request and on every refresh |
 | Write surface | messaging only; everything else is read-only |
 
 An 8-character code from a 30-character alphabet is ~39 bits. That is **not**
@@ -39,10 +41,15 @@ not the entropy.
 
 | Control | Status |
 |---|---|
-| 65 permission keys, one definition file | IMPLEMENTATION VERIFIED |
+| 69 permission keys, one definition file | IMPLEMENTATION VERIFIED |
 | `requirePermission` / `requireAnyPermission` on routes | IMPLEMENTATION VERIFIED |
 | 17 keys **locked** — never delegable | IMPLEMENTATION VERIFIED |
 | Only `bursar` and `teacher` are school-adjustable | IMPLEMENTATION VERIFIED |
+| `platform.*` capabilities held by `super_admin` alone, locked, ungrantable through overrides | TEST VERIFIED — `scripts/check-super-admin.js` |
+| A super_admin's named school is verified at the door (404 if not a school / deleted) | TEST VERIFIED — `scripts/check-super-admin.js` |
+| A school-scoped user naming another school (query, body or path) is refused: 403 `SCHOOL_ACCESS_DENIED` | TEST VERIFIED — `scripts/check-school-scope.js` |
+| A deactivated or deleted school blocks its own users: login 403, existing tokens 401 `SCHOOL_INACTIVE`, refresh refused; reactivation lifts it | TEST VERIFIED — `scripts/check-school-scope.js` |
+| Platform audit trail (`AuditLog`): school lifecycle, administrator changes, entering a school | IMPLEMENTATION VERIFIED |
 | Roles defined once (`config/roles.js`); `"admin"` normalised away | IMPLEMENTATION VERIFIED |
 | Bursar separated from admin (no `payroll.setSalary`, no `approvals.decide`) | IMPLEMENTATION VERIFIED |
 | The full matrix | TEST VERIFIED — `check-role-matrix.js`, `check-authz-matrix.js`, `check-admin-guards.js` |

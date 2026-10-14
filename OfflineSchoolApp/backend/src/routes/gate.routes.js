@@ -51,6 +51,11 @@ router.post("/scan", asyncHandler(async (req, res) => {
   try {
     const result = await gate.scan({
       schoolId,
+      // The scanning device's id for this event. A replay of a scan the server
+      // already recorded — the response was lost, the phone tried again — must
+      // answer with that event, not record a second one and message the
+      // guardian twice. See scan() in services/gate.service.js.
+      id:        req.body._id ? String(req.body._id).trim() : null,
       token:     req.body.token,
       at:        req.body.at,
       direction: req.body.direction,
@@ -74,6 +79,9 @@ router.post("/scan", asyncHandler(async (req, res) => {
       direction: result.direction,
       at:        result.event.at,
       duplicate: result.duplicate,
+      // True when this request repeated a scan the server had already
+      // recorded under the same id — the retry path, not a second event.
+      replay:    Boolean(result.replay),
       notified:  Boolean(result.notification && result.notification.status !== "skipped"),
       notifySkipped: result.notification?.skipReason ?? null,
       // Why no message went, when none did — "arrived on time" is an answer,

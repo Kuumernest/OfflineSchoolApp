@@ -21,6 +21,19 @@ import { errorText } from "../../../src/utils/appError";
 // CONSTANTS
 // ─────────────────────────────────────────────────────────
 
+/*
+ * Continuous assessment is deliberately NOT offered here.
+ *
+ * A CA belongs to a sequence — that binding is what pairs it with the paper
+ * and what makes its marks count for anything. This screen does not collect a
+ * sequence number at all (it sends `term` and nothing finer), so a CA created
+ * from it would be attached to no sequence, would appear on no report card,
+ * and would count towards no average, with nothing on screen to say so.
+ *
+ * There is no gap for a school: creating a sequence exam creates its CA
+ * automatically, server-side, whichever client asked for it. The exam list and
+ * the mark-entry screens on this device show and mark CA exams like any other.
+ */
 const examTypeOptions = (t) => [
   { value: "test",            label: t("examNew.typeTest")            },
   { value: "practical",       label: t("examNew.typePractical")       },
@@ -459,7 +472,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
 
   const handleSelectClass = useCallback((cls) => {
     const classId   = String(cls._id || cls.id);
-    const className = cls.name || cls.className || "Class";
+    const className = cls.name || cls.className || t("academic.class");
     setSelectedClass({ id: classId, name: className });
     setSearch("");
   }, []);
@@ -469,7 +482,7 @@ const StepSubjects = ({ schoolId, form, assignments, setAssignments }) => {
     const classId   = selectedClass.id;
     const className = selectedClass.name;
     const subjectId = String(subject._id || subject.id);
-    const subName   = subject.name || subject.subjectName || "Subject";
+    const subName   = subject.name || subject.subjectName || t("academic.subject");
 
     setAssignments((prev) => {
       const clsEntry = prev[classId] || { className, subjects: {} };

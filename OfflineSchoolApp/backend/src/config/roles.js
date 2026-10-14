@@ -155,6 +155,21 @@ const STAFF_ROLES = [
   ROLES.TEACHER,
 ];
 
+/**
+ * The platform, not a school.
+ *
+ * Creating a school, switching one off, reading figures across all of them:
+ * decisions no school may take about itself or about its neighbours. Only the
+ * operator of the deployment is here, and nothing a school administrator can
+ * grant reaches it — config/permissions.js marks every platform capability
+ * locked, and the per-school overrides apply to bursar and teacher only.
+ *
+ * A super_admin operating INSIDE a school does not use this set at all: there
+ * they hold the ordinary school capabilities, scoped by utils/tenant.js to the
+ * school they named. Platform scope is what they hold in addition.
+ */
+const PLATFORM_ROLES = [ROLES.SUPER_ADMIN];
+
 // ─────────────────────────────────────────────────────────────────────────────
 // PREDICATES
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +180,7 @@ const isAdmin   = (role) => has(ADMIN_ROLES,   role);
 const isFinance = (role) => has(FINANCE_ROLES, role);
 const isStaff   = (role) => has(STAFF_ROLES,   role);
 const isBursar  = (role) => normalizeRole(role) === ROLES.BURSAR;
+const isPlatform = (role) => has(PLATFORM_ROLES, role);
 
 module.exports = {
   ROLES,
@@ -177,9 +193,11 @@ module.exports = {
   OFFICE_ROLES,
   TEACHING_ROLES,
   STAFF_ROLES,
+  PLATFORM_ROLES,
 
   isAdmin,
   isFinance,
   isStaff,
   isBursar,
+  isPlatform,
 };

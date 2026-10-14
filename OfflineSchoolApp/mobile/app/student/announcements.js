@@ -88,7 +88,7 @@ const getPriorityConfig = (priority = "normal") => {
     case "high":
       return { labelKey: "annStudent.prioHigh",   icon: "arrow-up-circle",    color: C.warning, bg: C.warningBg, border: "#FDE68A" };
     case "low":
-      return { label: "Low",    icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200 };
+      return { labelKey: "annStudent.prioLow", icon: "remove-circle",      color: C.gray500, bg: C.gray100,   border: C.gray200 };
     default:
       return { labelKey: "annStudent.prioNormal", icon: "information-circle", color: C.info,    bg: C.infoBg,    border: "#BFDBFE" };
   }
@@ -611,8 +611,7 @@ export default function StudentAnnouncements() {
         <View style={s.urgentBanner}>
           <Ionicons name="warning" size={16} color={C.error} />
           <Text style={s.urgentBannerText}>
-            {stats.urgentUnack} urgent announcement
-            {stats.urgentUnack !== 1 ? "s" : ""} need your attention
+            {t("annStudent.urgentBanner", { count: stats.urgentUnack })}
           </Text>
         </View>
       )}
@@ -709,7 +708,7 @@ export default function StudentAnnouncements() {
                 {searchQuery
                   ? t("annStudent.noResults")
                   : activeFilter !== "all"
-                  ? `No ${activeFilter} announcements`
+                  ? t("annStudent.emptyFiltered")
                   : t("annStudent.emptyNone")}
               </Text>
               <Text style={s.emptySub}>

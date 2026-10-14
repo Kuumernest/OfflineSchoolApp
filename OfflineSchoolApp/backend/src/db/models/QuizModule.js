@@ -39,11 +39,25 @@ const QuestionOptionSchema = new mongoose.Schema(
 const QuestionSchema = new mongoose.Schema(
   {
     schoolId:      { type: String, required: true, index: true },
+    // The id the authoring device stored this question under. Unlike the rest
+    // of the app these models are keyed by ObjectId, so the client's id cannot
+    // be the key; it is kept here so a retried create is recognised as a
+    // replay of this row rather than becoming a second question. Unique per
+    // school (index below).
+    client_id:     { type: String, default: null },
     category_id:   {
       type: mongoose.Schema.Types.ObjectId,
       ref:  "QuestionCategory",
       default: null,
     },
+    /**
+     * The subject this question belongs to — Subject._id, exactly as a quiz
+     * carries it. The bank is asked for by subject (GET /quiz/questions), so
+     * a question without one is in no subject's bank. Nullable only because
+     * questions written before the field existed have none; the phone gives
+     * those the subject of the quizzes they sit in where that is unambiguous.
+     */
+    subject_id:    { type: String, default: null, index: true },
     question_text: { type: String, required: true },
     question_type: {
       type: String,
@@ -76,6 +90,9 @@ const QuestionSchema = new mongoose.Schema(
 // QUIZ
 // ─────────────────────────────────────────────
 
+// The bank's own query: one teacher's questions in one subject.
+QuestionSchema.index({ schoolId: 1, created_by: 1, subject_id: 1 });
+
 const QuizQuestionSchema = new mongoose.Schema(
   {
     question_id:     {
@@ -92,6 +109,8 @@ const QuizQuestionSchema = new mongoose.Schema(
 const QuizSchema = new mongoose.Schema(
   {
     schoolId:     { type: String, required: true, index: true },
+    // As on Question: the authoring device's id, so a retried create replays.
+    client_id:    { type: String, default: null },
     title:        { type: String, required: true, trim: true  },
     description:  { type: String, default: null               },
     instructions: { type: String, default: null               },
@@ -224,6 +243,17 @@ const QuizAnalyticsSchema = new mongoose.Schema(
     lowest_score:      { type: Number, default: 0 },
   },
   { timestamps: true }
+);
+
+// One row per (school, client id): the guard the create routes rely on when
+// two retries of the same offline create race each other.
+QuestionSchema.index(
+  { schoolId: 1, client_id: 1 },
+  { unique: true, partialFilterExpression: { client_id: { $type: "string" } } }
+);
+QuizSchema.index(
+  { schoolId: 1, client_id: 1 },
+  { unique: true, partialFilterExpression: { client_id: { $type: "string" } } }
 );
 
 module.exports = {

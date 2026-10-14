@@ -24,19 +24,14 @@ const TermResult       = require("../db/models/TermResult");
 const AcademicStructure = require("../db/models/AcademicStructure");
 const GradingConfig    = require("../db/models/GradingConfig");
 const grading          = require("./grading.service");
+const { CA_TYPE }      = require("../../../shared/caAssessment");
+const academicPolicy   = require("./academicPolicy.service");
+const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function lookupGrade(markOutOf20) {
   return grading.lookupGrade(markOutOf20);
-}
-
-function getSequenceWeights(structure, termNumber) {
-  const term = structure.terms.find((t) => t.number === termNumber);
-  if (!term) return [50, 50];
-
-  // Equal weights: 50/50 for 2 sequences
-  return term.sequences.map((s) => s.weight);
 }
 
 // ── Core ────────────────────────────────────────────────────
@@ -65,7 +60,16 @@ async function loadTermContext({ schoolId, academicYear, term }) {
   if (!structure) {
     throw new Error(`No academic structure found for ${schoolId} / ${academicYear}`);
   }
-  const termConfig = structure.terms.find((t) => t.number === term);
+
+  // The configuration this term is computed under, frozen and named (docs/39
+  // §8), from the two documents just read — no further query on a warm
+  // process, which keeps the per-class cost fixed (check-term-compute).
+  const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
+
+  // Which sequences the term holds and what each weighs come from that
+  // snapshot's period tree (docs/39 Phase 3), not from the structure directly.
+  const termConfig = legacyTermsFromPeriods(policy.policy.structure.periods)
+    .find((t) => t.number === term);
   if (!termConfig) {
     throw new Error(`Term ${term} not found in academic structure`);
   }
@@ -79,19 +83,37 @@ async function loadTermContext({ schoolId, academicYear, term }) {
   const Exam = mongoose.model("Exam");
   const all = await Exam.find({
     schoolId, academicYear, term, deletedAt: null,
-  }).select("_id name sequenceNumber").lean();
+  }).select("_id name sequenceNumber type").lean();
 
-  const exams = all.filter((e) => sequenceNumbers.includes(e.sequenceNumber));
+  /*
+   * The papers, not the continuous assessments.
+   *
+   * A sequence now has two exams: the paper and its CA. The paper's
+   * ResultSummary IS the sequence result — results.service blends the CA into
+   * it — so reading the CA exam's own summary here would count continuous
+   * assessment a second time, as though it were a whole extra sequence.
+   *
+   * Without this filter `exams.find(e => e.sequenceNumber === seqNum)` would
+   * also return whichever of the two Mongo happened to hand over first, which
+   * is a term average that changes between runs.
+   */
+  const exams = all.filter(
+    (e) => sequenceNumbers.includes(e.sequenceNumber) && e.type !== CA_TYPE
+  );
 
   return {
     termConfig,
     sequenceNumbers,
     exams,
     examIds: exams.map((e) => e._id),
+    // A CA exam with no sequence is not a paper a school forgot to bind — it
+    // cannot be marked as one — so it is left out of the report rather than
+    // shown to an administrator as work to do.
     unsequencedExams: all
-      .filter((e) => e.sequenceNumber == null)
+      .filter((e) => e.sequenceNumber == null && e.type !== CA_TYPE)
       .map((e) => ({ _id: String(e._id), name: e.name || null })),
     passMark: gradingConfig?.passMark ?? 10,
+    policyHash: policy._id,
   };
 }
 
@@ -151,6 +173,10 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
       overallGrade:  termGrade.grade,
       overallRemark: termGrade.remark,
       isPassing:     termAverage >= passMark,
+      // A context built by hand (a caller outside loadTermContext) has no
+      // policy, and its rows say so rather than claiming one.
+      policyHash:    context.policyHash ?? null,
+      calcVersion:   CALC_VERSIONS.term,
       syncStatus:    "pending",
     },
   };
@@ -313,6 +339,29 @@ async function computeClassTermAverages({
   };
 }
 
+
+/**
+ * Competition places for a list of averages: one more than the number
+ * strictly ahead, ties sharing a place — the same answer as counting, for
+ * each pupil, every pupil with a higher average, without doing that count
+ * once per pupil (which made a class of n cost n² and a school of forty
+ * classes a visible pause). Values are read the way the count read them,
+ * Number(x) || 0, so a missing average places as zero exactly as before.
+ *
+ * @param {number[]} averages  in any order
+ * @returns {number[]}         the place of each, in the same order
+ */
+function competitionPlaces(averages) {
+  const values = averages.map((a) => Number(a) || 0);
+  const distinct = [...new Set(values)].sort((a, b) => b - a);
+  const count = new Map();
+  for (const v of values) count.set(v, (count.get(v) ?? 0) + 1);
+  const place = new Map();
+  let ahead = 0;
+  for (const v of distinct) { place.set(v, ahead + 1); ahead += count.get(v); }
+  return values.map((v) => place.get(v));
+}
+
 /**
  * Compute term positions (dense ranking) for a class.
  */
@@ -342,16 +391,13 @@ async function computeTermPositions({ schoolId, academicYear, term, classId }) {
    * One more than the number of pupils strictly ahead, which is the same rule
    * expressed against the averages rather than the sorted index.
    */
-  const bulkOps = results.map((r) => {
-    const mine  = Number(r.termAverage) || 0;
-    const ahead = results.filter((o) => (Number(o.termAverage) || 0) > mine).length;
-    return {
-      updateOne: {
-        filter: { _id: r._id },
-        update: { $set: { classPosition: ahead + 1, totalInClass } },
-      },
-    };
-  });
+  const places = competitionPlaces(results.map((r) => r.termAverage));
+  const bulkOps = results.map((r, i) => ({
+    updateOne: {
+      filter: { _id: r._id },
+      update: { $set: { classPosition: places[i], totalInClass } },
+    },
+  }));
 
   if (bulkOps.length > 0) {
     await TermResult.bulkWrite(bulkOps);
@@ -402,6 +448,7 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
 }
 
 module.exports = {
+  competitionPlaces,
   loadTermContext,
   termResultFields,
   computeStudentTermAverage,

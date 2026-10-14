@@ -173,8 +173,8 @@ export default function EditTeacherPage() {
               assignmentId: String(a._id || a.id),
               subjectId:    refId(a.subject),
               id:           refId(a.subject),
-              name:         refName(a.subject) || "Unknown",
-              className:    refName(a.class)   || "Unknown",
+              name:         refName(a.subject) || t("common.unknown"),
+              className:    refName(a.class)   || t("common.unknown"),
               classId:      refId(a.class) || a.classId || "",
             })
           );
@@ -195,8 +195,8 @@ export default function EditTeacherPage() {
             normaliseAvailable({
               id:        String(s._id  || s.id),
               subjectId: String(s._id  || s.id),
-              name:      s.name        ?? "Unknown",
-              className: refName(s.class) || s.classObj?.name || s.className || "Unknown",
+              name:      s.name        ?? t("common.unknown"),
+              className: refName(s.class) || s.classObj?.name || s.className || t("common.unknown"),
               classId:   refId(s.class) || s.classId || "",
             })
           );
@@ -385,8 +385,8 @@ export default function EditTeacherPage() {
               assignmentId: String(a._id || a.id),
               subjectId:    refId(a.subject),
               id:           refId(a.subject),
-              name:         refName(a.subject) || "Unknown",
-              className:    refName(a.class)   || "Unknown",
+              name:         refName(a.subject) || t("common.unknown"),
+              className:    refName(a.class)   || t("common.unknown"),
               classId:      refId(a.class) || a.classId || "",
             })
           );
@@ -406,8 +406,8 @@ export default function EditTeacherPage() {
               normaliseAvailable({
                 id:        String(s._id || s.id),
                 subjectId: String(s._id || s.id),
-                name:      s.name        ?? "Unknown",
-                className: refName(s.class) || s.classObj?.name || s.className || "Unknown",
+                name:      s.name        ?? t("common.unknown"),
+                className: refName(s.class) || s.classObj?.name || s.className || t("common.unknown"),
                 classId:   refId(s.class) || s.classId || "",
               })
             )
@@ -499,7 +499,7 @@ export default function EditTeacherPage() {
             {teacher?.name ?? "Edit Teacher"}
           </h1>
           <p className="text-xs text-gray-500">
-            {assigned.length} subject{assigned.length !== 1 ? "s" : ""} assigned
+            {t("teachersEdit.subjectsAssignedCount", { count: assigned.length })}
           </p>
         </div>
         <button
@@ -526,7 +526,7 @@ export default function EditTeacherPage() {
             ? <Loader2 size={15} className="animate-spin" />
             : <Save size={15} />
           }
-          {saving ? t("common.saving") : "Save"}
+          {saving ? t("common.saving") : t("common.save")}
         </button>
       </div>
 
@@ -651,7 +651,7 @@ export default function EditTeacherPage() {
                         ? <Loader2 size={13} className="animate-spin" />
                         : <X size={13} />
                       }
-                      Remove
+                      {t("common.remove")}
                     </button>
                   </div>
                 );
@@ -710,7 +710,7 @@ export default function EditTeacherPage() {
                         ? <Loader2 size={13} className="animate-spin" />
                         : <Plus size={13} />
                       }
-                      Assign
+                      {t("teachersEdit.assign")}
                     </button>
                   </div>
                 );

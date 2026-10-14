@@ -10,12 +10,22 @@ const ExamSubject   = require("../db/models/ExamSubject");
 const StudentScore  = require("../db/models/StudentScore");
 const ResultSummary = require("../db/models/ResultSummary");
 const GradingConfig = require("../db/models/GradingConfig");
+// The CA half of a sequence: created alongside the paper, paired with it, and
+// the source of the split the sequence result is computed by.
+const sequenceAssessment = require("../services/sequenceAssessment.service");
 const Class         = require("../db/models/Class");
 const Subject       = require("../db/models/Subject");
 const User          = require("../db/models/User");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const StudentRoster = require("../db/models/Student");
+const { teacherAssigned } = require("../utils/teacherScope");
 const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
+const tenant = require("../utils/tenant");
+const academicPolicy = require("../services/academicPolicy.service");
+const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
   logResultChange,
@@ -40,10 +50,16 @@ const adminOnly = requirePermission("exams.manage");
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) return String(provided).trim();
-  return req.user?.schoolId;
-};
+// The canonical rule (utils/tenant), so a handler and the guard below can never
+// disagree about which school a request is for. `|| undefined` lets an empty
+// candidate fall through to the request's other sources, as the guard does.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
+
+// Every exam, paper, mark and result here is one school's. A request that
+// resolves to no school — a super_admin who named none, an account with no
+// school — is refused before any handler builds a `{ schoolId: undefined }`
+// filter (docs/39 §4.6i, §17.2, Phase 2e).
+router.use(tenant.requireSchool());
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -64,7 +80,7 @@ const resolveClassIdsFromBody = (body) => {
   return [];
 };
 
-const resolveClassData = async (classIdArray) => {
+const resolveClassData = async (classIdArray, schoolId) => {
   if (!classIdArray || classIdArray.length === 0) {
     return {
       primaryClassId:   null,
@@ -73,7 +89,11 @@ const resolveClassData = async (classIdArray) => {
       classNames:       null,
     };
   }
-  const classRecords = await Class.find({ _id: { $in: classIdArray } }).lean();
+  // Scoped: an exam bound to another school's class would carry that class's
+  // name into this school's records and count its pupils in the other's.
+  const classRecords = await Class.find({
+    _id: { $in: classIdArray }, ...(schoolId ? { schoolId } : {}),
+  }).lean();
   const classNameMap = new Map(classRecords.map((c) => [String(c._id), c.name]));
   const orderedIds   = classIdArray.filter((cid) => classNameMap.has(cid));
   const orderedNames = orderedIds.map((cid) => classNameMap.get(cid));
@@ -189,7 +209,8 @@ router.get("/", staffOnly, asyncHandler(async (req, res) => {
   const query = { schoolId, deletedAt: null };
   if (status)       query.status       = status;
   if (academicYear) query.academicYear = academicYear;
-  if (term)         query.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         query.term         = Number(term);
   if (classId) {
     query.$or = [
       { classId  },
@@ -197,7 +218,7 @@ router.get("/", staffOnly, asyncHandler(async (req, res) => {
     ];
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total = await Exam.countDocuments(query);
   const exams = await Exam.find(query)
     .sort({ createdAt: -1 })
@@ -318,7 +339,8 @@ router.get("/stats", staffOnly, asyncHandler(async (req, res) => {
   const { term, academicYear, classId } = req.query;
 
   const base = { schoolId, deletedAt: null };
-  if (term)         base.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         base.term         = Number(term);
   if (academicYear) base.academicYear = academicYear;
   if (classId) {
     base.$or = [{ classId }, { classIds: classId }];
@@ -462,12 +484,13 @@ router.get("/reports", staffOnly, asyncHandler(async (req, res) => {
     status: { $in: ["completed", "published"] },
   };
   if (academicYear) query.academicYear = academicYear;
-  if (term)         query.term         = term;
+  if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, message: "term must be a positive integer" });
+  if (term)         query.term         = Number(term);
   if (classId) {
     query.$or = [{ classId }, { classIds: classId }];
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total = await Exam.countDocuments(query);
   const exams = await Exam.find(query)
     .sort({ createdAt: -1 })
@@ -486,13 +509,16 @@ router.get("/reports", staffOnly, asyncHandler(async (req, res) => {
 
 router.get("/reports/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { examId, classId, page = 1, limit = 50 } = req.query;
 
-  const query = { schoolId, deletedAt: null };
+  // Published unless the caller is an administrator — the rule every other
+  // read of a ResultSummary applies (docs/35 §5); this list had been left out.
+  const query = { schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
-  const skip    = (Number(page) - 1) * Number(limit);
+  const skip    = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total   = await ResultSummary.countDocuments(query);
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })
@@ -555,9 +581,11 @@ router.get("/submissions", staffOnly, asyncHandler(async (req, res) => {
 
 router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { classId, examId } = req.query;
 
-  const query = { schoolId, deletedAt: null };
+  // Published unless the caller is an administrator, as above.
+  const query = { schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (examId)  query.examId  = examId;
   if (classId) query.classId = classId;
 
@@ -572,6 +600,24 @@ router.get("/submissions/results", staffOnly, asyncHandler(async (req, res) => {
   return res.json({ success: true, results, total: results.length });
 }));
 
+
+/**
+ * Marks entered per (exam, class, subject), in one grouped query.
+ *
+ * The two submission views asked StudentScore.countDocuments once per
+ * ExamSubject — a school of a hundred classes and twelve subjects made 1,200
+ * counts to draw one screen. One $group over the same filter gives the same
+ * numbers; a key with no entry counts as zero, as an empty count did.
+ */
+const enteredCountsFor = async (match) => {
+  const rows = await StudentScore.aggregate([
+    { $match: { ...match, score: { $ne: null }, deletedAt: null } },
+    { $group: { _id: { examId: "$examId", classId: "$classId", subjectId: "$subjectId" }, n: { $sum: 1 } } },
+  ]);
+  const counts = new Map(rows.map((r) => [`${r._id.examId}|${r._id.classId}|${r._id.subjectId}`, r.n]));
+  return (es) => counts.get(`${es.examId}|${es.classId}|${es.subjectId}`) ?? 0;
+};
+
 router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { examId, classId } = req.query;
@@ -581,19 +627,8 @@ router.get("/submissions/submissions", staffOnly, asyncHandler(async (req, res) 
   if (classId) query.classId = classId;
 
   const subjects = await ExamSubject.find(query).lean();
-  const enriched = await Promise.all(
-    subjects.map(async (es) => {
-      const count = await StudentScore.countDocuments({
-        examId:    es.examId,
-        subjectId: es.subjectId,
-        classId:   es.classId,
-        schoolId,
-        score:     { $ne: null },
-        deletedAt: null,
-      });
-      return { ...es, totalScoresEntered: count };
-    })
-  );
+  const entered  = await enteredCountsFor({ schoolId, ...(examId ? { examId } : {}), ...(classId ? { classId } : {}) });
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
   return res.json({
     success:     true,
     submissions: enriched,
@@ -692,7 +727,7 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   }
 
   const resolvedIds = resolveClassIdsFromBody(req.body);
-  const classData   = await resolveClassData(resolvedIds);
+  const classData   = await resolveClassData(resolvedIds, schoolId);
 
   const exam = await Exam.create({
     _id:          examId,
@@ -728,9 +763,15 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   if (Array.isArray(subjects) && subjects.length > 0) {
     for (const s of subjects) {
       if (!s.subjectId) continue;
-      const subjectDoc = await Subject.findById(s.subjectId).lean();
+      const subjectDoc = await Subject.findOne({ _id: String(s.subjectId), schoolId }).lean();
       const teacherDoc = s.teacherId
-        ? await User.findById(s.teacherId).lean() : null;
+        ? await User.findOne({ _id: String(s.teacherId), schoolId }).lean() : null;
+      if (!subjectDoc) {
+        return res.status(400).json({ message: "subjectId " + s.subjectId + " is not a subject of this school" });
+      }
+      if (s.teacherId && !teacherDoc) {
+        return res.status(400).json({ message: "teacherId " + s.teacherId + " is not a member of this school" });
+      }
       const es = await ExamSubject.create({
         _id:              uuidv4(),
         examId:           exam._id,
@@ -757,10 +798,45 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
     }
   }
 
+  /*
+   * ── The other half of the sequence ──────────────────────────────────────
+   *
+   * "CA is an assessment type under every sequence" has to be true of the
+   * data, not of a screen. An administrator who creates Sequence 1 gets both
+   * halves: the paper they just described, and a CA exam bound to it carrying
+   * the same subjects, the same teachers and the same coefficients.
+   *
+   * Skipped when the school has CA off, when the exam is not bound to a
+   * sequence, and when the exam IS the CA — a CA does not get a CA.
+   *
+   * Deliberately not fatal. A school losing the exam it just created because
+   * the companion could not be written is a worse outcome than a sequence with
+   * one half, which an administrator can see and fix; ensureCaExam is
+   * idempotent, so the next edit or the next create picks it up.
+   */
+  let caExam = null;
+  if (type !== "ca") {
+    try {
+      const made = await sequenceAssessment.ensureCaExam({
+        paper:    exam.toObject(),
+        userId:   req.user?._id || null,
+        // An id the client chose, for a create made with no connection: the
+        // same reason the paper's own _id is honoured above.
+        caExamId: req.body.caExamId || null,
+      });
+      caExam = made.exam;
+    } catch (err) {
+      console.error("[exams] CA companion not created:", err.message);
+    }
+  }
+
   console.log(`✅ Exam created: ${exam.name} [${exam._id}]`);
   return res.status(201).json({
     success:  true,
     exam:     { ...exam.toObject(), subjects: createdSubjects },
+    // The CA exam, so a client that has just created a sequence knows where to
+    // send CA marks without going looking for it.
+    caExam:   caExam ? { _id: caExam._id, name: caExam.name, type: caExam.type } : null,
     serverId: exam._id,
   });
 }));
@@ -788,7 +864,7 @@ router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
 
   const resolvedIds = resolveClassIdsFromBody(req.body);
   const classData   = resolvedIds.length > 0
-    ? await resolveClassData(resolvedIds) : null;
+    ? await resolveClassData(resolvedIds, schoolId) : null;
 
   const updates = {
     ...(name         !== undefined && { name: name.trim() }),
@@ -893,6 +969,25 @@ router.delete("/:id", adminOnly, asyncHandler(async (req, res) => {
   ).lean();
 
   if (!exam) return res.status(404).json({ message: "Exam not found" });
+
+  /*
+   * The sequence's continuous assessment goes with its paper.
+   *
+   * Archiving the paper and leaving the CA behind would leave a half a
+   * sequence in the exam list — an exam nothing pairs with, whose marks reach
+   * no report card and which an administrator has no way to recognise as
+   * orphaned.
+   *
+   * Soft, like the paper's own delete: the marks are not touched and both
+   * exams can be revived together.
+   */
+  if (exam.type !== "ca") {
+    await Exam.updateMany(
+      { parentExamId: String(exam._id), type: "ca", deletedAt: null },
+      { $set: { deletedAt: new Date(), status: "archived" } }
+    ).catch((err) => console.error("[exams] CA not archived:", err.message));
+  }
+
   console.log(`🗑️  Exam soft-deleted: ${exam.name}`);
   return res.json({ success: true, message: "Exam archived" });
 }));
@@ -926,9 +1021,14 @@ router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
 
   if (!subjectId) return res.status(400).json({ message: "subjectId is required" });
 
-  const subjectDoc      = await Subject.findById(subjectId).lean();
-  const teacherDoc      = teacherId ? await User.findById(teacherId).lean() : null;
+  const subjectDoc      = await Subject.findOne({ _id: String(subjectId), schoolId }).lean();
+  const teacherDoc      = teacherId ? await User.findOne({ _id: String(teacherId), schoolId }).lean() : null;
+  if (!subjectDoc) return res.status(400).json({ message: "subjectId is not a subject of this school" });
+  if (teacherId && !teacherDoc) return res.status(400).json({ message: "teacherId is not a member of this school" });
   const resolvedClassId = classId || exam.classId;
+  if (resolvedClassId && !(await Class.exists({ _id: String(resolvedClassId), schoolId }))) {
+    return res.status(400).json({ message: "classId is not a class of this school" });
+  }
 
   /**
    * ── The id, and the two ways a repeat arrives ────────────────────────────
@@ -999,6 +1099,20 @@ router.post("/:examId/subjects", adminOnly, asyncHandler(async (req, res) => {
     isOral:      isOral      ?? false,
   });
 
+  /*
+   * The same subject on the sequence's continuous assessment.
+   *
+   * A subject attached to the paper after the CA was created would otherwise
+   * be markable in one half of the sequence and not the other, and a teacher
+   * would find Mathematics on the paper's sheet and missing from the CA sheet
+   * with nothing to say why. Idempotent and non-fatal, for the reasons
+   * ensureCaExam is.
+   */
+  if (exam.type !== "ca") {
+    await sequenceAssessment.mirrorSubjectToCa(exam, es)
+      .catch((err) => console.error("[exams] CA subject not mirrored:", err.message));
+  }
+
   return res.status(201).json({ success: true, subject: es });
 }));
 
@@ -1029,8 +1143,11 @@ router.put(
       updates[key] = n;
     }
     if (teacherId !== undefined) {
-      updates.teacherId = teacherId || null;
-      const teacherDoc = teacherId ? await User.findById(teacherId).lean() : null;
+      const teacherDoc = teacherId ? await User.findOne({ _id: String(teacherId), schoolId }).lean() : null;
+      if (teacherId && !teacherDoc) {
+        return res.status(400).json({ message: "teacherId is not a member of this school" });
+      }
+      updates.teacherId   = teacherId || null;
       updates.teacherName = teacherDoc?.name || null;
     }
     if (isPractical !== undefined) updates.isPractical = Boolean(isPractical);
@@ -1063,8 +1180,12 @@ router.put(
   })
 );
 
+// adminOnly: this was the one route in the file with no guard of its own, so
+// any signed-in account of the school — a pupil included — could soft-delete a
+// subject out of an exam. Its sibling PUT is admin-only for a lesser change.
 router.delete(
   "/:examId/subjects/:subjectId",
+  adminOnly,
   asyncHandler(async (req, res) => {
     const schoolId = resolveSchoolId(req, req.query.schoolId);
     const es = await ExamSubject.findOneAndUpdate(
@@ -1088,8 +1209,17 @@ router.delete(
 // The whole cohort’s marks for one exam. Its sibling POST .../scores/bulk was
 // staffOnly and this read was not, so a pupil could fetch every classmate’s
 // score for any exam in their school by asking for it.
+//
+// WHO READS THIS SHEET: every holder of exams.view in the school — the
+// teaching roles, the bursar excluded — for every class, published or not.
+// That breadth is the recorded policy for teachers' reads of marks (docs/20
+// §7b, §11.7; docs/22 §4), recorded there as a product decision still to be
+// taken, and it is not taken here: the write below is confined to the
+// teacher's own (class, subject) pair, the read is the school's. An operator
+// names the school first; no school is no school, never every school.
 router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
   const schoolId  = resolveSchoolId(req, req.query.schoolId);
+  if (!schoolId) return res.status(400).json({ success: false, message: "schoolId is required" });
   const { classId, subjectId } = req.query;
   const query = {
     examId:    req.params.examId,
@@ -1105,9 +1235,9 @@ router.get("/:examId/scores", staffOnly, asyncHandler(async (req, res) => {
 router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.body.schoolId);
   const examId   = req.params.examId;
-  const { classId, subjectId, examSubjectId, scores } = req.body;
+  const { classId: bodyClassId, subjectId: bodySubjectId, examSubjectId, scores } = req.body;
 
-  if (!classId || !subjectId || !Array.isArray(scores)) {
+  if (!bodyClassId || !bodySubjectId || !Array.isArray(scores)) {
     return res.status(400).json({
       message: "classId, subjectId, and scores[] are required",
     });
@@ -1116,17 +1246,75 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   const exam = await Exam.findOne({ _id: examId, schoolId }).lean();
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
+  // ── The class and subject come from the exam, not the request ───────────
+  // The ExamSubject row is the exam's own statement of which class sits which
+  // subject. When one exists it decides both — the body is only allowed to
+  // NAME it — and it must be this exam's and this school's: the old
+  // ExamSubject.findById(examSubjectId) took any school's row, whose maxScore
+  // then validated the sheet and whose submission status was flipped below.
+  // Where an exam carries no ExamSubject rows the body's pair is used, but
+  // the class and the subject must both be this school's.
+  const examSubject = examSubjectId
+    ? await ExamSubject.findOne({
+        _id: String(examSubjectId), examId, schoolId, deletedAt: null,
+      }).lean()
+    : await ExamSubject.findOne({
+        examId, subjectId: String(bodySubjectId), classId: String(bodyClassId),
+        schoolId, deletedAt: null,
+      }).lean();
+  if (examSubjectId && !examSubject) {
+    return res.status(404).json({ message: "Exam subject not found" });
+  }
+  const classId   = String(examSubject?.classId   ?? bodyClassId);
+  const subjectId = String(examSubject?.subjectId ?? bodySubjectId);
+  if (!examSubject) {
+    const [classOk, subjectOk] = await Promise.all([
+      Class.exists({ _id: classId, schoolId }),
+      Subject.exists({ _id: subjectId, schoolId }),
+    ]);
+    if (!classOk)   return res.status(404).json({ message: "Class not found" });
+    if (!subjectOk) return res.status(404).json({ message: "Subject not found" });
+  }
+
+  // ── The assignment is the boundary, not the capability ───────────────────
+  // exams.view says "you may work with marks"; the TeacherAssignment row says
+  // whose. Quiz authoring and homework already refuse an unassigned teacher
+  // with SUBJECT_NOT_ASSIGNED, and the registry's own note says assignment is
+  // what decides "who can enter the marks of whom". Without this check any
+  // teacher could rewrite any class's sheet in their school. Asked of the
+  // PAIR the exam itself names, never of the pair the request claimed.
+  if (req.user?.role === "teacher") {
+    const ok = await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id,
+      schoolId,
+      classId,
+      subjectId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false,
+        code:    "SUBJECT_NOT_ASSIGNED",
+        message: "You are not assigned to this class and subject",
+      });
+    }
+  }
+
   // Nothing checked isLocked or isPublished here, so a published report card
   // could be rewritten under a parent who had already read it. An admin may
   // still correct a mistake, but only with a reason that gets recorded.
   const audit = await guardResultWrite(req, res, { examId, schoolId, subjectId });
   if (!audit) return;
 
-  const examSubject = examSubjectId
-    ? await ExamSubject.findById(examSubjectId).lean()
-    : await ExamSubject.findOne({
-        examId, subjectId, classId, deletedAt: null,
-      }).lean();
+  // Every pupil on the sheet is one of this school's. A studentId from
+  // elsewhere would otherwise mint a row in this school's pipeline that
+  // points at another school's child.
+  const sheetStudentIds = [...new Set(
+    scores.map((s) => (s?.studentId ? String(s.studentId) : null)).filter(Boolean)
+  )];
+  const knownStudents = new Set(
+    (await StudentRoster.find({ _id: { $in: sheetStudentIds }, schoolId })
+      .select("_id").lean()).map((s) => String(s._id))
+  );
 
   // A mark of 23/20 (or a blank cell on a present student) silently corrupts
   // every average and grade computed from it, so the sheet is validated before
@@ -1147,6 +1335,27 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   }
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+
+  /*
+   * ── CA marks into a school that has turned CA off ───────────────────────
+   *
+   * A new CA mark is refused: the school has said it does not assess that way,
+   * the mark would appear on no report card and count towards no average, and
+   * a teacher would be entering marks into nothing.
+   *
+   * An EXISTING CA mark may still be corrected. Turning CA off deletes
+   * nothing — that is the whole point of the toggle — and a school that turns
+   * it off mid-year must still be able to fix a mark somebody typed wrong
+   * before they did, ready for the day they turn it back on.
+   *
+   * 400 rather than 403: this is a statement about the request, and the
+   * offline queue stops on a 4xx and asks a person rather than retrying for
+   * ever.
+   */
+  const caSettings = require("../../../shared/caAssessment")
+    .caSettings(gradingConfig);
+  const caLocked = exam.type === "ca" && !caSettings.caEnabled;
+
   // A count, not a collection: the documents this accumulated were never
   // read — the response and the log both asked only how many. The history
   // diff below works off priorByStudent, which is fetched up front.
@@ -1173,6 +1382,20 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
       const { studentId, score, teacherRemark, isAbsent, isExempt } = row;
       if (!studentId) {
         failed.push({ ...row, reason: "Missing studentId" });
+        continue;
+      }
+      if (!knownStudents.has(String(studentId))) {
+        failed.push({ ...row, reason: "Student not found in this school" });
+        continue;
+      }
+
+      // See caLocked above: corrections to a mark that already exists are
+      // allowed; a new one is not.
+      if (caLocked && !priorByStudent.has(String(studentId))) {
+        failed.push({
+          ...row,
+          reason: "Continuous assessment is disabled for this school",
+        });
         continue;
       }
 
@@ -1331,6 +1554,13 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   if (!exam) return res.status(404).json({ message: "Exam not found" });
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
+
+  // The configuration this run reads, frozen and named, so every summary it
+  // writes can say what produced it (docs/39 §8). Stamped only: nothing below
+  // reads it, and the arithmetic is unchanged.
+  const policy = await academicPolicy.resolve({
+    schoolId, academicYear: exam.academicYear, gradingConfig, createdBy: req.user?._id ?? null,
+  });
   const scoreQuery    = { examId, schoolId, deletedAt: null };
   if (classId) scoreQuery.classId = classId;
 
@@ -1483,6 +1713,8 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
       subjectsTotal:  scores.length,
       isPassing:      computed.isPassing,
       subjectBreakdown,
+      policyHash:     policy._id,
+      calcVersion:    CALC_VERSIONS.examProcess,
       syncStatus:     "synced",
       lastSyncedAt:   new Date(),
     };
@@ -1554,7 +1786,9 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
 router.get("/:examId/results", staffOnly, asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
   const { classId } = req.query;
-  const query = { examId: req.params.examId, schoolId, deletedAt: null };
+  // Published unless the caller is an administrator — the feed's rule for
+  // this collection and GET /api/results/:examId's, applied here too.
+  const query = { examId: req.params.examId, schoolId, deletedAt: null, ...feedScopes.publishedUnlessAdmin(req) };
   if (classId) query.classId = classId;
   const results = await ResultSummary.find(query)
     .sort({ classPosition: 1 })
@@ -1581,20 +1815,8 @@ router.get("/:examId/submissions", staffOnly, asyncHandler(async (req, res) => {
   if (teacherId) query.teacherId = teacherId;
 
   const subjects = await ExamSubject.find(query).lean();
-
-  const enriched = await Promise.all(
-    subjects.map(async (es) => {
-      const count = await StudentScore.countDocuments({
-        examId:    req.params.examId,
-        subjectId: es.subjectId,
-        classId:   es.classId,
-        schoolId,
-        score:     { $ne: null },
-        deletedAt: null,
-      });
-      return { ...es, totalScoresEntered: count };
-    })
-  );
+  const entered  = await enteredCountsFor({ examId: req.params.examId, schoolId });
+  const enriched = subjects.map((es) => ({ ...es, totalScoresEntered: entered(es) }));
 
   return res.json({ success: true, submissions: enriched });
 }));

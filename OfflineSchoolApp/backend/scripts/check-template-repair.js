@@ -22,11 +22,13 @@
  *   node scripts/check-template-repair.js
  */
 
-const { repairHtml, verify, layoutPass, repairCss,
+const { repairHtml, verify,
         headerPass, repairHeaderCss,
         verifyStripPass, repairVerifyCss,
         printClassPass, repairPrintCss,
-        layoutCardsPass } = require("./repair-report-templates");
+        removeBannerPass, removeClosingPass,
+        infoPanelPass, repairInfoPanelCss,
+        remarksBlockPass, repairRemarksCss } = require("./repair-report-templates");
 const { DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS } =
   require("../src/print/defaultReportTemplate");
 
@@ -70,87 +72,6 @@ const OLD_SEEDED = `<div class="school-header">{{school_logo}}{{school_name}}</d
 {{subjects_table}}
 ${OLD_BANNER}
 <div class="footer">{{report_date}}</div>`;
-
-// ═══════════════════════════════════════════════════════════════════════════
-console.log("--- what it repairs ---");
-
-const repaired = repairHtml(OLD_SEEDED, OLD_CSS);
-check("the shipped banner is recognised", repaired.status, "repaired");
-check("PROMOTED is gone from the pass/fail banner",
-  /PROMOTED/.test(repaired.html.split("{{if is_annual}}")[0]), false);
-check("it says PASSED instead",
-  repaired.html.includes('<div class="verdict-pill pass">✓ PASSED</div>'), true);
-check("and NOT PASSED for the other branch",
-  repaired.html.includes('<div class="verdict-pill fail">✗ NOT PASSED</div>'), true);
-check("both passes ran over the one template",
-  repaired.changes, ["promotion", "layout"]);
-check("the annual-only promotion block is added",
-  repaired.html.includes("{{if is_annual}}"), true);
-check("gated on there being a decision at all",
-  repaired.html.includes("{{if promotion_status}}"), true);
-
-// The whole point of patching rather than reseeding.
-check("the school's own header survives",
-  repaired.html.includes('<div class="school-header">{{school_logo}}{{school_name}}</div>'), true);
-check("and its footer",
-  repaired.html.includes('<div class="footer">{{report_date}}</div>'), true);
-check("and everything before the banner is byte-identical",
-  repaired.html.slice(0, OLD_SEEDED.indexOf("  <!-- Pass / fail -->")),
-  OLD_SEEDED.slice(0, OLD_SEEDED.indexOf("  <!-- Pass / fail -->")));
-
-// A banner with another conditional inside it: a lazy regex would stop at the
-// inner {{endif}} and leave half the block rewritten.
-const nested = "HEAD{{if isPassing}}{{if grade}}A{{endif}} PROMOTED{{else}}NOT PROMOTED{{endif}}TAIL";
-const nestedFixed = repairHtml(nested);
-check("a nested {{if}} does not truncate the block", nestedFixed.status, "repaired");
-check("the text after the block is kept",
-  nestedFixed.html.endsWith("TAIL"), true);
-check("the inner conditional is intact",
-  nestedFixed.html.includes("{{if grade}}A{{endif}}"), true);
-
-// ═══════════════════════════════════════════════════════════════════════════
-console.log("--- the verdict comes off its own row ---");
-
-// The fault: a full-width band carrying the remark inside it, which wrapped to
-// several lines and pushed the verification code off the page.
-check("the band is gone",
-  /class="pass-banner (pass|fail)">\s*[✓✗]/.test(repaired.html), false);
-check("the remark moved out of it and beside the pill",
-  repaired.html.includes(
-    '{{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}'), true);
-check("and is gated, so an empty remark leaves no empty box",
-  repaired.html.split("verdict-remark").length - 1, 2);
-check("the promotion block keeps its own full-width band",
-  repaired.html.split("{{if is_annual}}")[1].includes('class="pass-banner pass"'),
-  true);
-
-// The styles the new markup needs, added only when they are missing.
-check("the rules are appended to the school's own CSS",
-  /\.verdict-pill\.fail/.test(repaired.css), true);
-check("and its own rules are kept",
-  repaired.css.startsWith(OLD_CSS), true);
-// The current seed already carries them, which is the case that must not be
-// appended to twice — a second copy would win on order and could differ.
-check("a stylesheet already carrying them is not given them twice",
-  repairCss(DEFAULT_TEMPLATE_CSS), null);
-check("and a template with no stylesheet of its own is not invented one",
-  repairCss(undefined), null);
-
-// A band a school built itself, with markup inside, is its design to keep.
-const ownMarkup =
-  '{{if isPassing}}<div class="pass-banner pass"><b>✓ PASSED</b> &mdash; {{remark}}</div>{{endif}}';
-check("a band with markup of its own is left alone",
-  layoutPass(ownMarkup).status, "already-fixed");
-
-// And a band that never carried the remark has nothing to unstack.
-check("a band without the remark is left alone",
-  layoutPass('{{if isPassing}}<div class="pass-banner pass">✓ PASSED</div>{{endif}}').status,
-  "already-fixed");
-check("a template repaired for the promotion months ago still gets the layout",
-  layoutPass(
-    '{{if isPassing}}<div class="pass-banner pass">✓ PASSED &mdash; {{remark}}</div>{{endif}}' +
-    '{{if is_annual}}{{if promotion_status}}x{{endif}}{{endif}}').status,
-  "repaired");
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- the official header replaces the centred strip ---");
@@ -212,7 +133,7 @@ check("and a stylesheet that has them is not given them twice",
 // original layout actually needs.
 const allThree = repairHtml(OLD_HEADER + OLD_BANNER, OLD_CSS);
 check("all three faults are repaired in one pass",
-  allThree.changes, ["promotion", "layout", "header"]);
+  allThree.changes, ["banner-removed", "header"]);
 check("and the stylesheet gains both sets of rules",
   /\.verdict-pill/.test(allThree.css) && /\.ministry-column/.test(allThree.css), true);
 check("a template needing all three verifies",
@@ -264,7 +185,7 @@ check("and a stylesheet that has them is not given them twice",
 // All four faults on one template — a school that saved the original seed.
 const allFour = repairHtml(OLD_HEADER + OLD_BANNER + OLD_FOOTER, OLD_CSS);
 check("all four are repaired in one pass",
-  allFour.changes, ["promotion", "layout", "header", "verify"]);
+  allFour.changes, ["banner-removed", "header", "verify", "panel", "remarks"]);
 check("and it verifies",
   verify(allFour.html, allFour.css,
     { expectRemark: true, expectHeader: true, expectVerify: true }), []);
@@ -327,117 +248,240 @@ check("and the table head repeats on a second page",
   /display:\s*table-header-group/.test(repairPrintCss(".x{}")), true);
 
 // ═══════════════════════════════════════════════════════════════════════════
-console.log("--- five bands fold into two cards ---");
+console.log("--- the information panel reaches a template saved without it ---");
 
-/** The card as the live school held it, with its own edited spacing. */
-const FIVE_BANDS = [
-  '  <div class="summary-section">',
-  '    <div class="summary-item"><div class="val">{{average}}</div></div>',
-  '    <div class="summary-item"><div class="val">{{total_students}}</div></div>',
+const SAVED_CARD = [
+  '<div class="report-wrapper">',
+  '  <h3>Academic Performance</h3>',
+  '  {{subjects_table}}',
+  '  <div class="footer">',
+  '    <div class="verify-strip">{{qr_code}}</div>',
+  '    <div>Next Term Begins: {{next_term_date}}</div>',
   '  </div>',
-  '  {{if isPassing}}',
-  '    <div class="verdict"><div class="verdict-pill pass">✓ PASSED</div>',
-  '      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}</div>',
-  '  {{else}}',
-  '    <div class="verdict"><div class="verdict-pill fail">✗ NOT PASSED</div>',
-  '      {{if remark}}<div class="verdict-remark">{{remark}}</div>{{endif}}</div>',
-  '  {{endif}}',
-  '  {{if is_annual}}{{if promotion_status}}<div class="pass-banner pass">{{promotion_status}}</div>{{endif}}{{endif}}',
-  '  <h3 style="margin:16px 0 8px">',
-  '    Attendance',
-  '  </h3>',
-  '  <div class="stat-row" style="display:flex;gap:12px;margin-bottom:16px">',
-  '    <div>Days Open: <strong>{{days_open}}</strong></div>',
-  '    <div>Absent: <strong>{{days_absent}}</strong></div>',
-  '  </div>',
-  '  {{attendance_table}}',
-  '  <div class="remarks-row" style="display:flex;gap:12px;margin-bottom:12px">',
-  '    <div class="remarks-section" style="flex:1"><p>{{teacher_comment}}</p>',
-  '      <div class="signature-row" style="margin-top:13px"><span class="signature-line">{{class_teacher}}</span></div>',
-  '    </div>',
-  '    <div class="remarks-section" style="flex:1"><p>{{principal_comment}}</p>',
-  '      <div class="signature-row" style="margin-top:13px"><span class="signature-line">{{principal_name}}</span></div>',
-  '    </div>',
-  '  </div>',
-  '  <div class="footer">FOOTER</div>',
+  '</div>',
 ].join("\n");
 
-const folded = layoutCardsPass(FIVE_BANDS);
-check("the seeded arrangement is recognised", folded.status, "repaired");
-check("the verdict is inside the summary card",
-  folded.html.includes("summary-verdict"), true);
-/*
- * The nesting hazard this pass hit first, and the promotion pass hit before
- * it: the verdict block contains {{if remark}}, so a non-greedy match for
- * {{endif}} stops at the INNER one and leaves the {{else}} branch — and a
- * second verdict band — sitting in the document. The region is found by
- * counting depth instead.
- */
-check("and the old band is gone, both branches of it",
-  /<div class="verdict">/.test(folded.html), false);
-check("absences and both remarks are one card",
-  folded.html.includes("closing-absences") &&
-  folded.html.includes("{{teacher_comment}}") &&
-  folded.html.includes("{{principal_comment}}"), true);
-check("days open, present and the rate are gone",
-  /\{\{days_open\}\}|\{\{days_present\}\}|\{\{attendance_percent\}\}/.test(folded.html),
-  false);
-check("but the absences remain", folded.html.includes("{{days_absent}}"), true);
-check("the promotion block is untouched",
-  folded.html.includes("{{promotion_status}}"), true);
-check("and everything after it", folded.html.includes("FOOTER"), true);
+const panelled = infoPanelPass(SAVED_CARD);
+check("a saved card is given the panel", panelled.status, "repaired");
+check("  above the verification strip, not below it",
+  panelled.html.indexOf("info-panel") < panelled.html.indexOf("verify-strip"), true);
+check("  and below the marks it summarises",
+  panelled.html.indexOf("{{subjects_table}}") < panelled.html.indexOf("info-panel"), true);
+check("  with the school's own markup untouched",
+  ["{{subjects_table}}", "{{qr_code}}", "{{next_term_date}}", "Academic Performance"]
+    .every((bit) => panelled.html.includes(bit)), true);
+check("  carrying every figure it is meant to",
+  ["{{class_average}}", "{{class_best}}", "{{class_lowest}}",
+   "{{position}}", "{{total_students}}", "{{average}}", "{{grade}}"]
+    .every((token) => panelled.html.includes(token)), true);
+check("  and no attendance, which the card no longer carries",
+  ["{{days_absent}}", "{{absences_excused}}", "{{late_coming}}"]
+    .some((token) => panelled.html.includes(token)), false);
+check("  and the conduct rows empty, for the class teacher to write in",
+  (panelled.html.match(/class="panel-write"/g) || []).length, 3);
+check("running it twice adds one panel, not two",
+  [infoPanelPass(panelled.html).status,
+   (infoPanelPass(panelled.html).html ?? panelled.html).split('class="info-panel"').length - 1],
+  ["already-fixed", 1]);
+check("the seeded card already carries it", infoPanelPass(DEFAULT_TEMPLATE_HTML).status, "already-fixed");
+check("a card with no footer and no strip is left alone",
+  infoPanelPass("<div>{{subjects_table}}</div>").status, "no-region");
+
+// A template from before the strip existed, which carries the bare token.
+const bareQr = infoPanelPass('<div>{{subjects_table}}</div>\n<div>{{qr_code}}</div>');
+check("a card with only the bare QR token still gets the panel above it",
+  [bareQr.status, bareQr.html?.indexOf("info-panel") < bareQr.html?.indexOf("{{qr_code}}")], ["repaired", true]);
+
+// The first version of these rules named the panel's cells after the
+// seeded card's own student header, and restyled it by accident. A sheet
+// carrying that version has it taken out, not added to.
+const STALE_PANEL_CSS = [
+  ".info-row { display: flex; }",
+  "",
+  "  /* ── The information panel ──────────────────────────",
+  "     the version that collided */",
+  "  .info-panel { display: grid; }",
+  "  .info-row { justify-content: space-between; }",
+  "  .info-val { font-weight: bold; white-space: nowrap; }",
+].join("\n");
+const freshened = repairInfoPanelCss(STALE_PANEL_CSS);
+check("a sheet with the colliding rules has them replaced, not doubled",
+  [freshened != null,
+   (freshened ?? "").includes("the version that collided"),
+   /\.panel-write\b/.test(freshened ?? "")],
+  [true, false, true]);
+check("  and the school's own rules before them are kept",
+  (freshened ?? "").startsWith(".info-row { display: flex; }"), true);
+check("  running it again changes nothing", repairInfoPanelCss(freshened), null);
+
+check("the panel's rules are appended to a sheet without them",
+  /\.info-panel\b/.test(repairInfoPanelCss(".x { color: red }") ?? ""), true);
+check("  and not to the seeded sheet, which writes them itself",
+  repairInfoPanelCss(DEFAULT_TEMPLATE_CSS), null);
+
+// End to end, on a whole saved card: the panel and its rules arrive together
+// and the result still renders.
+const panelRepair = repairHtml(SAVED_CARD, ".x { color: red }");
+check("through the whole repair: markup and stylesheet together",
+  [panelRepair.status, panelRepair.changes.includes("panel"), /\.info-panel\b/.test(panelRepair.css)],
+  ["repaired", true, true]);
+check("  and running the repair again changes nothing",
+  repairHtml(panelRepair.html, panelRepair.css).status, "already-fixed");
+
+console.log("--- the band over the marks comes off ---");
+
+/** A card at the arrangement this project last wrote. */
+const FOLDED_CARD = [
+  '<div class="report-wrapper">',
+  '  {{subjects_table}}',
+  '  <div class="summary-section">',
+  '    <div class="summary-outcome">{{if isPassing}}<div class="verdict-pill pass">PASSED</div>{{else}}<div class="verdict-pill fail">NOT PASSED</div>{{endif}}</div>',
+  '    <div class="summary-performance"><div class="perf-grade">{{grade}}</div></div>',
+  '  </div>',
+  '  {{if is_annual}}{{if promotion_status}}<div class="pass-banner pass">{{promotion_status}}</div>{{endif}}{{endif}}',
+  '  <div class="closing-section"><div class="closing-absences">{{days_absent}}</div>',
+  '    <div class="remarks-section"><p>{{teacher_comment}}</p></div></div>',
+  '  <div class="footer"><div class="verify-strip">{{qr_code}}</div></div>',
+  '</div>',
+].join("\n");
+
+/** And one at the arrangement before that: five separate bands. */
+const FIVE_BANDS = [
+  '<div class="report-wrapper">',
+  '  {{subjects_table}}',
+  '  {{if isPassing}}<div class="pass-banner pass">PASSED &mdash; {{remark}}</div>',
+  '  {{else}}<div class="pass-banner fail">FAILED &mdash; {{remark}}</div>{{endif}}',
+  '  <h3>Attendance</h3>',
+  '  {{attendance_table}}',
+  '  <div class="stat-row"><div>Days Open: {{days_open}}</div></div>',
+  '  <div class="remarks-row"><div class="remarks-section"><p>{{teacher_comment}}</p></div>',
+  '    <div class="remarks-section"><p>{{principal_comment}}</p></div></div>',
+  '  <div class="footer">{{qr_code}}</div>',
+  '</div>',
+].join("\n");
+
+const debanded = removeBannerPass(FOLDED_CARD);
+check("the folded band is taken off", debanded.status, "repaired");
+check("  with nothing put in its place",
+  [/summary-section/.test(debanded.html), /verdict-pill/.test(debanded.html),
+   /pass-banner/.test(debanded.html)], [false, false, false]);
+check("  and the marks and the footer left alone",
+  ["{{subjects_table}}", "{{qr_code}}"].every((bit) => debanded.html.includes(bit)), true);
+check("the original banner is taken off too",
+  [removeBannerPass(FIVE_BANDS).status,
+   /pass-banner/.test(removeBannerPass(FIVE_BANDS).html)], ["repaired", false]);
 check("running it twice changes nothing",
-  layoutCardsPass(folded.html).status, "already-fixed");
+  removeBannerPass(debanded.html).status, "already-fixed");
+check("the current seed has no band to remove",
+  removeBannerPass(DEFAULT_TEMPLATE_HTML).status, "already-fixed");
+check("a school's own block that merely mentions the decision is left alone",
+  removeBannerPass('<div>{{if is_annual}}<p>{{promotion_status}}</p>{{endif}}</div>').status,
+  "already-fixed");
 
-// This pass MOVES a school's content, which is the most invasive thing a
-// repair can do, so it acts only on the exact shape this project seeded.
-check("a card a school arranged itself is refused",
-  layoutCardsPass("<div>{{average}}</div><div>{{days_absent}}</div>").status,
-  "no-region");
-// Half a fold is worse than none: one new card and one old band.
-check("and so is a card where only one region matches",
-  layoutCardsPass(FIVE_BANDS.split("<h3")[0]).status, "no-region");
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- attendance and the middle remark panels come off ---");
 
+const declosed = removeClosingPass(FOLDED_CARD);
+check("the folded closing card is taken off", declosed.status, "repaired");
+check("  absences and the remark panel with it",
+  [/closing-section/.test(declosed.html), /closing-absences/.test(declosed.html)], [false, false]);
+const debanded5 = removeClosingPass(FIVE_BANDS);
+check("the bands it was folded from, too", debanded5.status, "repaired");
+check("  the attendance heading, its table and the figures",
+  [/Attendance<\/h3>/.test(debanded5.html), debanded5.html.includes("{{attendance_table}}"),
+   /stat-row/.test(debanded5.html)], [false, false, false]);
+check("  and the two remark panels that sat in the middle",
+  /remarks-row/.test(debanded5.html), false);
+check("  while the marks stay where they are",
+  debanded5.html.includes("{{subjects_table}}"), true);
+check("running it twice changes nothing",
+  removeClosingPass(declosed.html).status, "already-fixed");
+check("the current seed has no attendance to remove",
+  removeClosingPass(DEFAULT_TEMPLATE_HTML).status, "already-fixed");
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- the remarks are put back at the foot of the card ---");
+
+const bandsOff = removeClosingPass(removeBannerPass(FIVE_BANDS).html).html;
+const remarked = remarksBlockPass(bandsOff);
+check("a card without them is given the pair", remarked.status, "repaired");
+check("  above the verification strip",
+  remarked.html.indexOf("remark-box") < remarked.html.indexOf("{{qr_code}}"), true);
+check("  and below the marks",
+  remarked.html.indexOf("{{subjects_table}}") < remarked.html.indexOf("remark-box"), true);
+check("  each labelled and signed, in the reader's language",
+  ["{{label_teacher_remark}}", "{{teacher_comment}}", "{{class_teacher}}",
+   "{{label_principal_remark}}", "{{principal_comment}}", "{{principal_name}}"]
+    .every((token) => remarked.html.includes(token)), true);
+check("running it twice adds one pair, not two",
+  [remarksBlockPass(remarked.html).status,
+   remarked.html.split('<div class="remarks">').length - 1], ["already-fixed", 1]);
+check("the current seed already carries them",
+  remarksBlockPass(DEFAULT_TEMPLATE_HTML).status, "already-fixed");
+check("their rules are appended to a sheet without them",
+  /\.remark-box\b/.test(repairRemarksCss(".x { color: red }") ?? ""), true);
+check("  and not to the seeded sheet, which writes them itself",
+  repairRemarksCss(DEFAULT_TEMPLATE_CSS), null);
+
+// ═══════════════════════════════════════════════════════════════════════════
+console.log("--- a saved card, through the whole repair ---");
+
+const migrated = repairHtml(FIVE_BANDS, ".x { color: red }");
+check("every change the card needed, in one pass",
+  [migrated.status, migrated.changes.includes("banner-removed"),
+   migrated.changes.includes("attendance-removed"), migrated.changes.includes("panel"),
+   migrated.changes.includes("remarks")], ["repaired", true, true, true, true]);
+check("  the order it leaves behind: marks, panel, remarks, footer",
+  [migrated.html.indexOf("{{subjects_table}}") < migrated.html.indexOf("info-panel"),
+   migrated.html.indexOf("info-panel") < migrated.html.indexOf("remark-box"),
+   migrated.html.indexOf("remark-box") < migrated.html.indexOf("{{qr_code}}")],
+  [true, true, true]);
+check("  the school's own rules kept, with the new ones after them",
+  [migrated.css.startsWith(".x { color: red }"), /\.info-panel\b/.test(migrated.css),
+   /\.remark-box\b/.test(migrated.css)], [true, true, true]);
+check("  and running it again changes nothing",
+  repairHtml(migrated.html, migrated.css).status, "already-fixed");
+check("the seeded card needs no migration at all",
+  repairHtml(DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS).status, "already-fixed");
+
+// ═══════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- what it refuses to touch ---");
 
-check("a template already using the new block",
-  repairHtml("x {{if is_annual}}{{if promotion_status}}y{{endif}}{{endif}}").status,
-  "already-fixed");
-check("the current seed, which is already correct",
-  repairHtml(DEFAULT_TEMPLATE_HTML).status, "already-fixed");
-check("a template with no pass/fail banner",
-  repairHtml("<div>{{student_name}}</div>").status, "no-banner");
-check("an empty template",
-  repairHtml("").status, "no-banner");
-check("a banner that never mentioned promotion",
-  repairHtml("{{if isPassing}}Well done{{else}}Try again{{endif}}").status,
-  "no-promotion");
-check("an {{if}} that never closes is reported, not guessed at",
-  repairHtml("{{if isPassing}} PROMOTED").status, "unbalanced");
-check("and nothing is returned to write in that case",
-  repairHtml("{{if isPassing}} PROMOTED").html, undefined);
-
-// Case matters: only the banner's own wording is rewritten, and only inside it.
-const promoElsewhere =
-  "<div>Council decision: PROMOTED</div>{{if isPassing}}Passed{{else}}Failed{{endif}}";
-check("PROMOTED outside the banner is left alone",
-  repairHtml(promoElsewhere).status, "no-promotion");
+// A card a school arranged itself: the passes act on the blocks this project
+// wrote, and on nothing else.
+const OWN_DESIGN = [
+  '<div class="my-own-card">',
+  '  <table class="my-marks">{{subjects_table}}</table>',
+  '  <aside class="my-notes">{{teacher_comment}}</aside>',
+  '</div>',
+].join("\n");
+check("no band, no attendance, nothing of ours to remove",
+  [removeBannerPass(OWN_DESIGN).status, removeClosingPass(OWN_DESIGN).status],
+  ["already-fixed", "already-fixed"]);
+check("and nowhere it can identify to put the panel or the remarks",
+  [infoPanelPass(OWN_DESIGN).status, remarksBlockPass(OWN_DESIGN).status],
+  ["no-region", "no-region"]);
+check("  so the whole repair reports it rather than guessing",
+  repairHtml(OWN_DESIGN, ".x{}").status, "repaired");
+check("  and leaves the school's own markup exactly as it was",
+  repairHtml(OWN_DESIGN, ".x{}").html, OWN_DESIGN);
 
 // ═══════════════════════════════════════════════════════════════════════════
 console.log("--- and it proves the result before writing it ---");
 
 check("the current seed passes verification",
   verify(DEFAULT_TEMPLATE_HTML, DEFAULT_TEMPLATE_CSS), []);
-check("a repaired old template passes too",
-  verify(repaired.html, repaired.css, { expectRemark: true }), []);
+check("a migrated old template passes too",
+  verify(migrated.html, migrated.css), []);
 
-// The risk of rearranging markup at all: tidying the row by losing the words.
-check("a rearrangement that dropped the remark is refused",
-  verify('{{if isPassing}}<div class="verdict-pill pass">✓ PASSED</div>{{endif}}' +
-         '{{if is_annual}}{{if promotion_status}}{{promotion_status}}{{endif}}{{endif}}',
-    DEFAULT_TEMPLATE_CSS, { expectRemark: true })
-    .some((p) => /dropped the remark/.test(p)), true);
+// The risk of moving markup at all: tidying the card by losing the words.
+// A template carrying the remarks block whose text no longer renders is
+// refused rather than written.
+check("a remarks block that prints nothing is refused",
+  verify('{{subjects_table}}<div class="remarks"><div class="remark-box">' +
+         '<div class="remark-body"></div></div></div>', DEFAULT_TEMPLATE_CSS)
+    .some((p) => /lost the teacher's remark/.test(p)), true);
 
 // The guard that matters: a template that no longer parses must be refused.
 const broken = verify("{{each subjects}} unterminated", DEFAULT_TEMPLATE_CSS);
@@ -451,16 +495,18 @@ check("a template the engine cannot parse is refused", broken.length > 0, true);
 const leaky = verify(
   "PROMOTED TO THE NEXT CLASS{{if isPassing}}PASSED{{endif}}", DEFAULT_TEMPLATE_CSS);
 check("a template stating a promotion in its own words is refused",
-  leaky.some((p) => /sequence card still shows a promotion/.test(p)), true);
+  leaky.some((p) => /shows a promotion it has not been given/.test(p)), true);
 check("while the token on its own is gated upstream and renders empty",
   verify("{{promotion_status}}{{if isPassing}}PASSED{{endif}}", DEFAULT_TEMPLATE_CSS)
-    .some((p) => /sequence card still shows a promotion/.test(p)),
+    .some((p) => /shows a promotion it has not been given/.test(p)),
   false);
 
-// And one that has lost the decision from the annual card.
-const noDecision = verify("{{if isPassing}}PASSED{{else}}NOT PASSED{{endif}}",
+// And a card that prints its marks but has lost the council's decision from
+// the annual version of itself. Checked only where the marks are, because a
+// fragment that never carried them is not a card the repair can judge.
+const noDecision = verify("{{subjects_table}}{{if isPassing}}PASSED{{endif}}",
   DEFAULT_TEMPLATE_CSS);
-check("a template with no promotion at all is refused for the annual card",
+check("a card whose annual version states no decision is refused",
   noDecision.some((p) => /annual card lost its promotion/.test(p)), true);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);

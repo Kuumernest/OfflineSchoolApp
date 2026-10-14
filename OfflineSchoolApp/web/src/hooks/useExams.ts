@@ -67,7 +67,7 @@ export const useCreateExam = () => {
       toast({ title: t("exams.examCreated"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to create exam", kind: "error" }),
+      toast({ title: e.message || t("exams.errCreate"), kind: "error" }),
   });
 };
 
@@ -90,7 +90,7 @@ export const useUpdateExamStatus = () => {
       toast({ title: t("exams.toastStatusUpdated"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to update status", kind: "error" }),
+      toast({ title: e.message || t("exams.errUpdateStatus"), kind: "error" }),
   });
 };
 
@@ -113,7 +113,7 @@ export const useUpdateExam = () => {
       toast({ title: t("exams.examUpdated"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to update exam", kind: "error" }),
+      toast({ title: e.message || t("exams.errUpdate"), kind: "error" }),
   });
 };
 
@@ -135,6 +135,6 @@ export const useDeleteExam = () => {
       toast({ title: t("exams.examDeleted"), kind: "success" });
     },
     onError: (e: Error) =>
-      toast({ title: e.message || "Failed to delete exam", kind: "error" }),
+      toast({ title: e.message || t("exams.errDelete"), kind: "error" }),
   });
 };

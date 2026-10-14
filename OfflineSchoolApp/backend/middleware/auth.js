@@ -3,7 +3,38 @@
 
 const jwt  = require("jsonwebtoken");
 const User = require("../src/db/models/User");
-const { normalizeRole } = require("../src/config/roles");
+const { normalizeRole, ROLES } = require("../src/config/roles");
+const { lookupSchool, isSchoolClosedFor } = require("../src/utils/schoolContext");
+
+const SCHOOL_INACTIVE_MESSAGE =
+  "This school has been deactivated. Contact the platform operator.";
+const SCHOOL_ACCESS_DENIED_MESSAGE =
+  "You may only act within your own school.";
+const PASSWORD_CHANGE_REQUIRED_MESSAGE =
+  "Choose a password before continuing.";
+
+/**
+ * What an account still on a temporary password may reach.
+ *
+ * Changing the password, reading its own profile (both spellings the clients
+ * use) and signing out. Nothing else: not the roster, not the register, not a
+ * refresh. A temporary password is something read aloud across an office or
+ * pasted into a chat; the fifteen-minute token it buys used to open every
+ * protected route for those fifteen minutes, and the access-token refresh
+ * mode minted another fifteen on request, so the ceiling was nominal.
+ *
+ * Matched on the path without its query string, and on the method, so a
+ * POST to /api/auth/me is not a way through.
+ */
+const PASSWORD_CHANGE_ROUTES = new Set([
+  "POST /api/auth/change-password",
+  "GET /api/auth/me",
+  "GET /api/users/me",
+  "POST /api/auth/logout",
+]);
+
+const routeKey = (req) =>
+  `${req.method} ${String(req.originalUrl || req.url || "").split("?")[0].replace(/\/+$/, "")}`;
 
 const authenticate = async (req, res, next) => {
   try {
@@ -77,6 +108,25 @@ const authenticate = async (req, res, next) => {
       }
     }
 
+    // ── A temporary password opens one door ────────────────────────────────
+    //
+    // The lifecycle this enforces (docs/22-release-readiness.md, X21):
+    //
+    //   temporary password → sign in → RESTRICTED: change-password, own
+    //   profile, logout only → password changed (pre-save stamps
+    //   passwordChangedAt, which kills this token) → ordinary token and
+    //   refresh token → ordinary refresh lifecycle.
+    //
+    // 403, not 401: the token is valid and the account is known; what is
+    // missing is an action the person must take. Clients route on the code.
+    if (user.mustResetPassword && !PASSWORD_CHANGE_ROUTES.has(routeKey(req))) {
+      return res.status(403).json({
+        success: false,
+        code:    "PASSWORD_CHANGE_REQUIRED",
+        message: PASSWORD_CHANGE_REQUIRED_MESSAGE,
+      });
+    }
+
     // Every guard downstream compares req.user.role against the canonical
     // names in config/roles.js, so the role is canonicalised once, here, at
     // the only door into the application. Doing it per-route is how one list
@@ -96,6 +146,78 @@ const authenticate = async (req, res, next) => {
       });
     }
 
+    // ── The school, at the door ─────────────────────────────────────────────
+    //
+    // Two rules, both decided here and nowhere else, because a rule copied
+    // into seventeen routers is a rule the eighteenth misses.
+    //
+    // 1. A school-scoped caller's OWN school must be open. A school the
+    //    platform has switched off, or deleted, takes its staff and pupils
+    //    with it: this refuses every request from then on, so a token issued
+    //    before the switch stops working at its very next use, with no
+    //    blacklist. Reactivation lifts it just as immediately.
+    //
+    // 2. A school-scoped caller may not NAME another school. utils/tenant.js
+    //    used to correct such a request silently to the caller's own school.
+    //    Silence is the wrong answer to "give me school B's data": the client
+    //    that asked is either mistaken or hostile, and both deserve a 403
+    //    that says so, not school A's figures under school B's heading. The
+    //    correction downstream stays as a second line; it should now never
+    //    be reached by anyone but a super_admin.
+    //
+    //    Path parameters are not visible here — see guardSchoolParam in
+    //    utils/tenant.js, which the one router with /:schoolId applies.
+    //
+    // 3. A super_admin may name any school, and is taken at their word about
+    //    WHICH — but the word is checked: the school must exist and not be
+    //    deleted, or the request is a 404 rather than an empty page that looks
+    //    like a real school with nothing in it. A deactivated school is still
+    //    reachable for them — switching it back on is done from inside — and
+    //    is flagged on req.schoolContext for whatever cares.
+    if (role !== ROLES.SUPER_ADMIN && await isSchoolClosedFor(user)) {
+      return res.status(401).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: SCHOOL_INACTIVE_MESSAGE,
+      });
+    }
+
+    const askedSchoolId = (() => {
+      const q = req.query?.schoolId;
+      if (q != null && String(q).trim() !== "") return String(q).trim();
+      const b = req.body;
+      if (b && typeof b === "object" && !Array.isArray(b) && b.schoolId != null &&
+          String(b.schoolId).trim() !== "") {
+        return String(b.schoolId).trim();
+      }
+      return null;
+    })();
+
+    if (role !== ROLES.SUPER_ADMIN && askedSchoolId !== null &&
+        askedSchoolId !== String(user.schoolId ?? "")) {
+      return res.status(403).json({
+        success: false,
+        code:    "SCHOOL_ACCESS_DENIED",
+        message: SCHOOL_ACCESS_DENIED_MESSAGE,
+      });
+    }
+
+    let schoolContext = null;
+    if (role === ROLES.SUPER_ADMIN) {
+      const asked = req.query?.schoolId ?? req.body?.schoolId;
+      if (asked != null && String(asked).trim() !== "") {
+        const school = await lookupSchool(asked);
+        if (!school) {
+          return res.status(404).json({
+            success: false,
+            code:    "SCHOOL_NOT_FOUND",
+            message: "No such school",
+          });
+        }
+        schoolContext = school;
+      }
+    }
+
     req.user = {
       ...user,
       role,
@@ -103,6 +225,7 @@ const authenticate = async (req, res, next) => {
       _id:          user._id,
       enrollmentNo: user.enrollmentNo ?? null,
     };
+    req.schoolContext = schoolContext;
 
     return next();
 
@@ -140,4 +263,8 @@ const authorize = (...roles) => {
   };
 };
 
-module.exports = { authenticate, authorize };
+module.exports = {
+  authenticate, authorize,
+  SCHOOL_INACTIVE_MESSAGE, SCHOOL_ACCESS_DENIED_MESSAGE,
+  PASSWORD_CHANGE_REQUIRED_MESSAGE, PASSWORD_CHANGE_ROUTES,
+};

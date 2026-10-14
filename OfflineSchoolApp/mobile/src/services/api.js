@@ -587,6 +587,24 @@ api.interceptors.response.use(
     const isFinal    = attempt >= maxRetries;
     const isOneShot  = maxRetries <= 1;
 
+    // ── 403 PASSWORD_CHANGE_REQUIRED ─────────────────────────────────────────
+    // The server admits an account on a temporary password to the password
+    // change and nothing else. app/_layout.js already walls a flagged user in
+    // /auth/set-password; marking the stored user raises that wall for a
+    // session whose flag the server set since — an administrator's reset.
+    if (status === 403 && error?.response?.data?.code === "PASSWORD_CHANGE_REQUIRED") {
+      try {
+        const store = getAuthStore();
+        const state = store?.getState?.();
+        if (state?.user && !state.user.mustResetPassword && state.updateUser) {
+          await state.updateUser({ ...state.user, mustResetPassword: true });
+        }
+      } catch (e) {
+        if (__DEV__) console.warn("[api] could not raise the password wall:", e?.message);
+      }
+      return Promise.reject(error);
+    }
+
     // ── 401 handling ─────────────────────────────────────────────────────────
     if (status === 401) {
 

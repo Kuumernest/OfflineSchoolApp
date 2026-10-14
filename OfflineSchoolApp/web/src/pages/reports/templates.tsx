@@ -198,12 +198,11 @@ export default function TemplatesPage() {
                         rounded-xl p-4 text-sm text-blue-700">
           <Info size={18} className="mt-0.5 shrink-0" />
           <p>
-            Paste any HTML layout and use{" "}
+            {t("templates.pasteHint")}{" "}
             <code className="bg-blue-100 px-1 rounded font-mono text-xs">
               {"{{student_name}}"}
             </code>{" "}
-            style placeholders. Set one template as <strong>default</strong> and
-            it will be used automatically when generating reports.
+            {t("templates.defaultHint")}
           </p>
         </div>
 
@@ -343,7 +342,7 @@ function TemplateCard({
             )}
           </div>
           <p className="text-xs text-gray-500 mt-0.5">
-            Version {template.version || 1}
+            {t("templates.version", { version: template.version || 1 })}
             {template.variables?.length
               ? ` · ${template.variables.length} placeholders`
               : ""}

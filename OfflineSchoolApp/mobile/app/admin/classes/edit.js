@@ -106,7 +106,7 @@ export default function EditClass() {
     if (!trimmed) return t("classesAdmin.errNameRequired");
     if (trimmed.length < 2) return t("classesAdmin.errNameShort");
     if (trimmed.length > MAX_CLASS_NAME_LENGTH) {
-      return `Class name cannot exceed ${MAX_CLASS_NAME_LENGTH} characters.`;
+      return t("classesAdmin.errNameMax", { max: MAX_CLASS_NAME_LENGTH });
     }
     if (/^\d+$/.test(trimmed)) return t("classesAdmin.errNameNumeric");
     return "";

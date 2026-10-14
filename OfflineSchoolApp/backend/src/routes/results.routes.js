@@ -22,10 +22,17 @@ const { requirePermission } = require("../../middleware/permissions");
 // one school could read another's by changing a parameter. resolveSchoolId is
 // the rule the rest of the backend already followed — a super_admin may name a
 // school, everybody else is their own.
-const { resolveSchoolId } = require("../utils/tenant");
+const { resolveSchoolId, requireSchool } = require("../utils/tenant");
 
 // ── Apply authenticate to ALL routes ─────────────────────
 router.use(authenticate);
+
+// A super_admin who names no school reads across schools here, anchored on
+// the exam's own school (results.controller loadScopedExam; docs/20 Info-A).
+// That is the role's, not "whoever has no school": an account whose own
+// schoolId is empty is refused rather than given the same reach (docs/39
+// §17.2, Phase 2e).
+router.use(requireSchool({ superAdminMayOmit: true }));
 
 // ── Role shorthand ────────────────────────────────────────
 //

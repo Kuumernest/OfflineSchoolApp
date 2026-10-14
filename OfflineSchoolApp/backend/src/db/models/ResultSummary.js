@@ -14,11 +14,56 @@ const subjectBreakdownSchema = new mongoose.Schema(
     // Coefficient-weighted fields — ExamSubject.weight ÷ 100 (default ×1).
     coefficient:    { type: Number,  default: 1      },
     weightedMark:   { type: Number,  default: null   },
+
+    /*
+     * The two assessments the sequence mark was made of.
+     *
+     * null throughout, and the default is null rather than 0 on purpose: a
+     * pupil with no CA recorded did not score zero in CA, and every one of the
+     * millions of rows written before continuous assessment existed is exactly
+     * that case. Whatever reads these has to be able to tell the difference.
+     *
+     * Stored rather than recomputed because the report card prints them beside
+     * the sequence mark, and re-deriving them would mean reaching back into
+     * two exams' scores for every row of every card.
+     */
+    caScore:        { type: Number,  default: null   },
+    caMaxScore:     { type: Number,  default: null   },
+    caMark:         { type: Number,  default: null   },  // /20
+    testScore:      { type: Number,  default: null   },
+    testMaxScore:   { type: Number,  default: null   },
+    testMark:       { type: Number,  default: null   },  // /20
+    // The split this row was actually graded by, after renormalising over the
+    // parts present — 0/100 on a row whose CA was never entered.
+    caWeight:       { type: Number,  default: null   },
+    testWeight:     { type: Number,  default: null   },
     grade:          { type: String,  default: null   },
     points:         { type: Number,  default: 0      },
     remark:         { type: String,  default: null   },
     isPassing:      { type: Boolean, default: false  },
     isAbsent:       { type: Boolean, default: false  },
+
+    /*
+     * Exempt, which is not the same fact as absent and was being thrown away.
+     *
+     * grading.service.calculateOverallResult has always built this row with
+     * `isExempt` on it — it is what decides the "EX" grade and the "Exempt"
+     * remark two lines above — but the path was missing here, so Mongoose
+     * stripped the field on every write. The state survived only as the grade
+     * STRING, which is a school-configurable label and not something a reader
+     * can safely test against.
+     *
+     * Anything reading the breakdown therefore saw an exempt subject as
+     * isExempt: undefined with normalizedMark: 0, and an exemption is emphatically
+     * not a zero: a pupil excused from a subject did not fail it. The student
+     * intelligence layer was averaging those zeros into the subject's trend.
+     *
+     * Additive and it changes no calculation: the flag was already being
+     * computed and is now stored. Rows written before this keep reading as
+     * undefined, which is why readers also treat a null `score` as "no mark
+     * behind this row" — see intelligence/subjectInsights.service.js.
+     */
+    isExempt:       { type: Boolean, default: false  },
   },
   { _id: false }
 );
@@ -85,6 +130,19 @@ const resultSummarySchema = new mongoose.Schema(
     isLocked:    { type: Boolean, default: false },
     lockedAt:    { type: Date,    default: null  },
 
+    /*
+     * ── Provenance (docs/39 §8) ─────────────────────────────────────────
+     *
+     * What produced this row: the AcademicPolicySnapshot of the configuration
+     * it was computed under, and the code that computed it
+     * (shared/academicPolicy CALC_VERSIONS). Both null on every row written
+     * before they existed — "legacy", read as docs/39 §9 describes — and on
+     * rows no computation wrote (a summary created bare at publication).
+     * Read by nothing yet; stamped so the answer exists from now on.
+     */
+    policyHash:  { type: String, default: null },
+    calcVersion: { type: String, default: null },
+
     // ── Sync ─────────────────────────────────────────────────
     syncStatus:   { type: String, enum: ["synced", "pending", "conflict"], default: "pending" },
     lastSyncedAt: { type: Date,   default: null },
@@ -110,4 +168,11 @@ resultSummarySchema.index({ examId: 1, gradePosition: 1 });
 resultSummarySchema.index({ schoolId: 1, isPublished: 1 });
 resultSummarySchema.index({ examId: 1, academicYear: 1, term: 1 });
 
+
+// The change feed's page (GET /api/sync/changes, config/syncFeed.js): filtered
+// on schoolId and a keyset of (updatedAt, _id), sorted the same way. Without
+// this the planner walked the school's rows in full for every page and every
+// idle poll, examining N documents to return none (docs/37). The mobile pull
+// (updatedAt >= since) is served by the same prefix.
+resultSummarySchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
 module.exports = mongoose.model("ResultSummary", resultSummarySchema);

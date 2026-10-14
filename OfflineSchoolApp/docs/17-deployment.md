@@ -66,6 +66,13 @@ no values appear in this documentation.
 | `GMAIL_APP_PASSWORD` | unset | App Password for the failover |
 | `EMAIL_FROM` | unset | legacy override for `BREVO_SENDER_EMAIL` |
 | `DISABLE_LOGIN_RATE_LIMIT` | unset | lifts the login limiter — **set only by `scripts/`, never in production** |
+| `ANALYSIS_WORKER_HEAP_MB` | `2048` | heap cap (MB) of one school-wide analysis worker; above it the run fails `WORKER_OUT_OF_MEMORY` and the server carries on (docs/38) |
+| `ANALYSIS_CONCURRENCY` | `1` | analyses one server process runs at once; budget about `ANALYSIS_WORKER_HEAP_MB` of free memory for each |
+| `ANALYSIS_TIMEOUT_MS` | `600000` | an analysis worker running longer is stopped (`TIMEOUT`) |
+| `ANALYSIS_REPORT_MAX_BYTES` | `12582912` | largest compressed analysis report stored (`REPORT_TOO_LARGE` above it) |
+
+The four `ANALYSIS_*` variables are read once at startup as whole numbers;
+anything that is not at least 1 is the default.
 
 ### Read by the code but NOT in `.env.example` — DISCREPANCY
 
@@ -163,14 +170,22 @@ Three services:
 |---|---|---|---|
 | `mongo` | `mongo:7` | **none published** | `mongo_data:/data/db` |
 | `backend` | built from `Dockerfile` | `5000:5000` | `uploads_data:/app/src/uploads` |
-| `nginx` | `nginx:alpine` | `80:80` | `./nginx.conf` only |
+| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80` | `./nginx.conf` only |
 
 ### The Dockerfile
 
-Two stages. Stage 1 builds the web app with Node 20 Alpine. Stage 2 installs
-backend production dependencies, copies `src/` and `middleware/`, copies the web
-build to `/app/public/web`, creates the upload directory tree, and runs as a
-**non-root** user.
+Two stages. Stage 1 builds the web app with Node 20 Alpine (with
+`shared/requestPath.js` at `/app/shared`, which the offline adapter imports).
+Stage 2 installs backend production dependencies; copies `src/`, `middleware/`,
+`engine/` and `scripts/calibration/` under `/app`, and `shared/` to `/shared`
+(every backend require of it climbs one level above the backend root); copies
+the web build to `/app/public/web`; creates the upload directory tree owned by
+the app user; and runs as a **non-root** user. `.dockerignore` keeps host
+`node_modules`, `web/dist` and local uploads and backups out of the build
+context. Before docs/38, the image lacked `engine/`, `scripts/calibration/` and
+`shared/` (the web stage failed on the import) and created the upload tree
+root-owned under a literal `{syllabus,…}` name, so the server could not start;
+see docs/38 §11 for the build and smoke test.
 
 The upload path is deliberate and was a real bug:
 
@@ -180,7 +195,14 @@ The upload path is deliberate and was a real bug:
 > mounting the volume there meant every uploaded file was written to the
 > container's writable layer and lost on the next deploy.
 
-### CONFIRMED DEFECT — the web console is not served by this stack
+### FIXED — the web console is not served by this stack
+
+*Fixed on `cold-intelligence-analysis`: the `nginx` service now builds the
+Dockerfile's `web` target (`nginx:alpine` with the web build at
+`/app/public/web`), and `GET /` serves the console. The cause of the HTTP 500
+was an internal redirection cycle: with the root missing, `try_files` fell
+through to `/index.html`, which matched `location /` again. See docs/38 §11
+for what was and was not verified. The original finding follows.*
 
 Three facts, each verified:
 
@@ -192,7 +214,8 @@ Three facts, each verified:
    service in `docker-compose.yml` mounts **only** `./nginx.conf`.
 
 So the path `nginx` roots at does not exist in the nginx container, and no other
-service serves the SPA. **`GET /` on the Compose stack returns nginx's 404.** The
+service serves the SPA. **`GET /` on the Compose stack does not return the
+console** (it returned HTTP 500 when probed during the docs/38 smoke test). The
 API and `/uploads/` work correctly; the console does not load.
 
 Either fix works:

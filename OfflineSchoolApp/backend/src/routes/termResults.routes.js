@@ -8,7 +8,9 @@ const TermResult       = require("../db/models/TermResult");
 const termGrading      = require("../services/termGrading.service");
 const staleness        = require("../services/resultStaleness.service");
 const { renderReportCard } = require("../services/reportHtml.service");
+const reportLayout     = require("../services/reportLayout.service");
 const { fillResultNames } = require("../utils/resultNames");
+const { readScope, applyReadScope, computeRefusal } = require("../utils/periodResultScope");
 const { buildTermCard, loadReportTemplate, loadSchoolForCard,
         cardVerification, periodDocumentKey, absoluteLogoUrl } =
   require("../services/reportCardData.service");
@@ -27,6 +29,10 @@ const { buildTermCard, loadReportTemplate, loadSchoolForCard,
 // a super_admin may name a school, everybody else is their own.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// WHO READS WHICH ROWS — utils/periodResultScope.js, shared with the annual
+// router and the sync feed: administrators every row, a bursar the published
+// ones, a teacher the published ones of the classes they are assigned to; a
+// teacher computes one of their classes, never the school.
 const canView    = requirePermission("results.view");
 const canCompute = requirePermission("results.edit");
 const canPublish = requirePermission("results.publish");
@@ -36,6 +42,7 @@ router.get(
   async (req, res) => {
     try {
       const { academicYear, term, classId, page = 1, limit = 50 } = req.query;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear || !term) {
@@ -45,15 +52,13 @@ router.get(
         });
       }
 
-      const filter = {
-        schoolId,
-        academicYear,
-        term: Number(term),
-        deletedAt: null,
-      };
-      if (classId) filter.classId = classId;
+      const filter = applyReadScope(
+        { schoolId, academicYear, term: Number(term), deletedAt: null },
+        await readScope(req, schoolId),
+        classId,
+      );
 
-      const skip = (Number(page) - 1) * Number(limit);
+      const skip = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, error: "page and limit must be positive integers" });
 
       const [results, total] = await Promise.all([
         TermResult.find(filter)
@@ -103,10 +108,16 @@ router.get(
       const { studentId } = req.params;
       const { academicYear } = req.query;
       const schoolId = resolveSchoolId(req);
+      // No school is no school. An operator who has not entered one used to
+      // get this pupil's rows from whichever school held them.
+      if (!schoolId) {
+        return res.status(400).json({ success: false, error: "schoolId is required" });
+      }
 
-      const filter = { studentId, deletedAt: null };
-      if (schoolId)     filter.schoolId = schoolId;
-      if (academicYear) filter.academicYear = academicYear;
+      const filter = applyReadScope(
+        { schoolId, studentId, deletedAt: null, ...(academicYear ? { academicYear } : {}) },
+        await readScope(req, schoolId),
+      );
 
       const results = await TermResult.find(filter)
         .sort({ term: 1 })
@@ -128,6 +139,7 @@ router.post(
   async (req, res) => {
     try {
       const { academicYear, term, classId } = req.body;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       if (!schoolId || !academicYear || !term) {
@@ -136,6 +148,9 @@ router.post(
           error: "schoolId, academicYear, and term are required",
         });
       }
+
+      const refusal = await computeRefusal(req, schoolId, classId);
+      if (refusal) return res.status(403).json(refusal);
 
       let result;
       if (classId) {
@@ -184,6 +199,7 @@ router.post(
   async (req, res) => {
     try {
       const { academicYear, term, classId } = req.body;
+      if (!(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
 
       const filter = {
@@ -229,12 +245,26 @@ router.get(
   async (req, res) => {
     try {
       const { academicYear, term, classId, lang, templateId } = req.query;
+      if (term !== undefined && !(Number.isInteger(Number(term)) && Number(term) >= 1)) return res.status(400).json({ success: false, error: "term must be a positive integer" });
       const schoolId = resolveSchoolId(req);
       if (!schoolId || !academicYear || !term || !classId) {
         return res.status(400).json({
           success: false,
           error: "schoolId, academicYear, term and classId are required",
         });
+      }
+
+      // The card is the row, printed: a caller who may not read the row may
+      // not print it either, and learns nothing about whether it exists.
+      const scope = await readScope(req, schoolId);
+      if (Object.keys(scope).length) {
+        const visible = await TermResult.exists(applyReadScope(
+          { schoolId, studentId: req.params.studentId, academicYear, term: Number(term), deletedAt: null },
+          scope, classId,
+        ));
+        if (!visible) {
+          return res.status(404).json({ success: false, error: "No term result for this student" });
+        }
       }
 
       const data = await buildTermCard({
@@ -249,7 +279,10 @@ router.get(
       // own origin or the image 404s. Same treatment as the school logo.
       data.photoUrl = absoluteLogoUrl(data.photoUrl, req);
 
-      const [letterhead, template, verify] = await Promise.all([
+      // Which sections it prints (docs/39 §10). A term or annual card is
+      // never archived — it is drawn from live results on every request — so
+      // it always prints with the school's current layout.
+      const [letterhead, template, verify, layout] = await Promise.all([
         loadSchoolForCard(schoolId, req),
         loadReportTemplate(schoolId, templateId),
         // The QR and the code. This card had neither: {{qr_code}} rendered the
@@ -258,6 +291,7 @@ router.get(
           data: data, schoolId, studentId: req.params.studentId,
           documentKey: periodDocumentKey(data), req,
         }),
+        reportLayout.currentLayout(schoolId),
       ]);
 
       const rendered = renderReportCard(data, {
@@ -266,8 +300,12 @@ router.get(
         school:     letterhead.school,
         template,
         verify,
+        sections: layout.sections,
       });
 
+      // The layout it printed with, for a caller that needs to trace it; the
+      // body stays the HTML these routes have always returned.
+      res.set("x-report-layout-version", String(layout.version ?? 0));
       res.set("content-type", "text/html; charset=utf-8");
       return res.send(rendered.html);
     } catch (err) {

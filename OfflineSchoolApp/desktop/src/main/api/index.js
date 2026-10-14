@@ -50,6 +50,9 @@ const reads = [
   ...require("./handlers/settings"),
   ...require("./handlers/promotion"),
   ...require("./handlers/staff"),
+  // Student intelligence, computed locally by shared/intelligence — the same
+  // functions the server calls, over this machine's mirrored rows.
+  ...require("./handlers/intelligence"),
 ];
 
 /**
@@ -153,7 +156,11 @@ const handle = (req, ctx) => {
           docId:      ctx.docs.put(row.collection, row.doc, { pending: true }),
         }));
 
-        return ctx.queue.add({ ...request, collection, docId: id, extraDocs });
+        return ctx.queue.add({
+          ...request, collection, docId: id, extraDocs,
+          // Who is queueing it, so the engine sends it under this account only.
+          userId: ctx.session?.userId ?? null,
+        });
       });
 
       /**

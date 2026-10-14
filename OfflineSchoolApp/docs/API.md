@@ -47,7 +47,9 @@ mounted **above** the `/api` auth/idempotency layer.
 
 | Method | Path | |
 |---|---|---|
-| POST | `/portal/login` | Portal credential login. |
+| POST | `/portal/login` | Portal credential login → `token` (20 min), `refreshToken` (90-day session), `children`. |
+| POST | `/portal/refresh` | Public. `{ refreshToken }` → a new `token`. 401 `SESSION_EXPIRED` / `ACCESS_REVOKED` is final. |
+| POST | `/portal/logout` | Public. `{ refreshToken }` ends that device's session. Idempotent. |
 | GET | `/portal/me` | Linked students, guardian identity. |
 | GET | `/portal/fees` , `/portal/fees/reminders` | Ledger and reminders. |
 | GET | `/portal/notifications` | |
@@ -102,6 +104,41 @@ Mounted **before** admin (specific prefixes win):
 - `periods.routes.js` → `/api/admin/periods`: CRUD + `/toggle`, `/reorder`.
 - `timetable.routes.js` → `/api/admin/timetable`: `GET /`, `POST /`,
   `PUT /:id`, `DELETE /:id`, `GET /teacher/:teacherId`, `GET /my-schedule`.
+
+## Platform — `superAdmin.routes.js` (`/api/super-admin`, super_admin only)
+
+Every route carries a `platform.*` capability; only `super_admin` holds them and
+no school can grant one. Inside a school the same role uses `/api/admin/*` with
+a `schoolId` — nothing here duplicates that. A super_admin naming a school that
+does not exist, on **any** route, is answered 404 `SCHOOL_NOT_FOUND` by
+`authenticate`.
+
+| Method | Path | Capability | |
+|---|---|---|---|
+| GET | `/super-admin/schools` | `platform.schools` | `?search=&status=all\|active\|inactive&page=&limit=` — with pupil and staff counts. |
+| POST | `/super-admin/schools` | `platform.manageSchools` | Create. 409 on a duplicate code/email. Audited `school.created`. |
+| GET | `/super-admin/schools/:schoolId` | `platform.schools` | Details, administrators and bursars, recent audit. |
+| PATCH | `/super-admin/schools/:schoolId` | `platform.manageSchools` | Identity fields only (name, code, contact, address, website, principal, verified). Audited with before/after. |
+| POST | `/super-admin/schools/:schoolId/activate` | `platform.manageSchools` | Audited `school.activated`. |
+| POST | `/super-admin/schools/:schoolId/deactivate` | `platform.manageSchools` | `{ reason }` required. Audited. There is deliberately no delete route. |
+| POST | `/super-admin/schools/:schoolId/enter` | `platform.schools` | Records `school.entered`; returns the context the client displays. |
+| GET | `/super-admin/dashboard` | `platform.dashboard` | Totals plus a row per school. `?schoolId=&academicYear=&term=&from=&to=`. |
+| GET | `/super-admin/performance` | `platform.dashboard` | The per-school comparison, same filters. |
+| GET | `/super-admin/filters` | `platform.dashboard` | Academic years with data, terms, schools. |
+| GET | `/super-admin/audit` | `platform.audit` | `?schoolId=&action=&actorId=&from=&to=&page=&limit=`. |
+
+Appointing a school's administrator is `POST /admin/settings/admins` with the
+school's id in the body — the existing route, which also records `admin.created`.
+
+**Deactivation is a lockout.** From the moment a school is switched off, every
+request from anyone scoped to it answers 401 `SCHOOL_INACTIVE` (tokens issued
+earlier included), `POST /auth/login` answers 403 `SCHOOL_INACTIVE`, and
+`/auth/refresh` refuses. Reactivation lifts all three at once.
+
+**Naming another school.** Any school-scoped caller whose request names a
+`schoolId` other than their own — query, body or path — is answered 403
+`SCHOOL_ACCESS_DENIED` by `authenticate` (or `guardSchoolParam` for the path),
+before any route runs.
 
 ## Teacher — `teacher.routes.js` (all teacher-scoped)
 
@@ -182,6 +219,21 @@ Rules in [`ARCHITECTURE.md §5`](ARCHITECTURE.md#5-roles-permissions-and-approva
 |---|---|
 | `homework.routes.js` | `GET/POST /`, `PUT/DELETE /:id`, `POST /:id/submissions`, `PATCH /:id/submissions/:submissionId/grade` |
 | `quiz.routes.js` | `GET /sync`, `GET/POST /categories`, `GET/POST /questions` (+`PUT/DELETE /:id`), `GET/POST /quizzes` (+`PUT/DELETE /:id`), `POST /attempts`, `GET /attempts/:id`, `GET /analytics/quizzes/:quizId` |
+
+**The question bank is one teacher's questions in one subject.** `Question.subject_id`
+is `Subject._id`, as on a quiz. `GET /quiz/questions?subject_id=` returns, for a
+teacher, only their own questions in that subject — `created_by` in the query is
+ignored for them and honoured only for an administrator; a question with no
+subject is in no subject's bank. `POST /quiz/questions` requires `subject_id`
+(400 `SUBJECT_REQUIRED`) and refuses a subject the teacher is not assigned
+(403 `SUBJECT_NOT_ASSIGNED`); `PUT` applies the same rule to a changed subject,
+and `PUT`/`DELETE` on another teacher's question are 404. A teacher's classes and
+subjects come from `GET /teacher/my-classes` and `GET /teacher/my-subjects?grouped=true`
+(their `TeacherAssignment` rows) — the phone's quiz screen reads those, not a
+local join, because the sync feed does not mirror class, subject or assignment
+tables to teachers. Proved by `scripts/check-quiz-scope.js`; the phone's own
+SQLite bank and its `question_analytics` migration are proved by
+`mobile/scripts/check-quiz-bank.js`.
 
 ## Announcements — `announcement.routes.js`
 

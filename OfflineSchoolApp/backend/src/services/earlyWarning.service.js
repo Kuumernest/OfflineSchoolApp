@@ -4,9 +4,9 @@
 const Student             = require("../db/models/Student");
 const Class               = require("../db/models/Class");
 const Homework            = require("../db/models/Homework");
-const ResultSummary       = require("../db/models/ResultSummary");
 const { StudentAttendance } = require("../db/models/Attendance");
 const { balancesFor }     = require("./fees.service");
+const academicHistory     = require("./intelligence/academicHistory.service");
 const { displayName, byName } = require("../utils/studentName");
 
 /**
@@ -24,6 +24,25 @@ const { displayName, byName } = require("../utils/studentName");
  *
  * Signals carry machine codes plus the numbers behind them; the clients own
  * the wording, in the reader's language.
+ *
+ * ── Where the results come from, and why that changed ─────────────────────
+ *
+ * The result signals used to read ResultSummary directly, ordered by createdAt.
+ * Two faults followed and both were silent:
+ *
+ *   A continuous assessment has a summary of its own, and this counted it as a
+ *   separate sitting. A pupil whose school publishes CA could be reported as
+ *   having dropped between two halves of the SAME sequence.
+ *
+ *   createdAt is when a row was written, not when the paper was sat. Recompute
+ *   or publish an earlier sequence late and it becomes the newest row while
+ *   remaining the oldest event, which reports a decline as an improvement and
+ *   an improvement as a decline.
+ *
+ * intelligence/academicHistory.service.js now answers "this pupil's results,
+ * oldest first" for this module and for the subject intelligence beside it, so
+ * the two cannot drift apart about what order a pupil's year happened in.
+ * Nothing else here moved: the same signals, the same points, the same shape.
  */
 
 const DEFAULT_WINDOW_DAYS = 30;
@@ -72,7 +91,7 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
   const ids = students.map((s) => String(s._id));
   const classNames = new Map(classes.map((c) => [String(c._id), c.name]));
 
-  const [attendanceAgg, summaries, homework, balances] = await Promise.all([
+  const [attendanceAgg, history, homework, balances] = await Promise.all([
     // One row per (student, status) in the window.
     StudentAttendance.aggregate([
       { $match: { schoolId, studentId: { $in: ids }, date: { $gte: sinceKey } } },
@@ -80,10 +99,8 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
     ]),
     // Published only: an unpublished summary is a draft nobody has signed off,
     // and flagging a child over it would leak marks the school has not issued.
-    ResultSummary.find({ schoolId, isPublished: true, deletedAt: null })
-      .select("studentId percentage isPassing subjectsFailed term academicYear createdAt")
-      .sort({ createdAt: 1 })
-      .lean(),
+    // Continuous assessment excluded and ordered academically — see the header.
+    academicHistory.publishedHistory({ schoolId, studentIds: ids }),
     // Homework due inside the window. dueDate is a day string, so string
     // comparison is date comparison.
     Homework.find({
@@ -106,14 +123,10 @@ const watchlist = async ({ schoolId, days = DEFAULT_WINDOW_DAYS }) => {
     attendance.set(id, a);
   }
 
-  const lastTwoResults = new Map(); // studentId → [previous?, latest]
-  for (const s of summaries) {
-    const id = String(s.studentId);
-    const list = lastTwoResults.get(id) ?? [];
-    list.push(s);
-    if (list.length > 2) list.shift();
-    lastTwoResults.set(id, list);
-  }
+  // studentId → [previous?, latest]. The history arrives oldest first, so the
+  // last two entries are the two most recent sittings.
+  const lastTwoResults = new Map();
+  for (const [id, results] of history) lastTwoResults.set(id, results.slice(-2));
 
   const homeworkByClass = new Map(); // classId → [{submitted:Set}]
   for (const hw of homework) {

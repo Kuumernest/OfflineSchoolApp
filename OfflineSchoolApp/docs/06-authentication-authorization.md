@@ -115,10 +115,38 @@ children**, which is why the row is a `GuardianAccess` and not a `Student`.
 | Normalisation | uppercased, punctuation stripped, so `abcd efgh` = `ABCD-EFGH` |
 | Max tries | 6 |
 | Lockout | 15 minutes |
-| Session | 12 hours |
+| Access token | 20 minutes — a `portal`-audience JWT, renewed by the client |
+| Session | 90 days per device, held on the `GuardianAccess` row |
 
 The alphabet omissions are not cosmetic: a code is read off paper and typed by
 someone who did not choose it, and those three pairs are where that goes wrong.
+
+### Session and token are two different things
+
+The code is the credential and the `GuardianAccess` row is the authorisation.
+Neither is a session, and until one existed the portal issued a single
+twelve-hour token — so every parent re-typed a code they were handed once, on
+paper, every morning.
+
+`POST /portal/login` now returns a short-lived **access token** plus an opaque
+**refresh token**. The refresh token is the session: 90 days from sign-in, one
+per device, stored as a SHA-256 hash in `GuardianAccess.sessions[]`. The
+clients treat "holds a refresh token" as signed in, and renew the access token
+through `POST /portal/refresh` when a request answers `TOKEN_EXPIRED`. Being
+offline — for a day or a month — does not end a session; the next request
+simply renews.
+
+A session ends when:
+
+- the parent signs out (`POST /portal/logout`, public, so it works after the
+  access token has lapsed);
+- the office **revokes** the code — `portalAuth` re-reads the row on every
+  request and `/refresh` applies the same rule, so this is immediate;
+- the office **re-issues** the code — a new credential empties `sessions[]`;
+- 90 days pass.
+
+Refresh tokens are not rotated: a rotated token that reaches the server but not
+the phone would sign the parent out, which is the failure this exists to remove.
 
 ### The portal is read-mostly
 
@@ -155,9 +183,40 @@ afterwards. `FINANCE_ROLES` keeps the admins in it on purpose: an admin who
 cannot see the books cannot approve anything, and approval is the half of
 segregation of duties that actually protects the school.
 
+### Platform scope — IMPLEMENTATION VERIFIED
+
+`super_admin` is a **platform** role, not a school role. Two things follow:
+
+- **Inside a school it is that school's administrator.** `resolveSchoolId`
+  takes the `schoolId` it names, and `DEFAULTS_BY_ROLE` gives it every school
+  capability. Nothing about running a school is duplicated for it — it uses
+  `/api/admin/*` like the school's own administrator, with a `schoolId`.
+- **Above any school it holds four `platform.*` capabilities** that no school
+  role holds and no school can grant (all locked, defaults `PLATFORM_ROLES`):
+  `platform.schools`, `platform.manageSchools`, `platform.dashboard`,
+  `platform.audit`. They guard `/api/super-admin/*` — see
+  [API.md](API.md#platform--superadminroutesjs-apisuper-admin-super_admin-only).
+
+The school a super_admin names is **checked at the door**: `authenticate`
+looks the id up (`utils/schoolContext.js`, cached 30 s) and answers 404
+`SCHOOL_NOT_FOUND` for an id that is not a school or has been deleted. A
+deactivated school is still reachable — switching it back on is done from
+inside — and is flagged on `req.schoolContext`. Nothing on the server remembers
+which school a super_admin is "in": the context is per request and cannot leak
+into the next one, or into another tab.
+
+Platform actions are recorded in `AuditLog` (`services/audit.service.js`):
+school created / updated / activated / deactivated / entered, and administrator
+appointed / restored / password reset / removed — actor, target school,
+resource, the fields that changed, reason, timestamp. Read through
+`GET /api/super-admin/audit`. `scripts/check-super-admin.js` proves all of the
+above with two populated schools, including that a school administrator, a
+bursar, a teacher, a student and a guardian are refused on every platform route
+and that a forged role or school claim in a token changes nothing.
+
 ### Permissions
 
-**65 keys** across **30 modules**, defined in `src/config/permissions.js`.
+**69 keys** across **31 modules**, defined in `src/config/permissions.js`.
 
 | Property | Count |
 |---|---|
@@ -242,12 +301,16 @@ only the `bursar` and `teacher` columns, and only for the 48 delegable keys.
 | `settings.manage` | YES | YES | — | — | — |
 | `permissions.manage` | YES | YES | — | — | — |
 | `sync.push` | YES | YES | — | — | — |
+| `platform.schools` | YES | — | — | — | — |
+| `platform.manageSchools` | YES | — | — | — | — |
+| `platform.dashboard` | YES | — | — | — | — |
+| `platform.audit` | YES | — | — | — | — |
 
 ### Reading the matrix
 
 Three things in it are worth stating explicitly because they surprise people:
 
-1. **`student` holds no permission at all.** Not one of the 65. Student access is
+1. **`student` holds no permission at all.** Not one of the 69. Student access is
    not expressed through this system — student routes guard themselves with
    `studentOnly` / `scopeToSelfForStudents` and scope every query to the caller's
    own record. The permission table is a *staff* authorization model.
@@ -281,12 +344,34 @@ resolveSchoolId(req, provided)
 - A **`super_admin` may name a school** — via `provided`, `req.body.schoolId`,
   `req.query.schoolId` or `req.params.schoolId` — and is taken at their word,
   because operating across schools is what the role is for.
-- **Everyone else is their own school**, whatever they asked for. Silently, not
-  as an error: clients legitimately send their own `schoolId` on every request,
-  and refusing would break all of them. The point is only that the value cannot
-  be used to reach further than the caller.
+- **Everyone else is their own school.** Since the platform role landed this is
+  enforced **at the door**, not by silent correction: `authenticate`
+  (`middleware/auth.js`) refuses a school-scoped caller whose request names any
+  other `schoolId` — in the query or the body — with **403
+  `SCHOOL_ACCESS_DENIED`**; the one router that carries `/:schoolId` in the path
+  (`academicStructure.routes.js`) applies the same rule through
+  `router.param("schoolId", guardSchoolParam)`. A `schoolId` equal to the
+  caller's own, or absent, or empty, passes. `resolveSchoolId` still corrects
+  downstream as a second line, but no ordinary caller reaches it with a
+  mismatch any more. A school that does not exist is a 403 for them (not
+  theirs, whatever it is) and a 404 `SCHOOL_NOT_FOUND` for a super_admin.
 - The caller's own school is `req.user.schoolId` **or** `req.portal.schoolId`, so
   the same function serves guardian requests.
+
+### A deactivated school takes its people with it — TEST VERIFIED
+
+`authenticate` also asks whether the caller's **own** school is open. A school
+the platform has switched off (`isActive: false`) or soft-deleted refuses every
+request from anyone scoped to it — administrator, bursar, teacher, pupil — with
+**401 `SCHOOL_INACTIVE`**, so a token issued before the switch fails at its very
+next use. `POST /api/auth/login` answers **403 `SCHOOL_INACTIVE`** to a correct
+password (it is not the password that is wrong), and `/api/auth/refresh` refuses
+to mint a session for a closed school. No token blacklist: the check is one row
+read per request, cached 30 s in-process (`utils/schoolContext.js`) and
+invalidated by the routes that switch a school. Reactivation lifts it as
+immediately. A `schoolId` that matches no `School` document is a dangling
+reference, not a closed school, and is let through. Proved by
+`scripts/check-school-scope.js`.
 
 ### Writes are different
 
@@ -316,7 +401,9 @@ copy.
 |---|---|
 | A non-super-admin cannot read another school's data through a `schoolId` parameter | **TEST VERIFIED** — `scripts/check-cross-school.js` |
 | Every router that resolves a school uses `resolveSchoolId` | **IMPLEMENTATION VERIFIED** at this commit |
-| A super_admin is trusted completely across schools | **By design** — there is no second check on them |
+| A super_admin may name any school, and the school it names must exist | **TEST VERIFIED** — `scripts/check-super-admin.js`; 404 `SCHOOL_NOT_FOUND` otherwise |
+| A school-scoped user naming another school is refused, not corrected | **TEST VERIFIED** — `scripts/check-school-scope.js`; 403 `SCHOOL_ACCESS_DENIED` via query, body and path |
+| A deactivated or deleted school's users cannot sign in or be served | **TEST VERIFIED** — `scripts/check-school-scope.js`; 403/401 `SCHOOL_INACTIVE`, existing tokens included |
 | The database itself enforces tenancy | **NO.** There is one database and one connection. Tenancy is application-level only. A query that omits `schoolId` returns every school's rows. |
 
 That last row is the one to keep in mind when adding a route. Nothing at the

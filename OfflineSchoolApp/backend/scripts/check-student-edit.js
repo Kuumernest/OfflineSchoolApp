@@ -32,6 +32,8 @@
  *   node scripts/check-student-edit.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -639,7 +641,7 @@ const bad = (label, detail) => {
 
   await server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

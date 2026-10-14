@@ -188,6 +188,10 @@ export const API = {
     acknowledge: (id) => `/announcements/${id}/acknowledge`,
   },
 
+  homework: {
+    list: "/homework",
+  },
+
   quiz: {
     list:      "/quiz/quizzes",
     detail:    (id) => `/quiz/quizzes/${id}`,

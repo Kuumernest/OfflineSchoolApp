@@ -6,8 +6,9 @@ import {
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useTranslation }                             from "react-i18next";
 import { useNavigate }                              from "react-router-dom";
-import { useAuthStore, useUser }                    from "@/store/auth.store";
+import { useAuthStore, useUser, useActiveSchool }   from "@/store/auth.store";
 import { cn }                                       from "@/utils/cn";
+import { roleLabel }                                from "@/utils/roleLabel";
 import {
   globalSearch,
   clearSearchCache,
@@ -96,6 +97,7 @@ function HighlightMatch({ text, query }: { text: string; query: string }) {
 export default function TopBar({ onMenuClick, title }: TopBarProps) {
   const { t }      = useTranslation();
   const user       = useUser();
+  const activeSchool = useActiveSchool();
   const { logout } = useAuthStore();
   const navigate   = useNavigate();
 
@@ -375,7 +377,7 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                   {/* Count header */}
                   <div className="border-b border-line bg-surface-muted px-4 py-2">
                     <p className="text-xs text-ink-faint">
-                      {totalResults} result{totalResults !== 1 ? "s" : ""} for{" "}
+                      {t("search.resultsFor", { count: totalResults })}{" "}
                       <span className="font-medium text-ink-body">
                         "{searchQuery}"
                       </span>
@@ -551,15 +553,15 @@ export default function TopBar({ onMenuClick, title }: TopBarProps) {
                 <p className="truncate text-xs text-ink-muted">
                   {user?.email}
                 </p>
-                <p className="mt-1 text-[11px] capitalize text-ink-faint">
-                  {user?.role?.replace("_", " ")}
+                <p className="mt-1 text-[11px] text-ink-faint">
+                  {roleLabel(user?.role, t)}
                 </p>
               </div>
               <button
                 type="button"
                 role="menuitem"
                 onClick={() => {
-                  navigate("/settings");
+                  navigate(user?.role === "super_admin" && !activeSchool ? "/platform/settings" : "/settings");
                   setDropdownOpen(false);
                 }}
                 className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] text-ink-body hover:bg-canvas"

@@ -30,6 +30,8 @@
  *   node scripts/check-desktop-parity.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const fs   = require("fs");
 const os   = require("os");
 const path = require("path");
@@ -993,24 +995,48 @@ const main = async () => {
   // Which narrows what the markedAt secondary sort is for: ordering marks taken
   // in different lessons on the same day. Worth knowing, and worth the fixture
   // being the shape the data can actually take.
+  /*
+   * ── Why these days are in a year that has already gone ──────────────────
+   *
+   * Every date here used to be 2026-09-14 .. 18, and on 2026-09-14 this whole
+   * suite stopped running: MongoBulkWriteError, E11000 on
+   * unique_student_attendance, key { cls-1, p1, null, null, "2026-09-14" }.
+   *
+   * The attendance REPORT section far below marks the same pupils across the
+   * last seven REAL days, because /report/weekly computes its window from the
+   * clock and marks outside it would prove nothing. Its author noted that
+   * "every fixture in this file is dated months later" — which was true of the
+   * register fixtures on the day they were written and stopped being true when
+   * the calendar reached them. One mark per pupil per subject per day is a
+   * unique index, so the two fixtures were simply the same row.
+   *
+   * A date the clock has already passed cannot re-enter a trailing window, so
+   * these sit in the previous academic year and the collision cannot recur.
+   * The guard beside the weekly fixture asserts that, loudly, rather than
+   * leaving the next person to decode an E11000.
+   *
+   * Only the year moved: the relative order and spacing the assertions below
+   * depend on — at-6 > at-3 > at-2 > at-1, the ranges, the two marks on one
+   * day — are unchanged.
+   */
   await StudentAttendance.collection.insertMany([
-    { _id: "at-1", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-14",
-      status: "present", markedAt: new Date("2026-09-14T08:05:00Z"), updatedAt: new Date() },
-    { _id: "at-2", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
-      status: "absent",  markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
-    { _id: "at-3", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-15",
+    { _id: "at-1", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-14",
+      status: "present", markedAt: new Date("2025-09-14T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-2", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-15",
+      status: "absent",  markedAt: new Date("2025-09-15T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-3", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-15",
       subjectId: "sub-1",
-      status: "present", markedAt: new Date("2026-09-15T11:30:00Z"), updatedAt: new Date() },
-    { _id: "at-4", schoolId: SCHOOL, studentId: "p2", classId: "cls-1", date: "2026-09-15",
-      status: "late",    markedAt: new Date("2026-09-15T08:20:00Z"), updatedAt: new Date() },
-    { _id: "at-5", schoolId: SCHOOL, studentId: "p3", classId: "cls-2", date: "2026-09-16",
-      status: "present", markedAt: new Date("2026-09-16T08:05:00Z"), updatedAt: new Date() },
+      status: "present", markedAt: new Date("2025-09-15T11:30:00Z"), updatedAt: new Date() },
+    { _id: "at-4", schoolId: SCHOOL, studentId: "p2", classId: "cls-1", date: "2025-09-15",
+      status: "late",    markedAt: new Date("2025-09-15T08:20:00Z"), updatedAt: new Date() },
+    { _id: "at-5", schoolId: SCHOOL, studentId: "p3", classId: "cls-2", date: "2025-09-16",
+      status: "present", markedAt: new Date("2025-09-16T08:05:00Z"), updatedAt: new Date() },
     // The endpoint applies NO deleted filter, so this must still come back.
-    { _id: "at-6", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2026-09-17",
-      status: "present", markedAt: new Date("2026-09-17T08:05:00Z"),
-      deletedAt: new Date("2026-09-18T00:00:00Z"), updatedAt: new Date() },
-    { _id: "at-9", schoolId: "other-school", studentId: "px", classId: "cls-9", date: "2026-09-15",
-      status: "present", markedAt: new Date("2026-09-15T08:05:00Z"), updatedAt: new Date() },
+    { _id: "at-6", schoolId: SCHOOL, studentId: "p1", classId: "cls-1", date: "2025-09-17",
+      status: "present", markedAt: new Date("2025-09-17T08:05:00Z"),
+      deletedAt: new Date("2025-09-18T00:00:00Z"), updatedAt: new Date() },
+    { _id: "at-9", schoolId: "other-school", studentId: "px", classId: "cls-9", date: "2025-09-15",
+      status: "present", markedAt: new Date("2025-09-15T08:05:00Z"), updatedAt: new Date() },
   ]);
 
   docs.putMany("studentAttendance",
@@ -1020,10 +1046,10 @@ const main = async () => {
   await parity("one class",             `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1`, asHead);
   await parity("one pupil",             `/api/attendance/students?schoolId=${SCHOOL}&studentId=p1`, asHead);
   await parity("one status",            `/api/attendance/students?schoolId=${SCHOOL}&status=absent`, asHead);
-  await parity("one exact day",         `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-15`, asHead);
-  await parity("a range, inclusive",    `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-15&endDate=2026-09-16`, asHead);
-  await parity("from only",             `/api/attendance/students?schoolId=${SCHOOL}&startDate=2026-09-16`, asHead);
-  await parity("to only",              `/api/attendance/students?schoolId=${SCHOOL}&endDate=2026-09-14`, asHead);
+  await parity("one exact day",         `/api/attendance/students?schoolId=${SCHOOL}&date=2025-09-15`, asHead);
+  await parity("a range, inclusive",    `/api/attendance/students?schoolId=${SCHOOL}&startDate=2025-09-15&endDate=2025-09-16`, asHead);
+  await parity("from only",             `/api/attendance/students?schoolId=${SCHOOL}&startDate=2025-09-16`, asHead);
+  await parity("to only",              `/api/attendance/students?schoolId=${SCHOOL}&endDate=2025-09-14`, asHead);
   await parity("a day nobody was marked", `/api/attendance/students?schoolId=${SCHOOL}&date=2020-01-01`, asHead);
   await parity("class and status together",
     `/api/attendance/students?schoolId=${SCHOOL}&classId=cls-1&status=present`, asHead);
@@ -1031,7 +1057,7 @@ const main = async () => {
   // An exact date wins over a range on the server — both are set on the same
   // query key, so the later assignment replaces the earlier.
   await parity("an exact date beats a range",
-    `/api/attendance/students?schoolId=${SCHOOL}&date=2026-09-14&startDate=2026-09-15&endDate=2026-09-16`, asHead);
+    `/api/attendance/students?schoolId=${SCHOOL}&date=2025-09-14&startDate=2025-09-15&endDate=2025-09-16`, asHead);
 
   // Surprising, and therefore worth pinning: an unreadable date becomes TODAY
   // rather than an error. Reproduced rather than improved on, because a mirror
@@ -1228,6 +1254,10 @@ const main = async () => {
       // The index is not partial either, so a soft-deleted row still occupies
       // its pupil's place — which is why res-gone below has its own.
       studentId: `stu-${i + 1}`, totalScore: 100 - i, classPosition: i + 1,
+      // Enough of a result for the card to state one: the decision and the
+      // average it is drawn from, which the report-card route prints in the
+      // table and the panel.
+      average: 14, percentage: 70, isPassing: true, overallGrade: "B",
       isPublished: true, deletedAt: null, updatedAt: new Date(),
     })),
     { _id: "res-unranked", examId: "exam-0", schoolId: SCHOOL, classId: "cls-1",
@@ -1278,7 +1308,16 @@ const main = async () => {
     (cardHtml.match(/\{\{[^}]+\}\}/g) || []), []);
   // The route builds the payload the renderer needs; these are the pieces the
   // controller is responsible for assembling.
-  check("carrying the outcome card", /class="(outcome|summary-verdict)"/.test(cardHtml), true);
+  // The card's own summary: the table states the decision and the totals, and
+  // the panel under it the rank, the average and the class. There is no band
+  // over the marks any more — see docs and the report-card suites.
+  check("carrying the table's decision row and the panel under it",
+    [/class="status-row"/.test(cardHtml), /class="info-panel"/.test(cardHtml)], [true, true]);
+  // The markup, not the stylesheet: the rules for both are in the head.
+  check("and the remarks at the foot, between the panel and the strip",
+    [cardHtml.indexOf('<div class="remarks">') > cardHtml.indexOf('<div class="info-panel">'),
+     cardHtml.indexOf('<div class="remarks">') < cardHtml.indexOf('<div class="verify">')],
+    [true, true]);
   check("and the school's name", cardHtml.includes("Parity College"), true);
 
   // A pupil with neither marks nor a summary is a 404 with a reason, not a 500.
@@ -2831,7 +2870,11 @@ const main = async () => {
   const StudentAttendanceModel = require("../src/db/models/Attendance").StudentAttendance;
   const { attendanceId: derivedId } = require("../../shared/attendance");
 
-  const REGISTER_DAY = "2026-10-06";
+  // In a year the clock has passed, for the reason given beside the at-* 
+  // fixtures: the weekly report marks these same pupils across the last seven
+  // REAL days, and one mark per pupil per day is a unique index. 2026-10-06
+  // would have collided for the week of the 6th to the 12th of October.
+  const REGISTER_DAY = "2025-10-06";
 
   const teachSession = {
     userId: "admin-1", schoolId: SCHOOL,
@@ -3051,7 +3094,8 @@ const main = async () => {
   const TeacherAttendanceModel = require("../src/db/models/Attendance").TeacherAttendance;
   const { teacherAttendanceId: derivedStaffId } = require("../../shared/attendance");
 
-  const STAFF_DAY = "2026-10-07";
+  // Likewise, and for the staff register's own unique index.
+  const STAFF_DAY = "2025-10-07";
 
   const staffSession = {
     userId: "admin-1", schoolId: SCHOOL,
@@ -3084,6 +3128,96 @@ const main = async () => {
       Object.keys(localRoster[0]).sort().join(),
       ["_id", "email", "name", "role"].join());
     check("and the same count", localRoster.length, serverRoster.length);
+  }
+
+  // ── The roster for a date and a period: the timetable decides ──────────
+  //
+  // With ?date (and ?periodId) both sides answer from the timetable —
+  // utils/teacherSchedule.js on the server, scheduledFromMirror in the
+  // desktop handler — and the whole envelope must agree: who, in what order,
+  // with which slots, and the date, weekday and period it resolved.
+  //
+  // Before the mirror holds any timetable for the school it must not answer
+  // at all: an empty list from a timetable that was never downloaded would
+  // read as "nobody is scheduled", so the request goes to the network.
+  {
+    const TIMETABLE_MON = "2025-10-06";   // a Monday; STAFF_DAY is the Tuesday after
+    const TIMETABLE_SUN = "2025-10-05";
+
+    check("with no timetable in the mirror, a dated roster is declined, not answered empty",
+      api.handle({
+        method: "GET", path: "/api/attendance/teachers/roster",
+        query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" },
+      }, staffCtx),
+      null);
+
+    const PeriodModel        = require("../src/db/models/Period");
+    const TimetableSlotModel = require("../src/db/models/TimetableSlot");
+    await Promise.all([PeriodModel.init(), TimetableSlotModel.init()]);
+    await PeriodModel.collection.insertMany([
+      { _id: "p1", schoolId: SCHOOL, name: "Period 1", startTime: "08:00", endTime: "09:00", sortOrder: 1, isActive: true,  deletedAt: null, updatedAt: new Date() },
+      { _id: "p2", schoolId: SCHOOL, name: "Period 2", startTime: "10:00", endTime: "11:00", sortOrder: 2, isActive: true,  deletedAt: null, updatedAt: new Date() },
+      { _id: "p3", schoolId: SCHOOL, name: "Period 3", startTime: "12:00", endTime: "13:00", sortOrder: 3, isActive: false, deletedAt: null, updatedAt: new Date() },
+      { _id: "p9", schoolId: "other-school", name: "Period 1", startTime: "08:00", endTime: "09:00", sortOrder: 1, isActive: true, deletedAt: null, updatedAt: new Date() },
+    ]);
+    await TimetableSlotModel.collection.insertMany([
+      { _id: "ts-1", schoolId: SCHOOL, classId: "cls-1", subjectId: "sub-1", teacherId: "t1", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-2", schoolId: SCHOOL, classId: "cls-3", subjectId: "sub-1", teacherId: "t2", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-3", schoolId: SCHOOL, classId: "cls-1", subjectId: "sub-1", teacherId: "t2", periodId: "p2", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+      { _id: "ts-4", schoolId: SCHOOL, classId: "cls-6", subjectId: "sub-1", teacherId: "t1", periodId: "p2", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },  // class switched off
+      { _id: "ts-5", schoolId: SCHOOL, classId: "cls-7", subjectId: "sub-1", teacherId: "t1", periodId: "p1", dayOfWeek: "TUE", deletedAt: null, version: 1, updatedAt: new Date() },  // class removed
+      { _id: "ts-6", schoolId: SCHOOL, classId: "cls-4", subjectId: "sub-1", teacherId: "t1", periodId: "p3", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },  // period switched off
+      { _id: "ts-7", schoolId: SCHOOL, classId: "cls-5", subjectId: "sub-1", teacherId: "t2", periodId: "p1", dayOfWeek: "MON", deletedAt: new Date(), version: 1, updatedAt: new Date() }, // deleted slot
+      { _id: "ts-8", schoolId: SCHOOL, classId: "cls-4", subjectId: "sub-1", teacherId: "nobody", periodId: "p1", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() }, // stale teacher
+      { _id: "ts-9", schoolId: "other-school", classId: "cls-9", subjectId: "sub-1", teacherId: "t1", periodId: "p9", dayOfWeek: "MON", deletedAt: null, version: 1, updatedAt: new Date() },
+    ]);
+    docs.putMany("period",        JSON.parse(JSON.stringify(await PeriodModel.find({}).lean())));
+    docs.putMany("timetableSlot", JSON.parse(JSON.stringify(await TimetableSlotModel.find({}).lean())));
+
+    const asStaff = { token, session: staffSession };
+    await parity("staff timetabled on Monday, Period 1",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p1`, asStaff);
+    await parity("staff timetabled on Monday, Period 2",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p2`, asStaff);
+    await parity("a period switched off: nobody, on both sides",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p3`, asStaff);
+    await parity("the other school's period id: nobody, on both sides",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p9`, asStaff);
+    await parity("the whole Monday, every period",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}`, asStaff);
+    await parity("a Sunday: an empty register, not everybody",
+      `/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_SUN}`, asStaff);
+
+    const monday = api.handle({
+      method: "GET", path: "/api/attendance/teachers/roster",
+      query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" },
+    }, staffCtx).data;
+    check("Monday, Period 1 lists the two timetabled teachers, in name order",
+      monday.teachers.map((t) => t._id), ["t2", "t1"]);
+    check("  each carrying the class that put them there",
+      monday.teachers.map((t) => t.slots.map((s) => s.className).join("+")), ["Form 2", "Form 1"]);
+    check("  and the envelope names what it resolved",
+      [monday.scheduled, monday.date, monday.dayOfWeek, monday.periodId, monday.period?.name],
+      [true, TIMETABLE_MON, "MON", "p1", "Period 1"]);
+
+    // The periods section further down seeds and counts its own periods for
+    // this school; these four are taken back out on both sides so it sees
+    // exactly what it expects. The slots stay: nothing below reads them.
+    const seededPeriods = ["p1", "p2", "p3", "p9"];
+    await PeriodModel.collection.deleteMany({ _id: { $in: seededPeriods } });
+    for (const id of seededPeriods) {
+      const row = docs.get("period", id);
+      if (row) docs.put("period", { ...row, deletedAt: new Date().toISOString() });
+    }
+    check("the dated roster is empty again once the periods are gone from both sides",
+      [
+        api.handle({ method: "GET", path: "/api/attendance/teachers/roster",
+          query: { schoolId: SCHOOL, date: TIMETABLE_MON, periodId: "p1" } }, staffCtx).data.count,
+        (await (await fetch(
+          `http://127.0.0.1:${port}/api/attendance/teachers/roster?schoolId=${SCHOOL}&date=${TIMETABLE_MON}&periodId=p1`,
+          { headers: { authorization: "Bearer " + token } })).json()).count,
+      ],
+      [0, 0]);
   }
 
   // ── Marking them ───────────────────────────────────────────────────────
@@ -3198,7 +3332,7 @@ const main = async () => {
     "/api/attendance/teachers?schoolId=" + SCHOOL + "&status=on_leave");
   await parity("and over a range of days",
     "/api/attendance/teachers?schoolId=" + SCHOOL +
-    "&startDate=2026-10-01&endDate=2026-10-31");
+    "&startDate=2025-10-01&endDate=2025-10-31");
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- the attendance reports ---");
@@ -3229,6 +3363,36 @@ const main = async () => {
   // file is dated months later — so without marks inside it the report would
   // compare two empty trends and prove nothing about the counting.
   const week = lastSevenDays();
+
+  /*
+   * ── The invariant that keeps this suite from failing one week a year ────
+   *
+   * Everything below is marked on REAL days, because /report/weekly computes
+   * its window from the clock. Everything above is marked on fixed days. One
+   * mark per pupil per subject per day is a unique index, so a fixed day that
+   * wanders into this window is not a clash of fixtures — it is the same row
+   * twice, and the suite dies on an E11000 that says nothing about why.
+   *
+   * That is exactly what happened on 2026-09-14, when the register fixture's
+   * hard-coded "2026-09-14" became today. The fixed days now sit in a year the
+   * clock has passed, which cannot recur — and this asserts it rather than
+   * trusting it, so if somebody dates a new fixture to next Tuesday they are
+   * told which day and why, here, instead of decoding a bulk write error.
+   */
+  const FIXED_REGISTER_DAYS = [
+    "2025-09-14", "2025-09-15", "2025-09-16", "2025-09-17",
+    REGISTER_DAY, STAFF_DAY,
+  ];
+  const wandered = FIXED_REGISTER_DAYS.filter((d) => week.includes(d));
+  if (wandered.length > 0) {
+    throw new Error(
+      "Attendance fixture dates have fallen inside the last-seven-days window " +
+      `the weekly report uses: ${wandered.join(", ")}. They must be days the ` +
+      "clock has already passed, or they collide with the fixtures below on " +
+      "unique_student_attendance. See the note beside the at-* fixtures."
+    );
+  }
+
   await StudentAttendanceModel.collection.insertMany([
     { _id: "wk-1", schoolId: SCHOOL, classId: "cls-1", subjectId: null, studentId: "p1",
       date: week[6], status: "present", markedBy: "admin-1", markedAt: new Date(),
@@ -3834,14 +3998,25 @@ const main = async () => {
     const theirs = await askTpl("GET", `/api/templates/tpl-5?schoolId=${SCHOOL}`, null, tplAs);
     check("nor by the server", theirs.status, 404);
 
-    // resolveSchoolId ignores the request's schoolId for anybody who is not a
-    // super_admin, so asking for another school reads your OWN. A handler that
-    // trusted query.schoolId would answer with tpl-5 here.
-    check("asking for another school still answers with this one",
+    // The desktop has no door: offline, a request naming another school reads
+    // the caller's OWN, which is the safe answer for a machine that cannot
+    // ask. A handler that trusted query.schoolId would answer with tpl-5 here.
+    check("asking for another school, offline, still answers with this one",
       api.handle({ method: "GET", path: "/api/templates", query: { schoolId: "other-school" } }, tplCtx)
         .data.templates.map((t) => t._id),
       ["tpl-1", "tpl-2", "tpl-3"]);
-    await parity("and the server agrees", `/api/templates?schoolId=other-school`, tplAs);
+    // The server does not correct any more — it refuses at the door
+    // (middleware/auth.js, 403 SCHOOL_ACCESS_DENIED). The two answers differ on
+    // purpose, and both are stated so neither can drift unnoticed.
+    {
+      const res  = await fetch(`http://127.0.0.1:${port}/api/templates?schoolId=other-school`,
+        { headers: { authorization: `Bearer ${tplAs.token}` } });
+      const body = await res.json();
+      check("and the server refuses it outright: 403 SCHOOL_ACCESS_DENIED",
+        [res.status, body.code], [403, "SCHOOL_ACCESS_DENIED"]);
+      check("  handing over none of the other school's templates",
+        JSON.stringify(body).includes("tpl-5"), false);
+    }
 
     // ── The guard over the whole router ──────────────────────────────────
     check("a bursar is not answered locally",
@@ -4359,15 +4534,28 @@ const main = async () => {
     "?schoolId=" + SCHOOL + "&status=banana");
 
   /**
-   * resolveSchoolId IGNORES ?schoolId for anybody who is not a super_admin.
+   * A foreign ?schoolId, on the two sides of the seam.
    *
-   * So a school_admin naming another school gets their OWN accounts, not an
-   * empty list — and a handler that took the query parameter (as the sibling
-   * handlers in that directory do) would answer with nothing while the server
-   * answered with five rows.
+   * Offline, the desktop has no door: it answers the caller's OWN accounts,
+   * never the other school's, and a handler that took the query parameter
+   * (as the sibling handlers in that directory do) would answer with nothing.
+   * Online, the server refuses at the door — 403 SCHOOL_ACCESS_DENIED from
+   * middleware/auth.js — rather than correcting. Both are asserted; they are
+   * meant to differ.
    */
-  await stgAdminsParity("a foreign schoolId is ignored, not honoured",
-    "?schoolId=other-school");
+  {
+    const local = api.handle(
+      { method: "GET", path: "/api/admin/settings/admins", query: { schoolId: "other-school" } },
+      stgCtx
+    );
+    check("a foreign schoolId, offline: this school's accounts, none of the other's",
+      local?.data?.admins?.some((a) => a._id === "stg-other") ?? null, false);
+    check("  and not an empty list",
+      (local?.data?.admins?.length ?? 0) > 0, true);
+    const fromServer = await stgGet("/api/admin/settings/admins?schoolId=other-school");
+    check("a foreign schoolId, online: the server refuses at the door — 403 SCHOOL_ACCESS_DENIED",
+      [fromServer.status, fromServer.body?.code], [403, "SCHOOL_ACCESS_DENIED"]);
+  }
 
   const stgAdmins = api.handle(
     { method: "GET", path: "/api/admin/settings/admins", query: { schoolId: SCHOOL } },
@@ -7692,21 +7880,12 @@ const main = async () => {
 
   await mongoose.disconnect();
 
-  /**
-   * Teardown must not turn a passing run into a failure.
-   *
-   * On a loaded machine mongod sometimes will not exit within the library's
-   * window, and the throw landed AFTER every assertion had been counted and
-   * printed — so the suite said "0 failed" and then exited 1, which is the
-   * worst of both for anything reading the exit code.
-   *
-   * A lingering temporary process is worth knowing about and is not a result.
-   */
-  try {
-    await mongo.stop();
-  } catch (err) {
-    console.log(`  (the temporary mongod did not exit cleanly: ${err.message})`);
-  }
+  // Teardown must not turn a passing run into a failure. The note that used to
+  // be here is now the docstring of scripts/stopQuietly.js, which twenty other
+  // check scripts needed too — they had this teardown without this guard, so
+  // `npm run check:all` died at whichever of them was running when the machine
+  // got slow.
+  await stopQuietly(mongo);
 };
 
 main()

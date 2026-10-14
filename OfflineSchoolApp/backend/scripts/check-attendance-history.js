@@ -30,6 +30,8 @@
  *   node scripts/check-attendance-history.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -76,6 +78,12 @@ const bad = (label, detail) => {
   await mkUser("adm-b",        "school_admin", B, "Admin B");
 
   await Class.create({ _id: "cls-a", schoolId: A, name: "Form 1" });
+  // Both teachers are assigned to Form 1 — the form master for one subject,
+  // the subject teacher for another. The register asks CLASS-level (docs/20 N7).
+  await mongoose.model("TeacherAssignment").create([
+    { schoolId: A, teacher: "form-master", class: "cls-a", subject: "sub-form" },
+    { schoolId: A, teacher: "subject-tea", class: "cls-a", subject: "sub-maths" },
+  ]);
   await Class.create({ _id: "cls-b", schoolId: B, name: "Form 1 B" });
   await Student.create({
     _id: "st-1", userId: "stu-a", schoolId: A, classId: "cls-a",
@@ -301,6 +309,6 @@ const bad = (label, detail) => {
 
   server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exitCode = fail ? 1 : 0;
 })().catch((err) => { console.error("check failed:", err); process.exit(1); });

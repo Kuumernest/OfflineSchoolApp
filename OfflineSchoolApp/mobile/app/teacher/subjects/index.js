@@ -737,7 +737,7 @@ export default function TeacherSubjectsScreen() {
           </View>
           <Text style={s.emptyTitle}>{t("teacherSubjects.emptyTitle")}</Text>
           <Text style={s.emptyText}>
-            You haven't been assigned to any classes or subjects yet.
+            {t("teacherSubjects.emptySub")}
             {t("teacherSubjects.emptyHint")}
           </Text>
           <TouchableOpacity
@@ -778,9 +778,9 @@ export default function TeacherSubjectsScreen() {
                 <View style={s.sectionHeaderText}>
                   <Text style={s.sectionTitle}>{section.title}</Text>
                   <Text style={s.sectionMeta}>
-                    {section.data.length} subject{section.data.length !== 1 ? "s" : ""}
+                    {t("academic.subjectCount", { count: section.data.length })}
                     {section.studentCount > 0
-                      ? `  ·  ${section.studentCount} student${section.studentCount !== 1 ? "s" : ""}`
+                      ? `  ·  ${t("academic.studentCount", { count: section.studentCount })}`
                       : ""}
                   </Text>
                 </View>
@@ -826,8 +826,7 @@ export default function TeacherSubjectsScreen() {
                           <View style={s.studentRow}>
                             <Ionicons name="people-outline" size={11} color={C.gray400} />
                             <Text style={s.studentText}>
-                              {section.studentCount}{" "}
-                              student{section.studentCount !== 1 ? "s" : ""}
+                              {t("academic.studentCount", { count: section.studentCount })}
                             </Text>
                           </View>
                         )}

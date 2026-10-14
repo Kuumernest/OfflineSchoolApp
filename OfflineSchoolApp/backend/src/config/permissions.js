@@ -85,6 +85,7 @@ const {
   OFFICE_ROLES,
   TEACHING_ROLES,
   STAFF_ROLES,
+  PLATFORM_ROLES,
 } = require("./roles");
 
 const ALL = [
@@ -284,6 +285,29 @@ const PERMISSION_DEFS = [
   // ── Cross-cutting reads ───────────────────────────────────────────────────
   p("insights.view",    "insights", OFFICE_ROLES, true,
     "The watch list. Names children by fee arrears, so teachers are out."),
+  // A second capability rather than widening the first, because the two answer
+  // different questions from different rooms. insights.view is the office's
+  // list and it carries the fee ledger; this is the staffroom's, and the
+  // endpoints behind it compute from marks alone — no balance, no charge, no
+  // payment, enforced by the module boundary rather than by a filter. Teachers
+  // are scoped to the classes they hold an assignment for, through the same
+  // utils/teacherScope.js the register and the mark sheet already ask.
+  p("insights.viewTaught", "insights", TEACHING_ROLES, true,
+    "Subject strengths and risks for the students a teacher takes. No money."),
+  // Writing a review is a teacher's act, scoped like every other teacher write
+  // to the classes they hold an assignment for. Reading one sits on
+  // insights.viewTaught rather than insights.view: a review is a named
+  // colleague's judgement about a named child — the same class of record as an
+  // intervention note, and the bursar is kept out of it for the same reason.
+  p("insights.review", "insights", TEACHING_ROLES, true,
+    "Record whether an intelligence conclusion about a student you teach matches what you see."),
+  p("insights.pilot", "insights", ADMIN_ROLES, false,
+    "Open, advance and conclude a validation pilot of the intelligence engine for the school. " +
+    "Not delegable: concluding a pilot is a decision about evidence, and the principal signs it."),
+  p("interventions.view", "interventions", ADMIN_ROLES, true, "School-wide student-support interventions; bursars are excluded."),
+  p("interventions.viewTaught", "interventions", TEACHING_ROLES, true, "Interventions for students a teacher teaches."),
+  p("interventions.create", "interventions", TEACHING_ROLES, true, "Human-created support actions for taught students."),
+  p("interventions.manage", "interventions", ADMIN_ROLES, true, "Manage school interventions and outcomes."),
 
   // ── Coursework ────────────────────────────────────────────────────────────
   p("homework.view",    "homework", TEACHING_ROLES, true,
@@ -312,6 +336,25 @@ const PERMISSION_DEFS = [
     "This screen. A role that can grant itself permissions has no ceiling."),
   p("sync.push",        "sync", ADMIN_ROLES, false,
     "Write period definitions and promotion decisions from a device."),
+
+  // ── The platform ──────────────────────────────────────────────────────────
+  //
+  // Held by the operator alone. school_admin is deliberately NOT in these: it
+  // is the one role whose defaults are otherwise the whole registry, and these
+  // are the capabilities that reach past a school's own walls. All locked —
+  // the overrides a school may write apply to bursar and teacher and drop
+  // locked keys on the way in, so no school can grant itself a view of its
+  // neighbours.
+  p("platform.schools",       "platform", PLATFORM_ROLES, false,
+    "List every school on the deployment and open any of them."),
+  p("platform.manageSchools", "platform", PLATFORM_ROLES, false,
+    "Create a school, change its identity, switch it on or off."),
+  p("platform.dashboard",     "platform", PLATFORM_ROLES, false,
+    "Figures aggregated across schools: enrolment, attendance, results, fees."),
+  p("platform.audit",         "platform", PLATFORM_ROLES, false,
+    "Read the record of what platform administrators did, and to which school."),
+  p("platform.manageAdmins",  "platform", PLATFORM_ROLES, false,
+    "Create, edit, switch on or off the platform's own administrator accounts."),
 ];
 
 const PERMISSION_KEYS = PERMISSION_DEFS.map((d) => d.key);

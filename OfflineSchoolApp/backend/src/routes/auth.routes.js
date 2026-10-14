@@ -7,6 +7,8 @@ const bcrypt   = require("bcryptjs");
 const jwt      = require("jsonwebtoken");
 const rateLimit = require("express-rate-limit");
 const User     = require("../db/models/User");
+const { passwordPolicyError } = require("../utils/passwordPolicy");
+const { isSchoolClosedFor } = require("../utils/schoolContext");
 const { authenticate } = require("../../middleware/auth");
 const {
   effectiveFor,
@@ -150,7 +152,9 @@ const serializeUser = (user, permissions = []) => ({
 
 const buildTokenResponse = async (user) => {
   const token        = signAccessToken(user);
-  const refreshToken = signRefreshToken(user);
+  // A temporary password buys a fifteen-minute session and nothing that can
+  // renew it: a ninety-day refresh token beside it made the ceiling nominal.
+  const refreshToken = user.mustResetPassword ? null : signRefreshToken(user);
   return {
     success: true,
     token,
@@ -194,10 +198,11 @@ router.post("/login", loginLimiter, async (req, res) => {
         return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
       if (user.role === "student") {
-        return res.status(401).json({
-          success: false,
-          message: "Students must log in with their enrollment number",
-        });
+        // Same answer and the same cost as an unknown address. A distinct
+        // message here confirmed that the email belongs to an active pupil,
+        // which is the oracle DUMMY_HASH exists to close.
+        await bcrypt.compare(password, DUMMY_HASH);
+        return res.status(401).json({ success: false, message: "Invalid email or password" });
       }
     } else {
       const cleanNo = enrollmentNo.trim().toUpperCase();
@@ -240,6 +245,19 @@ router.post("/login", loginLimiter, async (req, res) => {
         message: isStudentLogin
           ? "Invalid enrollment number or password"
           : "Invalid email or password",
+      });
+    }
+
+    // A user whose school the platform has switched off cannot sign in, and is
+    // told why: a correct password answered with "invalid" would send them to
+    // reset a password that is not the problem. super_admin has no school and
+    // is never refused here; a schoolId that matches no School row is not a
+    // closed school (see utils/schoolContext.js).
+    if (await isSchoolClosedFor(user)) {
+      return res.status(403).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: "This school has been deactivated. Contact the platform operator.",
       });
     }
 
@@ -291,6 +309,16 @@ router.post("/refresh", async (req, res, next) => {
       });
     }
 
+    // The door rule, for the one path that mints a session without passing
+    // the door: a closed school's refresh token must not reissue one.
+    if (await isSchoolClosedFor(user)) {
+      return res.status(401).json({
+        success: false,
+        code:    "SCHOOL_INACTIVE",
+        message: "This school has been deactivated. Contact the platform operator.",
+      });
+    }
+
     // Same rule middleware/auth.js applies to access tokens: a refresh token
     // minted before the last password change must not mint new ones. Without
     // this, "sign out everybody" never actually finished — the access token
@@ -301,6 +329,19 @@ router.post("/refresh", async (req, res, next) => {
         success: false,
         message: "Session ended when your password changed — please log in again",
         code:    "REFRESH_STALE",
+      });
+    }
+
+    // A flagged account holds no refresh token — login withholds it — but a
+    // token minted before an administrator's reset survives on the device
+    // until passwordChangedAt catches it above, and nothing else should ever
+    // turn a temporary password into a renewable session. The door applies
+    // the same rule to the access-token mode (middleware/auth.js).
+    if (user.mustResetPassword) {
+      return res.status(403).json({
+        success: false,
+        code:    "PASSWORD_CHANGE_REQUIRED",
+        message: "Choose a password before continuing.",
       });
     }
 
@@ -348,29 +389,11 @@ router.post("/change-password", authenticate, async (req, res) => {
     if (newPassword !== confirmPassword) {
       return res.status(400).json({ success: false, message: "Passwords do not match" });
     }
-    if (newPassword.length < 8) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must be at least 8 characters",
-      });
-    }
-    if (!/[A-Z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one uppercase letter",
-      });
-    }
-    if (!/[a-z]/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one lowercase letter",
-      });
-    }
-    if (!/\d/.test(newPassword)) {
-      return res.status(400).json({
-        success: false,
-        message: "Password must contain at least one number",
-      });
+    // The four rules live in utils/passwordPolicy.js, which the platform's
+    // account creation reads too, so the two cannot drift apart.
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) {
+      return res.status(400).json({ success: false, message: policyError });
     }
 
     const userId = req.user.id || req.user._id;

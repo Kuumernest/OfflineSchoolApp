@@ -22,6 +22,8 @@
  *   node scripts/check-hourly-payroll.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const mongoose = require("mongoose");
 
 const payroll = require("../src/services/payroll.service");
@@ -200,7 +202,7 @@ const main = async () => {
   check("finance routes load", true, true);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

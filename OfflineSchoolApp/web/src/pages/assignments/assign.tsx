@@ -123,7 +123,7 @@ const StepCard = ({ step, children }: { step: Step; children: React.ReactNode })
           <Icon size={20} className="text-indigo-600" />
         </div>
         <div>
-          <p className="text-xs font-medium text-gray-400">Step {step} of 4</p>
+          <p className="text-xs font-medium text-gray-400">{t("assignments.stepOf", { step, total: 4 })}</p>
           <p className="text-base font-bold text-gray-900">{t(s.titleKey)}</p>
         </div>
       </div>
@@ -304,7 +304,7 @@ export default function AssignTeacherPage() {
   const mutation = useMutation({
     mutationFn: async () => {
       if (!selectedTeacher || !selectedClass || !selectedSubjects.length) {
-        throw new Error("Incomplete selection");
+        throw new Error(t("assignments.incompleteSelection"));
       }
 
       const teacherId = selectedTeacher._id;
@@ -340,7 +340,7 @@ export default function AssignTeacherPage() {
         subjects:  selectedSubjects.map((s) => s.name),
         ok:        true,
         error:     bulk.failed.length
-          ? `${bulk.failed.length} subject(s) failed`
+          ? t("assignments.subjectsFailed", { count: bulk.failed.length })
           : undefined,
       }] as CreateResult[];
     },
@@ -380,10 +380,10 @@ export default function AssignTeacherPage() {
             }
           </div>
           <h2 className="text-xl font-bold text-gray-900">
-            {allOk ? t("assignments.created") : "Partial Success"}
+            {allOk ? t("assignments.created") : t("assignments.partialSuccess")}
           </h2>
           <p className="mt-1 text-sm text-gray-500">
-            Assigned to{" "}
+            {t("assignments.assignedTo")}{" "}
             <span className="font-semibold text-gray-900">
               {selectedTeacher?.name}
             </span>
@@ -478,10 +478,10 @@ export default function AssignTeacherPage() {
           </div>
 
           {teachersQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-gray-400">Loading teachers…</p>
+            <p className="py-6 text-center text-sm text-gray-400">{t("subjects.loadingTeachers")}</p>
           ) : filteredTeachers.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-400">
-              {teacherSearch ? t("assignments.noTeacherHit") : "No teachers found."}
+              {teacherSearch ? t("assignments.noTeacherHit") : t("assignments.noTeachers")}
             </p>
           ) : (
             <div className="flex flex-col gap-2">
@@ -552,14 +552,13 @@ export default function AssignTeacherPage() {
             <div className="mb-3 flex items-center gap-2 rounded-xl bg-blue-50 px-3 py-2.5">
               <AlertCircle size={14} className="shrink-0 text-blue-600" />
               <p className="text-xs font-medium text-blue-800">
-                Currently assigned to {existing.length} subject
-                {existing.length !== 1 ? "s" : ""}
+                {t("assignments.currentlyAssigned", { count: existing.length })}
               </p>
             </div>
           )}
 
           {classesQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-gray-400">Loading classes…</p>
+            <p className="py-6 text-center text-sm text-gray-400">{t("subjectsEdit.loadingClasses")}</p>
           ) : classes.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-400">{t("assignments.noClasses")}</p>
           ) : (
@@ -598,14 +597,14 @@ export default function AssignTeacherPage() {
                       </p>
                       {cls.section && (
                         <p className="text-xs text-gray-400">
-                          Section {cls.section}
+                          {t("common.section")} {cls.section}
                         </p>
                       )}
                     </div>
                     <div className="flex shrink-0 items-center gap-2">
                       {count > 0 && (
                         <span className="rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-600">
-                          {count} assigned
+                          {t("assignments.countAssigned", { count })}
                         </span>
                       )}
                       <ChevronRight size={16} className="text-gray-300" />
@@ -640,7 +639,7 @@ export default function AssignTeacherPage() {
           </div>
 
           {subjectsQuery.isLoading ? (
-            <p className="py-6 text-center text-sm text-gray-400">Loading subjects…</p>
+            <p className="py-6 text-center text-sm text-gray-400">{t("subjects.loading")}</p>
           ) : subjects.length === 0 ? (
             <p className="py-6 text-center text-sm text-gray-400">
               {t("assignments.noSubjectsInClass")}
@@ -661,8 +660,8 @@ export default function AssignTeacherPage() {
                     : <Square      size={18} />
                   }
                   {allSelected
-                    ? "Deselect All"
-                    : `Select All (${availableSubjects.length})`
+                    ? t("subjects.deselectAll")
+                    : t("assignments.selectAllCount", { count: availableSubjects.length })
                   }
                 </button>
               )}
@@ -722,8 +721,7 @@ export default function AssignTeacherPage() {
                   onClick={() => setStep(4)}
                   className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 py-3 text-sm font-bold text-white hover:bg-indigo-700 transition-colors"
                 >
-                  Review {selectedSubjects.length} Selection
-                  {selectedSubjects.length !== 1 ? "s" : ""}
+                  {t("assignments.reviewSelection", { count: selectedSubjects.length })}
                   <ChevronRight size={16} />
                 </button>
               )}
@@ -759,7 +757,7 @@ export default function AssignTeacherPage() {
 
           <div className="mb-3 rounded-xl border border-gray-100 p-3.5">
             <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-400">
-              <BookOpen size={12} /> Subjects ({selectedSubjects.length})
+              <BookOpen size={12} /> {t("assignments.subjectsCount", { count: selectedSubjects.length })}
             </p>
             <div className="flex flex-col gap-1.5">
               {selectedSubjects.map((s) => (

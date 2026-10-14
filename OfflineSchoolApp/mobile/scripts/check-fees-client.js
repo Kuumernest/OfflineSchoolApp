@@ -26,6 +26,12 @@
  */
 
 const path  = require("path");
+
+// The same guard the backend check scripts use: a mongod that will not
+// stop must not turn a passing run into a failing one. These two print
+// their summary AFTER teardown, so the throw suppressed the verdict too.
+const { stopQuietly } =
+  require(require("path").join(__dirname, "..", "..", "backend", "scripts", "stopQuietly"));
 const fs    = require("fs");
 const babel = require("@babel/core");
 
@@ -373,7 +379,7 @@ const loadModule = (rel, stubs) => {
 
   await server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
 
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);

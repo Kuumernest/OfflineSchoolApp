@@ -2,6 +2,7 @@
 import { useState, useMemo }          from "react";
 import { useSearchParams, Link }      from "react-router-dom";
 import { useExams }                   from "@/hooks/useExams";
+import { useUser }                    from "@/store/auth.store";
 import { useTranslation } from "react-i18next";
 import {
   useExamStats,
@@ -718,12 +719,17 @@ export default function ExamResultsPage() {
   );
   const { data: rankingsData } = useRankings(selectedExamId ?? "", rankScope);
 
+  // A processed-but-unpublished exam is the office's to look at; the server
+  // answers a teacher's statistics and rankings for published results only,
+  // so offering the draft would be offering an empty page.
+  const user    = useUser();
+  const isAdmin = user?.role === "super_admin" || user?.role === "school_admin";
   const completedExams = useMemo(
     () =>
       (examsData?.exams ?? []).filter(
-        (e) => e.status === "completed" || e.status === "published"
+        (e) => e.status === "published" || (isAdmin && e.status === "completed")
       ),
-    [examsData]
+    [examsData, isAdmin]
   );
 
   const stats: Stats | null    = statsData?.data ?? null;

@@ -4,6 +4,7 @@ import { fetchTeachers }        from "@/services/teacher.service";
 import { fetchClasses }         from "@/services/class.service";
 import { subjectService }       from "@/services/subject.service";
 import { useAuthStore }         from "@/store/auth.store";
+import i18n                     from "@/i18n";
 
 // ─── Unified search result type ───────────────────────────────────────────────
 export interface SearchResult {
@@ -121,7 +122,7 @@ async function getTeacherResults(schoolId: string): Promise<SearchResult[]> {
       sublabel: [
         t.email,
         t.subjects?.length
-          ? `${t.subjects.length} subject${t.subjects.length > 1 ? "s" : ""}`
+          ? i18n.t("academic.subjectCount", { count: t.subjects.length })
           : null,
       ]
         .filter(Boolean)

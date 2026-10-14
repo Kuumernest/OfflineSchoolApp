@@ -168,7 +168,7 @@ const getQuizStatus = (quiz, attempts = [], t) => {
       : null;
     return {
       label:    remaining != null
-        ? `${remaining} attempt${remaining !== 1 ? "s" : ""} left`
+        ? t("studentQuiz.attemptsLeft", { count: remaining })
         : t("studentHome.quizRetake"),
       color:    "#4F46E5",
       bg:       "#EEF2FF",
@@ -341,7 +341,7 @@ const StartModal = ({ quiz, attempts, onStart, onClose, starting }) => {
                 <View key={a.id || i} style={styles.prevCard}>
                   <View style={styles.prevCardLeft}>
                     <Text style={styles.prevAttemptNum}>
-                      Attempt {a.attempt_number || i + 1}
+                      {t("studentQuiz.attemptN", { n: a.attempt_number || i + 1 })}
                     </Text>
                     <Text style={styles.prevAttemptDate}>
                       {formatDate(a.submitted_at || a.started_at) ?? "—"}
@@ -786,8 +786,7 @@ export default function StudentQuizzesScreen() {
                         { color: "#4F46E5" },
                       ]}
                     >
-                      {status.attempts} attempt
-                      {status.attempts !== 1 ? "s" : ""}
+                      {t("quizList.attemptCount", { count: status.attempts })}
                     </Text>
                   </View>
                 )}
@@ -825,7 +824,7 @@ export default function StudentQuizzesScreen() {
                         },
                       ]}
                     >
-                      Best: {status.best.toFixed(1)}%
+                      {t("studentQuiz.best", { value: status.best.toFixed(1) })}
                     </Text>
                   </View>
                 )}

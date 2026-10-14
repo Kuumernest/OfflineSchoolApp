@@ -12,19 +12,34 @@
 export const DAY_CODES = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"] as const;
 export type DayCode = (typeof DAY_CODES)[number];
 
-export const DAY_LABELS: Record<DayCode, string> = {
-  MON: "Monday",
-  TUE: "Tuesday",
-  WED: "Wednesday",
-  THU: "Thursday",
-  FRI: "Friday",
-  SAT: "Saturday",
-  SUN: "Sunday",
+// ─────────────────────────────────────────────────────────────────────────────
+// DAY LABELS
+//
+// Weekday names are user-facing text, so they are NOT stored here. They live
+// in src/i18n/locales/{en,fr}.json under the "timetable" namespace and are
+// resolved with t() at render time. These maps translate each canonical code
+// into its translation key — never into a literal label — so the grid renders
+// Monday/Lundi (etc.) purely based on the selected language.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const DAY_LABEL_KEYS: Record<DayCode, string> = {
+  MON: "timetable.monday",
+  TUE: "timetable.tuesday",
+  WED: "timetable.wednesday",
+  THU: "timetable.thursday",
+  FRI: "timetable.friday",
+  SAT: "timetable.saturday",
+  SUN: "timetable.sunday",
 };
 
-export const DAY_SHORT: Record<DayCode, string> = {
-  MON: "Mon", TUE: "Tue", WED: "Wed", THU: "Thu",
-  FRI: "Fri", SAT: "Sat", SUN: "Sun",
+export const DAY_SHORT_KEYS: Record<DayCode, string> = {
+  MON: "timetable.monShort",
+  TUE: "timetable.tueShort",
+  WED: "timetable.wedShort",
+  THU: "timetable.thuShort",
+  FRI: "timetable.friShort",
+  SAT: "timetable.satShort",
+  SUN: "timetable.sunShort",
 };
 
 /** The five days a timetable grid shows by default. */

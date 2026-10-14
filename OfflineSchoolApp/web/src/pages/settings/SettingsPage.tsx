@@ -16,6 +16,7 @@ import { cn }                    from "@/utils/cn";
 import { useToast }              from "@/components/ui/Toast";
 import api                       from "@/services/api";
 import { resolveLogoSrc }        from "@/utils/logoSrc";
+import { roleLabel }             from "@/utils/roleLabel";
 import { useTranslation } from "react-i18next";
 import type { TFunction } from "i18next";
 
@@ -56,6 +57,11 @@ interface GradingConfig {
   passMark:    number;
   /** Whether letter grades appear on report cards at all. */
   showGrades:  boolean;
+  /** Whether a sequence is marked twice — CA, then the paper — or once. */
+  caEnabled:   boolean;
+  /** The split, as percentages of the sequence. Must add to 100 when on. */
+  caWeight:    number;
+  testWeight:  number;
   useGpa:      boolean;
   gpaScale:    number;
   gradingType: string;
@@ -144,30 +150,16 @@ const DAYS_OF_WEEK = [
   { value: "Saturday",  labelKey: "settings.daySat" },
 ];
 
-// "admin" is kept in both maps below, and only in the maps. It is not a role
-// the API will store — see backend/src/config/roles.js — but a school whose
-// database predates the enum could still hold a row saying it, and a badge
-// reading "admin" is better than one reading nothing.
+// "admin" is kept here, and in the label map in utils/roleLabel. It is not a
+// role the API will store — see backend/src/config/roles.js — but a school
+// whose database predates the enum could still hold a row saying it, and a
+// badge reading "admin" is better than one reading nothing.
 const ROLE_COLORS: Record<string, string> = {
   super_admin:  "bg-red-100 text-red-700",
   school_admin: "bg-purple-100 text-purple-700",
   bursar:       "bg-amber-100 text-amber-700",
   admin:        "bg-indigo-100 text-indigo-700",
   teacher:      "bg-emerald-100 text-emerald-700",
-};
-
-const ROLE_LABEL_KEYS: Record<string, string> = {
-  super_admin:  "settings.roleSuperAdmin",
-  school_admin: "settings.schoolAdmin",
-  bursar:       "settings.roleBursar",
-  admin:        "settings.roleAdmin",
-  teacher:      "academic.teacher",
-};
-
-/** The visible name for a role, falling back to the raw value we were sent. */
-const roleLabel = (role: string | undefined, t: TFunction): string => {
-  const key = ROLE_LABEL_KEYS[role ?? ""];
-  return key ? t(key) : (role ?? "");
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -966,8 +958,32 @@ function GradingSection({ schoolId }: { schoolId: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [schoolId]);
 
+  /*
+   * CA + Test must add to 100 before the save is attempted.
+   *
+   * Checked here as well as on the server because the server answers a bad
+   * split with a 400, and a 400 in the offline queue stops the outbox and
+   * waits for a person. Saying so on the form is the difference between a
+   * corrected number and a stuck queue.
+   */
+  const caSplitError = ((): string | null => {
+    if (!config || config.caEnabled === false) return null;
+    const ca   = Number(config.caWeight);
+    const test = Number(config.testWeight);
+    if (!Number.isFinite(ca) || !Number.isFinite(test)) return t("settings.caWeightInvalid");
+    if (ca < 0 || test < 0) return t("settings.caWeightNegative");
+    if (Math.round((ca + test) * 100) / 100 !== 100) {
+      return t("settings.caWeightSum", { total: Math.round((ca + test) * 100) / 100 });
+    }
+    return null;
+  })();
+
   const handleSave = async () => {
     if (!config) return;
+    if (caSplitError) {
+      toast({ kind: "error", title: t("settings.saveFailed"), message: caSplitError });
+      return;
+    }
     setSaving(true);
     try {
       const payload = { ...config, schoolId };
@@ -1031,6 +1047,78 @@ function GradingSection({ schoolId }: { schoolId: string }) {
               </span>
             </span>
           </label>
+
+          {/* ── Continuous assessment ────────────────────────────────────
+
+              The toggle, and the split it governs. ON by default; a school
+              that does not assess continuously turns it off, and turning it
+              off deletes nothing — the CA marks already entered stay where
+              they are, ready for the day it is turned back on. The weights
+              stay editable while it is off for the same reason. */}
+          <label className="flex items-start gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.caEnabled !== false}
+              onChange={(e) => setConfig({ ...config, caEnabled: e.target.checked })}
+              className="mt-0.5 h-4 w-4 rounded border-gray-300 text-indigo-600
+                         focus:ring-2 focus:ring-indigo-200"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-gray-800">
+                {t("settings.caEnabled")}
+              </span>
+              <span className="block text-xs text-gray-500 mt-0.5">
+                {t("settings.caEnabledHint")}
+              </span>
+            </span>
+          </label>
+
+          {config.caEnabled !== false && (
+            <div className="rounded-xl border border-gray-100 bg-gray-50 p-4">
+              <p className="mb-3 text-sm font-semibold text-gray-700">
+                {t("settings.caSplit")}
+              </p>
+              <div className="flex flex-wrap items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <FieldLabel>{t("settings.caWeight")}</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="1"
+                    value={config.caWeight ?? 40}
+                    onChange={(e) =>
+                      setConfig({ ...config, caWeight: Number(e.target.value) })
+                    }
+                    className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
+                               text-sm outline-none focus:border-indigo-400
+                               focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <FieldLabel>{t("settings.testWeight")}</FieldLabel>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="1"
+                    value={config.testWeight ?? 60}
+                    onChange={(e) =>
+                      setConfig({ ...config, testWeight: Number(e.target.value) })
+                    }
+                    className="w-20 rounded-xl border border-gray-200 bg-white px-3 py-2
+                               text-sm outline-none focus:border-indigo-400
+                               focus:ring-2 focus:ring-indigo-100"
+                  />
+                  <span className="text-sm text-gray-500">%</span>
+                </div>
+              </div>
+              {caSplitError
+                ? <p className="mt-2 text-xs text-red-500">{caSplitError}</p>
+                : <p className="mt-2 text-xs text-gray-500">{t("settings.caSplitHint")}</p>}
+            </div>
+          )}
 
           {/* Pass mark */}
           <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-4">

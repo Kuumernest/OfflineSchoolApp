@@ -110,6 +110,14 @@ interface RosterArgs {
   subject:  AttendanceSubject;
   schoolId: string;
   classId?: string | null;
+  /**
+   * Teachers only. The staff register is the timetable's: the server lists
+   * who is scheduled to teach on this date, in this period (any period when
+   * none is given). Without a date it would list every active teacher, which
+   * is not a register anyone marks.
+   */
+  date?:     string | null;
+  periodId?: string | null;
 }
 
 /**
@@ -143,23 +151,32 @@ export async function fetchPeriods(schoolId: string): Promise<Period[]> {
  * instead.
  */
 export async function fetchRoster(args: RosterArgs): Promise<RosterEntry[]> {
+  const teachers = args.subject === "teachers";
   const { data } = await api.get(`${BASE}/${args.subject}/roster`, {
     params: {
       schoolId: args.schoolId,
       ...(args.classId ? { classId: args.classId } : {}),
+      ...(teachers && args.date     ? { date:     args.date }     : {}),
+      ...(teachers && args.periodId ? { periodId: args.periodId } : {}),
     },
   });
 
-  const key = args.subject === "students" ? "students" : "teachers";
-  return unwrapList<Record<string, unknown>>(data, key).map((p) => ({
-    id:          String(p._id ?? p.id ?? ""),
-    name:        personName(p),
-    email:       (p.email as string) ?? null,
-    admissionNo: (p.admissionNo as string) ?? null,
-    classId:     (p.classId as string) ?? null,
-    className:   (p.className as string) ?? null,
-    attendance:  null,
-  }));
+  const key = teachers ? "teachers" : "students";
+  return unwrapList<Record<string, unknown>>(data, key).map((p) => {
+    // A timetabled teacher arrives with the slots that put them on the list;
+    // the classes they teach in the period become their second line.
+    const slots = Array.isArray(p.slots) ? (p.slots as Record<string, unknown>[]) : [];
+    const classNames = [...new Set(slots.map((s) => String(s.className ?? "")).filter(Boolean))];
+    return {
+      id:          String(p._id ?? p.id ?? ""),
+      name:        personName(p),
+      email:       (p.email as string) ?? null,
+      admissionNo: (p.admissionNo as string) ?? null,
+      classId:     (p.classId as string) ?? null,
+      className:   (p.className as string) ?? (classNames.length ? classNames.join(" · ") : null),
+      attendance:  null,
+    };
+  });
 }
 
 async function fetchRecords(args: {

@@ -18,6 +18,8 @@
  *   node scripts/check-cross-school.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -187,6 +189,6 @@ const bad = (label, detail) => {
 
   server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exitCode = fail ? 1 : 0;
 })().catch((err) => { console.error("check failed:", err); process.exit(1); });

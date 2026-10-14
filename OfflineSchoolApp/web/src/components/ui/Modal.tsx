@@ -12,6 +12,7 @@ import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { cn } from "@/utils/cn";
+import { useTranslation } from "react-i18next";
 
 interface ModalProps {
   open:      boolean;
@@ -39,6 +40,7 @@ export function Modal({
   size = "md",
   className,
 }: ModalProps) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDialogElement>(null);
 
   // showModal()/close() are imperative, so open/close is driven by an effect
@@ -105,7 +107,7 @@ export function Modal({
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
             className="-mr-1 rounded-control p-1 text-ink-faint transition-colors hover:bg-canvas hover:text-ink-body"
           >
             <X className="h-4 w-4" />

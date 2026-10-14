@@ -288,7 +288,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             <DetailRow
               icon={<SvgIcon d={PATHS.mail}     color="#4F46E5" />}
               label={t("common.email")}
-              value={application.email || "No email provided"}
+              value={application.email || t("admissions.noEmail")}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.phone}    color="#059669" />}
@@ -317,7 +317,7 @@ export const ReviewModal: React.FC<ReviewModalProps> = ({
             <DetailRow
               icon={<SvgIcon d={PATHS.school}   color="#7C3AED" />}
               label={t("admissions.appliedForClass")}
-              value={application.className || "Not specified"}
+              value={application.className || t("common.notSpecified")}
             />
             <DetailRow
               icon={<SvgIcon d={PATHS.calendar} color="#4F46E5" />}

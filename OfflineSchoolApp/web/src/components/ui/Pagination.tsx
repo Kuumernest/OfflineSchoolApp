@@ -30,7 +30,7 @@ export function Pagination({
   }
 
   return (
-    <div className="flex items-center justify-between gap-4 border-t border-line px-1 pt-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-t border-line px-1 pt-3">
       {/* One interpolated sentence per clause rather than words wrapped around
           <span>s — "Page 2 sur 5" and "Page 2 of 5" put the numbers in the same
           places, but a translator cannot move them if they are separate nodes. */}

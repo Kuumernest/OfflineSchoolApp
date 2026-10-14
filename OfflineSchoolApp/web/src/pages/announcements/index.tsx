@@ -172,7 +172,7 @@ export default function AnnouncementsPage() {
         : createAnnouncement(payload);
     },
     onSuccess: () => {
-      toast({ title: editing ? t("announcements.updated") : "Announcement posted", kind: "success" });
+      toast({ title: editing ? t("announcements.updated") : t("announcements.posted"), kind: "success" });
       closeComposer();
       invalidate();
     },
@@ -200,8 +200,8 @@ export default function AnnouncementsPage() {
       toast({
         title:   t("announcements.markedRead"),
         message: marked > 0
-          ? `${marked} announcement${marked === 1 ? "" : "s"} marked as read.`
-          : "Nothing was left unread.",
+          ? t("announcements.markedCount", { count: marked })
+          : t("announcements.nothingUnread"),
         kind: "success",
       });
       invalidate();
@@ -242,7 +242,7 @@ export default function AnnouncementsPage() {
   const askRemove = async (a: Announcement) => {
     const ok = await confirm({
       title:        t("announcements.removeConfirm"),
-      message:      `"${a.title}" will disappear for everyone who can currently see it.`,
+      message:      t("announcements.removeBody", { title: a.title }),
       confirmLabel: t("common.remove"),
       kind:         "danger",
     });
@@ -328,12 +328,12 @@ export default function AnnouncementsPage() {
         <Card className="text-center py-16">
           <Megaphone className="w-8 h-8 text-gray-300 mx-auto" />
           <p className="mt-3 text-sm font-medium text-gray-700">
-            {audience || priority ? t("announcements.noneMatch") : "No announcements yet"}
+            {audience || priority ? t("announcements.noneMatch") : t("announcements.none")}
           </p>
           <p className="mt-1 text-sm text-gray-500">
             {audience || priority
               ? t("announcements.clearFilters")
-              : "Post one to reach staff, students, or a particular class."}
+              : t("announcements.noneHint")}
           </p>
           {!audience && !priority && (
             <Button className="mt-4" size="sm" icon={<Plus className="w-4 h-4" />} onClick={openCreate}>
@@ -402,7 +402,7 @@ export default function AnnouncementsPage() {
                       </IconAction>
                       {pinAllowed && (
                         <IconAction
-                          title={a.isPinned ? t("announcements.unpin") : "Pin to the top"}
+                          title={a.isPinned ? t("announcements.unpin") : t("announcements.pin")}
                           onClick={() => pinMutation.mutate(a._id)}
                         >
                           {a.isPinned
@@ -438,7 +438,7 @@ export default function AnnouncementsPage() {
       <Modal
         open={composerOpen}
         onClose={closeComposer}
-        title={editing ? t("announcements.editOne") : "New announcement"}
+        title={editing ? t("announcements.editOne") : t("announcements.new")}
         size="lg"
       >
         <form
@@ -567,7 +567,7 @@ export default function AnnouncementsPage() {
               {t("common.cancel")}
             </Button>
             <Button type="submit" disabled={!canSave} loading={saveMutation.isPending}>
-              {editing ? t("common.saveChanges") : "Post announcement"}
+              {editing ? t("common.saveChanges") : t("quickActions.postAnnouncement")}
             </Button>
           </div>
         </form>

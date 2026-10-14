@@ -17,7 +17,7 @@ table over memory.
 |---|---|---|
 | `PORT` | no | Defaults to 5000. |
 | `NODE_ENV` | no | `production` switches on `trust proxy`, strict CORS, combined logs. |
-| `MONGODB_URI` | **yes** | e.g. `mongodb://user:pass@localhost:27017/school_app`. |
+| `MONGODB_URI` | **yes** | e.g. `mongodb://user:pass@localhost:27017/school_app`. Include the database name: without one MongoDB uses an empty `test` database and every login fails. |
 | `JWT_SECRET` | **yes** | 32+ characters. `config/env.js` refuses a short or placeholder value **at boot**. |
 | `JWT_REFRESH_SECRET` | **yes** | Enables the refresh-token flow (`POST /auth/refresh`). |
 | `JWT_EXPIRES_IN` / `JWT_REFRESH_EXPIRES` | no | Defaults 30d / 90d. |

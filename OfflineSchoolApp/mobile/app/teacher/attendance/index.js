@@ -21,6 +21,7 @@ import { Ionicons }          from "@expo/vector-icons";
 import { useAuthStore }      from "../../../src/store/auth.store";
 import { AttendanceService } from "../../../src/services/attendance.service";
 import { getDatabase }       from "../../../src/db/database";
+import { getTeacherClasses } from "../../../src/services/teacherScope.service";
 
 // ─────────────────────────────────────────────────────────────
 // HELPERS
@@ -39,7 +40,29 @@ const formatDate = (d) => {
 // FETCH TEACHER'S ASSIGNED CLASSES FROM SQLITE
 // ─────────────────────────────────────────────────────────────
 
+// The classes this teacher teaches, from the one place that knows: the
+// server's TeacherAssignment rows through teacherScope.service, cached for
+// offline. The mirror's teacher_assignments ⋈ classes join below is what this
+// screen used to read; a teacher's mirror does not receive those rows (the
+// sync feed excludes them for the role), so offline it listed nothing. It is
+// kept as the last resort for a phone never online since the scope shipped.
 const getTeacherAssignedClasses = async (teacherId, schoolId, t) => {
+  try {
+    const classes = await getTeacherClasses(teacherId, schoolId);
+    if (classes.length) {
+      return classes.map((c) => ({
+        id:   String(c.id),
+        name: c.name || t("attTeacher.unnamedClass"),
+        sub:  [c.level, c.section].filter(Boolean).join(" · "),
+      }));
+    }
+  } catch (err) {
+    console.warn("[getTeacherAssignedClasses] scope failed:", err?.message);
+  }
+  return getTeacherAssignedClassesFromMirror(teacherId, schoolId, t);
+};
+
+const getTeacherAssignedClassesFromMirror = async (teacherId, schoolId, t) => {
   try {
     const db = await getDatabase();
 
@@ -130,7 +153,7 @@ const ClassCard = ({ cls, summary, onMark, onReport }) => {
           <Text style={cardS.name}>{cls.name}</Text>
           {!!cls.sub && <Text style={cardS.sub}>{cls.sub}</Text>}
           <Text style={cardS.meta}>
-            {summary?.marked ?? 0} of {summary?.total ?? 0} marked today
+            {t("attAdmin.markedOfTotalToday", { marked: summary?.marked ?? 0, total: summary?.total ?? 0 })}
           </Text>
         </View>
 
@@ -413,8 +436,7 @@ export default function TeacherAttendanceScreen() {
         {classes.length > 0 && (
           <View style={styles.overallCard}>
             <Text style={styles.overallTitle}>
-              My Classes Today — {classes.length} class
-              {classes.length !== 1 ? "es" : ""}
+              {t("attTeacher.myClassesToday", { count: classes.length })}
             </Text>
 
             <View style={styles.overallPills}>

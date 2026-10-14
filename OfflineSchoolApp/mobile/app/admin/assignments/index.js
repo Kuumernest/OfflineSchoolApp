@@ -287,9 +287,11 @@ export default function AssignmentsIndex() {
   const handleRemoveAssignment = useCallback((assignment) => {
     Alert.alert(
       t("assignList.removeTitle"),
-      `Remove ${assignment.teacher?.name || "this teacher"} from ` +
-      `${assignment.subject?.name || "this subject"} in ` +
-      `${assignment.class?.name || "this class"}?`,
+      t("assignList.removeBody", {
+        teacher: assignment.teacher?.name || t("assignList.thisTeacher"),
+        subject: assignment.subject?.name || t("assignList.thisSubject"),
+        class:   assignment.class?.name   || t("assignList.thisClass"),
+      }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {
@@ -475,7 +477,7 @@ export default function AssignmentsIndex() {
           <View key={teacherId} style={styles.groupContainer}>
             <GroupHeader
               title={group.teacherName}
-              subtitle={`${group.assignments.length} subject${group.assignments.length !== 1 ? "s" : ""} assigned`}
+              subtitle={t("assignList.subjectsAssignedCount", { count: group.assignments.length })}
               avatarContent={
                 <Text style={[styles.groupAvatarText, { color: "#4F46E5" }]}>
                   {group.teacherName?.charAt(0)?.toUpperCase() || "?"}
@@ -559,7 +561,7 @@ export default function AssignmentsIndex() {
           <View key={classId} style={styles.groupContainer}>
             <GroupHeader
               title={group.className}
-              subtitle={`${group.assignments.length} teacher${group.assignments.length !== 1 ? "s" : ""} assigned`}
+              subtitle={t("assignList.teachersAssignedCount", { count: group.assignments.length })}
               avatarContent={
                 <Ionicons name="school" size={18} color="#7C3AED" />
               }
@@ -633,9 +635,7 @@ export default function AssignmentsIndex() {
           <View style={styles.unassignedBanner}>
             <Ionicons name="information-circle" size={20} color="#D97706" />
             <Text style={styles.unassignedBannerText}>
-              {unassignedTeachers.length} teacher
-              {unassignedTeachers.length !== 1 ? "s" : ""} without any subject
-              assignment
+              {t("assignList.unassignedTeacherCount", { count: unassignedTeachers.length })}
             </Text>
           </View>
           {unassignedTeachers.map((teacher) => (

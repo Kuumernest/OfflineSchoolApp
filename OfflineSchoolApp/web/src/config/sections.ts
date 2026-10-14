@@ -28,6 +28,7 @@
  */
 
 export type SectionKey =
+  | "platform"
   | "overview"
   | "students"
   | "teachers"
@@ -69,6 +70,12 @@ export interface Section {
 }
 
 export const SECTIONS: Record<SectionKey, Section> = {
+  platform: {
+    key: "platform", labelKey: "navGroup.platform", label: "Platform",
+    text: "text-primary-700", bg: "bg-primary-50", border: "border-primary-200",
+    solid: "bg-primary-600", rule: "bg-primary-500",
+    navIcon: "text-primary-300",
+  },
   overview: {
     key: "overview", labelKey: "navGroup.overview", label: "Overview",
     text: "text-primary-700", bg: "bg-primary-50", border: "border-primary-200",
@@ -139,6 +146,7 @@ export const SECTIONS: Record<SectionKey, Section> = {
  * /exams, and /messages/audit before /messages.
  */
 const ROUTE_SECTIONS: Array<[string, SectionKey]> = [
+  ["/platform",       "platform"],
   ["/dashboard",      "overview"],
   ["/watchlist",      "overview"],
   ["/approvals",      "overview"],
@@ -191,6 +199,8 @@ export const NAV_GROUPS: Array<{
   /** Matched against a top-level nav item's own path or its first child's. */
   paths: string[];
 }> = [
+  { labelKey: "navGroup.platform", label: "Platform",
+    paths: ["/platform"] },
   { labelKey: "navGroup.overview", label: "Overview",
     paths: ["/dashboard", "/watchlist", "/approvals"] },
   { labelKey: "navGroup.people", label: "People",

@@ -20,6 +20,7 @@ import { Pencil,
   IdCard,
   KeyRound,
   ShieldAlert,
+  Sparkles,
 } from "lucide-react";
 
 import { useUser }              from "@/store/auth.store";
@@ -1324,6 +1325,18 @@ export default function StudentDetailPage() {
                 variant="default"
                 disabled={isBusy}
                 onClick={() => navigate(`/students/${student._id}/edit`)}
+              />
+
+              {/* The student's intelligence pages were reachable only from the
+                  class intelligence list; the profile is where the office
+                  starts from, so it opens them too. Same route, same gate. */}
+              <ActionButton
+                icon={Sparkles}
+                label={t("studentDetail.openStrengths")}
+                description={t("studentDetail.openStrengthsHint")}
+                variant="default"
+                disabled={isBusy}
+                onClick={() => navigate(`/students/${student._id}/strengths`)}
               />
 
             {/* Move */}

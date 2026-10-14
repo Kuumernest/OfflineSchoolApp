@@ -133,7 +133,7 @@ return (
   {form.type !== "practical" && (
     <div>
       <label className="block text-sm font-semibold text-gray-700 mb-2">
-        Sequence <span className="text-red-500">*</span>
+        {t("examCreate.sequence")} <span className="text-red-500">*</span>
       </label>
       <div className="flex flex-wrap gap-2">
         {getSequencesForTerm(Number(form.term) as TermNumber).map((seq) => {
@@ -296,8 +296,8 @@ return (
     </label>
     <div className="flex gap-2">
       {[
-        { value: "draft",     label: "Draft"     },
-        { value: "scheduled", label: "Scheduled" },
+        { value: "draft",     label: t("examStatus.draft")     },
+        { value: "scheduled", label: t("examStatus.scheduled") },
       ].map((opt) => (
         <button
           key={opt.value}
@@ -862,15 +862,15 @@ return (
       <h3 className="font-semibold text-gray-900">{t("examCreate.subjectAssignments")}</h3>
       <span className="text-xs bg-primary-100 text-primary-700
                        font-bold px-3 py-1 rounded-full">
-        {Object.keys(assignments).length} class(es) ·
-        {totalSubjects} subject(s)
+        {t("subjects.classCount", { count: Object.keys(assignments).length })} ·
+        {t("academic.subjectCount", { count: totalSubjects })}
       </span>
     </div>
 
     {Object.keys(assignments).length === 0 ? (
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4
                       text-amber-700 text-sm text-center">
-        ⚠️ No subjects assigned. You can add them later from the exam detail.
+        {t("examCreate.noSubjectsWarning")}
       </div>
     ) : (
       <div className="space-y-3">
@@ -883,7 +883,7 @@ return (
                 {cls.className}
               </span>
               <span className="text-xs text-gray-500">
-                {Object.keys(cls.subjects).length} subject(s)
+                {t("academic.subjectCount", { count: Object.keys(cls.subjects).length })}
               </span>
             </div>
             <div className="divide-y divide-gray-100">
@@ -895,7 +895,7 @@ return (
                     {sub.subjectName}
                   </span>
                   <span className="text-gray-400 text-xs">
-                    Max {sub.maxScore} · Pass {sub.passMark}
+                    {t("examCreate.max")} {sub.maxScore} · {t("examCreate.passMark")} {sub.passMark}
                   </span>
                 </div>
               ))}

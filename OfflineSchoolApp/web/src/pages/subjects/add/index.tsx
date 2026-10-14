@@ -323,7 +323,7 @@ export default function AddSubjectPage() {
             (err as { response?: { data?: { message?: string } } })
               ?.response?.data?.message ??
             (err instanceof Error ? err.message : null) ??
-            "Unknown error";
+            t("common.unknownError");
           outcomes.push({
             classId:   cid,
             className: cls?.name ?? cid,
@@ -471,7 +471,7 @@ export default function AddSubjectPage() {
               label={t("subjects.nameLabel")}
               required
               error={errors.name}
-              hint="Use a clear, recognisable name."
+              hint={t("subjectsEdit.nameHint")}
             >
               <div
                 className={cn(
@@ -592,7 +592,7 @@ export default function AddSubjectPage() {
               label={t("academic.class_other")}
               required
               error={errors.classIds}
-              hint="Select all classes that will teach this subject."
+              hint={t("subjectsAdd.classesHint")}
             >
               <div
                 className={cn(
@@ -605,7 +605,7 @@ export default function AddSubjectPage() {
               >
                 {classesQuery.isLoading ? (
                   <p className="px-4 py-3 text-sm text-gray-400">
-                    Loading classes…
+                    {t("subjectsEdit.loadingClasses")}
                   </p>
                 ) : classes.length === 0 ? (
                   <p className="px-4 py-3 text-sm text-gray-400">
@@ -624,7 +624,7 @@ export default function AddSubjectPage() {
                         : <Square      size={16} className="text-gray-400 shrink-0"   />
                       }
                       <span className="text-xs font-bold text-gray-600 uppercase tracking-wide">
-                        {allSelected ? t("subjects.deselectAll") : "Select All"}
+                        {allSelected ? t("subjects.deselectAll") : t("examCreate.selectAll")}
                       </span>
                       <span className="ml-auto text-xs text-gray-400">
                         {form.classIds.length}/{classes.length}
@@ -660,7 +660,7 @@ export default function AddSubjectPage() {
                               </span>
                               {cls.level && (
                                 <span className="ml-auto text-xs text-gray-400">
-                                  Level {cls.level}
+                                  {t("common.level")} {cls.level}
                                 </span>
                               )}
                             </button>
@@ -702,7 +702,7 @@ export default function AddSubjectPage() {
             <Field
               id={teacherId}
               label={t("classes.assignedTeacher")}
-              hint="Optional — you can assign a teacher later."
+              hint={t("subjectsAdd.teacherHint")}
             >
               <select
                 id={teacherId}
@@ -717,7 +717,7 @@ export default function AddSubjectPage() {
                 )}
               >
                 <option value="">
-                  {teachersQuery.isLoading ? t("subjects.loadingTeachers") : "No teacher assigned"}
+                  {teachersQuery.isLoading ? t("subjects.loadingTeachers") : t("subjects.noTeacher")}
                 </option>
                 {teachers.map((t) => (
                   <option key={t._id} value={t._id}>{t.name}</option>

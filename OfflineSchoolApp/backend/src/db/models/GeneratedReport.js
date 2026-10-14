@@ -84,6 +84,18 @@ const generatedReportSchema = new mongoose.Schema(
 
     // ── Frozen output ─────────────────────────────────────────────────────
     // The exact variable values fed into the engine at generation time
+    /*
+     * The layout this card was issued with (docs/39 §10, Phase 2d): the
+     * ReportTemplateVersion it was printed under and a copy of its sections,
+     * so a reprint shows the same sections however the school's layout has
+     * changed since — and still reads if the version row is ever missing.
+     * All null on a card issued before layouts existed: it was printed with
+     * every section, which is how it reprints (reportLayout.service, "legacy").
+     */
+    layoutVersionId: { type: String, default: null },
+    layoutVersion:   { type: Number, default: null },
+    layoutSections:  { type: mongoose.Schema.Types.Mixed, default: null },
+
     variablePayload: {
       type:    mongoose.Schema.Types.Mixed,
       default: {},

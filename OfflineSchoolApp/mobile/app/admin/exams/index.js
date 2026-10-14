@@ -32,6 +32,7 @@ const STATUS_META = {
 
 const EXAM_TYPE_KEYS = {
   test:               "examType.test",
+  ca:                 "examType.ca",
   practical:          "examType.practical",
   promotion_exam:     "examType.promotion_exam",
 };
@@ -369,7 +370,7 @@ export default function ExamsDashboardScreen() {
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle}>{t("examsDash.title")}</Text>
           <Text style={styles.headerSub}>
-            {safe(d.total, "0")} exam{d.total !== 1 ? "s" : ""} total
+            {t("examsDash.examTotal", { count: Number(d.total) || 0 })}
           </Text>
         </View>
         <TouchableOpacity

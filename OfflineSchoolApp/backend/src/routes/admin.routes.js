@@ -14,6 +14,10 @@ const School            = require("../db/models/School");
 
 // ─── Services ────────────────────────────────────────────────────────────────
 const { sendEmail } = require("../services/email.service");
+// The platform audit trail. Appointing or removing a school's administrator,
+// and a super_admin rewriting a school's details, are recorded whoever does
+// them; the rest of this router is a school's own business.
+const { recordAudit, diff: auditDiff } = require("../services/audit.service");
 const {
   applyActiveStructuresForStudent: billStudentForClass,
 } = require("../services/fees.service");
@@ -118,7 +122,7 @@ const addNotDeleted = (query) => {
 // "a.b" or "50%" matches far more than it should — and a stray "(" throws,
 // which turns a search box into a 500.
 const escapeRegex = (str) =>
-  String(str ?? "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  String(str ?? "").replace(/\0/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 // ─── Lazy model loaders ──────────────────────────────────────────────────────
 
@@ -1258,6 +1262,14 @@ router.put("/teachers/:id", requirePermission("teachers.manage"), asyncHandler(a
     if (!isValidEmail(emailClean)) {
       return sendError(res, 400, "A valid email is required");
     }
+    // findOneAndUpdate skips the pre("save") uniqueness hook, so the rule is
+    // applied here: one active staff account per address, platform-wide.
+    // Without it a teacher could be given another school's staff address and
+    // that account's sign-in became a coin toss.
+    const holder = await User.findOne({
+      email: emailClean, role: { $ne: ROLES.STUDENT }, _id: { $ne: String(req.params.id) },
+    }).select("_id").lean();
+    if (holder) return sendError(res, 409, "Email already registered");
     updateFields.email = emailClean;
   }
   if (req.user?.role === "super_admin" && schoolId) {
@@ -1327,6 +1339,9 @@ router.post("/teachers/:id/reset-password", requirePermission("teachers.manage")
 router.get("/classes", requirePermission("classes.view"), asyncHandler(async (req, res) => {
   const schoolId        = resolveSchoolId(req, req.query.schoolId);
   const includeInactive = req.query.includeInactive === "true";
+  // An operator who has named no school is not asking about every school; the
+  // sibling handlers below say the same. A school administrator always has one.
+  if (!schoolId) return sendError(res, 400, "schoolId is required");
 
   let query = {};
   if (schoolId) query.schoolId = schoolId;
@@ -1385,7 +1400,15 @@ router.post("/classes", requirePermission("classes.manage"), asyncHandler(async 
   // Re-POSTing an id that already exists returns it rather than failing, which
   // is what makes the offline outbox safe to retry.
   if (id) {
-    const already = await Class.findById(String(id).trim()).lean();
+    // Scoped: the unscoped findById answered another school's class to whoever
+    // supplied its id. A foreign id is a conflict, not a row.
+    const dedupSchool = resolveSchoolId(req, schoolId);
+    const already = await Class.findOne({
+      _id: String(id).trim(), ...(dedupSchool ? { schoolId: dedupSchool } : {}),
+    }).lean();
+    if (!already && await Class.exists({ _id: String(id).trim() })) {
+      return sendError(res, 409, "A class with this id already exists");
+    }
     if (already) {
       return sendSuccess(res, {
         class:        already,
@@ -1641,7 +1664,14 @@ router.post("/subjects", requirePermission("subjects.manage"), asyncHandler(asyn
   // can supply the id it already stored — see POST /classes above for why the
   // mirror needs this, and POST /exams for the original of the pattern.
   if (id) {
-    const already = await Subject.findById(String(id).trim()).lean();
+    // Scoped, as for POST /classes.
+    const dedupSchool = resolveSchoolId(req, schoolId);
+    const already = await Subject.findOne({
+      _id: String(id).trim(), ...(dedupSchool ? { schoolId: dedupSchool } : {}),
+    }).lean();
+    if (!already && await Subject.exists({ _id: String(id).trim() })) {
+      return sendError(res, 409, "A subject with this id already exists");
+    }
     if (already) {
       return sendSuccess(res, {
         subject:      normaliseSubject(already),
@@ -2011,6 +2041,53 @@ router.get("/students", requirePermission("students.view"), asyncHandler(async (
 
   query = addNotDeleted(query);
 
+  // ── Pagination, in the database when a page is asked for ─────────────────
+  //
+  // Measured (scripts/perf-critical-paths.js, 1,200 pupils, 8 concurrent): the
+  // list answered a 50-row page in 1.1 s median and 6.2 s at p95, because it
+  // fetched every pupil of the school, sorted them in memory and sliced. That
+  // cost grows with the school, and this is the console's most-opened list.
+  //
+  // A paged caller now gets a pipeline: the same filter, the same order (the
+  // name the roster shows, lower-cased, under an English collation so accents
+  // sort as localeCompare did) and a skip/limit, with the total counted
+  // alongside. The unpaged path below is unchanged for callers that send no
+  // limit — the parity script and older clients want the whole list. The
+  // application-collection fallback only applies when the school has no
+  // Student rows at all, so a zero total hands the request to that path.
+  const pageNo  = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const pageLim = Math.min(Math.max(parseInt(req.query.limit, 10) || 0, 0), 200);
+  if (pageLim > 0) {
+    const S = getStudent();
+    if (S) {
+      const sortName = {
+        $toLower: { $ifNull: ["$studentName", { $ifNull: ["$name", { $ifNull: ["$firstName", ""] }] }] },
+      };
+      const [pageDocs, total] = await Promise.all([
+        S.aggregate([
+          { $match: query },
+          { $addFields: { _sortName: sortName } },
+          { $sort: { _sortName: 1, _id: 1 } },
+          { $skip: (pageNo - 1) * pageLim },
+          { $limit: pageLim },
+          { $project: { _sortName: 0 } },
+        ]).collation({ locale: "en", strength: 2 }),
+        S.countDocuments(query),
+      ]);
+      if (total > 0) {
+        const slice = await withClassNames(pageDocs.map(normaliseStudentDoc).filter(Boolean));
+        return sendSuccess(res, {
+          count:    slice.length,
+          total,
+          page:     pageNo,
+          pages:    Math.max(1, Math.ceil(total / pageLim)),
+          students: slice,
+          data:     slice,
+        });
+      }
+    }
+  }
+
   const students   = await fetchAllStudents(query);
   const sorted     = students.sort((a, b) => {
     const nameA =
@@ -2100,7 +2177,9 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
   }
 
   // ── Validate class ────────────────────────────────────────────────────────
-  const cls = await Class.findById(classId).lean();
+  // Tenant query, as PATCH /students/:id/move already does: findById let an
+  // approval bind a pupil to another school's class and copy its name.
+  const cls = await Class.findOne(getTenantQuery(req, classId)).lean();
   if (!cls) return sendError(res, 400, "Class not found");
 
   const now              = new Date();
@@ -2227,25 +2306,34 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
 
   // 2. By enrollmentNo (handles idempotent re-approval of same student)
   if (!user && enrollmentNo) {
-    user = await User.findOne({ enrollmentNo }).catch(() => null);
+    // Within this school: enrolment numbers are prefixed by school code and
+    // codes are not guaranteed unique, so an unscoped match could adopt —
+    // rename, re-password and re-home — another school's pupil account.
+    user = await User.findOne({ enrollmentNo, schoolId: resolvedSchoolId }).catch(() => null);
     if (user) {
       console.log(`[approve] Found user by enrollmentNo: ${user._id}`);
     }
   }
 
   if (user) {
-    // Existing user found — update credentials only
-    await User.findByIdAndUpdate(user._id, {
-      name:              studentName,
-      enrollmentNo,
-      password:          tempPassword,
-      mustResetPassword: true,
-      isActive:          true,
-      schoolId:          resolvedSchoolId,
-      classId,
-    }).catch((err) => {
+    // Existing user found — update credentials only.
+    //
+    // save(), not findByIdAndUpdate: the pre("save") hook is what hashes the
+    // password. The update form stored the temporary password in clear text
+    // on every re-approval — and, since bcrypt then rejected it, locked the
+    // pupil out until the next reset.
+    try {
+      user.name              = studentName;
+      user.enrollmentNo      = enrollmentNo;
+      user.password          = tempPassword;
+      user.mustResetPassword = true;
+      user.isActive          = true;
+      user.schoolId          = resolvedSchoolId;
+      user.classId           = classId;
+      await user.save();
+    } catch (err) {
       console.warn("[approve] User update failed:", err.message);
-    });
+    }
     console.log(`[approve] Updated existing student user: ${user._id}`);
 
   } else {
@@ -2328,6 +2416,7 @@ router.put("/students/:id/approve", requirePermission("students.admit"), asyncHa
       // Check if a Student record already exists for THIS specific student
       // (not by email — that would match siblings)
       const existingStudent = await S.findOne({
+        schoolId: resolvedSchoolId,
         $or: [
           { applicationId: studentId        },
           { userId:        String(user._id) },
@@ -2591,8 +2680,8 @@ router.delete("/students/:id", requirePermission("students.delete"), asyncHandle
   }
 
   if (!deleted && App) {
-    const result = await App.findByIdAndUpdate(
-      id, { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
+    const result = await App.findOneAndUpdate(
+      getTenantQuery(req, id), { deletedAt: new Date(), isActive: false }, { returnDocument: 'after' }
     ).catch(() => null);
     if (result) deleted = true;
   }
@@ -2871,19 +2960,33 @@ const handleCreateAssignment = asyncHandler(async (req, res) => {
   // As with POST /classes and POST /subjects: a client that made this
   // assignment offline supplies the id it already stored, and replaying it
   // returns the existing row instead of a second one.
+  const schoolId = resolveSchoolId(req, bodySchool);
+
   if (id) {
-    const already = await TeacherAssignment.findById(String(id).trim()).lean();
+    // Tenancy: the replay guard is scoped to the caller's school. The old
+    // unscoped findById answered another school's assignment row — its
+    // teacher, class and subject ids — to whoever supplied the id. A dedup
+    // hit carries only what an outbox needs to reconcile.
+    const already = await TeacherAssignment.findOne({
+      _id: String(id).trim(),
+      ...(schoolId ? { schoolId } : {}),
+    }).lean();
     if (already) {
       return sendSuccess(res, {
-        assignment:   already,
+        assignment: {
+          _id:       String(already._id),
+          id:        String(already._id),
+          schoolId:  already.schoolId ?? null,
+          teacherId: already.teacher ? String(already.teacher) : null,
+          classId:   already.class   ? String(already.class)   : null,
+          subjectId: already.subject ? String(already.subject) : null,
+        },
         serverId:     String(already._id),
         clientId:     String(id).trim(),
         deduplicated: true,
       });
     }
   }
-
-  const schoolId = resolveSchoolId(req, bodySchool);
 
   const [teacher, cls, subject] = await Promise.all([
     User.findOne({
@@ -3089,6 +3192,10 @@ const { DEFAULT_GRADES } = require("../../../shared/gradeScale");
 
 const { defaultGradingConfig: getDefaultGradingConfig } = require("../../../shared/gradeScale");
 
+// The CA rules, from the one place that holds them — the settings screens, the
+// desktop mirror and the grading engine all validate against this same module.
+const CA = require("../../../shared/caAssessment");
+
 router.get("/settings/grading", requirePermission("settings.view"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.query.schoolId);
   const GradingConfig = getGradingConfig();
@@ -3118,13 +3225,70 @@ router.get("/settings/grading", requirePermission("settings.view"), asyncHandler
     config.gradingType = "percentage";
   }
 
+  /*
+   * A config saved before continuous assessment existed carries none of its
+   * three fields, and every settings screen loads this document and puts the
+   * whole thing straight back on save. Undefined in, undefined out, and the
+   * next save would write caEnabled as absent — which the endpoint reads as
+   * the default anyway, but the SCREEN would have rendered an unchecked box
+   * and told an administrator CA was off when it was not.
+   *
+   * Filled with the shipped defaults, which is what the engine grades by for
+   * exactly the same document — so the screen and the report card cannot
+   * disagree about what the school is doing.
+   */
+  config.caEnabled  = config.caEnabled  ?? CA.DEFAULT_CA_ENABLED;
+  // The STORED split, not the effective one. caSettings() answers 0/100 for a
+  // school with CA off — correct for grading, wrong here, because the screen
+  // writes back what it was given and the school's own percentages would be
+  // gone the moment somebody saved with CA off.
+  config.caWeight   = config.caWeight   ?? CA.DEFAULT_CA_WEIGHT;
+  config.testWeight = config.testWeight ?? CA.DEFAULT_TEST_WEIGHT;
+
   return sendSuccess(res, { grading: config });
 }));
 
 router.put("/settings/grading", requirePermission("settings.manage"), asyncHandler(async (req, res) => {
   const schoolId      = resolveSchoolId(req, req.body.schoolId);
   const GradingConfig = getGradingConfig();
-  const { grades, passMark, useGpa, gpaScale, gradingType, showGrades } = req.body;
+  const {
+    grades, passMark, useGpa, gpaScale, gradingType, showGrades,
+    caEnabled, caWeight, testWeight,
+  } = req.body;
+
+  /*
+   * ── CA and Test must add up before anything is written ──────────────────
+   *
+   * The schema carries the same rule, but a document pre-validate hook does
+   * not run on findOneAndUpdate — update validators are per-field, and "these
+   * two add to 100" cannot be expressed on either field alone. So a 30/60
+   * split would have been saved by the very call this endpoint makes, and the
+   * first thing anybody would have noticed is a report card whose sequence
+   * marks were 10 % short.
+   *
+   * 400 rather than 500, for the reason the note below gives: the desktop
+   * queues writes made offline and retries 5xx for ever.
+   */
+  //
+  // An omitted field means "unchanged", so the stored document is read once
+  // and supplies the fallback for all three. Falling back to the shipped
+  // defaults instead would quietly reset a school's own 30/70 split every time
+  // somebody saved the grade bands from a screen that does not show it.
+  const storedCa = GradingConfig
+    ? await GradingConfig.findOne({ schoolId })
+        .select("caEnabled caWeight testWeight").lean().catch(() => null)
+    : null;
+
+  const resolvedCa = {
+    caEnabled:  caEnabled  ?? storedCa?.caEnabled  ?? CA.DEFAULT_CA_ENABLED,
+    caWeight:   caWeight   ?? storedCa?.caWeight   ?? CA.DEFAULT_CA_WEIGHT,
+    testWeight: testWeight ?? storedCa?.testWeight ?? CA.DEFAULT_TEST_WEIGHT,
+  };
+
+  const caVerdict = CA.validateCaWeights(resolvedCa);
+  if (!caVerdict.ok) {
+    return sendError(res, 400, caVerdict.error, { code: caVerdict.code });
+  }
 
   // Coerce stale gradingType values written under an earlier schema so the
   // admin is not stuck behind a validator they cannot otherwise clear.
@@ -3168,6 +3332,12 @@ router.put("/settings/grading", requirePermission("settings.manage"), asyncHandl
         useGpa:      useGpa      ?? false,
         gpaScale:    gpaScale    ?? 4.0,
         gradingType: gradingType || "percentage",
+        // Continuous assessment, resolved above against what is already
+        // stored so that an omitted field means "leave it alone" rather than
+        // "reset it".
+        caEnabled:   resolvedCa.caEnabled,
+        caWeight:    resolvedCa.caWeight,
+        testWeight:  resolvedCa.testWeight,
         updatedBy:   req.user?._id,
       },
       { upsert: true, returnDocument: 'after', runValidators: true }
@@ -3282,6 +3452,12 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
     delete restoredObj.password;
     delete restoredObj.tempPassword;
 
+    await recordAudit(req, {
+      action: "admin.restored", schoolId: resolvedSchoolId, schoolName,
+      resource: { type: "user", id: user._id, label: emailClean },
+      after: { role: user.role, name: user.name },
+    });
+
     console.log(`♻️  Staff account restored: ${user.name} (${user._id})`);
     return sendSuccess(res, {
       admin:        restoredObj,
@@ -3315,6 +3491,12 @@ router.post("/settings/admins", requirePermission("users.manage"), asyncHandler(
   delete adminObj.password;
   delete adminObj.tempPassword;
 
+  await recordAudit(req, {
+    action: "admin.created", schoolId: resolvedSchoolId, schoolName,
+    resource: { type: "user", id: admin._id, label: emailClean },
+    after: { role: normalizedRole, name: name.trim() },
+  });
+
   return sendSuccess(res, {
     admin:     adminObj,
     restored:  false,
@@ -3347,6 +3529,11 @@ router.post("/settings/admins/:id/reset-password", requirePermission("users.mana
     context: "adminWelcome (reset)",
   });
 
+  await recordAudit(req, {
+    action: "admin.passwordReset", schoolId: admin.schoolId, schoolName,
+    resource: { type: "user", id: admin._id, label: admin.email },
+  });
+
   return sendSuccess(res, {
     emailSent:    emailResult.success,
     tempPassword,
@@ -3367,6 +3554,13 @@ router.delete("/settings/admins/:id", requirePermission("users.manage"), asyncHa
     { returnDocument: 'after' }
   );
   if (!admin) return sendError(res, 404, "Admin not found");
+
+  await recordAudit(req, {
+    action: "admin.removed", schoolId: admin.schoolId,
+    schoolName: await getSchoolName(admin.schoolId),
+    resource: { type: "user", id: admin._id, label: admin.email },
+    before: { isActive: true, role: admin.role }, after: { isActive: false },
+  });
 
   return sendSuccess(res, { message: "Admin removed" });
 }));
@@ -3768,10 +3962,31 @@ router.put("/school-info", requirePermission("settings.manage"), asyncHandler(as
     updateFields.logo = null;
   }
 
+  // A super_admin rewriting a school's details from the platform is recorded
+  // with what changed. A school editing itself is its own affair. The logo is
+  // left out of the comparison: it is a file, not a fact.
+  const auditKeys = req.user?.role === ROLES.SUPER_ADMIN
+    ? Object.keys(updateFields).filter((k) => k !== "logo")
+    : [];
+  const previous = auditKeys.length
+    ? await School.findById(schoolId).select(auditKeys.join(" ")).lean()
+    : null;
+
   const school = await School.findByIdAndUpdate(
     schoolId, updateFields, { returnDocument: 'after', runValidators: true }
   );
   if (!school) return sendError(res, 404, "School not found");
+
+  if (previous) {
+    const d = auditDiff(previous, school.toObject(), auditKeys);
+    if (d.changed.length) {
+      await recordAudit(req, {
+        action: "school.updated", schoolId, schoolName: school.name,
+        resource: { type: "school", id: schoolId, label: school.name },
+        before: d.before, after: d.after,
+      });
+    }
+  }
 
   // Only remove the old file once the document points at the new one, and
   // only if it is genuinely a different file.

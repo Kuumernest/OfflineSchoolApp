@@ -63,11 +63,24 @@ const wholeSchool = () => ({});
  */
 const taughtStudentsOnly = async (req, models) => {
   if (req.user?.role !== ROLES.TEACHER) return {};
+  // Six collections carry this scope, and a page of the feed asks each of
+  // them; the teacher's assignments do not change between those six asks.
+  // Memoised on the request, never across requests.
+  if (req._taughtScope) return req._taughtScope;
+  req._taughtScope = taughtScopeOf(req, models);
+  return req._taughtScope;
+};
+const taughtScopeOf = async (req, models) => {
 
   const teacherId = String(req.user._id ?? req.user.id);
+  // Active rows only, as utils/teacherScope.js asks on every write: an
+  // assignment the office switched off is a class whose roster the device
+  // must stop mirroring at its next sync. Both spellings of the fields are
+  // read, for rows written by older code paths.
   const assignments = await models.TeacherAssignment.find({
     schoolId: req.user.schoolId,
     $or: [{ teacher: teacherId }, { teacherId }],
+    isActive: { $ne: false },
     deletedAt: null,
   }).select("class classId").lean();
 
@@ -110,6 +123,31 @@ const taughtStudentsOnly = async (req, models) => {
  */
 const publishedUnlessAdmin = (req) =>
   ADMIN_ROLES.includes(req.user?.role) ? {} : { isPublished: true };
+
+/**
+ * Raw marks (StudentScore) mirror exactly as the caller may read them online.
+ *
+ * A StudentScore has no isPublished of its own; publication is the
+ * ResultSummary's. Online, a holder of exams.view reads the whole school's
+ * sheet for any exam, draft or not (GET /api/exams/:examId/scores — the
+ * recorded teacher read policy, docs/20 §7b). A holder of results.view
+ * WITHOUT exams.view — the bursar — reaches a raw mark only inside a
+ * published result (GET /api/results/:examId/student/:id). The feed used to
+ * send the bursar every mark in the school, published or not: more offline
+ * than they could ever see online, which is the gap this file's header warns
+ * against. So: administrators and exams.view holders mirror the collection
+ * whole; everyone else mirrors the marks of exams with a published result.
+ */
+const marksAsReadOnline = async (req, models) => {
+  if (ADMIN_ROLES.includes(req.user?.role)) return {};
+  const permissions = require("../services/permissions.service");
+  const held = await permissions.effectiveFor(req.user?.role, req.user?.schoolId);
+  if (held.includes("exams.view")) return {};
+  const published = await models.ResultSummary.distinct("examId", {
+    schoolId: req.user?.schoolId, isPublished: true, deletedAt: null,
+  });
+  return { examId: { $in: published.map(String) } };
+};
 
 // ─────────────────────────────────────────────────────────────────────────────
 // THE FEED
@@ -223,20 +261,34 @@ const FEED = [
   { collection: "teacherAttendance", model: "TeacherAttendance", permission: "attendance.view" },
   { collection: "exam",         model: "Exam",         permission: "exams.view" },
   { collection: "examSubject",  model: "ExamSubject",  permission: "exams.view" },
-  { collection: "studentScore", model: "StudentScore", permission: "results.view" },
-  { collection: "resultSummary", model: "ResultSummary", permission: "results.view" },
+  {
+    collection: "studentScore", model: "StudentScore",
+    permission: "results.view",
+    scope: marksAsReadOnline,
+    why: "Raw marks, mirrored as the caller reads them online: whole for the " +
+         "teaching roles (the recorded school-wide read policy), the marks of " +
+         "published exams only for a results.view holder without exams.view.",
+  },
+  {
+    collection: "resultSummary", model: "ResultSummary",
+    permission: "results.view",
+    scope: publishedUnlessAdmin,
+    why: "The exam result as processed. Non-admins mirror the published ones " +
+         "only — the rule GET /api/results/:examId applies, and the one the " +
+         "entry lost when ExamResult was replaced by this model (docs/35).",
+  },
   {
     collection: "termResult", model: "TermResult",
     permission: "results.view",
     scope: publishedUnlessAdmin,
-    why: "Scoped like ExamResult: non-admins only see published term results. " +
+    why: "Scoped like resultSummary: non-admins only see published term results. " +
          "Mirrored so the desktop can render term report cards offline.",
   },
   {
     collection: "annualResult", model: "AnnualResult",
     permission: "results.view",
     scope: publishedUnlessAdmin,
-    why: "Scoped like ExamResult: non-admins only see published annual results. " +
+    why: "Scoped like resultSummary: non-admins only see published annual results. " +
          "Mirrored so the desktop can render annual report cards offline.",
   },
   {
@@ -247,6 +299,35 @@ const FEED = [
   },
   { collection: "grade",        model: "Grade",        permission: "results.view" },
   { collection: "homework",     model: "Homework",     permission: "homework.view" },
+  { collection: "intervention", model: "Intervention", permission: ["interventions.view", "interventions.viewTaught"], scope: taughtStudentsOnly,
+    why: "Teachers mirror only actions for taught pupils; finance roles have no intervention capability." },
+  {
+    collection: "intelligenceReview", model: "IntelligenceReview",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A teacher's recorded judgement of an engine conclusion about a pupil — a school " +
+         "record, named, and read on the same guard as the intelligence it reviews. Scoped " +
+         "like intervention: a teacher's machine holds reviews for the pupils they teach.",
+  },
+  {
+    collection: "explorationEvidence", model: "ExplorationEvidence",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "What a pupil tried, enjoyed or was seen doing outside the marks — interest, exposure, " +
+         "performance, a teacher's observation, a reflection. A school record about a pupil, " +
+         "scoped like intervention: a teacher's machine holds rows for the pupils they teach.",
+  },
+  {
+    collection: "studentExploration", model: "StudentExploration",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A pupil's engagement with a catalog activity — chosen, started, submitted, completed, " +
+         "skipped or declined — with the teacher's rating where the activity has one. A school " +
+         "record about a pupil, scoped like intervention.",
+  },
+  {
+    collection: "explorationObservation", model: "ExplorationObservation",
+    permission: ["insights.view", "insights.viewTaught"], scope: taughtStudentsOnly,
+    why: "A teacher's dated, coded observation of a pupil during an exploration activity. " +
+         "Written by staff, read by staff who may read the pupil.",
+  },
   { collection: "reportTemplate", model: "ReportTemplate", permission: "reports.manage" },
   { collection: "enrollment",   model: "Enrollment",   permission: ["students.view", "students.viewTaught"] },
   { collection: "promotionRun",      model: "PromotionRun",      permission: "promotion.run" },
@@ -263,6 +344,66 @@ const FEED = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EXCLUDED = {
+  // ── The pupil's own words ───────────────────────────────────────────────
+  ExplorationReflection:
+    "A pupil's own account of an exploration: controlled answers and free text " +
+    "the pupil chooses whether to share. Student-authored and student-private by " +
+    "default; a staff machine must not hold the text a pupil did not share, so it " +
+    "is read online through the route that applies the pupil's choice, never mirrored.",
+  // ── Definitions, not records ────────────────────────────────────────────
+  ExplorationActivity:
+    "A school's own addition to the exploration catalog. The shipped catalog " +
+    "is in shared/exploration and is offline by construction; a school's " +
+    "additions are read online with it and carry nothing about any pupil.",
+  // ── Bookkeeping the classroom never needs ──────────────────────────────
+  DevelopmentPlan:
+    "A development plan a pupil and a teacher work on: objective, milestones, " +
+    "reviews, adaptations, the pupil's own reflections and documented " +
+    "constraints. Read online through the routes that apply each viewer's " +
+    "policy (a pupil's reflection is never a staff machine's); every reading " +
+    "beside it is derived from documents that ARE mirrored.",
+  LearningEvidenceSnapshot:
+    "A learning-evidence reading as it stood on one day — patterns, quality, " +
+    "contradictions, a hash of the events it was made from. Derived from " +
+    "collections that ARE mirrored (homework, scores, exams, attendance) and " +
+    "recomputable from them; the memory stays online in one place.",
+  StrengthProfileSnapshot:
+    "A strengths profile as it read on one day, taken deliberately for the " +
+    "longitudinal view. Derived from documents that ARE mirrored and " +
+    "recomputable from them; the memory of what it used to say is read online " +
+    "by the office and stays in one place.",
+  IntelligencePilot:
+    "The frame around a validation exercise: which school, which classes, " +
+    "which engine version, what state it is in, the evidence counts and the " +
+    "decision. Read online by the head and the operator; no classroom machine " +
+    "has a use for it offline, and keeping it off every mirror keeps the one " +
+    "record of a pilot in one place.",
+  IntelligenceStudentFeedback:
+    "A pupil's six bounded answers about their own intelligence summary, " +
+    "given inside a pilot. Read by nothing but the pilot report, which counts " +
+    "answers and never names a pupil; no classroom machine holds another " +
+    "pupil's answers, so it is never mirrored.",
+  ReportTemplateVersion:
+    "Which sections a school's report cards print, one immutable row per " +
+    "change (docs/39 §10). Report cards are rendered by the server on every " +
+    "client — the desktop marks both card endpoints online-only — so no " +
+    "client screen reads it; the card payload carries the layout it printed " +
+    "with for any client that draws a card itself.",
+
+  AcademicPolicySnapshot:
+    "The frozen academic rules a result was computed under (docs/39 §6.3). " +
+    "Nothing on a client reads it yet, and no result carries its hash until " +
+    "Phase 2c; whether the desktop mirrors it — it is immutable and small, so " +
+    "the cursor is trivial — is decided when a client screen needs it, not " +
+    "before.",
+
+  IntelligenceAnalysisRun:
+    "A server-side run of the school-wide calibration analysis and its " +
+    "compressed report (docs/38). Recomputable from documents that ARE " +
+    "mirrored, megabytes per school, and meaningful only to the server that " +
+    "fingerprints the evidence it was computed from; the review queue and the " +
+    "pilot read it online.",
+
   // The FILE, whose two registered models are in the FEED above as
   // studentAttendance and teacherAttendance. Listed here so the filename-based
   // classification check is satisfied without implying the data is unmirrored.
@@ -286,6 +427,12 @@ const EXCLUDED = {
     "The atomic sequences behind receipt and enrolment numbers. Two offline " +
     "machines holding a copy would both believe they knew the next value, " +
     "which is exactly the collision the device code exists to avoid.",
+
+  AuditLog:
+    "What a platform operator did, and to which school. It is not scoped to " +
+    "one school at all — the row survives the school it names being switched " +
+    "off — and it is read online by the operator alone, from the platform " +
+    "console. An audit trail has no place on office machines.",
 
   SyncLog:
     "A record of other devices' syncs. Operational, not school data.",
@@ -351,6 +498,12 @@ const EXCLUDED = {
     "An audit trail of mark changes. Append-only server-side and read on " +
     "demand; mirroring it would double the academic data on the machine to " +
     "answer a question that is asked rarely.",
+
+  ExamMark:
+    "A teacher's exam marks before they are approved — submitted or rejected, " +
+    "awaiting the administrator's decision. It belongs to one teacher and " +
+    "exists only in flight; once approved the marks are what studentScore " +
+    "mirrors, and an office copy of an undecided queue serves no screen.",
 
   ExamSubject: null,   // placeholder overwritten below — see the check
 };
@@ -447,12 +600,14 @@ const satisfies = (entry, held) => required(entry).some((k) => held.has(k));
  * belongs in its own commit with its own thought — not as a side effect of
  * building a sync feed.
  *
- * A BURSAR CAN MIRROR EVERY EXAM MARK, because results.view defaults to include
- * the bursar. That is the existing model and this feed follows it faithfully,
- * but it is worth a second look precisely BECAUSE of offline: online it means a
- * screen a bursar would never visit, and offline it means a permanent copy of
- * the school's marks on the finance office machine. Mirroring makes an
- * over-broad capability more consequential than it was.
+ * A BURSAR USED TO MIRROR EVERY EXAM MARK, because results.view defaults to
+ * include the bursar and the studentScore entry had no scope. Online that
+ * capability reaches a raw mark only inside a published result; offline it
+ * was a permanent copy of every mark, drafts included, on the finance office
+ * machine. The entry now mirrors the marks of published exams only for a
+ * results.view holder without exams.view (marksAsReadOnline), which is what
+ * they can read. Whether the bursar should hold results.view at all remains
+ * the role matrix's question, not the feed's.
  */
 const KNOWN_GAPS = [
   {
@@ -492,5 +647,5 @@ module.exports = {
   byCollection,
   modelNames,
   assertEveryModelIsClassified,
-  scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin },
+  scopes: { wholeSchool, taughtStudentsOnly, publishedUnlessAdmin, marksAsReadOnline },
 };

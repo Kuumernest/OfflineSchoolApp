@@ -107,6 +107,42 @@ api.interceptors.request.use(
       config.headers.Authorization = `Bearer ${token}`;
     }
 
+    // 2️⃣b  A super_admin inside a school names it on every request.
+    //
+    // The pages already do, through user.schoolId; this is for the request
+    // that did not, which would otherwise be answered about the whole
+    // platform under a school's heading. The platform's own routes, auth and
+    // the portal are left alone — a schoolId there is a filter, not a
+    // context — and a request that already names a school is not overruled.
+    try {
+      const { user, activeSchool } = getAuthState();
+      const url = String(config.url ?? "");
+      if (
+        user?.role === "super_admin" && activeSchool &&
+        !/^\/?(auth|super-admin|portal)(\/|$|\?)/.test(url) &&
+        !/[?&]schoolId=/.test(url)
+      ) {
+        const method = String(config.method ?? "get").toLowerCase();
+        if (method === "get" || method === "delete") {
+          const params = (config.params ?? {}) as Record<string, unknown>;
+          if (params.schoolId == null || params.schoolId === "") {
+            config.params = { ...params, schoolId: activeSchool._id };
+          }
+        } else if (
+          config.data == null ||
+          (typeof config.data === "object" &&
+            !(config.data instanceof FormData) && !Array.isArray(config.data))
+        ) {
+          const body = (config.data ?? {}) as Record<string, unknown>;
+          if (body.schoolId == null || body.schoolId === "") {
+            config.data = { ...body, schoolId: activeSchool._id };
+          }
+        }
+      }
+    } catch {
+      // Store not ready: nothing to add.
+    }
+
     // 3️⃣  Scale the timeout to the link actually in use.
     //
     // The ORIGINAL budget, remembered, not whatever is on the config now:
@@ -158,6 +194,20 @@ api.interceptors.response.use(
     // This prevents redirect loops when credentials are wrong on login, and
     // avoids recursion on /auth/refresh itself failing.
     const isAuthEndpoint = url.includes("/auth/");
+
+    // The server admits an account on a temporary password to the password
+    // change and nothing else (403 PASSWORD_CHANGE_REQUIRED). StaffOnly already
+    // sends a flagged user to /change-password; this covers a stored session
+    // whose flag the server set since — an administrator's reset — by marking
+    // the user and letting the guard route.
+    const code = (err?.response?.data as { code?: string } | undefined)?.code;
+    if (status === 403 && code === "PASSWORD_CHANGE_REQUIRED") {
+      try { getAuthState().setUser({ mustResetPassword: true }); } catch { /* store not ready */ }
+      if (typeof window !== "undefined" && window.location.pathname !== "/change-password") {
+        window.location.replace("/change-password");
+      }
+      return Promise.reject(err);
+    }
 
     if (status === 401 && !isAuthEndpoint && !originalRequest._retry) {
       // ── Case A: refresh already in progress ──────────────────────────────

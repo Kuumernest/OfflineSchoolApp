@@ -115,6 +115,8 @@ const openDatabase = () => {
     api  = client({ meta: metaBag });
     sync = engine({
       docs, queue, state: syncState, client: api,
+      // The engine sends only the signed-in account's queued requests.
+      currentUser: () => session?.userId ?? null,
       // No collection list: the server decides what this caller may mirror, so
       // the desktop holds no copy of the feed table to drift from it.
       onChange: (status) => {
@@ -238,7 +240,7 @@ const registerHandlers = () => {
    * today the way it behaves in a browser.
    */
   ipcMain.handle("api:request", (_e, req) => {
-    const result = localApi.handle(req, { docs, meta: metaBag, queue, session });
+    const result = localApi.handle(req, { docs, meta: metaBag, queue, session, state: syncState });
 
     // Something was queued: try to send it immediately rather than waiting for
     // the interval. Online this makes an offline-capable write indistinguishable

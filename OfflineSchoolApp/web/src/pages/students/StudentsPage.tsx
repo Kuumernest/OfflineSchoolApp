@@ -19,6 +19,7 @@ import { SearchInput }     from "@/components/ui/SearchInput";
 import { Select }          from "@/components/ui/Select";
 import { Pagination }      from "@/components/ui/Pagination";
 import { useTranslation } from "react-i18next";
+import i18n from "@/i18n";
 import {
   Table, THead, Th, TBody, Tr, Td, EmptyTable,
 } from "@/components/ui/DataTable";
@@ -73,11 +74,11 @@ const statusVariant = (status: string | undefined): BadgeVariant => {
 
 const statusLabel = (status: string | undefined): string => {
   switch ((status ?? "").toLowerCase()) {
-    case "approved":  return "Active";
-    case "suspended": return "Suspended";
-    case "rejected":  return "Rejected";
-    case "pending":   return "Pending";
-    default:          return status || "Unknown";
+    case "approved":  return i18n.t("common.active");
+    case "suspended": return i18n.t("students.suspended");
+    case "rejected":  return i18n.t("students.rejected");
+    case "pending":   return i18n.t("common.pending");
+    default:          return status || i18n.t("common.unknown");
   }
 };
 
@@ -97,7 +98,7 @@ const toQueryStatus = (uiStatus: string): string => uiStatus || "all";
  * both shapes so this keeps working if the API contract changes.
  */
 const resolveClassName = (student: Student): string =>
-  student.class?.name ?? student.className ?? "Unassigned";
+  student.class?.name ?? student.className ?? i18n.t("students.unassignedClass");
 
 /**
  * Returns a human-readable count label that reflects the active filter.
@@ -416,7 +417,7 @@ export default function StudentsPage() {
             subtitle={
               search || classId || status !== "all"
                 ? t("students.adjustFilters")
-                : "Add your first student to get started"
+                : t("students.firstOne")
             }
             action={
               !search && !classId && status === "all" ? (

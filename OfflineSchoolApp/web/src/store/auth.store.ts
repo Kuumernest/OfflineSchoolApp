@@ -40,6 +40,25 @@ export interface AuthUser {
   permissions:       string[];
 }
 
+/**
+ * The school a super_admin is currently working inside.
+ *
+ * The server keeps no such thing: every request a super_admin makes names its
+ * school in `schoolId`, and the door (middleware/auth.js) checks the school is
+ * real. What this holds is the client's side of that — which school to name,
+ * and what to write on the context bar. enterSchool mirrors the id into
+ * user.schoolId as well, because every page reads its school from there; that
+ * is what lets the operator use the ordinary school screens unchanged.
+ */
+export interface ActiveSchool {
+  _id:           string;
+  name:          string;
+  code:          string | null;
+  isActive:      boolean;
+  academicYear?: string | null;
+  currentTerm?:  string | null;
+}
+
 export interface StaffLoginCredentials {
   email:    string;
   password: string;
@@ -56,8 +75,13 @@ export type LoginCredentials = StaffLoginCredentials | StudentLoginCredentials;
 export interface PublicAuthState {
   token:          string | null;
   refreshToken:   string | null;
+  user:           AuthUser | null;
+  activeSchool:   ActiveSchool | null;
   logout:         () => void;
   refreshSession: () => Promise<boolean>;
+  // Exposed for the axios interceptor: a 403 PASSWORD_CHANGE_REQUIRED marks the
+  // stored user so the route guard sends them to /change-password.
+  setUser:        (updates: Partial<AuthUser>) => void;
 }
 
 interface AuthState {
@@ -76,6 +100,11 @@ interface AuthState {
   setUser:        (updates: Partial<AuthUser>) => void;
   clearError:     () => void;
   refreshSession: () => Promise<boolean>;
+
+  /** super_admin only — see ActiveSchool. */
+  activeSchool:   ActiveSchool | null;
+  enterSchool:    (school: ActiveSchool) => void;
+  leaveSchool:    () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -212,6 +241,39 @@ const clearPersistedAuth = () => {
   // Stops the sync loop as well as clearing the token: a signed-out machine
   // should not be reaching the server on a timer.
   tellDesktop(null);
+  storage.removeItem("activeSchool");
+};
+
+/** The school context survives a refresh; it is cleared by sign-out. */
+const readPersistedSchool = (): ActiveSchool | null => {
+  try {
+    const raw = storage.getItem("activeSchool");
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as Partial<ActiveSchool>;
+    return parsed && typeof parsed._id === "string" && typeof parsed.name === "string"
+      ? {
+          _id: parsed._id, name: parsed.name, code: parsed.code ?? null,
+          isActive: parsed.isActive !== false,
+          academicYear: parsed.academicYear ?? null, currentTerm: parsed.currentTerm ?? null,
+        }
+      : null;
+  } catch {
+    return null;
+  }
+};
+
+/**
+ * A super_admin's user object, with the school they are inside mirrored in.
+ *
+ * The account itself has no school and never gets one; the mirror is what the
+ * pages read. Any user object that arrives from the server — a refresh, a
+ * restored session — has to be re-mirrored or the pages lose their school
+ * while the layout still believes it is inside one. Everyone else is returned
+ * untouched.
+ */
+const withActiveSchool = (user: AuthUser, school: ActiveSchool | null): AuthUser => {
+  if (user.role !== "super_admin" || !school) return user;
+  return { ...user, schoolId: school._id, schoolName: school.name, school: { name: school.name } };
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,6 +281,7 @@ const clearPersistedAuth = () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const useAuthStore = create<AuthState>((set, get) => ({
+  activeSchool:    readPersistedSchool(),
   user:            null,
   token:           null,
   refreshToken:    null,
@@ -287,6 +350,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       user:            null,
       token:           null,
       refreshToken:    null,
+      activeSchool:    null,
       isAuthenticated: false,
       hasInitialized:  true,
       error:           null,
@@ -316,7 +380,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         if (!parsed?._id && !parsed?.id) {
           throw new Error("Stored user object is missing an id");
         }
-        const user = normaliseAuthUser(parsed);
+        // The stored user normally carries the mirror already; this covers a
+        // user persisted by a refresh that ran before the mirror was kept.
+        const user = withActiveSchool(normaliseAuthUser(parsed), get().activeSchool);
         set({
           user,
           token,
@@ -356,7 +422,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   // ── setAuth ────────────────────────────────────────────────────────────────
   setAuth: (user: AuthUser, token: string, refreshToken: string | null = null) => {
     persistAuth(user, token, refreshToken);
+    // A fresh sign-in starts outside any school.
+    storage.removeItem("activeSchool");
     set({
+      activeSchool: null,
       user,
       token,
       refreshToken,
@@ -364,6 +433,36 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       hasInitialized:  true,
       error:           null,
     });
+  },
+
+  // ── enterSchool / leaveSchool ──────────────────────────────────────────────
+  // super_admin only. The id is mirrored into user.schoolId because that is
+  // where every page reads its school from; the platform's own pages do not
+  // read it, and the axios interceptor fills it in for any request that forgot.
+  enterSchool: (school: ActiveSchool) => {
+    const current = get().user;
+    if (!current || current.role !== "super_admin") return;
+    const user: AuthUser = {
+      ...current,
+      schoolId:   school._id,
+      schoolName: school.name,
+      school:     { name: school.name },
+    };
+    storage.setItem("activeSchool", JSON.stringify(school));
+    storage.setItem("user", JSON.stringify(user));
+    set({ activeSchool: school, user });
+  },
+
+  leaveSchool: () => {
+    const current = get().user;
+    storage.removeItem("activeSchool");
+    if (!current || current.role !== "super_admin") {
+      set({ activeSchool: null });
+      return;
+    }
+    const user: AuthUser = { ...current, schoolId: "", schoolName: undefined, school: null };
+    storage.setItem("user", JSON.stringify(user));
+    set({ activeSchool: null, user });
   },
 
   // ── setUser ────────────────────────────────────────────────────────────────
@@ -388,7 +487,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           "/auth/refresh",
           currentRefreshToken ? { refreshToken: currentRefreshToken } : {},
         );
-        const { token, refreshToken, user } = extractAuthPayload(response.data);
+        const { token, refreshToken, user: fresh } = extractAuthPayload(response.data);
+
+        // The server's copy of a super_admin has no school — schoolId is null
+        // on the account, by design. The school they are working inside lives
+        // only in this store, mirrored into user.schoolId, which is where every
+        // page reads its school from. Taking the server's user as-is here wiped
+        // that mirror on every token refresh: activeSchool stayed set, so the
+        // page stayed inside the school, but every query gated on user.schoolId
+        // went quiet and the dashboard read as an empty school.
+        const user = withActiveSchool(fresh, get().activeSchool);
 
         persistAuth(user, token, refreshToken);
         set({
@@ -422,6 +530,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const useUser              = () => useAuthStore((s) => s.user);
+export const useActiveSchool      = () => useAuthStore((s) => s.activeSchool);
 export const useToken             = () => useAuthStore((s) => s.token);
 export const useIsAuthed          = () => useAuthStore((s) => s.isAuthenticated);
 export const useIsReady           = () => useAuthStore((s) => s.hasInitialized);

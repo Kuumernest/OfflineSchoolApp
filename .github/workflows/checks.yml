@@ -169,9 +169,17 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
-          cache-dependency-path: OfflineSchoolApp/mobile/package-lock.json
+          cache-dependency-path: |
+            OfflineSchoolApp/mobile/package-lock.json
+            OfflineSchoolApp/backend/package-lock.json
 
       - run: npm ci
+
+      # Six of the checks below run the mobile clients against the real backend
+      # router, loading express, mongoose and mongodb-memory-server from the
+      # backend's node_modules — absent unless installed here (MODULE_NOT_FOUND).
+      - run: npm ci
+        working-directory: OfflineSchoolApp/backend
 
       # Every screen and service parses through babel-preset-expo (what the
       # bundler does, so a failure here cannot load on a device), the two locale

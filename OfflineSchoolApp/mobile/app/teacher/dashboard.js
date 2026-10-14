@@ -28,6 +28,7 @@ import { isTeacherProfileComplete } from "./profile/setup";
 import { useAnnouncementStore } from "../../src/store/announcement.store";
 import { toDisplayUri }        from "../../src/utils/logoUri";
 import { useTranslation }      from "../../src/i18n/useTranslation";
+import { reminderMessageKey, reminderRoute } from "../../src/utils/attendanceReminders";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // STATIC DATA
@@ -51,6 +52,10 @@ const buildModules = (t) => [
   { id: "quizzes",       title: t("teacherHome.modQuizzesTitle"),       icon: "help-circle-outline",   color: "#059669", route: "/teacher/quizzes",       description: t("teacherHome.modQuizzesDesc")                               },
   { id: "homework",      title: t("teacherHome.modHomeworkTitle"),      icon: "create-outline",        color: "#D97706", route: "/teacher/homework",      description: t("teacherHome.modHomeworkDesc")                              },
   { id: "results",       title: t("teacherHome.modResultsTitle"),       icon: "bar-chart-outline",     color: "#059669", route: "/teacher/results",       description: t("teacherHome.modResultsDesc")                               },
+  // Reading the guidance needs a connection; recording what you decided to do
+  // about it does not — the writer goes through the outbox like every other
+  // mutation on this handset.
+  { id: "intelligence",  title: t("teacherHome.modIntelligenceTitle"),  icon: "bulb-outline",          color: "#4F46E5", route: "/teacher/intelligence",  description: t("teacherHome.modIntelligenceDesc")                          },
   { id: "attendance",    title: t("teacherHome.modAttendanceTitle"),    icon: "calendar-outline",      color: "#DB2777", route: "/teacher/attendance",    description: t("teacherHome.modAttendanceDesc")                            },
   { id: "timetable",     title: t("teacherHome.modTimetableTitle"),     icon: "time-outline",          color: "#2563EB", route: "/teacher/timetable",     description: t("teacherHome.modTimetableDesc")                             },
   { id: "announcements", title: t("teacherHome.modAnnouncementsTitle"), icon: "megaphone-outline",     color: "#7C3AED", route: "/teacher/announcements", description: t("teacherHome.modAnnouncementsDesc"), badge: "announcements" },
@@ -332,7 +337,29 @@ export default function TeacherDashboard() {
       if (stats.pendingGrading > 0)        list.push({ id: "pending-grading",    type: "warning", icon: "clipboard-outline",        message: t("teacherHome.alertPendingGrading", { count: stats.pendingGrading }),                                                             route: "/teacher/results"                    });
       if (stats.upcomingDeadlines > 0)     list.push({ id: "deadlines",          type: "info",    icon: "alarm-outline",            message: t("teacherHome.alertDeadlines", { count: stats.upcomingDeadlines }),                                                         route: "/teacher/homework"                   });
       if (stats.upcomingExams > 0)         list.push({ id: "exams",              type: "warning", icon: "school-outline",           message: t("teacherHome.alertUpcomingExams", { count: stats.upcomingExams }),                                                                route: "/teacher/exams"                      });
-      if (stats.todayAttendanceMissing > 0) list.push({ id: "missing-attendance", type: "danger",  icon: "alert-circle-outline",     message: t("teacherHome.alertMissingAttendance", { count: stats.todayAttendanceMissing }),                                         route: "/teacher/attendance/mark"            });
+      // One reminder per class without a register, each opening THAT class's
+      // register for the day. The single count used to open the register
+      // screen with no class — an empty screen headed "Class".
+      const reminders = Array.isArray(stats.todayAttendanceReminders) ? stats.todayAttendanceReminders : [];
+      for (const r of reminders) {
+        const time = r.status === "past" ? (r.endTime || "") : (r.startTime || "");
+        list.push({
+          id:      `attendance-${r.classId}-${r.date}`,
+          type:    r.status === "upcoming" ? "warning" : "danger",
+          icon:    "alert-circle-outline",
+          message: t(time ? reminderMessageKey(r.status) : "teacherHome.attendanceReminderNoTime", {
+            className:   r.className   || t("teacherHome.classFallback"),
+            subjectName: r.subjectName || t("teacherHome.subjectFallback"),
+            time,
+          }),
+          route: reminderRoute(r),
+        });
+      }
+      // A count with no classes behind it (an older server, no timetable on
+      // the phone): the list of classes, where each can be chosen.
+      if (!reminders.length && stats.todayAttendanceMissing > 0) {
+        list.push({ id: "missing-attendance", type: "danger", icon: "alert-circle-outline", message: t("teacherHome.alertMissingAttendance", { count: stats.todayAttendanceMissing }), route: "/teacher/attendance" });
+      }
       if (stats.newSubmissions > 0)        list.push({ id: "new-submissions",    type: "success", icon: "checkmark-circle-outline", message: t("teacherHome.alertNewSubmissions", { count: stats.newSubmissions }),           route: "/teacher/homework"                   });
     }
 

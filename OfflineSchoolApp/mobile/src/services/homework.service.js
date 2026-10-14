@@ -453,15 +453,21 @@ export const updateHomework = async (id, updates) => {
       endpoint: `/homework/${id}`,
       payload: {
         id,
+        // The server's upsert wants the whole document, and takes the author
+        // from the token for a teacher — sent anyway so an admin's edit keeps
+        // the original author.
+        schoolId:    hw.schoolId,
+        classId:     String(hw.class_id),
+        subjectId:   String(hw.subject_id),
+        createdBy:   String(hw.created_by),
         title:       updates.title       ?? hw.title,
         description: updates.description ?? hw.description,
         instructions: updates.instructions ?? hw.instructions,
         dueDate:     updates.due_date    ?? hw.due_date,
-        maxScore:    updates.max_score   ?? hw.max_score,
+        maxScore:    Number(updates.max_score   ?? hw.max_score),
         allowLate:   updates.allow_late  !== undefined ? !!updates.allow_late : !!hw.allow_late,
-        latePenalty: updates.late_penalty ?? hw.late_penalty,
+        latePenalty: Number(updates.late_penalty ?? hw.late_penalty ?? 0),
         isPublished: updates.is_published !== undefined ? !!updates.is_published : !!hw.is_published,
-        status:      updates.status      ?? hw.status,
         attachmentUrl:  updates.attachment_url  ?? hw.attachment_url,
         attachmentName: updates.attachment_name ?? hw.attachment_name,
         attachmentType: updates.attachment_type ?? hw.attachment_type,

@@ -49,6 +49,9 @@ const {
 
 // The same table and pass mark the read side and the server serve.
 const { DEFAULT_PASS_MARK } = require("../../../../../shared/gradeScale");
+// The same CA rules the server validates against, so a split this machine
+// accepts offline is not one the server refuses on the next push.
+const CA = require("../../../../../shared/caAssessment");
 
 /**
  * The read handlers export these alongside their route array — the array is what
@@ -319,6 +322,26 @@ module.exports = [
         showGrades = body.showGrades;
       }
 
+      /*
+       * ── Continuous assessment ───────────────────────────────────────────
+       *
+       * Omitted means unchanged, falling back to the row already stored — not
+       * to the shipped defaults, which would quietly reset a school's own
+       * 30/70 split every time somebody saved the grade bands.
+       *
+       * The pair is validated here and not only on the server because a split
+       * the server would refuse is a 400, and a 400 stops the outbox and waits
+       * for a person. Declining the write keeps the queue moving and leaves
+       * the screen able to say what is wrong.
+       */
+      const resolvedCa = {
+        caEnabled:  body.caEnabled  ?? existing.caEnabled  ?? CA.DEFAULT_CA_ENABLED,
+        caWeight:   body.caWeight   ?? existing.caWeight   ?? CA.DEFAULT_CA_WEIGHT,
+        testWeight: body.testWeight ?? existing.testWeight ?? CA.DEFAULT_TEST_WEIGHT,
+      };
+      if (typeof resolvedCa.caEnabled !== "boolean") return null;
+      if (!CA.validateCaWeights(resolvedCa).ok)      return null;
+
       const doc = {
         ...withoutPending(existing),
         schoolId,
@@ -328,6 +351,9 @@ module.exports = [
         useGpa,
         gpaScale,
         gradingType,
+        caEnabled:  resolvedCa.caEnabled,
+        caWeight:   Number(resolvedCa.caWeight),
+        testWeight: Number(resolvedCa.testWeight),
         updatedBy: session?.userId ?? null,
         updatedAt: new Date().toISOString(),
       };

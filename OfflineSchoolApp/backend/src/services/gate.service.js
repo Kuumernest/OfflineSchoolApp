@@ -131,9 +131,33 @@ const shouldNotify = ({ school, direction, at }) => {
  * @returns {Promise<{event, student, direction, duplicate, notification}>}
  */
 const scan = async ({
-  schoolId, token, at, scannedBy, station,
+  schoolId, id = null, token, at, scannedBy, station,
   direction: given, notifyGuardian = true,
 }) => {
+  // ── A replay is the event it already made ──────────────────────────────
+  //
+  // Offline devices queue a scan with the id they stored and retry it until
+  // they hear back. If the first attempt was recorded and the answer lost,
+  // the retry must not become a second event: the guardian would be told
+  // twice, and the register would show the child leaving twice. An id that
+  // is already this school's event answers with that event; an id that
+  // belongs to another school's event is refused rather than reused.
+  if (id) {
+    const prior = await GateEvent.findOne({ _id: id }).lean();
+    if (prior) {
+      if (String(prior.schoolId) !== String(schoolId)) {
+        const err = new Error("That scan id already belongs to another school");
+        err.status = 409;
+        err.code = "SCAN_ID_TAKEN";
+        throw err;
+      }
+      const student = await Student.findOne({ _id: prior.studentId, schoolId })
+        .select("_id studentName firstName lastName enrollmentNo classId")
+        .lean();
+      return { replay: true, duplicate: true, event: prior, student: student ?? { _id: prior.studentId }, direction: prior.direction, notification: null, notifyPolicy: null };
+    }
+  }
+
   const value = String(token ?? "").trim();
   if (!value) {
     const err = new Error("No code was scanned");
@@ -196,6 +220,7 @@ const scan = async ({
       : (last?.direction === "in" ? "out" : "in");
 
   const event = await GateEvent.create({
+    ...(id ? { _id: id } : {}),
     schoolId,
     studentId: String(student._id),
     direction,

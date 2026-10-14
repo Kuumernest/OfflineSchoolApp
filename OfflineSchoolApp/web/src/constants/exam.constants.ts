@@ -19,6 +19,7 @@ export const EXAM_STATUS_META: Record<
 
 export const EXAM_TYPE_KEYS: Record<ExamType, string> = {
   test:            "examType.test",
+  ca:              "examType.ca",
   practical:       "examType.practical",
   promotion_exam:  "examType.promotion_exam",
 };

@@ -60,6 +60,19 @@ const termResultSchema = new mongoose.Schema(
     isLocked:    { type: Boolean, default: false },
     lockedAt:    { type: Date,    default: null  },
 
+    /*
+     * ── Provenance (docs/39 §8) ─────────────────────────────────────────
+     *
+     * What produced this row: the AcademicPolicySnapshot of the configuration
+     * it was computed under, and the code that computed it
+     * (shared/academicPolicy CALC_VERSIONS). Both null on every row written
+     * before they existed — "legacy", read as docs/39 §9 describes — and on
+     * rows no computation wrote (a summary created bare at publication).
+     * Read by nothing yet; stamped so the answer exists from now on.
+     */
+    policyHash:  { type: String, default: null },
+    calcVersion: { type: String, default: null },
+
     // Sync
     syncStatus:   { type: String, enum: ["synced", "pending", "conflict"], default: "pending" },
     lastSyncedAt: { type: Date,   default: null },
@@ -80,4 +93,11 @@ termResultSchema.index(
 termResultSchema.index({ schoolId: 1, academicYear: 1, term: 1, classPosition: 1 });
 termResultSchema.index({ schoolId: 1, isPublished: 1 });
 
+
+// The change feed's page (GET /api/sync/changes, config/syncFeed.js): filtered
+// on schoolId and a keyset of (updatedAt, _id), sorted the same way. Without
+// this the planner walked the school's rows in full for every page and every
+// idle poll, examining N documents to return none (docs/37). The mobile pull
+// (updatedAt >= since) is served by the same prefix.
+termResultSchema.index({ schoolId: 1, updatedAt: 1, _id: 1 });
 module.exports = mongoose.model("TermResult", termResultSchema);

@@ -175,7 +175,7 @@ export default function LoginPage() {
             {/* Password */}
             <div>
               <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
-                Password
+                {t("login.password")}
               </label>
               <div className="relative">
                 <input
@@ -208,7 +208,7 @@ export default function LoginPage() {
               className="w-full py-3 px-4 bg-primary-600 hover:bg-primary-700 disabled:bg-primary-400 disabled:cursor-not-allowed text-white font-semibold rounded-lg transition flex items-center justify-center gap-2"
             >
               {isLoading && <Loader2 className="w-4 h-4 animate-spin" aria-hidden="true" />}
-              {isLoading ? t("common.saving") : "Sign In"}
+              {isLoading ? t("common.saving") : t("login.submit")}
             </button>
 
           </form>
@@ -217,7 +217,7 @@ export default function LoginPage() {
           <p className="text-center text-gray-400 text-xs mt-5">
             {looksLikeEmail
               ? t("login.forgotten")
-              : "Forgotten your password? Ask your class teacher or school admin to reset it."}
+              : t("login.forgottenStudent")}
           </p>
         </div>
 

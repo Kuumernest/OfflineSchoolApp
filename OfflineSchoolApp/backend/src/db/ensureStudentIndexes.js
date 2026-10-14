@@ -41,8 +41,17 @@ async function ensureStudentGateTokenIndex() {
 
   const col = db.collection("students");
 
-  // 1) What does the live index look like?
-  const indexes = await col.indexes();
+  // 1) What does the live index look like? On a database that has never
+  //    held a student — a fresh deployment, or a verification run against an
+  //    empty instance — the collection does not exist yet and MongoDB answers
+  //    "ns does not exist" (code 26) rather than an empty list. That is not a
+  //    stale index; it is no index, and createIndex below brings the
+  //    collection into being with the right shape. Found when the server
+  //    refused to boot against an empty database.
+  const indexes = await col.indexes().catch((err) => {
+    if (err && (err.code === 26 || err.codeName === "NamespaceNotFound")) return [];
+    throw err;
+  });
   const current = indexes.find(
     (ix) =>
       ix.name === "gateToken_1" ||

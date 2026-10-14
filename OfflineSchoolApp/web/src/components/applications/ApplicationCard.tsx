@@ -92,7 +92,7 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
             {application.name}
           </p>
           <p className="text-xs text-gray-400 truncate mt-0.5">
-            {application.email || "No email provided"}
+            {application.email || t("admissions.noEmail")}
           </p>
         </div>
 
@@ -104,18 +104,18 @@ export const ApplicationCard: React.FC<ApplicationCardProps> = ({
               : "bg-amber-100 text-amber-700",
           ].join(" ")}
         >
-          {stale ? t("common.stale") : "Pending"}
+          {stale ? t("common.stale") : t("common.pending")}
         </span>
       </div>
 
       {/* ── Meta grid ── */}
       <div className="mt-3 grid grid-cols-2 gap-y-2 gap-x-4">
         <MetaItem icon={<Icon d={ICONS.school}   color="#4F46E5" />}>
-          {application.className || "No class selected"}
+          {application.className || t("admissions.noClassSelected")}
         </MetaItem>
 
         <MetaItem icon={<Icon d={ICONS.people}   color="#6B7280" />}>
-          {application.guardianName || "No guardian"}
+          {application.guardianName || t("admissions.noGuardian")}
         </MetaItem>
 
         <MetaItem icon={<Icon d={ICONS.calendar} color="#6B7280" />}>

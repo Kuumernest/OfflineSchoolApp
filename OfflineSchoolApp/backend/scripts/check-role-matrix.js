@@ -327,8 +327,22 @@ const checkPermissions = () => {
   console.log("--- what each role holds out of the box ---");
   check("super_admin holds every capability",
     perms.defaultsFor(ROLES.SUPER_ADMIN).length, PERMS.PERMISSION_KEYS.length);
-  check("school_admin holds every capability",
-    perms.defaultsFor(ROLES.SCHOOL_ADMIN).length, PERMS.PERMISSION_KEYS.length);
+  // Every capability a SCHOOL has. The platform keys are the exception and
+  // the point: they are the ones that reach past a school's own walls, and
+  // school_admin — whose defaults are otherwise the whole registry — must not
+  // hold a single one, nor be able to acquire one through an override.
+  const platformKeys = PERMS.PERMISSION_KEYS.filter((k) => k.startsWith("platform."));
+  check("the platform has capabilities of its own", platformKeys.length > 0, true);
+  check("school_admin holds every school capability",
+    perms.defaultsFor(ROLES.SCHOOL_ADMIN).length,
+    PERMS.PERMISSION_KEYS.length - platformKeys.length);
+  check("school_admin holds no platform capability",
+    perms.defaultsFor(ROLES.SCHOOL_ADMIN).filter((k) => k.startsWith("platform.")), []);
+  check("nor does the bursar or a teacher",
+    [...perms.defaultsFor(ROLES.BURSAR), ...perms.defaultsFor(ROLES.TEACHER)]
+      .filter((k) => k.startsWith("platform.")), []);
+  check("every platform capability is locked",
+    platformKeys.filter((k) => !PERMS.LOCKED_KEYS.includes(k)), []);
   check("student holds none", perms.defaultsFor(ROLES.STUDENT), []);
   check("an unrecognised role holds none", perms.defaultsFor("principal"), []);
 

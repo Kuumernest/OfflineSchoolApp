@@ -49,7 +49,6 @@ import { fetchClasses } from "@/services/class.service";
 import {
   STUDENT_STATUSES,
   TEACHER_STATUSES,
-  STATUS_LABELS,
 } from "@/types/attendance.types";
 import type {
   AttendanceStatus,
@@ -84,6 +83,11 @@ const STATUS_STYLE: Record<AttendanceStatus, { on: string; off: string; icon: ty
 
 export default function AttendancePage() {
   const { t } = useTranslation();
+  // The status words come from the catalogue, not from the English label map in
+  // attendance.types.ts: on a French console the register said "Present", "Late"
+  // and "On leave" between otherwise French sentences.
+  const statusLabel = (status: AttendanceStatus) =>
+    t(status === "on_leave" ? "attendance.onLeave" : `academic.${status}`);
   const qc = useQueryClient();
   const { toast, confirm } = useToast();
 
@@ -265,7 +269,7 @@ export default function AttendancePage() {
 
   const classes = classesQ.data ?? [];
   const classOptions = [
-    { value: "", label: "Choose a class…" },
+    { value: "", label: t("students.chooseClass") },
     ...classes.map((c) => ({
       value: c.id ?? c._id ?? "",
       label: [c.name, c.section].filter(Boolean).join(" "),
@@ -313,7 +317,7 @@ export default function AttendancePage() {
                         : "bg-white text-gray-600 hover:bg-gray-50",
                     )}
                   >
-                    {s}
+                    {t(s === "students" ? "academic.student" : "academic.teacher", { count: 2 })}
                   </button>
                 ))}
               </div>
@@ -332,10 +336,12 @@ export default function AttendancePage() {
             </label>
           )}
 
-          {/* Period selector — lets the teacher pick which class period
-              they are marking. The register is keyed on this, so switching
-              periods clears the unsaved draft. */}
-          {subject === "students" && (
+          {/* Period selector — which period is being marked. The register is
+              keyed on it, so switching periods clears the unsaved draft. For
+              staff it also decides who is listed: the server answers with the
+              teachers timetabled in that period on that date, and "All day"
+              with everyone timetabled that day. */}
+          {(
             <label className="block">
               <span className="block text-xs font-medium text-gray-500 mb-1.5">{t("attendance.period", "Period")}</span>
               <Select
@@ -424,7 +430,9 @@ export default function AttendancePage() {
           <p className="mt-1 text-sm text-gray-500">
             {subject === "students"
               ? t("attendance.noActiveStudents")
-              : "No active teachers found for this school."}
+              : periodId
+                ? t("attendance.noScheduledTeachers")
+                : t("attendance.noScheduledTeachersDay")}
           </p>
         </Card>
       ) : (
@@ -436,7 +444,7 @@ export default function AttendancePage() {
                 key={s}
                 className="px-3 py-1.5 rounded-lg bg-white border border-gray-200 flex items-center gap-2"
               >
-                <span className="text-xs text-gray-500">{STATUS_LABELS[s]}</span>
+                <span className="text-xs text-gray-500">{statusLabel(s)}</span>
                 <span className="text-sm font-semibold text-gray-900 tabular-nums">
                   {counts[s] ?? 0}
                 </span>
@@ -453,11 +461,11 @@ export default function AttendancePage() {
           <Card padding={false}>
             <div className="p-4 border-b border-gray-100 space-y-3">
               <CardHeader
-                title={`${roster.length} on the register`}
+                title={t("attendance.onRoster", { count: roster.length })}
                 subtitle={
                   dirtyCount > 0
-                    ? `${dirtyCount} unsaved ${dirtyCount === 1 ? "change" : "changes"}`
-                    : "No unsaved changes"
+                    ? t("attendance.unsavedCount", { count: dirtyCount })
+                    : t("attendance.noUnsaved")
                 }
                 action={
                   <SearchInput
@@ -508,6 +516,9 @@ export default function AttendancePage() {
                       {entry.admissionNo && (
                         <p className="text-xs text-gray-400">{entry.admissionNo}</p>
                       )}
+                      {subject === "teachers" && entry.className && (
+                        <p className="truncate text-xs text-gray-400" title={entry.className}>{entry.className}</p>
+                      )}
                     </div>
 
                     {!current && (
@@ -524,7 +535,7 @@ export default function AttendancePage() {
                             key={s}
                             type="button"
                             aria-pressed={active}
-                            title={STATUS_LABELS[s]}
+                            title={statusLabel(s)}
                             onClick={() =>
                               setDraft((d) => ({ ...d, [entry.id]: s }))
                             }
@@ -534,7 +545,7 @@ export default function AttendancePage() {
                             )}
                           >
                             <Icon className="w-3.5 h-3.5" />
-                            <span className="hidden sm:inline">{STATUS_LABELS[s]}</span>
+                            <span className="hidden sm:inline">{statusLabel(s)}</span>
                           </button>
                         );
                       })}

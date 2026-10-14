@@ -32,6 +32,8 @@
  *   node scripts/check-term-compute.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const mongoose = require("mongoose");
 
 const main = async () => {
@@ -265,7 +267,7 @@ const main = async () => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail === 0 ? 0 : 1);
 };
 

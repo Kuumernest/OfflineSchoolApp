@@ -57,11 +57,20 @@ function principalFromRequest(req) {
   }
 
   if (req.user?._id) {
+    // The school a staff member speaks from is their own. A super_admin has
+    // none — schoolId is null on the account, by design — and speaks from the
+    // school they have stepped into, which middleware/auth.js has already
+    // resolved from the request and checked exists: req.schoolContext. Reading
+    // req.user.schoolId alone answered "no school" for every super_admin, and
+    // requirePrincipal turned that into a 401 that the web client took for an
+    // expired token.
+    const own = req.user.schoolId ? String(req.user.schoolId) : null;
+    const entered = req.schoolContext?._id ? String(req.schoolContext._id) : null;
     return {
       kind:     "user",
       id:       String(req.user._id),
       role:     req.user.role,
-      schoolId: req.user.schoolId ? String(req.user.schoolId) : null,
+      schoolId: own ?? entered,
       name:     req.user.name || req.user.fullName || null,
     };
   }

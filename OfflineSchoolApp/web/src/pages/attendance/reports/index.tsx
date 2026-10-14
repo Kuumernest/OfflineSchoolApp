@@ -149,9 +149,9 @@ export default function AttendanceReportsPage() {
           icon={School}
           summary={teachers}
           statuses={[
-            { key: "present",  label: "Present",  tone: "bg-emerald-500" },
-            { key: "absent",   label: "Absent",   tone: "bg-red-500" },
-            { key: "late",     label: "Late",     tone: "bg-amber-500" },
+            { key: "present",  label: t("academic.present"), tone: "bg-emerald-500" },
+            { key: "absent",   label: t("academic.absent"),  tone: "bg-red-500" },
+            { key: "late",     label: t("academic.late"),    tone: "bg-amber-500" },
             { key: "on_leave", label: t("attendance.onLeave"), tone: "bg-blue-500" },
           ]}
         />
@@ -182,7 +182,7 @@ export default function AttendanceReportsPage() {
                         : "text-gray-500",
                   )}
                 >
-                  {movement.delta > 0 ? "+" : ""}{movement.delta} pts vs week
+                  {t("attendance.ptsVsWeek", { delta: `${movement.delta > 0 ? "+" : ""}${movement.delta}` })}
                 </span>
               </div>
             )
@@ -243,7 +243,7 @@ function SummaryPanel({
           </div>
           <div>
             <h3 className="text-sm font-semibold text-gray-800">{title}</h3>
-            <p className="text-xs text-gray-500">{total} on the roster</p>
+            <p className="text-xs text-gray-500">{t("attendance.onRoster", { count: total })}</p>
           </div>
         </div>
 

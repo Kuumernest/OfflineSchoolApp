@@ -201,6 +201,18 @@ const SubjectRow = ({ subject, index, maxScore }) => {
   const norm     = subject.normalizedMark ?? subject.normalizedScore;
   const max      = maxScore || subject.maxScore || 100;
 
+  /*
+   * Whether this sequence was marked both ways.
+   *
+   * Read off the row rather than from a flag on the payload: the breakdown is
+   * rebuilt from scratch every time results are processed, so these fields are
+   * present exactly when the school was using CA at the time — including on a
+   * historical result that was computed before CA existed, where both are
+   * absent and the row renders as it always has.
+   */
+  const caParts = subject.caScore != null || subject.testScore != null;
+  const fmtPart = (v) => (v == null ? "—" : v);
+
   const color = absent  ? C.gray400
               : passing ? C.success
               : C.error;
@@ -219,6 +231,24 @@ const SubjectRow = ({ subject, index, maxScore }) => {
         {subject.teacherName ? (
           <Text style={s.subjectTeacher} numberOfLines={1}>
             {subject.teacherName}
+          </Text>
+        ) : null}
+        {/* ── The two halves of the sequence ────────────────────────────
+
+            The Score column holds the SEQUENCE mark — CA and the paper
+            combined by the school's split — so on its own it gives a parent
+            no way to see where it came from. Both halves go underneath
+            rather than in two more columns, because a phone is 360px wide
+            and the printed card is where the table belongs.
+
+            Shown only when this row actually has them. A dash, never a zero,
+            for a CA nobody recorded: the two say different things about a
+            pupil and only one of them is true. */}
+        {caParts ? (
+          <Text style={s.subjectParts} numberOfLines={1}>
+            {t("reportCardDoc.table.ca")} {fmtPart(subject.caScore)}
+            {"  ·  "}
+            {t("reportCardDoc.table.test")} {fmtPart(subject.testScore)}
           </Text>
         ) : null}
       </View>
@@ -286,12 +316,32 @@ const fetchReportCardHtml = async ({ examId, studentId, schoolId, schoolName }) 
 function buildPdfHtml({ result, exam, schoolName, t, locale }) {
   const subjects = result.subjectBreakdown || [];
   const abs      = t("reportCardDoc.absent");
+
+  /*
+   * Whether this sequence was marked both ways.
+   *
+   * Read off the rows, which is where the answer already is: the breakdown is
+   * rebuilt whenever results are processed, so these fields are present
+   * exactly when the school was assessing continuously. A result computed
+   * before CA existed has neither, and prints the table it always printed.
+   *
+   * This builder is only the OFFLINE fallback — online, every platform prints
+   * the backend's HTML — but a card that gains and loses two columns depending
+   * on whether the phone had signal is not a card a school can trust.
+   */
+  const showCa = subjects.some((s) => s.caScore != null || s.testScore != null);
+  // A dash, never a zero, for a CA nobody recorded.
+  const part = (v) => (v == null ? "—" : v);
+
   const rows = subjects.map((s) => {
     const score = s.score ?? s.rawScore;
     const color = s.isAbsent ? "#9CA3AF" : s.isPassing ? "#059669" : "#DC2626";
     return `
       <tr>
         <td>${s.subjectName || ""}</td>
+        ${showCa ? `
+        <td style="text-align:center">${s.isAbsent ? abs : part(s.caScore)}</td>
+        <td style="text-align:center">${s.isAbsent ? abs : part(s.testScore)}</td>` : ""}
         <td style="text-align:center">${s.isAbsent ? abs : score ?? "—"}</td>
         <td style="text-align:center;color:${color};font-weight:700">
           ${s.isAbsent ? abs : s.grade || "—"}
@@ -423,6 +473,9 @@ function buildPdfHtml({ result, exam, schoolName, t, locale }) {
         <thead>
           <tr>
             <th>${t("reportCardDoc.table.subject")}</th>
+            ${showCa ? `
+            <th style="text-align:center">${t("reportCardDoc.table.ca")}</th>
+            <th style="text-align:center">${t("reportCardDoc.table.test")}</th>` : ""}
             <th style="text-align:center">${t("reportCardDoc.table.score")}</th>
             <th style="text-align:center">${t("reportCardDoc.table.grade")}</th>
             <th style="text-align:center">${t("reportCardDoc.table.points")}</th>
@@ -1078,6 +1131,8 @@ const s = StyleSheet.create({
     alignItems:    "center",
   },
   subjectScore: { fontSize: 14, fontWeight: "700" },
+  // The CA / Test line under a subject: secondary to the mark above it.
+  subjectParts: { fontSize: 10, color: C.gray400, marginTop: 1 },
   subjectNorm:  { fontSize: 10, color: C.gray400 },
   gradePill: {
     width:          44,

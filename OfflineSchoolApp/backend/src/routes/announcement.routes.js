@@ -42,10 +42,12 @@ const noCache = (req, res, next) => {
     "Expires":           "0",
     "Surrogate-Control": "no-store",
   });
-  res.on("finish", () => {
-    res.removeHeader("ETag");
-    res.removeHeader("Last-Modified");
-  });
+  // No finish-time header removal: once the response has been sent, Node throws
+  // ERR_HTTP_HEADERS_SENT from removeHeader, and an exception inside a "finish"
+  // listener is uncaught — it reaches process.on("uncaughtException"), not the
+  // route's error handling (found by the Stage 18A input probe on this route).
+  // A 304 is already impossible here: the conditional request headers are
+  // deleted above, and no-store forbids the client from reusing the body.
   next();
 };
 
@@ -101,19 +103,12 @@ const extractUserId = (req) =>
  * announcements exists.
  *
  * A super_admin still crosses schools, which is what that role is for.
+ *
+ * Moved to utils/announcementScope.js when the student read-receipt copies in
+ * server.js and students.routes.js were found doing the same lookup unscoped.
+ * One implementation, three callers.
  */
-const findAnnouncementById = async (id, req) => {
-  const doc = await Announcement.findByAnyId(id);
-  if (!doc) return null;
-
-  if (req?.user?.role === "super_admin") return doc;
-
-  const callerSchool = req?.user?.schoolId;
-  if (!callerSchool) return null;
-  if (String(doc.schoolId ?? "") !== String(callerSchool)) return null;
-
-  return doc;
-};
+const { findAnnouncementById } = require("../utils/announcementScope");
 
 const resolveStudentClassId = async (userId, schoolId) => {
   try {
@@ -333,7 +328,7 @@ const handleStudentAnnouncements = async (req, res) => {
       if (!isEpoch) filter.updatedAt = { $gte: sinceDate };
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (parseInt(page) - 1) * parseInt(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
 
     const [announcements, total] = await Promise.all([
       Announcement.find(filter)
@@ -601,7 +596,7 @@ router.get("/", adminOrTeacher, async (req, res) => {
       }
     }
 
-    const skip = (parseInt(page) - 1) * parseInt(limit);
+    const skip = (parseInt(page) - 1) * parseInt(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
 
     const [announcements, total] = await Promise.all([
       Announcement.find(filter)

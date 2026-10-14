@@ -363,7 +363,7 @@ const SubmitModal = memo(({
                 </Text>
                 {homework.submission_submitted_at && (
                   <Text style={modalStyles.prevSubmissionDate}>
-                    Submitted {formatDateTime(homework.submission_submitted_at)}
+                    {t("studentHw.submittedOn", { date: formatDateTime(homework.submission_submitted_at) })}
                     {homework.submission_is_late ? "  · Late" : ""}
                   </Text>
                 )}
@@ -405,7 +405,7 @@ const SubmitModal = memo(({
                   textAlignVertical="top"
                 />
                 <Text style={modalStyles.charCount}>
-                  {text.length} character{text.length !== 1 ? "s" : ""}
+                  {t("studentHw.charCount", { count: text.length })}
                 </Text>
               </View>
             )}
@@ -457,7 +457,7 @@ const SubmitModal = memo(({
               <View style={[modalStyles.gradedFooter, { backgroundColor: "#FEE2E2" }]}>
                 <Ionicons name="lock-closed-outline" size={20} color="#DC2626" />
                 <Text style={[modalStyles.gradedFooterText, { color: "#DC2626" }]}>
-                  Deadline has passed — no submissions accepted
+                  {t("studentHw.closedNote")}
                 </Text>
               </View>
             </View>
@@ -746,8 +746,8 @@ export default function StudentHomeworkScreen() {
           <Text style={styles.headerTitle}>{t("studentHw.listTitle")}</Text>
           <Text style={styles.headerSub}>
             {stats.pending > 0
-              ? `${stats.pending} pending · ${stats.submitted} submitted`
-              : `${stats.total} assignment${stats.total !== 1 ? "s" : ""}`}
+              ? t("studentHw.pendingSubmitted", { pending: stats.pending, submitted: stats.submitted })
+              : t("studentHw.assignmentCount", { count: stats.total })}
           </Text>
         </View>
       </View>
@@ -761,7 +761,7 @@ export default function StudentHomeworkScreen() {
         >
           <Ionicons name="warning" size={18} color="#DC2626" />
           <Text style={styles.urgentBannerText}>
-            {stats.urgent} assignment{stats.urgent !== 1 ? "s" : ""} due very soon!
+            {t("studentHome.urgentHomework", { count: stats.urgent })}
           </Text>
           <Text style={styles.urgentBannerLink}>{t("studentHw.viewArrow")}</Text>
         </TouchableOpacity>
@@ -860,8 +860,8 @@ export default function StudentHomeworkScreen() {
             <Ionicons name="document-text-outline" size={56} color="#D1D5DB" />
             <Text style={styles.emptyTitle}>
               {activeFilter === "all"
-                ? "No homework yet"
-                : `No ${activeFilter} homework`}
+                ? t("studentHw.emptyNone")
+                : t("studentHw.emptyFiltered")}
             </Text>
             <Text style={styles.emptySubtitle}>
               {activeFilter === "all"

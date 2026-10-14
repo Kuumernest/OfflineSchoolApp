@@ -712,9 +712,7 @@ export default function AdminDashboard() {
         id:      "stale",
         type:    "danger",
         icon:    "alert-circle-outline",
-        message: `${stats.stalePendingApps} application${
-          stats.stalePendingApps > 1 ? "s" : ""
-        } pending over 3 days`,
+        message: t("dashAdmin.alertStaleApps", { count: stats.stalePendingApps }),
         route:   "/admin/students/applications",
       });
     }
@@ -724,9 +722,7 @@ export default function AdminDashboard() {
         id:      "unassigned",
         type:    "warning",
         icon:    "people-outline",
-        message: `${stats.unassignedTeachers} teacher${
-          stats.unassignedTeachers > 1 ? "s" : ""
-        } not yet assigned`,
+        message: t("dashAdmin.alertUnassignedTeachers", { count: stats.unassignedTeachers }),
         route:   "/admin/assignments",
       });
     }
@@ -736,9 +732,7 @@ export default function AdminDashboard() {
         id:      "missing-subjects",
         type:    "warning",
         icon:    "book-outline",
-        message: `${stats.classesWithoutSubjects} class${
-          stats.classesWithoutSubjects > 1 ? "es" : ""
-        } missing subjects`,
+        message: t("dashAdmin.alertClassesNoSubjects", { count: stats.classesWithoutSubjects }),
         route:   "/admin/subjects",
       });
     }
@@ -748,9 +742,7 @@ export default function AdminDashboard() {
         id:      "conflicts",
         type:    "danger",
         icon:    "warning-outline",
-        message: `${stats.timetableConflicts} timetable conflict${
-          stats.timetableConflicts > 1 ? "s" : ""
-        } detected`,
+        message: t("dashAdmin.alertConflicts", { count: stats.timetableConflicts }),
         route:   "/admin/timetable",
       });
     }
@@ -767,9 +759,7 @@ export default function AdminDashboard() {
           id:      "timetable-incomplete",
           type:    "info",
           icon:    "calendar-outline",
-          message: `${stats.incompleteTimetableSlots} class${
-            stats.incompleteTimetableSlots > 1 ? "es" : ""
-          } without timetable (${pct}%)`,
+          message: t("dashAdmin.alertNoTimetable", { count: stats.incompleteTimetableSlots, pct }),
           route:   "/admin/timetable",
         });
       }
@@ -794,9 +784,7 @@ export default function AdminDashboard() {
         id:      "sync-overwrites",
         type:    "warning",
         icon:    "sync-outline",
-        message: `${overwriteCount} sync overwrite${
-          overwriteCount > 1 ? "s" : ""
-        } — your edits were replaced`,
+        message: t("dashAdmin.syncOverwrites", { count: overwriteCount }),
         route:   "/admin/sync-overwrites",
       });
     }
@@ -918,7 +906,7 @@ export default function AdminDashboard() {
         {alerts.length > 0 && (
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              Alerts{" "}
+              {t("dashAdmin.alerts")}{" "}
               <Text style={styles.alertBadge}>({alerts.length})</Text>
             </Text>
             {alerts.map((a) => (

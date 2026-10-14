@@ -8,11 +8,19 @@ export type ExamStatus =
 | "published"
 | "archived";
 
-/** Simplified exam type — only 3 values */
+/**
+ * Exam type.
+ *
+ * "ca" is continuous assessment — the other half of a sequence, marked through
+ * the weeks rather than on the paper. It is an exam like any other on purpose:
+ * it gets subjects, marks, the same entry screens and the same offline queue,
+ * none of which had to learn what CA is.
+ */
 export type ExamType =
 | "test"
 | "practical"
-| "promotion_exam";
+| "promotion_exam"
+| "ca";
 
 export type SequenceNumber = 1 | 2 | 3 | 4 | 5 | 6;
 export type TermNumber = 1 | 2 | 3;
@@ -26,7 +34,7 @@ export type SubmissionStatus =
 // ─── Academic Structure ────────────────────────────────────
 
 export interface AssessmentConfig {
-  type: "test" | "practical" | "promotion_exam";
+  type: ExamType;
   label?: string;
 }
 
@@ -77,6 +85,13 @@ startDate: string | null;
 endDate: string | null;
 totalMarks: number;
 passMark: number;
+/**
+ * Exam metadata, for display and backward compatibility.
+ *
+ * NOT the CA/Test weighting: that is GradingConfig.caWeight and
+ * GradingConfig.testWeight, which are authoritative for every sequence
+ * calculation and are what the report card prints.
+ */
 weight: number;
 description: string | null;
 instructions: string | null;

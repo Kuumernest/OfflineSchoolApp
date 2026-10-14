@@ -661,7 +661,7 @@ export default function ReportGeneratorScreen() {
           <View style={s.examBanner}>
             <Ionicons name="document-text-outline" size={16} color={C.primary} />
             <Text style={s.examBannerText} numberOfLines={1}>
-              Exam: {selectedExam.name}
+              {t("reportGen.examLabel", { name: selectedExam.name })}
             </Text>
             <TouchableOpacity onPress={() => setSelectedExam(null)} hitSlop={8}>
               <Ionicons name="close-circle" size={16} color={C.gray400} />
@@ -691,7 +691,7 @@ export default function ReportGeneratorScreen() {
                 label={
                   selectedStudent?.name ||
                   (students.length > 0
-                    ? `All ${students.length} students`
+                    ? t("reportGen.allStudents", { count: students.length })
                     : selectedClass
                       ? t("reportGen.loadingStudents")
                       : t("reportGen.selectClassFirst"))
@@ -721,7 +721,7 @@ export default function ReportGeneratorScreen() {
             <View style={s.studentCountBadge}>
               <Ionicons name="people-outline" size={12} color={C.success} />
               <Text style={s.studentCountText}>
-                {students.length} unique student{students.length !== 1 ? "s" : ""} loaded
+                {t("reportGen.uniqueLoaded", { count: students.length })}
               </Text>
             </View>
           )}
@@ -754,7 +754,7 @@ export default function ReportGeneratorScreen() {
             label={
               selectedTemplate?.name ||
               (templates.length
-                ? `Built-in (${templates.length} custom available)`
+                ? t("reportGen.builtinWithCustom", { count: templates.length })
                 : t("reportGen.builtinShort"))
             }
             hasValue={!!selectedTemplate}
@@ -801,7 +801,7 @@ export default function ReportGeneratorScreen() {
             <View style={s.resultHeader}>
               <Ionicons name="checkmark-circle" size={24} color={C.success} />
               <Text style={s.resultTitle}>
-                Report generated for {lastReport.studentName}
+                {t("reportGen.generatedFor", { name: lastReport.studentName })}
               </Text>
             </View>
             <Text style={s.resultInfo}>{t("reportGen.pdfShared")}</Text>
@@ -818,7 +818,7 @@ export default function ReportGeneratorScreen() {
                 color={result.errorCount > 0 ? C.warning : C.success}
               />
               <Text style={s.resultTitle}>
-                {result.successCount} of {result.total} reports generated
+                {t("reportGen.generatedOf", { done: result.successCount, total: result.total })}
               </Text>
             </View>
 
@@ -865,7 +865,7 @@ export default function ReportGeneratorScreen() {
             )}
 
             <Text style={s.resultInfo}>
-              {result.successCount} PDF{result.successCount !== 1 ? "s" : ""} saved to device.
+              {t("reportGen.pdfsSaved", { count: result.successCount })}
             </Text>
           </View>
         )}
@@ -884,9 +884,9 @@ export default function ReportGeneratorScreen() {
               <Ionicons name="document-text-outline" size={20} color={C.white} />
               <Text style={s.generateBtnText}>
                 {selectedStudent
-                  ? `Generate Report for ${selectedStudent.name}`
+                  ? t("reportGen.generateFor", { name: selectedStudent.name })
                   : students.length > 0
-                    ? `Generate All ${students.length} Reports`
+                    ? t("reportGen.generateAll", { count: students.length })
                     : t("reportGen.generateCta")}
               </Text>
             </>

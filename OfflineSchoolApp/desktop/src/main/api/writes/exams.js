@@ -412,7 +412,13 @@ module.exports = [
           continue;
         }
 
-        const maxScore = Number(row.maxScore ?? exam.passMark ?? 100);
+        // The paper's own maximum, as the server resolves it: the row's, else the
+        // ExamSubject's. The old fallback was exam.passMark, which is a mark out
+        // of 20, not a maximum — a row without maxScore was graded against 10.
+        const es = (row.examSubjectId && docs.get("examSubject", String(row.examSubjectId)))
+          || docs.find("examSubject", { examId, schoolId, subjectId: String(row.subjectId ?? subjectId ?? ""), classId: String(row.classId ?? classId ?? exam.classId ?? "") })[0]
+          || null;
+        const maxScore = Number(row.maxScore ?? es?.maxScore ?? 100);
         const computed = computeGrade(row.score, maxScore, gradingConfig);
 
         const doc = {

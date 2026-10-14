@@ -296,8 +296,7 @@ export default function AdminAnnouncementsScreen() {
           <View style={styles.filterBannerLeft}>
             <Ionicons name="people" size={18} color="#0891B2" />
             <Text style={styles.filterBannerText}>
-              Showing {announcements.length} teacher announcement
-              {announcements.length !== 1 ? "s" : ""}
+              {t("annAdmin.showingTeacherCount", { count: announcements.length })}
             </Text>
           </View>
           <TouchableOpacity
@@ -540,8 +539,7 @@ export default function AdminAnnouncementsScreen() {
                         styles.badgeText,
                         { color: "#EA580C", marginLeft: 3 },
                       ]}>
-                        {item.targetClasses.length} class
-                        {item.targetClasses.length > 1 ? "es" : ""}
+                        {t("annAdmin.classCount", { count: item.targetClasses.length })}
                       </Text>
                     </View>
                   )}

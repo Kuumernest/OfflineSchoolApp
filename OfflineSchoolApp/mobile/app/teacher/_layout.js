@@ -13,18 +13,14 @@ export default function TeacherLayout() {
       if (summary.succeeded > 0) {
         Alert.alert(
           t("teacherLayout.uploadsDone"),
-          `${summary.succeeded} queued upload${
-            summary.succeeded > 1 ? "s" : ""
-          } synced successfully.`
+          t("teacherLayout.syncedCount", { count: summary.succeeded })
         );
       }
 
       if (summary.failed > 0) {
         Alert.alert(
           t("teacherLayout.uploadsFailed"),
-          `${summary.failed} upload${
-            summary.failed > 1 ? "s" : ""
-          } could not be synced. They will retry next time.`
+          t("teacherLayout.failedCount", { count: summary.failed })
         );
       }
     },

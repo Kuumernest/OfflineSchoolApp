@@ -6,6 +6,7 @@ import { setRetryContext, clearRetryContext } from "./api";
 import NetInfo                          from "@react-native-community/netinfo";
 import { AppState }                     from "react-native";
 import { getDatabase }                  from "../db/database";
+import { ensureQuizTables }             from "../db/quizSchema";
 import * as SecureStore                 from "expo-secure-store";
 import {
   safeAddColumn,
@@ -705,102 +706,11 @@ class SyncManagerClass {
   }
 
   async migrateQuizTables() {
+    // One definition for the fresh install and for the phone that already has
+    // the tables — db/quizSchema.js, which also says how question_analytics
+    // came to have two shapes and why the question bank threw.
     const db = await getDatabase();
-
-    const creates = [
-      `CREATE TABLE IF NOT EXISTS question_categories (
-        id TEXT PRIMARY KEY, schoolId TEXT, name TEXT NOT NULL,
-        description TEXT, parent_id TEXT, is_active INTEGER DEFAULT 1,
-        deleted_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS questions (
-        id TEXT PRIMARY KEY, schoolId TEXT, category_id TEXT,
-        question_text TEXT NOT NULL, question_type TEXT NOT NULL,
-        media_url TEXT, difficulty TEXT DEFAULT 'medium', points REAL DEFAULT 1.0,
-        explanation TEXT, is_active INTEGER DEFAULT 1, created_by TEXT,
-        deleted_at TEXT, _synced INTEGER DEFAULT 0, _synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS question_options (
-        id TEXT PRIMARY KEY, question_id TEXT NOT NULL,
-        option_text TEXT NOT NULL, is_correct INTEGER DEFAULT 0,
-        match_pair TEXT, display_order INTEGER DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS question_analytics (
-        id TEXT PRIMARY KEY, question_id TEXT NOT NULL,
-        times_seen INTEGER DEFAULT 0, times_correct INTEGER DEFAULT 0,
-        avg_time_secs REAL DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS quizzes (
-        id TEXT PRIMARY KEY, schoolId TEXT, title TEXT NOT NULL,
-        description TEXT, instructions TEXT, subject_id TEXT, class_id TEXT,
-        created_by TEXT, time_limit_minutes INTEGER, time_per_question INTEGER,
-        shuffle_questions INTEGER DEFAULT 0, shuffle_options INTEGER DEFAULT 0,
-        questions_per_page INTEGER DEFAULT 1, allow_backtrack INTEGER DEFAULT 1,
-        max_attempts INTEGER DEFAULT 1, passing_score REAL DEFAULT 70,
-        available_from TEXT, available_until TEXT,
-        show_answers_after TEXT DEFAULT 'on_completion',
-        show_score INTEGER DEFAULT 1, show_explanation INTEGER DEFAULT 1,
-        is_published INTEGER DEFAULT 0, deleted_at TEXT,
-        _synced INTEGER DEFAULT 0, _synced_at TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
-      `CREATE TABLE IF NOT EXISTS quiz_questions (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL, question_id TEXT NOT NULL,
-        display_order INTEGER DEFAULT 0, points_override REAL)`,
-      `CREATE TABLE IF NOT EXISTS quiz_attempts (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL, user_id TEXT NOT NULL,
-        attempt_number INTEGER DEFAULT 1, status TEXT DEFAULT 'in_progress',
-        raw_score REAL DEFAULT 0, max_score REAL DEFAULT 0,
-        percentage REAL DEFAULT 0, is_passed INTEGER DEFAULT 0,
-        started_at TEXT, submitted_at TEXT, time_taken_secs INTEGER,
-        deleted_at TEXT, _synced INTEGER DEFAULT 0, _synced_at TEXT)`,
-      `CREATE TABLE IF NOT EXISTS quiz_analytics (
-        id TEXT PRIMARY KEY, quiz_id TEXT NOT NULL,
-        total_attempts INTEGER DEFAULT 0, avg_score REAL DEFAULT 0, pass_rate REAL DEFAULT 0)`,
-      `CREATE TABLE IF NOT EXISTS attempt_answers (
-        id TEXT PRIMARY KEY, attempt_id TEXT NOT NULL, question_id TEXT NOT NULL,
-        time_taken INTEGER, is_correct INTEGER DEFAULT 0, points REAL DEFAULT 0,
-        _synced INTEGER DEFAULT 0, _synced_at TEXT)`,
-      `CREATE TABLE IF NOT EXISTS attempt_answer_selections (
-        id TEXT PRIMARY KEY, attempt_answer_id TEXT NOT NULL,
-        option_id TEXT, text_response TEXT, match_response TEXT)`,
-    ];
-
-    for (const sql of creates) {
-      await db.execAsync(sql).catch((err) =>
-        console.warn("[migrateQuizTables] CREATE failed:", err.message)
-      );
-    }
-
-    const indexes = [
-      "CREATE INDEX IF NOT EXISTS idx_questions_school    ON questions(schoolId)",
-      "CREATE INDEX IF NOT EXISTS idx_questions_category  ON questions(category_id)",
-      "CREATE INDEX IF NOT EXISTS idx_questions_synced    ON questions(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_q_options_question  ON question_options(question_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_school      ON quizzes(schoolId)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_class       ON quizzes(class_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_subject     ON quizzes(subject_id)",
-      "CREATE INDEX IF NOT EXISTS idx_quizzes_synced      ON quizzes(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_quiz_q_quiz         ON quiz_questions(quiz_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_quiz       ON quiz_attempts(quiz_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_user       ON quiz_attempts(user_id)",
-      "CREATE INDEX IF NOT EXISTS idx_attempts_synced     ON quiz_attempts(_synced)",
-      "CREATE INDEX IF NOT EXISTS idx_answers_attempt     ON attempt_answers(attempt_id)",
-      "CREATE INDEX IF NOT EXISTS idx_answer_sel_answer   ON attempt_answer_selections(attempt_answer_id)",
-    ];
-    for (const idx of indexes) {
-      await db.execAsync(idx).catch(() => {});
-    }
-
-    const patches = {
-      questions:       [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quizzes:         [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      quiz_attempts:   [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"], ["deleted_at", "TEXT"]],
-      attempt_answers: [["_synced", "INTEGER DEFAULT 0"], ["_synced_at", "TEXT"]],
-    };
-    for (const [table, cols] of Object.entries(patches)) {
-      for (const [col, def] of cols) {
-        await safeAddColumn(db, table, col, def);
-      }
-    }
-
+    await ensureQuizTables(db);
     console.log("[SyncManager] Quiz tables ready");
   }
 
@@ -1182,6 +1092,7 @@ class SyncManagerClass {
       if (this._isUnauthenticated()) return;
       SyncProgress.step("quizzes");
       await this.syncQuizData();
+      await this.syncHomeworkData();
 
       console.log("[SyncManager] Sync completed at", this.lastSync);
       // A completed cycle clears the backoff outright. No slow climb back
@@ -2506,6 +2417,102 @@ class SyncManagerClass {
   // mutation. What remains is repair plus pull.
   // ═══════════════════════════════════════════════════════════════════════════
 
+  /**
+   * Homework, from the server into the phone's homework tables.
+   *
+   * For a teacher the server answers with the homework they set; for a pupil,
+   * with their school's. Rows the phone has changed and not yet sent
+   * (_synced = 0) are left alone — the outbox owns them until they land — and
+   * everything else is overwritten with the server's copy, so a deletion or
+   * an edit made in the office reaches the phone. Submissions ride along as
+   * subdocuments and are stored beside the homework the same way.
+   */
+  async syncHomeworkData() {
+    if (this._isUnauthenticated()) return;
+    if (!(this.isTeacher() || this.isStudent())) return;
+    const schoolId = await this.getSchoolId();
+    if (!schoolId) return;
+
+    try {
+      const { ensureHomeworkTables } = require("./homework.service");
+      await ensureHomeworkTables();
+      const response = await this._withRetry(
+        "pullHomework",
+        () => api.get(API.homework.list, { params: { schoolId } })
+      );
+      const rows = Array.isArray(response.data?.homework) ? response.data.homework : [];
+      const db = await getDatabase();
+      const ts = new Date().toISOString();
+      let ok = 0, fail = 0;
+
+      await withTransaction(db, async () => {
+        for (const h of rows) {
+          try {
+            const id = String(h._id || h.id || "");
+            if (!id) continue;
+            const iso = (v) => (v ? new Date(v).toISOString() : null);
+            await db.runAsync(
+              `INSERT INTO homework
+                 (id, schoolId, class_id, subject_id, created_by, title, description, instructions,
+                  due_date, max_score, allow_late, late_penalty, attachment_url, attachment_name,
+                  attachment_type, is_published, _synced, created_at, updated_at, deleted_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+               ON CONFLICT(id) DO UPDATE SET
+                 schoolId = excluded.schoolId, class_id = excluded.class_id,
+                 subject_id = excluded.subject_id, created_by = excluded.created_by,
+                 title = excluded.title, description = excluded.description,
+                 instructions = excluded.instructions, due_date = excluded.due_date,
+                 max_score = excluded.max_score, allow_late = excluded.allow_late,
+                 late_penalty = excluded.late_penalty, attachment_url = excluded.attachment_url,
+                 attachment_name = excluded.attachment_name, attachment_type = excluded.attachment_type,
+                 is_published = excluded.is_published, _synced = 1,
+                 updated_at = excluded.updated_at, deleted_at = excluded.deleted_at
+               WHERE homework._synced = 1 OR homework._synced IS NULL`,
+              [
+                id, String(h.schoolId ?? schoolId), String(h.classId ?? ""), String(h.subjectId ?? ""),
+                String(h.createdBy ?? ""), h.title ?? "", h.description ?? null, h.instructions ?? null,
+                h.dueDate ?? null, Number(h.maxScore ?? 100), h.allowLate === false ? 0 : 1,
+                Number(h.latePenalty ?? 0), h.attachmentUrl ?? null, h.attachmentName ?? null,
+                h.attachmentType ?? null, h.isPublished ? 1 : 0,
+                iso(h.createdAt) ?? ts, iso(h.updatedAt) ?? ts, iso(h.deletedAt),
+              ]
+            );
+            for (const s of Array.isArray(h.submissions) ? h.submissions : []) {
+              const sid = String(s._id || s.id || "");
+              if (!sid) continue;
+              await db.runAsync(
+                `INSERT INTO homework_submissions
+                   (id, homework_id, student_id, submission_text, attachment_url, score, feedback,
+                    graded_by, graded_at, status, _synced, submitted_at, updated_at, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   submission_text = excluded.submission_text, attachment_url = excluded.attachment_url,
+                   score = excluded.score, feedback = excluded.feedback, graded_by = excluded.graded_by,
+                   graded_at = excluded.graded_at, status = excluded.status, _synced = 1,
+                   submitted_at = excluded.submitted_at, updated_at = excluded.updated_at
+                 WHERE homework_submissions._synced = 1 OR homework_submissions._synced IS NULL`,
+                [
+                  sid, id, String(s.studentId ?? ""), s.text ?? null, s.attachmentUrl ?? null,
+                  s.score ?? null, s.feedback ?? null, s.gradedBy ?? null, iso(s.gradedAt),
+                  s.score != null ? "graded" : "submitted", iso(s.submittedAt) ?? ts, ts, iso(s.submittedAt) ?? ts,
+                ]
+              );
+            }
+            ok++;
+          } catch (rowErr) {
+            fail++;
+            console.warn("[SyncManager] homework row skipped:", rowErr.message);
+          }
+        }
+      });
+      console.log(`[SyncManager] Homework pull complete: ${ok} stored, ${fail} skipped`);
+    } catch (err) {
+      // A failed pull is reported, not swallowed: the caller logs it and the
+      // cycle's other steps still run.
+      console.warn("[SyncManager] pullHomework failed:", err.message);
+    }
+  }
+
   async syncQuizData() {
     if (this._isUnauthenticated()) return;
     const schoolId = await this.getSchoolId();
@@ -2784,18 +2791,21 @@ class SyncManagerClass {
 
           await db.runAsync(
             `INSERT INTO questions (
-               id, schoolId, category_id, question_text, question_type,
+               id, schoolId, category_id, subject_id, question_text, question_type,
                media_url, difficulty, points, explanation,
                is_active, created_by, _synced, created_at, updated_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)
              ON CONFLICT(id) DO UPDATE SET
-               category_id = excluded.category_id, question_text = excluded.question_text,
+               category_id = excluded.category_id,
+               subject_id = COALESCE(excluded.subject_id, questions.subject_id),
+               question_text = excluded.question_text,
                question_type = excluded.question_type, media_url = excluded.media_url,
                difficulty = excluded.difficulty, points = excluded.points,
                explanation = excluded.explanation, is_active = excluded.is_active,
                _synced = 1, updated_at = excluded.updated_at`,
             [
               String(id), q.schoolId, categoryId,
+              q.subject_id || q.subjectId || null,
               q.question_text || q.questionText,
               q.question_type || q.questionType,
               q.media_url     || q.mediaUrl    || null,

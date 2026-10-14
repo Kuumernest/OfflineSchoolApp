@@ -5,6 +5,7 @@ const express = require("express");
 const router  = express.Router();
 const path    = require("path");
 const fs      = require("fs");
+const { v4: uuidv4 } = require("uuid");
 
 const User              = require("../db/models/User");
 const Class             = require("../db/models/Class");
@@ -262,14 +263,17 @@ const lazyModel = (modulePath, label) => {
 const getStudent       = lazyModel("../db/models/Student",       "Student");
 const getTimetableSlot = lazyModel("../db/models/TimetableSlot", "TimetableSlot");
 const getPeriod        = lazyModel("../db/models/Period",        "Period");
-const getAttendance    = lazyModel("../db/models/Attendance",    "Attendance");
+// Attendance.js exports { StudentAttendance, TeacherAttendance }, not a model.
+// The plain lazyModel handed back that object, and the register route called
+// bulkWrite on it — a 500 after the assignment check had passed.
+const getAttendanceModule = lazyModel("../db/models/Attendance", "Attendance");
+const getAttendance       = () => getAttendanceModule()?.StudentAttendance ?? null;
 const getSubmission    = lazyModel("../db/models/Submission",    "Submission");
 const getAssignment    = lazyModel("../db/models/Assignment",    "Assignment");
 const getQuiz          = lazyModel("../db/models/Quiz",          "Quiz");
 const getContent       = lazyModel("../db/models/Content",       "Content");
 const getExam          = lazyModel("../db/models/Exam",          "Exam");
 const getExamMark      = lazyModel("../db/models/ExamMark",      "ExamMark");
-const getResult        = lazyModel("../db/models/Result",        "Result");
 
 // ═════════════════════════════════════════════════════════════════════════════
 // ASYNC HANDLER
@@ -371,8 +375,12 @@ const getTeacherScope = async (teacherId, schoolId) => {
   const tid        = String(teacherId);
 
   try {
+    // Active rows of this school only; both spellings of the fields are read,
+    // for rows written by older code paths.
     const rows = await TeacherAssignment.find({
       $or: [{ teacher: tid }, { teacherId: tid }],
+      isActive: { $ne: false },
+      ...(schoolId ? { schoolId: String(schoolId) } : {}),
     })
       .select("subject subjectId subject_id class classId class_id")
       .lean();
@@ -390,7 +398,10 @@ const getTeacherScope = async (teacherId, schoolId) => {
   }
 
   try {
+    // Scoped to the school: without it this read walked every school's
+    // subjects on the platform for one teacher's ids, on fourteen routes.
     const rows = await Subject.find({
+      ...(schoolId ? { schoolId: String(schoolId) } : {}),
       $or: [{ teacher_id: tid }, { teacherId: tid }, { teacher: tid }],
     })
       .select("_id class classId class_id")
@@ -482,10 +493,11 @@ const sevenDaysFromNow = () => {
   return d.toISOString().split("T")[0];
 };
 
-const getTodayDayName = () => {
-  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-  return days[new Date().getDay()];
-};
+// One reading of the week for the whole application: the staff register
+// matches an attendance date to timetable slots with the same function
+// (shared/timetable.js), so "today" here and "Monday" there cannot disagree.
+const { dayCodeFor } = require("../../../shared/timetable");
+const getTodayDayName = () => dayCodeFor(new Date());
 
 const getTodayDayNameQuery = () => {
   const codes = {
@@ -944,6 +956,69 @@ router.get("/assignments", asyncHandler(async (req, res) => {
 // GET /teacher/stats/summary
 // ═════════════════════════════════════════════════════════════════════════════
 
+/**
+ * The teacher's classes for today, from their own timetable slots in their own
+ * school, with the ids a reminder needs to open a register — classId,
+ * subjectId, periodId, the date — and whether the class already has a
+ * register for the day.
+ *
+ * The dashboard's attendance reminder used to receive only names and a count,
+ * so tapping it opened the register screen with no class. "Has a register" is
+ * what the app has always meant: at least one StudentAttendance row for the
+ * class on the date, whoever marked it. (The old count compared against a
+ * teacherId field StudentAttendance does not have, so nothing ever counted as
+ * marked and the count was the number of classes.)
+ */
+const buildTodayClasses = async (teacherId, schoolId) => {
+  const T = getTimetableSlot();
+  if (!T) return [];
+
+  const today   = todayISO();
+  const rawSlots = await T.find({
+    teacherId: String(teacherId),
+    dayOfWeek: getTodayDayNameQuery(),
+    deletedAt: null,
+    ...(schoolId ? { schoolId: String(schoolId) } : {}),
+  }).lean();
+  if (!rawSlots.length) return [];
+
+  const enriched = await enrichTimetableSlots(rawSlots);
+  sortSlotsByTime(enriched);
+
+  let markedClassIds = new Set();
+  try {
+    const Att = getAttendance();
+    if (Att) {
+      const classIds = [...new Set(enriched.map((s) => String(s.classId)).filter(Boolean))];
+      const marked = await Att.distinct("classId", {
+        ...(schoolId ? { schoolId: String(schoolId) } : {}),
+        classId: { $in: classIds },
+        date:    today,
+      });
+      markedClassIds = new Set(marked.map(String));
+    }
+  } catch (e) {
+    console.warn("buildTodayClasses attendance error:", e.message);
+  }
+
+  return enriched.map((s) => ({
+    slotId:           s._id,
+    classId:          s.classId  ? String(s.classId)  : null,
+    subjectId:        s.subjectId ? String(s.subjectId) : null,
+    periodId:         s.periodId ? String(s.periodId) : null,
+    dayOfWeek:        s.dayOfWeek,
+    date:             today,
+    subjectName:      s.subjectName,
+    className:        s.className,
+    periodName:       s.periodName,
+    startTime:        s.startTime,
+    endTime:          s.endTime,
+    room:             s.room,
+    status:           computeSlotStatus(s.startTime, s.endTime),
+    attendanceMarked: s.classId ? markedClassIds.has(String(s.classId)) : false,
+  }));
+};
+
 router.get("/stats/summary", asyncHandler(async (req, res) => {
   const teacherId = resolveTeacherId(req);
   if (!teacherId)
@@ -967,7 +1042,7 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
     pendingGrading,
     upcomingDeadlines,
     upcomingExams,
-    todayAttendanceMissing,
+    _attendanceMissingPlaceholder,
     newSubmissions,
     activeExams,
     pendingMarksEntry,
@@ -1027,18 +1102,8 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
         return E ? await E.countDocuments({ teacherId: String(teacherId), examDate: { $gte: new Date(today), $lte: new Date(weekEnd) } }) : 0;
       } catch { return 0; }
     })(),
-    (async () => {
-      try {
-        const T   = getTimetableSlot();
-        const Att = getAttendance();
-        if (!T || !Att) return 0;
-        const slots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).select("classId").lean();
-        if (!slots.length) return 0;
-        const slotClassIds = [...new Set(slots.map((s) => String(s.classId)))];
-        const markedCount  = await Att.countDocuments({ teacherId: String(teacherId), date: today, classId: { $in: slotClassIds } });
-        return Math.max(0, slotClassIds.length - markedCount);
-      } catch { return 0; }
-    })(),
+    // Computed from todayClasses below — see buildTodayClasses.
+    Promise.resolve(null),
     (async () => {
       try {
         const Sub = getSubmission();
@@ -1085,25 +1150,14 @@ router.get("/stats/summary", asyncHandler(async (req, res) => {
 
   let todayClasses = [];
   try {
-    const T = getTimetableSlot();
-    if (T) {
-      const rawSlots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).lean();
-      const enriched = await enrichTimetableSlots(rawSlots);
-      sortSlotsByTime(enriched);
-      todayClasses = enriched.map((s) => ({
-        slotId:      s._id,
-        subjectName: s.subjectName,
-        className:   s.className,
-        periodName:  s.periodName,
-        startTime:   s.startTime,
-        endTime:     s.endTime,
-        room:        s.room,
-        status:      computeSlotStatus(s.startTime, s.endTime),
-      }));
-    }
+    todayClasses = await buildTodayClasses(teacherId, schoolId);
   } catch (e) {
     console.warn("stats/summary timetable error:", e.message);
   }
+  // One per class, not per slot: two periods of one class are one register.
+  const todayAttendanceMissing = new Set(
+    todayClasses.filter((c) => c.classId && !c.attendanceMarked).map((c) => c.classId)
+  ).size;
 
   const stats = {
     assignedSubjects: subjectIds.length,
@@ -1143,22 +1197,7 @@ router.get("/my-workload", asyncHandler(async (req, res) => {
 
   let todayClasses = [];
   try {
-    const T = getTimetableSlot();
-    if (T) {
-      const rawSlots = await T.find({ teacherId: String(teacherId), dayOfWeek: dayQuery, deletedAt: null }).lean();
-      const enriched = await enrichTimetableSlots(rawSlots);
-      sortSlotsByTime(enriched);
-      todayClasses = enriched.map((s) => ({
-        slotId:      s._id,
-        subjectName: s.subjectName,
-        className:   s.className,
-        periodName:  s.periodName,
-        startTime:   s.startTime,
-        endTime:     s.endTime,
-        room:        s.room,
-        status:      computeSlotStatus(s.startTime, s.endTime),
-      }));
-    }
+    todayClasses = await buildTodayClasses(teacherId, schoolId);
   } catch (e) {
     console.warn("my-workload timetable error:", e.message);
   }
@@ -1336,7 +1375,11 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
   const { classIds } = await getTeacherScope(teacherId, schoolId);
   const resolvedIds  = await resolveClassIds(String(classId).trim());
 
-  if (!isAssignedToClass(resolvedIds, classIds)) {
+  // CLASS-level, active assignments only (getTeacherScope) — the same rule
+  // as /api/attendance. An administrator holds attendance.mark for the whole
+  // school and is assigned to no class; the gate is the teacher's.
+  const isAdminRole = ["super_admin", "school_admin"].includes(req.user?.role);
+  if (!isAdminRole && !isAssignedToClass(resolvedIds, classIds)) {
     return res.status(403).json({ message: "You are not assigned to this class" });
   }
 
@@ -1344,31 +1387,52 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
   const dateStr    = String(date).split("T")[0];
   const saved      = [], failed = [];
 
+  // The rows this writes are StudentAttendance rows — the same collection the
+  // /api/attendance register writes, with its natural key (school, class,
+  // pupil, subject, period, date) and its required markedBy. The old body
+  // wrote a teacherId field the schema does not have and no markedBy, which
+  // the schema requires, so nothing it wrote could be read back by anything.
+  // A daily mark, as this route has always taken: no subject, no period.
+  if (!schoolId) return res.status(400).json({ message: "No school on this session" });
+
+  // Every pupil is one of this class, in this school. The modern route checks
+  // the same thing; a studentId from elsewhere used to be written as given.
+  const S = getStudent();
+  const wanted = [...new Set(records.map((r) => String(r?.studentId ?? "")).filter(Boolean))];
+  const known  = S
+    ? new Set((await S.find({ _id: { $in: wanted }, schoolId, classId: classIdStr }).select("_id").lean())
+        .map((s) => String(s._id)))
+    : new Set(wanted);
+
+  const STATUSES = new Set(["present", "absent", "late", "excused"]);
+
   // One write for the register, then one read to answer with the ids.
-  //
-  // This awaited an upsert per pupil, which on a class of forty is forty
-  // sequential round trips while the teacher waits at the end of a lesson.
-  // The read afterwards is needed because an upsert reports ids only for the
-  // rows it inserted, and the response has always returned every id —
-  // re-marking a register updates rather than inserts, so upsertedIds alone
-  // would answer with a shrinking list as the day went on.
   const ops        = [];
   const studentIds = [];
 
   for (const r of records) {
-    const sid = String(r.studentId);
+    const sid    = String(r?.studentId ?? "");
+    const status = String(r?.status ?? "present").toLowerCase();
+    if (!sid || !known.has(sid)) {
+      failed.push({ studentId: sid || null, reason: "Student not found in this class" });
+      continue;
+    }
+    if (!STATUSES.has(status)) {
+      failed.push({ studentId: sid, reason: `Invalid status "${r?.status}"` });
+      continue;
+    }
     studentIds.push(sid);
     ops.push({
       updateOne: {
         filter: {
-          teacherId: String(teacherId), classId: classIdStr,
-          studentId: sid, date: dateStr,
+          schoolId, classId: classIdStr, studentId: sid,
+          subjectId: null, periodId: null, date: dateStr,
         },
         update: {
-          $set: {
-            teacherId: String(teacherId), classId: classIdStr,
-            studentId: sid, date: dateStr,
-            status: r.status || "present", schoolId,
+          $set:         { status, markedBy: String(teacherId), markedAt: new Date() },
+          $setOnInsert: {
+            _id: uuidv4(), schoolId, classId: classIdStr, studentId: sid,
+            subjectId: null, periodId: null, date: dateStr,
           },
         },
         upsert: true,
@@ -1396,7 +1460,8 @@ router.post("/attendance/mark", asyncHandler(async (req, res) => {
 
   if (studentIds.length) {
     const rows = await Att.find({
-      teacherId: String(teacherId), classId: classIdStr, date: dateStr,
+      schoolId, classId: classIdStr, date: dateStr,
+      subjectId: null, periodId: null,
       studentId: { $in: studentIds },
     }).select("_id").lean();
     for (const row of rows) saved.push(row._id);
@@ -1422,10 +1487,12 @@ router.get("/attendance/status", asyncHandler(async (req, res) => {
     return res.status(403).json({ message: "You are not assigned to this class" });
   }
 
+  // The class's register for the day, in this school. teacherId is not a
+  // field of the schema, so the old filter matched nothing.
   const records = await Att.find({
-    teacherId: String(teacherId),
-    classId:   String(classId).trim(),
-    date:      String(date).split("T")[0],
+    ...(schoolId ? { schoolId } : {}),
+    classId: String(classId).trim(),
+    date:    String(date).split("T")[0],
   }).lean();
 
   return res.json({ success: true, records });
@@ -1468,6 +1535,30 @@ router.get("/my-exams", asyncHandler(async (req, res) => {
   });
 }));
 
+/**
+ * The exam is this school's and one of this teacher's classes, or the marks
+ * routes answer 404 / 403.
+ *
+ * Exam has no subjectId field, so the old comparison against exam.subjectId
+ * never matched — and when the exam was not found at all the check was skipped
+ * and marks were written under whatever examId string arrived. Scoped to the
+ * caller's school and asked at CLASS level, because ExamMark carries no
+ * subject.
+ */
+const refuseUnlessExamIsTheirs = async (req, E, examId, teacherId) => {
+  const schoolId = req.user?.schoolId || null;
+  const exam = await E.findOne({
+    _id: String(examId), ...(schoolId ? { schoolId } : {}),
+  }).select("_id classId classIds").lean();
+  if (!exam) return { status: 404, message: "Exam not found" };
+  const { classIds } = await getTeacherScope(teacherId, schoolId);
+  const examClassIds = [String(exam.classId || ""), ...(exam.classIds || []).map(String)].filter(Boolean);
+  if (!examClassIds.some((c) => classIds.includes(c))) {
+    return { status: 403, message: "You are not assigned to this exam's class" };
+  }
+  return null;
+};
+
 router.get("/exams/:examId/marks", asyncHandler(async (req, res) => {
   const teacherId = resolveTeacherId(req);
   const EM        = getExamMark();
@@ -1478,12 +1569,8 @@ router.get("/exams/:examId/marks", asyncHandler(async (req, res) => {
   const E          = getExam();
 
   if (E) {
-    const exam           = await E.findById(examId).lean();
-    const schoolId       = req.user?.schoolId || null;
-    const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-    if (exam && !subjectIds.includes(String(exam.subjectId))) {
-      return res.status(403).json({ message: "You are not assigned to this exam's subject" });
-    }
+    const refused = await refuseUnlessExamIsTheirs(req, E, examId, teacherId);
+    if (refused) return res.status(refused.status).json({ message: refused.message });
   }
 
   const marks = await EM.find({ examId: String(examId), teacherId: String(teacherId) })
@@ -1508,12 +1595,8 @@ router.post("/exams/:examId/marks", asyncHandler(async (req, res) => {
 
   const E = getExam();
   if (E) {
-    const exam           = await E.findById(examId).lean();
-    const schoolId       = req.user?.schoolId || null;
-    const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-    if (exam && !subjectIds.includes(String(exam.subjectId))) {
-      return res.status(403).json({ message: "You are not assigned to this exam's subject" });
-    }
+    const refused = await refuseUnlessExamIsTheirs(req, E, examId, teacherId);
+    if (refused) return res.status(refused.status).json({ message: refused.message });
   }
 
   const saved = [], failed = [];
@@ -1681,9 +1764,12 @@ router.get("/my-content", asyncHandler(async (req, res) => {
   if (req.query.subjectId)                        filter.subjectId = req.query.subjectId;
   if (req.query.classId)                          filter.classId   = req.query.classId;
   if (req.query.search) {
+    // A search term is a literal, not a pattern: unescaped, "(a+)+$" is a
+    // regular expression the database evaluates on the caller's behalf.
+    const term = String(req.query.search).slice(0, 100).replace(/\0/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     filter.$or = [
-      { title:       { $regex: req.query.search, $options: "i" } },
-      { description: { $regex: req.query.search, $options: "i" } },
+      { title:       { $regex: term, $options: "i" } },
+      { description: { $regex: term, $options: "i" } },
     ];
   }
 
@@ -1894,27 +1980,59 @@ router.get("/subjects-classes", asyncHandler(async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 router.get("/results", asyncHandler(async (req, res) => {
-  const teacherId  = resolveTeacherId(req);
-  const R          = getResult();
+  // The marks a teacher entered, read back. This answered from a "Result"
+  // model that does not exist, so it was always an empty list and the mobile
+  // class-results screen showed quizzes only. The rows are StudentScore, the
+  // same documents the office reads, carrying the grade the school's scale gave
+  // them at entry — no client recomputes a letter. Scope is the teacher's
+  // assignment PAIRS (class + subject), as the mark sheet and the register ask.
+  const teacherId = resolveTeacherId(req);
+  const schoolId  = req.user?.schoolId || null;
+  if (!schoolId) return res.json({ success: true, results: [] });
+  const tid = String(teacherId);
+  const rows = await TeacherAssignment.find({ $or: [{ teacher: tid }, { teacherId: tid }], isActive: { $ne: false }, schoolId: String(schoolId) })
+    .select("subject subjectId subject_id class classId class_id").lean();
+  const pairs = new Set(rows.map((r) => `${String(r.class || r.classId || r.class_id || "")}|${String(r.subject || r.subjectId || r.subject_id || "")}`).filter((k) => !k.startsWith("|") && !k.endsWith("|")));
+  if (!pairs.size) return res.json({ success: true, results: [] });
 
-  if (!R) return res.json({ success: true, results: [] });
-
-  const schoolId       = req.user?.schoolId || null;
-  const { subjectIds } = await getTeacherScope(teacherId, schoolId);
-
-  if (!subjectIds.length) return res.json({ success: true, results: [] });
-
+  const StudentScore = require("../db/models/StudentScore");
+  const Exam         = require("../db/models/Exam");
+  const S            = getStudent();
+  const classIds   = [...new Set([...pairs].map((k) => k.split("|")[0]))];
+  const subjectIds = [...new Set([...pairs].map((k) => k.split("|")[1]))];
+  const filter = { schoolId: String(schoolId), deletedAt: null, classId: { $in: classIds }, subjectId: { $in: subjectIds } };
   const { classId, examId } = req.query;
-  const filter = { subjectId: { $in: subjectIds } };
   if (classId) filter.classId = String(classId).trim();
   if (examId)  filter.examId  = String(examId).trim();
+  const scores = (await StudentScore.find(filter).sort({ createdAt: -1 }).limit(2000).lean())
+    .filter((sc) => pairs.has(`${String(sc.classId)}|${String(sc.subjectId)}`));
+  if (!scores.length) return res.json({ success: true, results: [] });
 
-  const results = await R.find(filter)
-    .populate("studentId", "studentName")
-    .populate("subjectId", "name code")
-    .sort({ createdAt: -1 })
-    .lean();
+  const ids = (xs) => [...new Set(xs.filter(Boolean).map(String))];
+  const [students, subjects, classes, exams] = await Promise.all([
+    S ? S.find({ _id: { $in: ids(scores.map((x) => x.studentId)) } }).select("studentName name firstName lastName enrollmentNo admissionNo").lean() : [],
+    Subject.find({ _id: { $in: ids(scores.map((x) => x.subjectId)) } }).select("name code").lean(),
+    Class.find({ _id: { $in: ids(scores.map((x) => x.classId)) } }).select("name").lean(),
+    Exam.find({ _id: { $in: ids(scores.map((x) => x.examId)) } }).select("name title type startDate date academicYear term").lean(),
+  ]);
+  const by = (list) => new Map(list.map((d) => [String(d._id), d]));
+  const st = by(students), su = by(subjects), cl = by(classes), ex = by(exams);
+  const nameOf = (p) => p ? (p.studentName || p.name || [p.firstName, p.lastName].filter(Boolean).join(" ") || null) : null;
 
+  const results = scores.map((sc) => {
+    const e = ex.get(String(sc.examId));
+    return {
+      _id: sc._id, type: "exam", examId: sc.examId, examTitle: e?.name || e?.title || null, examType: e?.type || null,
+      examDate: e?.startDate || e?.date || sc.createdAt || null, academicYear: e?.academicYear || null, term: e?.term ?? null,
+      subjectId: sc.subjectId, subjectName: su.get(String(sc.subjectId))?.name || null,
+      classId: sc.classId, className: cl.get(String(sc.classId))?.name || null,
+      studentId: sc.studentId, studentName: nameOf(st.get(String(sc.studentId))),
+      admissionNo: st.get(String(sc.studentId))?.admissionNo || st.get(String(sc.studentId))?.enrollmentNo || null,
+      score: sc.score ?? null, maxScore: sc.maxScore ?? null, percentage: sc.percentage ?? null,
+      grade: sc.grade ?? null, remark: sc.remark ?? null, isPassing: sc.isPassing ?? null,
+      isAbsent: sc.isAbsent === true, isExempt: sc.isExempt === true, createdAt: sc.createdAt,
+    };
+  });
   return res.json({ success: true, results });
 }));
 

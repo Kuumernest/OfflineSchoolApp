@@ -737,7 +737,7 @@ function ContentLibraryPage() {
           <Text style={styles.headerTitle}>{t("teacherContent.title")}</Text>
           {summary?.total > 0 && (
             <Text style={styles.headerSub}>
-              {summary.total} file{summary.total !== 1 ? "s" : ""}
+              {t("teacherContent.fileCount", { count: summary.total })}
             </Text>
           )}
         </View>
@@ -821,8 +821,8 @@ function ContentLibraryPage() {
       {/* FILTER / SORT ROW */}
       <View style={styles.filterRow}>
         <Text style={styles.resultCount}>
-          {displayItems.length} item{displayItems.length !== 1 ? "s" : ""}
-          {searchQuery.trim() ? ` for "${searchQuery}"` : ""}
+          {t("teacherContent.itemCount", { count: displayItems.length })}
+          {searchQuery.trim() ? ` ${t("teacherContent.forQuery", { query: searchQuery })}` : ""}
         </Text>
 
         <View style={styles.filterActions}>

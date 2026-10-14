@@ -652,6 +652,7 @@ export default function StudentDashboard() {
     { id: "announcements", title: t("studentHome.qaAnnouncements"), icon: "megaphone-outline",     color: "#DB2777", route: "/student/announcements"   },
     { id: "messages",      title: t("studentHome.qaMessages"),      icon: "chatbubbles-outline",   color: "#2563EB", route: "/messages"                },
     { id: "results",       title: t("studentHome.qaResults"),       icon: "trophy-outline",        color: "#059669", route: "/student/results"         },
+    { id: "fees",          title: t("studentHome.qaFees"),          icon: "wallet-outline",        color: "#0D9488", route: "/student/fees"            },
     { id: "settings",      title: t("studentHome.qaSettings"),      icon: "settings-outline",      color: "#6B7280", route: "/student/settings"        },
   ], [t]);
 
@@ -798,6 +799,60 @@ export default function StudentDashboard() {
             bg="#FFFBEB"
             color="#D97706"
           />
+        </View>
+
+        {/* Explore: the pupil's own way into the exploration loop */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/explore")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="compass-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("explore.subtitle")}</Text>
+            <Text style={s.urgentBannerLink}>{t("explore.title")}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Development: how the pupil's strengths have read over time */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/development")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="trending-up-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("development.studentSubtitle")}</Text>
+            <Text style={s.urgentBannerLink}>{t("development.studentTitle")}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Development plans: what the pupil is working on, with a teacher */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/plans")}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="clipboard-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("devPlan.activePlans")}</Text>
+            <Text style={s.urgentBannerLink}>{t("devPlan.studentTitle")}</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* My intelligence: the readings lined up, and a way to ask about them */}
+        <View style={s.section}>
+          <TouchableOpacity
+            style={s.urgentBanner}
+            onPress={() => router.push("/student/intelligence")}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel={t("intel.title")}
+          >
+            <Ionicons name="sparkles-outline" size={18} color="#4F46E5" />
+            <Text style={s.urgentBannerText}>{t("intel.homeSubtitle")}</Text>
+            <Text style={s.urgentBannerLink}>{t("intel.title")}</Text>
+          </TouchableOpacity>
         </View>
 
         {/* Urgent homework banner */}

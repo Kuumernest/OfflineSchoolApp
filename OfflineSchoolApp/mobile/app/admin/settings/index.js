@@ -1122,7 +1122,35 @@ const GradingSection = ({ schoolId }) => {
     }
   };
 
+  /*
+   * CA + Test must add to 100 before the save is attempted.
+   *
+   * Checked on the form as well as on the server because the server answers a
+   * bad split with a 400, and a 400 stops the offline queue and waits for a
+   * person. Saying so here is the difference between a corrected number and a
+   * stuck outbox on a phone with no signal.
+   */
+  const caSplitError = (() => {
+    if (!config || config.caEnabled === false) return null;
+    const ca   = Number(config.caWeight);
+    const test = Number(config.testWeight);
+    if (!Number.isFinite(ca) || !Number.isFinite(test)) {
+      return t("adminSettings.caWeightInvalid");
+    }
+    if (ca < 0 || test < 0) return t("adminSettings.caWeightNegative");
+    if (Math.round((ca + test) * 100) / 100 !== 100) {
+      return t("adminSettings.caWeightSum", {
+        total: Math.round((ca + test) * 100) / 100,
+      });
+    }
+    return null;
+  })();
+
   const handleSave = async () => {
+    if (caSplitError) {
+      Alert.alert(t("adminSettings.errTitle"), caSplitError);
+      return;
+    }
     try {
       setSaving(true);
       await saveGradingConfig({ ...config, schoolId });
@@ -1178,6 +1206,42 @@ const GradingSection = ({ schoolId }) => {
             trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
           />
         </SettingRow>
+        {/* ── Continuous assessment ─────────────────────────────────────
+
+            ON by default. Turning it off hides CA from report cards and stops
+            requiring it; it deletes nothing, so the marks already entered are
+            there for the day a school turns it back on — which is also why the
+            weights stay editable while it is off. */}
+        <SettingRow label={t("adminSettings.caEnabled")}>
+          <Switch
+            value={config.caEnabled !== false}
+            onValueChange={(v) => setConfig({ ...config, caEnabled: v })}
+            trackColor={{ false: "#E5E7EB", true: "#4F46E5" }}
+          />
+        </SettingRow>
+        {config.caEnabled !== false && (
+          <>
+            <SettingRow label={t("adminSettings.caWeight")}>
+              <TextInput
+                style={[styles.input, styles.inputSmall]}
+                value={String(config.caWeight ?? 40)}
+                onChangeText={(v) => setConfig({ ...config, caWeight: Number(v) || 0 })}
+                keyboardType="numeric"
+              />
+            </SettingRow>
+            <SettingRow label={t("adminSettings.testWeight")}>
+              <TextInput
+                style={[styles.input, styles.inputSmall]}
+                value={String(config.testWeight ?? 60)}
+                onChangeText={(v) => setConfig({ ...config, testWeight: Number(v) || 0 })}
+                keyboardType="numeric"
+              />
+            </SettingRow>
+            <Text style={caSplitError ? styles.caError : styles.caHint}>
+              {caSplitError || t("adminSettings.caSplitHint")}
+            </Text>
+          </>
+        )}
         <SettingRow label={t("adminSettings.gpaSystem")}>
           <Switch
             value={config.useGpa}
@@ -1601,6 +1665,10 @@ const styles = StyleSheet.create({
   settingRow:      { marginBottom: 14 },
   settingLabel:    { fontSize: 13, color: "#6B7280", marginBottom: 6 },
   settingHint:     { fontSize: 11, color: "#9CA3AF" },
+  // The CA/Test split: a hint under the two fields, red when the two do
+  // not add up, because that is a save the server will refuse.
+  caHint:          { fontSize: 11, color: "#9CA3AF", marginBottom: 14 },
+  caError:         { fontSize: 11, color: "#DC2626", marginBottom: 14 },
   input:           { backgroundColor: "#F9FAFB", borderWidth: 1, borderColor: "#E5E7EB", borderRadius: 10, padding: 10, fontSize: 14 },
   inputSmall:      { width: 100 },
   btn:             { paddingVertical: 13, borderRadius: 12, alignItems: "center", justifyContent: "center", flexDirection: "row", gap: 6 },

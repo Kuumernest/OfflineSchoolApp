@@ -11,6 +11,9 @@ import {
   useComputeAnnualResults,
   usePublishAnnualResults,
 } from "@/hooks/useExamResults";
+import { useQuery } from "@tanstack/react-query";
+import { useUser } from "@/store/auth.store";
+import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
 import type { AnnualResult } from "@/types/exam.types";
 
@@ -42,8 +45,24 @@ export default function AnnualResultsPage() {
 
   const [academicYear, setAcademicYear] = useState(ACADEMIC_YEARS[1]);
   const [page, setPage] = useState(1);
+  const [classId, setClassId] = useState("");
 
-  const { data, isLoading } = useAnnualResults(academicYear, undefined, page);
+  // Who may do what here is the server's call (periodResultScope.js); the page
+  // only avoids offering what it would refuse. A teacher reads the published
+  // results of their classes and computes one class at a time; publishing is
+  // an administrator's run. The class list is the teacher's roster or the
+  // school's, as fetchStaffClasses decides — never all schools for an operator.
+  const user      = useUser();
+  const isAdmin   = user?.role === "super_admin" || user?.role === "school_admin";
+  const needsClass = !isAdmin && !classId;
+  const classesQ  = useQuery({
+    queryKey: ["staff-classes", user?.role ?? "", user?.schoolId ?? ""],
+    queryFn:  () => fetchStaffClasses(user),
+    enabled:  !!user?.schoolId,
+  });
+  const classes = classesQ.data ?? [];
+
+  const { data, isLoading } = useAnnualResults(academicYear, classId || undefined, page);
   const computeMutation = useComputeAnnualResults();
   const publishMutation = usePublishAnnualResults();
 
@@ -67,11 +86,12 @@ export default function AnnualResultsPage() {
    * error toast and an unhandled rejection was raised alongside it.
    */
   const handleCompute = () => {
-    computeMutation.mutate({ academicYear });
+    if (needsClass) return;
+    computeMutation.mutate({ academicYear, ...(classId ? { classId } : {}) });
   };
 
   const handlePublish = () => {
-    publishMutation.mutate({ academicYear });
+    publishMutation.mutate({ academicYear, ...(classId ? { classId } : {}) });
   };
 
   return (
@@ -106,12 +126,28 @@ export default function AnnualResultsPage() {
             ))}
           </select>
         </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            {t("annualResults.className")}
+          </label>
+          <select
+            value={classId}
+            onChange={(e) => { setClassId(e.target.value); setPage(1); }}
+            className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
+          >
+            <option value="">{t("annualResults.allClasses")}</option>
+            {classes.map((c) => (
+              <option key={c._id} value={c._id}>{c.name}</option>
+            ))}
+          </select>
+        </div>
         <button
           onClick={handleCompute}
-          disabled={computeMutation.isPending}
+          disabled={computeMutation.isPending || needsClass}
+          title={needsClass ? t("annualResults.pickClassToCompute") : undefined}
           className={cn(
             "flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition",
-            computeMutation.isPending
+            computeMutation.isPending || needsClass
               ? "bg-gray-100 text-gray-400 cursor-not-allowed"
               : "bg-indigo-600 text-white hover:bg-indigo-700"
           )}
@@ -123,7 +159,7 @@ export default function AnnualResultsPage() {
           )}
           {t("annualResults.compute")}
         </button>
-        <button
+        {isAdmin && <button
           onClick={handlePublish}
           disabled={publishMutation.isPending || !results.length}
           className={cn(
@@ -139,7 +175,7 @@ export default function AnnualResultsPage() {
             <Send className="h-4 w-4" />
           )}
           {t("annualResults.publish")}
-        </button>
+        </button>}
       </div>
 
       {/* Overtaken by the term results behind them.
@@ -161,7 +197,7 @@ export default function AnnualResultsPage() {
           </div>
           <button
             onClick={handleCompute}
-            disabled={computeMutation.isPending}
+            disabled={computeMutation.isPending || needsClass}
             className="shrink-0 rounded-xl bg-amber-600 px-3 py-1.5 text-xs
                        font-semibold text-white hover:bg-amber-700
                        disabled:opacity-50"

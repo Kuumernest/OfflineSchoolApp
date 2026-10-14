@@ -150,7 +150,7 @@ const SummaryBar = ({ students }) => {
     <View style={summaryS.card}>
       <View style={summaryS.header}>
         <Text style={summaryS.title}>
-          {students.length} Student{students.length !== 1 ? "s" : ""}
+          {t("academic.studentCount", { count: students.length })}
         </Text>
         <View style={[summaryS.badge, { backgroundColor: color + "15" }]}>
           <Text style={[summaryS.badgeText, { color }]}>
@@ -160,12 +160,19 @@ const SummaryBar = ({ students }) => {
       </View>
 
       <View style={summaryS.pills}>
+        {/*
+          * labelKey, not label. These carried `label:` already translated and
+          * were then rendered with t(p.labelKey) — t(undefined), which i18n-js
+          * prints as [missing "en." translation]. Five of those across the top
+          * of the attendance report, and key={p.labelKey} made every React key
+          * undefined besides.
+          */}
         {[
-          { label: t("attStatus.present"), val: totals.present, color: "#059669" },
-          { label: t("attStatus.absent"),  val: totals.absent,  color: "#DC2626" },
-          { label: t("attStatus.late"),    val: totals.late,    color: "#D97706" },
-          { label: t("attStatus.excused"), val: totals.excused, color: "#4F46E5" },
-          { label: t("common.total"),   val: totals.total,   color: "#6B7280" },
+          { labelKey: "attStatus.present", val: totals.present, color: "#059669" },
+          { labelKey: "attStatus.absent",  val: totals.absent,  color: "#DC2626" },
+          { labelKey: "attStatus.late",    val: totals.late,    color: "#D97706" },
+          { labelKey: "attStatus.excused", val: totals.excused, color: "#4F46E5" },
+          { labelKey: "common.total",      val: totals.total,   color: "#6B7280" },
         ].map((p) => (
           <View
             key={p.labelKey}
@@ -570,11 +577,10 @@ export default function TeacherAttendanceReportScreen() {
 
         <View style={styles.headerCenter}>
           <Text style={styles.headerTitle} numberOfLines={1}>
-            {className} Report
+            {t("attTeacher.classReport", { className })}
           </Text>
           <Text style={styles.headerSub}>
-            {selectedPreset.label} · {filtered.length} student
-            {filtered.length !== 1 ? "s" : ""}
+            {selectedPreset.label} · {t("academic.studentCount", { count: filtered.length })}
           </Text>
         </View>
 

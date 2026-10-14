@@ -218,6 +218,26 @@ MIGRATIONS.push({
   `,
 });
 
+MIGRATIONS.push({
+  version: 4,
+  name:    "the outbox remembers who queued each request",
+  /**
+   * The queue replays requests with whatever token the renderer holds NOW. It
+   * held no record of who had queued them, so a bursar who signed out with
+   * three payments waiting, and a colleague who then signed in on the same
+   * machine, would have those payments sent under the colleague's account —
+   * the server would take them as the colleague's, and if the colleague's
+   * capabilities differed, refuse them as the colleague's.
+   *
+   * The engine now sends only the signed-in account's rows and leaves the
+   * rest exactly where they are until that account is back. NULL is a row
+   * from before this column existed; it is sent as it always was.
+   */
+  up: `
+    ALTER TABLE outbox ADD COLUMN user_id TEXT;
+  `,
+});
+
 const SCHEMA_VERSION = MIGRATIONS[MIGRATIONS.length - 1].version;
 
 module.exports = { PRAGMAS, MIGRATIONS, SCHEMA_VERSION };

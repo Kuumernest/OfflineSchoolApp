@@ -60,15 +60,10 @@ const DeleteDialog = ({ assignment, onConfirm, onCancel, busy }: DeleteDialogPro
       </div>
       <h3 className="text-lg font-bold text-gray-900">{t("assignments.remove")}</h3>
       <p className="mt-2 text-sm text-gray-500">
-        Remove{" "}
-        <span className="font-semibold text-gray-900">
-          {assignment.subject?.name ?? "this subject"}
-        </span>{" "}
-        from{" "}
-        <span className="font-semibold text-gray-900">
-          {assignment.class?.name ?? "this class"}
-        </span>
-        ?
+        {t("assignments.removeBody", {
+          subject: assignment.subject?.name ?? t("assignments.thisSubject"),
+          class:   assignment.class?.name   ?? t("assignments.thisClass"),
+        })}
       </p>
       <div className="mt-6 flex gap-3">
         <button
@@ -83,7 +78,7 @@ const DeleteDialog = ({ assignment, onConfirm, onCancel, busy }: DeleteDialogPro
           disabled={busy}
           className="flex-1 rounded-xl bg-red-600 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
         >
-          {busy ? t("common.removing") : "Remove"}
+          {busy ? t("common.removing") : t("common.remove")}
         </button>
       </div>
     </div>
@@ -193,11 +188,11 @@ export default function TeacherAssignmentDetailPage() {
         </button>
         <div className="flex-1 min-w-0">
           <h1 className="truncate text-2xl font-bold text-gray-900">
-            {teacher?.name ?? "Teacher"}
+            {teacher?.name ?? t("academic.teacher")}
           </h1>
           <p className="text-sm text-gray-500">
-            {assignments.length} assignment{assignments.length !== 1 ? "s" : ""}{" "}
-            · {classCount} class{classCount !== 1 ? "es" : ""}
+            {t("assignments.assignmentCount", { count: assignments.length })}{" "}
+            · {t("subjects.classCount", { count: classCount })}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-2">

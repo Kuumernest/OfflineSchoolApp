@@ -286,8 +286,8 @@ export default function AdminClasses() {
               Alert.alert(
                 t("classesAdmin.deletedTitle"),
                 deletedSubjects > 0
-                  ? `"${classItem.name}" and ${deletedSubjects} subject${deletedSubjects === 1 ? "" : "s"} removed.`
-                  : `"${classItem.name}" has been removed.`
+                  ? t("classesAdmin.removedWithSubjects", { name: classItem.name, count: deletedSubjects })
+                  : t("classesAdmin.removed", { name: classItem.name })
               );
             } catch (err) {
               const status  = err?.response?.status;

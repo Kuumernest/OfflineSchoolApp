@@ -22,6 +22,8 @@
  *   node scripts/check-messaging-integration.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const path = require("path");
 
 let pass = 0, fail = 0;
@@ -487,7 +489,7 @@ const check = (label, actual, expected) => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongod.stop();
+  await stopQuietly(mongod);
   process.exitCode = fail ? 1 : 0;
 })().catch((err) => {
   console.error("\nSuite crashed:", err);

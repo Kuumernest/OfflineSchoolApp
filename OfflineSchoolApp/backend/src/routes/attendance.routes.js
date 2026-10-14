@@ -8,10 +8,15 @@ const { StudentAttendance, TeacherAttendance } =
   require("../db/models/Attendance");
 const User    = require("../db/models/User");
 const Student = require("../db/models/Student");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const { teacherAssigned } = require("../utils/teacherScope");
+const { scheduledTeachers } = require("../utils/teacherSchedule");
 
 // What a register entry used to say, for the one record type where
 // last-write-wins used to leave no trace at all.
 const AttendanceChangeLog = require("../db/models/AttendanceChangeLog");
+const { summariseStudentAttendance } =
+  require("../services/attendanceSummary.service");
 
 const notify = require("../services/notification");
 
@@ -321,7 +326,12 @@ router.get("/students/today", staffRead, async (req, res) => {
     const schoolId = resolveSchoolId(req);
     const classId  = req.query.classId;
     const periodId = req.query.periodId || null;
-    const today    = todayStr();
+    // An optional ?date=YYYY-MM-DD opens another day's register: a reminder
+    // tapped in the evening for the morning's class still names today, but a
+    // reminder the phone kept from an offline day names that day, and it is
+    // not silently moved. Anything that is not a date is today.
+    const asked = String(req.query.date ?? "");
+    const today = /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : todayStr();
 
     const query = { schoolId, date: today };
     if (classId)  query.classId  = classId;
@@ -469,6 +479,25 @@ router.post("/students/bulk", teachingOnly, async (req, res) => {
     const resolvedDate     = dateStr(date);
     const resolvedPeriodId = periodId || null;
     const validStatuses    = STUDENT_STATUSES;
+
+    // ── The register belongs to the classes a teacher is assigned to ───────
+    // CLASS-level, by audit decision — same rule as the single-mark route,
+    // and for the same reason: the capability alone let any teacher holding
+    // attendance.mark rewrite any class's register in their school.
+    if (req.user?.role === "teacher") {
+      const ok = await teacherAssigned(TeacherAssignment, {
+        teacherId: req.user._id || req.user.id,
+        schoolId:  resolvedSchoolId,
+        classId,
+      });
+      if (!ok) {
+        return res.status(403).json({
+          success: false,
+          code:    "CLASS_NOT_ASSIGNED",
+          message: "You are not assigned to this class",
+        });
+      }
+    }
 
     // ── Verify the students actually exist in this class ─────────────────────
     // Previously the only check was `!row.studentId`, a truthiness test, so any
@@ -726,6 +755,27 @@ router.post("/students", teachingOnly, async (req, res) => {
     const resolvedDate     = dateStr(date);
     const resolvedPeriodId = periodId || null;
 
+    // ── The register belongs to the classes a teacher is assigned to ───────
+    // CLASS-level, by audit decision: a form master takes the whole class,
+    // not one subject in it. The capability alone let any teacher holding
+    // attendance.mark rewrite any class's register in their school. Admins
+    // and a super_admin pass; the schoolId here is the caller's own for
+    // everybody but a super_admin (the auth door refuses a foreign one).
+    if (req.user?.role === "teacher") {
+      const ok = await teacherAssigned(TeacherAssignment, {
+        teacherId: req.user._id || req.user.id,
+        schoolId:  resolvedSchoolId,
+        classId,
+      });
+      if (!ok) {
+        return res.status(403).json({
+          success: false,
+          code:    "CLASS_NOT_ASSIGNED",
+          message: "You are not assigned to this class",
+        });
+      }
+    }
+
     // Same gap as the bulk route had: the upsert would happily create a row for
     // a studentId that belongs to nobody, and there is no DELETE route to undo
     // it. Verify first.
@@ -849,13 +899,45 @@ router.get("/teachers/me", staffRead, async (req, res) => {
 });
 
 // ── GET /api/attendance/teachers/roster ──────────────────────────────────────
-// Used by admins to get the list of all teachers in a school.
+// Used by admins to get the list of teachers in a school.
+//
+// With ?date (and optionally ?periodId) the list is the staff TIMETABLED that
+// day, in that period — see utils/teacherSchedule.js for the rule. That is
+// the register the office marks: a teacher with no class in the period has
+// nothing to be present for, and one with two classes in it is one person.
+// The answer names the date, its weekday and the period it resolved so the
+// screen never has to work the timetable out for itself.
+//
+// Without a date the endpoint answers as it always has — every active
+// teacher — because the phone's reports read this list for names, and a
+// report about last term must be able to name a teacher who has no class
+// this morning.
 router.get("/teachers/roster", staffRead, async (req, res) => {
   try {
     const schoolId = resolveSchoolId(req);
 
     if (!schoolId) {
       return res.status(400).json({ message: "schoolId is required" });
+    }
+
+    if (req.query.date || req.query.periodId) {
+      const scheduled = await scheduledTeachers({
+        schoolId, date: req.query.date, periodId: req.query.periodId,
+      });
+      console.log(
+        `👩‍🏫 Teacher roster: ${scheduled.teachers.length} timetabled for school=${schoolId} ` +
+        `${scheduled.date} (${scheduled.dayOfWeek}) period=${scheduled.periodId ?? "any"}`
+      );
+      return res.json({
+        success:   true,
+        teachers:  scheduled.teachers,
+        count:     scheduled.teachers.length,
+        scheduled: true,
+        date:      scheduled.date,
+        dayOfWeek: scheduled.dayOfWeek,
+        periodId:  scheduled.periodId,
+        period:    scheduled.period,
+      });
     }
 
     const teachers = await User.find({
@@ -1328,10 +1410,16 @@ router.get("/report/class/:classId", staffRead, async (req, res) => {
         .lean(),
     ]);
 
+    // One pass to group the term's rows by pupil; the filter-per-pupil this
+    // replaces was roster × records for every report.
+    const byStudent = new Map();
+    for (const r of records) {
+      const k = String(r.studentId);
+      if (!byStudent.has(k)) byStudent.set(k, []);
+      byStudent.get(k).push(r);
+    }
     const studentSummary = roster.map((student) => {
-      const studentRecords = records.filter(
-        (r) => r.studentId === String(student._id)
-      );
+      const studentRecords = byStudent.get(String(student._id)) ?? [];
       const present = studentRecords.filter((r) => r.status === "present").length;
       const absent  = studentRecords.filter((r) => r.status === "absent").length;
       const late    = studentRecords.filter((r) => r.status === "late").length;
@@ -1511,11 +1599,19 @@ router.get("/report/student/:studentId", staffRead, async (req, res) => {
       if (r.status in byDate[r.date]) byDate[r.date][r.status] += 1;
     }
 
-    const totalPresent = records.filter((r) => r.status === "present").length;
-    const totalLate    = records.filter((r) => r.status === "late").length;
-    const totalExcused = records.filter((r) => r.status === "excused").length;
-    const totalAbsent  = records.filter((r) => r.status === "absent").length;
-    const totalRecords = records.length;
+    // The same counting the report card does, from the same place, so a
+    // bulletin and this report never disagree about how much school a pupil
+    // missed. Row counts here as before — a register is marked per period —
+    // with the per-day figures beside them for anything that says "days".
+    const summaries = await summariseStudentAttendance({
+      schoolId, studentIds: [studentId], from: startDate, to: endDate,
+    });
+    const counted = summaries.get(String(studentId));
+    const totalPresent = counted?.records.present ?? 0;
+    const totalLate    = counted?.records.late    ?? 0;
+    const totalExcused = counted?.records.excused ?? 0;
+    const totalAbsent  = counted?.records.absent  ?? 0;
+    const totalRecords = counted?.records.total   ?? 0;
 
     return res.json({
       success: true,
@@ -1531,6 +1627,9 @@ router.get("/report/student/:studentId", staffRead, async (req, res) => {
         rate:      totalRecords > 0 ? Math.round((totalPresent / totalRecords) * 100) : null,
         lateCount: totalLate,
         excusedCount: totalExcused,
+        // Distinct calendar days, for a reader who wants days rather than
+        // periods. The row counts above are unchanged.
+        days:      counted?.days ?? { present: 0, absent: 0, late: 0, excused: 0, away: 0 },
       },
       byPeriod:  Object.values(byPeriod),
       bySubject: Object.values(bySubject),

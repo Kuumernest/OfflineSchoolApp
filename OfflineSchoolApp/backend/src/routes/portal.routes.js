@@ -3,6 +3,30 @@
 
 const express = require("express");
 const router  = express.Router();
+// Brute-force protection on the guardian sign-in. The per-row lockout in
+// portal.service.js protects one child's access record; this protects the
+// ROUTE, which is what an attacker needs to work through a list of admission
+// numbers — and what an unauthenticated caller has no other limit on. The
+// admission numbers are sequential (SCH-2026-0004), so the route is the
+// guessable half of the credential and it is the half that had no ceiling.
+const rateLimit = require("express-rate-limit");
+
+// Same shape and the same opt-out as the staff login limiter in auth.routes.js:
+// the verification harness signs in dozens of times from 127.0.0.1 in a few
+// seconds, which is indistinguishable from the attack this stops. Only
+// scripts/ sets the flag; production never does.
+const portalLoginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 15,                  // per IP per window
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    code:    "RATE_LIMITED",
+    message: "Too many sign-in attempts. Please try again later.",
+  },
+  skip: () => process.env.DISABLE_LOGIN_RATE_LIMIT === "1",
+});
 
 const School        = require("../db/models/School");
 const Class         = require("../db/models/Class");
@@ -28,6 +52,7 @@ const { StudentAttendance } = require("../db/models/Attendance");
 const Announcement  = require("../db/models/Announcement");
 
 const portal = require("../services/portal.service");
+const fees   = require("../services/fees.service");
 const { buildReceiptHtml } = require("../print/receipt");
 const { labelsFor, formatPrintDate } = require("../print/labels");
 const { displayName } = require("../utils/studentName");
@@ -102,7 +127,7 @@ const resolvePublicSchool = async (provided) => {
 // SIGN IN  (public)
 // ═════════════════════════════════════════════════════════════════════════════
 
-router.post("/login", asyncHandler(async (req, res) => {
+router.post("/login", portalLoginLimiter, asyncHandler(async (req, res) => {
   try {
     const schoolId = await resolvePublicSchool(req.body.schoolId);
     const result = await portal.login({
@@ -114,6 +139,32 @@ router.post("/login", asyncHandler(async (req, res) => {
   } catch (err) {
     return fail(res, err);
   }
+}));
+
+/**
+ * A fresh access token for a signed-in device.
+ *
+ * Public, like /login, because it is called when the access token has lapsed
+ * — the one moment a portal-authenticated route cannot serve. The refresh
+ * token is the credential here, and it is checked against the GuardianAccess
+ * row, so a code the office has revoked is refused at once.
+ */
+router.post("/refresh", asyncHandler(async (req, res) => {
+  try {
+    const result = await portal.refresh({ refreshToken: req.body.refreshToken });
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    return fail(res, err);
+  }
+}));
+
+/**
+ * Sign one device out. Public for the same reason: a parent whose access token
+ * lapsed an hour ago must still be able to leave a shared phone signed out.
+ */
+router.post("/logout", asyncHandler(async (req, res) => {
+  const result = await portal.logout({ refreshToken: req.body.refreshToken });
+  return res.json({ success: true, ...result });
 }));
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -267,36 +318,14 @@ router.get("/me", asyncHandler(async (req, res) => {
 /** The fee account: what was charged, what has been paid, what is left. */
 router.get("/fees", asyncHandler(async (req, res) => {
   const { studentId, schoolId } = req.portal;
-  const filter = { schoolId, studentId, deletedAt: null };
-  if (req.query.academicYear) filter.academicYear = req.query.academicYear;
-
-  const [charges, payments] = await Promise.all([
-    FeeCharge.find({ ...filter, voidedAt: null }).sort({ createdAt: 1 }).lean(),
-    FeePayment.find(filter).sort({ receivedAt: 1 }).lean(),
-  ]);
-
-  const charged = charges.reduce((s, c) => s + (c.amount ?? 0), 0);
-  const waived  = charges.reduce((s, c) => s + (c.waivedAmount ?? 0), 0);
-  // Reversals are negative rows, so a plain sum is already net of them.
-  const paid    = payments.reduce((s, p) => s + (p.amount ?? 0), 0);
-
-  return res.json({
-    success: true,
-    data: {
-      charges: charges.map((c) => ({
-        _id: c._id, label: c.label, code: c.code,
-        amount: c.amount, waivedAmount: c.waivedAmount,
-        academicYear: c.academicYear, term: c.term,
-      })),
-      payments: payments.map((p) => ({
-        _id: p._id, receiptNo: p.receiptNo, amount: p.amount,
-        method: p.method, reference: p.reference, receivedAt: p.receivedAt,
-        academicYear: p.academicYear,
-        isReversal: Boolean(p.reversesId) || (p.amount ?? 0) < 0,
-      })),
-      totals: { charged, waived, paid, balance: charged - waived - paid },
-    },
+  // The family's ledger is the one function in fees.service — the pupil's own
+  // route reads the same one. String(), because the extended query parser
+  // turns ?academicYear[$ne]=x into an object, and an operator is not a year.
+  const data = await fees.familyLedger({
+    schoolId, studentId,
+    academicYear: req.query.academicYear ? String(req.query.academicYear) : null,
   });
+  return res.json({ success: true, data });
 }));
 
 /**
@@ -1232,6 +1261,165 @@ router.get("/announcements", asyncHandler(async (req, res) => {
       forStudents: (a.targetStudents ?? []).filter((id) => childIds.includes(String(id))),
     })),
   });
+}));
+
+/**
+ * GET /children/:studentId/strengths
+ *
+ * A guardian's view of one child's strengths and exploration areas: plain
+ * words, the supporting subjects, the limits, and the list of what the system
+ * does not infer. No engine internals, no teacher's review, no other child.
+ * The child must be one this access unlocks — the same scope every other
+ * child route uses.
+ */
+router.get("/children/:studentId/strengths", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const strengthsSvc = require("../services/intelligence/strengths.service");
+  const profile = await strengthsSvc.profileFor({ schoolId, studentId: id });
+  const view = strengthsSvc.forGuardian(profile) ?? {
+    strengths: [], emergingAreas: [], explorationAreas: [], limitations: ["no_academic_profile"], confidence: "insufficient",
+    notInferred: require("../../../shared/strengths").NOT_INFERRED, versions: { academic: null, strengths: null },
+  };
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...view } });
+}));
+
+/**
+ * GET /children/:studentId/development
+ *
+ * A guardian's view of how one child's strengths have read over time: what
+ * is developing, what has stayed consistent, what changed, what is too early
+ * to call, and what supports each — in plain categories. No engine internals,
+ * no reviewer, no note, no other child. Same scope as every other child route.
+ */
+router.get("/children/:studentId/development", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const developmentSvc = require("../services/intelligence/development.service");
+  const asOf = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const h = await developmentSvc.historyFor({ schoolId, studentId: id, asOf: asOf && !Number.isNaN(asOf.getTime()) ? asOf : null });
+  const view = developmentSvc.forGuardian(h) ?? { asOf: null, developing: [], consistent: [], changing: [], tooEarly: [], observations: null, notInferred: require("../../../shared/development").NOT_INFERRED, versions: null };
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...view } });
+}));
+
+/**
+ * GET /children/:studentId/guidance
+ *
+ * A guardian's view of the development guidance: the areas the child is
+ * building, suggested ways to support learning, what to watch, the support
+ * that has been agreed, and the observed progress since it began. No reason
+ * codes, no reviewer, no staff note, no other child.
+ */
+router.get("/children/:studentId/guidance", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const gSvc = require("../services/intelligence/developmentGuidance.service");
+  const ivSvc = require("../services/intelligence/developmentInterventions.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const asOf = asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null;
+  const [g, docs] = await Promise.all([gSvc.guidanceFor({ schoolId, studentId: id, asOf }), ivSvc.listFor({ schoolId, studentId: id })]);
+  const outcomes = new Map(await Promise.all(docs.map(async (d) => [String(d._id), await ivSvc.outcomeFor(d, { asOf })])));
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, guidance: gSvc.forGuardian(g), agreedSupport: ivSvc.forGuardian(docs, outcomes) } });
+}));
+
+/**
+ * GET /children/:studentId/development-plans
+ *
+ * A guardian's view of a child's development plans: the objective, how the
+ * child is being supported, the milestones completed, the upcoming support,
+ * the review status. No reflection, no staff note, no reason code, no other
+ * child. Same scope as every other child route.
+ */
+router.get("/children/:studentId/development-plans", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const plansSvc = require("../services/intelligence/developmentPlans.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const asOf = asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null;
+  const docs = await plansSvc.listFor({ schoolId, studentId: id });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, plans: plansSvc.forGuardian(docs, asOf) } });
+}));
+
+/**
+ * GET /children/:studentId/explorations
+ *
+ * A guardian's view of what one child has explored: which activities, in
+ * which areas, how far they got, how many observations and which kinds of
+ * evidence — and never the child's reflection, which is theirs.
+ */
+router.get("/children/:studentId/explorations", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const explorationSvc = require("../services/intelligence/exploration.service");
+  const lang = String(req.query.lang ?? "en").toLowerCase().startsWith("fr") ? "fr" : "en";
+  const rows = await explorationSvc.history({ schoolId, studentId: id, viewer: "guardian", lang });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, explorations: rows } });
+}));
+
+/**
+ * GET /children/:studentId/learning
+ *
+ * A guardian's plain view of one child's learning evidence: per subject, the
+ * pattern each kind of evidence shows and how much evidence there is;
+ * attendance counts and pattern; the concise lines. No event, no note, no
+ * label on the child.
+ */
+router.get("/children/:studentId/learning", asyncHandler(async (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) return res.status(404).json({ success: false, message: "Child not found" });
+  const learningSvc = require("../services/intelligence/learningEvidence.service");
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const r = await learningSvc.readingFor({ schoolId, studentId: id, asOf: asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: id, ...(learningSvc.forGuardian(r) ?? { subjects: [], attendance: null, concise: [], notInferred: [] }) } });
+}));
+
+/**
+ * GET  /children/:studentId/intelligence-summary
+ * POST /children/:studentId/explain { question }
+ *
+ * A guardian's view of the advanced intelligence layer (Stage 17): the
+ * deterministic synthesis and the exploration candidates, and an explanation
+ * of them, projected for a parent — objectives, support and progress; never
+ * a reflection code, a reason code, a teacher's review code, a note, or
+ * another child. Same scope as every other child route.
+ */
+const guardianChild = (req, res) => {
+  const { schoolId, studentIds, studentId: primary } = req.portal;
+  const id = String(req.params.studentId);
+  const allowed = (studentIds && studentIds.length ? studentIds : [primary]).map(String);
+  if (!allowed.includes(id)) { res.status(404).json({ success: false, message: "Child not found" }); return null; }
+  const asOfRaw = req.query.asOf ? new Date(String(req.query.asOf)) : null;
+  const lang = String(req.query.lang ?? req.headers["accept-language"] ?? "en").toLowerCase().startsWith("fr") ? "fr" : "en";
+  return { schoolId, id, asOf: asOfRaw && !Number.isNaN(asOfRaw.getTime()) ? asOfRaw : null, lang };
+};
+
+router.get("/children/:studentId/intelligence-summary", asyncHandler(async (req, res) => {
+  const c = guardianChild(req, res); if (!c) return undefined;
+  const advancedSvc = require("../services/intelligence/advancedIntelligence.service");
+  const s = await advancedSvc.summaryFor({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: "parent", lang: c.lang });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: c.id, ...s } });
+}));
+
+router.post("/children/:studentId/explain", asyncHandler(async (req, res) => {
+  const c = guardianChild(req, res); if (!c) return undefined;
+  const advancedSvc = require("../services/intelligence/advancedIntelligence.service");
+  const question = req.body?.question;
+  if (typeof question !== "string" || !question.trim()) return res.status(400).json({ success: false, code: "QUESTION_REQUIRED", message: "A question is required." });
+  if (question.length > advancedSvc.QUESTION_MAX) return res.status(400).json({ success: false, code: "QUESTION_TOO_LONG", message: `A question is at most ${advancedSvc.QUESTION_MAX} characters.` });
+  const r = await advancedSvc.explain({ schoolId: c.schoolId, studentId: c.id, asOf: c.asOf, viewer: "parent", lang: c.lang, question, operation: "explain", identity: null });
+  return res.json({ success: true, data: { generatedAt: new Date(), studentId: c.id, ...r } });
 }));
 
 module.exports = router;

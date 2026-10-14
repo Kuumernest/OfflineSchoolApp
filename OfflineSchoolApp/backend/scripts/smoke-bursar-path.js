@@ -27,6 +27,8 @@
  *   node scripts/smoke-bursar-path.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 
@@ -95,6 +97,13 @@ const main = async () => {
   app.use("/api/finance",   authenticate, require("../src/routes/finance.routes"));
   app.use("/api/approvals", authenticate, require("../src/routes/approvals.routes"));
   app.use("/api/admin",     authenticate, require("../src/routes/admin.routes"));
+
+  // Every model the routes use is loaded now. Wait for their indexes: the
+  // unique index on FeeCharge is what makes applying a structure twice raise
+  // nothing, and mongoose builds it in the background on a fresh database. On
+  // a busy host the first insertMany landed before the build finished and the
+  // class was billed twice — a flake that read like double billing.
+  await Promise.all(Object.values(mongoose.models).map((m) => m.init()));
 
   const server = app.listen(0);
   const port   = server.address().port;
@@ -467,7 +476,7 @@ const main = async () => {
   console.log(`\n  ${pass} passed, ${fail} failed`);
 
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exit(fail ? 1 : 0);
 };
 

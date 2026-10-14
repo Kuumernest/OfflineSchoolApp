@@ -501,6 +501,7 @@ export default function TeacherStudentsScreen() {
 // ═════════════════════════════════════════════════════════════════════════════
 
 function Header({ title, count }) {
+  const { t } = useTranslation();
   return (
     <View style={styles.header}>
       <TouchableOpacity
@@ -514,7 +515,7 @@ function Header({ title, count }) {
         <Text style={styles.headerTitle} numberOfLines={1}>{title}</Text>
         {count != null && (
           <Text style={styles.headerSub}>
-            {count} student{count !== 1 ? "s" : ""}
+            {t("academic.studentCount", { count })}
           </Text>
         )}
       </View>
@@ -537,16 +538,10 @@ function StudentRow({ student }) {
   const gender   = genderIcon(student.gender);
 
   return (
-    <TouchableOpacity
-      style={styles.row}
-      activeOpacity={0.7}
-      onPress={() =>
-        router.push({
-          pathname: "/teacher/students/[id]",
-          params:   { id: student.id, name: student.name },
-        })
-      }
-    >
+    // A row, not a link: there is no per-pupil screen for a teacher on the
+    // handset (the office's student detail is the console's), and a row that
+    // opened "Unmatched Route" was worse than one that opens nothing.
+    <View style={styles.row}>
       <View style={[styles.avatar, { backgroundColor: avatar.bg }]}>
         <Text style={[styles.avatarText, { color: avatar.text }]}>
           {initials}
@@ -578,8 +573,7 @@ function StudentRow({ student }) {
         </View>
       </View>
 
-      <Ionicons name="chevron-forward" size={18} color={C.gray300} />
-    </TouchableOpacity>
+    </View>
   );
 }
 

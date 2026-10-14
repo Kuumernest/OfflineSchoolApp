@@ -56,6 +56,8 @@ const OFFICE_ROLES = ["super_admin", "school_admin", "bursar"];
  * printed as a different letter offline than the school's own server printed.
  */
 const { DEFAULT_GRADES, DEFAULT_PASS_MARK } = require("../../../../../shared/gradeScale");
+// Continuous assessment, from the one module the server validates against.
+const CA = require("../../../../../shared/caAssessment");
 
 /**
  * gradingType's enum, from GradingConfig.js.
@@ -334,7 +336,22 @@ module.exports = [
         useGpa:      false,
         gpaScale:    4.0,
         gradingType: "percentage",
+        // CA is on unless a school turns it off, which is the server's default
+        // too. Absent here, the settings screen would read undefined, render
+        // an unchecked box, and write CA off on the next save for a school
+        // that never touched the setting.
+        caEnabled:   CA.DEFAULT_CA_ENABLED,
+        caWeight:    CA.DEFAULT_CA_WEIGHT,
+        testWeight:  CA.DEFAULT_TEST_WEIGHT,
       };
+
+      // A mirror row synced from a config written before CA existed carries
+      // none of the three. Same repair as the server's GET, and the STORED
+      // split rather than the effective one: a school with CA off keeps its
+      // own percentages for the day it turns CA back on.
+      grading.caEnabled  = grading.caEnabled  ?? CA.DEFAULT_CA_ENABLED;
+      grading.caWeight   = grading.caWeight   ?? CA.DEFAULT_CA_WEIGHT;
+      grading.testWeight = grading.testWeight ?? CA.DEFAULT_TEST_WEIGHT;
 
       // A mirror row synced from a server document that once held an out-of-enum
       // gradingType would otherwise round-trip through the screen and be refused

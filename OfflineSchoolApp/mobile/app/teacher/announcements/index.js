@@ -226,8 +226,7 @@ const AnnouncementCard = React.memo(({ item, tab, onPress, onLongPress }) => {
             <View style={styles.classCountChip}>
               <Ionicons name="school-outline" size={11} color="#6B7280" />
               <Text style={styles.classCountText}>
-                {item.targetClasses.length} class
-                {item.targetClasses.length > 1 ? "es" : ""}
+                {t("annTeacher.classCount", { count: item.targetClasses.length })}
               </Text>
             </View>
           )}

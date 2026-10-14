@@ -155,7 +155,12 @@ module.exports = [
       if (!Number.isFinite(page) || !Number.isFinite(limit)) return null;
       if (page < 1 || limit < 1) return null;
 
+      // exams.view's list, published unless the caller is an administrator —
+      // the server's rule for this route (exam.routes.js /reports/results). A
+      // bursar is sent to the server, which refuses them.
+      if (!session?.role || session.role === "bursar") return null;
       const filter = { schoolId };
+      if (!["super_admin", "school_admin", "admin"].includes(session.role)) filter.isPublished = true;
       if (examId)   filter.examId  = examId;
       if (query.classId) filter.classId = String(query.classId);
 
@@ -204,10 +209,18 @@ module.exports = [
   {
     route: "GET /api/exams/:examId/scores",
 
-    /** The marks entered for an exam, optionally narrowed to a class or subject. */
+    /**
+     * The marks entered for an exam, optionally narrowed to a class or subject.
+     *
+     * Online this sheet is exams.view's — the teaching roles, not the bursar
+     * (exam.routes.js). A bursar's request is not answered here: it goes to
+     * the server, which refuses it, rather than being served from rows the
+     * mirror holds for other reasons.
+     */
     handler: ({ params, query }, { docs, session }) => {
       const schoolId = query.schoolId ? String(query.schoolId).trim() : session?.schoolId;
       if (!schoolId) return null;
+      if (!session?.role || session.role === "bursar") return null;
 
       const filter = { examId: String(params.examId), schoolId, deletedAt: null };
       if (query.classId)   filter.classId   = String(query.classId);

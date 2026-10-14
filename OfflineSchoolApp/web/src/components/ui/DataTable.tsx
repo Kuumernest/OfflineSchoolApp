@@ -19,8 +19,11 @@ export function Table({
 }) {
   return (
     // The scroll container is the table's own, so a wide table scrolls inside
-    // its card instead of pushing the whole page sideways.
-    <div className="overflow-x-auto">
+    // its card instead of pushing the whole page sideways. min-w-0 and
+    // max-w-full matter when the card is a grid or flex child: without them
+    // the column's automatic minimum is the table's full width, and the page
+    // grows to fit it.
+    <div className="min-w-0 max-w-full overflow-x-auto">
       <table
         className={cn(
           "w-full text-sm border-separate border-spacing-0",
@@ -120,19 +123,29 @@ export function Td({
   children,
   className,
   numeric = false,
+  wrap = false,
   colSpan,
 }: {
   children?:  React.ReactNode;
   className?: string;
   /** Right-align, for columns of figures. */
   numeric?:   boolean;
+  /**
+   * Let the text wrap. Cells are nowrap by default because a date or a figure
+   * broken over two lines is worse than a table that scrolls; a name, a
+   * reason or an address is the opposite, and one long value in a nowrap cell
+   * is what makes every other column scroll off the screen. Pair it with a
+   * min-w/max-w so the column has a width to wrap into.
+   */
+  wrap?:      boolean;
   /** For a row that spans the table — a group heading inside the body. */
   colSpan?:   number;
 }) {
   return (
     <td
       className={cn(
-        "px-4 h-12 text-ink-body whitespace-nowrap",
+        "px-4 text-ink-body",
+        wrap ? "py-3 whitespace-normal break-words" : "h-12 whitespace-nowrap",
         // Border on the cell rather than divide-y on the body: with
         // border-separate that is what keeps the rule under the sticky header
         // from detaching when the body scrolls.

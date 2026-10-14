@@ -56,4 +56,53 @@ const namedAnotherSchool = (req, provided) => {
   return own != null && String(asked).trim() !== String(own);
 };
 
-module.exports = { resolveSchoolId, namedAnotherSchool };
+/**
+ * The door rule for a school named in the PATH.
+ *
+ * middleware/auth.js refuses a school-scoped caller who names another school
+ * in the query or body, but a path parameter is not parsed until the router
+ * matches, so the one router that carries /:schoolId applies this with
+ * router.param("schoolId", guardSchoolParam). Same answer as the door:
+ * super_admin may name any school; everyone else may name only their own,
+ * and gets 403 SCHOOL_ACCESS_DENIED otherwise.
+ */
+const guardSchoolParam = (req, res, next) => {
+  const asked = req.params?.schoolId;
+  if (asked == null || String(asked).trim() === "") return next();
+  if (req.user?.role === "super_admin") return next();
+  const own = req.user?.schoolId ?? req.portal?.schoolId ?? null;
+  if (own != null && String(asked).trim() === String(own)) return next();
+  return res.status(403).json({
+    success: false,
+    code:    "SCHOOL_ACCESS_DENIED",
+    message: "You may only act within your own school.",
+  });
+};
+
+/**
+ * Refuse a request that resolves to no school (docs/39 §17.2, Phase 2e).
+ *
+ * Two callers resolve to none: a super_admin who named no school, and an
+ * account whose own schoolId is empty — the door lets the second through,
+ * since there is no school of theirs to be closed. Routers that built their
+ * filters from that nothing answered for no school by accident
+ * (`{ schoolId: undefined }` matches no row) or for every school by
+ * construction (`...(schoolId ? { schoolId } : {})` drops the filter). Both
+ * are now a 400 here, before any handler runs.
+ *
+ * superAdminMayOmit keeps a documented platform-wide read (docs/20 Info-A)
+ * for the super_admin alone; it never extends to a schoolless school account.
+ *
+ * The body is the one the report-layout routes already send.
+ */
+const requireSchool = ({ superAdminMayOmit = false } = {}) => (req, res, next) => {
+  if (resolveSchoolId(req)) return next();
+  if (superAdminMayOmit && req.user?.role === "super_admin") return next();
+  return res.status(400).json({
+    success: false,
+    code:    "SCHOOL_REQUIRED",
+    error:   "A school must be selected",
+  });
+};
+
+module.exports = { resolveSchoolId, namedAnotherSchool, guardSchoolParam, requireSchool };

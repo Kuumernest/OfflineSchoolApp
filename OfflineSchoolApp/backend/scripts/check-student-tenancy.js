@@ -36,6 +36,8 @@
  *   node scripts/check-student-tenancy.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 
@@ -188,7 +190,7 @@ const main = async () => {
 
   await new Promise((r) => server.close(r));
   await mongoose.disconnect();
-  try { await mongo.stop(); } catch { /* a lingering temp process is not a result */ }
+  try { await stopQuietly(mongo); } catch { /* a lingering temp process is not a result */ }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
 };

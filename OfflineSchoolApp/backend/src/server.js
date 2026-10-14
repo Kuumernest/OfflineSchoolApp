@@ -119,6 +119,12 @@ if (process.env.NODE_ENV === "production") {
 
 // `dev` is colourised and writes a line per request including 304s. Production
 // gets the Apache combined format, which is what log collectors parse.
+// The URL as logged, with any ?sig= (a signed media or document link — a
+// capability that opens a file for an hour) reduced to its name. A log line
+// is read by more people, for longer, than the link was meant for.
+morgan.token("url", (req) =>
+  String(req.originalUrl || req.url || "").replace(/([?&]sig=)[^&]+/g, "$1[redacted]")
+);
 app.use(morgan(process.env.NODE_ENV === "production" ? "combined" : "dev"));
 
 app.use(cors({
@@ -159,6 +165,16 @@ app.get(BROWSER_AUTO_REQUESTS, (_req, res) => res.status(204).end());
 // RANGE-AWARE MEDIA STREAMING
 // ✅ Fixed: /*path → /{*path} for Node 24 compatibility
 // ─────────────────────────────────────────────────────────────────────────────
+
+// ── Applicant documents are never served from here ──────────────────────────
+// Birth certificates and ID scans a family attached to an admission
+// application land under uploads/applications. They are reached through
+// GET /api/students/applications/:id/documents/:key, which authorises the
+// caller (or a link minted for one) — see utils/applicationDocuments.js. Both
+// the streaming handler below and express.static after it would otherwise hand
+// the file to anyone holding the URL, so the prefix is closed ahead of both.
+// A uniform 404, because "forbidden" would confirm the file exists.
+app.use("/uploads/applications", require("./utils/applicationDocuments").blockPublicApplicationsPath);
 
 app.get("/uploads/{*path}", (req, res, next) => {
   const rawParam = req.params.path || req.params[0] || "";
@@ -410,6 +426,28 @@ app.use("/api/portal", loadRoute("./routes/portal.routes"));
 // STUDENT ANNOUNCEMENT ROUTES
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * The student audience, stated once.
+ *
+ * /api/students/announcements/* is the STUDENT surface of the announcement
+ * feature: the mobile client picks it by role (see announcement.service.js,
+ * `isStudent(user) ? /students/announcements/… : /announcements/…`), and the
+ * students router guards its own copies with the same `studentOnly` test. These
+ * inline copies predate that guard and carried authentication only, so any
+ * staff account — of any school — could post a read receipt onto an
+ * announcement it had nothing to do with. Tenancy now bounds the row; the role
+ * belongs here too, matching the router.
+ */
+const studentOnly = (req, res, next) => {
+  if (!req.user || req.user.role !== "student") {
+    return res.status(403).json({
+      success: false,
+      message: `Students only. Your role "${req.user?.role}" is not permitted.`,
+    });
+  }
+  next();
+};
+
 app.get(
   "/api/students/announcements",
   auth.authenticate,
@@ -421,17 +459,22 @@ app.post(
   "/api/students/announcements/:id/read",
   auth.authenticate,
   noCache,
+  studentOnly,
   async (req, res) => {
     try {
-      const Announcement = require("./db/models/Announcement");
-      // findByAnyId, not findById: this route is registered ahead of the
-      // students router and handles the phone's nanoid announcement ids.
-      const announcement = await Announcement.findByAnyId(req.params.id);
+      const { findAnnouncementById } = require("./utils/announcementScope");
+      // findByAnyId inside the helper, not findById: this route is registered
+      // ahead of the students router and handles the phone's nanoid
+      // announcement ids. The helper also applies the school filter — a receipt
+      // goes only into the caller's own school's rows, and another school's id
+      // answers 404 rather than confirming it exists.
+      const announcement = await findAnnouncementById(req.params.id, req);
       if (!announcement) {
         return res.status(404).json({ message: "Announcement not found" });
       }
 
       const userId = req.user._id?.toString();
+      const Announcement = require("./db/models/Announcement");
       const result = await Announcement.updateOne(
         { _id: announcement._id, "readBy.user": { $ne: userId } },
         { $push: { readBy: { user: userId, readAt: new Date() } } }
@@ -453,13 +496,15 @@ app.post(
   "/api/students/announcements/:id/acknowledge",
   auth.authenticate,
   noCache,
+  studentOnly,
   async (req, res) => {
     try {
-      const Announcement = require("./db/models/Announcement");
-      const announcement = await Announcement.findById(req.params.id);
+      const { findAnnouncementById } = require("./utils/announcementScope");
+      const announcement = await findAnnouncementById(req.params.id, req);
       if (!announcement) {
         return res.status(404).json({ message: "Announcement not found" });
       }
+
       const userId     = req.user._id?.toString();
       const alreadyAck = (announcement.acknowledgedBy || []).some(
         (r) => r.user?.toString() === userId
@@ -508,16 +553,24 @@ app.post(
       const User           = require("./db/models/User");
       const { v4: uuidv4 } = require("uuid");
 
-      const student = await Student.findById(req.params.id).lean();
+      // ── Tenancy ─────────────────────────────────────────────────────────
+      // A school-scoped caller may only provision logins for their OWN
+      // students, and the login belongs to the STUDENT's school — not to
+      // whoever the caller is or whatever the body named. The old
+      // caller-first fallback let a students.manage holder point a brand-new
+      // User at another school's Student record and walk away with a working
+      // login for it. The lookup answers 404 for a foreign id, exactly as
+      // GET /api/users/:id does.
+      const callerSchoolId = req.user?.schoolId ? String(req.user.schoolId) : null;
+      const student = await Student.findOne({
+        _id: req.params.id,
+        ...(callerSchoolId ? { schoolId: callerSchoolId } : {}),
+      }).lean();
       if (!student) {
         return res.status(404).json({ success: false, message: "Student not found" });
       }
 
-      const schoolId =
-        req.user?.schoolId ||
-        req.body?.schoolId ||
-        student.schoolId   ||
-        null;
+      const schoolId = student.schoolId || null;
 
       let userDoc = student.userId
         ? await User.findById(student.userId)
@@ -525,7 +578,15 @@ app.post(
 
       if (!userDoc && (student.email || student.studentEmail)) {
         const email = (student.email || student.studentEmail || "").toLowerCase();
-        if (email) userDoc = await User.findOne({ email, role: "student" });
+        if (email) {
+          userDoc = await User.findOne({
+            email,
+            role:    "student",
+            // The existing login must belong to the student's own school. A
+            // same-named account at another school is that school's business.
+            ...(schoolId ? { schoolId } : {}),
+          });
+        }
       }
 
       if (userDoc?.enrollmentNo) {
@@ -563,7 +624,13 @@ app.post(
       // trusted: a code like "G.V.A" would otherwise build a regex whose dot
       // matches anything and could read another school's sequence.
       const last = await User.findOne(
-        { enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` }, role: "student" },
+        {
+          enrollmentNo: { $regex: `^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}` },
+          role:         "student",
+          // The sequence is the school's own: without this clause the highest
+          // number across EVERY school was read.
+          ...(schoolId ? { schoolId } : {}),
+        },
         { enrollmentNo: 1 },
         { sort: { enrollmentNo: -1 } }
       ).lean();
@@ -822,6 +889,9 @@ app.use("/api/insights",
   auth.authenticate,
   loadRoute("./routes/insights.routes")
 );
+app.use("/api/interventions", auth.authenticate, loadRoute("./routes/interventions.routes"));
+// The exploration catalog and a pupil's moves through an exploration (Stage 10).
+app.use("/api/explorations", auth.authenticate, loadRoute("./routes/explorations.routes"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // TEACHER ROUTES
@@ -839,6 +909,20 @@ app.use("/api/teacher",
 // Mounted above /api/admin, like periods and timetable below it: the admin
 // router is a catch-all for that prefix, so a more specific path has to be
 // registered first or it never sees a request.
+// ─────────────────────────────────────────────────────────────────────────────
+// THE PLATFORM
+//
+// What sits above a school: creating one, switching it off, reading across all
+// of them, the audit trail. Every route carries a platform.* capability that
+// only super_admin holds. A super_admin working INSIDE a school does not come
+// here — they use /api/admin/* with a schoolId, like any other administrator
+// of that school.
+// ─────────────────────────────────────────────────────────────────────────────
+app.use("/api/super-admin",
+  auth.authenticate,
+  loadRoute("./routes/superAdmin.routes")
+);
+
 app.use("/api/admin/permissions",
   auth.authenticate,
   loadRoute("./routes/permissions.routes")
@@ -1025,6 +1109,20 @@ async function startServer() {
     // looking as though it is protecting them. See the module docstring.
     await ensureIdempotencyIndex();
 
+    // The school-wide analysis runs (docs/38): the unique index that keeps two
+    // servers from running the same analysis at once, then the runs a stopped
+    // process left queued or running, whose leases have expired.
+    // Neither stops the server: without them the analysis may run twice or
+    // a stale run waits out its lease, which costs work, not a school's day.
+    const analysisRuns = require("./services/intelligence/analysisRuns.service");
+    await analysisRuns.ensureIndexes();
+    try {
+      const interrupted = await analysisRuns.recoverStale();
+      if (interrupted) console.log(`[analysis] ${interrupted} interrupted run(s) from a previous process marked INTERRUPTED`);
+    } catch (err) {
+      console.error("[analysis] could not sweep interrupted runs at boot — " + err.message + " (they expire with their lease)");
+    }
+
     console.log("✅ Indexes verified");
 
     /*
@@ -1091,8 +1189,8 @@ async function startServer() {
       console.log("  STATIC   ANY  /uploads/*           ← express.static");
       console.log("  ─────────────────────────────────");
       console.log("  AUTH+NC  GET  /api/students/announcements      ← FIRST");
-      console.log("  AUTH+NC  POST /api/students/announcements/:id/read");
-      console.log("  AUTH+NC  POST /api/students/announcements/:id/acknowledge");
+      console.log("  AUTH+NC+STU POST /api/students/announcements/:id/read");
+      console.log("  AUTH+NC+STU POST /api/students/announcements/:id/acknowledge");
       console.log("  AUTH     POST /api/students/:id/enrollment-number");
       console.log("  ─────────────────────────────────");
       console.log("  OPT-AUTH ANY  /api/students/*");

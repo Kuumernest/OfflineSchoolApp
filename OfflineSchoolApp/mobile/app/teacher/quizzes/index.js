@@ -36,6 +36,10 @@ import {
   getQuizAnalytics,
   getQuizAttemptsByQuizId,
 } from "../../../src/services/quiz.service";
+import {
+  fetchTeacherScope,
+  allTeacherSubjects,
+} from "../../../src/services/teacherScope.service";
 
 // ─────────────────────────────────────────────────────────────
 // CONSTANTS
@@ -822,7 +826,7 @@ const AnalyticsModal = memo(({ quiz, onClose }) => {
 // CUSTOM HOOK — useQuizData
 // ─────────────────────────────────────────────────────────────
 
-function useQuizData(schoolId, teacherId) {
+function useQuizData(schoolId, teacherId, subjectId = null) {
   const { t } = useTranslation();
   const [quizzes,    setQuizzes]    = useState([]);
   const [questions,  setQuestions]  = useState([]);
@@ -850,9 +854,13 @@ function useQuizData(schoolId, teacherId) {
             schoolId:   schoolId.toString(),
             created_by: teacherId.toString(),
           }),
+          // This teacher's questions, and — when a subject chip is chosen —
+          // only that subject's. Filtered in the database, not here.
           getQuestions({
-            schoolId: schoolId.toString(),
-            limit:    100,
+            schoolId:   schoolId.toString(),
+            created_by: teacherId.toString(),
+            subject_id: subjectId || null,
+            limit:      100,
           }),
           getCategories(schoolId.toString()),
         ]);
@@ -875,7 +883,7 @@ function useQuizData(schoolId, teacherId) {
     // call time, so a stale identity still translates correctly — and listing
     // it here would refetch every quiz on a language switch.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [schoolId, teacherId]
+    [schoolId, teacherId, subjectId]
   );
 
   useEffect(() => { loadAll(); }, [loadAll]);
@@ -904,6 +912,19 @@ export default function TeacherQuizzesScreen() {
   const schoolId  = user?.schoolId;
   const teacherId = user?._id || user?.id || user?.userId;
 
+  // The subject chips over the question bank: every subject this teacher is
+  // assigned, from the same source the quiz screen's pickers use.
+  const [filterSubject,  setFilterSubject]  = useState(null);
+  const [subjectOptions, setSubjectOptions] = useState([]);
+  useEffect(() => {
+    let alive = true;
+    if (!teacherId) return undefined;
+    fetchTeacherScope({ teacherId, schoolId })
+      .then((scope) => { if (alive) setSubjectOptions(allTeacherSubjects(scope)); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [teacherId, schoolId]);
+
   const {
     quizzes,
     questions,
@@ -913,7 +934,7 @@ export default function TeacherQuizzesScreen() {
     loadAll,
     setQuizzes,
     setQuestions,
-  } = useQuizData(schoolId, teacherId);
+  } = useQuizData(schoolId, teacherId, filterSubject);
 
   const [activeTab,      setActiveTab]      = useState("quizzes");
   const [quizSearch,     setQuizSearch]     = useState("");
@@ -1199,6 +1220,38 @@ export default function TeacherQuizzesScreen() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.filterChips}
       >
+        {subjectOptions.length > 0 && (
+          <>
+            <TouchableOpacity
+              style={[styles.chip, !filterSubject && styles.chipActive]}
+              onPress={() => setFilterSubject(null)}
+            >
+              <Text style={[styles.chipText, !filterSubject && styles.chipTextActive]}>
+                {t("quizList.allSubjects")}
+              </Text>
+            </TouchableOpacity>
+            {subjectOptions.map((subj) => (
+              <TouchableOpacity
+                key={subj.id}
+                style={[styles.chip, filterSubject === subj.id && styles.chipActive]}
+                onPress={() =>
+                  setFilterSubject((prev) => (prev === subj.id ? null : subj.id))
+                }
+              >
+                <Text
+                  style={[
+                    styles.chipText,
+                    filterSubject === subj.id && styles.chipTextActive,
+                  ]}
+                >
+                  {subj.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <View style={styles.chipDivider} />
+          </>
+        )}
+
         {Object.entries(QUESTION_TYPE_KEYS).map(([type, labelKey]) => (
           <TouchableOpacity
             key={type}

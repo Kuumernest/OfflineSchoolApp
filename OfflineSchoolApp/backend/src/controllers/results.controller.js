@@ -18,6 +18,9 @@ const {
 const Student = require("../db/models/Student");
 const Class   = require("../db/models/Class");
 const AcademicStructure = require("../db/models/AcademicStructure");
+const TeacherAssignment = require("../db/models/TeacherAssignment");
+const Subject           = require("../db/models/Subject");
+const { teacherAssigned } = require("../utils/teacherScope");
 const { renderReportCardHtml, renderReportCard } =
   require("../services/reportHtml.service");
 const resultsService = require("../services/results.service");
@@ -27,6 +30,12 @@ const { lookupGrade } = require("../services/grading.service");
 // scripts/check-report-card.js.
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
+const { legacyTermsOf } = require("../../../shared/academicPolicy");
+// The CA half of a sequence. A sequence card shows both assessments and the
+// mark they combine to; the pairing and the arithmetic are shared with the
+// grading engine so the card cannot print a different number from the one the
+// term average was computed from.
+const sequenceAssessment = require("../services/sequenceAssessment.service");
 
 // ─────────────────────────────────────────────────────────
 // UTILITIES
@@ -43,6 +52,32 @@ const asyncHandler = (fn) => (req, res, next) =>
 
 const isAdmin = (role) =>
   ["super_admin", "school_admin", "admin"].includes(role);
+
+/**
+ * The exam this request is about, IN THE CALLER'S SCHOOL.
+ *
+ * Every per-student read and write in this controller used to start from
+ * Exam.findById(examId) or from a { examId, studentId } filter with no school
+ * in it, so a results.view holder in one school who knew an exam and pupil id
+ * from another read that pupil's marks, positions and report card — and the
+ * write routes minted rows into the other school's pipeline. The exam is the
+ * anchor: it is loaded scoped, and its school is the scope for everything
+ * that follows.
+ *
+ * A super_admin who named no school is the one caller allowed to look across
+ * schools (docs/20 Info-A); for them the exam's own school becomes the scope,
+ * so the sub-queries still stay within one school.
+ *
+ * @returns {Promise<{exam: object, schoolId: string}|null>} null = not this school's
+ */
+const loadScopedExam = async (req, examId, provided, select = null) => {
+  const schoolId = req ? resolveSchoolId(req, provided) : null;
+  const q = Exam.findOne({ _id: String(examId ?? ""), ...(schoolId ? { schoolId } : {}) });
+  if (select) q.select(select);
+  const exam = await q.lean();
+  if (!exam) return null;
+  return { exam, schoolId: schoolId ? String(schoolId) : String(exam.schoolId) };
+};
 
 // ─────────────────────────────────────────────────────────
 // GET /api/results/:examId
@@ -70,7 +105,7 @@ const getExamResults = asyncHandler(async (req, res) => {
     filter.isPublished = isPublished === "true";
   }
 
-  const skip    = (Number(page) - 1) * Number(limit);
+  const skip    = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, message: "page and limit must be positive integers" });
   const total   = await ResultSummary.countDocuments(filter);
   const results = await ResultSummary.find(filter)
     .sort({ classPosition: 1 })
@@ -132,106 +167,17 @@ const getExamStats = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
   const { classId, schoolId: qSchoolId } = req.query;
 
-  const schoolId = resolveSchoolId(req, qSchoolId);
-
-  const filter = { examId, deletedAt: null };
-  if (schoolId) filter.schoolId = schoolId;
-  if (classId)  filter.classId  = classId;
-
-  const results = await ResultSummary.find(filter).lean();
-
-  const totalStudents = results.length;
-  const passed = results.filter((r) => r.isPassing).length;
-  const failed = totalStudents - passed;
-
-  // Average / highest / lowest use each student's overall percentage (0-100),
-  // not the /20 average stored on the summary. r.average mixes scales when
-  // subjects have different maxScore, so a 12/20 average must not render as 12%.
-  const percentages = results
-    .map((r) => r.percentage)
-    .filter((p) => p != null && Number.isFinite(Number(p)))
-    .map(Number);
-  const average = percentages.length
-    ? Math.round((percentages.reduce((s, v) => s + v, 0) / percentages.length) * 100) / 100
-    : 0;
-  const highest = percentages.length ? Math.max(...percentages) : 0;
-  const lowest  = percentages.length ? Math.min(...percentages) : 0;
-  const passRate = totalStudents > 0
-    ? Math.round((passed / totalStudents) * 10000) / 100
-    : 0;
-
-  const gpas = results
-    .map((r) => r.gpa)
-    .filter((g) => g != null && Number.isFinite(Number(g)))
-    .map(Number);
-  const averageGpa = gpas.length
-    ? Math.round((gpas.reduce((s, v) => s + v, 0) / gpas.length) * 100) / 100
-    : 0;
-
-  const gradeDistribution = {};
-  for (const r of results) {
-    const g = r.overallGrade || "N/A";
-    gradeDistribution[g] = (gradeDistribution[g] || 0) + 1;
-  }
-
-  // Subject analysis — aggregate per-subject numbers from every student's
-  // subjectBreakdown. Averages / highs / lows are percentages so the UI can
-  // render them alongside the pass rate without mixing scales.
-  const subjectAgg = new Map();
-  for (const r of results) {
-    for (const s of r.subjectBreakdown || []) {
-      if (s.isAbsent || s.isExempt || s.score == null) continue;
-      const key = String(s.subjectId || s.subjectName || "");
-      if (!key) continue;
-      if (!subjectAgg.has(key)) {
-        subjectAgg.set(key, {
-          subjectId:   s.subjectId || key,
-          subjectName: s.subjectName || key,
-          total:       0,
-          sum:         0,
-          highest:     -Infinity,
-          lowest:      Infinity,
-          passed:      0,
-        });
-      }
-      const agg = subjectAgg.get(key);
-      agg.total += 1;
-      const pct = s.percentage != null && Number.isFinite(Number(s.percentage))
-        ? Number(s.percentage)
-        : s.maxScore > 0
-          ? Math.round((Number(s.score) / Number(s.maxScore)) * 10000) / 100
-          : 0;
-      agg.sum += pct;
-      if (pct > agg.highest) agg.highest = pct;
-      if (pct < agg.lowest)  agg.lowest  = pct;
-      if (s.isPassing) agg.passed += 1;
-    }
-  }
-  const subjectStats = [...subjectAgg.values()].map((a) => ({
-    subjectId:   a.subjectId,
-    subjectName: a.subjectName,
-    average:     a.total > 0 ? Math.round((a.sum / a.total) * 100) / 100 : 0,
-    highest:     a.total > 0 ? a.highest : 0,
-    lowest:      a.total > 0 ? a.lowest  : 0,
-    passRate:    a.total > 0 ? Math.round((a.passed / a.total) * 10000) / 100 : 0,
-    total:       a.total,
-  }));
-
-  return res.json({
-    success: true,
-    data: {
-      totalStudents,
-      passed,
-      failed,
-      average,
-      highest,
-      lowest,
-      passRate,
-      averageGpa,
-      gradeDistribution,
-      subjectStats,
-    },
+  // The arithmetic lives in services/classStats.service.js, where the report
+  // card reads it too. It moved there unchanged: same filter, same percentage
+  // scale, same zeroes on an empty class, same subject breakdown.
+  const data = await classStats.examStatistics({
+    schoolId: resolveSchoolId(req, qSchoolId),
+    examId,
+    classId,
+    onlyPublished: !isAdmin(req.user?.role),
   });
+
+  return res.json({ success: true, data });
 });
 
 // ─────────────────────────────────────────────────────────
@@ -249,7 +195,15 @@ const getExamRankings = asyncHandler(async (req, res) => {
   const scope = ["class", "grade", "school"].includes(rankBy)
     ? rankBy : "class";
 
-  let rankings = await getRankings(examId, scope, classId || null);
+  // Tenancy: a ranking is one school's table. The service filtered on examId
+  // alone, so a foreign examId answered another school's positions, names and
+  // admission numbers.
+  const scoped = await loadScopedExam(req, examId, req.query.schoolId, "_id schoolId");
+  if (!scoped) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
+  let rankings = await getRankings(examId, scope, classId || null, scoped.schoolId, { onlyPublished: !isAdmin(req.user?.role), limit: Number(limit) });
   rankings     = rankings.slice(0, Number(limit));
 
   return res.json({
@@ -272,10 +226,30 @@ const getStudentResult = asyncHandler(async (req, res) => {
   //    ResultSummary / StudentScore). Consumers got an empty summary and the
   //    web batch print silently fell back to blank marks. Response shape is
   //    unchanged: { summary, scores }.
+  // Tenancy: the exam anchors the read. Without it a results.view holder in
+  // one school read another school's pupil by (examId, studentId).
+  const scoped = await loadScopedExam(req, examId, req.query.schoolId, "_id schoolId");
+  if (!scoped) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result found for this student in this exam",
+    });
+  }
+  const { schoolId } = scoped;
+
   const [summary, scores] = await Promise.all([
-    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
+
+  // Published or not there, for anyone who is not an administrator — the rule
+  // GET /results/:examId applies one route up, applied to the single pupil too.
+  if (!isAdmin(req.user?.role) && !summary?.isPublished) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result found for this student in this exam",
+    });
+  }
 
   if (!summary && !scores.length) {
     return res.status(404).json({
@@ -320,19 +294,62 @@ const getStudentResult = asyncHandler(async (req, res) => {
  *   to resolve against. Optional: a caller without a request gets the stored
  *   relative path, which is still correct data.
  */
+/**
+ * The filter that selects every row sharing a ranking key with these scores:
+ * their examSubjectIds, and — for any row of theirs without one — their
+ * subjectIds, which is the key subjectRanking falls back to. A pupil with no
+ * scores matches nothing, as nothing could place them.
+ */
+const cohortKeysFor = (pupilScores) => {
+  const es = [...new Set(pupilScores.map((s) => s.examSubjectId).filter((x) => x != null).map(String))];
+  const su = [...new Set(pupilScores.filter((s) => s.examSubjectId == null && s.subjectId != null).map((s) => String(s.subjectId)))];
+  const or = [];
+  if (es.length) or.push({ examSubjectId: { $in: es } });
+  if (su.length) or.push({ subjectId: { $in: su } });
+  return or.length ? { $or: or } : { _id: { $in: [] } };
+};
+
 const buildStudentReportCardData = async (examId, studentId, req) => {
   // ✅ Phase 0 repoint: reads the LIVE pipeline collections (StudentScore +
   //    ResultSummary, written by processResults) instead of ExamResult/ExamScore.
   //    Payload shape is unchanged — the mobile ReportCard (admin + student
   //    views), the web batch print and the shared HTML renderer consume it.
-  const [scores, examSubjects, summary, exam] = await Promise.all([
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
-    ExamSubject.find({ examId, deletedAt: null }).lean(),
-    ResultSummary.findOne({ examId, studentId, deletedAt: null }).lean(),
-    Exam.findById(examId).lean(),
+  // Tenancy: the exam is loaded in the caller's school first, and its school
+  // scopes every read below. The card, the verification code it mints and the
+  // archive it writes are therefore always this school's — a foreign examId
+  // used to build another school's card, mint a public code for that pupil
+  // and freeze the card into THIS school's GeneratedReports.
+  const scoped = await loadScopedExam(req, examId, req?.query?.schoolId ?? req?.body?.schoolId);
+  if (!scoped) return { ok: false };
+  const { exam, schoolId } = scoped;
+
+  const [scores, examSubjects, summary] = await Promise.all([
+    // Sorted, because the card's subject rows follow this order. Unsorted,
+    // the order was whichever index the planner picked — {examId, studentId,
+    // subjectId} gives subject order, {schoolId, studentId} does not — so the
+    // same card could list its subjects differently from one print to the next
+    // (seen as an intermittent check:academic failure). subjectId order is
+    // what the unique index usually gave.
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).sort({ subjectId: 1 }).lean(),
+    ExamSubject.find({ examId, schoolId, deletedAt: null }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
 
-  if (!summary && !scores.length) return { ok: false };
+  // A card is a published result, printed. Anyone who is not an administrator
+  // gets no card for a result the school has not published.
+  if (req?.user && !isAdmin(req.user.role) && !summary?.isPublished) return { ok: false };
+
+  /*
+   * The continuous assessment beside this paper.
+   *
+   * Inactive — and every lookup below null — for a school with CA off, for a
+   * card that is not a sequence card, and for a sequence with no CA exam,
+   * which is every report card this system printed before CA existed. Those
+   * cards come out byte-identical.
+   */
+  const ca = await sequenceAssessment.loadSequenceContext(exam);
+
+  if (!summary && !scores.length && ca.caByKey.size === 0) return { ok: false };
 
   /*
    * The form master, from the class this card belongs to.
@@ -344,14 +361,24 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
    */
   const cardClassId = summary?.classId || scores[0]?.classId || exam?.classId || null;
   const classTeacherName = cardClassId
-    ? (await Class.findOne({ _id: String(cardClassId) })
+    ? (await Class.findOne({ _id: String(cardClassId), schoolId })
         .select("classTeacherName").lean().catch(() => null))?.classTeacherName || null
+    : null;
+
+  /*
+   * How the class did: the same function GET /:examId/stats answers with,
+   * never a second implementation, and scoped to this exam's school — which
+   * loadScopedExam settled above — so a card can no more reach another
+   * school's marks than the pages that show them can.
+   */
+  const cardClassStats = cardClassId
+    ? await classStats.sequenceClassStats({ schoolId, examId, classId: cardClassId })
     : null;
 
   // ── Student info + school grading settings (requirements §1, §3) ──────────
   const [student, gradingConfig, allExamScores] = await Promise.all([
     // gender / dateOfBirth live on the Student document, not the summary
-    Student.findOne({ _id: studentId })
+    Student.findOne({ _id: studentId, schoolId })
       .select("gender dateOfBirth studentName enrollmentNo admissionNo photoUrl")
       .lean()
       .catch(() => null),
@@ -361,8 +388,17 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       ? GradingConfig.findOne({ schoolId: String(exam.schoolId) }).lean()
           .catch(() => null)
       : Promise.resolve(null),
-    // Every score for this exam — needed to rank the student per subject (§5)
-    StudentScore.find({ examId, deletedAt: null })
+    // The scores the pupil is ranked among (§5). subjectRanking groups by
+    // examSubjectId when a row carries one and by subjectId otherwise, and
+    // positionOf looks a pupil's row up in its own group only — so the rows
+    // that can move this pupil's place are those sharing one of their keys.
+    // Reading the whole exam (every class the exam covers) answered the same
+    // positions at the cost of S×M rows per card; a class print of forty
+    // cards read the school forty times.
+    StudentScore.find({
+      examId, schoolId, deletedAt: null,
+      ...cohortKeysFor(scores),
+    })
       .select("studentId examSubjectId subjectId score maxScore isAbsent isExempt")
       .lean(),
   ]);
@@ -374,8 +410,39 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // reach it too and where scripts/check-report-card.js can test it: pupils who
   // did not sit a subject are out of both the ranking and the denominator, and
   // equal marks share a place.
-  const ranking = subjectRanking(allExamScores);
-  const computeSubjectPosition = (score) => ranking.positionOf(score);
+  /*
+   * Ranked on the SEQUENCE mark, not on the paper alone.
+   *
+   * A pupil's place in a subject has to be a place in the mark the card
+   * prints. Ranking the paper while printing CA+paper would put a pupil 3rd
+   * beside a mark that is 1st, on the same line, on paper a family keeps.
+   *
+   * With CA inactive this is the untouched list of paper scores and the
+   * positions are exactly what they were.
+   */
+  const rankingInput = ca.active
+    ? allExamScores.map((row) => {
+        const blended = sequenceAssessment.blendSubject({
+          ca:   ca.lookup(row.studentId, row.subjectId),
+          test: row,
+          settings: ca.settings,
+        });
+        return { ...row, score: blended.score, maxScore: blended.maxScore };
+      })
+    : allExamScores;
+
+  const ranking = subjectRanking(rankingInput);
+  // Positions are looked up by the same identity the ranking was built on, so
+  // a row is probed with its blended mark rather than its paper mark.
+  const blendedForRanking = new Map(
+    rankingInput.map((row) => [
+      `${String(row.studentId)}|${String(row.subjectId)}`, row,
+    ])
+  );
+  const computeSubjectPosition = (score) =>
+    ranking.positionOf(
+      blendedForRanking.get(`${String(score.studentId)}|${String(score.subjectId)}`) || score
+    );
 
   // ── Grade + remark per the school's configured bands (§3, §4) ──────────────
   // The school's GradingConfig.grades bands are on the /20 Cameroon scale
@@ -431,7 +498,34 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   // same pupil's sequence card said ×4 and their term card said ×1.
   const resolveCoeff = (es) => coefficientFromWeight(es?.weight);
 
-  const subjectRows = scores.map((score) => {
+  /*
+   * A subject this pupil has CA in and no paper mark for.
+   *
+   * Without these the mark a teacher entered would sit in the database and
+   * appear on no report card, because the card is built from the paper's
+   * scores. A stand-in row carries no paper mark — which is the honest state —
+   * and blends to the CA alone.
+   */
+  const caOnlyRows = [];
+  if (ca.active) {
+    const marked = new Set(scores.map((row) => String(row.subjectId)));
+    for (const [key, caRow] of ca.caByKey) {
+      const [sid, subjectId] = key.split("|");
+      if (String(sid) !== String(studentId)) continue;
+      if (marked.has(subjectId)) continue;
+      caOnlyRows.push({
+        _id: `ca-only:${subjectId}`,
+        studentId, subjectId,
+        examSubjectId: null,
+        score:    null,
+        maxScore: caRow.maxScore,
+        isAbsent: false,
+        isExempt: false,
+      });
+    }
+  }
+
+  const subjectRows = [...scores, ...caOnlyRows].map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
                      subjectMap.get(String(score.subjectId)) || {};
     // The exam's own total before a literal 100. A subject row written before
@@ -441,9 +535,31 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     const maxScore = score.maxScore || es.maxScore || exam?.totalMarks || 100;
     const coeff    = resolveCoeff(es);
 
+    /*
+     * The sequence mark: CA and the paper, combined by the school's split.
+     *
+     * `blended` is null whenever CA is inactive, and then every value below is
+     * the paper's own — the same card this system has always printed.
+     *
+     * A pupil with no CA is graded on the paper alone, not on 60 % of it. A
+     * missing CA is an absent record, not a zero, and the renormalisation in
+     * blendSubject is what keeps those two different.
+     */
+    const blended = ca.active
+      ? sequenceAssessment.blendSubject({
+          ca:   ca.lookup(studentId, score.subjectId),
+          test: { score: score.score, maxScore,
+                  isAbsent: score.isAbsent || false,
+                  isExempt: score.isExempt || false },
+          settings: ca.settings,
+        })
+      : null;
+
+    const effectiveScore = blended ? blended.score : score.score;
+
     const normalizedMark =
-      score.score != null && !score.isAbsent && !score.isExempt
-        ? Math.round((score.score / maxScore) * 20 * 100) / 100
+      effectiveScore != null && !score.isAbsent && !score.isExempt
+        ? Math.round((effectiveScore / maxScore) * 20 * 100) / 100
         : null;
 
     const weightedScore =
@@ -460,8 +576,26 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       examSubjectId: score.examSubjectId || es._id || null,
       subjectName:   es.subjectName  || String(score.subjectId),
       teacherName:   es.teacherName  || null,
-      score:         score.score,
+      // The sequence mark — what the "Score" column has always held, now made
+      // of both assessments when the school uses both.
+      score:         effectiveScore,
       maxScore,
+      /*
+       * The two halves, for the CA and Test columns.
+       *
+       * null throughout when CA is off or nothing was recorded, and null is
+       * what the renderer prints as "—". It must never become a 0: a dash says
+       * "no CA was entered", a zero says "this pupil scored nothing", and a
+       * parent reads the difference.
+       */
+      caScore:       blended?.caScore      ?? null,
+      caMaxScore:    blended?.caMaxScore   ?? null,
+      caMark:        blended?.caMark       ?? null,
+      testScore:     blended?.testScore    ?? null,
+      testMaxScore:  blended?.testMaxScore ?? null,
+      testMark:      blended?.testMark     ?? null,
+      caWeight:      blended?.caWeight     ?? null,
+      testWeight:    blended?.testWeight   ?? null,
       isAbsent:      score.isAbsent      ?? false,
       isExempt:      score.isExempt      ?? false,
       teacherRemark: score.teacherRemark || null,
@@ -491,6 +625,27 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     };
   });
 
+  /*
+   * Who teaches each subject.
+   *
+   * The exam subject names a teacher when whoever set the exam up said so,
+   * and most of the time nobody did — so the card fell back to nothing. The
+   * assignment register (TeacherAssignment, the same rows the permission
+   * layer reads) is the authority on who teaches a subject to a class, and
+   * it fills the gaps. Two queries for the whole card; see subjectTeachers.
+   */
+  const assignedTeachers = await subjectTeachers({
+    schoolId,
+    classId:    cardClassId,
+    subjectIds: subjectRows.map((r) => r.subjectId),
+  });
+  for (const r of subjectRows) {
+    r.teacherName = r.teacherName || assignedTeachers.get(String(r.subjectId)) || null;
+  }
+  // A sequence card's own columns are the CA and the paper it was marked
+  // from — they are already on each row (caScore / testScore) and the
+  // renderer shows them when the school marks both ways.
+
   const activeRows    = subjectRows.filter(
     (r) => !r.isAbsent && !r.isExempt && r.score != null
   );
@@ -517,9 +672,10 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
           schoolId: String(exam.schoolId), academicYear: exam.academicYear,
         }).lean().catch(() => null)
       : null;
-    ownName = structure?.terms
-      ?.flatMap((t) => t.sequences || [])
-      ?.find((sq) => sq.number === exam.sequenceNumber)?.name || null;
+    // The sequence's name, from the period tree (docs/39 Phase 3).
+    ownName = legacyTermsOf(structure)
+      .flatMap((t) => t.sequences)
+      .find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
 
   // The facts about the period, not a sentence about it. The header names the
@@ -562,6 +718,18 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       // The form master, over the signature rule at the foot of the card.
       classTeacher: classTeacherName,
       showGrades,
+      /*
+       * Whether this card carries CA columns at all (§1).
+       *
+       * True only when the school has CA on AND this sequence actually has a
+       * CA exam: a card with two empty columns headed "CA" tells a parent the
+       * school assessed nothing, which is not what "no CA exam was created"
+       * means. The weights ride along so the card can say what the split was —
+       * a mark of 15.2 is not checkable without them.
+       */
+      caEnabled:    ca.active,
+      caWeight:     ca.active ? ca.settings.caWeight   : null,
+      testWeight:   ca.active ? ca.settings.testWeight : null,
       reportType,
       subjects:     subjectRows,
       summary: summary
@@ -602,12 +770,24 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
         : null,
       computed: {
         totalCoefficients: totalCoeff,
+        // What the coefficients were applied to: the sum the average above
+        // is divided by them from. Exposed rather than recomputed anywhere
+        // else, so the table's last row and the average cannot disagree.
+        totalWeighted:     Math.round(totalWeighted * 100) / 100,
         weightedAverage,
         outOf: 20,
       },
+      // The class this pupil sat in, on the scale the exam statistics use
+      // (percentages — see services/classStats.service.js). Null where there
+      // is nothing to say; never a zero standing in for an unknown.
+      classStats:  cardClassStats,
 };
 
-  return { ok: true, data };
+  // The school this card belongs to — the scoped exam's, resolved above. The
+  // HTML route loads the letterhead, template, verification code and archive
+  // by it; a super_admin's token names no school, so reading the token there
+  // printed "SCHOOL" with no logo, no template, no code, and archived nothing.
+  return { ok: true, data, schoolId };
 };
 
 // ─────────────────────────────────────────────────────────
@@ -626,7 +806,14 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  return res.json({ success: true, data: built.data });
+  // The sections this card prints — the layout it was issued with, or the
+  // school's current one — for a client that draws a card from this payload
+  // rather than printing the server's HTML (docs/39 §10). Beside the data,
+  // not inside it: the payload is what results produced, the layout is how
+  // the school chose to print it.
+  const layout = await reportLayout.layoutForSequenceCard({ schoolId: built.schoolId, examId, studentId });
+
+  return res.json({ success: true, data: built.data, layout: reportLayout.describe(layout) });
 });
 
 // ─────────────────────────────────────────────────────────
@@ -653,8 +840,11 @@ const getStudentReportCard = asyncHandler(async (req, res) => {
 // annual cards reach the same one — see the note there.
 const { coefficientFromWeight } = require("../services/subjectCoefficient.service");
 const { cardVerification } = require("../services/reportCardData.service");
-const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl } =
+const classStats = require("../services/classStats.service");
+const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers } =
   require("../services/reportCardData.service");
+// Which sections a card prints (docs/39 §10, Phase 2d).
+const reportLayout = require("../services/reportLayout.service");
 
 /**
  * Freeze what was just issued.
@@ -672,7 +862,7 @@ const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl } =
  * the report card they asked for.
  */
 const archiveGeneratedReport = ({
-  schoolId, examId, studentId, data, html, template, source, userId,
+  schoolId, examId, studentId, data, html, template, source, userId, layout,
 }) => {
   if (!schoolId) return;
 
@@ -696,6 +886,8 @@ const archiveGeneratedReport = ({
         studentId,
         templateId:      source === "template" ? String(template._id) : null,
         templateVersion: source === "template" ? template.version ?? 1 : 1,
+        // The sections it was printed with, so it reprints with them.
+        ...reportLayout.issuedFields(layout),
         renderedHtml:    html,
         variablePayload: data,
         term:            data.term         || null,
@@ -727,10 +919,15 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     });
   }
 
+  // The scoped exam's school, not the token's: the same school every read
+  // above was scoped to, and the only one a super_admin acting on a selected
+  // school actually has. For a school user the two are the same id.
+  const schoolId = built.schoolId;
+
   // Logo, motto and the official header's delegations come from the school's
   // settings (§2) — never hard-coded, and loaded by the one function all three
   // card routes share so they cannot select different fields from each other.
-  const letterhead = await loadSchoolForCard(req.user?.schoolId, req);
+  const letterhead = await loadSchoolForCard(schoolId, req);
   const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
 
   /**
@@ -744,7 +941,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
    */
   const verify = await cardVerification({
     data:        built.data,
-    schoolId:    req.user?.schoolId,
+    schoolId,
     studentId,
     documentKey: examId,
     req,
@@ -753,9 +950,18 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
   // Per-school template drives the layout when the school has one; the
   // built-in layout is the fallback, including when a template fails to render.
   const template = await loadReportTemplate(
-    req.user?.schoolId,
+    schoolId,
     req.query.templateId
   );
+
+  /*
+   * Which sections it prints (docs/39 §10). A card already issued prints
+   * with the layout it was issued with — a school that hides a section today
+   * does not change a card a family already holds. One issued before layouts
+   * existed prints every section, as it was issued. Anything else prints
+   * with the school's current layout, and records it if this is its issue.
+   */
+  const layout = await reportLayout.layoutForSequenceCard({ schoolId, examId, studentId });
 
   const rendered = renderReportCard(built.data, {
     lang,
@@ -764,10 +970,11 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     school: { ...letterhead.school, name: schoolName || "" },
     verify,
     template,
+    sections: layout.sections,
   });
 
   archiveGeneratedReport({
-    schoolId:  req.user?.schoolId,
+    schoolId,
     examId,
     studentId,
     data:      built.data,
@@ -775,6 +982,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
     template,
     source:    rendered.source,
     userId:    req.user?._id,
+    layout,
   });
 
   return res.json({
@@ -791,6 +999,9 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
       // Tokens in the school's template that the engine does not know. The
       // card still printed; this lets the UI tell the admin to fix the typo.
       ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
+      // The layout it printed with, and any switched-off section the school's
+      // template printed anyway because it does not gate it.
+      layout: reportLayout.describe(layout, rendered.source === "template" ? template : null),
     },
   });
 });
@@ -812,7 +1023,7 @@ const getStudentReportCardHtml = asyncHandler(async (req, res) => {
  */
 const reissueStudentReportCard = asyncHandler(async (req, res) => {
   const { examId, studentId } = req.params;
-  const schoolId = req.user?.schoolId;
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
 
   if (!schoolId) {
     return res.status(400).json({ success: false, error: "schoolId is required" });
@@ -823,8 +1034,11 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
   // deleted a reprint quietly no-ops against the dead row and the unique index
   // blocks a fresh insert — leaving the card unrecoverable. Reissue is the
   // explicit admin action, so it is the thing that may revive one.
+  // Scoped to the caller's school: the (examId, studentId) pair is unique
+  // across the platform, so without schoolId a foreign pair reissued — and
+  // overwrote — another school's frozen card.
   const existing = await GeneratedReport.findOne({
-    examId, studentId,
+    examId, studentId, schoolId,
   }).select("_id templateVersion deletedAt").lean();
 
   if (!existing) {
@@ -854,10 +1068,15 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
 
   const template = await loadReportTemplate(schoolId, req.body.templateId);
 
+  // A reissue is the deliberate act that supersedes an issued card, so it
+  // takes the school's CURRENT layout and records it (docs/39 §10).
+  const layout = { ...(await reportLayout.currentLayout(schoolId)) };
+
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
     template,
+    sections: layout.sections,
   });
 
   await GeneratedReport.updateOne(
@@ -866,6 +1085,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       $set: {
         templateId:      rendered.source === "template" ? String(template._id) : null,
         templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
+        ...reportLayout.issuedFields(layout),
         renderedHtml:    rendered.html,
         variablePayload: built.data,
         term:            built.data.term         || null,
@@ -893,6 +1113,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       templateId:      rendered.source === "template" ? String(template._id) : null,
       templateVersion: rendered.source === "template" ? template.version ?? 1 : null,
       ...(rendered.unknownTokens ? { unknownTokens: rendered.unknownTokens } : {}),
+      layout: reportLayout.describe(layout, rendered.source === "template" ? template : null),
     },
   });
 });
@@ -912,14 +1133,50 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     });
   }
 
-  const schoolId = req.user?.schoolId;
-  const out      = Number(outOf)    || 20;
-  const pass     = Number(passMark) || 10;
+  const out  = Number(outOf)    || 20;
+  const pass = Number(passMark) || 10;
 
-  const [exam, gradingConfig] = await Promise.all([
-    Exam.findById(examId).lean(),
-    GradingConfig.findOne({ schoolId }).lean(),
-  ]);
+  // Tenancy: the exam anchors the write. Exam.findById plus an unscoped
+  // { examId, studentId } lookup let a results.edit holder rewrite another
+  // school's summary from body numbers.
+  const scoped = await loadScopedExam(req, examId, req.body.schoolId);
+  if (!scoped) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+  const { exam, schoolId } = scoped;
+
+  if (!(await Student.exists({ _id: String(studentId), schoolId }))) {
+    return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // A teacher recomputes the summaries of the classes they teach and no
+  // other — the class-level question, because a summary spans every subject.
+  // Admins pass. Same boundary as the register.
+  if (req.user?.role === "teacher") {
+    const summaryClassId =
+      (await ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null })
+        .select("classId").lean())?.classId ||
+      (await StudentScore.findOne({ examId, studentId, schoolId, deletedAt: null })
+        .select("classId").lean())?.classId ||
+      exam.classId || null;
+    const ok = summaryClassId && await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id, schoolId, classId: summaryClassId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false, code: "CLASS_NOT_ASSIGNED",
+        error: "You are not assigned to this student's class",
+      });
+    }
+  }
+
+  // Lock and publication apply to a recomputed summary exactly as to a mark:
+  // a published card is not rewritten from body numbers without a recorded
+  // reason, and never by a teacher. This route had no guard.
+  const audit = await guardResultWrite(req, res, { examId, schoolId, studentId });
+  if (!audit) return;
+
+  const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
 
   let totalWeightedScore = 0;
   let totalCoefficients  = 0;
@@ -1044,7 +1301,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
   };
 
   const existing = await ResultSummary.findOne({
-    examId, studentId, deletedAt: null,
+    examId, studentId, schoolId, deletedAt: null,
   });
 
   let summary;
@@ -1059,7 +1316,7 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     // are schema-required; take them from the student's score rows, falling
     // back to the exam.
     const firstScore = await StudentScore.findOne({
-      examId, studentId, deletedAt: null,
+      examId, studentId, schoolId, deletedAt: null,
     })
       .select("classId schoolId studentName admissionNo className academicYear term")
       .lean();
@@ -1088,6 +1345,15 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
     });
     summary = created.toObject ? created.toObject() : created;
   }
+
+  await logResultChange(audit, {
+    entity:   "summary",
+    entityId: String(summary._id),
+    action:   existing ? "updated" : "created",
+    field:    "average",
+    oldValue: existing?.average ?? null,
+    newValue: average,
+  });
 
   console.log(
     `✅ Report card: student=${studentId}`,
@@ -1160,8 +1426,23 @@ const publishResults = asyncHandler(async (req, res) => {
   const { examId }  = req.params;
   const { classId } = req.body;
 
+  // ── Tenancy: publishing is per school, and the school is named ──────────
+  // The old filter matched { examId } across every school, so a foreign
+  // examId published another school's report cards, and the summary route
+  // below could retract one. A platform write names its school or nothing
+  // happens.
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const exam = await Exam.findOne({ _id: examId, schoolId }).select("_id").lean();
+  if (!exam) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
   // Publish all ResultSummary records for this exam
-  const filter = { examId, deletedAt: null };
+  const filter = { examId, schoolId, deletedAt: null };
   if (classId) filter.classId = classId;
 
   const result = await ResultSummary.updateMany(filter, {
@@ -1172,14 +1453,17 @@ const publishResults = asyncHandler(async (req, res) => {
   });
 
   // Also update the Exam status
-  await Exam.findByIdAndUpdate(examId, {
-    $set: {
-      status: "published",
-      resultsPublished: true,
-      resultsPublishedAt: new Date(),
-      publishedBy: req.user?._id || null,
-    },
-  });
+  await Exam.findOneAndUpdate(
+    { _id: examId, schoolId },
+    {
+      $set: {
+        status: "published",
+        resultsPublished: true,
+        resultsPublishedAt: new Date(),
+        publishedBy: req.user?._id || null,
+      },
+    }
+  );
 
   return res.json({
     success:   true,
@@ -1196,7 +1480,15 @@ const publishResult = asyncHandler(async (req, res) => {
   const { summaryId }      = req.params;
   const { publish = true } = req.body;
 
-  const summary = await ResultSummary.findById(summaryId);
+  // Tenancy: a summary id without a school names nothing. The old
+  // findById(summaryId) let a foreign id publish or retract another school's
+  // report card under a family that already holds it.
+  const schoolId = resolveSchoolId(req, req.body.schoolId);
+  if (!schoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const summary = await ResultSummary.findOne({ _id: summaryId, schoolId });
 
   if (!summary) {
     return res.status(404).json({
@@ -1269,15 +1561,136 @@ const upsertScore = asyncHandler(async (req, res) => {
     score, maxScore, isAbsent, isExempt, teacherRemark,
   } = req.body;
 
+  // ── Tenancy: the exam anchors the write ──────────────────────────────────
+  // The row's schoolId field is what the write RECORDS, not what authorises
+  // it. Without an in-school exam check, a results.edit holder could supply
+  // another school's exam/student/subject ids and mint a mark that feeds that
+  // school's pipeline; without the assignment check below, any teacher could
+  // do it to any class of their own school.
+  const callerSchoolId = resolveSchoolId(req, schoolId);
+  if (!callerSchoolId) {
+    return res.status(400).json({ success: false, error: "schoolId is required" });
+  }
+
+  const exam = await Exam.findOne({ _id: examId, schoolId: callerSchoolId })
+    .select("_id schoolId type")
+    .lean();
+  if (!exam) {
+    return res.status(404).json({ success: false, error: "Exam not found" });
+  }
+
+  if (!studentId || !subjectId) {
+    return res.status(400).json({ success: false, error: "studentId and subjectId are required" });
+  }
+  if (!(await Student.exists({ _id: String(studentId), schoolId: callerSchoolId }))) {
+    return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // ── The class and subject come from the exam, not the request ───────────
+  // The ExamSubject row is the exam's own statement of which class sits which
+  // subject. When one exists it decides the class (and the examSubjectId the
+  // row records); the body's classId is only consulted for an exam that
+  // carries no ExamSubject rows, and even then the class and the subject must
+  // both be this school's.
+  const examSubjectBase = {
+    examId, schoolId: callerSchoolId, subjectId: String(subjectId), deletedAt: null,
+  };
+  let examSubject = await ExamSubject.findOne({
+    ...examSubjectBase,
+    ...(examSubjectId ? { _id: String(examSubjectId) } : {}),
+    ...(!examSubjectId && classId ? { classId: String(classId) } : {}),
+  }).select("_id classId subjectId maxScore").lean();
+  if (!examSubject && !examSubjectId && classId) {
+    // The body named a class the exam does not sit this subject in; the
+    // exam's own row for the subject decides, if it has one.
+    examSubject = await ExamSubject.findOne(examSubjectBase)
+      .select("_id classId subjectId maxScore").lean();
+  }
+  if (examSubjectId && !examSubject) {
+    return res.status(404).json({ success: false, error: "Exam subject not found" });
+  }
+
+  const existing = await StudentScore.findOne({
+    examId, studentId, subjectId, schoolId: callerSchoolId,
+  });
+
+  const effectiveClassId = examSubject?.classId
+    ? String(examSubject.classId)
+    : String(classId || existing?.classId || "");
+  if (!effectiveClassId) {
+    return res.status(400).json({ success: false, error: "classId is required" });
+  }
+  if (!examSubject) {
+    const [classOk, subjectOk] = await Promise.all([
+      Class.exists({ _id: effectiveClassId, schoolId: callerSchoolId }),
+      Subject.exists({ _id: String(subjectId), schoolId: callerSchoolId }),
+    ]);
+    if (!classOk)   return res.status(404).json({ success: false, error: "Class not found" });
+    if (!subjectOk) return res.status(404).json({ success: false, error: "Subject not found" });
+  }
+
+  // The relationship, not just the capability — the same rule as the exam
+  // router's bulk sheet, quiz authoring and homework: a teacher writes marks
+  // for the (class, subject) pairs they are assigned, and for no other. Asked
+  // of the pair the exam names, before anything is written.
+  if (req.user?.role === "teacher") {
+    const ok = await teacherAssigned(TeacherAssignment, {
+      teacherId: req.user._id || req.user.id,
+      schoolId:  callerSchoolId,
+      classId:   effectiveClassId,
+      subjectId,
+    });
+    if (!ok) {
+      return res.status(403).json({
+        success: false,
+        code:    "SUBJECT_NOT_ASSIGNED",
+        error:   "You are not assigned to this class and subject",
+      });
+    }
+  }
+
+  /*
+   * ── A present pupil needs a real mark ───────────────────────────────────
+   *
+   * The same rule the bulk sheet applies, and for the same reason it gives:
+   * "a blank cell on a present student silently corrupts every average and
+   * grade computed from it". This route had no such guard, so a body with no
+   * `score` stored score: null with isAbsent false — and processResults turns
+   * that into a genuine ZERO in ResultSummary.subjectBreakdown
+   * (`score: effectiveScore ?? 0`), where nothing downstream can tell it from
+   * a mark the pupil actually earned. The report card prints it, the term
+   * average counts it, and the student intelligence layer reads it as a real
+   * collapse in the subject.
+   *
+   * Closed here, at the door, rather than by teaching every reader to guess
+   * what a zero meant. A pupil with no mark is recorded as absent or exempt,
+   * which the whole system already understands; the fallback below it stays
+   * as it is, now genuinely unreachable from either write path.
+   *
+   * After authorisation on purpose: somebody who may not write this mark
+   * learns that and nothing else.
+   */
+  const ceiling = Number(maxScore ?? examSubject?.maxScore ?? 100);
+  if (!isAbsent && !isExempt) {
+    const blank = score === null || score === undefined || score === "";
+    const value = Number(score);
+    if (blank || !Number.isFinite(value) || value < 0 || value > ceiling) {
+      return res.status(400).json({
+        success: false,
+        code:    "SCORE_REQUIRED",
+        error:   `A present student needs a mark between 0 and ${ceiling}. ` +
+                 `Record the student as absent or exempt if there is no mark.`,
+      });
+    }
+  }
+
   const audit = await guardResultWrite(req, res, {
     examId,
-    schoolId: schoolId || req.user?.schoolId,
+    schoolId: callerSchoolId,
     studentId,
     subjectId,
   });
   if (!audit) return;
-
-  const existing = await StudentScore.findOne({ examId, studentId, subjectId });
 
   if (existing) {
     // Snapshot before Object.assign mutates the document in place.
@@ -1331,8 +1744,8 @@ const upsertScore = asyncHandler(async (req, res) => {
   }
 
   const newScore = await StudentScore.create({
-    examId, examSubjectId, studentId,
-    subjectId, classId, schoolId,
+    examId, examSubjectId: examSubject?._id ?? examSubjectId ?? null, studentId,
+    subjectId, classId: effectiveClassId, schoolId: callerSchoolId,
     score,
     maxScore:      maxScore      ?? 100,
     isAbsent:      isAbsent      ?? false,
@@ -1364,7 +1777,14 @@ const upsertScore = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 const deleteScore = asyncHandler(async (req, res) => {
-  const score = await StudentScore.findById(req.params.scoreId);
+  // Tenancy: scoped to the CALLER's school. The old lookup trusted the row's
+  // own schoolId — which is exactly what it then handed to the guard — so a
+  // foreign score id deleted another school's mark.
+  const callerSchoolId = resolveSchoolId(req);
+  const score = await StudentScore.findOne({
+    _id: req.params.scoreId,
+    ...(callerSchoolId ? { schoolId: callerSchoolId } : {}),
+  });
 
   if (!score) {
     return res.status(404).json({
@@ -1439,6 +1859,10 @@ const getResultHistory = asyncHandler(async (req, res) => {
 // ─────────────────────────────────────────────────────────
 
 module.exports = {
+  // The payload every report-card route is built from, exported so the CA
+  // rules can be asserted against the thing a card is actually made of rather
+  // than against a hand-written imitation of it.
+  buildStudentReportCardData,
   getExamResults,
   getExamStats,
   getExamRankings,

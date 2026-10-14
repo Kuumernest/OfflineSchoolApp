@@ -120,12 +120,16 @@ const applyRateLimit = (req, res, next) => {
   next();
 };
 
+// Housekeeping only: sweep expired buckets. unref() so the sweeper never keeps a
+// process alive on its own — the HTTP server holds the loop while it runs, and
+// anything that merely requires this router (a check, a script) can exit. The
+// verify router's sweeper already does this.
 setInterval(() => {
   const now = Date.now();
   for (const [ip, entry] of rateLimitStore) {
     if (now > entry.resetAt) rateLimitStore.delete(ip);
   }
-}, RATE_WINDOW_MS);
+}, RATE_WINDOW_MS).unref();
 
 // ═════════════════════════════════════════════════════════════════════════════
 // SECTION 4 — FILE HANDLING
@@ -147,13 +151,33 @@ const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
 ]);
 
+/**
+ * The stored extension follows the declared type, never the client's filename.
+ *
+ * Files land under /uploads/applications, which express.static serves with a
+ * Content-Type taken from the extension. Keeping path.extname(originalname)
+ * meant a body of { name: "x.html", mimeType: "image/png" } was stored as
+ * x.html and served as a page from the API's own origin. A type outside the
+ * table is stored as .bin and served as an octet-stream.
+ */
+const EXTENSION_BY_MIME = {
+  "image/jpeg": ".jpg", "image/jpg": ".jpg", "image/png": ".png",
+  "image/webp": ".webp", "image/heic": ".heic", "image/heif": ".heif",
+  "application/pdf": ".pdf",
+};
+const extensionFor = (mime) =>
+  EXTENSION_BY_MIME[String(mime || "").trim().toLowerCase()] || ".bin";
+
+/** A search term is a literal, not a pattern. */
+const escapeRegex = (value) => String(value).replace(/\0/g, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
 // ── Multer (multipart/form-data fallback) ─────────────────────────────────────
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename:    (_req, file, cb) => {
     const unique = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const ext    = path.extname(file.originalname).toLowerCase() || ".bin";
+    const ext    = extensionFor(file.mimetype);
     cb(null, `${unique}${ext}`);
   },
 });
@@ -226,7 +250,7 @@ const validateBase64File = (f, index) => {
  * a document metadata object compatible with the StudentApplication schema.
  */
 const saveBase64File = (f) => {
-  const ext      = path.extname(f.name).toLowerCase() || ".bin";
+  const ext      = extensionFor(f.mimeType);
   const unique   = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
   const filename = `${unique}${ext}`;
   const filePath = path.join(UPLOAD_DIR, filename);
@@ -295,10 +319,10 @@ router.get(
       });
     }
 
-    const page   = Math.max(1, parseInt(req.query.page  ?? "1",  10));
-    const limit  = Math.max(1, Math.min(100, parseInt(req.query.limit ?? "20", 10)));
+    const page   = Math.max(1, parseInt(req.query.page  ?? "1",  10) || 1);
+    const limit  = Math.max(1, Math.min(100, parseInt(req.query.limit ?? "20", 10) || 20));
     const skip   = (page - 1) * limit;
-    const search = String(req.query.search || "").trim();
+    const search = escapeRegex(String(req.query.search || "").trim().slice(0, 100));
 
     const schoolAndClauses = buildAndClauses(
       search ? {
@@ -406,6 +430,12 @@ router.get(
     const School = getSchool();
     if (!School) return sendError(res, 404, "School not found");
 
+    // A value that could never be a school id is a 404, not a cast error
+    // surfacing as a 500 with the model's name in it.
+    if (!/^[a-f\d]{24}$/i.test(String(req.params.id))) {
+      return sendError(res, 404, "School not found");
+    }
+
     const school = await School.findOne({
       $and: buildAndClauses({ _id: req.params.id }),
     })
@@ -499,7 +529,7 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
   if (!studentName?.trim())  errors.push("Student name is required");
   if (!guardianName?.trim()) errors.push("Guardian name is required");
   if (!phone?.trim())        errors.push("Phone number is required");
-  if (!classId?.trim())      errors.push("Please select a class");
+  if (!(typeof classId === "string" ? classId.trim() : ""))      errors.push("Please select a class");
   if (!schoolId?.trim())     errors.push("Please select a school");
   if (!email?.trim()) {
     errors.push("Email address is required");
@@ -522,8 +552,10 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
   // ── Verify school ───────────────────────────────────────────────────────────
   const School = getSchool();
   if (School) {
+    // applicationsOpen is the switch the school's administrator throws to
+    // close admissions; the message below always claimed to honour it.
     const school = await School.findOne({
-      $and: buildAndClauses({ _id: schoolId.trim() }),
+      $and: buildAndClauses({ _id: schoolId.trim(), applicationsOpen: { $ne: false } }),
     }).lean();
 
     if (!school) {
@@ -618,32 +650,23 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
 
   if (existing) {
 
-    if (existing.status === "approved") {
-      // This exact student is already enrolled
+    // ── One answer for every duplicate ─────────────────────────────────────
+    // This endpoint is public. "Already enrolled" and "already under review"
+    // told anyone who typed a child's name and a parent's email whether that
+    // child is at this school, and the pending branch handed over the
+    // application's id. Both now answer exactly as a new application does.
+    // Nothing is created either way. A pending application keeps its id (the
+    // family already holds it); an enrolled pupil's answer carries an id that
+    // resolves to nothing, so it cannot be traded for an enrolment number.
+    if (existing.status === "approved" || existing.status === "pending") {
       if (!isJson) cleanupFiles(req.files);
       cleanupFiles(savedDocs.map((d) => ({ path: d.path })));
-      return sendError(
-        res, 409,
-        "This student is already enrolled at this school. " +
-        "Please log in with your enrollment number.",
-        { status: "approved", detail: "already_enrolled" }
-      );
-    }
-
-    if (existing.status === "pending") {
-      // Application already under review
-      if (!isJson) cleanupFiles(req.files);
-      cleanupFiles(savedDocs.map((d) => ({ path: d.path })));
-      return sendError(
-        res, 409,
-        "An application for this student is already under review. " +
-        "You will be notified once it is processed.",
-        {
-          status:        "pending",
-          applicationId: String(existing._id),
-          detail:        "already_pending",
-        }
-      );
+      return sendSuccess(res, {
+        message:       "Application submitted successfully",
+        applicationId: existing.status === "pending"
+          ? String(existing._id)
+          : require("crypto").randomUUID(),
+      }, 201);
     }
 
     // status === "rejected" — re-application allowed
@@ -683,8 +706,9 @@ const handleApplyRequest = asyncHandler(async (req, res) => {
       `[${docsToAdd.length} new doc(s), ${mergedDocs.length} total]`
     );
 
+    // Same words as a first submission — see the duplicate note above.
     return sendSuccess(res, {
-      message:       "Application re-submitted successfully",
+      message:       "Application submitted successfully",
       applicationId: String(existing._id),
     }, 201);
   }
@@ -750,10 +774,19 @@ router.post(
 router.use((err, req, res, _next) => {
   console.error("Unhandled error in public.routes.js:", err);
   cleanupFiles(req.files);
+  // The message stays in the log. Every caller here is anonymous, and
+  // err.message carried Mongoose cast errors — model and field names — and
+  // whatever an exception happened to say. A malformed value is the caller's
+  // to fix (400); anything else is ours (500), and neither says more than that.
+  const malformed =
+    err?.name === "CastError" || err?.name === "ValidationError" ||
+    err?.name === "BSONError" || err?.type === "entity.parse.failed";
   return sendError(
     res,
-    500,
-    err.message || "An unexpected error occurred. Please try again.",
+    malformed ? 400 : 500,
+    malformed
+      ? "The request contains an invalid value. Please check the form and try again."
+      : "An unexpected error occurred. Please try again.",
     process.env.NODE_ENV === "development" ? { stack: err.stack } : {}
   );
 });

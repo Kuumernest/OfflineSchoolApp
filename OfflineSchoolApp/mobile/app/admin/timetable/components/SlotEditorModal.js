@@ -26,6 +26,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SubjectService } from "../../../../src/services/subject.service";
 import { TeacherService  } from "../../../../src/services/teacher.service";
 import { useTranslation } from "../../../../src/i18n/useTranslation";
+import { i18n } from "../../../../src/i18n";
 import { errorText } from "../../../../src/utils/appError";
 
 const { height: SCREEN_HEIGHT } = Dimensions.get("window");
@@ -117,7 +118,7 @@ const normalizeSubjects = (result) => {
       raw.subjectName, raw.subject_name,
       nested?.name, nested?.label,
       raw.name, raw.label, raw.code,
-    ) ?? "Unnamed subject";
+    ) ?? i18n.t("ttAdmin.unnamedSubject");
     out.push({ id, name });
   }
   return out;

@@ -109,7 +109,7 @@ const outbox = (db) => {
      */
     add({
       method, path, body = null, collection = null, docId = null,
-      idemKey = null, dedupeKey = null, extraDocs = null,
+      idemKey = null, dedupeKey = null, extraDocs = null, userId = null,
     }) {
       // Never derived from the document: two operations on one document are two
       // operations, and the server must be able to tell them apart.
@@ -133,14 +133,15 @@ const outbox = (db) => {
       const res = db.prepare(`
         INSERT INTO outbox
           (idem_key, dedupe_key, method, path, body, collection, doc_id,
-           extra_docs, created_at, next_try_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           extra_docs, created_at, next_try_at, user_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         key, dedupeKey, method.toUpperCase(), path,
         body === null ? null : JSON.stringify(body),
         collection, docId,
         extraDocs?.length ? JSON.stringify(extraDocs) : null,
-        nowIso(), nowIso()
+        nowIso(), nowIso(),
+        userId ? String(userId) : null
       );
 
       return { seq: Number(res.lastInsertRowid), duplicate: false };
@@ -153,23 +154,41 @@ const outbox = (db) => {
      * strict ordering above. Also stops at anything not yet due, because the
      * queue is a line: if the head is backing off, the rest waits with it.
      */
-    nextBatch(limit = 25) {
-      const rows = db.prepare(
-        "SELECT * FROM outbox ORDER BY seq ASC LIMIT ?"
-      ).all(limit);
+    nextBatch(limit = 25, { userId = null } = {}) {
+      // With an account named, only that account's line. Another account's
+      // rows are not this queue's business and are left untouched — and so is
+      // a row with no owner at all (queued before migration 4): nobody can say
+      // whose it is, so it is never sent and never adopted by whoever signed in.
+      // OWNERLESS QUEUED MUTATIONS MUST NEVER BE EXECUTED UNDER A DIFFERENT
+      // ACCOUNT. Without an account named (tests, tooling) the line is read as
+      // it always was.
+      const rows = userId
+        ? db.prepare(
+            "SELECT * FROM outbox WHERE user_id = ? ORDER BY seq ASC LIMIT ?"
+          ).all(String(userId), limit)
+        : db.prepare("SELECT * FROM outbox ORDER BY seq ASC LIMIT ?").all(limit);
 
       const due = [];
       for (const row of rows) {
         if (row.status === "blocked") break;
         if (row.next_try_at && row.next_try_at > nowIso()) break;
-        due.push({
-          ...row,
-          seq:  Number(row.seq),
-          body: row.body ? JSON.parse(row.body) : null,
+        let body, extraDocs;
+        try {
+          body      = row.body ? JSON.parse(row.body) : null;
           // Parsed here rather than in the engine: the engine's job is to decide
           // what to do with them, not to know how they are stored.
-          extraDocs: row.extra_docs ? JSON.parse(row.extra_docs) : [],
-        });
+          extraDocs = row.extra_docs ? JSON.parse(row.extra_docs) : [];
+        } catch (err) {
+          // A row whose body cannot be read cannot be sent, ever. Parked as
+          // blocked with the reason, and the queue stops behind it as it does
+          // for any refusal — a person can discard it. Throwing here instead
+          // ended every cycle at this row, and nothing behind it ever moved.
+          db.prepare(
+            "UPDATE outbox SET status='blocked', last_error=?, next_try_at=NULL WHERE seq=?"
+          ).run(`Malformed request body could not be parsed: ${err.message}`.slice(0, 500), row.seq);
+          break;
+        }
+        due.push({ ...row, seq: Number(row.seq), body, extraDocs });
       }
       return due;
     },
@@ -249,6 +268,9 @@ const outbox = (db) => {
       return {
         pending: counts.find((c) => c.status === "pending")?.n ?? 0,
         blocked: blocked.length,
+        // Rows from before ownership was recorded. No account will ever send
+        // them; a person recovers or discards them from the sync screen.
+        ownerless: db.prepare("SELECT COUNT(*) AS n FROM outbox WHERE user_id IS NULL").get()?.n ?? 0,
         // Named, not just counted. "3 changes could not be saved" is not
         // something a bursar can act on; "the payment for Ada Nkeng was
         // refused because the fee structure was deactivated" is.

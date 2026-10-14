@@ -23,6 +23,8 @@
  *   node scripts/check-conflicts.js
  */
 
+const { stopQuietly } = require("./stopQuietly");
+
 const express  = require("express");
 const mongoose = require("mongoose");
 const jwt      = require("jsonwebtoken");
@@ -90,6 +92,12 @@ const bad = (label, detail) => {
   await mk("bur-1", "bursar",  "Bursar");
 
   await Class.create({ _id: "cls-1", schoolId: S, name: "Form 1" });
+  // Both teachers teach Maths to Form 1: the mark sheet now asks the
+  // (class, subject) pair of TeacherAssignment (docs/20 N2).
+  await mongoose.model("TeacherAssignment").create([
+    { schoolId: S, teacher: "tea-1", class: "cls-1", subject: "sub-1" },
+    { schoolId: S, teacher: "tea-2", class: "cls-1", subject: "sub-1" },
+  ]);
   await Subject.create({ _id: "sub-1", schoolId: S, classId: "cls-1", name: "Maths" })
     .catch(() => {});
   await Student.create({
@@ -337,6 +345,6 @@ const bad = (label, detail) => {
 
   server.close();
   await mongoose.disconnect();
-  await mongo.stop();
+  await stopQuietly(mongo);
   process.exitCode = fail ? 1 : 0;
 })().catch((err) => { console.error("check failed:", err); process.exit(1); });

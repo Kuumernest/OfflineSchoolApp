@@ -1,6 +1,7 @@
 // web/src/components/applications/DocumentCard.tsx
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 import type { ApplicationDocument } from "../../types/applications";
 
 interface DocumentCardProps {
@@ -13,7 +14,9 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
   doc,
   index,
   onOpen,
-}) => (
+}) => {
+  const { t } = useTranslation();
+  return (
   <button
     onClick={() => onOpen(doc)}
     className="flex items-center gap-3 w-full bg-gray-50 border border-gray-200
@@ -42,10 +45,10 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
     {/* Text */}
     <div className="flex-1 min-w-0">
       <p className="text-sm font-semibold text-gray-900 truncate">
-        {doc.title || `Document ${index + 1}`}
+        {doc.title || t("admissions.documentN", { n: index + 1 })}
       </p>
       <p className="text-xs text-gray-400 truncate mt-0.5">
-        {doc.type || "Attached document"}
+        {doc.type || t("admissions.attachedDocument")}
       </p>
     </div>
 
@@ -65,4 +68,5 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({
       />
     </svg>
   </button>
-);
+  );
+};

@@ -181,7 +181,7 @@ export default function SyncOverwritesScreen() {
 
     Alert.alert(
       t("syncScreens.markAllSeen"),
-      `Mark all ${unseenCount} overwrite${unseenCount > 1 ? "s" : ""} as seen? This will clear the dashboard alert.`,
+      t("syncScreens.markAllSeenBody", { count: unseenCount }),
       [
         { text: t("common.cancel"), style: "cancel" },
         {

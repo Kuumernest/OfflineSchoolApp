@@ -267,7 +267,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
             </Text>
             <View style={styles.scorePassMark}>
               <Text style={styles.scorePassMarkText}>
-                Pass mark: {quiz?.passing_score ?? 70}%
+                {t("studentQuiz.passMarkValue", { value: quiz?.passing_score ?? 70 })}
               </Text>
             </View>
           </View>
@@ -335,7 +335,7 @@ const ResultScreen = ({ result, quiz, onClose }) => {
               color="#4F46E5"
             />
             <Text style={styles.reviewToggleText}>
-              {showAnswers ? t("studentQuiz.hide") : t("studentQuiz.review")} Answers
+              {showAnswers ? t("studentQuiz.hideAnswers") : t("studentQuiz.reviewAnswers")}
             </Text>
           </TouchableOpacity>
         )}
@@ -683,7 +683,7 @@ export default function AttemptScreen() {
     if (unanswered > 0) {
       Alert.alert(
         t("studentQuiz.submitTitle"),
-        `You have ${unanswered} unanswered question${unanswered !== 1 ? "s" : ""}. Are you sure you want to submit?`,
+        t("studentQuiz.unansweredConfirm", { count: unanswered }),
         [
           { text: t("studentQuiz.keepGoing"), style: "cancel" },
           { text: t("studentQuiz.submit"),     style: "destructive", onPress: doSubmit },
@@ -825,10 +825,7 @@ export default function AttemptScreen() {
             <View style={styles.pointsBadge}>
               <Ionicons name="star" size={11} color="#D97706" />
               <Text style={styles.pointsBadgeText}>
-                {currentQ.points_override ?? currentQ.points} pt
-                {(currentQ.points_override ?? currentQ.points) !== 1
-                  ? "s"
-                  : ""}
+                {t("studentQuiz.pointCount", { count: currentQ.points_override ?? currentQ.points })}
               </Text>
             </View>
           )}

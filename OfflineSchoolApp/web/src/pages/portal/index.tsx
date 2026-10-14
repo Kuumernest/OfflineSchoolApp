@@ -33,7 +33,7 @@ import { cn }          from "@/utils/cn";
 import { printHtml }   from "@/print/document";
 import { resolveLogoSrc } from "@/utils/logoSrc";
 import {
-  portalLogin, getPortalToken, setPortalToken, clearPortalToken,
+  portalLogin, portalLogout, hasPortalSession, setPortalSession,
   fetchMe, fetchFees, fetchResults, fetchAttendance, fetchAnnouncements,
   fetchFeeReminders, fetchNotifications,
   fetchReceiptHtml,
@@ -78,7 +78,8 @@ export default function ParentPortalPage() {
   const fmt = useFormat();
   const qc  = useQueryClient();
 
-  const [signedIn, setSignedIn] = useState(Boolean(getPortalToken()));
+  // A session, not an access token: the client renews the latter on its own.
+  const [signedIn, setSignedIn] = useState(hasPortalSession());
   const [tab, setTab]           = useState<Tab>("fees");
   // Null means "whichever the server picks first" — what a one-child parent
   // gets, and never has to think about.
@@ -91,7 +92,7 @@ export default function ParentPortalPage() {
   const [printing, setPrinting]       = useState<string | null>(null);
 
   const signOut = () => {
-    clearPortalToken();
+    void portalLogout();
     setSignedIn(false);
     setChildId(null);
     qc.clear();
@@ -157,8 +158,7 @@ export default function ParentPortalPage() {
     setBusy(true);
     setError(null);
     try {
-      const { token } = await portalLogin(admissionNo.trim(), code.trim());
-      setPortalToken(token);
+      setPortalSession(await portalLogin(admissionNo.trim(), code.trim()));
       setSignedIn(true);
       setChildId(null);
       setCode("");
@@ -664,7 +664,7 @@ export default function ParentPortalPage() {
                             )}
                           </div>
                           <p className="text-sm font-medium text-ink truncate">
-                            {p.subjectName ?? "General"}
+                            {p.subjectName ?? t("portal.general")}
                           </p>
                         </div>
                         <Badge
@@ -704,7 +704,7 @@ export default function ParentPortalPage() {
                         <li key={i} className="flex items-center gap-3 px-4 py-2.5">
                           <div className="min-w-0 flex-1">
                             <p className="text-sm font-medium text-ink truncate">
-                              {s.subjectName ?? "General"}
+                              {s.subjectName ?? t("portal.general")}
                             </p>
                             <p className="text-[11px] text-ink-faint">
                               {s.present}P · {s.absent}A · {s.late}L · {s.excused}E

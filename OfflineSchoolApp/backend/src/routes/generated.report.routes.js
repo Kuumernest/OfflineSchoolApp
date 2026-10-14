@@ -30,12 +30,16 @@ const writeReports = requirePermission("reports.manage");
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) {
-    return String(provided).trim();
-  }
-  return req.user?.schoolId;
-};
+const tenant = require("../utils/tenant");
+
+// The canonical rule, so a handler and the guard below agree on the school.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
+
+// Several handlers below scope with `...(schoolId ? { schoolId } : {})`, which
+// with no school is no filter at all: a caller with none read, unpublished or
+// deleted any school's issued card by id. Refused here instead (docs/39 §17.2,
+// Phase 2e).
+router.use(tenant.requireSchool());
 
 // ─────────────────────────────────────────────────────────
 // POST /api/generated-reports
@@ -75,9 +79,24 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
     });
   }
 
-  // Upsert — one record per student per exam
+  // The exam and the pupil are this school's. The unique index on
+  // (examId, studentId) spans the platform, so the old filter { examId,
+  // studentId } MATCHED another school's row when given its ids — and the
+  // $set below then re-parented that row to this school with new HTML.
+  {
+    const Exam    = require("../db/models/Exam");
+    const Student = require("../db/models/Student");
+    const [examOk, studentOk] = await Promise.all([
+      examId ? Exam.exists({ _id: String(examId), schoolId: resolvedSchoolId }) : Promise.resolve(true),
+      Student.exists({ _id: String(studentId), schoolId: resolvedSchoolId }),
+    ]);
+    if (!examOk)    return res.status(404).json({ success: false, error: "Exam not found" });
+    if (!studentOk) return res.status(404).json({ success: false, error: "Student not found" });
+  }
+
+  // Upsert — one record per student per exam, within this school
   const filter = examId
-    ? { examId, studentId }
+    ? { examId, studentId, schoolId: resolvedSchoolId }
     : { studentId, term, academicYear, schoolId: resolvedSchoolId };
 
   const update = {
@@ -100,11 +119,21 @@ router.post("/", writeReports, asyncHandler(async (req, res) => {
     },
   };
 
-  const report = await GeneratedReport.findOneAndUpdate(
-    filter,
-    update,
-    { upsert: true, returnDocument: 'after' }
-  ).lean();
+  let report;
+  try {
+    report = await GeneratedReport.findOneAndUpdate(
+      filter,
+      update,
+      { upsert: true, returnDocument: 'after' }
+    ).lean();
+  } catch (err) {
+    // The scoped filter found nothing, the insert hit the platform-wide unique
+    // index: the pair belongs to a row this school may not touch.
+    if (err?.code === 11000) {
+      return res.status(409).json({ success: false, code: "REPORT_EXISTS", error: "A report card for this exam and student already exists" });
+    }
+    throw err;
+  }
 
   console.log(
     `📄 GeneratedReport saved: student=${studentId}`,
@@ -156,7 +185,7 @@ router.get("/", readReports, asyncHandler(async (req, res) => {
     filter.isPublished = isPublished === "true";
   }
 
-  const skip  = (Number(page) - 1) * Number(limit);
+  const skip  = (Number(page) - 1) * Number(limit); if (!(skip >= 0) || !(Number(limit) >= 1)) return res.status(400).json({ success: false, error: "page and limit must be positive integers" });
   const total = await GeneratedReport.countDocuments(filter);
 
   const reports = await GeneratedReport.find(filter)

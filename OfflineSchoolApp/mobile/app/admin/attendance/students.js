@@ -68,7 +68,7 @@ const PeriodSelector = ({ schoolId, selected, onSelect }) => {
   return (
     <View style={{ paddingHorizontal: 16, paddingVertical: 8, backgroundColor: "#FFF", borderBottomWidth: 1, borderBottomColor: "#F3F4F6" }}>
       <Text style={{ fontSize: 12, fontWeight: "600", color: "#6B7280", marginBottom: 6 }}>
-        {t("attAdmin.selectPeriod", "Select period")}
+        {t("attAdmin.selectPeriod")}
       </Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>
         <TouchableOpacity
@@ -80,7 +80,7 @@ const PeriodSelector = ({ schoolId, selected, onSelect }) => {
           activeOpacity={0.7}
         >
           <Text style={[ps.chipText, !selected && ps.chipTextActive]}>
-            {t("attAdmin.allPeriods", "All")}
+            {t("attAdmin.allPeriods")}
           </Text>
         </TouchableOpacity>
         {periods.filter(p => p.isActive !== false).map((p) => (
@@ -222,7 +222,7 @@ const ClassSelector = ({ schoolId, onSelect }) => {
       </View>
 
       <Text style={cs.hint}>
-        {filtered.length} class{filtered.length !== 1 ? "es" : ""} · tap to mark attendance
+        {t("attAdmin.classCountHint", { count: filtered.length })}
       </Text>
 
       <ScrollView
@@ -420,10 +420,9 @@ const MarkAttendance = React.forwardRef(({
 
         Alert.alert(
           t("attAdmin.savedTitle"),
-          `Attendance saved for ${records.length} student(s).${
-            unmarked > 0 ? `\n${unmarked} student(s) not marked.` : ""
-          }`,
-          [{ text: "OK", onPress: onSaved }]
+          t("attAdmin.savedForStudents", { count: records.length }) +
+            (unmarked > 0 ? `\n${t("attTeacher.notMarked", { count: unmarked })}` : ""),
+          [{ text: t("common.ok"), onPress: onSaved }]
         );
       } catch (err) {
         Alert.alert(t("attAdmin.saveFailed"), errorText(t, err, "attAdmin.pleaseTryAgain"));
@@ -435,9 +434,9 @@ const MarkAttendance = React.forwardRef(({
     if (unmarked > 0) {
       Alert.alert(
         t("attAdmin.unmarkedStudentsTitle"),
-        `${unmarked} student(s) have not been marked. Save anyway?`,
+        t("attTeacher.unmarkedConfirm", { count: unmarked }),
         [
-          { text: "Cancel",      style: "cancel" },
+          { text: t("common.cancel"), style: "cancel" },
           { text: t("attAdmin.saveAnyway"), onPress: doSave  },
         ]
       );

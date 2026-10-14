@@ -1,6 +1,7 @@
 // web/src/components/applications/ErrorBanner.tsx
 
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 interface ErrorBannerProps {
   message: string;
@@ -10,7 +11,9 @@ interface ErrorBannerProps {
 export const ErrorBanner: React.FC<ErrorBannerProps> = ({
   message,
   onRetry,
-}) => (
+}) => {
+  const { t } = useTranslation();
+  return (
   <div
     className="flex items-center gap-3 bg-red-50 border border-red-200
                rounded-xl px-4 py-3 mb-4 mt-2"
@@ -35,7 +38,8 @@ export const ErrorBanner: React.FC<ErrorBannerProps> = ({
       className="text-sm text-red-600 font-bold hover:underline
                  focus:outline-none focus:ring-2 focus:ring-red-400 rounded"
     >
-      Retry
+      {t("common.retry")}
     </button>
   </div>
-);
+  );
+};

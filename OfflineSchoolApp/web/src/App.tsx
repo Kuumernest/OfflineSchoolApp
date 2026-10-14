@@ -36,6 +36,9 @@ const ChangePassword   = lazy(() => import("@/pages/auth/ChangePasswordPage"));
 const DashboardPage    = lazy(() => import("@/pages/dashboard/DashboardPage"));
 const BursarDashboard  = lazy(() => import("@/pages/dashboard/BursarDashboardPage"));
 const WatchlistPage    = lazy(() => import("@/pages/insights/watchlist"));
+const ClassIntelPage   = lazy(() => import("@/pages/insights/class-intelligence"));
+const IntelReviewPage  = lazy(() => import("@/pages/insights/intelligence-review"));
+const StrengthsPage    = lazy(() => import("@/pages/insights/student-strengths"));
 
 const StudentsPage     = lazy(() => import("@/pages/students/StudentsPage"));
 const StudentDetail    = lazy(() => import("@/pages/students/StudentDetailPage"));
@@ -98,6 +101,15 @@ const PortalCodesPage  = lazy(() => import("@/pages/portal/codes"));
 const ParentPortalPage = lazy(() => import("@/pages/portal/index"));
 const NotFoundPage     = lazy(() => import("@/pages/NotFoundPage"));
 
+// The platform: above any school. super_admin only — see navigation.ts.
+const PlatformDashboard    = lazy(() => import("@/pages/platform/PlatformDashboardPage"));
+const PlatformSchools      = lazy(() => import("@/pages/platform/SchoolsPage"));
+const PlatformSchoolDetail = lazy(() => import("@/pages/platform/SchoolDetailPage"));
+const PlatformPerformance  = lazy(() => import("@/pages/platform/PerformancePage"));
+const PlatformReports      = lazy(() => import("@/pages/platform/ReportsPage"));
+const PlatformAudit        = lazy(() => import("@/pages/platform/AuditLogPage"));
+const PlatformSettings     = lazy(() => import("@/pages/platform/PlatformSettingsPage"));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,6 +155,9 @@ const TEACHING: UserRole[] = ["super_admin", "school_admin", "teacher"];
 /** Anyone the school employs. Reads, and messages. */
 const STAFF: UserRole[] = ["super_admin", "school_admin", "bursar", "teacher"];
 
+/** Above any school: the operator of the deployment. Mirrors PLATFORM_ROLES. */
+const PLATFORM: UserRole[] = ["super_admin"];
+
 /** Wraps a group of routes in one role gate. */
 const gate = (roles: UserRole[]) => (
   <RequireRole roles={roles}>
@@ -162,7 +177,11 @@ const gate = (roles: UserRole[]) => (
  * the app keep working without any of them knowing the role.
  */
 function DashboardHome() {
-  const role = useAuthStore((s) => s.user?.role);
+  const role         = useAuthStore((s) => s.user?.role);
+  const activeSchool = useAuthStore((s) => s.activeSchool);
+  // The operator lands on the platform until they step into a school; inside
+  // one they get that school's dashboard like its own administrator would.
+  if (role === "super_admin" && !activeSchool) return <Navigate to="/platform" replace />;
   return role === "bursar" ? <BursarDashboard /> : <DashboardPage />;
 }
 
@@ -216,6 +235,17 @@ export default function App() {
 
           <Route index element={<Navigate to="/dashboard" replace />} />
 
+          {/* ── The platform: above any school ─────────────────────────── */}
+          <Route element={gate(PLATFORM)}>
+            <Route path="/platform"                   element={page(<PlatformDashboard />)} />
+            <Route path="/platform/schools"           element={page(<PlatformSchools />)} />
+            <Route path="/platform/schools/:schoolId" element={page(<PlatformSchoolDetail />)} />
+            <Route path="/platform/performance"       element={page(<PlatformPerformance />)} />
+            <Route path="/platform/reports"           element={page(<PlatformReports />)} />
+            <Route path="/platform/audit"             element={page(<PlatformAudit />)} />
+            <Route path="/platform/settings"          element={page(<PlatformSettings />)} />
+          </Route>
+
           {/* Every member of staff has a dashboard; which one is by role. */}
           <Route element={gate(STAFF)}>
             <Route path="/dashboard" element={page(<DashboardHome />)} />
@@ -268,13 +298,28 @@ export default function App() {
 
           {/* ── Academic work ──────────────────────────────────────────── */}
           <Route element={gate(TEACHING)}>
+            {/*
+              The student intelligence pages are the staffroom's, and the
+              navigation has always offered them to teachers — but they sat in
+              the OFFICE gate, where a teacher who followed the link was turned
+              back. The API decides the rest: insights.viewTaught is a TEACHING
+              capability and every pupil route scopes a teacher to their own
+              classes (a pupil outside them is 403), so this gate is only "is
+              this your business at all". The bursar is out, as on the API.
+            */}
+            {/* The teacher loop: evidence → guidance → action → outcome. */}
+            <Route path="/class-intelligence" element={page(<ClassIntelPage />)} />
+            {/* Calibration: a teacher judges what the engine said, without seeing
+                what colleagues said until they have answered themselves. */}
+            <Route path="/intelligence-review" element={page(<IntelReviewPage />)} />
+            {/* Strengths, exploration and the explanation layer, one pupil. */}
+            <Route path="/students/:studentId/strengths" element={page(<StrengthsPage />)} />
+
             {/* Students. The bursar may read a student record through the API
                 but not here: these are the admission and approval screens, and
                 they read from /admin/students, which is admin-only. */}
             <Route path="/students"              element={page(<StudentsPage />)} />
             <Route path="/students/new"          element={page(<AddStudentPage />)} />
-            <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
-            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
             {/* Last: ":id" would otherwise swallow "new" / "admissions". */}
             <Route path="/students/:id"          element={page(<StudentDetail />)} />
             <Route path="/students/:id/edit"     element={page(<EditStudentPage />)} />
@@ -306,6 +351,11 @@ export default function App() {
 
           {/* ── Governance, configuration, academic authority ───────────── */}
           <Route element={gate(ADMIN)}>
+            {/* Admission and application screens: students.admit is an ADMIN
+                capability on the server, and the navigation lists them for
+                administrators only; a teacher reaching them by URL met 403s. */}
+            <Route path="/students/admissions"   element={page(<AdmissionsPage />)} />
+            <Route path="/students/applications" element={page(<ApplicationsPage />)} />
             <Route path="/teachers"                    element={page(<TeachersPage />)} />
             <Route path="/teachers/new"                element={page(<AddTeacherPage />)} />
             <Route path="/teachers/assignments"        element={page(<AssignmentsPage />)} />

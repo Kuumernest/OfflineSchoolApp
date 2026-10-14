@@ -32,6 +32,21 @@ const { requirePermission } = require("../../middleware/permissions");
  */
 router.use(requirePermission("reports.manage"));
 
+const tenant = require("../utils/tenant");
+
+/**
+ * Every template, preview and issued-card list here is one school's. A request
+ * that resolves to no school is refused before any handler runs (docs/39
+ * §17.2, Phase 2e) — same 400 the layout routes below already gave.
+ *
+ * The two vocabularies are the same for every school and hold no school's
+ * data, so they stay readable without one.
+ */
+const SCHOOL_FREE = new Set(["GET /tokens", "GET /sections"]);
+const requireSchool = tenant.requireSchool();
+router.use((req, res, next) =>
+  SCHOOL_FREE.has(`${req.method} ${req.path}`) ? next() : requireSchool(req, res, next));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,12 +54,8 @@ router.use(requirePermission("reports.manage"));
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) {
-    return String(provided).trim();
-  }
-  return req.user?.schoolId;
-};
+// The canonical rule, so a handler and the guard above agree on the school.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
 
 const scanVariables = (html) => {
   const found = new Set();
@@ -177,6 +188,107 @@ router.post("/seed-default", asyncHandler(async (req, res) => {
 // GET /api/templates/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// REPORT-CARD LAYOUT — which sections this school's cards print
+// (docs/39 §10, Phase 2d; services/reportLayout.service.js)
+//
+//   GET  /api/templates/sections                 the supported sections
+//   GET  /api/templates/layout                   the school's current layout
+//   PUT  /api/templates/layout                   { sections: { id: bool } } → version n+1
+//   GET  /api/templates/layout/versions          every version, newest first
+//   GET  /api/templates/layout/versions/:version one version
+//
+// reports.manage, like every route here (ADMIN roles). The school is the
+// canonical resolver's (utils/tenant) — the caller's own, or the one a
+// super_admin names — and a request with no school is refused outright
+// rather than answered for no school or for every school. A write that
+// names another school is refused, not redirected.
+//
+// Presentation only: a layout decides which blocks a card PRINTS. It changes
+// no mark, result, rank, decision or intelligence evidence.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const reportLayout = require("../services/reportLayout.service");
+const { SECTIONS: REPORT_SECTIONS } = require("../../../shared/reportSections");
+
+/** The school a layout request is for, or a 400 already sent. */
+const layoutSchool = (req, res) => {
+  const schoolId = tenant.resolveSchoolId(req);
+  if (!schoolId) {
+    res.status(400).json({ success: false, code: "SCHOOL_REQUIRED", error: "A school must be selected" });
+    return null;
+  }
+  return schoolId;
+};
+
+const layoutError = (res, err) => {
+  if (err?.status && err.status < 500) {
+    return res.status(err.status).json({
+      success: false, code: err.code, error: err.message,
+      ...(err.details !== undefined ? { details: err.details } : {}),
+    });
+  }
+  throw err;
+};
+
+/** The school's default token template, for the "cannot hide" warning. */
+const defaultTemplateOf = (schoolId) =>
+  ReportTemplate.findOne({ schoolId, isDefault: true, deletedAt: null }).select("_id html").lean();
+
+router.get("/sections", asyncHandler(async (_req, res) => {
+  res.json({
+    success: true,
+    sections: REPORT_SECTIONS.map(({ id, label, description }) => ({ id, label, description, default: true })),
+  });
+}));
+
+router.get("/layout", asyncHandler(async (req, res) => {
+  const schoolId = layoutSchool(req, res);
+  if (!schoolId) return;
+  const [layout, template] = await Promise.all([reportLayout.currentLayout(schoolId), defaultTemplateOf(schoolId)]);
+  res.json({
+    success: true,
+    layout,
+    // Sections switched off that the school's default token template prints
+    // unconditionally — they will still print until the template gates them.
+    sectionsNotHiddenByTemplate: reportLayout.templateCompatibility(template, layout),
+  });
+}));
+
+router.put("/layout", asyncHandler(async (req, res) => {
+  if (tenant.namedAnotherSchool(req, req.body?.schoolId ?? req.query?.schoolId)) {
+    return res.status(403).json({ success: false, code: "SCHOOL_ACCESS_DENIED", error: "Not your school" });
+  }
+  const schoolId = layoutSchool(req, res);
+  if (!schoolId) return;
+  try {
+    const { changed, layout } = await reportLayout.updateLayout({
+      schoolId, body: req.body, userId: req.user?._id ?? null,
+    });
+    const template = await defaultTemplateOf(schoolId);
+    res.status(changed ? 201 : 200).json({
+      success: true, changed, layout,
+      sectionsNotHiddenByTemplate: reportLayout.templateCompatibility(template, layout),
+    });
+  } catch (err) {
+    return layoutError(res, err);
+  }
+}));
+
+router.get("/layout/versions", asyncHandler(async (req, res) => {
+  const schoolId = layoutSchool(req, res);
+  if (!schoolId) return;
+  res.json({ success: true, versions: await reportLayout.listVersions(schoolId) });
+}));
+
+router.get("/layout/versions/:version", asyncHandler(async (req, res) => {
+  const schoolId = layoutSchool(req, res);
+  if (!schoolId) return;
+  const version = await reportLayout.getVersion(schoolId, req.params.version);
+  if (!version) return res.status(404).json({ success: false, code: "LAYOUT_VERSION_NOT_FOUND", error: "No such layout version" });
+  res.json({ success: true, version });
+}));
+
 router.get("/:id", asyncHandler(async (req, res) => {
   const schoolId = resolveSchoolId(req, req.query.schoolId);
 
@@ -211,6 +323,19 @@ router.post("/", asyncHandler(async (req, res) => {
     return res.status(400).json({ success: false, error: "html is required" });
   }
 
+  // The desktop queues this request with the id it stored the template under
+  // and retries it until it hears back, exactly as for POST /:id/duplicate
+  // below. A repeat of an id this school already holds answers with that
+  // template; an id another school holds is refused.
+  const templateId = req.body._id ? String(req.body._id).trim() : uuidv4();
+  const prior = req.body._id ? await ReportTemplate.findById(templateId).lean() : null;
+  if (prior) {
+    if (String(prior.schoolId) !== String(schoolId)) {
+      return res.status(409).json({ success: false, code: "TEMPLATE_ID_TAKEN", error: "That template id already belongs to another school" });
+    }
+    return res.status(200).json({ success: true, replay: true, template: prior });
+  }
+
   if (isDefault) {
     await ReportTemplate.updateMany(
       { schoolId, deletedAt: null },
@@ -219,7 +344,7 @@ router.post("/", asyncHandler(async (req, res) => {
   }
 
   const template = await ReportTemplate.create({
-    _id:       uuidv4(),
+    _id:       templateId,
     schoolId,
     name:      name.trim(),
     html,
@@ -364,11 +489,20 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
   const ExamSubject   = require("../db/models/ExamSubject");
   const Exam          = require("../db/models/Exam");
 
-  const [scores, examSubjects, summary, exam] = await Promise.all([
-    StudentScore.find({ examId, studentId, deletedAt: null }).lean(),
-    ExamSubject.find({  examId, deletedAt: null            }).lean(),
-    ResultSummary.findOne({ examId, studentId }).lean(),
-    Exam.findById(examId).lean(),
+  // Tenancy: the exam is this school's, or the preview has nothing to show.
+  // The old Exam.findById plus unscoped { examId, studentId } reads rendered
+  // another school's pupil into this school's template.
+  const exam = await Exam.findOne({ _id: String(examId), schoolId }).lean();
+  if (!exam) {
+    return res.status(404).json({
+      success: false,
+      error:   "No result data found for this student in this exam",
+    });
+  }
+  const [scores, examSubjects, summary] = await Promise.all([
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    ExamSubject.find({  examId, schoolId, deletedAt: null  }).lean(),
+    ResultSummary.findOne({ examId, studentId, schoolId }).lean(),
   ]);
 
   if (!scores.length && !summary) {
@@ -458,6 +592,9 @@ router.post("/:id/preview", asyncHandler(async (req, res) => {
   };
 
   const { resolvePlaceholders } = require("../../engine/placeholder.engine");
+  // The preview shows the school's current layout, the one its next card
+  // will print with (docs/39 §10).
+  data.sections = (await reportLayout.currentLayout(schoolId)).sections;
   const resolvedHtml = resolvePlaceholders(template.html, data);
   const fullHtml     = `<style>${template.css || ""}</style>${resolvedHtml}`;
 
