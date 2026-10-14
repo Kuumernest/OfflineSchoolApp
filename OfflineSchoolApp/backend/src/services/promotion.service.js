@@ -8,6 +8,11 @@ const Enrollment        = require("../db/models/Enrollment");
 const PromotionRun      = require("../db/models/PromotionRun");
 const PromotionDecision = require("../db/models/PromotionDecision");
 const { displayName } = require("../utils/studentName");
+const AcademicStructure = require("../db/models/AcademicStructure");
+const AnnualResult      = require("../db/models/AnnualResult");
+const TermResult        = require("../db/models/TermResult");
+const { effectiveRules, promotionUnderRules } = require("../../../shared/academicRules");
+const { legacyTermsOf } = require("../../../shared/academicPolicy");
 
 /**
  * End-of-year rollover: who moves up, who repeats, who leaves.
@@ -124,6 +129,61 @@ const proposeFor = ({ currentClass, result }) => {
   };
 };
 
+/**
+ * The year's picture per student under a non-legacy promotion rule (Phase 4,
+ * shared/academicRules): published AnnualResult and TermResult rows — the
+ * year's own figures — rather than an average of sequence summaries
+ * (docs/39 §14, decision D1b). Published only, as the legacy reader.
+ */
+const yearByStudent = async (schoolId, academicYear) => {
+  const [annual, terms] = await Promise.all([
+    AnnualResult.find({ schoolId, academicYear, isPublished: true, deletedAt: null })
+      .select("studentId annualAverage").lean(),
+    TermResult.find({ schoolId, academicYear, isPublished: true, deletedAt: null })
+      .select("studentId term isPassing").lean(),
+  ]);
+  const out = new Map();
+  const entry = (id) => {
+    const k = String(id);
+    if (!out.has(k)) out.set(k, { annualAverage: null, terms: new Map() });
+    return out.get(k);
+  };
+  for (const a of annual) entry(a.studentId).annualAverage = a.annualAverage ?? null;
+  for (const t of terms)  entry(t.studentId).terms.set(Number(t.term), !!t.isPassing);
+  return out;
+};
+
+/**
+ * One student's proposal under a non-legacy rule. Pure.
+ *
+ * The outcome comes from promotionUnderRules — the very function the annual
+ * row's promotionStatus is computed by — so the run and the annual card can
+ * no longer disagree (docs/39 §4.4). The rules about destinations are the
+ * legacy ones: a final year graduates, a missing next class is never guessed.
+ */
+const proposeUnderRules = ({ rules, currentClass, year, termNumbers }) => {
+  if (!currentClass) return { outcome: "unassigned", basis: "no_results", toClassId: null };
+  if (currentClass.isFinalYear) return { outcome: "graduated", basis: "final_year", toClassId: null };
+
+  const { status, reason } = promotionUnderRules(rules, {
+    annualAverage: year?.annualAverage ?? null,
+    terms: termNumbers.map((n) => ({ isComplete: year?.terms.has(n) ?? false, passed: year?.terms.get(n) ?? false })),
+    termsInYear: termNumbers.length,
+    classId: currentClass._id,
+  });
+
+  if (status === "pending") {
+    // Not decidable from results: an incomplete year, no bar, or manual_only.
+    // Unassigned blocks the commit until someone decides (rule 1).
+    return { outcome: "unassigned", basis: reason === "manual" ? "manual" : "no_results", toClassId: null };
+  }
+  if (status === "repeated") {
+    return { outcome: "repeated", basis: reason === "average_fail" ? "average_fail" : "results_fail", toClassId: currentClass._id };
+  }
+  if (!currentClass.nextClassId) return { outcome: "unassigned", basis: "results_pass", toClassId: null };
+  return { outcome: "promoted", basis: "results_pass", toClassId: currentClass.nextClassId };
+};
+
 const tallyCounts = (decisions) => ({
   total:      decisions.length,
   promoted:   decisions.filter((d) => d.outcome === "promoted").length,
@@ -166,7 +226,15 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
     .select("name nextClassId isFinalYear promotionAverage").lean();
   const classById = new Map(classes.map((c) => [String(c._id), c]));
 
-  const results = await resultsByStudent(schoolId, fromYear);
+  // The school's promotion rule for the year being closed (Phase 4). legacy —
+  // the default — is the reader below, unchanged.
+  const structure = await AcademicStructure.findOne({ schoolId, academicYear: fromYear, deletedAt: null })
+    .select("rules terms").lean();
+  const rules     = effectiveRules(structure?.rules);
+  const ruled     = rules.promotionRule !== "legacy";
+  const results   = ruled ? null : await resultsByStudent(schoolId, fromYear);
+  const years     = ruled ? await yearByStudent(schoolId, fromYear) : null;
+  const termNumbers = ruled ? [...new Set(legacyTermsOf(structure).map((t) => t.number))] : [];
 
   const run = await PromotionRun.create({
     schoolId, fromYear, toYear,
@@ -176,8 +244,11 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
 
   const rows = students.map((s) => {
     const currentClass = s.classId ? classById.get(String(s.classId)) : null;
-    const result       = results.get(String(s._id)) ?? null;
-    const proposal     = proposeFor({ currentClass, result });
+    const result       = ruled ? null : (results.get(String(s._id)) ?? null);
+    const year         = ruled ? (years.get(String(s._id)) ?? null) : null;
+    const proposal     = ruled
+      ? proposeUnderRules({ rules: structure.rules, currentClass, year, termNumbers })
+      : proposeFor({ currentClass, result });
     const target       = proposal.toClassId ? classById.get(String(proposal.toClassId)) : null;
 
     return {
@@ -192,7 +263,7 @@ const generateRun = async ({ schoolId, fromYear, toYear, generatedBy }) => {
       toClassName:   target?.name ?? null,
       outcome:       proposal.outcome,
       basis:         proposal.basis,
-      average:       result?.average ?? null,
+      average:       ruled ? (year?.annualAverage ?? null) : (result?.average ?? null),
     };
   });
 
@@ -411,6 +482,7 @@ const reverseRun = async ({ schoolId, runId, reason, reversedBy }) => {
 };
 
 module.exports = {
+  proposeUnderRules,
   proposeFor,
   tallyCounts,
   resultsByStudent,

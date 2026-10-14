@@ -176,10 +176,14 @@ const periodName = ({ reportType, sequenceNumber, term, name } = {}, lang = "en"
  * @param {number|null|undefined} stored
  * @param {string} reportType  "sequence" | "term" | "annual"
  */
-const averageOutOf20 = (stored, reportType) => {
+const { sequenceAverageIsOn20 } = require("./academicRules");
+
+const averageOutOf20 = (stored, reportType, calcVersion = null) => {
   if (stored == null || !Number.isFinite(Number(stored))) return null;
   const n = Number(stored);
-  return reportType === "term" || reportType === "annual"
+  // A sequence summary written under the weighted_20 rule (calcVersion
+  // "exam-process/2", shared/academicRules) is already out of twenty.
+  return reportType === "term" || reportType === "annual" || sequenceAverageIsOn20(calcVersion)
     ? n
     : Math.round(n * 5 * 100) / 100;
 };

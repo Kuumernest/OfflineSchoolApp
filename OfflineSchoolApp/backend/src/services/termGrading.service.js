@@ -27,6 +27,7 @@ const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
 const academicPolicy   = require("./academicPolicy.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
+const { effectiveRules, calcVersionFor } = require("../../../shared/academicRules");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -114,6 +115,14 @@ async function loadTermContext({ schoolId, academicYear, term }) {
       .map((e) => ({ _id: String(e._id), name: e.name || null })),
     passMark: gradingConfig?.passMark ?? 10,
     policyHash: policy._id,
+    // The school's rules for the year, from the same snapshot (Phase 4).
+    // school_bands grades the stored term row with the school's own bands,
+    // which is what its card already prints (docs/39 §12).
+    rules: effectiveRules(policy.policy.rules),
+    calcVersion: calcVersionFor("term", policy.policy.rules),
+    gradeOf: effectiveRules(policy.policy.rules).gradingAuthority === "school_bands"
+      ? (mark) => grading.lookupSchoolGrade(mark, gradingConfig)
+      : null,
   };
 }
 
@@ -124,6 +133,8 @@ async function loadTermContext({ schoolId, academicYear, term }) {
  */
 function termResultFields({ context, summaries, studentName, admissionNo, className }) {
   const { termConfig, sequenceNumbers, exams, passMark } = context;
+  // The built-in scale unless the rules say the school's bands (Phase 4).
+  const gradeOf = context.gradeOf || lookupGrade;
 
   const sequenceAverages = [];
   let totalWeightedAvg = 0;
@@ -138,7 +149,7 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
       : null;
 
     const avg   = summary?.average ?? null;
-    const grade = avg != null ? lookupGrade(avg) : null;
+    const grade = avg != null ? gradeOf(avg) : null;
 
     sequenceAverages.push({
       sequence:     seqNum,
@@ -160,7 +171,7 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
     ? Math.round((totalWeightedAvg / totalWeight) * 100) / 100
     : 0;
 
-  const termGrade = lookupGrade(termAverage);
+  const termGrade = gradeOf(termAverage);
 
   return {
     hasAnyMark,
@@ -176,7 +187,7 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
       // A context built by hand (a caller outside loadTermContext) has no
       // policy, and its rows say so rather than claiming one.
       policyHash:    context.policyHash ?? null,
-      calcVersion:   CALC_VERSIONS.term,
+      calcVersion:   context.calcVersion ?? CALC_VERSIONS.term,
       syncStatus:    "pending",
     },
   };
@@ -301,6 +312,19 @@ async function computeClassTermAverages({
     summariesByStudent({ examIds: ctx.examIds, classId, schoolId }),
   ]);
 
+  // D3, "refuse": a published term row is not recomputed in place. Checked
+  // before anything is written, for the whole class.
+  if (ctx.rules?.publishedResults === "refuse") {
+    const published = await TermResult.countDocuments({
+      schoolId, academicYear, term, classId, isPublished: true, deletedAt: null,
+    });
+    if (published > 0) {
+      const err = new Error(`${published} published term result(s) would be recomputed. Unpublish them first.`);
+      err.status = 409; err.code = "PUBLISHED_RESULTS"; err.published = published;
+      throw err;
+    }
+  }
+
   const ops = [];
   let noMarks = 0;
 
@@ -351,16 +375,8 @@ async function computeClassTermAverages({
  * @param {number[]} averages  in any order
  * @returns {number[]}         the place of each, in the same order
  */
-function competitionPlaces(averages) {
-  const values = averages.map((a) => Number(a) || 0);
-  const distinct = [...new Set(values)].sort((a, b) => b - a);
-  const count = new Map();
-  for (const v of values) count.set(v, (count.get(v) ?? 0) + 1);
-  const place = new Map();
-  let ahead = 0;
-  for (const v of distinct) { place.set(v, ahead + 1); ahead += count.get(v); }
-  return values.map((v) => place.get(v));
-}
+// The one ranker, shared with the weighted sequence route (shared/ranking.js).
+const { competitionPlaces } = require("../../../shared/ranking");
 
 /**
  * Compute term positions (dense ranking) for a class.
@@ -426,17 +442,27 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
 
   let totalComputed = 0;
   let totalSkipped  = 0;
+  // Under the D3 "refuse" rule a class with published term results is left
+  // exactly as it is and named here; the other classes still compute.
+  const refusedClasses = [];
 
   for (const cls of classes) {
-    const { computed, skipped } = await computeClassTermAverages({
-      schoolId,
-      academicYear,
-      term,
-      classId: cls._id,
-      context,
-    });
-    totalComputed += computed;
-    totalSkipped  += skipped;
+    let out;
+    try {
+      out = await computeClassTermAverages({
+        schoolId,
+        academicYear,
+        term,
+        classId: cls._id,
+        context,
+      });
+    } catch (err) {
+      if (err.code !== "PUBLISHED_RESULTS") throw err;
+      refusedClasses.push({ classId: String(cls._id), className: cls.name ?? null, published: err.published });
+      continue;
+    }
+    totalComputed += out.computed;
+    totalSkipped  += out.skipped;
   }
 
   return {
@@ -444,6 +470,7 @@ async function computeAllClassTermAverages({ schoolId, academicYear, term }) {
     skipped:  totalSkipped,
     noMarks:  totalSkipped,
     unsequencedExams: context.unsequencedExams,
+    ...(refusedClasses.length ? { refusedClasses } : {}),
   };
 }
 

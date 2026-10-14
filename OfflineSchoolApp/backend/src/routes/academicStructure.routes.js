@@ -115,6 +115,211 @@ router.put(
   }
 );
 
+// ═════════════════════════════════════════════════════════════════════════════
+// CALCULATION RULES (docs/39 Phase 4, shared/academicRules.js)
+//
+// The decisions that change real results — which sequence average is
+// official (D1), where promotion reads and what rule it applies (D1b, D2),
+// whether published results may be recomputed in place (D3), and whose grade
+// bands a term/annual row stores (§12) — are the school's, per year. Every
+// default is the behaviour before rules existed, so a school that never opens
+// this computes exactly as before.
+//
+//   GET  …/:year/rules          the year's rules, their definitions, the impact
+//   POST …/:year/rules/preview  what a proposed change would change, with counts
+//   PUT  …/:year/rules          change them (validated, audited)
+//
+// Published results are never rewritten by a change here: a rule applies to
+// what is computed after it. The preview says how many results are already
+// published (they keep their figures) and how many would be recomputed the
+// next time their exam, term or year is processed.
+// ═════════════════════════════════════════════════════════════════════════════
+
+const academicRules = require("../../../shared/academicRules");
+const { recordAudit } = require("../services/audit.service");
+
+const yearImpact = async (schoolId, academicYear) => {
+  const mongoose = require("mongoose");
+  const M = (n) => mongoose.model(n);
+  const examIds = (await M("Exam").find({ schoolId, academicYear, deletedAt: null }).select("_id").lean())
+    .map((e) => e._id);
+  const split = async (model, filter) => {
+    const [published, total] = await Promise.all([
+      M(model).countDocuments({ ...filter, isPublished: true }),
+      M(model).countDocuments(filter),
+    ]);
+    return { published, unpublished: total - published };
+  };
+  const [sequence, term, annual, draftRuns] = await Promise.all([
+    examIds.length ? split("ResultSummary", { schoolId, examId: { $in: examIds }, deletedAt: null })
+                   : { published: 0, unpublished: 0 },
+    split("TermResult",   { schoolId, academicYear, deletedAt: null }),
+    split("AnnualResult", { schoolId, academicYear, deletedAt: null }),
+    M("PromotionRun").countDocuments({ schoolId, fromYear: academicYear, status: "draft", deletedAt: null }),
+  ]);
+  return { sequence, term, annual, draftPromotionRuns: draftRuns };
+};
+
+/** What moves from `before` to `after`, rule by rule, and what each affects. */
+const ruleChanges = (before, after) => {
+  const affects = {
+    sequenceAverage:  ["sequence", "term", "annual"],
+    gradingAuthority: ["term", "annual"],
+    promotionRule:    ["annual", "promotion"],
+    publishedResults: [],
+    promotionThreshold: ["annual", "promotion"],
+    classThresholds:    ["annual", "promotion"],
+  };
+  const changes = [];
+  for (const key of [...academicRules.RULE_KEYS, "promotionThreshold", "classThresholds"]) {
+    const a = JSON.stringify(before[key]), b = JSON.stringify(after[key]);
+    if (a !== b) changes.push({ rule: key, from: before[key], to: after[key], affects: affects[key] });
+  }
+  return changes;
+};
+
+const loadYear = async (req, res) => {
+  const schoolId = resolveSchoolId(req, req.params.schoolId);
+  if (!schoolId) {
+    res.status(400).json({ success: false, code: "SCHOOL_REQUIRED", error: "A school must be selected" });
+    return null;
+  }
+  const structure = await AcademicStructure.findOne({
+    schoolId, academicYear: req.params.year, deletedAt: null,
+  }).lean();
+  return { schoolId, structure };
+};
+
+/** A proposed body merged onto the current rules, checked; or a 400 sent. */
+const proposedRules = (req, res, current) => {
+  const body = req.body?.rules ?? req.body;
+  const checked = academicRules.validateRules(body);
+  if (!checked.ok) {
+    res.status(400).json({ success: false, code: "INVALID_RULES", errors: checked.errors });
+    return null;
+  }
+  const merged = academicRules.effectiveRules({ ...current, ...checked.value });
+  const incoherent = academicRules.coherenceErrors(merged);
+  if (incoherent.length) {
+    res.status(400).json({ success: false, code: "INVALID_RULES", errors: incoherent });
+    return null;
+  }
+  return merged;
+};
+
+router.get(
+  "/:schoolId/:year/rules",
+  canRead,
+  async (req, res) => {
+    try {
+      const loaded = await loadYear(req, res);
+      if (!loaded) return;
+      const rules = academicRules.effectiveRules(loaded.structure?.rules);
+      res.json({
+        success: true,
+        academicYear: req.params.year,
+        rules,
+        isDefault: academicRules.isDefault(rules),
+        defaults: academicRules.DEFAULT_RULES,
+        definitions: academicRules.RULES,
+        impact: await yearImpact(loaded.schoolId, req.params.year),
+      });
+    } catch (err) {
+      console.error("[academicStructure] RULES GET error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+router.post(
+  "/:schoolId/:year/rules/preview",
+  canManage,
+  async (req, res) => {
+    try {
+      if (namedAnotherSchool(req, req.params.schoolId)) {
+        return res.status(403).json({ success: false, code: "SCHOOL_ACCESS_DENIED", error: "Not your school" });
+      }
+      const loaded = await loadYear(req, res);
+      if (!loaded) return;
+      const current = academicRules.effectiveRules(loaded.structure?.rules);
+      const next = proposedRules(req, res, current);
+      if (!next) return;
+      res.json({
+        success: true,
+        changes: ruleChanges(current, next),
+        rules: next,
+        impact: await yearImpact(loaded.schoolId, req.params.year),
+      });
+    } catch (err) {
+      console.error("[academicStructure] RULES PREVIEW error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
+router.put(
+  "/:schoolId/:year/rules",
+  canManage,
+  async (req, res) => {
+    try {
+      if (namedAnotherSchool(req, req.params.schoolId)) {
+        return res.status(403).json({ success: false, code: "SCHOOL_ACCESS_DENIED", error: "Not your school" });
+      }
+      const loaded = await loadYear(req, res);
+      if (!loaded) return;
+      if (!loaded.structure) {
+        return res.status(404).json({ success: false, code: "NO_STRUCTURE", error: "This year has no academic structure yet" });
+      }
+      const current = academicRules.effectiveRules(loaded.structure.rules);
+      const next = proposedRules(req, res, current);
+      if (!next) return;
+
+      const changes = ruleChanges(current, next);
+      if (changes.length === 0) return res.json({ success: true, changed: false, rules: current });
+
+      // A draft promotion run was proposed under the current rule; changing
+      // the rule underneath it would leave its proposals unexplained.
+      if (changes.some((c) => c.affects.includes("promotion"))) {
+        const drafts = await require("mongoose").model("PromotionRun").countDocuments({
+          schoolId: loaded.schoolId, fromYear: req.params.year, status: "draft", deletedAt: null,
+        });
+        if (drafts > 0) {
+          return res.status(409).json({
+            success: false, code: "PROMOTION_RUN_DRAFT",
+            error: "A draft promotion run exists for this year. Commit or discard it before changing the promotion rule.",
+          });
+        }
+      }
+
+      // Stored complete-but-minimal: only what differs from the default.
+      const stored = academicRules.nonDefaultRules(next);
+      await AcademicStructure.updateOne(
+        { _id: loaded.structure._id },
+        Object.keys(stored).length
+          ? { $set: { rules: stored, updatedBy: req.user?._id ?? null } }
+          : { $unset: { rules: 1 }, $set: { updatedBy: req.user?._id ?? null } }
+      );
+
+      await recordAudit(req, {
+        action: "academic.rulesChanged",
+        schoolId: loaded.schoolId,
+        resource: { type: "AcademicStructure", id: loaded.structure._id, label: req.params.year },
+        before: current,
+        after: next,
+        reason: typeof req.body?.reason === "string" ? req.body.reason : null,
+      });
+
+      res.json({
+        success: true, changed: true, rules: next, changes,
+        impact: await yearImpact(loaded.schoolId, req.params.year),
+      });
+    } catch (err) {
+      console.error("[academicStructure] RULES PUT error:", err.message);
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+);
+
 // ── GET /api/academic-structure/:schoolId ──────────────────────────────────
 // List all structures for a school
 router.get(

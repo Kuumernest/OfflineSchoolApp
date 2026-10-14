@@ -36,6 +36,9 @@ const AUDIT_ACTIONS = [
   "superAdmin.activated",
   "superAdmin.deactivated",
   "superAdmin.passwordReset",
+  // A school's calculation rules for a year changed (shared/academicRules,
+  // docs/39 Phase 4): before/after are the effective rules.
+  "academic.rulesChanged",
 ];
 
 const auditLogSchema = new mongoose.Schema(

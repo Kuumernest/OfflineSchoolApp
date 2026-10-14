@@ -227,7 +227,7 @@ function resolveAverage20(payload) {
 
   // The one rule, in shared/reportCard.js: a sequence average is GPA points
   // and a term or annual average is already out of twenty.
-  return averageOutOf20(summary.average, payload.reportType);
+  return averageOutOf20(summary.average, payload.reportType, summary.calcVersion);
 }
 
 const esc = (str) =>

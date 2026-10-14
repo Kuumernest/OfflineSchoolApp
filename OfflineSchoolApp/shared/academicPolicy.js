@@ -46,6 +46,7 @@
 
 const { DEFAULT_PASS_MARK } = require("./gradeScale");
 const CA = require("./caAssessment");
+const { nonDefaultRules } = require("./academicRules");
 
 /**
  * The code that wrote a result row, one name per writer. Each moves only when
@@ -248,7 +249,18 @@ const resolvePolicy = ({ schoolId, academicYear, structure = null, gradingConfig
       promotionExams:     [...(structure?.promotionExams || [])].map(Number).sort((a, b) => a - b),
       promotionThreshold: num(structure?.promotionThreshold),
     },
+
+    // The school's calculation rules (shared/academicRules.js, Phase 4) —
+    // only those that differ from the default. A school on defaults has no
+    // `rules` key at all (canonicalJson drops undefined), so its policy hash
+    // is the one it had before rules existed.
+    rules: rulesOrUndefined(structure?.rules),
   };
+};
+
+const rulesOrUndefined = (raw) => {
+  const r = nonDefaultRules(raw);
+  return Object.keys(r).length > 0 ? r : undefined;
 };
 
 /**

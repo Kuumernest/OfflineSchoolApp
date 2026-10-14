@@ -34,7 +34,7 @@
 // The one table, from shared/. This file carried its own seven-band copy with
 // no C+ and remarks that disagreed with the school's — and since this is what
 // actually grades a mark, its copy is the one that reached the report card.
-const { GRADE_SCALE } = require("../../../shared/gradeScale");
+const { GRADE_SCALE, findBand } = require("../../../shared/gradeScale");
 
 /** The bottom band, for the marks no band claimed. Read off the table so it
  *  cannot say something the table does not. */
@@ -81,6 +81,29 @@ function lookupGrade(markOutOf20) {
   }
   // Fallback — should never reach here
   return failBand();
+}
+
+/**
+ * A /20 mark on the SCHOOL's own bands (GradingConfig.grades), falling back
+ * to the built-in scale where the school has none or the mark falls in no
+ * band — the rule computeGrade in exam.routes already grades sequence marks
+ * by. Used by the term and annual layers under the "school_bands" rule
+ * (shared/academicRules, docs/39 §12); lookupGrade stays what they use by
+ * default.
+ *
+ * @returns {{ grade: string, points: number, remark: string, remarkFr: string }}
+ */
+function lookupSchoolGrade(markOutOf20, gradingConfig) {
+  const bands = Array.isArray(gradingConfig?.grades) && gradingConfig.grades.length > 0
+    ? gradingConfig.grades : null;
+  const band = bands ? findBand(markOutOf20, bands) : null;
+  if (!band) return lookupGrade(markOutOf20);
+  return {
+    grade:    band.grade,
+    points:   Number(band.gpaPoints ?? band.points ?? 0),
+    remark:   band.remark ?? null,
+    remarkFr: band.remarkFr || band.remark || null,
+  };
 }
 
 /**
@@ -294,6 +317,7 @@ function generateRemark(result) {
 // ── Exports ───────────────────────────────────────────────────────────────
 
 module.exports = {
+  lookupSchoolGrade,
   GRADE_SCALE,
   PASSING_MARK_OUT_OF_20,
   normalizeTo20,

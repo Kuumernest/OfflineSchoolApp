@@ -25,6 +25,7 @@ const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
 const academicPolicy    = require("./academicPolicy.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
+const { effectiveRules, calcVersionFor, promotionUnderRules } = require("../../../shared/academicRules");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -97,7 +98,17 @@ async function annualContextFor({ schoolId, academicYear }) {
     promotionExamIds = promotionExamDocs.map((e) => e._id);
   }
 
-  return { structure, passMark, termWeights, promotionExamIds, policyHash: policy._id };
+  const rules = effectiveRules(policy.policy.rules);
+  return {
+    structure, passMark, termWeights, promotionExamIds, policyHash: policy._id,
+    // The school's rules for the year, from the same snapshot (Phase 4).
+    rules,
+    rawRules:    policy.policy.rules,
+    calcVersion: calcVersionFor("annual", policy.policy.rules),
+    gradeOf: rules.gradingAuthority === "school_bands"
+      ? (mark) => grading.lookupSchoolGrade(mark, gradingConfig)
+      : null,
+  };
 }
 
 /**
@@ -105,8 +116,10 @@ async function annualContextFor({ schoolId, academicYear }) {
  * already in hand. Pure: no database. The arithmetic and the promotion rule
  * are exactly those of the per-pupil function this replaced.
  */
-function annualRowFor(ctx, { termResults, promotionResults }) {
+function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
   const { structure, passMark, termWeights } = ctx;
+  // The built-in scale unless the rules say the school's bands (Phase 4).
+  const gradeOf = ctx.gradeOf || lookupGrade;
 
   // 5. Build per-term averages
   const termAverages = [];
@@ -117,7 +130,7 @@ function annualRowFor(ctx, { termResults, promotionResults }) {
   for (const tw of termWeights) {
     const tr = termResults.find((r) => r.term === tw.term);
     const avg = tr?.termAverage ?? null;
-    const grade = avg != null ? lookupGrade(avg) : null;
+    const grade = avg != null ? gradeOf(avg) : null;
 
     termAverages.push({
       term:         tw.term,
@@ -138,10 +151,23 @@ function annualRowFor(ctx, { termResults, promotionResults }) {
     ? Math.round((totalWeightedAvg / totalWeight) * 100) / 100
     : 0;
 
-  const annualGrade = lookupGrade(annualAverage);
+  const annualGrade = gradeOf(annualAverage);
   const isPassing = annualAverage >= passMark;
 
-  // 7. Determine promotion status
+  // 7. Determine promotion status.
+  //
+  // Under a non-legacy promotion rule, the one function the promotion run
+  // also proposes by (shared/academicRules promotionUnderRules, docs/39 §14).
+  if (ctx.rules && ctx.rules.promotionRule !== "legacy") {
+    const { status } = promotionUnderRules(ctx.rawRules, {
+      annualAverage,
+      terms: termAverages.map((ta) => ({ isComplete: ta.isComplete, passed: ta.isComplete && ta.average >= passMark })),
+      termsInYear: termWeights.length,
+      classId,
+    });
+    return { termAverages, annualAverage, annualGrade, promotionStatus: status, isPassing };
+  }
+
   let promotionStatus = "pending";
   if (completedTerms >= 3) {
     const allTermsPassed = termAverages.every(
@@ -179,7 +205,7 @@ const annualSetFor = ({ studentName, admissionNo, className }, ctx, row) => ({
   promotionThreshold:  ctx.structure.promotionThreshold ?? null,
   isPassing:           row.isPassing,
   policyHash:          ctx.policyHash ?? null,
-  calcVersion:         CALC_VERSIONS.annual,
+  calcVersion:         ctx.calcVersion ?? CALC_VERSIONS.annual,
   syncStatus:          "pending",
 });
 
@@ -220,7 +246,7 @@ async function computeStudentAnnualAverage({
   }
   void structure;
 
-  const row = annualRowFor(ctx, { termResults, promotionResults });
+  const row = annualRowFor(ctx, { termResults, promotionResults, classId });
 
   // 8. Upsert AnnualResult
   const filter = {
@@ -290,6 +316,18 @@ async function computeClassAnnualAverages({
     // as it failed every pupil of it before), one read of the class's term
     // results grouped by pupil, one read of the promotion results, one write.
     const ctx = await annualContextFor({ schoolId, academicYear });
+
+    // D3, "refuse": a published annual row is not recomputed in place.
+    if (ctx.rules.publishedResults === "refuse") {
+      const published = await AnnualResult.countDocuments({
+        schoolId, academicYear, classId, isPublished: true, deletedAt: null,
+      });
+      if (published > 0) {
+        const err = new Error(`${published} published annual result(s) would be recomputed. Unpublish them first.`);
+        err.status = 409; err.code = "PUBLISHED_RESULTS"; err.published = published;
+        throw err;
+      }
+    }
     // Student._id, which is what TermResult.studentId holds and what
     // buildAnnualCard looks the pupil up by. Reading the login id here
     // matched no term results at all for any pupil who had an account.
@@ -323,6 +361,7 @@ async function computeClassAnnualAverages({
         const row = annualRowFor(ctx, {
           termResults:      termsByStudent.get(k) ?? [],
           promotionResults: promoByStudent.get(k) ?? [],
+          classId,
         });
         ops.push({
           updateOne: {
@@ -393,18 +432,31 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
 
   let totalComputed = 0;
   let totalSkipped  = 0;
+  // Under the D3 "refuse" rule a class with published annual results is left
+  // exactly as it is and named here; the other classes still compute.
+  const refusedClasses = [];
 
   for (const cls of classes) {
-    const { computed, skipped } = await computeClassAnnualAverages({
-      schoolId,
-      academicYear,
-      classId: cls._id,
-    });
-    totalComputed += computed;
-    totalSkipped  += skipped;
+    let out;
+    try {
+      out = await computeClassAnnualAverages({
+        schoolId,
+        academicYear,
+        classId: cls._id,
+      });
+    } catch (err) {
+      if (err.code !== "PUBLISHED_RESULTS") throw err;
+      refusedClasses.push({ classId: String(cls._id), className: cls.name ?? null, published: err.published });
+      continue;
+    }
+    totalComputed += out.computed;
+    totalSkipped  += out.skipped;
   }
 
-  return { computed: totalComputed, skipped: totalSkipped };
+  return {
+    computed: totalComputed, skipped: totalSkipped,
+    ...(refusedClasses.length ? { refusedClasses } : {}),
+  };
 }
 
 module.exports = {

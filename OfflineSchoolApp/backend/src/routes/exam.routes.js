@@ -25,6 +25,9 @@ const { requirePermission } = require("../../middleware/permissions");
 const tenant = require("../utils/tenant");
 const academicPolicy = require("../services/academicPolicy.service");
 const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+const { effectiveRules, calcVersionFor } = require("../../../shared/academicRules");
+const { weightedSequenceResult } = require("../services/weightedSequence.service");
+const { competitionPlaces } = require("../../../shared/ranking");
 const { scopes: feedScopes } = require("../config/syncFeed");
 const {
   guardResultWrite,
@@ -1561,6 +1564,14 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   const policy = await academicPolicy.resolve({
     schoolId, academicYear: exam.academicYear, gradingConfig, createdBy: req.user?._id ?? null,
   });
+
+  // The school's rules for the year, read from that frozen snapshot (Phase 4,
+  // shared/academicRules). At their defaults everything below is the
+  // pre-Phase-4 route, unchanged.
+  const rules       = effectiveRules(policy.policy.rules);
+  const weighted    = rules.sequenceAverage === "weighted_20";
+  const calcVersion = calcVersionFor("examProcess", policy.policy.rules);
+
   const scoreQuery    = { examId, schoolId, deletedAt: null };
   if (classId) scoreQuery.classId = classId;
 
@@ -1599,10 +1610,42 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   // an exam felt like it hung.
   const existingSummaries = await ResultSummary.find({
     examId, schoolId, studentId: { $in: studentIds },
-  }).select("_id studentId").lean();
+  }).select("_id studentId isPublished").lean();
   const existingByStudent = new Map(
     existingSummaries.map((s) => [String(s.studentId), s])
   );
+
+  // D3, "refuse": a published result is not recomputed in place. Unpublishing
+  // first is the deliberate, visible act; nothing is written here.
+  if (rules.publishedResults === "refuse") {
+    const published = existingSummaries.filter((s) => s.isPublished).length;
+    if (published > 0) {
+      return res.status(409).json({
+        success: false,
+        code:    "PUBLISHED_RESULTS",
+        message: `${published} published result(s) would be recomputed. Unpublish them first.`,
+        published,
+      });
+    }
+  }
+
+  // weighted_20 reads the CA beside the paper, as the card does.
+  const caContext = weighted
+    ? await sequenceAssessment.loadSequenceContext(exam, classId || null)
+    : null;
+  const subjectMapForCard = new Map();
+  if (weighted) {
+    for (const es of examSubjects) {
+      subjectMapForCard.set(String(es._id), es);
+      if (es.subjectId != null) subjectMapForCard.set(String(es.subjectId), es);
+    }
+  }
+  // A paper's summary carries its year and term, which the promotion run and
+  // the term layer select by (docs/39 §4.7e). Not a CA's: its marks are
+  // already inside the paper's result.
+  const placeFields = weighted && !sequenceAssessment.isContinuousAssessment(exam)
+    ? { academicYear: exam.academicYear ?? null, term: exam.term != null ? String(exam.term) : null }
+    : {};
 
   // Collected here and sent as one bulkWrite after the loop.
   const summaryOps = [];
@@ -1617,6 +1660,41 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   const summaries = [];
 
   for (const [studentId, scores] of Object.entries(byStudent)) {
+    if (weighted) {
+      const r = weightedSequenceResult({
+        studentId, scores, subjectMap: subjectMapForCard, ca: caContext, exam,
+        grade: (mark20) => computeGrade(mark20, 20, gradingConfig),
+      });
+      const overall = computeGrade(r.average, 20, gradingConfig);
+      const stu = studentMap.get(studentId);
+      summaries.push({
+        _id:            existingByStudent.get(String(studentId))?._id || uuidv4(),
+        classId:        classId || exam.classId,
+        className:      stu?.className || classNamesById.get(String(stu?.classId)) || null,
+        studentName:    stu?.studentName || [stu?.firstName, stu?.lastName].filter(Boolean).join(" ") || null,
+        admissionNo:    stu?.enrollmentNo || null,
+        totalScore:     Math.round(r.totalScore * 100) / 100,
+        maxTotalScore:  r.maxTotalScore,
+        percentage:     Math.round((r.average / 20) * 100),
+        average:        r.average,
+        overallGrade:   overall.grade,
+        overallRemark:  overall.remark,
+        gpa:            overall.gpaPoints,
+        subjectsPassed: r.passed,
+        subjectsFailed: r.failed,
+        subjectsTotal:  r.subjectBreakdown.length,
+        isPassing:      overall.isPassing,
+        subjectBreakdown: r.subjectBreakdown,
+        ...placeFields,
+        policyHash:     policy._id,
+        calcVersion,
+        syncStatus:     "synced",
+        lastSyncedAt:   new Date(),
+        examId, studentId, schoolId,
+      });
+      continue;
+    }
+
     let totalScore    = 0;
     let maxTotalScore = 0;
     let passed        = 0;
@@ -1731,6 +1809,15 @@ router.post("/:examId/process", adminOnly, asyncHandler(async (req, res) => {
   }
 
   for (const classSummaries of Object.values(grouped)) {
+    if (weighted) {
+      // Ranked on the official figure itself, competition style (1, 1, 3).
+      const places = competitionPlaces(classSummaries.map((s) => s.average));
+      classSummaries.forEach((s, i) => {
+        s.classPosition = places[i];
+        s.totalInClass  = classSummaries.length;
+      });
+      continue;
+    }
     classSummaries.sort((a, b) => b.percentage - a.percentage);
     let pos = 1;
     for (let i = 0; i < classSummaries.length; i++) {

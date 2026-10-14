@@ -161,6 +161,11 @@ router.post(
 
       res.json({ success: true, ...result });
     } catch (err) {
+      // D3 "refuse" (shared/academicRules): published results are not
+      // recomputed in place. A conflict the caller can act on, not a fault.
+      if (err.code === "PUBLISHED_RESULTS") {
+        return res.status(409).json({ success: false, code: err.code, error: err.message, published: err.published });
+      }
       console.error("[annualResults] COMPUTE error:", err.message);
       res.status(500).json({ success: false, error: err.message });
     }

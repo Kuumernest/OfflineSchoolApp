@@ -33,6 +33,7 @@
  */
 
 const ResultSummary = require("../db/models/ResultSummary");
+const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
 const TermResult    = require("../db/models/TermResult");
 const AnnualResult  = require("../db/models/AnnualResult");
 
@@ -209,10 +210,14 @@ async function sequenceClassStats({ schoolId, examId, classId }) {
    * over. `percentage` means the same thing in both, so the conversion is
    * the same arithmetic for every row: a hundredth of it, twenty times.
    */
-  const rows = await ResultSummary.find(filter).select("percentage").lean();
+  const rows = await ResultSummary.find(filter).select("percentage average calcVersion").lean();
   return {
     scale: "20",
-    ...cohortFigures(rows.map((r) => percentAsMark(r.percentage))),
+    // A weighted_20 row (exam-process/2) stores its exact /20 average; its
+    // percentage is that average rounded to a whole number, so reading the
+    // percentage would print a class figure a few hundredths off the pupils'.
+    ...cohortFigures(rows.map((r) => (sequenceAverageIsOn20(r.calcVersion)
+      ? round2(Number(r.average)) : percentAsMark(r.percentage)))),
   };
 }
 

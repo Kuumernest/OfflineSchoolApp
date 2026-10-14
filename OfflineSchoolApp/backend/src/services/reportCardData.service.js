@@ -778,7 +778,7 @@ async function cardVerification({ data, schoolId, studentId, documentKey, req })
    */
   const avg20 = data.computed?.weightedAverage != null
     ? Number(data.computed.weightedAverage)
-    : averageOutOf20(data.summary?.average, data.reportType);
+    : averageOutOf20(data.summary?.average, data.reportType, data.summary?.calcVersion);
 
   const isPassing = data.summary?.isPassing ?? (avg20 != null ? avg20 >= 10 : null);
   const position  = data.summary?.classPosition;

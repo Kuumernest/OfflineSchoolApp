@@ -102,6 +102,13 @@ const academicStructureSchema = new mongoose.Schema(
     passMark:     { type: Number, default: 10 },   // /20
     maxAbsences:  { type: Number, default: null },   // null = no limit
 
+    // The school's calculation rules for this year (shared/academicRules.js,
+    // docs/39 Phase 4). No default: absent means every rule at its default,
+    // which is exactly how results were computed before rules existed. Written
+    // only through PUT /academic-structure/:schoolId/:year/rules, which
+    // validates and audits.
+    rules: { type: mongoose.Schema.Types.Mixed, default: undefined },
+
     createdBy: { type: String, default: null },
     updatedBy: { type: String, default: null },
 
