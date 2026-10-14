@@ -3092,7 +3092,14 @@
     "termComputed": "Term results computed",
     "termPublished": "Term results published",
     "annualComputed": "Annual results computed",
-    "annualPublished": "Annual results published"
+    "annualPublished": "Annual results published",
+    "addTerm": "Add a term",
+    "removeTerm": "Remove this term",
+    "addSequence": "Add a sequence",
+    "removeSequence": "Remove this sequence",
+    "newTermName": "Term {{n}}",
+    "newSequenceName": "Sequence {{n}}",
+    "shapeHint": "A year has 1 to {{terms}} terms (for example semesters) and up to {{sequences}} sequences in all; every term needs at least one. A term or sequence that already has exams cannot be removed or moved."
   },
   "termResults": {
     "title": "Term Results",
@@ -5348,5 +5355,9 @@
         "desc": "Date of issue and school name."
       }
     }
+  },
+  "academicPeriods": {
+    "sequenceN": "Sequence {{n}}",
+    "termN": "Term {{n}}"
   }
 }

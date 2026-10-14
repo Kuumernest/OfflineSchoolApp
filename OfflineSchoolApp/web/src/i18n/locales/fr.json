@@ -3092,7 +3092,14 @@
     "termComputed": "Moyennes du trimestre calculées",
     "termPublished": "Résultats du trimestre publiés",
     "annualComputed": "Moyennes annuelles calculées",
-    "annualPublished": "Résultats annuels publiés"
+    "annualPublished": "Résultats annuels publiés",
+    "addTerm": "Ajouter un trimestre",
+    "removeTerm": "Supprimer ce trimestre",
+    "addSequence": "Ajouter une séquence",
+    "removeSequence": "Supprimer cette séquence",
+    "newTermName": "Trimestre {{n}}",
+    "newSequenceName": "Séquence {{n}}",
+    "shapeHint": "Une année compte de 1 à {{terms}} périodes (par exemple des semestres) et au plus {{sequences}} séquences au total ; chaque période en a au moins une. Une période ou une séquence qui a déjà des examens ne peut être ni supprimée ni déplacée."
   },
   "termResults": {
     "title": "Résultats trimestriels",
@@ -5348,5 +5355,9 @@
         "desc": "Date de délivrance et nom de l'établissement."
       }
     }
+  },
+  "academicPeriods": {
+    "sequenceN": "Séquence {{n}}",
+    "termN": "Trimestre {{n}}"
   }
 }

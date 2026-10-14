@@ -168,8 +168,12 @@ function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
     return { termAverages, annualAverage, annualGrade, promotionStatus: status, isPassing };
   }
 
+  // Every term of the year complete. This was `completedTerms >= 3`, which
+  // is the same thing for a three-term year — every year there was until
+  // Phase 6 let a school shape its own — and could never be met by a year of
+  // two semesters, whose pupils would have stayed "pending" for good.
   let promotionStatus = "pending";
-  if (completedTerms >= 3) {
+  if (termWeights.length > 0 && completedTerms >= termWeights.length) {
     const allTermsPassed = termAverages.every(
       (ta) => ta.isComplete && ta.average >= passMark
     );

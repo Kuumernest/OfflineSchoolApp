@@ -15,8 +15,7 @@ import { useExamResults, useExamStats,
 import { useUpdateExamStatus, useUpdateExam } from "@/hooks/useExams";
 import type { ExamStatus,
               ExamSubject,
-              ExamType,
-              TermNumber }                  from "@/types/exam.types";
+              ExamType }                    from "@/types/exam.types";
 import * as ExamService                      from "@/services/exam.service";
 import api                                   from "@/services/api";
 import { getErrorMessage }                   from "@/lib/axios";
@@ -26,12 +25,10 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   EXAM_STATUS_META,
   EXAM_TYPE_KEYS,
-  SEQUENCE_MAP,
-  getSequencesForTerm,
-  TERM_OPTIONS,
   ACADEMIC_YEAR_OPTIONS,
   examTypeLabel,
 }                                            from "@/constants/exam.constants";
+import { useAcademicPeriods }                from "@/hooks/useAcademicPeriods";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -258,6 +255,8 @@ const DetailsTab = ({
     instructions:  exam.instructions  ?? "",
   });
   const [editErrors, setEditErrors] = useState<Record<string, string>>({});
+  // The year's own terms and sequences (docs/39 Phase 6), else the fixed set.
+  const periods = useAcademicPeriods(editForm.academicYear);
 
   const handleEditChange = (field: string, value: string) => {
     setEditForm((prev) => ({ ...prev, [field]: value }));
@@ -483,8 +482,8 @@ const DetailsTab = ({
                       ${editErrors.term ? "border-red-400" : "border-gray-200"}`}
                   >
                     <option value="">{t("examCreate.selectTerm")}</option>
-                    {TERM_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>{t(opt.labelKey)}</option>
+                    {periods.terms.map((tm) => (
+                      <option key={tm.number} value={String(tm.number)}>{tm.label}</option>
                     ))}
                   </select>
                   {editErrors.term && <p className="text-xs text-red-500 mt-1">{editErrors.term}</p>}
@@ -503,12 +502,9 @@ const DetailsTab = ({
                              focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
                   <option value="">{t("examCreate.selectSequence")}</option>
-                  {getSequencesForTerm(Number(editForm.term) as TermNumber).map((seq) => {
-                    const meta = SEQUENCE_MAP[seq];
-                    return (
-                      <option key={seq} value={seq}>{t(meta.labelKey)}</option>
-                    );
-                  })}
+                  {periods.sequencesOf(editForm.term).map((seq) => (
+                    <option key={seq.number} value={seq.number}>{seq.label}</option>
+                  ))}
                 </select>
               </div>
 

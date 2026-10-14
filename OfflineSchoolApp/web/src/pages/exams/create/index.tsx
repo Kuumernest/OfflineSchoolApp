@@ -11,12 +11,10 @@ import { useToast }       from "@/components/ui/Toast";
 
 import {
   EXAM_TYPE_KEYS,
-  SEQUENCE_MAP,
-  getSequencesForTerm,
-  TERM_OPTIONS,
   ACADEMIC_YEAR_OPTIONS,
   examTypeLabel,
 } from "@/constants/exam.constants";
+import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 
 // ─────────────────────────────────────────────────────────
 // TYPES
@@ -79,6 +77,9 @@ onChange: (field: keyof DetailsForm, value: string) => void;
 errors: Partial<Record<keyof DetailsForm, string>>;
 }) => {
   const { t } = useTranslation();
+  // The year's own terms and sequences (docs/39 Phase 6); the old fixed
+  // three-by-two set when the structure cannot be read.
+  const periods = useAcademicPeriods(form.academicYear);
 const tm = Number(form.totalMarks);
 const pm = Number(form.passMark);
 const passRate = tm > 0 ? ((pm / tm) * 100).toFixed(1) : null;
@@ -136,9 +137,7 @@ return (
         {t("examCreate.sequence")} <span className="text-red-500">*</span>
       </label>
       <div className="flex flex-wrap gap-2">
-        {getSequencesForTerm(Number(form.term) as TermNumber).map((seq) => {
-          const meta = SEQUENCE_MAP[seq];
-          const isPromo = seq === 5 || seq === 6;
+        {periods.sequencesOf(form.term).map(({ number: seq, label, isPromotion: isPromo }) => {
           return (
             <button
               key={seq}
@@ -151,7 +150,7 @@ return (
                   : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
                 }`}
             >
-              {t(meta.labelKey)}{isPromo ? " *" : ""}
+              {label}{isPromo ? " *" : ""}
             </button>
           );
         })}
@@ -194,19 +193,19 @@ return (
         {t("academic.term")} <span className="text-red-500">*</span>
       </label>
       <div className="flex flex-wrap gap-2">
-        {TERM_OPTIONS.map((opt) => (
+        {periods.terms.map((tm) => (
           <button
-            key={opt.value}
+            key={tm.number}
             type="button"
-            onClick={() => onChange("term", opt.value)}
+            onClick={() => onChange("term", String(tm.number))}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold
               border transition-colors
-              ${form.term === opt.value
+              ${form.term === String(tm.number)
                 ? "bg-primary-600 border-primary-600 text-white"
                 : "bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100"
               }`}
           >
-            {t(opt.labelKey)}
+            {tm.label}
           </button>
         ))}
       </div>

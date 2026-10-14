@@ -15,6 +15,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useUser } from "@/store/auth.store";
 import { fetchStaffClasses } from "@/services/insights.service";
 import { cn } from "@/utils/cn";
+import { useAcademicPeriods } from "@/hooks/useAcademicPeriods";
 import type { TermResult, TermNumber } from "@/types/exam.types";
 
 // ─────────────────────────────────────────────────────────
@@ -28,11 +29,6 @@ const ACADEMIC_YEARS = [
   `${CURRENT_YEAR + 1}/${CURRENT_YEAR + 2}`,
 ];
 
-const TERMS: { value: TermNumber; labelKey: string }[] = [
-  { value: 1, labelKey: "academicStructure.term" + " 1" },
-  { value: 2, labelKey: "academicStructure.term" + " 2" },
-  { value: 3, labelKey: "academicStructure.term" + " 3" },
-];
 
 // ─────────────────────────────────────────────────────────
 // COMPONENT
@@ -62,6 +58,11 @@ export default function TermResultsPage() {
   const classes = classesQ.data ?? [];
 
   const { data, isLoading } = useTermResults(academicYear, term, classId || undefined, page);
+  // The year's own terms and the selected term's sequences (docs/39 Phase 6):
+  // one column per sequence the term actually has, not a fixed two.
+  const periods = useAcademicPeriods(academicYear);
+  const termSequences = periods.sequencesOf(term);
+  const columnCount = 8 + termSequences.length;
   const computeMutation = useComputeTermResults();
   const publishMutation = usePublishTermResults();
 
@@ -138,9 +139,9 @@ export default function TermResultsPage() {
             onChange={(e) => { setTerm(Number(e.target.value) as TermNumber); setPage(1); }}
             className="rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-indigo-400 focus:ring-2 focus:ring-indigo-100"
           >
-            {TERMS.map((te) => (
-              <option key={te.value} value={te.value}>
-                {t("academicStructure.term")} {te.value}
+            {periods.terms.map((te) => (
+              <option key={te.number} value={te.number}>
+                {te.label}
               </option>
             ))}
           </select>
@@ -245,8 +246,9 @@ export default function TermResultsPage() {
               <th className="px-4 py-3">{t("termResults.studentName")}</th>
               <th className="px-4 py-3">{t("termResults.admissionNo")}</th>
               <th className="px-4 py-3">{t("termResults.className")}</th>
-              <th className="px-4 py-3 text-center">{t("termResults.seq1Avg")}</th>
-              <th className="px-4 py-3 text-center">{t("termResults.seq2Avg")}</th>
+              {termSequences.map((sq) => (
+                <th key={sq.number} className="px-4 py-3 text-center">{sq.label}</th>
+              ))}
               <th className="px-4 py-3 text-center">{t("termResults.termAverage")}</th>
               <th className="px-4 py-3 text-center">{t("termResults.grade")}</th>
               <th className="px-4 py-3 text-center">{t("termResults.position")}</th>
@@ -256,20 +258,18 @@ export default function TermResultsPage() {
           <tbody className="divide-y divide-gray-50">
             {isLoading ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center">
+                <td colSpan={columnCount} className="px-4 py-12 text-center">
                   <Loader2 className="mx-auto h-6 w-6 animate-spin text-indigo-500" />
                 </td>
               </tr>
             ) : results.length === 0 ? (
               <tr>
-                <td colSpan={10} className="px-4 py-12 text-center text-gray-400">
+                <td colSpan={columnCount} className="px-4 py-12 text-center text-gray-400">
                   {t("termResults.noResults")}
                 </td>
               </tr>
             ) : (
               results.map((r, idx) => {
-                const seq1 = r.sequenceAverages?.find((s) => s.sequence === ((r.term - 1) * 2 + 1));
-                const seq2 = r.sequenceAverages?.find((s) => s.sequence === ((r.term - 1) * 2 + 2));
                 return (
                   <tr
                     key={r._id}
@@ -294,12 +294,14 @@ export default function TermResultsPage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500">{r.admissionNo}</td>
                     <td className="px-4 py-3 text-gray-500">{r.className}</td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {seq1?.average?.toFixed(1) ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center text-gray-700">
-                      {seq2?.average?.toFixed(1) ?? "—"}
-                    </td>
+                    {termSequences.map((sq) => {
+                      const sa = r.sequenceAverages?.find((s) => s.sequence === sq.number);
+                      return (
+                        <td key={sq.number} className="px-4 py-3 text-center text-gray-700">
+                          {sa?.average?.toFixed(1) ?? "—"}
+                        </td>
+                      );
+                    })}
                     <td className="px-4 py-3 text-center font-semibold text-gray-900">
                       {r.termAverage?.toFixed(1) ?? "—"}
                     </td>

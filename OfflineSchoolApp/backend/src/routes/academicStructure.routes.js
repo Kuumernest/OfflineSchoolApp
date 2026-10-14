@@ -5,6 +5,7 @@ const router = require("express").Router();
 const AcademicStructure = require("../db/models/AcademicStructure");
 const { requirePermission } = require("../../middleware/permissions");
 const { resolveSchoolId, namedAnotherSchool, guardSchoolParam } = require("../utils/tenant");
+const { validateTerms, periodsStillHolding } = require("../../../shared/periodStructure");
 
 // The path names the school, and the door (middleware/auth.js) cannot see a
 // path parameter. This is the same refusal, applied where the parameter is.
@@ -98,6 +99,32 @@ router.put(
       const sets = {};
       for (const key of allowed) {
         if (updates[key] !== undefined) sets[key] = updates[key];
+      }
+
+      // A school may shape its own year (docs/39 Phase 6, shared/
+      // periodStructure.js) — within the bounds every stored record lives in,
+      // and never by removing or moving a period that already has exams.
+      if (sets.terms !== undefined) {
+        const shape = validateTerms(sets.terms);
+        if (!shape.ok) {
+          return res.status(400).json({ success: false, code: "INVALID_STRUCTURE", errors: shape.errors });
+        }
+        const exams = await require("mongoose").model("Exam").find({
+          schoolId, academicYear: year, deletedAt: null,
+        }).select("_id name term sequenceNumber").lean();
+        const orphaned = periodsStillHolding(sets.terms, exams);
+        if (orphaned.length > 0) {
+          return res.status(409).json({
+            success: false, code: "PERIODS_IN_USE",
+            error: "Some exams belong to a term or sequence this change would remove or move.",
+            exams: orphaned.slice(0, 20),
+          });
+        }
+        // Promotion exams are sequence numbers; drop any the year no longer has.
+        const seqNumbers = new Set(sets.terms.flatMap((t) => t.sequences.map((q) => q.number)));
+        if (Array.isArray(sets.promotionExams)) {
+          sets.promotionExams = sets.promotionExams.filter((n) => seqNumbers.has(Number(n)));
+        }
       }
       sets.updatedBy = req.user?._id ?? null;
 
