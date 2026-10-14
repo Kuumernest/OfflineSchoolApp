@@ -1426,33 +1426,6 @@ const calculateStudentReportCard = asyncHandler(async (req, res) => {
 });
 
 // ─────────────────────────────────────────────────────────
-// POST /api/results/:examId/compute
-// ─────────────────────────────────────────────────────────
-
-const computeResults = asyncHandler(async (req, res) => {
-  const { examId }                          = req.params;
-  const { schoolId: bodySchoolId, classId } = req.body;
-  const schoolId = resolveSchoolId(req, bodySchoolId);
-
-  if (!schoolId) {
-    return res.status(400).json({ message: "schoolId is required" });
-  }
-
-  // Use the new results.service.js pipeline (Phase 0)
-  const resultsService = require("../services/results.service");
-  const result = await resultsService.processResults({ examId, classId, schoolId });
-
-  return res.json({
-    success:   true,
-    message:   `Results computed for ${result.computed || 0} student(s)`,
-    computed:  result.computed || 0,
-    warnings:  result.warnings || [],
-    isPartial: result.isPartial || false,
-    stats:     result.stats || null,
-  });
-});
-
-// ─────────────────────────────────────────────────────────
 // POST /api/results/:examId/publish
 // ─────────────────────────────────────────────────────────
 
@@ -1914,7 +1887,6 @@ module.exports = {
   getStudentReportCardHtml,
   reissueStudentReportCard,
   calculateStudentReportCard,
-  computeResults,
   publishResults,
   publishResult,
   upsertScore,

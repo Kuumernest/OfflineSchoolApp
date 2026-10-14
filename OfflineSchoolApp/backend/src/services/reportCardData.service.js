@@ -579,8 +579,11 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
       average:        record.annualAverage,
       overallGrade:   grading.showGrades ? record.overallGrade : null,
       overallRemark:  record.overallRemark,
+      // The year's own average. This read `record.termAverage ?? …`, copied
+      // from the term card: an annual row carrying a stray termAverage
+      // printed that figure's French remark beside the year's (docs/39 §4.6h).
       overallRemarkFr: GradingConfig.bandRemark(
-        GradingConfig.findGradeBand(record.termAverage ?? record.annualAverage, grading.bands),
+        GradingConfig.findGradeBand(record.annualAverage, grading.bands),
         "fr") || record.overallRemark,
       classPosition:  record.classPosition,
       totalInClass:   record.totalInClass,

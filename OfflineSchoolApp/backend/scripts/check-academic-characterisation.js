@@ -17,7 +17,8 @@
  *
  *   - results.service.processResults (CA blended, coefficients, GPA-point
  *     average). No router has ever mounted it (git log -S); it is reached
- *     only from tests and the unrouted results.controller.computeResults.
+ *     only from tests (its unrouted caller, results.controller.computeResults,
+ *     which passed it an object, was removed: docs/39 §4.6e).
  *   - POST /api/exams/:examId/process (exam.routes.js). What web, mobile and
  *     desktop call — so what every real result in a database came from.
  *     Raw-mark integer mean, no CA, no coefficients, absent as zero, and no
@@ -499,7 +500,7 @@ const main = async () => {
   // ── The live route: POST /api/exams/:examId/process ─────────────────────
   //
   // Everything above runs results.service.processResults. No router mounts
-  // it: its one caller, results.controller.computeResults, is not routed.
+  // it (its one caller, the unrouted results.controller.computeResults, is gone).
   // What web, mobile and desktop actually call to compute a sequence is
   // POST /api/exams/:examId/process (exam.routes.js), which writes
   // ResultSummary by arithmetic of its own. The same school, built again,

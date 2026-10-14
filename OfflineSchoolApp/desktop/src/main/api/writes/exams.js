@@ -399,7 +399,10 @@ module.exports = [
       const { classId, subjectId, scores } = body;
       if (!Array.isArray(scores) || scores.length === 0) return null;
 
-      const gradingConfig = docs.get("gradingConfig", schoolId);
+      // By schoolId: GradingConfig's _id is a Mongo ObjectId, not the school's
+      // id, so get(…, schoolId) never found the school's bands and every mark
+      // was graded on the built-in scale (docs/39 §4.6b).
+      const gradingConfig = docs.find("gradingConfig", { schoolId })[0] ?? null;
 
       const now = new Date().toISOString();
       const saved = [];
@@ -499,7 +502,10 @@ module.exports = [
       const classId = body.classId || exam.classId || null;
 
       // ── Load the mirror's copies of every collection process touches ────
-      const gradingConfig = docs.get("gradingConfig", schoolId);
+      // By schoolId: GradingConfig's _id is a Mongo ObjectId, not the school's
+      // id, so get(…, schoolId) never found the school's bands and every mark
+      // was graded on the built-in scale (docs/39 §4.6b).
+      const gradingConfig = docs.find("gradingConfig", { schoolId })[0] ?? null;
 
       const scoreQuery = { examId, schoolId, deletedAt: null };
       if (classId) scoreQuery.classId = classId;
