@@ -1753,7 +1753,9 @@
     "caSplitHint": "Le CC et l'épreuve doivent totaliser 100 %. La note de séquence est le CC x sa pondération plus l'épreuve x la sienne.",
     "caWeightSum": "Le CC et l'épreuve doivent totaliser 100 % (actuellement {{total}} %)",
     "caWeightNegative": "Les pondérations ne peuvent pas être négatives",
-    "caWeightInvalid": "Les pondérations doivent être des nombres"
+    "caWeightInvalid": "Les pondérations doivent être des nombres",
+    "secCalculationRules": "Règles de calcul",
+    "secReportLayout": "Rubriques du bulletin"
   },
   "permissions": {
     "title": "Qui peut faire quoi",
@@ -5176,6 +5178,175 @@
       "offline": "Pas de connexion. L'intelligence enregistrée reste disponible ; les explications nécessitent le serveur.",
       "QUESTION_REQUIRED": "Saisissez d'abord une question.",
       "QUESTION_TOO_LONG": "La question est trop longue."
+    }
+  },
+  "academicRules": {
+    "title": "Règles de calcul",
+    "intro": "Comment les résultats de l'année sont calculés. Chaque règle relève de l'autorité pédagogique de l'établissement : rien ne change avant qu'elle soit choisie ici, et les résultats déjà publiés conservent les chiffres avec lesquels ils ont été délivrés.",
+    "year": "Année scolaire",
+    "onDefaults": "Cette année applique le fonctionnement actuel pour chaque règle.",
+    "impactTitle": "Résultats de l'année",
+    "counts": "{{published}} publiés · {{unpublished}} non publiés",
+    "totals": "Cette année : {{published}} résultats publiés et {{unpublished}} non publiés au total.",
+    "decision": "Décision {{id}}",
+    "currentBehaviour": "Fonctionnement actuel",
+    "schoolBar": "Seuil de passage de l'établissement (sur 20)",
+    "barHint": "La moyenne annuelle nécessaire pour passer.",
+    "classBarsHint": "Une classe peut avoir son propre seuil ; laissez vide pour celui de l'établissement.",
+    "sameAsSchool": "Comme l'établissement",
+    "barInvalid": "Saisissez un nombre de 0 à 20.",
+    "barRequired": "Cette règle nécessite un seuil de passage.",
+    "review": "Vérifier les changements",
+    "takesEffect": "S'applique aux résultats calculés après l'enregistrement.",
+    "confirmTitle": "Modifier les règles de calcul de {{year}}",
+    "fromTo": "{{from}} → {{to}}",
+    "reaches": "Concerne : {{what}}",
+    "consequence": "{{published}} résultats publiés conservent les chiffres avec lesquels ils ont été délivrés. {{unpublished}} résultats non publiés suivront les nouvelles règles au prochain traitement de leur examen, trimestre ou année.",
+    "draftRunBlocks": "Une procédure de passage en brouillon existe pour cette année. Validez-la ou abandonnez-la avant de modifier la règle de passage.",
+    "reason": "Motif",
+    "reasonHint": "Consigné dans le journal d'audit avec la modification, par exemple la décision qui l'a approuvée.",
+    "confirm": "Enregistrer les règles",
+    "saved": "Règles de calcul enregistrées",
+    "saveFailed": "Impossible d'enregistrer les règles de calcul",
+    "previewFailed": "Impossible de vérifier la modification",
+    "unavailable": "Les règles de calcul n'ont pas pu être chargées.",
+    "none": "aucun",
+    "classBars": "{{count}} seuil de classe",
+    "classBars_other": "{{count}} seuils de classe",
+    "affects": {
+      "sequence": "Résultats de séquence",
+      "term": "Résultats trimestriels",
+      "annual": "Résultats annuels",
+      "promotion": "Passage"
+    },
+    "rule": {
+      "sequenceAverage": {
+        "title": "Moyenne officielle de séquence",
+        "desc": "Quel chiffre est la moyenne de séquence d'un élève — la base des rangs, des résultats trimestriels et annuels et du passage."
+      },
+      "gradingAuthority": {
+        "title": "Mentions des résultats trimestriels et annuels",
+        "desc": "Quel barème un résultat trimestriel ou annuel enregistré utilise."
+      },
+      "promotionRule": {
+        "title": "Passage en classe supérieure",
+        "desc": "Comment la proposition de passage de fin d'année est décidée."
+      },
+      "publishedResults": {
+        "title": "Résultats publiés",
+        "desc": "Si un nouveau traitement peut modifier des résultats déjà publiés."
+      },
+      "promotionThreshold": {
+        "title": "Seuil de passage",
+        "desc": ""
+      },
+      "classThresholds": {
+        "title": "Seuils de passage par classe",
+        "desc": ""
+      }
+    },
+    "value": {
+      "raw_mean": {
+        "label": "Moyenne brute des notes (fonctionnement actuel)",
+        "desc": "Moyenne arrondie à l'entier des notes de composition, sans contrôle continu ni coefficients ; une matière où l'élève est absent compte zéro. Classement au pourcentage."
+      },
+      "weighted_20": {
+        "label": "Moyenne pondérée sur 20",
+        "desc": "Chaque matière sur 20, contrôle continu intégré selon la répartition de l'établissement, pondérée par le coefficient, matières d'absence exclues, à deux décimales — le chiffre que le bulletin de séquence imprime déjà. Classement sur cette moyenne."
+      },
+      "split": {
+        "label": "Barème intégré sur les résultats enregistrés (fonctionnement actuel)",
+        "desc": "Les résultats trimestriels et annuels enregistrent une mention du barème intégré, tandis que leurs bulletins impriment le barème de l'établissement."
+      },
+      "school_bands": {
+        "label": "Le barème de l'établissement partout",
+        "desc": "Les résultats trimestriels et annuels enregistrent la mention et l'appréciation de l'établissement : la mention enregistrée et la mention imprimée sont les mêmes."
+      },
+      "legacy": {
+        "label": "Résultats de séquence (fonctionnement actuel)",
+        "desc": "Propositions tirées des résultats de séquence publiés de l'année : le seuil de moyenne de la classe s'il existe, sinon la réussite d'au moins la moitié. Le résultat annuel décide séparément."
+      },
+      "annual_average_at_least": {
+        "label": "Moyenne annuelle au moins égale à un seuil",
+        "desc": "L'élève passe lorsque sa moyenne annuelle publiée atteint le seuil (une classe peut avoir le sien). La procédure de passage et le résultat annuel appliquent la même règle."
+      },
+      "majority_of_terms_passed": {
+        "label": "Majorité des trimestres réussis",
+        "desc": "L'élève passe après avoir réussi au moins la moitié des résultats trimestriels publiés de l'année."
+      },
+      "manual_only": {
+        "label": "Décision manuelle",
+        "desc": "Aucune proposition à partir des résultats : chaque élève attend la décision d'un administrateur avant la clôture de l'année."
+      },
+      "overwrite": {
+        "label": "Recalcul sur place (fonctionnement actuel)",
+        "desc": "Un nouveau traitement remplace les résultats, y compris ceux déjà publiés."
+      },
+      "refuse": {
+        "label": "Protéger les résultats publiés",
+        "desc": "Le traitement d'un examen, d'un trimestre ou d'une année comportant des résultats publiés est refusé tant qu'ils ne sont pas dépubliés — l'étape délibérée et visible."
+      }
+    }
+  },
+  "reportLayout": {
+    "title": "Rubriques du bulletin",
+    "intro": "Choisissez les rubriques que les bulletins de l'établissement impriment. Les rubriques masquées sont toujours calculées, enregistrées et publiées — elles ne sont simplement pas imprimées.",
+    "defaultLayout": "Par défaut : toutes les rubriques",
+    "version": "Version {{version}}",
+    "presentationOnly": "Chaque modification est enregistrée comme une nouvelle version. Les bulletins déjà délivrés conservent leur version.",
+    "templatePrintsIt": "Le modèle de bulletin de l'établissement imprime cette rubrique quoi qu'il arrive ; modifiez le modèle pour la masquer.",
+    "takesEffect": "S'applique aux bulletins imprimés ou délivrés après l'enregistrement.",
+    "confirmTitle": "Enregistrer les rubriques du bulletin",
+    "confirmMessage": "Ceci devient la version {{version}}. Masquées : {{hidden}}. Les bulletins déjà délivrés conservent leur version ; les nouveaux utilisent celle-ci.",
+    "nothingHidden": "aucune",
+    "saved": "Rubriques du bulletin enregistrées (version {{version}})",
+    "unchanged": "Rien à modifier",
+    "saveFailed": "Impossible d'enregistrer les rubriques du bulletin",
+    "unavailable": "Les rubriques du bulletin n'ont pas pu être chargées.",
+    "history": "Versions",
+    "hiddenCount": "{{count}} rubrique masquée",
+    "hiddenCount_other": "{{count}} rubriques masquées",
+    "section": {
+      "watermark": {
+        "label": "Logo en filigrane",
+        "desc": "Le logo de l'établissement imprimé en transparence derrière chaque bulletin."
+      },
+      "header": {
+        "label": "En-tête",
+        "desc": "Ministère, nom de l'établissement, logo, devise, titre du bulletin et examen ou année."
+      },
+      "studentInfo": {
+        "label": "Renseignements sur l'élève",
+        "desc": "Nom, matricule, sexe, date de naissance, classe et année."
+      },
+      "results": {
+        "label": "Résultats scolaires",
+        "desc": "Le tableau des matières : notes, coefficients, mentions, appréciations, rangs et totaux."
+      },
+      "performance": {
+        "label": "Performance",
+        "desc": "Rang, moyenne, mention générale et, sur le bulletin annuel, la décision."
+      },
+      "classProfile": {
+        "label": "Profil de la classe",
+        "desc": "Moyenne de la classe, plus forte et plus faible moyenne."
+      },
+      "conduct": {
+        "label": "Conduite",
+        "desc": "Les cases travail, conduite et observations remplies à la main."
+      },
+      "remarks": {
+        "label": "Appréciations et signatures",
+        "desc": "Les appréciations du professeur principal et du chef d'établissement, avec lignes de signature."
+      },
+      "verification": {
+        "label": "Code de vérification",
+        "desc": "Le code QR et le code de vérification, lorsqu'il existe."
+      },
+      "footer": {
+        "label": "Pied de page",
+        "desc": "Date de délivrance et nom de l'établissement."
+      }
     }
   }
 }
