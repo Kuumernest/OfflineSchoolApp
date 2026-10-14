@@ -61,10 +61,19 @@ const ctx = {
   const p = rows.studentScore[0];
   check("40 on a /50 paper → max 50, 80%, graded as 16/20", [p.maxScore, p.percentage, p.grade], [50, 80, letter(16)]);
 
-  console.log("\n--- a row that names its own maxScore is left alone ---");
+  // docs/39 §4.6a: the server stores and grades a mark against the
+  // ExamSubject's maximum, never one a row claims, so the mirror does too.
+  // This used to pin "a row that names its own maxScore is left alone", the
+  // behaviour the server no longer has.
+  console.log("\n--- a row's own maxScore does not override the ExamSubject's ---");
   rows.studentScore = [];
   await api.handle({ method: "POST", path: "/api/exams/e1/scores/bulk", params: { examId: "e1" }, query: {}, body: { classId: "c1", subjectId: "x1", scores: [{ studentId: "s1", score: 9, maxScore: 10 }] } }, ctx);
-  check("9/10 stays /10 → 90%, graded as 18/20", [rows.studentScore[0].maxScore, rows.studentScore[0].percentage, rows.studentScore[0].grade], [10, 90, letter(18)]);
+  check("9 claimed /10 on a /20 subject → stored 9/20, 45%, graded as 9/20, as the server stores it", [rows.studentScore[0].maxScore, rows.studentScore[0].percentage, rows.studentScore[0].grade], [20, 45, letter(9)]);
+
+  console.log("\n--- with no ExamSubject at all, the row's maxScore is all there is ---");
+  rows.studentScore = [];
+  await api.handle({ method: "POST", path: "/api/exams/e1/scores/bulk", params: { examId: "e1" }, query: {}, body: { classId: "c1", subjectId: "no-such-subject", scores: [{ studentId: "s1", score: 9, maxScore: 10 }] } }, ctx);
+  check("9/10 with no ExamSubject → /10, 90%, graded as 18/20", [rows.studentScore[0].maxScore, rows.studentScore[0].percentage, rows.studentScore[0].grade], [10, 90, letter(18)]);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

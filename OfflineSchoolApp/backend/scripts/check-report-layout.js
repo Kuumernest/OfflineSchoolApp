@@ -285,7 +285,12 @@ const main = async () => {
     [issued?.layoutVersionId, issued?.layoutVersion, issued?.layoutSections?.results], [`${SCHOOLS.A}:v1`, 1, false]);
   const frozen = issued?.renderedHtml;
 
+  const academicRows = async () => JSON.stringify(await Promise.all(
+    ["StudentScore", "ResultSummary", "TermResult", "AnnualResult"].map((m) => M(m).find({}).sort({ _id: 1 }).lean())));
+  const rowsBeforeLayout = await academicRows();
   const a2 = await putLayout("adm-A", { results: true, footer: false });
+  // A section switch is presentation: it moves no mark, result or rank.
+  check("switching sections rewrites no score, summary, term or annual row", await academicRows(), rowsBeforeLayout);
   check("A changes its layout → version 2", [a2.status, a2.body?.layout?.version, a2.body?.layout?.basedOnVersion], [201, 2, 1]);
 
   const reprint = await seqCard("adm-A", "A", "p1");
