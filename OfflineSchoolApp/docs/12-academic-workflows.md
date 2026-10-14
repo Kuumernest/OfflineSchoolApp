@@ -55,6 +55,13 @@ sequence marks directly. Both are implemented
 `PUT /api/academic-structure/:schoolId/:year`,
 `GET /api/academic-structure/:schoolId`.
 
+> **Who reads it (docs/39 D4).** `settings.view` reads the whole document;
+> `exams.view` (teachers) reads the year's shape — terms, sequences, names,
+> promotion exams, pass marks — through `GET …/:schoolId/:year` only, never
+> the rules, and that read never creates a document. It is the same
+> permission the sync feed ships the document under. **TEST VERIFIED** by
+> `check:authz`, `check:feed` and `check:desktop` (offline parity).
+>
 > These three routes take `:schoolId` from the URL. They are among the routers
 > that previously used it as given; they now resolve through `resolveSchoolId`.
 > **TEST VERIFIED** by `check-cross-school.js`.

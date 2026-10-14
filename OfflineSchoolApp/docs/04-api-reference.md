@@ -132,13 +132,16 @@ Read the top of each router for its aliases.
 
 ## Routes by area
 
-### `/api/academic-structure` — `academicStructure.routes.js` — 3 routes
+### `/api/academic-structure` — `academicStructure.routes.js` — 6 routes
 
 | Method | Path | Guards |
 |---|---|---|
-| GET | `/:schoolId/:year` | `canRead` |
+| GET | `/:schoolId/:year` | `canReadYear` (`settings.view` or `exams.view`; without `settings.view`, the year's shape only, and nothing is created) |
 | PUT | `/:schoolId/:year` | `canManage` |
 | GET | `/:schoolId` | `canRead` |
+| GET | `/:schoolId/:year/rules` | `canRead` |
+| POST | `/:schoolId/:year/rules/preview` | `canManage` |
+| PUT | `/:schoolId/:year/rules` | `canManage` |
 
 ### `/api/admin` — `admin.routes.js` — 58 routes
 
