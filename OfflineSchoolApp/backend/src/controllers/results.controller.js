@@ -324,7 +324,13 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
   const { exam, schoolId } = scoped;
 
   const [scores, examSubjects, summary] = await Promise.all([
-    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).lean(),
+    // Sorted, because the card's subject rows follow this order. Unsorted,
+    // the order was whichever index the planner picked — {examId, studentId,
+    // subjectId} gives subject order, {schoolId, studentId} does not — so the
+    // same card could list its subjects differently from one print to the next
+    // (seen as an intermittent check:academic failure). subjectId order is
+    // what the unique index usually gave.
+    StudentScore.find({ examId, studentId, schoolId, deletedAt: null }).sort({ subjectId: 1 }).lean(),
     ExamSubject.find({ examId, schoolId, deletedAt: null }).lean(),
     ResultSummary.findOne({ examId, studentId, schoolId, deletedAt: null }).lean(),
   ]);
