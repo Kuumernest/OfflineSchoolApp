@@ -93,6 +93,16 @@ const proposeFor = ({ currentClass, result }) => {
     return { outcome: "graduated", basis: "final_year", toClassId: null };
   }
 
+  // No published result for the year is no evidence either way. This fell
+  // through to "promoted" — and on the live route, whose summaries carry no
+  // academicYear, every pupil of the school has no result, so a run proposed
+  // promoting all of them, including pupils the annual results hold back
+  // (docs/39 §4.7e). Unassigned, as under every other rule: the commit is
+  // blocked until someone decides.
+  if (!result) {
+    return { outcome: "unassigned", basis: "no_results", toClassId: null };
+  }
+
   // The class's own bar, when the admin has set one. Checked before the
   // pass-count rule: a student can have scraped through two of three terms
   // and still sit under the average the class demands.

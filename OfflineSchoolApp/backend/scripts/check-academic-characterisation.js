@@ -461,13 +461,15 @@ const main = async () => {
       /*
        * [docs/39 §4.4] every pupil the annual results call "repeated" is
        * proposed "promoted" here — the run reads summaries, not annual results.
-       * Eve, with no results at all, is proposed "promoted" on basis "no_results".
+       * Eve, with no results at all, is "unassigned" on basis "no_results":
+       * no evidence, so someone decides (docs/39 §4.7e, fixed; she was
+       * proposed "promoted" to Form 4).
        */
       "stu-ama": { outcome: "promoted", basis: "results_pass", average: 2.7, toClassId: FORM4 },
       "stu-bih": { outcome: "promoted", basis: "results_pass", average: 2.9, toClassId: FORM4 },
       "stu-cho": { outcome: "promoted", basis: "results_pass", average: 2.3, toClassId: FORM4 },
       "stu-dan": { outcome: "promoted", basis: "results_pass", average: 2.7, toClassId: FORM4 },
-      "stu-eve": { outcome: "promoted", basis: "no_results", average: null, toClassId: FORM4 },
+      "stu-eve": { outcome: "unassigned", basis: "no_results", average: null, toClassId: null },
     });
 
     /*
@@ -632,11 +634,14 @@ const main = async () => {
      */
     check("live: resultsByStudent", Object.fromEntries([...byStudent.entries()].sort()), {});
     const { decisions } = await promotion.generateRun({ schoolId: LIVE, fromYear: YEAR, toYear: NEXT_YEAR, generatedBy: null });
-    // So every pupil is proposed on "no_results" — promoted, Cho (annual: repeated) included.
+    // So every pupil is proposed on "no_results". They were proposed
+    // "promoted", Cho (annual: repeated) included; now each is unassigned and
+    // the commit waits for a person (docs/39 §4.7e, fixed). The blindness
+    // itself (D1b) is the school's decision: weighted_20 or a non-legacy rule.
     check("live: promotion decisions [outcome, basis]", Object.fromEntries(decisions
       .map((x) => [x.studentId, [x.outcome, x.basis]]).sort()), {
-      "L-stu-ama": ["promoted", "no_results"], "L-stu-bih": ["promoted", "no_results"], "L-stu-cho": ["promoted", "no_results"],
-      "L-stu-dan": ["promoted", "no_results"], "L-stu-eve": ["promoted", "no_results"],
+      "L-stu-ama": ["unassigned", "no_results"], "L-stu-bih": ["unassigned", "no_results"], "L-stu-cho": ["unassigned", "no_results"],
+      "L-stu-dan": ["unassigned", "no_results"], "L-stu-eve": ["unassigned", "no_results"],
     });
     check("live: summaries carry no academicYear or term", pick(await live(1, "stu-ama"), ["academicYear", "term"]),
       { academicYear: null, term: null });
