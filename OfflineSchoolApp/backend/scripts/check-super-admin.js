@@ -108,7 +108,11 @@ const check = (label, actual, expected) => {
     pupil("stu-b1", B, "cls-b", 1), pupil("stu-b2", B, "cls-b", 2),
   ]);
 
-  const day = "2026-09-14";
+  // Yesterday, as a UTC day string the way platformStats writes its window
+  // (the last 30 days by default). This was the literal "2026-09-14" —
+  // yesterday on the day it was written — and aged out of the window 30 days
+  // later, failing the attendance checks with nothing in the code changed.
+  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
   await StudentAttendance.create([
     { schoolId: A, classId: "cls-a", studentId: "stu-a1", markedBy: "teacher-a", date: day, status: "present" },
     { schoolId: A, classId: "cls-a", studentId: "stu-a2", markedBy: "teacher-a", date: day, status: "present" },
