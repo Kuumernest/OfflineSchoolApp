@@ -1344,9 +1344,9 @@ Checked against docs/37:
 | **1. Audit** | this document | none |
 | **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
 | **3. Represent today's structure as configuration** (**done**, ahead of D1 on the project owner's instruction; §20.0) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
-| **4. Configuration-driven calculation** | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
-| **5. Admin configuration UI** | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
-| **6. Genuinely custom structures** | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
+| **4. Configuration-driven calculation** (**done** as per-school rules, defaults = today; §20.0) | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
+| **5. Admin configuration UI** (**done** for the rules and section layouts; §20.0) | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
+| **6. Genuinely custom structures** (**partly done**: flexible periods within today's bounds; §20.0) | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
 
 ### 20.0 Progress
 
@@ -1507,6 +1507,115 @@ Checked against docs/37:
     `check:academic` (52), `check:academicpolicy` (86), `check:term`,
     `check:cards`, `check:coeff`, `check:reportcard` and `check:complexity`
     are unchanged.
+- **Phase 4, done: the school's calculation rules (decisions D1–D3 and §12
+  as settings, never taken by the code).**
+  - **Why rules.** D1, D1b, D2 and D3 change real results and need the
+    school's authorised academic review, which the code cannot give. So
+    each is a rule on `AcademicStructure.rules`, chosen per school and year
+    (`shared/academicRules.js`). **Every default is the behaviour before
+    rules existed.** A school that sets nothing computes byte-for-byte as
+    before (`check:academic` and every earlier suite unchanged) and keeps
+    the same policy hash: only non-default rules enter the snapshot.
+  - **The rules:**
+    | Rule | Default (today) | Option | Writer version |
+    |---|---|---|---|
+    | `sequenceAverage` (D1) | `raw_mean` | `weighted_20`: the figure the sequence card prints (CA blended, coefficients, absent left out, 2 decimals); ranked on it; the subject passes on its blended mark (§4.6l); paper summaries carry `academicYear`/`term` (§4.7e) | `exam-process/2` |
+    | `gradingAuthority` (§12) | `split` | `school_bands`: term and annual rows store the school's bands | `term/2`, `annual/2` |
+    | `promotionRule` (D1b, D2) | `legacy` | `annual_average_at_least` (school bar, per-class bars), `majority_of_terms_passed`, `manual_only`. One function decides both the annual row's status and the promotion run's proposal (§4.4, §14). The run reads published `AnnualResult`/`TermResult` | `annual/2` |
+    | `publishedResults` (D3) | `overwrite` | `refuse`: processing an exam, term or year with published results is refused with 409 and nothing is written; a whole-school run skips and names those classes | — |
+  - **Reading /20.** Cards, the verification snapshot and class statistics
+    read an `exam-process/2` average as /20 (`averageOutOf20` takes the
+    row's `calcVersion`), never ×5.
+  - **One ranker:** `shared/ranking.competitionPlaces`, used by term, annual
+    and the weighted route. The default route keeps its own pinned loop.
+  - **API:** `GET`/`PUT /api/academic-structure/:schoolId/:year/rules` and
+    `POST …/rules/preview` (`settings.view` / `settings.manage`).
+    - **Validation:** writes are validated strictly, and incoherent sets are
+      refused (for example `annual_average_at_least` without a bar).
+    - **Audit:** a no-op stores nothing. A real change is audited (`AuditLog`
+      `academic.rulesChanged`, before/after and a reason).
+    - **Draft promotion runs:** a promotion-rule change is refused while a
+      draft promotion run exists for the year.
+    - **Preview counts:** the preview returns, per layer, how many results
+      are published (they keep their figures) and how many are unpublished
+      (they follow the new rules when next processed).
+  - **Tests:** `check:academicrules`, 63 checks. They include stored average
+    === card `weightedAverage` for every pupil, and run proposals === annual
+    status. Mutations: no CA blend fails 8, class bar ignored fails 2, the
+    route ignoring `refuse` fails 2.
+  - **Not done from the Phase 4 row:**
+    - Component weights still come from `GradingConfig.caWeight/testWeight`.
+      That is the same arithmetic; generalising components is the §6.4
+      model, part of Phase 6.
+    - Term and annual cards are still not archived at issue, and the QR is
+      still refreshed per render (§10.2(4)(5)). Changing what a reprint
+      shows is a document decision of its own; it is not taken here.
+- **The decisions are still the school's.** No rule has been switched on for
+  any school. Choosing `weighted_20` is D1. The settings screen (Phase 5)
+  is where the school's authorised academic review records it, with the
+  consequence shown first.
+- **Phase 5, done: the settings screens** (web, Settings).
+  - **Calculation rules:** per year, every option described, today's
+    behaviour marked as such, published and unpublished counts, and the
+    promotion bars validated. Save shows the server's preview first: what
+    moves, what it reaches, the counts, any blocking draft run, and a reason
+    for the audit trail.
+  - **Report card sections:** the Phase 2(d) API, which had no client. Each
+    section is described, with a warning where the school's own template
+    prints a section regardless, a confirmation naming the new version, and
+    the version history. Reorder and per-section options are not offered,
+    because the API has none.
+  - **Not built from §20.2:** a ranking visibility editor (§13), and an
+    impact preview for structure edits (structure edits are guarded instead;
+    see Phase 6).
+- **Phase 6, partly done: a school shapes its own year, within the bounds
+  every stored record already lives in.**
+  - **The shape.** 1–3 terms (semesters by name), each with at least one
+    sequence, up to 6 sequences across the year, numbered 1..m in order
+    (`shared/periodStructure.js`). For example, two semesters of three
+    evaluations each. No stored record needs migrating: terms stay 1–3 and
+    sequences 1–6, and the term and annual layers, cards and snapshot
+    already read the year from its structure (Phase 3).
+  - **The save route** validates any `terms` it is sent (400
+    `INVALID_STRUCTURE`). It refuses to remove a period, or move it to
+    another term, while it has exams (409 `PERIODS_IN_USE`, nothing stored),
+    and drops promotion exams the year no longer has. A write without
+    `terms` is unaffected.
+  - **The annual layer** decides the default promotion status when every
+    term of the year is complete. That was `completedTerms >= 3`, which is
+    identical for three-term years and could never be met by two
+    semesters.
+  - **Web:**
+    - The structure editor adds and removes terms and sequences, numbers
+      sequences across the year (it assumed two per term), and keeps
+      promotion exams on their sequences.
+    - Exam create and edit offer the year's own terms and sequences
+      (`hooks/useAcademicPeriods`), including its own promotion exams in
+      place of the fixed 5 and 6.
+    - The term- and annual-results tables show one column per sequence or
+      term the year actually has.
+    - Everything falls back to the old fixed set when the structure cannot
+      be read. That includes teachers, who lack `settings.view` (§4.6j).
+  - **Tests:** `check:periodshapes`, 27 checks. The shape rules; the route,
+    with nothing stored on refusal; and a two-semester school end to end,
+    against hand-worked figures (semesters 13 and 12, year 12.5, three
+    named columns, annual card 12.5). Mutations: the old `>= 3` rule fails
+    1, no in-use guard fails 3.
+  - **Not done from the Phase 6 row,** each a cross-cutting change of its
+    own:
+    - non-/20 scales, which the intelligence thresholds are all written in
+      (`SCALE = 20`, deltas 2/4/14);
+    - more than 3 terms or 6 sequences: the bounds of `Exam`, the cohort
+      schema and the card tokens;
+    - open assessment types and families, and `Exam.periodKey`/`componentKey`
+      (§11.2);
+    - cohort `FORMAT_VERSION` 2 and the §15.2 intelligence mappings;
+    - the mobile and desktop term pickers.
+  - **Found on the way, not fixed:**
+    - Mobile's exam edit sends `"first_term"`, and its create sends
+      `"Term 1"`, into the numeric `term` field.
+    - The web exam list's term filter sends `"Term 1"` (400).
+    - `platformStats` drops term filters above 3.
 
 ### 20.1 Safest first implementation slice
 
@@ -1525,10 +1634,11 @@ This slice is done, and so are Phase 2(d), section layouts (§10.3), and
 Phase 2(e), the missing-school guard (§17.4), which was implemented and
 verified by `check:schoolguard`. Phase 2 is complete. Phase 3 is also done,
 ahead of D1 on the project owner's instruction, with no figure changed
-(§20.0). D1 is still undecided and needs the school's sign-off. It now
-blocks Phase 4.
+(§20.0). Phase 4 made D1–D3 per-school rules whose defaults are today's
+behaviour, so no school's results change until its authorised academic
+review chooses otherwise in the Phase 5 screen. None has.
 
-### 20.2 Admin experience (Phase 5 design; not implemented)
+### 20.2 Admin experience (Phase 5 design; partly implemented, see §20.0)
 
 ```
 Academic Settings
@@ -1563,8 +1673,12 @@ consequence:**
 ### 21.1 Decisions needed before Phase 3
 
 > Phase 3 has since been done without these, as a behaviour-preserving
-> refactor (§20.0). None of them is decided. D1–D3 now block Phase 4,
-> which is where results change.
+> refactor (§20.0). Phase 4 turned D1, D1b, D2 and D3 into per-school rules
+> (`shared/academicRules.js`) whose defaults are today's behaviour. So none
+> is decided by the code, and none is decided for any school until its
+> authorised academic review chooses in Settings → Calculation rules. The
+> questions below are the ones that review answers. D4 remains open as a
+> permission question.
 
 - **D1 (revised). Which sequence calculation is authoritative (§4.1, §4.7).**
   Real results are the live route's: a whole-number raw mean, with no CA, no
