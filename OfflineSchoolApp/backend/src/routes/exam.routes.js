@@ -1323,16 +1323,22 @@ router.post("/:examId/scores/bulk", staffOnly, asyncHandler(async (req, res) => 
   // every average and grade computed from it, so the sheet is validated before
   // anything is written. Absent and exempt rows carry no score; every other
   // student must have a real number between 0 and the subject's ceiling.
+  //
+  // The ceiling is the one the mark is stored and graded against below — the
+  // exam subject's — never a maxScore sent on the row. Checking the row's own
+  // value let { score: 30, maxScore: 40 } through on a /20 subject, to be
+  // stored as 30/20 (docs/39 §4.6a).
+  const ceiling = examSubject?.maxScore ?? 100;
   const invalidScores = scores.filter((s) => {
     if (!s || s.isAbsent || s.isExempt)                           return false;
     if (s.score === null || s.score === undefined || s.score === "") return true;
     const n = Number(s.score);
-    return !Number.isFinite(n) || n < 0 || n > (s.maxScore ?? examSubject?.maxScore ?? 100);
+    return !Number.isFinite(n) || n < 0 || n > ceiling;
   });
   if (invalidScores.length > 0) {
     return res.status(400).json({
       success: false,
-      message: `${invalidScores.length} invalid score(s): every present student needs a mark between 0 and ${examSubject?.maxScore ?? 100}`,
+      message: `${invalidScores.length} invalid score(s): every present student needs a mark between 0 and ${ceiling}`,
       invalid: invalidScores.map((s) => s.studentId),
     });
   }

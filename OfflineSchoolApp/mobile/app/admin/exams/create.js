@@ -1104,7 +1104,9 @@ export default function CreateExamScreen() {
     name:         "",
     type:         "test",
     academicYear: ACADEMIC_YEARS[1],
-    term:         "Term 1",
+    // One of termOptions' values. "Term 1" matched none of them, and was sent
+    // as is when the picker was left alone: the server refuses it (400).
+    term:         "1",
     status:       "draft",
     startDate:    "",
     endDate:      "",
@@ -1170,7 +1172,7 @@ export default function CreateExamScreen() {
         name:         form.name.trim(),
         type:         form.type,
         academicYear: form.academicYear,
-        term:         form.term,
+        term:         Number(form.term),
         status:       form.status,
         startDate:    form.startDate.trim()    || null,
         endDate:      form.endDate.trim()      || null,

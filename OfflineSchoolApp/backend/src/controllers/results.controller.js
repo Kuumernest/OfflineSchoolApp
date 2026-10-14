@@ -7,7 +7,6 @@ const ResultSummary   = require("../db/models/ResultSummary");
 const Exam            = require("../db/models/Exam");
 const ExamSubject     = require("../db/models/ExamSubject");
 const GradingConfig   = require("../db/models/GradingConfig");
-const School          = require("../db/models/School");
 const GeneratedReport = require("../db/models/GeneratedReport");
 const ResultChangeLog = require("../db/models/ResultChangeLog");
 const {
@@ -845,6 +844,7 @@ const { loadReportTemplate, loadSchoolForCard, absoluteLogoUrl, subjectTeachers 
   require("../services/reportCardData.service");
 // Which sections a card prints (docs/39 §10, Phase 2d).
 const reportLayout = require("../services/reportLayout.service");
+const { recordAudit } = require("../services/audit.service");
 
 /**
  * Freeze what was just issued.
@@ -1039,7 +1039,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
   // overwrote — another school's frozen card.
   const existing = await GeneratedReport.findOne({
     examId, studentId, schoolId,
-  }).select("_id templateVersion deletedAt").lean();
+  }).select("_id templateId templateVersion layoutVersion deletedAt").lean();
 
   if (!existing) {
     return res.status(404).json({
@@ -1060,21 +1060,32 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
   const lang =
     String(req.body.lang || "en").toLowerCase() === "fr" ? "fr" : "en";
 
-  let schoolName = req.user?.schoolName || null;
-  if (!schoolName) {
-    const school = await School.findOne({ _id: schoolId }).select("name").lean();
-    schoolName = school?.name || null;
-  }
+  // The same letterhead and verification strip the issue path prints
+  // (getStudentReportCardHtml). A reissue used to render with the school's
+  // name alone, so the card that superseded an issued one had no logo, motto,
+  // delegations or QR (docs/39 §4.6f).
+  const letterhead = await loadSchoolForCard(schoolId, req);
+  const schoolName = req.user?.schoolName || letterhead.doc?.name || null;
+  const verify = await cardVerification({
+    data:        built.data,
+    schoolId,
+    studentId,
+    documentKey: examId,
+    req,
+  });
 
   const template = await loadReportTemplate(schoolId, req.body.templateId);
 
   // A reissue is the deliberate act that supersedes an issued card, so it
   // takes the school's CURRENT layout and records it (docs/39 §10).
   const layout = { ...(await reportLayout.currentLayout(schoolId)) };
+  const issued = reportLayout.issuedFields(layout);
 
   const rendered = renderReportCard(built.data, {
     lang,
     schoolName: schoolName || "School",
+    school: { ...letterhead.school, name: schoolName || "" },
+    verify,
     template,
     sections: layout.sections,
   });
@@ -1085,7 +1096,7 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       $set: {
         templateId:      rendered.source === "template" ? String(template._id) : null,
         templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
-        ...reportLayout.issuedFields(layout),
+        ...issued,
         renderedHtml:    rendered.html,
         variablePayload: built.data,
         term:            built.data.term         || null,
@@ -1097,6 +1108,29 @@ const reissueStudentReportCard = asyncHandler(async (req, res) => {
       },
     }
   );
+
+  // The name against it (docs/39 §4.6f): who superseded which card, from
+  // which template and layout to which, and why if they said.
+  await recordAudit(req, {
+    action:   "reportCard.reissued",
+    schoolId,
+    resource: { type: "GeneratedReport", id: existing._id, label: `exam ${examId}` },
+    before: {
+      templateId:      existing.templateId ?? null,
+      templateVersion: existing.templateVersion ?? null,
+      layoutVersion:   existing.layoutVersion ?? null,
+      deleted:         Boolean(existing.deletedAt),
+    },
+    after: {
+      templateId:      rendered.source === "template" ? String(template._id) : null,
+      templateVersion: rendered.source === "template" ? template.version ?? 1 : 1,
+      layoutVersion:   issued.layoutVersion ?? null,
+      deleted:         false,
+      verifyCode:      verify?.code ?? null,
+    },
+    reason: typeof req.body.reason === "string" ? req.body.reason
+          : typeof req.body.changeReason === "string" ? req.body.changeReason : null,
+  });
 
   console.log(
     `♻️  Report card reissued: exam=${examId} student=${studentId} ` +
@@ -1670,7 +1704,16 @@ const upsertScore = asyncHandler(async (req, res) => {
    * After authorisation on purpose: somebody who may not write this mark
    * learns that and nothing else.
    */
-  const ceiling = Number(maxScore ?? examSubject?.maxScore ?? 100);
+  //
+  // The ceiling is the exam subject's maxScore whenever there is one — what
+  // processing divides by — and it is also what the row stores. A body's own
+  // maxScore used to win both, so { score: 300, maxScore: 1000 } on a /20
+  // subject passed and processed as 300/20 (docs/39 §4.6a). The body's value
+  // is honoured only for a mark with no exam subject to answer for it.
+  // A ceiling that is not a positive number (a body's "abc") would make every
+  // comparison below false and let any mark through, so it reads as 100.
+  const ceilingRaw = Number(examSubject?.maxScore ?? maxScore ?? existing?.maxScore ?? 100);
+  const ceiling    = Number.isFinite(ceilingRaw) && ceilingRaw > 0 ? ceilingRaw : 100;
   if (!isAbsent && !isExempt) {
     const blank = score === null || score === undefined || score === "";
     const value = Number(score);
@@ -1713,7 +1756,7 @@ const upsertScore = asyncHandler(async (req, res) => {
     }
     Object.assign(existing, {
       score,
-      maxScore:      maxScore      ?? existing.maxScore,
+      maxScore:      ceiling,
       isAbsent:      isAbsent      ?? existing.isAbsent,
       isExempt:      isExempt      ?? existing.isExempt,
       teacherRemark: teacherRemark ?? existing.teacherRemark,
@@ -1747,7 +1790,7 @@ const upsertScore = asyncHandler(async (req, res) => {
     examId, examSubjectId: examSubject?._id ?? examSubjectId ?? null, studentId,
     subjectId, classId: effectiveClassId, schoolId: callerSchoolId,
     score,
-    maxScore:      maxScore      ?? 100,
+    maxScore:      ceiling,
     isAbsent:      isAbsent      ?? false,
     isExempt:      isExempt      ?? false,
     teacherRemark: teacherRemark ?? null,

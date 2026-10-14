@@ -325,17 +325,17 @@ acts on (2). They can disagree, and both are affected by §4.1.
 
 | # | Finding | Evidence | Verified |
 |---|---|---|---|
-| a | Bulk-score validation checks against the **client-sent** `maxScore` but stores the ExamSubject's | `exam.routes.js:1318` vs `:1393` | code reading |
+| a | Bulk-score validation checks against the **client-sent** `maxScore` but stores the ExamSubject's; the single-mark route lets the body raise both | `exam.routes.js:1318` vs `:1393`; `results.controller.js` `upsertScore` | **Fixed:** both routes and the desktop mirror use `ExamSubject.maxScore` (`check:marks`) |
 | b | Desktop offline grading looks up GradingConfig by `_id = schoolId`, so it never finds the school's bands | `desktop/src/main/api/writes/exams.js:402`, `store.js:369-374` | code reading |
 | c | Mobile carries a divergent 7-band scale for its offline card fallback | `mobile/src/services/report.data.service.js:886-925` | code reading (sync audit) |
 | d | Strengths engine counts CA twice: CA events (family `continuous`) are corroboration though CA is already blended into the academic mark | `shared/strengths/learningIntegration.js:86,124` | code reading; not reproduced |
 | e | `results.controller` calls `processResults({examId,…})` with an object | `results.controller.js:1369` | code reading; route reachability not traced |
-| f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | report-card audit |
-| g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | report-card audit |
+| f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | **Fixed:** same letterhead and verification strip as the issue path; `AuditLog` `reportCard.reissued` (`check:reportlayout`) |
+| g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | **Fixed:** an existing card is refused, 409 `REPORT_ALREADY_ISSUED` (`check:marks`) |
 | h | Annual card's French remark reads `termAverage ?? annualAverage` | `reportCardData.service.js:580` | code reading |
 | i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design. **Fixed in Phase 2(e)** (§17.4) | `exam.routes.js:20-23,194-200`; scratch probe | probe |
 | j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | code reading |
-| k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **pinned** in `check:academic` |
+| k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **Fixed:** no row; an unpublished stale row is removed, a published one kept as issued and not ranked (`check:annualnoterms`; `check:academic` pins moved) |
 | l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
 
 ---
@@ -1611,11 +1611,13 @@ Checked against docs/37:
       (§11.2);
     - cohort `FORMAT_VERSION` 2 and the §15.2 intelligence mappings;
     - the mobile and desktop term pickers.
-  - **Found on the way, not fixed:**
-    - Mobile's exam edit sends `"first_term"`, and its create sends
-      `"Term 1"`, into the numeric `term` field.
-    - The web exam list's term filter sends `"Term 1"` (400).
-    - `platformStats` drops term filters above 3.
+  - **Found on the way:**
+    - Mobile's exam edit sent `"first_term"`, and its create sent
+      `"Term 1"`, into the numeric `term` field. **Fixed:** both send 1–3.
+    - The web exam list's term filter sent `"Term 1"` (400). **Fixed:**
+      1–3; "Full Year" is "All terms".
+    - `platformStats` drops term filters above 3. Not fixed: `Exam.term`
+      cannot exceed 3 either.
 
 ### 20.1 Safest first implementation slice
 

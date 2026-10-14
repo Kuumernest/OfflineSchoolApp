@@ -47,7 +47,8 @@
  *                   annual and promotion layers read it as /20 or 0–100
  *   [docs/39 §4.3]  a recompute unpublishes a published result
  *   [docs/39 §4.4]  the promotion run and the annual results disagree
- *   [docs/39 §4.6k] a pupil with no term result gets an annual row of 0
+ *   [docs/39 §4.6k] FIXED: a pupil with no term result used to get an
+ *                   annual row of 0, F, ranked last; now gets none
  *   [docs/39 §4.6l] the sequence card's subject pass flag is the paper's,
  *                   not the blended mark it prints
  *   [docs/39 §4.7]  the live route: CA and coefficients ignored, absent as
@@ -350,8 +351,10 @@ const main = async () => {
 
   console.log("--- annual results (annualGrading) ---");
   const annualRun = await annualGrading.computeClassAnnualAverages({ schoolId: SCHOOL, academicYear: YEAR, classId: FORM3 });
-  // Five, not four: Eve too — see the annual rows below.
-  check("annual run", annualRun, { computed: 5, skipped: 0 });
+  // [docs/39 §4.6k, fixed] four, not five: Eve has no term result and gets no
+  // annual row, as the term layer gives her no term row. Was { computed: 5,
+  // skipped: 0 }.
+  check("annual run", annualRun, { computed: 4, skipped: 1, noTerms: 1 });
   {
     const all = {};
     for (const [id] of PUPILS) {
@@ -365,18 +368,18 @@ const main = async () => {
     /*
      * Ama: (3.09·33.33 + 2.83·33.33 + 2.27·33.34) / 100 = 2.7299 → 2.73.
      *
-     * [docs/39 §4.6k] Eve has no term result at all and is still written an
-     * annual row: average 0, F, ranked last of five. The term layer refuses
-     * exactly this ("not a zero", termGrading.service.js); the annual layer
-     * writes one for every active pupil. promotionStatus stays "pending"
-     * because fewer than three terms are complete.
+     * [docs/39 §4.6k, fixed] Eve has no term result at all and gets no
+     * annual row, as the term layer gives her none ("not a zero",
+     * termGrading.service.js). Until the fix she was written average 0, F,
+     * "pending", ranked 5 of 5. Nobody else's place moves (she was last);
+     * totalInClass is 4, not 5.
      */
     check("annual rows", all, {
-      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 5 },
-      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 1, totalInClass: 5 },
-      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 4, totalInClass: 5 },
-      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 5 },
-      "stu-eve": { annualAverage: 0,    overallGrade: "F", isPassing: false, promotionStatus: "pending",  promotionThreshold: 10, classPosition: 5, totalInClass: 5 },
+      "stu-ama": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 4 },
+      "stu-bih": { annualAverage: 2.9,  overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 1, totalInClass: 4 },
+      "stu-cho": { annualAverage: 2.33, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 4, totalInClass: 4 },
+      "stu-dan": { annualAverage: 2.73, overallGrade: "F", isPassing: false, promotionStatus: "repeated", promotionThreshold: 10, classPosition: 2, totalInClass: 4 },
+      "stu-eve": null,
     });
     const ama = await AnnualResult.findOne({ schoolId: SCHOOL, academicYear: YEAR, studentId: "stu-ama" }).lean();
     check("Ama termAverages", (ama?.termAverages || []).map((x) => pick(x, ["term", "average", "overallGrade", "isComplete"])),
@@ -599,11 +602,12 @@ const main = async () => {
       const r = await AnnualResult.findOne({ schoolId: LIVE, academicYear: YEAR, studentId: `${L}${id}` }).lean();
       annual[id] = r ? [r.annualAverage, r.overallGrade, r.isPassing, r.promotionStatus, r.classPosition] : null;
     }
-    // Ama (13·33.33 + 12·33.33 + 11·33.34)/100 = 12.00. Eve: the §4.6k zero row again.
+    // Ama (13·33.33 + 12·33.33 + 11·33.34)/100 = 12.00. Eve: no row (§4.6k,
+    // fixed; was [0, "F", false, "pending", 5]).
     check("live: annual rows [average, grade, passing, promotion, position]", annual, {
       "stu-ama": [12, "B", true, "promoted", 2], "stu-bih": [13, "B", true, "promoted", 1],
       "stu-cho": [5.83, "F", false, "repeated", 4], "stu-dan": [12, "B", true, "promoted", 2],
-      "stu-eve": [0, "F", false, "pending", 5],
+      "stu-eve": null,
     });
 
     const card = await buildStudentReportCardData(`${L}ex-seq1`, `${L}stu-ama`);

@@ -250,6 +250,17 @@ async function computeStudentAnnualAverage({
   }
   void structure;
 
+  // No term result, no annual result — as the term layer writes no row for a
+  // pupil with no marks. This wrote a 0, an F and last place for a pupil who
+  // had simply not been assessed (docs/39 §4.6k). An unpublished row left by
+  // an earlier run goes; a published one stays exactly as it was issued.
+  if (termResults.length === 0) {
+    await AnnualResult.deleteOne({
+      schoolId, academicYear, classId, studentId, isPublished: { $ne: true },
+    });
+    return null;
+  }
+
   const row = annualRowFor(ctx, { termResults, promotionResults, classId });
 
   // 8. Upsert AnnualResult
@@ -278,7 +289,8 @@ async function computeStudentAnnualAverage({
  * @param {string}  opts.schoolId
  * @param {string}  opts.academicYear
  * @param {string}  opts.classId
- * @returns {{ computed: number, skipped: number }}
+ * @returns {{ computed: number, skipped: number, noTerms: number }}
+ *   skipped includes noTerms: pupils with no term result, who get no row.
  */
 async function computeClassAnnualAverages({
   schoolId,
@@ -314,6 +326,8 @@ async function computeClassAnnualAverages({
 
   let computed = 0;
   let skipped  = 0;
+  let noTerms  = 0;
+  let excluded = [];
 
   if (students.length > 0) {
     // One context for the class (an absent structure fails the whole class,
@@ -359,9 +373,13 @@ async function computeClassAnnualAverages({
     }
 
     const ops = [];
+    const noTermIds = [];
     for (const student of students) {
       try {
         const k = String(student._id);
+        // No term result, no annual row (docs/39 §4.6k): see
+        // computeStudentAnnualAverage.
+        if (!termsByStudent.has(k)) { noTermIds.push(student._id); continue; }
         const row = annualRowFor(ctx, {
           termResults:      termsByStudent.get(k) ?? [],
           promotionResults: promoByStudent.get(k) ?? [],
@@ -385,26 +403,42 @@ async function computeClassAnnualAverages({
       }
     }
     if (ops.length > 0) await AnnualResult.bulkWrite(ops, { ordered: false });
+
+    // Rows an earlier run wrote for those pupils: an unpublished one is
+    // removed, so it is no longer ranked; a published one is left as issued
+    // and kept out of the positions below. Only asked when there are such
+    // pupils, so a class where everyone has a term costs no extra query.
+    if (noTermIds.length > 0) {
+      await AnnualResult.deleteMany({
+        schoolId, academicYear, classId, studentId: { $in: noTermIds }, isPublished: { $ne: true },
+      });
+      noTerms = noTermIds.length;
+      excluded = noTermIds.map(String);
+    }
   }
 
   // Compute class positions
-  await computeAnnualPositions({ schoolId, academicYear, classId });
+  await computeAnnualPositions({ schoolId, academicYear, classId, exclude: excluded });
 
-  return { computed, skipped };
+  return { computed, skipped: skipped + noTerms, noTerms };
 }
 
 /**
  * Compute annual positions (dense ranking) for a class.
+ *
+ * `exclude`: pupils whose row is not ranked and not touched — a published
+ * row kept for a pupil who no longer has a term result (docs/39 §4.6k).
  */
-async function computeAnnualPositions({ schoolId, academicYear, classId }) {
-  const results = await AnnualResult.find({
+async function computeAnnualPositions({ schoolId, academicYear, classId, exclude = [] }) {
+  const skip = new Set(exclude.map(String));
+  const results = (await AnnualResult.find({
     schoolId,
     academicYear,
     classId,
     deletedAt: null,
   })
     .sort({ annualAverage: -1 })
-    .lean();
+    .lean()).filter((r) => !skip.has(String(r.studentId)));
 
   const totalInClass = results.length;
 
@@ -436,6 +470,7 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
 
   let totalComputed = 0;
   let totalSkipped  = 0;
+  let totalNoTerms  = 0;
   // Under the D3 "refuse" rule a class with published annual results is left
   // exactly as it is and named here; the other classes still compute.
   const refusedClasses = [];
@@ -455,10 +490,11 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
     }
     totalComputed += out.computed;
     totalSkipped  += out.skipped;
+    totalNoTerms  += out.noTerms;
   }
 
   return {
-    computed: totalComputed, skipped: totalSkipped,
+    computed: totalComputed, skipped: totalSkipped, noTerms: totalNoTerms,
     ...(refusedClasses.length ? { refusedClasses } : {}),
   };
 }

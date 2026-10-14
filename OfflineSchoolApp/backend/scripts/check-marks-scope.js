@@ -211,6 +211,19 @@ const check = (label, actual, expected) => {
   r = await root.post(`/exams/ex-a/scores/bulk?schoolId=${A}`, { ...sheet("form3a", "maths-3a", [["st-a2", 17]]), schoolId: A });
   check("the super admin, naming the school, writes", [r.status, (await scoreOf("st-a2", "maths-3a"))?.score], [201, 17]);
 
+  // docs/39 §4.6a: the ceiling is the stored ExamSubject.maxScore (20 here),
+  // whatever maxScore a row claims, because that is what the mark is stored
+  // and graded against.
+  r = await adminA.post("/exams/ex-a/scores/bulk", { classId: "form3a", subjectId: "maths-3a",
+    scores: [{ studentId: "st-a2", score: 30, maxScore: 40 }] });
+  check("a row claiming maxScore 40 cannot carry 30 onto a /20 subject → 400, naming 20",
+    [r.status, /between 0 and 20\b/.test(r.body?.message ?? "")], [400, true]);
+  check("  the mark stands", (await scoreOf("st-a2", "maths-3a"))?.score, 17);
+  r = await adminA.post("/exams/ex-a/scores/bulk", { classId: "form3a", subjectId: "maths-3a",
+    scores: [{ studentId: "st-a2", score: 17, maxScore: 40 }] });
+  check("  a valid mark sent with maxScore 40 is stored against the subject's 20",
+    [r.status, (await scoreOf("st-a2", "maths-3a"))?.maxScore], [201, 20]);
+
   // ═══════════════════════════════════════════════════════════════════════
   console.log("\n--- N2b: reading the marks back — GET /teacher/results is the teacher's own pairs, letters as graded ---");
   // The route once answered from a model that did not exist and was always
@@ -265,6 +278,14 @@ const check = (label, actual, expected) => {
 
   r = await adminA.post("/results/score", { examId: "ex-a", studentId: "st-a1", subjectId: "physics-3a", score: 16, maxScore: 20 });
   check("the administrator corrects any subject → 201", r.status, 201);
+
+  // docs/39 §4.6a, the single-mark route: a body maxScore cannot raise the ceiling.
+  r = await maths.post("/results/score", { examId: "ex-a", studentId: "st-a2", subjectId: "maths-3a", score: 30, maxScore: 1000 });
+  check("a body maxScore of 1000 cannot carry 30 onto a /20 subject → 400 SCORE_REQUIRED", [r.status, r.body?.code], [400, "SCORE_REQUIRED"]);
+  check("  the mark stands", (await scoreOf("st-a2", "maths-3a"))?.score, 12);
+  r = await maths.post("/results/score", { examId: "ex-a", studentId: "st-a2", subjectId: "maths-3a", score: 12, maxScore: 100 });
+  check("  a valid mark sent with maxScore 100 is stored against the subject's 20",
+    [r.status, (await scoreOf("st-a2", "maths-3a"))?.maxScore], [200, 20]);
   r = await pupilA.post("/results/score", { examId: "ex-a", studentId: "st-a1", subjectId: "maths-3a", score: 20 });
   check("a pupil holds no results.edit → 403", r.status, 403);
 
@@ -344,8 +365,19 @@ const check = (label, actual, expected) => {
   check("  or for their own pupil under Alpha's exam → 404", r.status, 404);
   const gr = await GeneratedReport.findOne({ _id: "gr-a1" }).lean();
   check("  Alpha's row still Alpha's, html intact", [gr.schoolId, gr.renderedHtml], [A, "<p>Alpha's card</p>"]);
+  // docs/39 §4.6g: an issued card is not overwritten, not even by its own school.
   r = await adminA.post("/generated-reports", { studentId: "st-a1", examId: "ex-a", renderedHtml: "<p>Alpha reprinted</p>" });
-  check("Alpha's own admin upserts → 201, same row", [r.status, r.body?.reportId], [201, "gr-a1"]);
+  check("Alpha's own admin posting over an issued card → 409, names the card",
+    [r.status, r.body?.code, r.body?.reportId], [409, "REPORT_ALREADY_ISSUED", "gr-a1"]);
+  check("  the issued card is unchanged",
+    (await GeneratedReport.findOne({ _id: "gr-a1" }).lean())?.renderedHtml, "<p>Alpha's card</p>");
+  await GeneratedReport.updateOne({ _id: "gr-a1" }, { $set: { isPublished: false } });
+  r = await adminA.post("/generated-reports", { studentId: "st-a1", examId: "ex-a", renderedHtml: "<p>Alpha reprinted</p>" });
+  check("  unpublished makes no difference: still 409", r.status, 409);
+  await GeneratedReport.updateOne({ _id: "gr-a1" }, { $set: { isPublished: true } });
+  r = await adminA.post("/generated-reports", { studentId: "st-a2", examId: "ex-a", renderedHtml: "<p>A first card</p>" });
+  check("a first card for a pupil with none → 201, stored as sent",
+    [r.status, (await GeneratedReport.findOne({ _id: r.body?.reportId }).lean())?.renderedHtml], [201, "<p>A first card</p>"]);
 
   await ReportTemplate.create({ _id: "tpl-b", schoolId: B, name: "Beta layout", html: "<div>{{student_name}}</div>", css: "" });
   r = await adminB.post("/templates/tpl-b/preview", { examId: "ex-a", studentId: "st-a1" });

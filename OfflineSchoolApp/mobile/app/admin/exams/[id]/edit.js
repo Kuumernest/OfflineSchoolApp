@@ -25,10 +25,13 @@ const EXAM_TYPES = [
   { value: "promotion_exam",  labelKey: "examEdit.typePromotionExam"   },
 ];
 
+// Exam.term is a number, 1–3. The values were "first_term"…, which the
+// server refuses (400), so no edit could be saved, and a stored 2 matched no
+// option. Strings for the picker; sent as a number.
 const TERMS = [
-  { value: "first_term",  labelKey: "examEdit.termFirst"  },
-  { value: "second_term", labelKey: "examEdit.termSecond" },
-  { value: "third_term",  labelKey: "examEdit.termThird"  },
+  { value: "1", labelKey: "examEdit.termFirst"  },
+  { value: "2", labelKey: "examEdit.termSecond" },
+  { value: "3", labelKey: "examEdit.termThird"  },
 ];
 
 /** Turn a labelKey table into the { value, label } shape OptionPicker renders. */
@@ -324,7 +327,7 @@ export default function EditExamScreen() {
 
   const [name,            setName]            = useState("");
   const [type,            setType]            = useState("test");
-  const [term,            setTerm]            = useState("first_term");
+  const [term,            setTerm]            = useState("1");
   const [academicYear,    setAcademicYear]    = useState("");
   const [startDate,       setStartDate]       = useState("");
   const [endDate,         setEndDate]         = useState("");
@@ -345,7 +348,7 @@ export default function EditExamScreen() {
       setExam(e);
       setName(e.name              || "");
       setType(e.type              || "test");
-      setTerm(e.term              || "first_term");
+      setTerm(e.term != null && e.term !== "" ? String(e.term) : "1");
       setAcademicYear(e.academicYear || "");
       setStartDate(e.startDate    || "");
       setEndDate(e.endDate        || "");
@@ -487,7 +490,7 @@ export default function EditExamScreen() {
       await ExamService.updateExam(id, {
         name:         name.trim(),
         type,
-        term,
+        term:         Number(term),
         academicYear: academicYear.trim(),
         startDate:    startDate.trim()    || undefined,
         endDate:      endDate.trim()      || undefined,

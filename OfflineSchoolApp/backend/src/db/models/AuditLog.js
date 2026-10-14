@@ -39,6 +39,9 @@ const AUDIT_ACTIONS = [
   // A school's calculation rules for a year changed (shared/academicRules,
   // docs/39 Phase 4): before/after are the effective rules.
   "academic.rulesChanged",
+  // An issued report card was superseded by an admin's reissue (docs/39
+  // §4.6f): before/after are its template and layout, never its content.
+  "reportCard.reissued",
 ];
 
 const auditLogSchema = new mongoose.Schema(
