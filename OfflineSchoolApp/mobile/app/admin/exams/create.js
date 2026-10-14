@@ -16,6 +16,7 @@ import api              from "../../../src/services/api";
 import DateField        from "../../../src/components/DateField";
 import { useTranslation } from "../../../src/i18n/useTranslation";
 import { errorText } from "../../../src/utils/appError";
+import { useAcademicTerms } from "../../../src/hooks/useAcademicTerms";
 
 // ─────────────────────────────────────────────────────────
 // CONSTANTS
@@ -40,11 +41,9 @@ const examTypeOptions = (t) => [
   { value: "promotion_exam",  label: t("examNew.typePromotionExam")   },
 ];
 
-const termOptions = (t) => [
-  { value: "1", label: t("examNew.term1") },
-  { value: "2", label: t("examNew.term2") },
-  { value: "3", label: t("examNew.term3") },
-];
+// The term picker offers the year's own terms (useAcademicTerms): a school of
+// two semesters sees two, named as it names them. The fixed three are the
+// fallback when the structure cannot be read.
 
 const statusOptions = (t) => [
   { value: "draft",     label: t("examNew.statusDraft")     },
@@ -249,7 +248,7 @@ const si = StyleSheet.create({
 // STEP 1 — EXAM DETAILS
 // ─────────────────────────────────────────────────────────
 
-const StepDetails = ({ form, onChange, errors }) => {
+const StepDetails = ({ form, onChange, errors, termOptions }) => {
   const { t } = useTranslation();
 
   return (
@@ -289,7 +288,7 @@ const StepDetails = ({ form, onChange, errors }) => {
       <PickerRow
         label={t("examNew.labelTerm")}
         required
-        options={termOptions(t)}
+        options={termOptions}
         value={form.term}
         onChange={(v) => onChange("term", v)}
       />
@@ -918,7 +917,7 @@ const st = StyleSheet.create({
 // STEP 3 — REVIEW
 // ─────────────────────────────────────────────────────────
 
-const StepReview = ({ form, assignments }) => {
+const StepReview = ({ form, assignments, termOptions }) => {
   const { t } = useTranslation();
 
   const totalSubjects = useMemo(
@@ -939,7 +938,7 @@ const StepReview = ({ form, assignments }) => {
           { label: t("examNew.reviewName"),        value: form.name },
           { label: t("examNew.reviewType"),        value: examTypeOptions(t).find((o) => o.value === form.type)?.label || form.type },
           { label: t("examNew.labelAcademicYear"), value: form.academicYear },
-          { label: t("examNew.reviewTerm"),        value: termOptions(t).find((o) => o.value === form.term)?.label || form.term },
+          { label: t("examNew.reviewTerm"),        value: termOptions.find((o) => o.value === form.term)?.label || form.term },
           { label: t("examNew.reviewStatus"),      value: statusOptions(t).find((o) => o.value === form.status)?.label || form.status },
           { label: t("examNew.labelStartDate"),    value: form.startDate || "—" },
           { label: t("examNew.labelEndDate"),      value: form.endDate   || "—" },
@@ -1119,6 +1118,13 @@ export default function CreateExamScreen() {
   const onChange = useCallback((field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   }, []);
+
+  const termLabel = useCallback((n) => t(`examNew.term${n}`), [t]);
+  const { options: termOptions } = useAcademicTerms(schoolId, form.academicYear, termLabel);
+  // A year with fewer terms than the one picked before: back to its first.
+  useEffect(() => {
+    if (!termOptions.some((o) => o.value === form.term)) onChange("term", termOptions[0]?.value ?? "1");
+  }, [termOptions, form.term, onChange]);
 
   const [assignments, setAssignments] = useState({});
 
@@ -1315,9 +1321,9 @@ export default function CreateExamScreen() {
       <StepIndicator steps={stepList(t)} currentStep={currentStep} />
 
       <View style={{ flex: 1 }}>
-        {currentStep === "details"  && <StepDetails  form={form} onChange={onChange} errors={detailErrors} />}
+        {currentStep === "details"  && <StepDetails  form={form} onChange={onChange} errors={detailErrors} termOptions={termOptions} />}
         {currentStep === "subjects" && <StepSubjects schoolId={schoolId} form={form} assignments={assignments} setAssignments={setAssignments} />}
-        {currentStep === "review"   && <StepReview   form={form} assignments={assignments} />}
+        {currentStep === "review"   && <StepReview   form={form} assignments={assignments} termOptions={termOptions} />}
       </View>
 
       <View style={styles.bottomNav}>
