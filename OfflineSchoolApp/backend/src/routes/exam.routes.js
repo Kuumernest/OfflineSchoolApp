@@ -22,6 +22,7 @@ const { teacherAssigned } = require("../utils/teacherScope");
 const { lookupGrade, normalizeTo20 } = require("../services/grading.service");
 
 const { requirePermission } = require("../../middleware/permissions");
+const tenant = require("../utils/tenant");
 const academicPolicy = require("../services/academicPolicy.service");
 const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
 const { scopes: feedScopes } = require("../config/syncFeed");
@@ -49,10 +50,16 @@ const adminOnly = requirePermission("exams.manage");
 // HELPERS
 // ─────────────────────────────────────────────────────────
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) return String(provided).trim();
-  return req.user?.schoolId;
-};
+// The canonical rule (utils/tenant), so a handler and the guard below can never
+// disagree about which school a request is for. `|| undefined` lets an empty
+// candidate fall through to the request's other sources, as the guard does.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
+
+// Every exam, paper, mark and result here is one school's. A request that
+// resolves to no school — a super_admin who named none, an account with no
+// school — is refused before any handler builds a `{ schoolId: undefined }`
+// filter (docs/39 §4.6i, §17.2, Phase 2e).
+router.use(tenant.requireSchool());
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);

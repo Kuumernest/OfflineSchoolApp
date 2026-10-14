@@ -32,6 +32,21 @@ const { requirePermission } = require("../../middleware/permissions");
  */
 router.use(requirePermission("reports.manage"));
 
+const tenant = require("../utils/tenant");
+
+/**
+ * Every template, preview and issued-card list here is one school's. A request
+ * that resolves to no school is refused before any handler runs (docs/39
+ * §17.2, Phase 2e) — same 400 the layout routes below already gave.
+ *
+ * The two vocabularies are the same for every school and hold no school's
+ * data, so they stay readable without one.
+ */
+const SCHOOL_FREE = new Set(["GET /tokens", "GET /sections"]);
+const requireSchool = tenant.requireSchool();
+router.use((req, res, next) =>
+  SCHOOL_FREE.has(`${req.method} ${req.path}`) ? next() : requireSchool(req, res, next));
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HELPERS
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,12 +54,8 @@ router.use(requirePermission("reports.manage"));
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) {
-    return String(provided).trim();
-  }
-  return req.user?.schoolId;
-};
+// The canonical rule, so a handler and the guard above agree on the school.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
 
 const scanVariables = (html) => {
   const found = new Set();
@@ -199,7 +210,6 @@ router.post("/seed-default", asyncHandler(async (req, res) => {
 
 const reportLayout = require("../services/reportLayout.service");
 const { SECTIONS: REPORT_SECTIONS } = require("../../../shared/reportSections");
-const tenant = require("../utils/tenant");
 
 /** The school a layout request is for, or a 400 already sent. */
 const layoutSchool = (req, res) => {

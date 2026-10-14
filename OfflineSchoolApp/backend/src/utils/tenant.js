@@ -79,4 +79,30 @@ const guardSchoolParam = (req, res, next) => {
   });
 };
 
-module.exports = { resolveSchoolId, namedAnotherSchool, guardSchoolParam };
+/**
+ * Refuse a request that resolves to no school (docs/39 §17.2, Phase 2e).
+ *
+ * Two callers resolve to none: a super_admin who named no school, and an
+ * account whose own schoolId is empty — the door lets the second through,
+ * since there is no school of theirs to be closed. Routers that built their
+ * filters from that nothing answered for no school by accident
+ * (`{ schoolId: undefined }` matches no row) or for every school by
+ * construction (`...(schoolId ? { schoolId } : {})` drops the filter). Both
+ * are now a 400 here, before any handler runs.
+ *
+ * superAdminMayOmit keeps a documented platform-wide read (docs/20 Info-A)
+ * for the super_admin alone; it never extends to a schoolless school account.
+ *
+ * The body is the one the report-layout routes already send.
+ */
+const requireSchool = ({ superAdminMayOmit = false } = {}) => (req, res, next) => {
+  if (resolveSchoolId(req)) return next();
+  if (superAdminMayOmit && req.user?.role === "super_admin") return next();
+  return res.status(400).json({
+    success: false,
+    code:    "SCHOOL_REQUIRED",
+    error:   "A school must be selected",
+  });
+};
+
+module.exports = { resolveSchoolId, namedAnotherSchool, guardSchoolParam, requireSchool };

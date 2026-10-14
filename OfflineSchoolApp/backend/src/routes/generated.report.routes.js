@@ -30,12 +30,16 @@ const writeReports = requirePermission("reports.manage");
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
 
-const resolveSchoolId = (req, provided) => {
-  if (req.user?.role === "super_admin" && provided) {
-    return String(provided).trim();
-  }
-  return req.user?.schoolId;
-};
+const tenant = require("../utils/tenant");
+
+// The canonical rule, so a handler and the guard below agree on the school.
+const resolveSchoolId = (req, provided) => tenant.resolveSchoolId(req, provided || undefined);
+
+// Several handlers below scope with `...(schoolId ? { schoolId } : {})`, which
+// with no school is no filter at all: a caller with none read, unpublished or
+// deleted any school's issued card by id. Refused here instead (docs/39 §17.2,
+// Phase 2e).
+router.use(tenant.requireSchool());
 
 // ─────────────────────────────────────────────────────────
 // POST /api/generated-reports

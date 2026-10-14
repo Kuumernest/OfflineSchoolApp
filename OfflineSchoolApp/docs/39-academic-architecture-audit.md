@@ -333,7 +333,7 @@ acts on (2). They can disagree, and both are affected by §4.1.
 | f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | report-card audit |
 | g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | report-card audit |
 | h | Annual card's French remark reads `termAverage ?? annualAverage` | `reportCardData.service.js:580` | code reading |
-| i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design | `exam.routes.js:20-23,194-200`; scratch probe | probe |
+| i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design. **Fixed in Phase 2(e)** (§17.4) | `exam.routes.js:20-23,194-200`; scratch probe | probe |
 | j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | code reading |
 | k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **pinned** in `check:academic` |
 | l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
@@ -579,12 +579,19 @@ averageOn20:  Number | null,      // ResultSummary only: the /20 figure, stored 
 
 ### 6.5 `ReportTemplate` + `ReportTemplateVersion` (**new**, immutable)
 
-- **Purpose:** reproduce a published card after the template changes.
-  **Solves** §4.3 for documents.
-- `ReportTemplate` stays the editable draft and gains `layout` (§10).
-- `ReportTemplateVersion { _id, templateId, schoolId, version, html, css, layout, createdAt, createdBy }`
-  is written on every template save. Insert-only.
-- `GeneratedReport` gains `kind: "sequence"|"term"|"annual"`, `periodKey`,
+- **Purpose:** reproduce a published card after the school's report-card
+  configuration changes. **Solves** §4.3 for documents.
+- `ReportTemplate` stays the editable token template. Its HTML/CSS is still
+  edited in place and is **not** versioned (§10.3, limitations).
+- **As implemented (Phase 2d, §10.3):** `ReportTemplateVersion { _id:
+  "${schoolId}:v${n}", schoolId, version, sections, basedOnVersion,
+  createdBy, createdAt }` versions the school's report-card **section
+  layout**: which sections its cards print. A layout change inserts version
+  n+1, and a save that changes nothing inserts nothing. It is append-only:
+  model pre-hooks refuse every update, replace and delete. Issued sequence
+  cards record `layoutVersionId`, `layoutVersion` and `layoutSections` on
+  `GeneratedReport`.
+- Proposed, not implemented: `GeneratedReport` gains `kind: "sequence"|"term"|"annual"`, `periodKey`,
   `policyHash`, `templateVersionId`, `payloadHash`, and is written for term
   and annual cards too (today: sequence only).
 
@@ -634,7 +641,7 @@ Scope rules:
 |---|---|---|
 | Academic structure + grading + ranking + promotion | `AcademicPolicySnapshot._id` (content hash) | any effective rule changes |
 | Arithmetic | `calcVersion` per writer (`shared/academicPolicy.CALC_VERSIONS`: `exam-process/1`, `results-service/1`, `term/1`, `annual/1`) | that writer's formula changes (e.g. a D1 decision) |
-| Template | `ReportTemplateVersion` | each template save |
+| Report-card section layout | `ReportTemplateVersion` (§10.3) | each layout change that changes something (template HTML/CSS is not versioned) |
 | Issued document | `GeneratedReport.payloadHash` | never (first issue wins; reissue = new row) |
 | Evidence | `ResultChangeLog` (exists) | each mark change |
 
@@ -1161,7 +1168,9 @@ Rules:
   `promotion.routes.js:~17-21`) should move to `utils/tenant.resolveSchoolId`
   and refuse a missing school explicitly. This is a behaviour change for a
   super_admin with no school selected: empty list → 400. It belongs to the
-  Phase 2 slice.
+  Phase 2 slice. **Done for the exam, template, issued-card and results
+  routers in Phase 2(e)** (§17.4); `admin.routes` and `promotion.routes`
+  are not part of it.
 
 ### 17.3 Tested in this audit
 
@@ -1169,6 +1178,90 @@ Rules:
 two schools returns 0 (Mongoose 9.9.1, in-memory MongoDB). The current
 behaviour is therefore fail-closed. It depends on driver serialisation of
 `undefined`, which is why the plan replaces it with an explicit guard.
+
+### 17.4 As implemented: the missing-school guard (Phase 2e)
+
+**What was wrong.** Three routers kept a private `resolveSchoolId` that
+returned `req.user.schoolId`: `exam.routes`, `template.routes` and
+`generated.report.routes`. That value is `undefined` in two cases: a
+super_admin who named no school, and a school account whose own `schoolId`
+is empty. The door lets the second through, because there is no school of
+theirs to be closed. With that `undefined`:
+
+- Most exam and template handlers built `{ schoolId: undefined }`. That
+  matched no row: fail-closed by accident (§17.3). It still answered 200,
+  and `PATCH /exams/:id/lock` wrote a school-less audit row and reported
+  success.
+- `generated.report.routes` built `...(schoolId ? { schoolId } : {})` on
+  `GET`/`PUT`/`DELETE /:id`, `GET /student/:studentId` and
+  `GET /exam/:examId`. With no school that is no filter at all: **fail
+  open**. A caller with no school read, unpublished or deleted any school's
+  issued card by id.
+- `results.controller` deliberately lets a super_admin with no school read
+  across schools, anchored on the exam's school (docs/20 Info-A). It keyed
+  that on "no school resolved", not on the role, so a schoolless school
+  account got the same reach.
+
+Reproduced: the new suite run against the routers before this change fails
+111 of 170 checks. That includes "nothing was written": A's issued card was
+unpublished and then deleted by a request that named no school.
+
+**The rule.** `utils/tenant.requireSchool()` is one middleware. It
+refuses a request that `tenant.resolveSchoolId` resolves to no school with
+`400 { success: false, code: "SCHOOL_REQUIRED", error: "A school must be
+selected" }`. That is the body the Phase 2(d) layout routes already sent,
+so their answers are unchanged.
+
+| Router | Guard | Exempt |
+|---|---|---|
+| `/api/exams` (every route) | `requireSchool()` | none |
+| `/api/templates` (every route, after `reports.manage`) | `requireSchool()` | `GET /tokens`, `GET /sections`: the same vocabulary for every school, no school data |
+| `/api/generated-reports` (every route) | `requireSchool()` | none |
+| `/api/results` (every route) | `requireSchool({ superAdminMayOmit: true })` | a super_admin, so Info-A is kept as documented. A schoolless school account is refused. |
+
+The three private helpers now delegate to `tenant.resolveSchoolId`. The
+guard and every handler therefore resolve the same school: if the guard
+passes, the handler's school is non-empty. Unchanged, and still enforced:
+
+- the door's 403 `SCHOOL_ACCESS_DENIED` when a school account names another
+  school in the query or body;
+- its 404 `SCHOOL_NOT_FOUND` when a super_admin names a school that does
+  not exist;
+- every handler's existing `schoolId` scoping, so another school's record
+  by id is a 404.
+
+**Behaviour change.** A super_admin with no school selected gets 400 on the
+exam, template and issued-card routers, where it used to get empty lists
+and 404s. The web client names the active school on every super_admin
+request (`web/src/lib/axios.ts`), so only a super_admin with no school
+selected sees it. That is the change §17.2 anticipated. Nothing changes for
+a school's own staff.
+
+**Tests.** `check:schoolguard` has 170 checks and is in `check:all` after
+`check:reportlayout`. It runs through the real routers and auth over HTTP,
+on two synthetic schools:
+
+1. 50 exam, template and issued-card routes refuse both kinds of
+   schoolless caller with the exact 400 body, and no row of any touched
+   model changes.
+2. 13 results routes refuse the schoolless school account and write
+   nothing. The super_admin's Info-A read still answers 200.
+3. A school's admin and teacher list, read, create, rename, duplicate and
+   update as before, and see only their own school.
+4. Another school's exam, template and issued card, by id, gets 404 on
+   read, update, status, delete, process, duplicate and set-default.
+   Naming that school gets 403. B's rows are byte-identical afterwards.
+5. A super_admin naming a school stays inside it. Naming a non-existent
+   school gets 404.
+6. Layout routes: `sections` and `tokens` work without a school, a
+   school's layout reads and writes as before, a cross-school layout write
+   gets 403, and a teacher still gets 403.
+
+**Not covered.** `admin.routes` and `promotion.routes` still carry private
+copies of the rule (§17.2). Promotion already refuses a missing school
+(§4.6i). Neither is an exam or template router, so neither was changed
+here. `POST /api/generated-reports` overwriting a frozen card (§4.6g) is
+unchanged; that route only gained the missing-school refusal.
 
 ---
 
@@ -1182,10 +1275,10 @@ behaviour is therefore fail-closed. It depends on driver serialisation of
 | Dead fields (`sequenceWeights`, `termWeights`, `useGpa`, `gpaScale`, `gradingType`, `annualAverageMethod`, `maxAbsences`) | **kept, documented as inert**; never deleted; the new editor stops showing the inert ones |
 | `ResultSummary`/`TermResult`/`AnnualResult` | **unchanged**; `policyHash null` = legacy-v0; new rows stamped |
 | `Class.promotionAverage` | **kept** as fallback; converted only by explicit admin action (§14) |
-| `ReportTemplate` | **unchanged**; first save after deploy writes `ReportTemplateVersion` 1 |
+| `ReportTemplate` | **unchanged**; its HTML/CSS is not versioned. `ReportTemplateVersion` versions the section layout only: a school's first layout change writes version 1, and a school with none prints every section (§10.3) |
 | `GeneratedReport` | **unchanged**; new kinds added |
-| **Generated** | `AcademicPolicySnapshot` (on first computation); `ReportTemplateVersion` (on save) |
-| **Versioned** | policy (snapshot), template (versions), arithmetic (`calcVersion`) |
+| **Generated** | `AcademicPolicySnapshot` (on first computation); `ReportTemplateVersion` (on a layout change) |
+| **Versioned** | policy (snapshot), report-card section layout (`ReportTemplateVersion`), arithmetic (`calcVersion`) |
 | **Becomes configuration** | periods/components/types, ranking, promotion rule, scale/rounding, card layout |
 
 ### 18.1 The current school as configuration (Cameroon default)
@@ -1249,8 +1342,8 @@ Checked against docs/37:
 |---|---|---|
 | **0. Decisions** (no code) | §21 D1–D4, above all D1, the sequence-average scale | none |
 | **1. Audit** | this document | none |
-| **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion` on save; (e) explicit missing-school guard on exam/template routers | additive fields only, plus (e) |
-| **3. Represent today's structure as configuration** | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
+| **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
+| **3. Represent today's structure as configuration** (**blocked** on D1, §21.1) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
 | **4. Configuration-driven calculation** | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
 | **5. Admin configuration UI** | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
 | **6. Genuinely custom structures** | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
@@ -1352,9 +1445,19 @@ Checked against docs/37:
   template, and every card route. Issued sequence cards keep their layout.
   See §10.3 for the model, sections, default, versioning, integration, API,
   tests and limitations.
-- Phase 2(e) (explicit missing-school guard on the existing exam/template
-  routes): not started. The new layout routes already refuse a missing
-  school.
+- **Phase 2(e), done: the missing-school guard.** One middleware,
+  `utils/tenant.requireSchool`, refuses a request with no school (400
+  `SCHOOL_REQUIRED`) on every exam, template and issued-card route. The
+  results router refuses a schoolless school account and keeps the
+  super_admin's documented cross-school read. The issued-card router had
+  failed open: a caller with no school could read, unpublish or delete any
+  school's card by id. `check:schoolguard` has 170 checks; the
+  pre-change routers fail 111 of them. See §17.4 for the routes, rules,
+  behaviour change and what is not covered.
+- **Phase 2 is complete:** (a) through (e) are done.
+- **Phase 3 is blocked** pending decision D1 (§21.1), which needs the
+  school's authorised academic review. D1 is not decided. §21.1 lists it
+  among the decisions needed before Phase 3.
 
 ### 20.1 Safest first implementation slice
 
@@ -1369,8 +1472,10 @@ Checked against docs/37:
   inputs that `processResults` never produces (§4.1), so a refactor could
   pass them and still change real results.
 
-Phase 2(e), the missing-school guard, is small and security-relevant, and
-can ride with it.
+This slice is done, and so are Phase 2(d), section layouts (§10.3), and
+Phase 2(e), the missing-school guard (§17.4), which was implemented and
+verified by `check:schoolguard`. Phase 2 is complete. Phase 3 is blocked
+pending D1 and the school's sign-off (§20.0, §21.1).
 
 ### 20.2 Admin experience (Phase 5 design; not implemented)
 
