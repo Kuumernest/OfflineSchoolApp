@@ -670,6 +670,12 @@ router.get("/:id", staffOnly, asyncHandler(async (req, res) => {
 // POST /api/exams
 // ─────────────────────────────────────────────────────────
 
+/** Exam.term as the schema holds it: an integer 1-3 (a numeric string casts). */
+const isTermNumber = (term) => {
+  const n = Number(term);
+  return term !== null && term !== "" && Number.isInteger(n) && n >= 1 && n <= 3;
+};
+
 router.post("/", adminOnly, asyncHandler(async (req, res) => {
   const {
     name, type, academicYear, term, sequenceNumber,
@@ -680,6 +686,10 @@ router.post("/", adminOnly, asyncHandler(async (req, res) => {
   if (!name?.trim())  return res.status(400).json({ message: "name is required" });
   if (!academicYear)  return res.status(400).json({ message: "academicYear is required" });
   if (!term)          return res.status(400).json({ message: "term is required" });
+  // The schema's 1-3, said as a 400. A label such as "Term 1" — what the
+  // mobile screens used to send — left as a 500, which the mobile outbox
+  // reads as "offline, retry", so it was retried for ever.
+  if (!isTermNumber(term)) return res.status(400).json({ message: "term must be 1-3" });
   // The schema constrains this to 1-6, so an out-of-range value would arrive
   // as a ValidationError and leave with a 500. A 400 says which field.
   if (sequenceNumber != null && sequenceNumber !== "") {
@@ -856,8 +866,11 @@ router.put("/:id", adminOnly, asyncHandler(async (req, res) => {
     totalMarks, passMark, status,
   } = req.body;
 
-  // Same 1-6 check the create route makes: the schema constrains it, so an
+  // Same checks the create route makes: the schema constrains both, so an
   // out-of-range value would arrive as a ValidationError and leave as a 500.
+  if (term !== undefined && !isTermNumber(term)) {
+    return res.status(400).json({ message: "term must be 1-3" });
+  }
   if (sequenceNumber != null && sequenceNumber !== "") {
     const sq = Number(sequenceNumber);
     if (!Number.isInteger(sq) || sq < 1 || sq > 6) {

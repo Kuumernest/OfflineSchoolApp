@@ -30,6 +30,7 @@ const { lookupGrade } = require("../services/grading.service");
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
+const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
 // The CA half of a sequence. A sequence card shows both assessments and the
 // mark they combine to; the pairing and the arithmetic are shared with the
 // grading engine so the card cannot print a different number from the one the
@@ -476,9 +477,30 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     };
   };
 
-  /** The /20 average this card headlines, for the overall band lookup. */
-  const resolveAvg20 = () =>
-    summary?.average != null ? Number(summary.average) : null;
+  // A subject passes on its sequence mark under weighted_20 (see the row).
+  const onSequenceMark = sequenceAverageIsOn20(summary?.calcVersion);
+  const passMark20     = Number(gradingConfig?.passMark ?? 10);
+
+  /**
+   * The stored average on /20, for the headline band lookup.
+   *
+   * A weighted_20 summary is on /20 already. A live-route (raw_mean) summary
+   * is the mean of raw paper marks on the papers' OWN scale: /20 when every
+   * paper is /20, which is unchanged here, but 65 for papers marked /100 —
+   * and read as /20 that headlined a pupil on 65% (13/20) "A+" (docs/39
+   * §4.7d/f). Such a summary is read through its own percentage instead.
+   * Which figure a card headlines is not decided here: this is the same
+   * stored figure, on the scale the bands are written in.
+   */
+  const resolveAvg20 = () => {
+    if (summary?.average == null) return null;
+    const average = Number(summary.average);
+    const live = summary.calcVersion == null || summary.calcVersion === "exam-process/1";
+    const subjects = Number(summary.subjectsTotal), maxTotal = Number(summary.maxTotalScore);
+    const allOn20 = subjects > 0 && maxTotal === 20 * subjects;
+    if (!live || allOn20 || !(subjects > 0 && maxTotal > 0) || summary.percentage == null) return average;
+    return Math.round((Number(summary.percentage) / 5) * 100) / 100;
+  };
 
   // Lookup by both ref styles: StudentScore.examSubjectId → ExamSubject._id,
   // while rows entered before subjects were set up may only carry subjectId.
@@ -615,7 +637,16 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       // the fallback for a score with no mark to look up.
       grade:         gi.grade            ?? score.grade,
       gradePoint:    gi.points           ?? score.gpaPoints ?? null,
-      isPassing:     score.isPassing     ?? null,
+      // The paper's stored flag — except where the school's rule says a
+      // subject passes on its sequence mark (weighted_20: "the subject passes
+      // on its blended mark", shared/academicRules), which is the mark this
+      // row prints and the stored summary counts. There the row printed
+      // "10.2, C, Fail" beside a summary that counted it passed (docs/39
+      // §4.6l). Under raw_mean the row is unchanged: which figure that card
+      // prints is the school's decision (§4.7f).
+      isPassing:     onSequenceMark
+        ? (normalizedMark != null ? normalizedMark >= passMark20 : false)
+        : (score.isPassing ?? null),
       normalizedMark,
       weightedScore,
       // Per-subject rank over the students who actually sat this subject (§5)

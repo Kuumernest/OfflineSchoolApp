@@ -328,7 +328,7 @@ acts on (2). They can disagree, and both are affected by §4.1.
 | a | Bulk-score validation checks against the **client-sent** `maxScore` but stores the ExamSubject's; the single-mark route lets the body raise both | `exam.routes.js:1318` vs `:1393`; `results.controller.js` `upsertScore` | **Fixed:** both routes and the desktop mirror use `ExamSubject.maxScore` (`check:marks`) |
 | b | Desktop offline grading looks up GradingConfig by `_id = schoolId`, so it never finds the school's bands | `desktop/src/main/api/writes/exams.js:402`, `store.js:369-374` | **Fixed:** found by `schoolId` in scores/bulk and process (`check:desktop`) |
 | c | Mobile carries a divergent 7-band scale for its offline card fallback | `mobile/src/services/report.data.service.js:886-925` | **Fixed:** a copy of the shipped 8-band scale, compared band for band by `check:reportcard` |
-| d | Strengths engine counts CA twice: CA events (family `continuous`) are corroboration though CA is already blended into the academic mark | `shared/strengths/learningIntegration.js:86,124` | code reading; not reproduced |
+| d | Strengths engine counts CA twice: CA events (family `continuous`) are corroboration though CA is already blended into the academic mark | `shared/strengths/learningIntegration.js:86,124` | **Reproduced, not fixed (decision needed):** real only where the mark contains CA (`weighted_20`, unrouted `processResults`); on the default path CA is outside the mark and counted once, correctly. Pinned as a known defect by `check:cadouble`; see the defect-closure pass in §20.0 |
 | e | `results.controller` calls `processResults({examId,…})` with an object | `results.controller.js:1369` | **Removed:** the handler was mounted on no route |
 | f | Reissued sequence cards lose the letterhead and QR, and no audit row is written | `results.controller.js:1038-1042` | **Fixed:** same letterhead and verification strip as the issue path; `AuditLog` `reportCard.reissued` (`check:reportlayout`) |
 | g | `POST /api/generated-reports` can `$set` client HTML over a frozen record | `generated.report.routes.js:48-144` | **Fixed:** an existing card is refused, 409 `REPORT_ALREADY_ISSUED` (`check:marks`) |
@@ -336,7 +336,7 @@ acts on (2). They can disagree, and both are affected by §4.1.
 | i | Super admin with no school selected: academic-structure, term, annual and promotion routes refuse with 400; `/api/exams` and `/api/templates` have no explicit guard. **Tested:** `Exam.countDocuments({schoolId: undefined})` across two schools returns **0** on Mongoose 9.9.1, so the list fails closed by accident, not by design. **Fixed in Phase 2(e)** (§17.4) | `exam.routes.js:20-23,194-200`; scratch probe | probe |
 | j | Teachers lack `settings.view` (ADMIN only, delegable) and cannot read `AcademicStructure` over REST, yet the desktop feed ships it to `exams.view` | `permissions.js:329`, `syncFeed.js:295` | **Fixed (D4):** the year's shape on `exams.view` (`check:authz`, `check:feed`) |
 | k | A pupil with **no term result** is written an `AnnualResult` of 0, grade F, and ranked last; the term layer deliberately writes no row in that case | `annualGrading.service.js` `computeClassAnnualAverages` (one op per active pupil) | **Fixed:** no row; an unpublished stale row is removed, a published one kept as issued and not ranked (`check:annualnoterms`; `check:academic` pins moved) |
-| l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **pinned** in `check:academic` |
+| l | The sequence card's subject pass flag is the paper's `StudentScore.isPassing`, not the blended mark the row prints: CA 12/20 + paper 9/20 → 10.2, grade C, "not passing" against a pass mark of 10 | `results.controller.js:612` | **Fixed under `weighted_20`** (the rule defines the pass on the blended mark; the row now agrees with it and with the stored count, `check:cardstored`). **Unchanged under `raw_mean`** (pinned in `check:academic`): which figure that card prints is the gated §4.7(f) decision |
 
 ---
 
@@ -382,7 +382,11 @@ Defects on the live route, each pinned:
   until someone decides. The blindness itself is D1b, still the school's.
 - **(f) The sequence card contradicts the stored result.** It prints 13.67
   (rebuilt from marks, with CA and coefficients) as the average, above a
-  grade (B) and position taken from the stored 12.
+  grade (B) and position taken from the stored 12. **Traced cause by cause
+  in the defect-closure pass (§20.0, `check:cardstored`):** rounding,
+  coefficients, CA, an absent subject, stale data and the papers' scale each
+  separate the two on their own. The scale case (/100 papers headlined "A+"
+  for 65%) is fixed; which figure the card prints stays the school's call.
 - **(g) Re-processing a published exam rewrites its figures** with no guard
   and no `ResultChangeLog` row. Unlike `processResults`, it leaves
   `isPublished` alone.
@@ -1739,6 +1743,164 @@ Checked against docs/37:
 
   Not run: anything on a device, in the Electron app, or in a browser; any
   check against a real school's data, which this repository has never seen.
+
+- **Defect-closure pass (2026-10-14, after the validation pass).** Three
+  open defects, the card/QR lifecycle, and the mobile term pickers. Atlas
+  was not connected to in this pass. No school's rule, published result or
+  promotion outcome changed; every destructive test ran on an in-memory
+  database.
+
+  **§4.7(f), card average vs stored average — traced; one cause fixed; the
+  rest is the school's decision.** `check:cardstored` (new) builds one
+  synthetic school per cause and runs the live `/process` route and the real
+  card builder. Under `raw_mean` the two figures are different calculations
+  from the same marks:
+
+  | Cause (alone) | Stored (`/process`) | Card (`weightedAverage`) |
+  |---|---|---|
+  | none (control) | 13 | 13 |
+  | rounding: 12 and 13 | 13 (12.5 rounds up) | 12.5 |
+  | coefficient: Maths 15 ×2, English 9 | 12 | 13 |
+  | CA 40/60: 15+8/10, 9+6/10 | 12 (paper only) | 12.8 (15.4, 10.2) |
+  | absent Maths, English 11 | 6 (absent as 0, 5.5 up) | 11 (absent left out) |
+  | stale: English corrected 14→18 after processing | 13 | 15 |
+  | papers /100: 60, 70 | 65 (the papers' scale) | 13 |
+
+  The card prints the second figure as its average
+  (`reportHtml.resolveAverage20`), and takes its headline grade, pass/fail
+  and position from the first (`results.controller` `resolveAvg20`,
+  `summary`). Under `weighted_20` the stored figure is the card's, equal for
+  every cause once processed (pinned). **Fixed:** on non-/20 papers the
+  headline grade was looked up on the raw-scale figure read as /20, so a
+  pupil on 65% (13/20) was headlined "A+". It now reads that stored figure
+  through its own percentage (13 → B). Cards on /20 papers are unchanged
+  (when every paper is /20 the figure is used as before). **Not changed:**
+  which figure a `raw_mean` card prints, and the stale case. Term and annual
+  results already report staleness (`resultStaleness.service`); sequence
+  summaries do not, and adding that is a small, policy-free change, offered
+  below rather than made.
+
+  **§4.6(d), CA counted twice — reproduced; blocked on two gates.**
+  `check:cadouble` (new) runs the real shared engines:
+  - On the default path (`raw_mean`), the academic reading is the paper
+    alone. CA is outside it, and counting it once as coursework is correct:
+    two CA marks lift an EMERGING reading to ESTABLISHED, as designed.
+  - Under `weighted_20` the reading is the CA-blended mark, and the same CA
+    marks lift it again, from EMERGING to ESTABLISHED, on evidence already
+    used.
+
+  No school runs `weighted_20`, so no school's data is affected today. The
+  correction is clear: a CA event whose period's mark already contains CA is
+  baseline, not corroboration. It is not made, because it needs:
+  1. the academic profile to say which marks contain CA. The offline
+     calibration cohort (`FORMAT_VERSION 1`) has no field for it, so a
+     live-only fix breaks "live = offline", and adding one is cohort format
+     v2, a gate;
+  2. a new `LEARNING_INTEGRATION_VERSION`, which every open pilot reports as
+     drift (409 `ENGINE_VERSION_CHANGED` until re-baselined).
+
+  **Decision request:** fix §4.6(d) together with any school's adoption of
+  `weighted_20` (D1), and approve cohort format v2 with a `caMark` per
+  subject row, plus the integration version bump. Until then the defect is
+  pinned and unreachable.
+
+  **§4.6(l), the card row's pass flag — fixed where the rule decides it.**
+  The row printed the paper's stored flag beside a blended mark and grade
+  (presentation only; `StudentScore.isPassing` is correctly "paper ≥ pass
+  mark"). Under `weighted_20` the configured rule defines a subject's pass
+  on its blended mark, and the stored summary counts it that way. The row
+  now agrees: blended mark ≥ the school's pass mark, absent not passing
+  (`check:cardstored`: 10.2 and exactly 10.00 pass, 9.96 and absent do not;
+  2 passed / 1 failed, as stored). Under `raw_mean` the row is unchanged
+  and still pinned in `check:academic`, because there the official figure
+  is the paper and the card's blended row is the §4.7(f) question. No pass
+  mark changed, and promotion is untouched.
+
+  **Mobile term values — a server fix found by testing.** `POST /exams`
+  with the old label `"Term 1"` (and `PUT` with `"first_term"`) answered
+  500, not 400. The mobile outbox reads 5xx as "offline, retry", so such an
+  edit would have been retried for ever. Both routes now refuse a term
+  outside 1–3 with 400, as they already did `sequenceNumber`.
+
+  **The card/QR lifecycle, as it is (`check:cardlifecycle`, new; nothing
+  changed):**
+
+  | Event | Archive (`GeneratedReport`) | QR row (`DocumentVerification`) |
+  |---|---|---|
+  | draft print (unpublished) | none | minted; snapshot of the unpublished figures |
+  | publication | untouched | untouched |
+  | first print after publication | written (first issue wins) | same code; snapshot refreshed |
+  | mark corrected, reprocessed | untouched | untouched until something prints |
+  | staff reprint | untouched (staff see a live render) | snapshot refreshed from live data, so the public page now disagrees with the archived paper |
+  | reissue (admin, audited) | rewritten | refreshed |
+  | revocation | untouched | revoked; reprints keep it revoked |
+  | term or annual card, any render | never archived | refreshed on every render |
+
+  The snapshot refreshes on every render because `ensure()` does an
+  unconditional `$set` of the snapshot (`documentVerify.service.js`),
+  deliberately: "the page always answers with the school's current record…
+  a mismatch is the check working". Pinned invariants that hold under every
+  option: one code per document across reprints, the page answers from the
+  stored snapshot (never live data), revocation survives reprints, and the
+  archive changes only by reissue.
+
+  | | 1. Archive at first print | 2. Issue at publication | 3. Freeze the QR only |
+  |---|---|---|---|
+  | Immutability | the paper, from first print after publication | the paper, from publication | the QR page only; the paper re-renders |
+  | Corrections | reissue (exists for sequence cards; to build for term/annual) | unpublish → correct → republish or reissue; codes on unpublish to define | reissue refreshes the QR; the paper follows live data |
+  | Traceability | archive + layout version per card | the same, complete for every pupil at once | snapshot only; the paper cannot be reproduced |
+  | QR behaviour | snapshot frozen at issue | frozen at publication; drafts get no code | frozen at publication; drafts get no code |
+  | Impact | `GeneratedReport` key/index migration (term and annual collide on `examId: null`), term/annual reissue and portal routes | as 1, plus a batch render at publish (heavy; partial failures) | `documentVerify` and its model only; reverses the stated design |
+
+  **Mobile exam terms — automated only; no device.** Mobile
+  `check:academicterms` (16) runs the real term service and the real
+  `ExamService` against the real backend routes:
+  - the school's own semesters, read as a teacher;
+  - kept for offline use, with the fixed three when nothing is known;
+  - the term sent as a number online and queued as a number offline;
+  - the replay accepted;
+  - an edit that resends the exam's term not moving it;
+  - the old labels refused with 400.
+
+  The screens themselves are checked by their source text only. **No device,
+  emulator or Expo runtime was available** (no Android SDK, `adb` or
+  emulator in the Codespace), so loading states, picker rendering and sync
+  on a device are **not verified**. Noticed, not changed: `ExamService`
+  sends a client `id` while the server keeps a supplied `_id`; mobile
+  reconciles ids through its id map (`check:idmap`).
+
+  **Requires a decision (unchanged by this pass):**
+  - D1, D1b, D2, D3.
+  - The `raw_mean` card figure, and with it the row pass flag under
+    `raw_mean`.
+  - §4.6(d)'s fix (with D1, cohort format v2 and the integration version).
+  - A bulk-decision control on the promotion screen.
+  - The card/QR lifecycle.
+  - Non-/20 scales, more than 3 terms or 6 sequences, open assessment types,
+    cohort format v2.
+
+  **Offered, not made (safe, but new behaviour):** a staleness flag on
+  sequence summaries, as term and annual results have, so a card whose marks
+  changed after processing says so.
+
+  **Commands run** (database URI and provider keys blanked; Atlas not
+  connected to at any point in this pass):
+  - backend `npm run check:all`: 6,366 checks in 104 suites, 0 failed. That
+    is the validation pass's 6,323 in 101 plus exactly the 43 new checks
+    (`check:cardstored` 26, `check:cadouble` 3, `check:cardlifecycle` 14),
+    so no existing suite's count moved. An earlier run in this pass stopped
+    at the known intermittent `check:pilot` privacy check (it fails when a
+    random id happens to contain "16"); the suites after it then passed when
+    re-run, and the clean run above passed whole;
+  - desktop `npm run check`: 266 passed, 0 failed;
+  - mobile `npm run check`: 667 passed, 0 failed, including
+    `check:academicterms` (16), eslint (0 errors) and `tsc`;
+  - web `npm run build` and `npm run lint`: passed, 0 errors;
+  - each new check also against the pre-change code: `check:cardstored`
+    fails 2 (the scale headline, the weighted_20 row flag), and mobile
+    `check:academicterms` fails 2 (the 500s).
+
+  Not run: anything on a device, emulator, in Electron or in a browser.
 
 ### 20.1 Safest first implementation slice
 
