@@ -155,6 +155,50 @@ const periodsFromLegacy = (structure, ca) => {
 };
 
 /**
+ * A period tree read back as numbered terms holding numbered sequences — the
+ * shape the term and annual readers were written against (docs/39 §20,
+ * Phase 3).
+ *
+ * Phase 3 makes the tree the one place a reader learns which sequences a term
+ * holds, what each is called and what each weighs. The readers' arithmetic is
+ * untouched: they receive the same { number, name, weight, sequences } they
+ * used to read off AcademicStructure, built from the tree instead.
+ *
+ * A sequence belongs to the term emitted before it (periodsFromLegacy writes
+ * each term followed by its sequences), not to whichever term carries its
+ * parentKey: a structure with a repeated term number yields two "t1" periods,
+ * and each must keep its own sequences, as `terms.find()` saw them.
+ *
+ * What the tree does not keep is the stored ARRAY order: terms and sequences
+ * come back in number order (periodsFromLegacy). For a structure stored in
+ * number order — the default, and every structure the settings screen can
+ * save — that is the same thing.
+ *
+ * @param {Array<object>} periods  a policy's structure.periods
+ * @returns {Array<{number, name, weight, sequences: Array<{number, name, weight}>}>}
+ */
+const legacyTermsFromPeriods = (periods) => {
+  const terms = [];
+  for (const p of periods || []) {
+    if (p.kind === "term") {
+      terms.push({ number: p.legacy.term, name: p.name, weight: p.weight, sequences: [] });
+    } else if (p.kind === "sequence" && terms.length > 0) {
+      terms[terms.length - 1].sequences.push({ number: p.legacy.sequence, name: p.name, weight: p.weight });
+    }
+  }
+  return terms;
+};
+
+/**
+ * The same, straight from an AcademicStructure document, for a reader that
+ * holds the document but not a snapshot (the card builders, which must not
+ * write a snapshot on a GET). The tree is built by the function the snapshot
+ * is built by; the CA settings only shape components, which this ignores.
+ */
+const legacyTermsOf = (structure) =>
+  legacyTermsFromPeriods(periodsFromLegacy(structure, CA.caSettings(null)));
+
+/**
  * The effective academic policy for one school and year.
  *
  * @param {object}  input
@@ -233,6 +277,8 @@ module.exports = {
   POLICY_FORMAT,
   INERT_FIELDS,
   periodsFromLegacy,
+  legacyTermsFromPeriods,
+  legacyTermsOf,
   resolvePolicy,
   canonicalJson,
 };

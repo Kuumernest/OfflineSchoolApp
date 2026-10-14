@@ -30,6 +30,7 @@ const { lookupGrade } = require("../services/grading.service");
 // scripts/check-report-card.js.
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
+const { legacyTermsOf } = require("../../../shared/academicPolicy");
 // The CA half of a sequence. A sequence card shows both assessments and the
 // mark they combine to; the pairing and the arithmetic are shared with the
 // grading engine so the card cannot print a different number from the one the
@@ -665,9 +666,10 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
           schoolId: String(exam.schoolId), academicYear: exam.academicYear,
         }).lean().catch(() => null)
       : null;
-    ownName = structure?.terms
-      ?.flatMap((t) => t.sequences || [])
-      ?.find((sq) => sq.number === exam.sequenceNumber)?.name || null;
+    // The sequence's name, from the period tree (docs/39 Phase 3).
+    ownName = legacyTermsOf(structure)
+      .flatMap((t) => t.sequences)
+      .find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
 
   // The facts about the period, not a sentence about it. The header names the

@@ -26,20 +26,12 @@ const GradingConfig    = require("../db/models/GradingConfig");
 const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
 const academicPolicy   = require("./academicPolicy.service");
-const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function lookupGrade(markOutOf20) {
   return grading.lookupGrade(markOutOf20);
-}
-
-function getSequenceWeights(structure, termNumber) {
-  const term = structure.terms.find((t) => t.number === termNumber);
-  if (!term) return [50, 50];
-
-  // Equal weights: 50/50 for 2 sequences
-  return term.sequences.map((s) => s.weight);
 }
 
 // ── Core ────────────────────────────────────────────────────
@@ -68,17 +60,21 @@ async function loadTermContext({ schoolId, academicYear, term }) {
   if (!structure) {
     throw new Error(`No academic structure found for ${schoolId} / ${academicYear}`);
   }
-  const termConfig = structure.terms.find((t) => t.number === term);
-  if (!termConfig) {
-    throw new Error(`Term ${term} not found in academic structure`);
-  }
-
-  const sequenceNumbers = termConfig.sequences.map((s) => s.number);
 
   // The configuration this term is computed under, frozen and named (docs/39
   // §8), from the two documents just read — no further query on a warm
   // process, which keeps the per-class cost fixed (check-term-compute).
   const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
+
+  // Which sequences the term holds and what each weighs come from that
+  // snapshot's period tree (docs/39 Phase 3), not from the structure directly.
+  const termConfig = legacyTermsFromPeriods(policy.policy.structure.periods)
+    .find((t) => t.number === term);
+  if (!termConfig) {
+    throw new Error(`Term ${term} not found in academic structure`);
+  }
+
+  const sequenceNumbers = termConfig.sequences.map((s) => s.number);
 
   // Every exam of the term, so the ones missing a sequence can be REPORTED
   // rather than silently ignored. An exam created before the server stored

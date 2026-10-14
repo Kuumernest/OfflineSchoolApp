@@ -24,7 +24,7 @@ const GradingConfig     = require("../db/models/GradingConfig");
 const grading           = require("./grading.service");
 const { competitionPlaces } = require("./termGrading.service");
 const academicPolicy    = require("./academicPolicy.service");
-const { CALC_VERSIONS } = require("../../../shared/academicPolicy");
+const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -32,8 +32,9 @@ function lookupGrade(markOutOf20) {
   return grading.lookupGrade(markOutOf20);
 }
 
-function getTermWeights(structure) {
-  return structure.terms.map((t) => ({
+// The terms come from the snapshot's period tree (docs/39 Phase 3).
+function getTermWeights(periods) {
+  return legacyTermsFromPeriods(periods).map((t) => ({
     term:   t.number,
     weight: t.weight,
   }));
@@ -75,7 +76,12 @@ async function annualContextFor({ schoolId, academicYear }) {
 
   const gradingConfig = await GradingConfig.findOne({ schoolId }).lean();
   const passMark = gradingConfig?.passMark ?? 10;
-  const termWeights = getTermWeights(structure);
+
+  // The configuration this year is computed under, frozen and named (docs/39
+  // §8), from the documents just read — no further query on a warm process,
+  // which keeps a class's cost fixed (check-complexity).
+  const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
+  const termWeights = getTermWeights(policy.policy.structure.periods);
 
   const promotionExams = structure.promotionExams ?? [];
   let promotionExamIds = [];
@@ -90,11 +96,6 @@ async function annualContextFor({ schoolId, academicYear }) {
     }).lean();
     promotionExamIds = promotionExamDocs.map((e) => e._id);
   }
-
-  // The configuration this year is computed under, frozen and named (docs/39
-  // §8), from the documents just read — no further query on a warm process,
-  // which keeps a class's cost fixed (check-complexity).
-  const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
 
   return { structure, passMark, termWeights, promotionExamIds, policyHash: policy._id };
 }

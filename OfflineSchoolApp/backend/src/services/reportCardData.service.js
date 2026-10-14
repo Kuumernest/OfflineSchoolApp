@@ -48,6 +48,8 @@ const { subjectRanking, periodName, averageOutOf20 } =
 const { coefficientFromWeight } =
   require("./subjectCoefficient.service");
 const sequenceAssessment = require("./sequenceAssessment.service");
+// The terms and sequences, from the period tree (docs/39 Phase 3).
+const { legacyTermsOf } = require("../../../shared/academicPolicy");
 
 /** A score as a mark out of 20, or null when the pupil did not sit it. */
 const outOf20 = (score, maxScore) => {
@@ -363,7 +365,7 @@ async function buildTermCard({ schoolId, academicYear, term, classId, studentId 
   ]);
   if (!record) return null;
 
-  const termConfig = structure?.terms?.find((t) => t.number === Number(term)) || null;
+  const termConfig = legacyTermsOf(structure).find((t) => t.number === Number(term)) || null;
   const seqNumbers = termConfig?.sequences?.map((s) => s.number) || [];
 
   const exams = await Exam.find({
@@ -527,8 +529,9 @@ async function buildAnnualCard({ schoolId, academicYear, classId, studentId }) {
   // The same split the term card makes, applied to the annual share: a
   // sequence's slice of the year, divided between its CA and its paper.
   const caSettings = await sequenceAssessment.loadCaSettings(schoolId);
+  const terms = legacyTermsOf(structure);
   const shareOf = (e) => {
-    const termConfig = structure?.terms?.find((t) => t.number === e.term);
+    const termConfig = terms.find((t) => t.number === e.term);
     const seqConfig  = termConfig?.sequences?.find((s) => s.number === e.sequenceNumber);
     const termShare  = (termConfig?.weight ?? 100 / 3) / 100;
     const seqShare   = (seqConfig?.weight ?? 50) / 100;

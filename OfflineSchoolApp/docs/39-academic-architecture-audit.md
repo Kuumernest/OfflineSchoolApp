@@ -1343,7 +1343,7 @@ Checked against docs/37:
 | **0. Decisions** (no code) | §21 D1–D4, above all D1, the sequence-average scale | none |
 | **1. Audit** | this document | none |
 | **2. Normalise without changing behaviour** | (a) **characterisation tests** that run real `processResults → term → annual → promotion → card payload` on synthetic data and pin today's outputs, including §4.1 as it stands; (b) `AcademicPolicySnapshot` model + `resolve()` + `periodsFromLegacy()`; (c) stamp `policyHash`/`calcVersion`/`averageScale` (and `averageOn20` on summaries) on newly computed rows; (d) `ReportTemplateVersion`: per-school, versioned report-card section layouts (§10.3); (e) explicit missing-school guard on exam/template routers (§17.4). **Complete:** (a)–(e) are all done (§20.0) | additive fields only, plus (e) |
-| **3. Represent today's structure as configuration** (**blocked** on D1, §21.1) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
+| **3. Represent today's structure as configuration** (**done**, ahead of D1 on the project owner's instruction; §20.0) | read paths (term/annual compute, card builders) take periods from the snapshot via `periodsFromLegacy`; characterisation tests must stay green byte-for-byte | none |
 | **4. Configuration-driven calculation** | single grading authority (§12), component weights replace `caWeight/testWeight` reading, unified ranker, unified promotion proposal, recompute guards on published rows, term/annual card archiving, QR at issue. Any deliberate result change (e.g. D1 fix) ships as `calcVersion "results/2"` for **new** computations only | yes, each behind a decision and a version |
 | **5. Admin configuration UI** | §15-style screens over the v2 structure, with impact preview and confirmations | UI |
 | **6. Genuinely custom structures** | non-/20 scales, >3 roots, semesters, new families; cohort `FORMAT_VERSION` 2; intelligence mappings decided per §15.2 | yes, per school |
@@ -1455,9 +1455,58 @@ Checked against docs/37:
   pre-change routers fail 111 of them. See §17.4 for the routes, rules,
   behaviour change and what is not covered.
 - **Phase 2 is complete:** (a) through (e) are done.
-- **Phase 3 is blocked** pending decision D1 (§21.1), which needs the
-  school's authorised academic review. D1 is not decided. §21.1 lists it
-  among the decisions needed before Phase 3.
+- **Phase 3, done (ahead of D1, on the project owner's instruction).**
+  The plan held Phase 3 until D1 was decided (§21.1). The project owner
+  chose to proceed, so it was done strictly as defined: today's behaviour,
+  read through the configuration, with no figure changed. D1 is still **not
+  decided**. It still needs the school's authorised academic review, and it
+  now blocks Phase 4, where results would actually change.
+  - **What changed.** The term and annual readers take their terms and
+    sequences from the period tree, not from `AcademicStructure.terms`
+    directly. `shared/academicPolicy.legacyTermsFromPeriods` reads a tree
+    back as numbered terms holding numbered sequences: the shape the
+    readers were written against. Their arithmetic is untouched.
+  - **Which readers:**
+    - `termGrading.loadTermContext` and `annualGrading.annualContextFor`
+      read the tree of the snapshot they already resolve and stamp. The
+      resolve moved ahead of the term lookup; it was already on the path,
+      and query counts are unchanged (`check:term`, `check:complexity`).
+    - `reportCardData.buildTermCard`, `buildAnnualCard` and the sequence
+      card's sequence name (`results.controller`) build the same tree from
+      the structure document they already read (`legacyTermsOf`). They
+      don't resolve a snapshot, so a card GET writes nothing.
+    - The unused `termGrading.getSequenceWeights` was removed.
+  - **One difference, on a shape the app can't save.** The tree lists terms
+    and sequences in number order, and array order is deliberately not part
+    of the policy hash (Phase 2b). A structure stored out of number order
+    therefore gets the same terms, weights and averages, but its
+    `sequenceAverages`, `termAverages` and term-card columns come out in
+    number order. The settings screen edits the default 3×2 structure in
+    place, so only a raw API write can store one. Missing and non-numeric
+    weights can't reach the readers: Mongoose fills the defaults and refuses
+    a non-number (checked).
+  - **Kept as is, deliberately:**
+    - `annualGrading` decides promotion only once `completedTerms >= 3`,
+      whatever the tree holds. Counting the tree's terms would change
+      results for a school with fewer terms.
+    - Promotion-exam settings are still read off the structure. Both are
+      promotion rules (D1b, D2), not structure.
+  - **Tests.** `check:periodtree` has 20 checks and is in `check:all` after
+    `check:academicpolicy`. It pins:
+    - every reader's view, before and after, for six saved shapes;
+    - the out-of-order difference;
+    - that a stored snapshot's tree, re-read from the database, matches its
+      structure;
+    - real term and annual computation and real term and annual cards with
+      non-50/50 weights, against hand-worked figures (13.2 / 13 / 11,
+      annual 12.25).
+
+    No earlier suite used non-default weights: forcing every sequence weight
+    to 50 passed all of them, and fails 9 of these. The suite also passes
+    against the pre-Phase-3 readers, so the figures are the ones they gave.
+    `check:academic` (52), `check:academicpolicy` (86), `check:term`,
+    `check:cards`, `check:coeff`, `check:reportcard` and `check:complexity`
+    are unchanged.
 
 ### 20.1 Safest first implementation slice
 
@@ -1474,8 +1523,10 @@ Checked against docs/37:
 
 This slice is done, and so are Phase 2(d), section layouts (§10.3), and
 Phase 2(e), the missing-school guard (§17.4), which was implemented and
-verified by `check:schoolguard`. Phase 2 is complete. Phase 3 is blocked
-pending D1 and the school's sign-off (§20.0, §21.1).
+verified by `check:schoolguard`. Phase 2 is complete. Phase 3 is also done,
+ahead of D1 on the project owner's instruction, with no figure changed
+(§20.0). D1 is still undecided and needs the school's sign-off. It now
+blocks Phase 4.
 
 ### 20.2 Admin experience (Phase 5 design; not implemented)
 
@@ -1510,6 +1561,10 @@ consequence:**
 ## 21. Risks and unresolved decisions
 
 ### 21.1 Decisions needed before Phase 3
+
+> Phase 3 has since been done without these, as a behaviour-preserving
+> refactor (§20.0). None of them is decided. D1–D3 now block Phase 4,
+> which is where results change.
 
 - **D1 (revised). Which sequence calculation is authoritative (§4.1, §4.7).**
   Real results are the live route's: a whole-number raw mean, with no CA, no
