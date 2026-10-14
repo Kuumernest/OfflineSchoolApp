@@ -161,6 +161,10 @@ const main = async () => {
     [ROLES.TEACHER, "feePayment",      false, ""],
     [ROLES.TEACHER, "payrollRun",      false, ""],
     [ROLES.TEACHER, "user",            false, "nor the staff directory"],
+    // docs/39 D4: the year's shape travels on exams.view, the same rule the
+    // REST read (GET /api/academic-structure/:schoolId/:year) now follows.
+    [ROLES.TEACHER, "academicStructure", true,  "the year's periods, on exams.view as over REST"],
+    [ROLES.BURSAR,  "academicStructure", false, "not the bursar's, as over REST"],
     [ROLES.STUDENT, "student",         false, "a pupil mirrors nothing from here"],
     [ROLES.STUDENT, "feeCharge",       false, ""],
     [ROLES.STUDENT, "class",           false, ""],

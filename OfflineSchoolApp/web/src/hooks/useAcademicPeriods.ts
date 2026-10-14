@@ -10,8 +10,9 @@
 // periods. This reads the year's AcademicStructure instead.
 //
 // It falls back to those constants, unchanged, whenever the structure cannot
-// be read: no school, no year, a role without settings.view (teachers today —
-// docs/39 §4.6j), or no connection. So a screen that used to work keeps
+// be read: no school, no year, a role with neither settings.view nor
+// exams.view (a teacher reads the year's shape with exams.view — docs/39 D4),
+// or no connection. So a screen that used to work keeps
 // working exactly as before; it only becomes correct for schools that differ.
 
 import { useQuery } from "@tanstack/react-query";

@@ -3,7 +3,8 @@
 
 const router = require("express").Router();
 const AcademicStructure = require("../db/models/AcademicStructure");
-const { requirePermission } = require("../../middleware/permissions");
+const { requirePermission, requireAnyPermission } = require("../../middleware/permissions");
+const permissions = require("../services/permissions.service");
 const { resolveSchoolId, namedAnotherSchool, guardSchoolParam } = require("../utils/tenant");
 const { validateTerms, periodsStillHolding } = require("../../../shared/periodStructure");
 
@@ -25,19 +26,29 @@ router.param("schoolId", guardSchoolParam);
 // silently redirecting an update to a different school than the URL named
 // would be its own kind of wrong.
 //
-// The read permission is settings.view rather than something narrower: the
-// results screens need passMark to render a grade at all, and every staff role
-// that sees a result needs it.
+// Reading is settings.view (administrators, delegable) — with one narrower
+// door. A year's shape — its terms, sequences, names and promotion exams — is
+// also readable with exams.view, the permission the desktop sync feed already
+// ships this document under (config/syncFeed.js): a teacher creating an exam
+// or reading term results needs the year's own periods, and REST and the feed
+// now follow one rule (docs/39 §4.6j, D4). Such a caller gets the shape only,
+// never the rules or their impact counts, and a read of theirs never creates
+// a document.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const canRead   = requirePermission("settings.view");
-const canManage = requirePermission("settings.manage");
+const canRead     = requirePermission("settings.view");
+const canReadYear = requireAnyPermission("settings.view", "exams.view");
+const canManage   = requirePermission("settings.manage");
+
+/** What a caller without settings.view sees of a year: its shape. */
+const SHAPE_FIELDS = ["schoolId", "academicYear", "terms", "promotionExams", "passMark", "promotionThreshold"];
+const shapeOf = (structure) => Object.fromEntries(SHAPE_FIELDS.map((k) => [k, structure[k] ?? null]));
 
 // ── GET /api/academic-structure/:schoolId/:year ────────────────────────────
 // Year like "2026/2027" must be URI-encoded by the client (2026%2F2027).
 router.get(
   "/:schoolId/:year",
-  canRead,
+  canReadYear,
   async (req, res) => {
     try {
       const { year } = req.params;
@@ -49,6 +60,12 @@ router.get(
         academicYear: year,
         deletedAt: null,
       }).lean();
+
+      if (!(await permissions.can(req.user, "settings.view"))) {
+        // The default year, unsaved, when the school has not set one up.
+        const shown = structure ?? new AcademicStructure({ schoolId, academicYear: year }).toObject();
+        return res.json({ success: true, structure: shapeOf(shown) });
+      }
 
       // Auto-create default structure if none exists
       if (!structure) {
