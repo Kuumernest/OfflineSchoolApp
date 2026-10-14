@@ -5,6 +5,9 @@ name: CI
 # master and every pull request. A suite that passes on one machine but not in
 # CI is exactly the kind of thing check-desktop-parity exists to catch — so it
 # belongs here, not only in a terminal.
+#
+# Node 24, as checks.yml: the desktop store and check:desktop use the built-in
+# node:sqlite, which Node 20 does not have, so every job on 20 failed there.
 
 on:
   push:
@@ -21,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.x"
           cache: npm
           cache-dependency-path: OfflineSchoolApp/backend/package-lock.json
       - run: npm ci
@@ -39,10 +42,18 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.x"
           cache: npm
-          cache-dependency-path: OfflineSchoolApp/mobile/package-lock.json
+          cache-dependency-path: |
+            OfflineSchoolApp/mobile/package-lock.json
+            OfflineSchoolApp/backend/package-lock.json
       - run: npm ci
+      # Six of the mobile checks (portal, fees, marks grade, sync permissions,
+      # exploration, intelligence clients) run against the real backend router,
+      # loading express, mongoose and mongodb-memory-server from the backend's
+      # own node_modules. Without this they fail with MODULE_NOT_FOUND.
+      - run: npm ci
+        working-directory: OfflineSchoolApp/backend
       # node scripts/check.js (parse + i18n parity), then eslint, then
       # tsc --noEmit across the app (JS included).
       #
@@ -77,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.x"
           cache: npm
           cache-dependency-path: OfflineSchoolApp/web/package-lock.json
       - run: npm ci
@@ -113,7 +124,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: "24.x"
           cache: npm
           cache-dependency-path: OfflineSchoolApp/desktop/package-lock.json
       # Nothing in `npm run check` touches Electron — only launch.js,
