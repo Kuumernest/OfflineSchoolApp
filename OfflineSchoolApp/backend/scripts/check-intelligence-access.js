@@ -107,6 +107,8 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
   const pupil = (id, schoolId, classId, n) => ({
     _id: id, userId: `u-${id}`, schoolId, classId,
     studentName: `Pupil ${n}`, enrollmentNo: `${n}`, isActive: true, status: "approved",
+    // Phone numbers the summary must never carry (synthetic, Cameroonian mobile shape).
+    phone: "+237 677 12 34 56", guardianPhone: "699112233",
   });
   await Student.create([
     pupil("st-a1", A, "form3a", "A1"), pupil("st-a2", A, "form4b", "A2"), pupil("st-b1", B, "form1b", "B1"),
@@ -383,7 +385,11 @@ const stable = (body) => JSON.stringify(body, (k, v) => (k === "generatedAt" ? u
   // Whole words: "fee" is a substring of "feedback", which the summary carries
   // on purpose, and a check that cries wolf gets switched off.
   check("no pupil name, phone or money",
-    /Pupil A1|677|\bbalance\b|\bfees?\b|\barrears?\b/i.test(summaryText), false);
+    // The fixture's own numbers, as stored and digits-only, rather than a bare
+    // "677": that matched any id or timestamp containing those three digits,
+    // and failed at random while a real phone number could not have been
+    // caught (the fixture held none).
+    /Pupil A1|\+237 677 12 34 56|237677123456|677123456|699112233|\bbalance\b|\bfees?\b|\barrears?\b/i.test(summaryText), false);
   check("but the distributions, flags and thresholds a head needs",
     ["evidence", "distribution", "flags", "sensitivity", "feedback"].every((k) => summaryText.includes(`"${k}"`)), true);
 
