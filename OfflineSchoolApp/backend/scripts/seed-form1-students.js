@@ -167,6 +167,9 @@ const uniq = (arr, count) => {
 // ── Main ─────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // Every account below has the password "student123": never against a real
+  // school's database by accident (scripts/seedGuard.js, docs/40 0.7).
+  require("./seedGuard").refuseUnlessSafe({ uri: process.env.MONGODB_URI });
   await mongoose.connect(process.env.MONGODB_URI);
   console.log("Connected to MongoDB");
 

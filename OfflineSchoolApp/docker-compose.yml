@@ -5,6 +5,13 @@ services:
   mongo:
     image: mongo:7
     restart: unless-stopped
+    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
+    # logs cannot fill the disk (docs/40 0.9).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     volumes:
       - mongo_data:/data/db
     environment:
@@ -28,12 +35,21 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
+    # logs cannot fill the disk (docs/40 0.9).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     depends_on:
       mongo:
         condition: service_healthy
     environment:
       NODE_ENV: production
       PORT: 5000
+      # Cameroon time (UTC+1) for printed dates and logs (docs/40 0.11).
+      TZ: Africa/Douala
       MONGODB_URI: mongodb://${MONGO_USER:?MONGO_USER must be set}:${MONGO_PASSWORD:?MONGO_PASSWORD must be set}@mongo:27017/school_app?authSource=admin
       # Required with no default — src/config/env.js refuses a short or
       # placeholder secret at boot, so the container starts only once a real
@@ -64,6 +80,13 @@ services:
       dockerfile: Dockerfile
       target: web
     restart: unless-stopped
+    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
+    # logs cannot fill the disk (docs/40 0.9).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     depends_on:
       - backend
     ports:
@@ -72,11 +95,14 @@ services:
     environment:
       # The public name the certificate is for, e.g. ecole.example.cm.
       DOMAIN: ${DOMAIN:?DOMAIN must be set — the name the TLS certificate is issued for}
-    # Reload every 6 hours so a certificate certbot has renewed is picked up.
-    command: ["/bin/sh", "-c", "while :; do sleep 6h & wait $${!}; nginx -s reload; done & exec /docker-entrypoint.sh nginx -g 'daemon off;'"]
+      TZ: Africa/Douala
+    # Port 80 at once; 443 as soon as the certificate exists; a reload every
+    # 6 hours for a renewed one (nginx-start.sh).
+    command: ["/bin/sh", "/nginx-start.sh"]
     volumes:
-      # A template: the image renders it to conf.d/default.conf with ${DOMAIN}.
-      - ./nginx.conf:/etc/nginx/templates/default.conf.template:ro
+      - ./nginx-start.sh:/nginx-start.sh:ro
+      - ./nginx-http.conf:/etc/nginx/site/http.conf.template:ro
+      - ./nginx.conf:/etc/nginx/site/https.conf.template:ro
       - letsencrypt:/etc/letsencrypt:ro
       - certbot_webroot:/var/www/certbot:ro
       # The uploads volume is deliberately NOT mounted here any more. nginx
@@ -86,11 +112,19 @@ services:
 
   # ── Certbot (TLS certificate renewal) ──────────────────────────────────────
   # Renews the Let's Encrypt certificate through nginx's port 80 (webroot).
-  # The first certificate is issued once by hand before nginx starts
-  # (docs/17, TLS); after that this checks twice a day and renews when due.
+  # The first certificate is issued once by hand, through the same webroot,
+  # with nginx already running (docs/17, TLS); after that this checks twice a
+  # day and renews when due.
   certbot:
     image: certbot/certbot:latest
     restart: unless-stopped
+    # Docker's json-file logs, capped: 5 files of 10 MB per service, so the
+    # logs cannot fill the disk (docs/40 0.9).
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     volumes:
       - letsencrypt:/etc/letsencrypt
       - certbot_webroot:/var/www/certbot

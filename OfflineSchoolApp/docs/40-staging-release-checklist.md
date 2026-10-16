@@ -18,7 +18,7 @@ live. Their tools stay in `backend/scripts/` and their history in docs/39
 
 Nothing below has been done on a real server, a browser or a device. Tests
 at this version (2026-10-16, database URI and provider keys blanked):
-backend `check:all`, every suite one by one, 112 suites, 6,467 checks, 0
+backend `check:all`, every suite one by one, 115 suites, 6,490 checks, 0
 failed; `check-revert-previous.js` 41 passed against each of
 `origin/master` and `097de9c`; desktop 275 and mobile 721 passed, 0 failed;
 web build, lint, `i18n:check` and `check:l10n` pass. The detail check
@@ -75,9 +75,12 @@ In the order to do them; 0.20 is on the day.
   - `MONGODB_URI` (0.3);
   - `ALLOWED_ORIGINS` (CORS): exactly the production web address(es);
   - `ANALYSIS_*` values (1.1);
-  - `DOMAIN`, the name the certificate is for, pointing at the server; the
-    first certificate issued once (docs/17, TLS), then its expiry date
-    checked (more than a month ahead; the `certbot` service renews it);
+  - `DOMAIN`, the name the certificate is for, pointing at the server. The
+    stack starts without a certificate (port 80 only); issue the first one
+    once through the webroot (docs/17, TLS), and nginx turns HTTPS on
+    within a minute (`[tls] certificate found … HTTPS on` in its log). Then
+    check the expiry (more than a month ahead; the `certbot` service renews
+    it);
   - free disk space on the host, for the database, the uploads volume and
     the logs.
 - **Expected:** each value set, checked by a second person, none copied
@@ -101,13 +104,16 @@ In the order to do them; 0.20 is on the day.
 - **Do:** check:
   - MongoDB is not reachable from the internet (the compose file publishes
     no port for it);
-  - only 80 and 443 are open. The stack publishes only those two (the
-    backend's 5000 is no longer published, and nginx serves HTTPS on 443,
-    port 80 redirecting; `check:deployconfig`); check the host firewall
-    agrees, from outside: `nc -z <server> 5000` and `27017` refuse;
-  - no seed or test accounts with known passwords
-    (`scripts/seed-form1-students.js` creates pupils with the password
-    "student123": never run it against production);
+  - only 80 and 443 are open. **Automatic:** the stack publishes only those
+    two (the backend's 5000 is not published; nginx serves HTTPS on 443,
+    port 80 redirecting; `check:deployconfig`). **Still checked:** the host
+    firewall agrees, from outside: `nc -z <server> 5000` and `27017` refuse;
+  - no seed or test accounts with known passwords. **Automatic:**
+    `scripts/seed-form1-students.js` (the one script that creates accounts
+    with a known password, "student123") refuses to run when `NODE_ENV` is
+    production or the database is not local or named as a test one, unless
+    `--i-know` is passed (`check:seedguard`). **Still checked:** no such
+    account exists in production;
   - a strong super admin password, not shared;
   - no secrets in the repository (`.env` files are not committed);
   - `npm audit` in backend, web, mobile and desktop: no high or critical
@@ -132,13 +138,13 @@ In the order to do them; 0.20 is on the day.
 - **If it fails:** fix the sender domain or the key before launch.
 
 **0.9 Monitoring** — *operator*
-- **Do:** an outside health check on `GET /api/health` that alerts the
-  operator; disk-space alerts on the host; Docker log rotation (the compose
-  file sets none, so set it in the Docker daemon or per service).
+- **Automatic:** every service's Docker logs are capped (json-file, 10 MB ×
+  5 files; `check:deployconfig`).
+- **Do:** an outside health check on `https://$DOMAIN/api/health` that
+  alerts the operator; disk-space alerts on the host.
 - **Expected:** an alert reaches the operator when the health check fails
-  (test it by stopping the backend once); logs rotate.
-- **If it fails:** without rotation the logs fill the disk; without the
-  check nobody knows the site is down.
+  (test it by stopping the backend once).
+- **If it fails:** without the check nobody knows the site is down.
 
 **0.10 Restarts after a reboot** — *operator*
 - **Do:** every service has `restart: unless-stopped` (`docker-compose.yml`
@@ -148,10 +154,13 @@ In the order to do them; 0.20 is on the day.
 - **If it fails:** enable Docker at boot and check the restart policy.
 
 **0.11 Time zone** — *operator, with each school's head*
-- **Do:** Cameroon is UTC+1 (`Africa/Douala`). A school's time zone
-  defaults to "UTC" (`School.settings.timezone`, `School.js:255-257`) and
-  the compose file sets no time zone for the host or containers: set each
-  school's time zone to `Africa/Douala`, and decide the host's.
+- **Automatic:** a new school's time zone defaults to `Africa/Douala`
+  (`School.settings.timezone`), and the backend and nginx run with
+  `TZ=Africa/Douala` (`check:timezone`, `check:deployconfig`): a date
+  printed at 23:30 UTC falls on the Cameroon day.
+- **Still checked:** a school created before this default keeps what it
+  stored (the old default was "UTC"); check each one's time zone in its
+  settings. The host's own clock is the operator's choice.
 - **Expected:** printed dates and times (cards, receipts, registers) are
   Cameroon time.
 - **If it fails:** a date printed near midnight falls on the wrong day.
@@ -191,8 +200,9 @@ In the order to do them; 0.20 is on the day.
 
 **0.15 Mobile builds submitted early** — *developer*
 - **Do:** submit the mobile builds to both stores well before 1 November,
-  built with the production `EXPO_PUBLIC_API_URL` (the server address is
-  fixed at build time, `mobile/src/services/api.js:46`).
+  built with the production `EXPO_PUBLIC_API_URL`, `https://<DOMAIN>/api`
+  (the server address is fixed at build time,
+  `mobile/src/services/api.js:46`).
 - **Expected:** both builds approved before launch day.
 - **If it fails:** schools use the web console until the store approves.
 
@@ -216,16 +226,16 @@ In the order to do them; 0.20 is on the day.
 - **If it fails:** note how long it ran and where it stopped; give it to
   the developer.
 
-**0.19 Every index verified at boot** — *operator, with the developer*
-- **Do:** read the boot log. Today it verifies only the analysis index
-  (`intelligenceanalysisruns activeKey is unique ✅`,
-  `analysisRuns.service.js:706-707`); the others are built by the models
-  without a line in the log. Check them by hand once
-  (`db.<collection>.getIndexes()` against the models), or have the
-  developer add a boot check for every index (code work, not in this
-  checklist).
-- **Expected:** every index the models declare exists in production.
-- **If it fails:** create the missing index before launch.
+**0.19 Every index verified at boot** — *operator*
+- **Automatic:** at boot the backend checks every index the models declare
+  against the database and logs one line per missing index
+  (`[indexes] missing on <collection>: { … }`), then
+  `[indexes] Indexes verified: N, missing: M` (`check:indexboot`). It
+  never stops the server.
+- **Do:** read that summary line in the production boot log.
+- **Expected:** `missing: 0`.
+- **If it fails:** each missing index has its own line; create it (or give
+  the line to the developer) before launch.
 
 **0.20 On the day: re-run 2.2, 2.3 and 2.5 against production** — *operator*
 - **Do:** after the production deploy, run 2.2 (the boot line), 2.3

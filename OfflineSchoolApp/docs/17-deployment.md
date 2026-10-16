@@ -172,26 +172,31 @@ Four services:
 |---|---|---|---|
 | `mongo` | `mongo:7` | **none published** | `mongo_data:/data/db` |
 | `backend` | built from `Dockerfile` | **none published** (5000 on the Docker network only) | `uploads_data:/app/src/uploads` |
-| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80`, `443:443` | `./nginx.conf` as a template; `letsencrypt` and `certbot_webroot`, read-only |
+| `nginx` | built from `Dockerfile`, target `web` (`nginx:alpine` + the web build) | `80:80`, `443:443` | `nginx-start.sh`, `nginx-http.conf` and `nginx.conf` (templates); `letsencrypt` and `certbot_webroot`, read-only |
 | `certbot` | `certbot/certbot` | none | `letsencrypt`, `certbot_webroot` |
 
 ### TLS
 
 nginx serves the app on 443 only (TLS 1.2 and 1.3, HTTP/2, HSTS). Port 80
 answers the Let's Encrypt challenge (`/.well-known/acme-challenge/`) and
-redirects everything else to `https://`. `nginx.conf` is a template: the
-nginx image fills in `${DOMAIN}` at start-up, and reads the certificate
-from `/etc/letsencrypt/live/${DOMAIN}/`.
+redirects everything else to `https://`. Two templates, with `${DOMAIN}`
+filled in at start-up: `nginx-http.conf` (port 80) and `nginx.conf` (port
+443, reading the certificate from `/etc/letsencrypt/live/${DOMAIN}/`).
+`nginx-start.sh` serves port 80 at once and adds 443 as soon as the
+certificate exists (checking every minute, after `nginx -t`), so a fresh
+server starts without one.
 
-**First certificate, once** (nginx cannot start without one). With `DOMAIN`
-pointing at this server and port 80 free:
+**First certificate, once.** With `DOMAIN` pointing at this server, start
+the stack, then issue it through the webroot nginx is already serving:
 
 ```bash
-docker compose up -d mongo backend
-docker compose run --rm -p 80:80 --entrypoint certbot certbot \
-  certonly --standalone -d "$DOMAIN" -m <operator email> --agree-tos --no-eff-email
 docker compose up -d
+docker compose run --rm --entrypoint certbot certbot \
+  certonly --webroot -w /var/www/certbot -d "$DOMAIN" -m <operator email> --agree-tos --no-eff-email
 ```
+
+Within a minute nginx logs `[tls] certificate found for $DOMAIN: HTTPS on`.
+Until then it logs `[tls] no certificate yet …` and serves port 80 only.
 
 **Renewal:** the `certbot` service tries `certbot renew` twice a day through
 the webroot, and nginx reloads every 6 hours to pick up a renewed
@@ -203,6 +208,17 @@ certificate. Check the expiry with
 `ALLOWED_ORIGINS` (`https://$DOMAIN`). The backend's port 5000 is not
 reachable from outside; from the server itself,
 `docker compose exec backend wget -qO- http://localhost:5000/api/health`.
+
+### Logs, time, indexes
+
+- **Logs:** every service writes Docker's `json-file` logs capped at 10 MB ×
+  5 files (`logging` in `docker-compose.yml`), so they cannot fill the disk.
+- **Time:** the backend and nginx run with `TZ=Africa/Douala`, so printed
+  dates and log times are Cameroon time; a new school's
+  `settings.timezone` defaults to `Africa/Douala`.
+- **Indexes:** at boot the backend checks every index the models declare
+  and logs one line per missing index, then
+  `[indexes] Indexes verified: N, missing: M`. Never fatal.
 
 ### The Dockerfile
 

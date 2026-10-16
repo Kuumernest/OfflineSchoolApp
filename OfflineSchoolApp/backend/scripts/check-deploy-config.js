@@ -8,10 +8,15 @@
  * committed, so an edit that reopens the backend's port or drops TLS fails
  * here.
  *
- * The configuration itself was run once by hand in nginx:alpine with a
- * self-signed certificate (docs/39 §20.0): nginx -t passed; port 80
- * redirected and served the challenge; port 443 served the web console
- * with HSTS over HTTP/2 and TLS 1.3, and refused TLS 1.1.
+ * Also: a fresh server starts on port 80 alone and adds 443 once the
+ * certificate exists (nginx-start.sh); every service's logs are capped; the
+ * backend and nginx run on Cameroon time.
+ *
+ * The configuration itself was run by hand in nginx:alpine with a
+ * self-signed certificate (docs/39 §20.0): with no certificate, port 80
+ * served the challenge and 443 stayed closed; once the certificate files
+ * appeared, HTTPS came on within the poll (HTTP/2, TLS 1.3, HSTS, TLS 1.1
+ * refused) and the logs were in WAT.
  *
  *   node scripts/check-deploy-config.js
  */
@@ -21,7 +26,10 @@ const path = require("path");
 
 const ROOT = process.env.CHECK_ROOT || path.join(__dirname, "..", "..");
 const compose = fs.readFileSync(path.join(ROOT, "docker-compose.yml"), "utf8");
-const nginx   = fs.readFileSync(path.join(ROOT, "nginx.conf"), "utf8");
+const read = (f) => (fs.existsSync(path.join(ROOT, f)) ? fs.readFileSync(path.join(ROOT, f), "utf8") : "");
+const nginx   = read("nginx.conf");          // port 443, rendered once the certificate exists
+const nginx80 = read("nginx-http.conf");     // port 80, always
+const start   = read("nginx-start.sh");
 
 let pass = 0, fail = 0;
 const check = (label, actual, expected) => {
@@ -43,8 +51,8 @@ const published = (block) => {
   const m = block.match(/\n    ports:\n((?:      - .*\n)+)/);
   return m ? [...m[1].matchAll(/"?(\d+):\d+"?/g)].map((x) => x[1]) : [];
 };
-/** The server blocks of nginx.conf, by what they listen on. */
-const servers = nginx.split(/\nserver \{/).slice(1);
+/** The server blocks of both files, by what they listen on. */
+const servers = `${nginx}\n${nginx80}`.split(/\nserver \{/).slice(1);
 const serverOn = (port) => servers.find((b) => new RegExp(`listen ${port}\\b`).test(b)) ?? "";
 
 console.log("--- published ports ---");
@@ -67,14 +75,26 @@ console.log("--- port 80 ---");
 check("80 answers the certificate challenge and redirects everything else to https",
   [/location \/\.well-known\/acme-challenge\/ \{\s*root \/var\/www\/certbot;/.test(http), /return 301 https:\/\/\$host\$request_uri;/.test(http)], [true, true]);
 check("80 serves nothing else (no app, no proxy)", [/proxy_pass/.test(http), /\/app\/public\/web/.test(http)], [false, false]);
+check("80 lives in its own file, 443 in nginx.conf", [/listen 80;/.test(nginx80), /listen 80;/.test(nginx), /listen 443 ssl;/.test(nginx)], [true, false, true]);
 
 console.log("--- certificates ---");
 const ng = service("nginx"), cb = service("certbot");
-check("nginx renders the template with DOMAIN, and reads the certificates and challenge files",
-  [/\.\/nginx\.conf:\/etc\/nginx\/templates\/default\.conf\.template:ro/.test(ng), /DOMAIN: \$\{DOMAIN:\?/.test(ng), /letsencrypt:\/etc\/letsencrypt:ro/.test(ng), /certbot_webroot:\/var\/www\/certbot:ro/.test(ng)], [true, true, true, true]);
-check("nginx reloads periodically, so a renewed certificate is picked up", /nginx -s reload/.test(ng), true);
+check("nginx starts through nginx-start.sh, with both templates, DOMAIN, the certificates and the challenge files",
+  [/command: \["\/bin\/sh", "\/nginx-start\.sh"\]/.test(ng), /\.\/nginx-start\.sh:\/nginx-start\.sh:ro/.test(ng),
+   /\.\/nginx-http\.conf:\/etc\/nginx\/site\/http\.conf\.template:ro/.test(ng), /\.\/nginx\.conf:\/etc\/nginx\/site\/https\.conf\.template:ro/.test(ng),
+   /DOMAIN: \$\{DOMAIN:\?/.test(ng), /letsencrypt:\/etc\/letsencrypt:ro/.test(ng), /certbot_webroot:\/var\/www\/certbot:ro/.test(ng)], [true, true, true, true, true, true, true]);
+check("a fresh server starts on port 80 alone; 443 is added once the certificate exists, after nginx -t",
+  [/have_cert\(\) \{ \[ -s "\$CERT" \] && \[ -s "\$KEY" \]; \}/.test(start), /render "\$SITE\/http\.conf\.template" "\$CONF\/00-http\.conf"/.test(start),
+   /if \[ ! -f "\$CONF\/10-https\.conf" \] && have_cert; then/.test(start), /if out=\$\(nginx -t 2>&1\); then\s*nginx -s reload/.test(start)], [true, true, true, true]);
+check("nginx reloads periodically, so a renewed certificate is picked up", /RELOAD="\$\{RELOAD_SECONDS:-21600\}"/.test(start) && /nginx -s reload/.test(start), true);
 check("a certbot service renews through the webroot, sharing both volumes",
   [/certbot renew --webroot -w \/var\/www\/certbot/.test(cb), /letsencrypt:\/etc\/letsencrypt\n/.test(cb), /certbot_webroot:\/var\/www\/certbot\n/.test(cb)], [true, true, true]);
+
+console.log("--- logs and time ---");
+const SERVICES = ["mongo", "backend", "nginx", "certbot"];
+check("every service logs to json-file capped at 10 MB × 5 files",
+  SERVICES.filter((n) => !/\n    logging:\n      driver: json-file\n      options:\n        max-size: "10m"\n        max-file: "5"\n/.test(service(n))), []);
+check("the backend and nginx run on Cameroon time", ["backend", "nginx"].filter((n) => !/\n      TZ: Africa\/Douala\n/.test(service(n))), []);
 
 console.log(`\n  ${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

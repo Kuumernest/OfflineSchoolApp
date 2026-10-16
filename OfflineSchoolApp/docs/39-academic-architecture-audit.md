@@ -77,7 +77,7 @@ result means.
     coefficients, leaves absent subjects out, stores /20 to two decimals,
     writes the year and term, prints on the card what it stores, and refuses
     to recompute a published result.
-- **Tests:** backend `check:all`: 112 suites, 6,467 checks, 0 failed;
+- **Tests:** backend `check:all`: 115 suites, 6,490 checks, 0 failed;
   `check-revert-previous.js` 41 against each of `origin/master` and
   `097de9c`; desktop `check` 275, 0 failed; mobile `check` 721, 0 failed;
   web build and lint pass, 0 errors; web `i18n:check` and `check:l10n` (93)
@@ -3143,6 +3143,51 @@ Checked against docs/37:
   - Commands run: backend `check:all` one by one, 112 suites, 6,467 checks,
     0 failed (no other suite's files changed).
 
+- **Operations: log caps, Cameroon time, indexes at boot, the seed guard,
+  the first certificate (2026-10-16).** No calculation, engine,
+  threshold, version constant, published row or recorded decision changed.
+  - **Logs:** every service in `docker-compose.yml` logs to json-file
+    capped at 10 MB × 5 files.
+  - **Time:** a new school's `settings.timezone` defaults to
+    `Africa/Douala` (was "UTC"; existing schools keep what they stored);
+    the backend and nginx run with `TZ=Africa/Douala` (both images honour
+    it: Node through ICU, nginx through its zoneinfo). A date printed at
+    23:30 UTC on 1 November reads 2 November. `check:timezone` (4).
+  - **Indexes at boot:** `services/indexCheck.service.js` compares every
+    index the models declare with the database after the models' builds,
+    logs one line per missing index and `[indexes] Indexes verified: N,
+    missing: M`; never fatal (`server.js`, in a try). `check:indexboot` (6,
+    with one index dropped and a missing collection).
+  - **Seed scripts:** the one script that creates accounts with a known
+    password, `scripts/seed-form1-students.js` ("student123"), refuses to
+    run before connecting when `NODE_ENV` is production or the database is
+    neither local (localhost, 127.0.0.1, ::1; not the Compose `mongo` host)
+    nor named as a test one, unless `--i-know` (`scripts/seedGuard.js`).
+    Found and left: `seed-academic-structure.js` writes to a real URI but
+    creates no accounts; `smoke-bursar-path.js` creates its user in an
+    in-memory database. `check:seedguard` (9).
+  - **First certificate:** with the previous configuration nginx could not
+    start on a fresh server (its 443 block names certificate files that do
+    not exist yet). Now `nginx-http.conf` (port 80: the challenge and a
+    redirect) is served at once, and `nginx-start.sh` adds `nginx.conf`
+    (443) as soon as the certificate exists, after `nginx -t`, then reloads
+    every 6 hours. Run by hand in `nginx:alpine`: with no certificate, port
+    80 served the challenge and 443 stayed closed; the certificate files
+    copied in, HTTPS came on within the 2-second test poll (TLS 1.3, HSTS);
+    log times in WAT; a clean stop on SIGTERM. The first certificate is now
+    issued through the webroot with nginx running (docs/17).
+    `check:deployconfig` 13 → 17.
+  - docs/17 (TLS, logs, time, indexes), docs/40 0.5, 0.7, 0.9, 0.11,
+    0.15 (`https://<DOMAIN>/api`) and 0.19, docs/41.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 115 suites, 6,490 checks, 0 failed;
+    - `check-revert-previous.js`: 41 passed with `--ref origin/master` and
+      with `--ref 097de9c`;
+    - desktop `npm run check`: 275 passed; mobile `npm run check`: 721
+      passed (eslint 0 errors, `tsc`);
+    - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
+      an untouched file); `i18n:check` OK; `check:l10n` 93 passed.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -3364,7 +3409,7 @@ the audit itself* no check suite was run, because no code changed.
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
 branch `academic-agreed-calculation`, the ID-card pass after `f8926ed`):
-backend `check:all`, 112 suites, 6,467 checks, 0 failed;
+backend `check:all`, 115 suites, 6,490 checks, 0 failed;
 `check-revert-previous.js` 41 passed against `origin/master` and `097de9c`;
 desktop `npm run check`, 275 passed; mobile `npm run check`, 721 passed; web
 build and lint, 0 errors; web `i18n:check` and `check:l10n` (93) pass.

@@ -1116,6 +1116,16 @@ async function startServer() {
     // a stale run waits out its lease, which costs work, not a school's day.
     const analysisRuns = require("./services/intelligence/analysisRuns.service");
     await analysisRuns.ensureIndexes();
+
+    // Every index the models declare, against the database: one line per
+    // missing index and a summary (docs/40 0.19). Never fatal. After the
+    // models' own builds, so an index still being built is not reported.
+    try {
+      await Promise.all(mongoose.modelNames().map((n) => mongoose.model(n).init().catch(() => null)));
+      await require("./services/indexCheck.service").verifyDeclaredIndexes();
+    } catch (err) {
+      console.error("[indexes] could not verify the declared indexes — " + err.message);
+    }
     try {
       const interrupted = await analysisRuns.recoverStale();
       if (interrupted) console.log(`[analysis] ${interrupted} interrupted run(s) from a previous process marked INTERRUPTED`);
