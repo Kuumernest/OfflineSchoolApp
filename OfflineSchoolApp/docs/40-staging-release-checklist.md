@@ -1,29 +1,236 @@
-# 40 — Staging and release checklist
+# 40 — Launch checklist
 
-For whoever deploys and accepts the release. It covers two changes, shipped
-together on branch `academic-agreed-calculation`:
+For whoever deploys and accepts the platform's first launch, on **Sunday 1
+November 2026**, from branch `academic-agreed-calculation`.
 
-- **Cold analysis.** The school-wide Intelligence analysis runs in a worker
-  and its report is stored ([docs/38](38-cold-intelligence-analysis.md),
-  §10–§11).
-- **The agreed calculation.** One way of calculating results and promotion
-  for every school
-  ([docs/39](39-academic-architecture-audit.md), Current status and §20.0).
+**This is a first launch, not a migration** (confirmed by the project
+owner, 2026-10-16). No school uses the platform yet, so no school has
+results under the previous code: the agreed calculation
+([docs/39](39-academic-architecture-audit.md) §21.1) is simply the
+platform's calculation from the first day, and the cold analysis
+([docs/38](38-cold-intelligence-analysis.md)) its analysis. The steps a
+migration of live schools would need (a revert-plus-cleanup rollback, a dry
+run per school, days without publishing, warnings about old app builds,
+re-baselining pilots) are marked **not needed for this launch** below, with
+when they would apply: a later change to the calculation once schools are
+live. Their tools stay in `backend/scripts/` and their history in docs/39
+§20.0.
 
-Nothing below has been done on a real server, a real school's data, a
-browser or a device. Tests at this version (2026-10-16, database URI and
-provider keys blanked): backend `check:all`, every suite one by one, 111
-suites, 6,454 checks, 0 failed; `check-revert-previous.js` (1.4), 41 passed
-against each of `origin/master` and `097de9c`; desktop 275 and mobile 721
-passed, 0 failed; web build, lint, `i18n:check` and `check:l10n` pass. The
-detail check before release, and what it left open, is
-[docs/41](41-detail-check.md). Each step is something to do, not a result. Every step
-has an owner:
+Nothing below has been done on a real server, a browser or a device. Tests
+at this version (2026-10-16, database URI and provider keys blanked):
+backend `check:all`, every suite one by one, 111 suites, 6,454 checks, 0
+failed; `check-revert-previous.js` 41 passed against each of
+`origin/master` and `097de9c`; desktop 275 and mobile 721 passed, 0 failed;
+web build, lint, `i18n:check` and `check:l10n` pass. The detail check
+before release, and what it left open, is [docs/41](41-detail-check.md).
+Each step is something to do, not a result. Every step has an owner:
 
 - **Operator:** runs the servers and the database.
-- **School head:** accepts the release for the school.
+- **School head:** a first school's head, accepting the platform for it.
 - **Teacher:** checks the screens they use.
 - **Developer:** answers anything that fails.
+- **Project owner:** decides what this checklist leaves to a decision.
+
+---
+
+## 0. Launch readiness
+
+In the order to do them; 0.20 is on the day.
+
+**0.1 Merge and tag the release** — *developer, with the project owner*
+- **Do:** merge pull request #3 into `master`; tag the merge commit (for
+  example `v1.0.0`) and push the tag.
+- **Expected:** one tag, on `master`, naming the commit every build comes
+  from.
+- **If it fails:** do not build from a branch or an untagged commit.
+
+**0.2 Build every app from the tag** — *developer*
+- **Do:** build the backend and web image, the desktop installer and the
+  mobile apps from the tag's commit, and note its short hash in each build's
+  release notes.
+- **Expected:** four builds, all from the same commit.
+- **If it fails:** rebuild from the tag; never mix builds from different
+  commits (1.7).
+
+**0.3 Confirm which database is production** — *operator, with the project owner*
+- **Do:** name the production MongoDB (host, database name, user), distinct
+  from staging and from development. The development `.env` points at a
+  demo database (`school_db`, one demo school); that is not production.
+- **Expected:** the production URI written down where the operator keeps
+  secrets, and used only by the production stack.
+- **If it fails:** stop: a stack pointed at the wrong database writes
+  there.
+
+**0.4 Production data before the first school joins** — *project owner, then operator*
+- **Do:** decide whether production starts empty or keeps the demo school,
+  then wipe or keep it accordingly.
+- **Expected:** the decision written down, and production matching it.
+- **If it fails:** a demo school left by accident shows in the super
+  admin's list and in every cross-school report.
+
+**0.5 Production settings** — *operator*
+- **Do:** set and check:
+  - secrets: `JWT_SECRET` and `JWT_REFRESH_SECRET` (32+ characters, new
+    for production, not the staging ones), the Brevo, Sentry and AI keys;
+  - `MONGODB_URI` (0.3);
+  - `ALLOWED_ORIGINS` (CORS): exactly the production web address(es);
+  - `ANALYSIS_*` values (1.1);
+  - the TLS certificate and its expiry date (more than a month ahead);
+  - free disk space on the host, for the database, the uploads volume and
+    the logs.
+- **Expected:** each value set, checked by a second person, none copied
+  from staging.
+- **If it fails:** the backend refuses to start on a short or placeholder
+  `JWT_SECRET`; a wrong `ALLOWED_ORIGINS` makes the web console fail every
+  request. Fix and restart.
+
+**0.6 Backups, and one full restore** — *operator*
+- **Do:** back up the database **and** the uploads volume (`uploads_data`:
+  logos, photos, attachments) on a schedule, daily, as normal operations;
+  copy each backup off the server. Then restore one backup of both to a
+  scratch instance and time it.
+- **Expected:** a schedule, backups landing off the server, and a restore
+  that brings back the data and the images, with its duration written
+  down.
+- **If it fails:** without a tested restore there is no rollback for data;
+  do not launch.
+
+**0.7 Security** — *operator, with the developer*
+- **Do:** check:
+  - MongoDB is not reachable from the internet (the compose file publishes
+    no port for it);
+  - only 80 and 443 are open. Note that `docker-compose.yml` publishes the
+    backend's port 5000 as well (lines 46–47) and nginx listens only on 80
+    (`nginx.conf`): close 5000 at the firewall (or stop publishing it) and
+    put TLS (443) in front of nginx or in it;
+  - no seed or test accounts with known passwords
+    (`scripts/seed-form1-students.js` creates pupils with the password
+    "student123": never run it against production);
+  - a strong super admin password, not shared;
+  - no secrets in the repository (`.env` files are not committed);
+  - `npm audit` in backend, web, mobile and desktop: no high or critical
+    findings;
+  - the logs contain no passwords or tokens. The `console.log` in
+    `examProcess.service.js` prints only a count ("Results processed: N
+    students").
+- **Expected:** every point checked and written down.
+- **If it fails:** fix before launch; a high or critical audit finding goes
+  to the developer.
+
+**0.8 Live services, with production keys on staging** — *operator*
+- **Do:** send one real email (Brevo), and make one call to the AI feature
+  the app uses (the advanced intelligence, `ADVANCED_INTELLIGENCE_PROVIDER`,
+  Anthropic). Check the email sender domain (SPF, DKIM) and that the
+  message does not land in spam. SMS: the code has no SMS channel (it sends
+  email, and has a WhatsApp channel that docs/19 D6 records as unproven), so
+  there is no SMS to send; if SMS is expected, it is a decision and new
+  work.
+- **Expected:** the email arrives in the inbox, not spam; the AI call
+  answers.
+- **If it fails:** fix the sender domain or the key before launch.
+
+**0.9 Monitoring** — *operator*
+- **Do:** an outside health check on `GET /api/health` that alerts the
+  operator; disk-space alerts on the host; Docker log rotation (the compose
+  file sets none, so set it in the Docker daemon or per service).
+- **Expected:** an alert reaches the operator when the health check fails
+  (test it by stopping the backend once); logs rotate.
+- **If it fails:** without rotation the logs fill the disk; without the
+  check nobody knows the site is down.
+
+**0.10 Restarts after a reboot** — *operator*
+- **Do:** every service has `restart: unless-stopped` (`docker-compose.yml`
+  lines 7, 30, 62) and Docker starts at boot; reboot the server once.
+- **Expected:** after the reboot, 2.3 answers 200 without anyone touching
+  it.
+- **If it fails:** enable Docker at boot and check the restart policy.
+
+**0.11 Time zone** — *operator, with each school's head*
+- **Do:** Cameroon is UTC+1 (`Africa/Douala`). A school's time zone
+  defaults to "UTC" (`School.settings.timezone`, `School.js:255-257`) and
+  the compose file sets no time zone for the host or containers: set each
+  school's time zone to `Africa/Douala`, and decide the host's.
+- **Expected:** printed dates and times (cards, receipts, registers) are
+  Cameroon time.
+- **If it fails:** a date printed near midnight falls on the wrong day.
+
+**0.12 Slow connections** — *teacher, school head*
+- **Do:** use the web console and the mobile app on a slow mobile
+  connection (or throttled to 3G): sign in, open a class, enter marks,
+  print a card.
+- **Expected:** every screen works, slowly; nothing times out silently;
+  the phone keeps marks offline and sends them later.
+- **If it fails:** note the screen and give it to the developer.
+
+**0.13 A full school year on staging** — *school head and a teacher, with the operator*
+- **Do:** on web and on mobile, in English and again in French, as a real
+  school would:
+  1. create a school, its admin, classes, subjects and pupils;
+  2. an exam with continuous assessment (CA); enter marks, process,
+     publish, print the sequence cards;
+  3. compute and publish the term results and print their cards; the same
+     for the year;
+  4. set the promotion bars on Promotion → Progression and run promotion;
+  5. print the ID cards.
+- **Expected:** every step works on both clients and in both languages;
+  every printed document reads correctly (§3 lists what each should show).
+- **If it fails:** note the step, the client and the language; do not
+  launch with a broken step.
+
+**0.14 App stores** — *project owner, with the developer*
+- **Do:** a privacy policy URL; the Play Console data-safety form; Apple's
+  privacy labels and its account-deletion requirement. The app holds
+  children's data (names, photos, marks, attendance, guardians' phones):
+  check Cameroon's personal data protection law, with advice, before
+  launch.
+- **Expected:** both store listings complete; the legal check done and
+  written down.
+- **If it fails:** a store rejects the build; resubmit once fixed.
+
+**0.15 Mobile builds submitted early** — *developer*
+- **Do:** submit the mobile builds to both stores well before 1 November,
+  built with the production `EXPO_PUBLIC_API_URL` (the server address is
+  fixed at build time, `mobile/src/services/api.js:46`).
+- **Expected:** both builds approved before launch day.
+- **If it fails:** schools use the web console until the store approves.
+
+**0.16 Desktop build signed** — *developer*
+- **Do:** sign the desktop installer (Windows code signing; macOS
+  notarisation if offered).
+- **Expected:** it installs without an "unknown publisher" warning.
+- **If it fails:** schools see a warning, or their antivirus blocks it.
+
+**0.17 A named support contact** — *project owner*
+- **Do:** name the person and the channel schools reach for help, and put
+  them in the welcome note (§6).
+- **Expected:** a name, a phone or WhatsApp number, and hours.
+- **If it fails:** do not send the welcome note without it.
+
+**0.18 First run, against production** — *operator, with a teacher*
+- **Do:** a fresh desktop install's first full sync, and a fresh phone's
+  first sign-in, against production.
+- **Expected:** both complete; the desktop shows the school's data; the
+  phone signs in and loads its classes.
+- **If it fails:** note how long it ran and where it stopped; give it to
+  the developer.
+
+**0.19 Every index verified at boot** — *operator, with the developer*
+- **Do:** read the boot log. Today it verifies only the analysis index
+  (`intelligenceanalysisruns activeKey is unique ✅`,
+  `analysisRuns.service.js:706-707`); the others are built by the models
+  without a line in the log. Check them by hand once
+  (`db.<collection>.getIndexes()` against the models), or have the
+  developer add a boot check for every index (code work, not in this
+  checklist).
+- **Expected:** every index the models declare exists in production.
+- **If it fails:** create the missing index before launch.
+
+**0.20 On the day: re-run 2.2, 2.3 and 2.5 against production** — *operator*
+- **Do:** after the production deploy, run 2.2 (the boot line), 2.3
+  (health through nginx) and 2.5 (one analysis, end to end) against
+  production.
+- **Expected:** all three as on staging.
+- **If it fails:** roll back (1.4) and tell the first schools.
 
 ---
 
@@ -61,256 +268,53 @@ has an owner:
   same analysis twice. Do not run more than one process until it exists.
 - **From:** docs/38 §7, §11 prerequisite 3.
 
-**1.3 Back up the database** — *operator*
-- **Do:** take a backup immediately before the deploy.
-- **Expected:** a restorable backup, dated, kept until the release is
-  accepted.
+**1.3 Back up before the deploy** — *operator*
+- **Do:** take a backup of the database and the uploads volume immediately
+  before the deploy, on top of the daily backups (0.6).
+- **Expected:** a restorable backup, dated.
 - **If it fails:** do not deploy.
-- **From:** the rollback steps below.
 
-**1.4 Decide the rollback path, for both changes** — *operator, with the developer*
-- **One server, one database, every school.** Every school runs on the same
-  backend and the same database: `docker-compose.yml` starts one `backend`
-  (line 26) on one database, `school_app` (line 37). Schools are created
-  inside the app by the super admin (`POST /api/super-admin/schools`,
-  `backend/src/routes/superAdmin.routes.js:198`), and every record carries
-  its `schoolId` (`backend/src/utils/tenant.js:98`, `requireSchool`). So
-  deploying switches every school at once, and restoring the database
-  restores every school, not one.
-- **Do:** agree, before deploying, how you would go back:
-  - **Cold analysis:** revert the change and redeploy backend and web
-    together. The previous code ignores the `intelligenceanalysisruns`
-    collection, which can be left or dropped; no other collection changed.
-    The four `ANALYSIS_*` variables are ignored (docs/38 §11, Rollback).
-  - **Agreed calculation: decided by the project owner, 2026-10-16.**
-    - Nothing published under the new calculation: revert backend and web
-      together, then run the cleanup with the latest manifest, --dry-run
-      first. No restore; nothing entered is lost.
-    - Something published under the new calculation: either restore the
-      backup from 1.3 or the latest daily backup from 1.6, or, in this
-      order (the class-wide unpublish routes exist only in the new code, so
-      unpublishing comes before the revert):
-      1. record the manifest;
-      2. unpublish the affected sequence, term and annual results with the
-         new routes, one call per class (Unpublish on the exam, term results
-         and annual results pages, with a reason; a year is refused while its promotion run is
-         a draft or committed: discard or reverse it first);
-      3. revert backend and web together;
-      4. run the cleanup with that manifest, --dry-run first;
-      5. reprocess the sequences, terms and years;
-      6. publish again;
-      7. reissue the cards issued from the new figures.
+**1.4 Rollback for this launch** — *operator, with the developer*
+- **Do:** this is the first launch: no school data depends on the old
+  code. The rollback is to redeploy the previous image (the last build
+  known to work), or to fix forward with the developer.
+- **Expected:** the previous image's tag known, and the operator able to
+  redeploy it in minutes.
+- **If it fails:** fix forward with the developer.
+- **Not needed for this launch:** the revert-plus-cleanup rollback (record
+  a manifest, unpublish with the new routes, revert, cleanup, reprocess,
+  publish, reissue) and its daily manifest. It applies to a later change to
+  the calculation once schools are live; the tools are
+  `scripts/revert-cleanup-agreed-calc.js` and `scripts/check-revert-previous.js`,
+  and the decision and its order are in docs/39 §20.0.
 
-      Tell the schools before either.
-    - The manifest must exist: it is recorded every day of the first week
-      (1.6) and again immediately before any revert. If the last recording
-      was missed, use the latest daily one, and check by hand the exams
-      reprocessed since it.
+**1.5 Dry run per school** — **not needed for this launch**
+- No school has results to compare. It applies to a later change to the
+  calculation once schools are live: `scripts/dry-run-agreed-calc.js`
+  copies one school into memory, reprocesses it with the new code and
+  reports what would change, without writing to the source (`check:dryrun`).
 
-    The commands, from `backend/`:
-    - record the manifest (read-only):
-      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest-YYYY-MM-DD.json>`;
-    - the cleanup, after the revert:
-      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --manifest <manifest.json> --dry-run`,
-      then the same without `--dry-run`. It sets `academicYear` and `term`
-      back to null on exactly the recorded rows, where they still hold the
-      recorded values and are unpublished; it counts the rest.
+**1.6 One server for every school** — *operator*
+- **Do:** one backend and one database serve every school (docs/39
+  §20.0): there is no switch per school, and none is to be added without
+  the project owner. Keep daily backups as normal operations (0.6).
+- **Not needed for this launch:** days without publishing and the daily
+  manifest, which keep a revert-plus-cleanup rollback possible for live
+  schools (1.4).
 
-    The reasons, from the code:
-    - **Sequence results:** results computed after the release are stamped
-      `exam-process/3`, `term/3` and `annual/3`. The previous code reads only
-      `exam-process/2` sequence results as /20, so on a card with no rebuilt
-      figure it would multiply an `exam-process/3` average by 5.
-    - **Promotion bars:** stored in `AcademicStructure.rules`, they are
-      ignored by the previous default rule (`legacy`).
-    - **Cohort files:** a format 2 calibration file is refused by the
-      previous code.
-    - **Pilots:** learning integration goes back to 1.0.0, so pilots drift
-      again.
-    - **A code revert leaves the year on every reprocessed sequence result
-      (tested).** The new code writes `academicYear` and `term` on each
-      sequence result. The previous route's update does not set them, so
-      they stay, even after the previous code reprocesses the exam
-      (`backend/src/routes/exam.routes.js:1760` at `origin/master`, `:1873`
-      at `097de9c`). The previous promotion run selects published sequence
-      results by `academicYear` (`backend/src/services/promotion.service.js:53`
-      at `origin/master`, `:58` at `097de9c`). Its own results carry
-      no year, so today it finds none and proposes on `no_results`. After a
-      revert it finds the left-over results and compares their /20 average
-      with the class's old 0–100 bar: with a bar of 50, every pupil of the
-      class is proposed "repeated". Everything else reads correctly and is
-      overwritten cleanly: cards, terms, years and figures are what the
-      previous code gives on its own.
-    - **The previous code can also write a year and term itself.** Its
-      "Calculate & save" (`POST /api/results/:examId/student/:studentId/reportcard/calculate`)
-      creates a sequence result with them when the pupil has none
-      (`backend/src/controllers/results.controller.js:1333` at
-      `origin/master`, `:1406` at `097de9c`). So the year on a row does not
-      say which code wrote it, and after the previous code reprocesses a row
-      its `calcVersion` is `exam-process/1` again. Only the ids recorded
-      before the revert say which rows this branch wrote.
-
-  - **On the shared server, a restore affects every school.** Restoring
-    the shared database puts every school back to that backup, and every
-    school loses what it entered after it, not only the school whose
-    results went wrong. Nothing restores one school's documents on its own:
-    no tool for it exists. 1.6 keeps a backup of the whole server for each
-    day of the first week, so the loss is at most a day.
-- **Tested:** `node scripts/check-revert-previous.js --ref origin/master`
-  (from `backend/`; not in `check:all`, as it checks out the previous code
-  in a temporary git worktree). On a made-up school, the new code
-  reprocesses, then the previous code reads, reprocesses and runs
-  promotion. It covers the cleanup: dry run first, then cleanup, with and
-  without the previous code reprocessing in between; an older row with a
-  year, as "Calculate & save" writes one, is left alone. It also covers
-  results published under the new code, and the published path above in
-  its order (step R): manifest, unpublish with the new routes one call per
-  class, revert, cleanup (dry run first), reprocess, publish, reissue a card
-  issued from the new figures (the reissued card carries the previous
-  code's figure). Step Q, beside it, unpublishes after the revert through
-  the previous code's own per-result route instead; both end with the
-  previous code's own rows and promotion proposals.
-  After the cleanup, the previous promotion run proposes exactly what it
-  proposed before this branch existed, and nothing else changed. 41
-  passed, 0 failed against `origin/master` (`99d59f4`) and against
-  `097de9c` (this branch just before the agreed calculation).
-- **Expected:** the rollback decision above, read and understood by the
-  operator before the deploy.
-- **If it fails:** do not deploy.
-- **From:** docs/38 §10 item 7, §11; docs/39 §20.0 ("Agreed calculation").
-
-**1.5 Dry run, per school** — *operator runs it; school head reviews it*
-- **Do:** for each school, before the release reaches it, run the dry run
-  against a copy of production, or read-only against production itself
-  (from `backend/`, with devDependencies installed):
-  `node scripts/dry-run-agreed-calc.js --uri <database URI> --school <schoolId> [--year 2026/2027] [--salt <word>]`.
-
-  It copies that one school into a private in-memory database and
-  reprocesses the year's unpublished results with the new code. Published
-  results are left, as on the server. It never writes to the source:
-  `check:dryrun` proves the source is byte-identical afterwards.
-- **What it reports** (counts and pseudonymous pupil ids only, never names):
-  - how many sequence, term and annual averages change, and the largest
-    change;
-  - how many positions change;
-  - each pupil whose annual promotion status would change, and from what to
-    what;
-  - how many of the year's sequence, term and annual results are already
-    **published**. Those keep their figures: reprocessing them is refused
-    (409 `PUBLISHED_RESULTS`) until the school unpublishes them.
-
-  The promotion section is empty until the year has annual results: before
-  then, it reports no change because there is nothing to compare, not
-  because nothing would change.
-
-  `--salt` makes the pupil ids reproducible, so the operator can match them
-  privately if the head asks.
-- **Tested:** `check:dryrun` (13 checks, every figure worked by hand in
-  `backend/scripts/check-dry-run-agreed-calc.js`) runs the dry run on a
-  made-up school in an in-memory database, from the module and from the
-  command line, and runs `list-unconfirmed-bars.js` (7.1) on the same
-  database; the source is byte-identical afterwards (dbHash, every
-  document, every index). Its report, as printed (pupil ids are
-  pseudonyms; the school is made up):
-
-  ```
-  Dry run — school 6a00000000000000000000d1, 2026/2027
-  Published for the year (refused until unpublished): 2 sequence, 0 term, 0 annual result(s)
-  Reprocessed: 1 exam(s) (1 published, left), 2 class-term(s) (0 published), 2 class-year(s) (0 published)
-  Sequence averages: 2 of 4 change, 0 new, 0 removed, 2 position(s) move; largest +2 (P-c0ced528, s1: 12 → 14)
-  Term averages: 2 of 2 change, 0 new, 0 removed, 2 position(s) move; largest +1 (P-c0ced528, term 1: 12 → 13)
-  Annual averages: 2 of 2 change, 0 new, 0 removed, 2 position(s) move; largest +1 (P-c0ced528, year: 12 → 13)
-  Promotion status changes: 1
-    P-1665d745: promoted → repeated
-  ```
-
-  Not yet run against any real school's data.
-- **Expected:** every school's head reads that school's report and accepts
-  the changes before the release. Large changes are expected where CA or
-  coefficients were not counted before.
-- **If it fails:** the script stops with a message (no school, no year,
-  cannot connect), and nothing is written. If a head does not accept the
-  changes, hold the release, for every school (1.6), and give the report to
-  the developer.
-- **From:** docs/39 Current status and §20.0 ("Agreed calculation").
-
-**1.6 Release to every school, with safeguards** — *operator, with every school's head*
-- **One shared server, so every school switches at once.** One backend and
-  one database serve every school (1.4), and the calculation is one
-  calculation for every school (docs/39 §20.0). There is no switch per
-  school, and none is to be added without the project owner.
-- **Do:**
-  - **Dry run accepted by every head.** Run 1.5 for every school; every
-    head accepts the report before the release.
-  - **Back up the whole server every day for the first week**, on top of
-    the backup before the deploy (1.3). Keep each one, dated, until the
-    release is accepted.
-  - **Record the manifest every day, beside the backup:**
-    `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest-YYYY-MM-DD.json>`
-    (read-only). Keep it, dated, with that day's backup. The cleanup in a
-    rollback needs it (1.4).
-  - **Ask schools not to publish results for the first 5 school days**, so
-    that rollback stays a revert plus cleanup (1.4). The request is in the
-    message (6).
-  - **Prefer the break between terms.** Release when schools are not
-    entering marks or processing results, so that fewer results are
-    reprocessed in the first days, and a restore (1.4) loses as little as
-    possible.
-- **Expected:** every head's acceptance of their dry run, a backup and a
-  manifest for each day of the first week, nothing published in the first
-  5 school days, no failed analysis runs (7), and no result changes a
-  school cannot match to its dry run.
-- **If it fails:** decide with the developer whether to roll back, as 1.4
-  says. Record the manifest again immediately before the revert. Tell
-  every school first.
-- **Considered, not chosen: a separate instance for the first school.** A
-  second copy of the stack with a copy of one school's data, so that a
-  restore touches that school alone. Its costs:
-  - a second server or stack, and the operator's time to run it;
-  - a tool to copy one school's documents out of the shared database and,
-    after the week, back in: none exists; it would be new developer work;
-  - that school's users pointed at the new instance: the desktop app's
-    server is set in the app (`desktop/src/main/main.js:332`), but the
-    mobile app's is fixed when it is built (`EXPO_PUBLIC_API_URL`,
-    `mobile/src/services/api.js:46`), so the school needs its own mobile
-    build;
-  - the school kept off the shared server while its copy exists.
-- **From:** docs/39 §20.0 ("Agreed calculation": effective for every
-  unpublished result); this checklist, 1.3 to 1.5.
-
-**1.7 Ship backend and web together; plan desktop and mobile** — *operator*
-- **Do:** deploy the backend and the web console from one build of this
-  branch. They ship in one image here; keep it that way.
-- **Desktop and mobile:**
-  - Release new desktop and mobile builds from the same branch.
-  - An older mobile app still works against the new server, but its
-    "Calculate & save" screen shows editable fields the server now ignores.
-  - An older desktop computes a provisional figure offline that the server
-    replaces on sync, or refuses (409) if the class has a published result.
-  - **An older desktop cannot render, print or issue a report card
-    offline**, so it cannot print its offline figure on a card. The
-    sequence card and its reissue are server-only
-    (`desktop/src/main/api/coverage.js:417` and `:427`); the desktop has no
-    offline answer for the term or annual card; a route the desktop does
-    not answer goes to the server (`desktop/src/main/api/index.js:111`,
-    `handle`); and printed cards (`GeneratedReport`) are not copied to the
-    desktop (`backend/src/config/syncFeed.js:469`). The cards page asks the
-    server for the rendered card (`web/src/pages/reports/cards.tsx:323`).
-    Offline, the card asks for a connection. The old offline figure shows
-    only in the desktop's own results lists until it syncs. Not a
-    card-printing risk; the results-list risk is the line above.
-  - **Neither app can be forced to a minimum version.** Neither sends its
-    version to the server, the server checks none, and neither has an
-    automatic updater. So the old builds keep working against the new
-    server, with the limits above: tell schools to install the new builds,
-    and keep this warning until they have.
-- **Expected:** one backend+web version live, and the desktop and mobile
-  builds scheduled.
+**1.7 Ship backend and web together; build desktop and mobile from the same tag** — *operator, developer*
+- **Do:** deploy the backend and the web console from one build of the tag
+  (0.2); they ship in one image here; keep it that way. Desktop and mobile
+  are built from the same tag.
+- **Expected:** one backend and web version live; desktop and mobile
+  builds from the same commit.
 - **If it fails:** a web build older than the backend reads the analysis's
-  202 answer as a report. From reading that code, the review page is
-  expected to break until the run completes (not tested). Redeploy them
-  together.
-- **From:** docs/38 §11 prerequisite 5; docs/39 §20.0.
+  202 answer as a report (the review page breaks until the run completes,
+  from reading that code). Redeploy them together.
+- **Not needed for this launch:** the warnings about older desktop and
+  mobile builds running against a newer server. No school has an older
+  build; they apply when a later release reaches schools that have not
+  updated (neither app can be forced to a minimum version).
 
 ---
 
@@ -415,121 +419,75 @@ screen.
 
 ---
 
-## 5. Pilots — *operator, then each school head*
+## 5. Pilots — **not needed for this launch**
 
-- **Do:**
-  1. List open pilots, read-only, in the database:
-     `db.intelligencepilots.find({ isOpen: true, deletedAt: null }, { schoolId: 1, kind: 1, status: 1, engineVersions: 1 })`.
-  2. For each, the pilot's report, `GET /api/insights/pilot/:id/report`
-     (as the school's head), shows `scope.engineVersionsMatch` and
-     `scope.engineDrift`.
-- **Expected:** a pilot opened before this release shows drift on
-  `learningIntegration` (1.0.0 → 1.1.0). Recording a calibration decision on
-  it answers 409 `ENGINE_VERSION_CHANGED`.
-- **What to do with a drifted pilot:** nothing updates a pilot's recorded
-  versions, so re-baselining means:
-  - the head closes it (CLOSED is allowed from every state;
-    INSUFFICIENT_EVIDENCE only from ANALYSIS_READY);
-  - and opens a new pilot, which records the current versions.
-
-  **The closed pilot's reviews do not count toward the new pilot.** A
-  review is stamped, when it is recorded, with the id of the pilot open at
-  that moment (`backend/src/routes/insights.routes.js:713`;
-  `IntelligenceReview.pilotRunId`, `backend/src/db/models/IntelligenceReview.js:116`).
-  A pilot's evidence is only the reviews stamped with its own id, since it
-  opened, on its engine version
-  (`backend/src/services/intelligence/pilot.service.js:190`, `windowOf`).
-  A new pilot has a new id, so it starts with no evidence. The reviews are
-  not deleted, and the closed pilot stays listed
-  (`GET /api/insights/pilot/history`, `insights.routes.js:871`) with its
-  report (`GET /api/insights/pilot/:id/report`, `insights.routes.js:860`),
-  but that report is worked out again each time it is read, not frozen.
-
-  So, before closing, the head saves:
-  - the pilot's report, `GET /api/insights/pilot/:id/report`;
-  - its current evidence, `GET /api/insights/pilot/evidence`;
-  - a note of who reviewed and how much was covered, for the new pilot's
-    start.
-- **If it fails:** a drifted pilot cannot be closed. Escalate.
-- **From:** docs/39 §20.0 ("Agreed calculation", the version bump).
+No pilot exists yet. Re-baselining pilots after an engine version change
+(close the drifted pilot, open a new one; its reviews do not carry over)
+applies when a later release changes an engine version while pilots are
+open; the steps are in docs/39 §20.0 and docs/38.
 
 ---
 
-## 6. Tell the schools — *school head, with the operator*
+## 6. Welcome note for the first schools — *project owner, with the support contact*
 
-Send to every school before the release: it reaches them all at once (1.6). English and French.
+Send to each first school when its account is created. English and French.
+Fill in the support contact (0.17).
 
 **English**
 
-> From [release date], results are calculated the same way in every school.
-> - Each sequence average is out of 20 and uses subject coefficients. Your
->   continuous assessment (CA) is included if your school uses CA.
-> - A subject marked absent or exempt, or with no exam mark, is left out of
->   the average. A mark of 0 counts as 0.
-> - Results that are not yet published for this year will change when you
->   process them again. Published results do not change.
-> - To recalculate results that are already published (a sequence, a term
->   or a year), unpublish them first: on the web console, open the exam (or
->   the term or year results), choose Unpublish, and give a reason. Report
->   cards already issued stay as issued.
-> - A sequence calculated before this change keeps its old figure inside a
->   new term: converted to /20, but still without CA or coefficients.
-> - On annual report cards, pupils in a final-year class show "Graduated"
->   (DIPLÔMÉ(E) on French cards).
+> Welcome. A few things about how results work:
+> - Each sequence average is out of 20 and uses your subjects'
+>   coefficients. Continuous assessment (CA) is included if your school
+>   uses CA.
+> - A subject marked absent, or with no exam mark, is left out of the
+>   average. A mark of 0 counts as 0.
+> - Promotion bars are set for each year, out of 20, on Promotion →
+>   Progression.
 > - Report cards print in your school's language, set in Settings (school
->   details), whoever opens them.
-> - Promotion bars are now set for each year, out of 20, on Promotion →
->   Progression. Please confirm a bar for each class. Old bars (0–100) are
->   shown there but are not used.
-> - Please do not publish results until [date].
-> - The first Intelligence review after the change may take a few minutes to
->   prepare.
+>   details).
+> - A published result is never recalculated. To correct one, unpublish
+>   it first (Unpublish, with a reason), then calculate and publish again.
+>   Cards already issued stay as issued; reissue them if they must change.
+> - For help: [support contact].
 
 **Français**
 
-> À partir du [date de mise en service], les résultats sont calculés de la
-> même façon dans toutes les écoles.
-> - Chaque moyenne de séquence est sur 20 et tient compte des coefficients.
->   Le contrôle continu (CC) est inclus si votre école l'utilise.
-> - Une matière notée absente ou dispensée, ou sans note d'épreuve, est
->   retirée de la moyenne. Une note de 0 compte comme 0.
-> - Les résultats de cette année qui ne sont pas encore publiés changeront
->   lorsque vous les retraiterez. Les résultats publiés ne changent pas.
-> - Pour recalculer des résultats déjà publiés (une séquence, un trimestre
->   ou une année), annulez d'abord leur publication : dans la console web,
->   ouvrez l'examen (ou les résultats du trimestre ou de l'année), choisissez
->   « Annuler la publication » et indiquez une raison. Les bulletins déjà
->   délivrés restent tels quels.
-> - Une séquence calculée avant ce changement garde son ancienne note dans
->   un nouveau trimestre : convertie sur 20, mais toujours sans CC ni
->   coefficients.
-> - Sur les bulletins annuels, les élèves d'une classe terminale sont
->   indiqués « DIPLÔMÉ(E) » (« Graduated » sur les bulletins en anglais).
-> - Les bulletins sont imprimés dans la langue de l'établissement, choisie
->   dans Paramètres (informations de l'établissement), quel que soit
->   l'utilisateur.
-> - Les seuils de passage se fixent désormais par année, sur 20, dans
->   Promotion → Progression. Merci de confirmer un seuil pour chaque classe.
->   Les anciens seuils (0–100) y sont affichés mais ne sont pas utilisés.
-> - Merci de ne pas publier de résultats avant le [date].
-> - La première revue Intelligence après le changement peut prendre quelques
->   minutes à se préparer.
+> Bienvenue. Quelques points sur les résultats :
+> - Chaque moyenne de séquence est sur 20 et tient compte des coefficients
+>   de vos matières. Le contrôle continu (CC) est inclus si votre école
+>   l'utilise.
+> - Une matière notée absente, ou sans note d'épreuve, est retirée de la
+>   moyenne. Une note de 0 compte comme 0.
+> - Les seuils de passage se fixent par année, sur 20, dans Promotion →
+>   Progression.
+> - Les bulletins sont imprimés dans la langue de votre établissement,
+>   choisie dans Paramètres (informations de l'établissement).
+> - Un résultat publié n'est jamais recalculé. Pour le corriger, annulez
+>   d'abord sa publication (« Annuler la publication », avec une raison),
+>   puis recalculez et publiez à nouveau. Les bulletins déjà délivrés
+>   restent tels quels ; rééditez-les s'ils doivent changer.
+> - Pour toute aide : [support contact].
 
-- **Expected:** every school has the message before the release.
-- **If it fails:** hold the release, for every school.
-- **From:** docs/39 Current status, §21.1; docs/38 §10.
+- **Expected:** each first school has the note, with a real support
+  contact, before its first marks are entered.
 
 ---
 
-## 7. After release, for the first week — *operator, daily*
+## 7. After launch, for the first week — *operator, daily*
 
 | Watch | Where | Act when |
 |---|---|---|
 | Analysis runs failing or timing out | run records (`intelligenceanalysisruns`, `status: "failed"`, `error.code` one of `WORKER_OUT_OF_MEMORY`, `TIMEOUT`, `ENGINE_ERROR`, `WORKER_EXITED`, `LOAD_ERROR`, `STORE_ERROR`, `REPORT_TOO_LARGE`, `INTERRUPTED`) | any `WORKER_OUT_OF_MEMORY` or `TIMEOUT`: revisit 1.1; any `ENGINE_ERROR`, `WORKER_EXITED`, `LOAD_ERROR` or `STORE_ERROR`: escalate to the developer; `INTERRUPTED` after a restart is expected (4) |
 | Worker memory | host memory during runs (`docker stats`) | memory near the host's limit: lower `ANALYSIS_CONCURRENCY` |
-| 409 `PUBLISHED_RESULTS` volume | backend access log (morgan, `combined` in production): 409 answers to `/process`, `/term-results/compute`, `/annual-results/compute` and `/reportcard/calculate` | many from one school: that school needs the "unpublish first" step explained (6) |
-| Support questions about promotion bars | support channel | the same question twice: add it to the message in 6 |
-| Manifest recorded (1.6) | that day's `--record` line: "Recorded N sequence result(s) stamped exam-process/3 (M published) …"; note N and M with the day's backup | no manifest for the day: record it now; M above 0 in the first 5 school days: a school published, so rollback is no longer a revert plus cleanup for it (1.4) |
+| Health check and disk | the monitoring of 0.9 | any alert: act on it the same day |
+| Backups | the off-server copies of 0.6 | a day without a backup: take one now |
+| Support questions | the support contact (0.17) | the same question twice: add it to the welcome note (6) |
+
+**Not needed for this launch:** the daily manifest row and the 409
+`PUBLISHED_RESULTS` volume row, which watch a revert-plus-cleanup rollback
+and the "unpublish first" step for schools moving from the previous
+calculation; they apply to a later calculation change once schools are
+live.
 
 **7.1 Before each school's first promotion run: classes with no confirmed bar** — *operator, then the school head*
 - **Do:** list, for every school, the classes with no confirmed bar for the

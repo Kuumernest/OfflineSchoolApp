@@ -1,5 +1,11 @@
 # 41 — Detail check before release
 
+**First launch.** No school uses the platform yet (confirmed by the
+project owner, 2026-10-16): the release on Sunday 1 November 2026 is the
+first launch, not a migration. Rows below about old rows, old builds or the
+revert path describe a later change once schools are live; for this launch
+docs/40 §0 is the readiness list.
+
 A pass over the whole app on branch `academic-agreed-calculation`
 (2026-10-16): speed, storage, English/French, the clients against the
 backend, the mobile display (the message module first), and loose ends.
@@ -271,7 +277,7 @@ Severity: **B** blocks release, **S** should fix, **N** nice to have.
 | l10n | The head called "Principal" in French in settings, lists, the template builder and printed documents, while the card says "chef d'établissement" | web/mobile `fr.json`; `backend/src/print/labels.js` | S | yes (follow-up) | web/mobile `check:l10n`; `check:idcard`. English unchanged: the card and the settings field both say "Principal" |
 | ID card | Printed a "Principal" placeholder in script in the head's signature space (removed; the title stays as the label under the line); lacked sex, date of birth, validity date, emergency contact and the school's address and phone; printed in the viewer's language | `backend/src/print/idCard.js`, `routes/documents.routes.js` | S | yes (follow-up) | `check:idcard` (both languages, long name, missing photo, the route in the school's language) |
 | ID card | No signature or stamp image in the data model; no health fields printed (the model's `bloodGroup` left off) | `School`, `Student` models | — | not added (by decision) | for the project owner if wanted |
-| Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, beside step Q; 41 vs `origin/master` and `097de9c` |
+| Rollback | docs/40 1.4's published option unpublished after the revert, when the class-wide unpublish routes are already gone with the new code | `docs/40-staging-release-checklist.md` 1.4 | S | yes (follow-up) | order rewritten (unpublish before the revert); check-revert-previous step R follows it, beside step Q; 41 vs `origin/master` and `097de9c`. Not needed for this launch (docs/40 1.4) |
 | Clients | After one class of an exam was unpublished while another stayed published, the exam still said "published": the web hid Publish, so that class could not be published back, and offered no Unpublish for the rest | `unpublish.service.js`; `web/src/pages/exams/[id]/index.tsx` | S | yes (follow-up) | `check:unpublish` (an exam of two classes); web `check:l10n` |
 | Speed | Both locales preloaded (160 kB gzip) | `web/src/i18n/index.ts` | N | no | lazy-load the other |
 | Speed | +1 query per class in whole-school term/annual compute | `termGrading`, `annualGrading` | N | no | batch the published check |

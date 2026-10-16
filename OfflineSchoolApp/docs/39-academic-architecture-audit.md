@@ -41,6 +41,15 @@ result means.
 
 ## Current status (2026-10-16, branch `academic-agreed-calculation`)
 
+- **First launch, no live schools** (confirmed by the project owner,
+  2026-10-16). No school uses the platform yet, so no school has results
+  under the previous code: the agreed calculation is the platform's
+  calculation from the first day. Launch: Sunday 1 November 2026
+  (docs/40). What this audit and §20.0 say about results computed before
+  the release, old rows and old app builds describes the code's behaviour
+  for a later change once schools are live; the migration steps built for
+  it (revert-plus-cleanup rollback, dry run per school, days without
+  publishing) are not needed for this launch.
 - **The calculation is decided, for every school** (§21.1, by the project
   owner on 2026-10-16; implementation in §20.0, "Agreed calculation").
   - Sequence average: the coefficient-weighted mean out of 20, CA blended
@@ -3072,6 +3081,39 @@ Checked against docs/37:
       passed (eslint 0 errors, `tsc`);
     - web `npm run build`: passed; `npm run lint`: 0 errors (1 warning in
       an untouched file); `i18n:check` OK; `check:l10n` 93 passed.
+
+- **First launch: docs/40 reworked (2026-10-16).** Docs only; no code
+  changed. The project owner confirmed that no school uses the platform
+  yet: this release is the first launch (Sunday 1 November 2026), not a
+  migration of live schools.
+  - docs/40 now opens with that, and adds §0 Launch readiness (0.1–0.20):
+    merge and tag; build every app from the tag; the production database
+    and its data; production settings; backups of the database and the
+    uploads volume with one timed restore; security; live services with
+    production keys; monitoring; restarts after a reboot; time zone; slow
+    connections; a full school year on staging on web and mobile in both
+    languages; the app stores; mobile builds submitted early; a signed
+    desktop build; a named support contact; first runs against production;
+    every index verified; and on the day, 2.2, 2.3 and 2.5 against
+    production.
+  - Marked not needed for this launch, each saying when it would apply (a
+    later change to the calculation once schools are live): 1.4's
+    revert-plus-cleanup rollback and manifest (replaced by redeploying the
+    previous image or fixing forward); 1.5 the dry run per school; 1.6's
+    days without publishing and the daily manifest (daily backups stay, as
+    normal operations); 1.7's warnings about old app builds; §5 pilots; §7's
+    manifest and 409 rows. §2 and §3 unchanged. §6 is a welcome note for
+    the first schools, in English and French.
+  - Found while writing §0, from the repository: `docker-compose.yml`
+    publishes the backend's port 5000 (lines 46–47) as well as nginx's 80,
+    and nginx listens on 80 only (TLS is to be put in front or in it); the
+    compose file sets no Docker log rotation and no time zone; a school's
+    time zone defaults to "UTC" (`School.js:255-257`); the code has no SMS
+    channel; the boot log verifies only the analysis index
+    (`analysisRuns.service.js:706-707`); `scripts/seed-form1-students.js`
+    creates pupils with a known password. Each is a §0 step; none was
+    changed here.
+  - docs/41 notes the first launch. No suite was run: no code changed.
 
 ### 20.1 Safest first implementation slice
 
