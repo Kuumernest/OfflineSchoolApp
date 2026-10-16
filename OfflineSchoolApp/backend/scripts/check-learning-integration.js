@@ -95,9 +95,9 @@ const twoHw = [hw("h1", "2027-04-01", { score: 16 }), hw("h2", "2027-04-15", { s
 
   let p = build(STRONG);
   let d = dim(p, Q);
-  check("versions: strengths 1.2.0 over integration 1.0.0; academic 1.0.0, exploration 1.0.0, learning evidence 1.0.0 unchanged",
+  check("versions: strengths 1.2.0 over integration 1.1.0 (docs/39 §4.6d); academic 1.0.0, exploration 1.0.0, learning evidence 1.0.0 unchanged",
     [p.strengthEngineVersion, p.learningIntegrationVersion, p.academicEngineVersion, exploration.EXPLORATION_ENGINE_VERSION, le.LEARNING_EVIDENCE_VERSION, p.learningEvidenceVersion],
-    ["1.2.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0", null]);
+    ["1.2.0", "1.1.0", "1.0.0", "1.0.0", "1.0.0", null]);
   check("with no learning reading the 1.1.0 answer stands, and the Stage 11 base fields are all present",
     [d.state, d.baseState, d.baseConfidence, d.basePersistence, d.baseConsistency, typeof d.baseDirection, d.fusedState, d.fused.stateSource],
     ["ESTABLISHED", "ESTABLISHED", "strong", "persistent", "consistent", "string", "ESTABLISHED", "academic"]);
@@ -347,8 +347,8 @@ const twoHw = [hw("h1", "2027-04-01", { score: 16 }), hw("h2", "2027-04-15", { s
   let rr = await teacherA.get("/insights/student/st-a1/strengths");
   let prof = rr.body.data.profile;
   let q = prof.strengths.find((x) => x.dimension === Q);
-  check("the teacher's read → 200, strengths 1.2.0 over integration 1.0.0 and learning evidence 1.0.0; the learning integration block is present",
-    [rr.status, prof.strengthEngineVersion, prof.learningIntegrationVersion, prof.learningEvidenceVersion, prof.learningIntegration.version, prof.learningIntegration.available], [200, "1.2.0", "1.0.0", "1.0.0", "1.0.0", true]);
+  check("the teacher's read → 200, strengths 1.2.0 over integration 1.1.0 and learning evidence 1.0.0; the learning integration block is present",
+    [rr.status, prof.strengthEngineVersion, prof.learningIntegrationVersion, prof.learningEvidenceVersion, prof.learningIntegration.version, prof.learningIntegration.available], [200, "1.2.0", "1.1.0", "1.0.0", "1.1.0", true]);
   check("quantitative reasoning: ESTABLISHED from the marks, CORROBORATED by two assignments and two quizzes (three attempts → two events); the practical stayed in the baseline",
     [q.state, q.baseState, q.learningEvidence.relationship, q.learningEvidence.independentEventCount, q.learningEvidence.sourceFamilies, prof.learningIntegration.duplicateEventsCollapsed, prof.learningIntegration.baselineEventsNotRecounted],
     ["ESTABLISHED", "ESTABLISHED", "CORROBORATED", 4, ["ASSIGNMENT", "QUIZ"], 1, 5]);
@@ -361,12 +361,12 @@ const twoHw = [hw("h1", "2027-04-01", { score: 16 }), hw("h2", "2027-04-15", { s
   check("/profile/evidence: the learning authority, the independent items, the modalities, every version, and the integrated blocks per dimension",
     [rr.status, rr.body.data.learningAuthority.academic, rr.body.data.learningIntegration.items.length, rr.body.data.learningIntegration.modalities.QUIZ, rr.body.data.versions,
      Object.keys(rr.body.data.dimensions[0]).filter((k) => ["academic", "learningEvidence", "corroboration", "context", "interpretation"].includes(k)).length],
-    [200, "baseline", 4, true, { academic: "1.0.0", strengths: "1.2.0", learningIntegration: "1.0.0", learningEvidence: "1.0.0", exploration: "1.0.0" }, 5]);
+    [200, "baseline", 4, true, { academic: "1.0.0", strengths: "1.2.0", learningIntegration: "1.1.0", learningEvidence: "1.0.0", exploration: "1.0.0" }, 5]);
   rr = await teacherA.get("/insights/student/st-a1/profile/timeline");
-  check("/profile/timeline names the relationship per dimension and every version", [rr.body.data.learningRelationships[Q], rr.body.data.versions.learningIntegration], ["CORROBORATED", "1.0.0"]);
+  check("/profile/timeline names the relationship per dimension and every version", [rr.body.data.learningRelationships[Q], rr.body.data.versions.learningIntegration], ["CORROBORATED", "1.1.0"]);
   rr = await teacherA.get("/insights/student/st-a1/profile");
   check("/profile: the current reading carries the integration summary (no events) and both new versions",
-    [rr.body.data.current.learningIntegrationVersion, rr.body.data.current.learningIntegration.relationships[Q], "items" in rr.body.data.current.learningIntegration], ["1.0.0", "CORROBORATED", false]);
+    [rr.body.data.current.learningIntegrationVersion, rr.body.data.current.learningIntegration.relationships[Q], "items" in rr.body.data.current.learningIntegration], ["1.1.0", "CORROBORATED", false]);
   check("authorisation unchanged: the pupil reads their own; another pupil, the bursar, a teacher of another class → 403; Beta's head → 404; the operator only with a school",
     [await statuses(pupilA1, reads.map((u) => u.replace("st-a1", "me"))), (await pupilA2.get(reads[0])).status, await statuses(bursar, reads), await statuses(teacherC, reads), await statuses(headB, reads), await statuses(operator, reads.map(inA)), (await statuses(operator, reads)).every((s) => s !== 200)],
     [[200, 200, 200, 200, 200], 403, [403, 403, 403, 403, 403], [403, 403, 403, 403, 403], [404, 404, 404, 404, 404], [200, 200, 200, 200, 200], true]);
@@ -384,7 +384,7 @@ const twoHw = [hw("h1", "2027-04-01", { score: 16 }), hw("h2", "2027-04-15", { s
   const v1 = rr.body.data;
   check("first rebuild → 201, v1, the SERVER's five versions, the boundary counts learning events too",
     [rr.status, v1.profileVersion, v1.academicEngineVersion, v1.strengthEngineVersion, v1.explorationEngineVersion, v1.learningIntegrationVersion, v1.learningEvidenceVersion, v1.evidenceBoundary.learningEvents, typeof v1.evidenceBoundary.hash],
-    [201, 1, "1.0.0", "1.2.0", "1.0.0", "1.0.0", "1.0.0", 4, "string"]);
+    [201, 1, "1.0.0", "1.2.0", "1.0.0", "1.1.0", "1.0.0", 4, "string"]);
   rr = await teacherA.post("/insights/student/st-a1/profile/rebuild", {});
   check("a rebuild on unchanged evidence returns v1 and writes nothing", [rr.status, rr.body.created, await M("StrengthProfileSnapshot").countDocuments({ studentId: "st-a1" })], [200, false, 1]);
   await M("Homework").updateOne({ _id: "hw2" }, { $set: { "submissions.0.score": 5 } });
@@ -393,7 +393,7 @@ const twoHw = [hw("h1", "2027-04-01", { score: 16 }), hw("h2", "2027-04-15", { s
     [rr.body.data.pendingSnapshot, rr.body.data.comparison.learningEvidence.map((x) => [x.dimension, x.previous, x.current, x.reasons]),
      (await M("StrengthProfileSnapshot").findOne({ studentId: "st-a1", profileVersion: 1 }).lean()).evidenceBoundary.hash === v1.evidenceBoundary.hash],
     [true, [[Q, "CORROBORATED", "PARTIALLY_CORROBORATED", ["LEARNING_EVIDENCE_CONTRADICTION_ADDED"]]], true]);
-  check("the changes payload names the versions on both sides", [rr.body.data.previous.learningIntegrationVersion, rr.body.data.current.learningIntegrationVersion], ["1.0.0", "1.0.0"]);
+  check("the changes payload names the versions on both sides", [rr.body.data.previous.learningIntegrationVersion, rr.body.data.current.learningIntegrationVersion], ["1.1.0", "1.1.0"]);
   rr = await head.post("/insights/student/st-a1/profile/rebuild", {});
   check("the head's rebuild → v2", [rr.status, rr.body.data.profileVersion], [201, 2]);
   await M("Homework").updateOne({ _id: "hw2" }, { $set: { deletedAt: new Date() } });

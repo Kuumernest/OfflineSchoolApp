@@ -84,30 +84,22 @@ async function annualContextFor({ schoolId, academicYear }) {
   const policy = await academicPolicy.resolve({ schoolId, academicYear, structure, gradingConfig });
   const termWeights = getTermWeights(policy.policy.structure.periods);
 
-  const promotionExams = structure.promotionExams ?? [];
-  let promotionExamIds = [];
-  if (promotionExams.length > 0) {
-    const Exam = mongoose.model("Exam");
-    const promotionExamDocs = await Exam.find({
-      schoolId,
-      academicYear,
-      sequenceNumber: { $in: promotionExams },
-      type: "promotion_exam",
-      deletedAt: null,
-    }).lean();
-    promotionExamIds = promotionExamDocs.map((e) => e._id);
-  }
+  // Promotion exams do not decide promotion under the decided rule (the
+  // annual average against the class's bar, docs/39 §14); they are read by
+  // nothing here. AcademicStructure.promotionExams still names them for the
+  // exam screens and the cards.
+  const promotionExamIds = [];
 
   const rules = effectiveRules(policy.policy.rules);
   return {
     structure, passMark, termWeights, promotionExamIds, policyHash: policy._id,
-    // The school's rules for the year, from the same snapshot (Phase 4).
+    // The rules in force (shared/academicRules, decided 2026-10-16), from the
+    // same snapshot: the school's bands on the stored row, promotion by the
+    // annual average against the class's bar.
     rules,
     rawRules:    policy.policy.rules,
-    calcVersion: calcVersionFor("annual", policy.policy.rules),
-    gradeOf: rules.gradingAuthority === "school_bands"
-      ? (mark) => grading.lookupSchoolGrade(mark, gradingConfig)
-      : null,
+    calcVersion: calcVersionFor("annual"),
+    gradeOf: (mark) => grading.lookupSchoolGrade(mark, gradingConfig),
   };
 }
 
@@ -117,8 +109,8 @@ async function annualContextFor({ schoolId, academicYear }) {
  * are exactly those of the per-pupil function this replaced.
  */
 function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
-  const { structure, passMark, termWeights } = ctx;
-  // The built-in scale unless the rules say the school's bands (Phase 4).
+  const { passMark, termWeights } = ctx;
+  // The school's bands; the built-in scale only for a context built by hand.
   const gradeOf = ctx.gradeOf || lookupGrade;
 
   // 5. Build per-term averages
@@ -154,44 +146,17 @@ function annualRowFor(ctx, { termResults, promotionResults, classId = null }) {
   const annualGrade = gradeOf(annualAverage);
   const isPassing = annualAverage >= passMark;
 
-  // 7. Determine promotion status.
-  //
-  // Under a non-legacy promotion rule, the one function the promotion run
-  // also proposes by (shared/academicRules promotionUnderRules, docs/39 §14).
-  if (ctx.rules && ctx.rules.promotionRule !== "legacy") {
-    const { status } = promotionUnderRules(ctx.rawRules, {
-      annualAverage,
-      terms: termAverages.map((ta) => ({ isComplete: ta.isComplete, passed: ta.isComplete && ta.average >= passMark })),
-      termsInYear: termWeights.length,
-      classId,
-    });
-    return { termAverages, annualAverage, annualGrade, promotionStatus: status, isPassing };
-  }
-
-  // Every term of the year complete. This was `completedTerms >= 3`, which
-  // is the same thing for a three-term year — every year there was until
-  // Phase 6 let a school shape its own — and could never be met by a year of
-  // two semesters, whose pupils would have stayed "pending" for good.
-  let promotionStatus = "pending";
-  if (termWeights.length > 0 && completedTerms >= termWeights.length) {
-    const allTermsPassed = termAverages.every(
-      (ta) => ta.isComplete && ta.average >= passMark
-    );
-    let promotionExamsPassed = true;
-    for (const pr of promotionResults) {
-      if (pr.average < structure.promotionThreshold) {
-        promotionExamsPassed = false;
-        break;
-      }
-    }
-    if (allTermsPassed && promotionExamsPassed) {
-      promotionStatus = "promoted";
-    } else if (!allTermsPassed) {
-      promotionStatus = "repeated";
-    } else {
-      promotionStatus = "conditional";
-    }
-  }
+  // 7. Promotion status: the one function the promotion run also proposes
+  // by (shared/academicRules promotionUnderRules, docs/39 §14). The annual
+  // average against the class's bar, the school's pass mark when no bar is
+  // set; pending until every term of the year is complete.
+  const { status: promotionStatus } = promotionUnderRules(ctx.rawRules, {
+    annualAverage,
+    terms: termAverages.map((ta) => ({ isComplete: ta.isComplete })),
+    termsInYear: termWeights.length,
+    classId,
+    passMark,
+  });
 
   return { termAverages, annualAverage, annualGrade, promotionStatus, isPassing };
 }
@@ -259,6 +224,13 @@ async function computeStudentAnnualAverage({
       schoolId, academicYear, classId, studentId, isPublished: { $ne: true },
     });
     return null;
+  }
+
+  // A published row is never recomputed in place (D3, decided).
+  if (await AnnualResult.exists({ schoolId, academicYear, classId, studentId, isPublished: true, deletedAt: null })) {
+    const err = new Error("This annual result is published. Unpublish it first.");
+    err.status = 409; err.code = "PUBLISHED_RESULTS";
+    throw err;
   }
 
   const row = annualRowFor(ctx, { termResults, promotionResults, classId });
@@ -335,8 +307,8 @@ async function computeClassAnnualAverages({
     // results grouped by pupil, one read of the promotion results, one write.
     const ctx = await annualContextFor({ schoolId, academicYear });
 
-    // D3, "refuse": a published annual row is not recomputed in place.
-    if (ctx.rules.publishedResults === "refuse") {
+    // A published annual row is never recomputed in place (D3, decided).
+    {
       const published = await AnnualResult.countDocuments({
         schoolId, academicYear, classId, isPublished: true, deletedAt: null,
       });
@@ -471,7 +443,7 @@ async function computeAllClassAnnualAverages({ schoolId, academicYear }) {
   let totalComputed = 0;
   let totalSkipped  = 0;
   let totalNoTerms  = 0;
-  // Under the D3 "refuse" rule a class with published annual results is left
+  // Under D3 (decided: refuse) a class with published annual results is left
   // exactly as it is and named here; the other classes still compute.
   const refusedClasses = [];
 

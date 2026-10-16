@@ -3914,8 +3914,8 @@
     "tryAgain": "Veuillez réessayer",
     "unenteredTitle": "Notes non saisies",
     "unenteredBody": {
-      "one": "%{count} élève n'a pas de note — saisissez une note ou marquez l'élève absent.",
-      "other": "%{count} élèves n'ont pas de note — saisissez une note ou marquez chaque élève absent."
+      "one": "%{count} élève n'a pas de note — saisissez une note ou marquez l'élève absent. Absent retire la matière de la moyenne de l'élève ; 0 compte comme une note.",
+      "other": "%{count} élèves n'ont pas de note — saisissez une note ou marquez chaque élève absent. Absent retire la matière de la moyenne de l'élève ; 0 compte comme une note."
     },
     "cancel": "Annuler",
     "saveAnyway": "Enregistrer quand même",

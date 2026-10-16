@@ -967,9 +967,9 @@
     "saved": "Enregistré",
     "saveFailed": "Échec de l'enregistrement. Veuillez réessayer.",
     "invalidScores": "{{count}} note(s) doivent être un nombre entre 0 et {{max}} — veuillez corriger les cellules surlignées.",
-    "missingScores": "{{count}} élève(s) n'ont pas de note — saisissez une note ou marquez-les absents.",
+    "missingScores": "{{count}} élève(s) n'ont pas de note — saisissez une note ou marquez-les absents. Absent retire la matière de la moyenne ; 0 compte comme une note.",
     "markPresent": "Marquer présent",
-    "markAbsent": "Marquer absent",
+    "markAbsent": "Marquer absent : cette matière est retirée de la moyenne de l'élève. Un 0 est une note et compte.",
     "noStudentsMatch": "Aucun élève ne correspond à votre recherche",
     "noStudentsInClass": "Aucun élève dans cette classe",
     "processConfirm": "Calculer les résultats ? Les mentions, moyennes et rangs seront calculés pour tous les élèves.",
@@ -2305,18 +2305,34 @@
   },
   "prog": {
     "title": "Progression des classes",
-    "blurb": "Vers quelle classe chacune mène. Défini ici une fois, car cela ne peut être déduit des noms — rien dans « Form 5 » n'indique que la suivante est « Lower Sixth ».",
+    "blurb": "Vers quelle classe chacune mène, et le seuil que ses élèves doivent atteindre. Les destinations sont définies ici une fois, car elles ne peuvent être déduites des noms — rien dans « Form 5 » n'indique que la suivante est « Lower Sixth ».",
     "nextClass": "Mène à",
     "finalYear": "Dernière année",
     "finalYearHint": "Les élèves de cette classe partent en fin d'année.",
-    "average": "Moyenne de passage",
-    "averageOff": "Règle du nombre de termes",
     "notSet": "Non défini",
     "incomplete": "{{count}} classe sans destination",
     "incomplete_other": "{{count}} classes sans destination",
     "incompleteHint": "Leurs élèves ne pourront pas passer tant que ce n'est pas défini.",
     "complete": "Chaque classe a une destination",
-    "saved": "Progression enregistrée"
+    "saved": "Progression enregistrée",
+    "year": "Année scolaire",
+    "schoolBar": "Seuil de l'école (/20)",
+    "schoolBarHint": "Pour les classes sans seuil propre. Vide : la moyenne de réussite ({{passMark}}).",
+    "rule": "Un élève est admis quand la moyenne annuelle publiée atteint le seuil de sa classe, redouble en dessous, et est diplômé d'une classe terminale. Sans résultat annuel publié pour chaque trimestre, une décision est à prendre. Les examens de passage ne comptent pas.",
+    "bar": "Seuil (/20)",
+    "barDefault": "{{bar}} (par défaut)",
+    "oldAverage": "Ancienne moyenne de passage : {{value}} (0–100, non utilisée). Saisissez un seuil sur 20 pour le confirmer cette année.",
+    "results": "Résultats annuels publiés",
+    "publishedOf": "{{published}} sur {{pupils}}",
+    "noneOf": "Aucun sur {{pupils}}",
+    "noResults": "{{count}} classe n'a aucun résultat annuel publié pour cette année :",
+    "noResults_other": "{{count}} classes n'ont aucun résultat annuel publié pour cette année :",
+    "noResultsHint": "une proposition y mettrait chaque élève en décision à prendre.",
+    "noStructure": "Cette année n'a pas encore de structure académique ; les seuils ne peuvent être enregistrés avant (Paramètres → Structure académique).",
+    "draftLocks": "Une proposition de passage en brouillon existe pour cette année. Validez-la ou supprimez-la avant de changer un seuil.",
+    "graduates": "Diplômés",
+    "reason": "Motif du changement de seuils",
+    "reasonHint": "Enregistré dans le journal d'audit avec les anciens et nouveaux seuils."
   },
   "promo": {
     "title": "Fin d'année",
@@ -5188,112 +5204,21 @@
     }
   },
   "academicRules": {
-    "title": "Règles de calcul",
-    "intro": "Comment les résultats de l'année sont calculés. Chaque règle relève de l'autorité pédagogique de l'établissement : rien ne change avant qu'elle soit choisie ici, et les résultats déjà publiés conservent les chiffres avec lesquels ils ont été délivrés.",
+    "title": "Comment les résultats sont calculés",
+    "intro": "Identique pour toutes les écoles, décidé par le responsable du projet. Rien ici n'est un réglage : une école fixe ses seuils de passage, dans Promotion → Progression.",
     "year": "Année scolaire",
-    "onDefaults": "Cette année applique le fonctionnement actuel pour chaque règle.",
-    "impactTitle": "Résultats de l'année",
-    "counts": "{{published}} publiés · {{unpublished}} non publiés",
-    "totals": "Cette année : {{published}} résultats publiés et {{unpublished}} non publiés au total.",
-    "decision": "Décision {{id}}",
-    "currentBehaviour": "Fonctionnement actuel",
-    "schoolBar": "Seuil de passage de l'établissement (sur 20)",
-    "barHint": "La moyenne annuelle nécessaire pour passer.",
-    "classBarsHint": "Une classe peut avoir son propre seuil ; laissez vide pour celui de l'établissement.",
-    "sameAsSchool": "Comme l'établissement",
-    "barInvalid": "Saisissez un nombre de 0 à 20.",
-    "barRequired": "Cette règle nécessite un seuil de passage.",
-    "review": "Vérifier les changements",
-    "takesEffect": "S'applique aux résultats calculés après l'enregistrement.",
-    "confirmTitle": "Modifier les règles de calcul de {{year}}",
-    "fromTo": "{{from}} → {{to}}",
-    "reaches": "Concerne : {{what}}",
-    "consequence": "{{published}} résultats publiés conservent les chiffres avec lesquels ils ont été délivrés. {{unpublished}} résultats non publiés suivront les nouvelles règles au prochain traitement de leur examen, trimestre ou année.",
-    "draftRunBlocks": "Une procédure de passage en brouillon existe pour cette année. Validez-la ou abandonnez-la avant de modifier la règle de passage.",
-    "reason": "Motif",
-    "reasonHint": "Consigné dans le journal d'audit avec la modification, par exemple la décision qui l'a approuvée.",
-    "confirm": "Enregistrer les règles",
-    "saved": "Règles de calcul enregistrées",
-    "saveFailed": "Impossible d'enregistrer les règles de calcul",
-    "previewFailed": "Impossible de vérifier la modification",
-    "unavailable": "Les règles de calcul n'ont pas pu être chargées.",
-    "none": "aucun",
-    "classBars": "{{count}} seuil de classe",
-    "classBars_other": "{{count}} seuils de classe",
-    "affects": {
-      "sequence": "Résultats de séquence",
-      "term": "Résultats trimestriels",
-      "annual": "Résultats annuels",
-      "promotion": "Passage"
+    "statement": {
+      "sequence": "Moyenne de séquence : la note de chaque matière sur 20 (CC intégré selon la répartition CC/épreuve de l'école quand le CC est activé ; l'épreuve seule sinon), pondérée par le coefficient de la matière.",
+      "absent": "Une matière notée absente ou dispensée, ou sans note d'épreuve, est retirée — note et coefficient. Un 0 saisi par l'enseignant est un vrai 0 et compte. Un élève sans aucune note d'épreuve n'a pas de résultat de séquence.",
+      "grading": "Les résultats trimestriels et annuels portent les mentions propres à l'école, les mêmes que le bulletin imprime en dessous.",
+      "promotion": "Passage : la moyenne annuelle publiée, sur 20, comparée au seuil de la classe pour l'année. Au seuil ou au-dessus : admis. En dessous : redouble. Classe terminale : diplômé. Pas de résultat annuel publié, ou un trimestre non publié : décision à prendre. Les examens de passage ne comptent pas.",
+      "published": "Un résultat publié n'est jamais recalculé. Pour le corriger, dépubliez-le d'abord ; la correction est alors calculée de la même façon."
     },
-    "rule": {
-      "sequenceAverage": {
-        "title": "Moyenne officielle de séquence",
-        "desc": "Quel chiffre est la moyenne de séquence d'un élève — la base des rangs, des résultats trimestriels et annuels et du passage."
-      },
-      "gradingAuthority": {
-        "title": "Mentions des résultats trimestriels et annuels",
-        "desc": "Quel barème un résultat trimestriel ou annuel enregistré utilise."
-      },
-      "promotionRule": {
-        "title": "Passage en classe supérieure",
-        "desc": "Comment la proposition de passage de fin d'année est décidée."
-      },
-      "publishedResults": {
-        "title": "Résultats publiés",
-        "desc": "Si un nouveau traitement peut modifier des résultats déjà publiés."
-      },
-      "promotionThreshold": {
-        "title": "Seuil de passage",
-        "desc": ""
-      },
-      "classThresholds": {
-        "title": "Seuils de passage par classe",
-        "desc": ""
-      }
-    },
-    "value": {
-      "raw_mean": {
-        "label": "Moyenne brute des notes (fonctionnement actuel)",
-        "desc": "Moyenne arrondie à l'entier des notes de composition, sans contrôle continu ni coefficients ; une matière où l'élève est absent compte zéro. Classement au pourcentage."
-      },
-      "weighted_20": {
-        "label": "Moyenne pondérée sur 20",
-        "desc": "Chaque matière sur 20, contrôle continu intégré selon la répartition de l'établissement, pondérée par le coefficient, matières d'absence exclues, à deux décimales — le chiffre que le bulletin de séquence imprime déjà. Classement sur cette moyenne."
-      },
-      "split": {
-        "label": "Barème intégré sur les résultats enregistrés (fonctionnement actuel)",
-        "desc": "Les résultats trimestriels et annuels enregistrent une mention du barème intégré, tandis que leurs bulletins impriment le barème de l'établissement."
-      },
-      "school_bands": {
-        "label": "Le barème de l'établissement partout",
-        "desc": "Les résultats trimestriels et annuels enregistrent la mention et l'appréciation de l'établissement : la mention enregistrée et la mention imprimée sont les mêmes."
-      },
-      "legacy": {
-        "label": "Résultats de séquence (fonctionnement actuel)",
-        "desc": "Propositions tirées des résultats de séquence publiés de l'année : le seuil de moyenne de la classe s'il existe, sinon la réussite d'au moins la moitié. Le résultat annuel décide séparément."
-      },
-      "annual_average_at_least": {
-        "label": "Moyenne annuelle au moins égale à un seuil",
-        "desc": "L'élève passe lorsque sa moyenne annuelle publiée atteint le seuil (une classe peut avoir le sien). La procédure de passage et le résultat annuel appliquent la même règle."
-      },
-      "majority_of_terms_passed": {
-        "label": "Majorité des trimestres réussis",
-        "desc": "L'élève passe après avoir réussi au moins la moitié des résultats trimestriels publiés de l'année."
-      },
-      "manual_only": {
-        "label": "Décision manuelle",
-        "desc": "Aucune proposition à partir des résultats : chaque élève attend la décision d'un administrateur avant la clôture de l'année."
-      },
-      "overwrite": {
-        "label": "Recalcul sur place (fonctionnement actuel)",
-        "desc": "Un nouveau traitement remplace les résultats, y compris ceux déjà publiés."
-      },
-      "refuse": {
-        "label": "Protéger les résultats publiés",
-        "desc": "Le traitement d'un examen, d'un trimestre ou d'une année comportant des résultats publiés est refusé tant qu'ils ne sont pas dépubliés — l'étape délibérée et visible."
-      }
-    }
+    "defaultBarSchool": "Une classe sans seuil propre est jugée au seuil de l'école : {{bar}}/20.",
+    "defaultBarPassMark": "Une classe sans seuil propre est jugée à la moyenne de réussite : {{bar}}/20.",
+    "editBars": "Fixer les seuils dans Promotion → Progression.",
+    "counts": "Cette année : {{published}} résultats publiés (conservés tels qu'émis) et {{unpublished}} non publiés (calculés ainsi au prochain traitement).",
+    "unavailable": "Impossible de lire les règles de l'année."
   },
   "reportLayout": {
     "title": "Rubriques du bulletin",

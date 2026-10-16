@@ -2,29 +2,28 @@
 "use strict";
 
 /**
- * weighted_20: a pupil with no counted subject has no sequence result.
+ * A pupil with no paper mark in any subject has no sequence result.
  *
- * The weighted_20 rule (shared/academicRules, docs/39 D1) averages the
- * subjects a pupil was marked in, absent and exempt subjects left out. A
- * pupil marked absent (or exempt) in EVERY subject leaves nothing to average,
- * and the route stored 0, grade F, not passing, ranked last; the term layer
- * then averaged that 0 in as a sequence the pupil had sat. That is the
+ * The decided calculation (shared/academicRules, docs/39 §21.1; it was the
+ * opt-in weighted_20 rule when this suite was written) averages the subjects
+ * a pupil has a paper mark in, absent and exempt subjects left out. A pupil
+ * marked absent (or exempt) in EVERY subject leaves nothing to average, and
+ * the route stored 0, grade F, not passing, ranked last; the term layer then
+ * averaged that 0 in as a sequence the pupil had sat. That is the
  * sequence-level twin of docs/39 §4.6k (no term result → an artificial 0/F
  * annual row), and it is fixed the same way: no row. A pupil with no score
  * rows at all was already handled so (check:rulesmatrix, eve).
  *
- * The default rule is unchanged and pinned here too: raw_mean counts an
- * absent subject as zero (docs/39 §4.7c), so the same pupil still gets 0.
- *
  * Every figure is worked by hand. CA off, papers /20, Maths coefficient 2,
  * English 1, term 1 = sequences 1 and 2 at 50/50, pass mark 10:
  *
- *            seq 1 (M, E)        seq 2 (M, E)    weighted_20 seq1 / seq2      term 1
+ *            seq 1 (M, E)        seq 2 (M, E)    seq1 / seq2                  term 1
  *   ama      15, 9               15, 9           (30+9)/3 = 13 / 13           13
  *   zed      absent, absent      14, 11          none / (28+11)/3 = 13        13  (seq 2 alone)
  *   xan      absent, exempt      absent, absent  none / none                  no term row
  *
- *   raw_mean seq 1: ama round(24/2) = 12, 60%; zed 0, 0%; xan 0, 0%; places 1, 2, 2.
+ * (Before the decision the default raw_mean stored zed and xan at 0, 0 %,
+ * ranked 2nd of 3, and ama at round(24/2) = 12.)
  *
  *   node scripts/check-weighted-no-marks.js
  */
@@ -124,23 +123,13 @@ const main = async () => {
   const cardAverage = async (n, p) => (await buildStudentReportCardData(`s${n}`, p))?.data?.computed?.weightedAverage ?? null;
 
   // ═══════════════════════════════════════════════════════════════════════
-  console.log("--- raw_mean (the default) is unchanged: absent counts as zero ---");
-  for (const n of [1, 2]) await processSeq(n);
-  check("seq 1 raw_mean [average, percentage, place, passing]", await seq(1, ["average", "percentage", "classPosition", "isPassing"]), {
-    ama: [12, 60, 1, true], zed: [0, 0, 2, false], xan: [0, 0, 2, false],
-  });
-  check("  the default card still prints its rebuilt 0 for an all-absent pupil", await cardAverage(1, "zed"), 0);
-
-  // ═══════════════════════════════════════════════════════════════════════
-  console.log("--- weighted_20: no counted subject, no sequence result ---");
-  let r = await call("PUT", `/academic-structure/${A}/${encodeURIComponent(YEAR)}/rules`,
-    { rules: { sequenceAverage: "weighted_20" }, reason: "check-weighted-no-marks" });
-  check("rule set", r.status, 200);
+  console.log("--- no paper mark in any subject, no sequence result ---");
+  let r;
   for (const n of [1, 2]) {
     r = await processSeq(n);
     check(`process seq ${n} → 200`, r.status, 200);
   }
-  check("seq 1 [average, grade, place, of]: only ama; zed's and xan's unpublished raw_mean rows are gone",
+  check("seq 1 [average, grade, place, of]: only ama; zed and xan have no row",
     await seq(1, ["average", "overallGrade", "classPosition", "totalInClass"]), {
       ama: [13, "B", 1, 1], zed: null, xan: null,
     });
@@ -167,21 +156,21 @@ const main = async () => {
       ?.map((s) => [s.sequence, s.isComplete]), [[1, false], [2, true]]);
 
   // ═══════════════════════════════════════════════════════════════════════
-  console.log("--- a published result is kept as issued ---");
-  // zed sat seq 1 after all, it was processed and published, then the marks
-  // were withdrawn: the issued row is not erased, and is not rewritten.
+  console.log("--- a published result is never recomputed ---");
+  // zed sat seq 1 after all: (2·12 + 12)/3 = 12. It is processed and
+  // published; then the marks are withdrawn. Re-processing is refused for the
+  // whole exam (docs/39 §21.1 D3, decided): the issued row is neither erased
+  // nor rewritten, and nothing else is written either.
   await M("StudentScore").updateMany({ examId: "s1", studentId: "zed" }, { $set: { score: 12, isAbsent: false } });
   await processSeq(1);
   check("zed seq 1 marked: (24 + 12)/3 = 12", (await seq(1, ["average"])).zed, [12]);
   await M("ResultSummary").updateMany({ schoolId: A, examId: "s1" }, { $set: { isPublished: true } });
   await M("StudentScore").updateMany({ examId: "s1", studentId: "zed" }, { $set: { score: null, isAbsent: true } });
-  const before = await M("ResultSummary").findOne({ schoolId: A, examId: "s1", studentId: "zed" }).lean();
-  await processSeq(1);
-  const after = await M("ResultSummary").findOne({ schoolId: A, examId: "s1", studentId: "zed" }).lean();
-  check("the published row stays exactly as issued",
-    JSON.stringify(after && { ...after, updatedAt: null }), JSON.stringify(before && { ...before, updatedAt: null }));
-  check("  and is not counted in the class's places (ama alone, 1 of 1)",
-    (await seq(1, ["classPosition", "totalInClass"])).ama, [1, 1]);
+  const before = JSON.stringify(await M("ResultSummary").find({ schoolId: A, examId: "s1" }).sort({ _id: 1 }).lean());
+  r = await processSeq(1);
+  check("re-processing → 409 PUBLISHED_RESULTS, every row exactly as issued",
+    [r.status, r.body?.code, JSON.stringify(await M("ResultSummary").find({ schoolId: A, examId: "s1" }).sort({ _id: 1 }).lean()) === before],
+    [409, "PUBLISHED_RESULTS", true]);
 
   console.log(`\n  ${pass} passed, ${fail} failed`);
   server.close();

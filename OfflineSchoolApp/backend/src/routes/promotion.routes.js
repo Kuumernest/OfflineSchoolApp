@@ -12,6 +12,7 @@ const PromotionRun      = require("../db/models/PromotionRun");
 const PromotionDecision = require("../db/models/PromotionDecision");
 
 const promotion = require("../services/promotion.service");
+const { effectiveRules, promotionBarFor } = require("../../../shared/academicRules");
 
 const asyncHandler = (fn) => (req, res, next) =>
   Promise.resolve(fn(req, res, next)).catch(next);
@@ -60,6 +61,54 @@ router.get("/progression", asyncHandler(async (req, res) => {
     .sort({ name: 1 })
     .lean();
 
+  // With ?year=, what a run for that year would judge each class by: its bar
+  // (out of 20) and how many of its pupils have a published annual result.
+  // promotionAverage is the old 0-100 figure, shown beside the new bar until
+  // an admin confirms one for the year; no run reads it (docs/39 §14).
+  let year = null;
+  const academicYear = req.query.year ? String(req.query.year) : null;
+  if (academicYear) {
+    if (!YEAR.test(academicYear)) return bad(res, "year must look like 2026/2027", "BAD_YEAR");
+    const mongoose = require("mongoose");
+    const M = (n) => mongoose.model(n);
+    const [structure, gradingConfig, annual, pupils, drafts] = await Promise.all([
+      M("AcademicStructure").findOne({ schoolId, academicYear, deletedAt: null }).select("rules").lean(),
+      M("GradingConfig").findOne({ schoolId }).select("passMark").lean(),
+      M("AnnualResult").aggregate([
+        { $match: { schoolId, academicYear, isPublished: true, deletedAt: null } },
+        { $group: { _id: "$classId", n: { $sum: 1 } } },
+      ]),
+      M("Student").aggregate([
+        { $match: { schoolId, status: "approved", deletedAt: null } },
+        { $group: { _id: "$classId", n: { $sum: 1 } } },
+      ]),
+      M("PromotionRun").countDocuments({ schoolId, fromYear: academicYear, status: "draft", deletedAt: null }),
+    ]);
+    const rules = effectiveRules(structure?.rules);
+    const passMark = gradingConfig?.passMark ?? 10;
+    const annualBy = new Map(annual.map((a) => [String(a._id), a.n]));
+    const pupilsBy = new Map(pupils.map((a) => [String(a._id), a.n]));
+    year = {
+      academicYear,
+      hasStructure: Boolean(structure),
+      passMark,
+      promotionThreshold: rules.promotionThreshold,
+      defaultBar: promotionBarFor(structure?.rules, null, passMark),
+      draftRuns: drafts,
+      classes: Object.fromEntries(rows.map((c) => {
+        const id = String(c._id);
+        const own = rules.classThresholds[id];
+        return [id, {
+          bar:             own ?? null,
+          confirmed:       own !== undefined,
+          effectiveBar:    promotionBarFor(structure?.rules, id, passMark),
+          pupils:          pupilsBy.get(id) ?? 0,
+          publishedAnnual: annualBy.get(id) ?? 0,
+        }];
+      })),
+    };
+  }
+
   return res.json({
     success: true,
     count:   rows.length,
@@ -68,6 +117,7 @@ router.get("/progression", asyncHandler(async (req, res) => {
     // fixed cheaply.
     incomplete: rows.filter((c) => !c.isFinalYear && !c.nextClassId).length,
     data: rows,
+    year,
   });
 }));
 
@@ -94,17 +144,9 @@ router.put("/progression", asyncHandler(async (req, res) => {
   for (const e of entries) {
     const nextId = e.nextClassId ? String(e.nextClassId) : null;
 
-    // The promotion average is optional, but when given it must be a usable
-    // percentage — a typo like "150" or "8a" would silently decide who
-    // repeats for the whole school.
-    let avg = null;
-    if (e.promotionAverage !== undefined && e.promotionAverage !== null && e.promotionAverage !== "") {
-      avg = Number(e.promotionAverage);
-      if (!Number.isFinite(avg) || avg < 0 || avg > 100) {
-        return bad(res, "promotionAverage must be a number between 0 and 100", "BAD_AVERAGE");
-      }
-      avg = Math.round(avg * 10) / 10;
-    }
+    // The old 0-100 promotionAverage is no longer written: a class's bar is
+    // set per year, out of 20, through the rules (PUT /academic-structure/
+    // :schoolId/:year/rules), and the old figure is kept as it is.
 
     // A class that leads to itself would promote a whole year group into the
     // class it just left, which reads as a successful rollover and is not one.
@@ -123,7 +165,6 @@ router.put("/progression", asyncHandler(async (req, res) => {
       {
         nextClassId: e.isFinalYear ? null : nextId,
         isFinalYear: Boolean(e.isFinalYear),
-        promotionAverage: avg,
       }
     );
   }

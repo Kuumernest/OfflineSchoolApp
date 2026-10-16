@@ -27,7 +27,7 @@ const grading          = require("./grading.service");
 const { CA_TYPE }      = require("../../../shared/caAssessment");
 const academicPolicy   = require("./academicPolicy.service");
 const { CALC_VERSIONS, legacyTermsFromPeriods } = require("../../../shared/academicPolicy");
-const { effectiveRules, calcVersionFor } = require("../../../shared/academicRules");
+const { effectiveRules, calcVersionFor, sequenceFigureOn20 } = require("../../../shared/academicRules");
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -115,14 +115,13 @@ async function loadTermContext({ schoolId, academicYear, term }) {
       .map((e) => ({ _id: String(e._id), name: e.name || null })),
     passMark: gradingConfig?.passMark ?? 10,
     policyHash: policy._id,
-    // The school's rules for the year, from the same snapshot (Phase 4).
-    // school_bands grades the stored term row with the school's own bands,
-    // which is what its card already prints (docs/39 §12).
+    // The rules in force (shared/academicRules, decided 2026-10-16): the
+    // stored term row takes the school's own bands, which is what its card
+    // prints (docs/39 §12), falling back to the built-in table when the school
+    // has none.
     rules: effectiveRules(policy.policy.rules),
-    calcVersion: calcVersionFor("term", policy.policy.rules),
-    gradeOf: effectiveRules(policy.policy.rules).gradingAuthority === "school_bands"
-      ? (mark) => grading.lookupSchoolGrade(mark, gradingConfig)
-      : null,
+    calcVersion: calcVersionFor("term"),
+    gradeOf: (mark) => grading.lookupSchoolGrade(mark, gradingConfig),
   };
 }
 
@@ -133,7 +132,7 @@ async function loadTermContext({ schoolId, academicYear, term }) {
  */
 function termResultFields({ context, summaries, studentName, admissionNo, className }) {
   const { termConfig, sequenceNumbers, exams, passMark } = context;
-  // The built-in scale unless the rules say the school's bands (Phase 4).
+  // The school's bands; the built-in scale only for a context built by hand.
   const gradeOf = context.gradeOf || lookupGrade;
 
   const sequenceAverages = [];
@@ -148,7 +147,11 @@ function termResultFields({ context, summaries, studentName, admissionNo, classN
       ? summaries.find((s) => String(s.examId) === String(exam._id))
       : null;
 
-    const avg   = summary?.average ?? null;
+    // On /20 whichever writer produced it: an exam-process/1 summary (a
+    // raw-mark mean on the papers' own scale) is read as its percentage ÷ 5,
+    // so a term holding old and new sequences averages one scale (decided
+    // 2026-10-16). The stored summary is not touched.
+    const avg   = sequenceFigureOn20(summary);
     const grade = avg != null ? gradeOf(avg) : null;
 
     sequenceAverages.push({
@@ -267,6 +270,13 @@ async function computeStudentTermAverage({
    */
   if (!hasAnyMark) return null;
 
+  // A published row is never recomputed in place (D3, decided).
+  if (await TermResult.exists({ schoolId, academicYear, term, classId, studentId, isPublished: true, deletedAt: null })) {
+    const err = new Error("This term result is published. Unpublish it first.");
+    err.status = 409; err.code = "PUBLISHED_RESULTS";
+    throw err;
+  }
+
   return TermResult.findOneAndUpdate(
     { schoolId, academicYear, term, classId, studentId },
     { $set: doc },
@@ -312,9 +322,9 @@ async function computeClassTermAverages({
     summariesByStudent({ examIds: ctx.examIds, classId, schoolId }),
   ]);
 
-  // D3, "refuse": a published term row is not recomputed in place. Checked
-  // before anything is written, for the whole class.
-  if (ctx.rules?.publishedResults === "refuse") {
+  // A published term row is never recomputed in place (D3, decided for every
+  // school). Checked before anything is written, for the whole class.
+  {
     const published = await TermResult.countDocuments({
       schoolId, academicYear, term, classId, isPublished: true, deletedAt: null,
     });

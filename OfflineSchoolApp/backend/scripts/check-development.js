@@ -254,9 +254,9 @@ const cur = (p, hash = "cur") => ({ profile: p, asOf: ASOF, boundaryHash: hash, 
   check("a 1.1.0 snapshot keeps its own version in the history; nothing is reinterpreted; the change names PROFILE_VERSION_CHANGED; its relationship stays null",
     [h.observations[0].versions.strengths, h.observations[1].versions.strengths, h.versions.observed.length, t.observations[0].relationship, h.changes.find((x) => x.dimensionId === Q).reasonCodes.includes("PROFILE_VERSION_CHANGED")],
     ["1.1.0", "1.2.0", 2, null, true]);
-  check("the engines beneath are untouched: academic 1.0.0, strengths 1.2.0, exploration 1.0.0, learning evidence 1.0.0, integration 1.0.0; development 1.0.0",
+  check("the engines beneath are untouched: academic 1.0.0, strengths 1.2.0, exploration 1.0.0, learning evidence 1.0.0, integration 1.1.0 (docs/39 §4.6d); development 1.0.0",
     [P.EST.academicEngineVersion, strengths.STRENGTH_ENGINE_VERSION, exploration.EXPLORATION_ENGINE_VERSION, le.LEARNING_EVIDENCE_VERSION, strengths.LEARNING_INTEGRATION_VERSION, dev.DEVELOPMENT_ENGINE_VERSION],
-    ["1.0.0", "1.2.0", "1.0.0", "1.0.0", "1.0.0", "1.0.0"]);
+    ["1.0.0", "1.2.0", "1.0.0", "1.0.0", "1.1.0", "1.0.0"]);
   const cmp = dev.compareDevelopmentSnapshots({ previous: snap(1, P.EST_C), current: snap(2, P.EST_X) });
   check("compareDevelopmentSnapshots: relationship change and a new contradiction; nothing from ordering or ids",
     [cmp.stateChanges.length, cmp.relationshipChanges.length, cmp.newContradictions.length, cmp.coverageChanges.length, cmp.versionsChanged,
@@ -325,7 +325,7 @@ const cur = (p, hash = "cur") => ({ profile: p, asOf: ASOF, boundaryHash: hash, 
   let rr = await teacherA.get(reads[0]);
   check("before any snapshot: one observation (today's reading), ESTABLISHED and CORROBORATED, INSUFFICIENT_HISTORY, engine 1.0.0 over the five beneath",
     [rr.status, rr.body.data.engineVersion, rr.body.data.history.observationCount, TQ(rr.body.data).currentState, TQ(rr.body.data).currentRelationship, TQ(rr.body.data).trajectory, rr.body.data.versions.current],
-    [200, "1.0.0", 1, "ESTABLISHED", "CORROBORATED", "INSUFFICIENT_HISTORY", { academic: "1.0.0", strengths: "1.2.0", exploration: "1.0.0", learningIntegration: "1.0.0", learningEvidence: "1.0.0" }]);
+    [200, "1.0.0", 1, "ESTABLISHED", "CORROBORATED", "INSUFFICIENT_HISTORY", { academic: "1.0.0", strengths: "1.2.0", exploration: "1.0.0", learningIntegration: "1.1.0", learningEvidence: "1.0.0" }]);
   rr = await teacherA.post("/insights/student/st-a1/profile/rebuild", { periodLabel: "Term 1" });
   const v1 = rr.body.data;
   rr = await teacherA.get(reads[0]);

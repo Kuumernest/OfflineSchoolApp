@@ -2,8 +2,10 @@
 "use strict";
 
 /**
- * A pupil's sequence result under the "weighted_20" rule (shared/academicRules,
- * decision D1, docs/39 §21.1) — calcVersion "exam-process/2".
+ * A pupil's sequence result: the calculation every school uses (shared/
+ * academicRules, decided by the project owner, docs/39 §21.1) — calcVersion
+ * "exam-process/3". exam-process/2 was the same arithmetic as an opt-in rule,
+ * except that a CA with no paper mark counted alone.
  *
  * ── It is the figure the sequence card already prints ─────────────────────
  *
@@ -38,8 +40,10 @@ const round2 = (n) => Math.round(n * 100) / 100;
  *             passed: number, failed: number, totalScore: number, maxTotalScore: number }}
  */
 function weightedSequenceResult({ studentId, scores, subjectMap, ca, exam, grade }) {
-  // A subject with CA and no paper mark still has a sequence mark: the CA
-  // alone (the card's caOnlyRows, for the same reason).
+  // A subject with CA and no paper row is listed, so its CA reaches the
+  // stored breakdown and the card, but it does not count: no paper mark, no
+  // subject (decided 2026-10-16; it counted the CA alone under
+  // exam-process/2).
   const caOnly = [];
   if (ca.active) {
     const marked = new Set(scores.map((row) => String(row.subjectId)));
@@ -70,8 +74,12 @@ function weightedSequenceResult({ studentId, scores, subjectMap, ca, exam, grade
           settings: ca.settings,
         })
       : null;
-    const effective = blended ? blended.score : s.score;
-    const counted   = effective != null && !s.isAbsent && !s.isExempt;
+    // Counted only with a paper mark: absent, exempt and not-entered papers
+    // are left out, mark and coefficient, whatever CA the pupil has. A 0
+    // entered by a teacher is a mark.
+    const hasPaper  = s.score != null && !s.isAbsent && !s.isExempt;
+    const effective = hasPaper ? (blended ? blended.score : s.score) : null;
+    const counted   = hasPaper && effective != null;
 
     const normalizedMark = counted ? round2((effective / maxScore) * 20) : null;
     const weightedMark   = counted ? round2(normalizedMark * coeff) : null;
@@ -107,7 +115,7 @@ function weightedSequenceResult({ studentId, scores, subjectMap, ca, exam, grade
       testWeight:   blended?.testWeight   ?? null,
       grade:        graded?.grade     ?? null,
       points:       graded?.gpaPoints ?? null,
-      remark:       graded ? graded.remark : (s.isAbsent ? "Absent" : s.isExempt ? "Exempt" : null),
+      remark:       graded ? graded.remark : (s.isAbsent ? "Absent" : s.isExempt ? "Exempt" : "No paper mark"),
       isPassing:    graded?.isPassing ?? false,
       isAbsent:     !!s.isAbsent,
       isExempt:     !!s.isExempt,

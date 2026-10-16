@@ -967,9 +967,9 @@
     "saved": "Saved",
     "saveFailed": "Save failed. Please try again.",
     "invalidScores": "{{count}} score(s) must be a number between 0 and {{max}} — please correct the highlighted cells.",
-    "missingScores": "{{count}} student(s) have no score — enter a mark or mark them absent.",
+    "missingScores": "{{count}} student(s) have no score — enter a mark or mark them absent. Absent leaves the subject out of the average; 0 counts as a mark.",
     "markPresent": "Mark present",
-    "markAbsent": "Mark absent",
+    "markAbsent": "Mark absent: this subject is left out of the pupil's average. A 0 is a mark and counts.",
     "noStudentsMatch": "No students match your search",
     "noStudentsInClass": "No students found in this class",
     "processConfirm": "Calculate results? This will compute grades, averages and rankings for all students.",
@@ -2305,18 +2305,34 @@
   },
   "prog": {
     "title": "Class progression",
-    "blurb": "Which class each one leads to. Stated here once, because it cannot be guessed from the names — nothing in \"Form 5\" says the next stop is \"Lower Sixth\".",
+    "blurb": "Which class each one leads to, and the bar its pupils must reach. Destinations are stated here once, because they cannot be guessed from the names — nothing in \"Form 5\" says the next stop is \"Lower Sixth\".",
     "nextClass": "Leads to",
     "finalYear": "Final year",
     "finalYearHint": "Students here leave at the end of the year.",
-    "average": "Promotion average",
-    "averageOff": "Term-count rule",
     "notSet": "Not set",
     "incomplete": "{{count}} class has no destination",
     "incomplete_other": "{{count}} classes have no destination",
     "incompleteHint": "Their students cannot be promoted until this is set.",
     "complete": "Every class has a destination",
-    "saved": "Progression saved"
+    "saved": "Progression saved",
+    "year": "Academic year",
+    "schoolBar": "School bar (/20)",
+    "schoolBarHint": "For classes without their own bar. Empty: the pass mark ({{passMark}}).",
+    "rule": "A pupil is promoted when the published annual average reaches the class's bar, repeats below it, and graduates from a final-year class. Without a published annual result for every term, the pupil needs a decision. Promotion exams do not count.",
+    "bar": "Bar (/20)",
+    "barDefault": "{{bar}} (default)",
+    "oldAverage": "Old promotion average: {{value}} (0–100, not used). Enter a bar out of 20 to confirm one for this year.",
+    "results": "Published annual results",
+    "publishedOf": "{{published}} of {{pupils}}",
+    "noneOf": "None of {{pupils}}",
+    "noResults": "{{count}} class has no published annual results for this year:",
+    "noResults_other": "{{count}} classes have no published annual results for this year:",
+    "noResultsHint": "a run would propose every pupil there as needing a decision.",
+    "noStructure": "This year has no academic structure yet; bars cannot be saved until it has one (Settings → Academic structure).",
+    "draftLocks": "A draft promotion run exists for this year. Commit or discard it before changing a bar.",
+    "graduates": "Graduates",
+    "reason": "Reason for changing the bars",
+    "reasonHint": "Recorded in the audit trail with the old and new bars."
   },
   "promo": {
     "title": "End of year",
@@ -5188,112 +5204,21 @@
     }
   },
   "academicRules": {
-    "title": "Calculation rules",
-    "intro": "How results are calculated for the year. Each rule is a decision for the school's academic authority: nothing changes until it is chosen here, and results already published keep the figures they were issued with.",
+    "title": "How results are calculated",
+    "intro": "The same for every school, decided by the project owner. Nothing here is a setting: a school sets its promotion bars, on Promotion → Progression.",
     "year": "Academic year",
-    "onDefaults": "This year uses the current behaviour for every rule.",
-    "impactTitle": "Results this year",
-    "counts": "{{published}} published · {{unpublished}} not published",
-    "totals": "This year: {{published}} published and {{unpublished}} unpublished results in all.",
-    "decision": "Decision {{id}}",
-    "currentBehaviour": "Current behaviour",
-    "schoolBar": "School promotion bar (out of 20)",
-    "barHint": "The annual average a pupil needs to move up.",
-    "classBarsHint": "A class may have its own bar; leave empty to use the school's.",
-    "sameAsSchool": "Same as the school",
-    "barInvalid": "Enter a number from 0 to 20.",
-    "barRequired": "This rule needs a promotion bar.",
-    "review": "Review changes",
-    "takesEffect": "Applies to results computed after saving.",
-    "confirmTitle": "Change the calculation rules for {{year}}",
-    "fromTo": "{{from}} → {{to}}",
-    "reaches": "Affects: {{what}}",
-    "consequence": "{{published}} published results keep the figures they were issued with. {{unpublished}} unpublished results will follow the new rules the next time their exam, term or year is processed.",
-    "draftRunBlocks": "A draft promotion run exists for this year. Commit or discard it before changing the promotion rule.",
-    "reason": "Reason",
-    "reasonHint": "Recorded in the audit trail with the change, e.g. the decision that approved it.",
-    "confirm": "Save the rules",
-    "saved": "Calculation rules saved",
-    "saveFailed": "Could not save the calculation rules",
-    "previewFailed": "Could not check the change",
-    "unavailable": "The calculation rules could not be loaded.",
-    "none": "none",
-    "classBars": "{{count}} class bar",
-    "classBars_other": "{{count}} class bars",
-    "affects": {
-      "sequence": "Sequence results",
-      "term": "Term results",
-      "annual": "Annual results",
-      "promotion": "Promotion"
+    "statement": {
+      "sequence": "Sequence average: each subject's mark out of 20 (CA blended in by the school's CA/paper split when CA is on; the paper alone when CA is off), weighted by the subject's coefficient.",
+      "absent": "A subject marked absent or exempt, or with no paper mark, is left out — mark and coefficient. A 0 entered by a teacher is a real 0 and counts. A pupil with no paper mark in any subject has no sequence result.",
+      "grading": "Term and annual results carry the school's own grade bands, the same bands the report card prints under them.",
+      "promotion": "Promotion: the published annual average, out of 20, against the class's bar for the year. At or above the bar: promoted. Below: repeats. Final-year class: graduates. No published annual result, or a term of the year not published: needs a decision. Promotion exams do not count.",
+      "published": "A published result is never recomputed. To correct one, unpublish it first; the change is then computed the same way."
     },
-    "rule": {
-      "sequenceAverage": {
-        "title": "Official sequence average",
-        "desc": "Which figure is a pupil's sequence average — the basis of ranks, term and annual results and promotion."
-      },
-      "gradingAuthority": {
-        "title": "Grades on term and annual results",
-        "desc": "Which grade bands a stored term or annual result uses."
-      },
-      "promotionRule": {
-        "title": "Promotion",
-        "desc": "How the end-of-year promotion proposal is decided."
-      },
-      "publishedResults": {
-        "title": "Published results",
-        "desc": "Whether processing again may change results that are already published."
-      },
-      "promotionThreshold": {
-        "title": "Promotion bar",
-        "desc": ""
-      },
-      "classThresholds": {
-        "title": "Class promotion bars",
-        "desc": ""
-      }
-    },
-    "value": {
-      "raw_mean": {
-        "label": "Raw mark mean (current behaviour)",
-        "desc": "Whole-number mean of the paper marks, without continuous assessment or coefficients; an absent subject counts as zero. Ranked by percentage."
-      },
-      "weighted_20": {
-        "label": "Weighted average out of 20",
-        "desc": "Each subject on /20 with continuous assessment blended by the school's split, weighted by coefficient, absent subjects left out, to two decimals — the figure the sequence card already prints. Ranked on that average."
-      },
-      "split": {
-        "label": "Built-in scale on stored rows (current behaviour)",
-        "desc": "Term and annual results store a grade from the built-in scale, while their report cards print the school's own bands."
-      },
-      "school_bands": {
-        "label": "The school's own bands everywhere",
-        "desc": "Term and annual results store the school's own grade and remark, so the stored grade and the printed grade are the same."
-      },
-      "legacy": {
-        "label": "Sequence summaries (current behaviour)",
-        "desc": "Proposals from the year's published sequence results: a class's own average bar when set, otherwise passing at least half of them. The annual result decides separately."
-      },
-      "annual_average_at_least": {
-        "label": "Annual average at or above a bar",
-        "desc": "A pupil moves up when the published annual average reaches the bar (a class may have its own). The promotion run and the annual result use the same rule."
-      },
-      "majority_of_terms_passed": {
-        "label": "Most terms passed",
-        "desc": "A pupil moves up after passing at least half of the year's published term results."
-      },
-      "manual_only": {
-        "label": "Decided by hand",
-        "desc": "No proposal from results: every pupil waits for an administrator's decision before the year can be closed."
-      },
-      "overwrite": {
-        "label": "Recompute in place (current behaviour)",
-        "desc": "Processing again replaces results, including published ones."
-      },
-      "refuse": {
-        "label": "Protect published results",
-        "desc": "Processing an exam, term or year that has published results is refused until they are unpublished — the deliberate, visible step."
-      }
-    }
+    "defaultBarSchool": "A class without its own bar is judged against the school's bar: {{bar}}/20.",
+    "defaultBarPassMark": "A class without its own bar is judged against the pass mark: {{bar}}/20.",
+    "editBars": "Set the bars on Promotion → Progression.",
+    "counts": "This year: {{published}} published results (kept exactly as issued) and {{unpublished}} unpublished (computed this way the next time they are processed).",
+    "unavailable": "The year's rules could not be read."
   },
   "reportLayout": {
     "title": "Report card sections",

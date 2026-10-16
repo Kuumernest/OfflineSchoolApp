@@ -3914,8 +3914,8 @@
     "tryAgain": "Please try again",
     "unenteredTitle": "Unentered Scores",
     "unenteredBody": {
-      "one": "%{count} student has no score — enter a mark or mark the student absent.",
-      "other": "%{count} students have no score — enter a mark or mark each student absent."
+      "one": "%{count} student has no score — enter a mark or mark the student absent. Absent leaves the subject out of the pupil's average; 0 counts as a mark.",
+      "other": "%{count} students have no score — enter a mark or mark each student absent. Absent leaves the subject out of the pupil's average; 0 counts as a mark."
     },
     "cancel": "Cancel",
     "saveAnyway": "Save Anyway",

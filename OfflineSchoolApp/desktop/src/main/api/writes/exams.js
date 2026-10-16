@@ -38,7 +38,6 @@
  */
 
 const { randomUUID } = require("crypto");
-const { effectiveRules } = require("../../../../../shared/academicRules");
 const { computeGrade } = require("../gradeUtils");
 
 /** The statuses PATCH /:id/status accepts. Anything else is the server's to refuse. */
@@ -478,120 +477,17 @@ module.exports = [
   // POST /api/exams/:examId/process
   // ─────────────────────────────────────────────────────────
   //
-  // Computing result summaries for every student in an exam. The server does
-  // this in one request: it groups scores by student, computes totals,
-  // percentages, grades, and class positions, then upserts ResultSummary rows.
-  //
-  // The local handler replicates the full computation using gradeUtils.js so
-  // the results tab shows data immediately — no spinner waiting for a server
-  // that may not be reachable. The real request is still queued so the server
-  // can confirm the computation (or correct it if the mirror is stale).
+  // Not computed on the desk. Every school's results are the decided
+  // calculation (shared/academicRules, docs/39 §21.1): CA blended by the
+  // school's split, coefficients, a subject with no paper mark left out, and
+  // a published result never recomputed. The desk used to compute the old
+  // raw-mark mean here, which would now be a second, different answer for
+  // the same marks; the request goes to the server instead (the dispatcher's
+  // "not handled here", src/main/api/index.js), which answers or refuses it.
   //
   {
     route: "POST /api/exams/:examId/process",
 
-    handler: ({ params, body }, { docs, session }) => {
-      const schoolId = body.schoolId ? String(body.schoolId).trim() : session?.schoolId;
-      if (!schoolId) return null;
-
-      const examId = String(params.examId);
-      const exam   = docs.get("exam", examId);
-      if (!exam) return null;
-      if (String(exam.schoolId) !== String(schoolId)) return null;
-      if (exam.deletedAt) return null;
-
-      const classId = body.classId || exam.classId || null;
-
-      // ── Load the mirror's copies of every collection process touches ────
-      // By schoolId: GradingConfig's _id is a Mongo ObjectId, not the school's
-      // id, so get(…, schoolId) never found the school's bands and every mark
-      // was graded on the built-in scale (docs/39 §4.6b).
-      const gradingConfig = docs.find("gradingConfig", { schoolId })[0] ?? null;
-
-      // The year's calculation rules (shared/academicRules, docs/39 Phase 4).
-      // The arithmetic below is the default rule's. Under weighted_20 it would
-      // show figures the server will not store, and under "refuse" it would
-      // overwrite published results the server keeps — so either goes to the
-      // server rather than answering with a different result here.
-      const structure = docs.find("academicStructure",
-        { schoolId, academicYear: exam.academicYear, deletedAt: null })[0] ?? null;
-      const rules = effectiveRules(structure?.rules);
-      if (rules.sequenceAverage !== "raw_mean") return null;
-      if (rules.publishedResults === "refuse"
-          && docs.find("resultSummary", { examId, schoolId, ...(classId ? { classId } : {}) })
-            .some((s) => s.isPublished && !s.deletedAt)) {
-        return null;
-      }
-
-      const scoreQuery = { examId, schoolId, deletedAt: null };
-      if (classId) scoreQuery.classId = classId;
-      const allScores = docs.find("studentScore", scoreQuery);
-
-      const examSubjectQuery = { examId, schoolId, deletedAt: null };
-      if (classId) examSubjectQuery.classId = classId;
-      const examSubjects = docs.find("examSubject", examSubjectQuery);
-
-      const subjectMap = new Map(examSubjects.map((es) => [es.subjectId, es]));
-
-      // ── Group scores by student ─────────────────────────────────────────
-      const byStudent = {};
-      for (const score of allScores) {
-        if (!byStudent[score.studentId]) byStudent[score.studentId] = [];
-        byStudent[score.studentId].push(score);
-      }
-
-      const { computeResultSummary, assignClassPositions } = require("../gradeUtils");
-
-      const summaries = [];
-
-      for (const [studentId, scores] of Object.entries(byStudent)) {
-        const summary = computeResultSummary(
-          studentId, scores, subjectMap, gradingConfig,
-          examId, schoolId, classId
-        );
-        summary._id = randomUUID();
-        summaries.push(summary);
-      }
-
-      // ── Class positions ─────────────────────────────────────────────────
-      assignClassPositions(summaries);
-
-      // ── Build the response ──────────────────────────────────────────────
-      //
-      // The primary document is the exam (status -> completed). Every
-      // ResultSummary goes into `also` so they all commit in one transaction.
-      const now = new Date().toISOString();
-
-      const examDoc = {
-        ...exam,
-        status:    "completed",
-        updatedBy: session?.userId ?? null,
-        updatedAt: now,
-      };
-
-      const also = summaries.map((s) => ({
-        collection: "resultSummary",
-        doc: s,
-      }));
-
-      return {
-        collection: "exam",
-        doc: examDoc,
-        also,
-        request: {
-          method: "POST",
-          path:   `/api/exams/${examId}/process`,
-          body:   { schoolId, classId },
-        },
-        response: {
-          status: 200,
-          data: {
-            success:   true,
-            processed: summaries.length,
-            message:   `Results processed for ${summaries.length} student(s)`,
-          },
-        },
-      };
-    },
+    handler: () => null,
   },
 ];

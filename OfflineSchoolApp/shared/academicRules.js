@@ -2,110 +2,61 @@
 "use strict";
 
 /**
- * The school's calculation rules for one academic year (docs/39 §20, Phase 4).
+ * How results are calculated, for every school (docs/39 §21.1, decided by the
+ * project owner on 2026-10-16), and the one thing a school sets: its
+ * promotion bars.
  *
- * ── Every rule is the school's decision, and every default is today ───────
+ * ── The calculation is the platform's, not a school's choice ──────────────
  *
- * docs/39 §21.1 lists the decisions that change real results: which sequence
- * average is official (D1), where promotion reads its results (D1b), which
- * promotion rule applies (D2), and whether published results may be silently
- * recomputed (D3). They need the school's authorised academic review, so the
- * code does not take them. Each is a rule here, chosen per school and year,
- * and each DEFAULT is exactly what the system did before this existed: a
- * school that never opens the setting computes byte-for-byte as before
- * (pinned by check:academic).
+ * Phase 4 made D1, D1b, D2 and D3 per-school rules whose defaults were the
+ * behaviour before rules existed. The project owner has decided them, once,
+ * for every school:
  *
- * ── How a rule reaches a result ───────────────────────────────────────────
+ *   sequence average   the coefficient-weighted mean out of 20; CA blended by
+ *                      the school's split when GradingConfig.caEnabled is on;
+ *                      a subject with no paper mark (absent, exempt, or not
+ *                      entered) left out, mark and coefficient; a 0 entered by
+ *                      a teacher is a real 0 (weightedSequence.service)
+ *   grading authority  term and annual rows store the school's own bands
+ *   promotion          the published annual average, out of 20, against the
+ *                      class's bar for the year; every term of the year must
+ *                      be published, or the pupil needs a decision
+ *   published results  never recomputed in place: unpublish first
  *
- * Rules live on AcademicStructure.rules (per year), are frozen into the
- * AcademicPolicySnapshot with the rest of the year's configuration, and every
- * row computed under them carries that snapshot's hash. Only rules that
- * differ from the default go into the snapshot, so a school on defaults keeps
- * the very same policy hash it had before rules existed.
+ * Effective for every result computed from the release date: a published row
+ * keeps its figures and its calcVersion, and an unpublished one follows these
+ * rules the next time its exam, term or year is processed.
  *
- * The writer's calcVersion says which arithmetic ran: "/1" is the code that
- * existed before Phase 4, used whenever the rules it depends on are at their
- * defaults; "/2" is the rule-driven code, interpreted with the snapshot's
- * rules. (policyHash, calcVersion) still answers "what produced this row?".
+ * ── What a school still sets ───────────────────────────────────────────────
  *
- * Pure: no database. Shared by the backend and the web settings screen.
+ * AcademicStructure.rules, per year: `promotionThreshold`, the school's bar
+ * for a class without its own (null = the school's pass mark), and
+ * `classThresholds`, classId → bar. Both out of 20. Coefficients, CA on/off,
+ * the CA/paper split and showGrades stay on GradingConfig and the subjects.
+ *
+ * A stored `promotionRule: "manual_only"` is still honoured (no proposal from
+ * results), because it promotes and holds back nobody; nothing can set it any
+ * more. Every other stored rule value from Phase 4 is ignored.
+ *
+ * Pure: no database. Shared by the backend and the web settings screens.
  */
 
-/**
- * Each rule: its values, its default (today), and what it decides.
- * `decision` names the docs/39 §21.1 question it answers.
- */
-const RULES = Object.freeze({
-  sequenceAverage: Object.freeze({
-    decision: "D1",
-    default:  "raw_mean",
-    values:   Object.freeze([
-      // POST /exams/:examId/process as it has always been (docs/39 §4.7):
-      // whole-number mean of raw paper marks, no CA, no coefficients, an
-      // absent subject counted as zero, ranked by percentage.
-      "raw_mean",
-      // The figure the sequence card already prints (docs/39 §21.1, the
-      // recommendation): each subject's mark on /20 with CA blended by the
-      // school's split, weighted by coefficient, absent subjects left out;
-      // two decimals; ranked by that average. Summaries also carry their
-      // academicYear and term, which the promotion run selects by.
-      "weighted_20",
-    ]),
-  }),
-  gradingAuthority: Object.freeze({
-    decision: "§12",
-    default:  "split",
-    values:   Object.freeze([
-      // Term and annual rows store a grade from the built-in scale, while
-      // their cards print the school's bands (docs/39 §4.2).
-      "split",
-      // Term and annual rows store the school's own bands and remark, so the
-      // stored grade and the printed grade are the same one.
-      "school_bands",
-    ]),
-  }),
-  promotionRule: Object.freeze({
-    decision: "D1b/D2",
-    default:  "legacy",
-    values:   Object.freeze([
-      // Today: published sequence summaries of the year, a class's
-      // promotionAverage when set, else passing at least half of them; the
-      // annual row's status from "every term passed + promotion exams".
-      "legacy",
-      // The year's AnnualResult average at or above a threshold on /20
-      // (a class may have its own). One rule for the proposal and for the
-      // annual row's status (docs/39 §14).
-      "annual_average_at_least",
-      // The year's TermResults: passing at least half of them.
-      "majority_of_terms_passed",
-      // No proposal from results: every pupil is "needs decision".
-      "manual_only",
-    ]),
-  }),
-  publishedResults: Object.freeze({
-    decision: "D3",
-    default:  "overwrite",
-    values:   Object.freeze([
-      // Today: recomputing replaces published figures in place.
-      "overwrite",
-      // Recomputing anything already published is refused; unpublish first,
-      // which is the deliberate, visible act.
-      "refuse",
-    ]),
-  }),
+/** The decided behaviour (docs/39 §21.1). Not configurable. */
+const PLATFORM = Object.freeze({
+  sequenceAverage:  "weighted_20",
+  gradingAuthority: "school_bands",
+  promotionRule:    "annual_average_at_least",
+  publishedResults: "refuse",
 });
 
-const RULE_KEYS = Object.freeze(Object.keys(RULES));
+/** Names the decided rule set in every policy snapshot it produced. */
+const PLATFORM_RULES = "agreed/1";
 
-/** The rules exactly as the system behaved before Phase 4. */
-const DEFAULT_RULES = Object.freeze({
-  sequenceAverage:    RULES.sequenceAverage.default,
-  gradingAuthority:   RULES.gradingAuthority.default,
-  promotionRule:      RULES.promotionRule.default,
-  publishedResults:   RULES.publishedResults.default,
-  promotionThreshold: null,
-  classThresholds:    Object.freeze({}),
-});
+/** The rule names Phase 4 let a school choose. A write naming one is refused. */
+const FIXED_RULE_KEYS = Object.freeze(Object.keys(PLATFORM));
+
+/** What a school may write. */
+const WRITABLE_KEYS = Object.freeze(["promotionThreshold", "classThresholds"]);
 
 const SCALE_MAX = 20;
 
@@ -113,49 +64,38 @@ const isFiniteNumber = (v) => typeof v === "number" && Number.isFinite(v);
 const onScale = (v) => isFiniteNumber(v) && v >= 0 && v <= SCALE_MAX;
 
 /**
- * Every rule, with defaults filled in. Tolerant: an unknown value or a stray
- * field reads as the default, because this runs on stored documents, and a
- * stored document that no longer validates must still compute — as it did
- * before. Writes are checked strictly by validateRules.
- *
- * @param {object|null|undefined} raw  AcademicStructure.rules
+ * The rules in force, from a stored AcademicStructure.rules. Tolerant: this
+ * runs on stored documents, so a stray field or an old Phase 4 choice reads as
+ * the platform's behaviour. Writes are checked strictly by validateRules.
  */
 const effectiveRules = (raw) => {
   const r = raw && typeof raw === "object" ? raw : {};
-  const out = {};
-  for (const key of RULE_KEYS) {
-    out[key] = RULES[key].values.includes(r[key]) ? r[key] : RULES[key].default;
-  }
-  out.promotionThreshold = onScale(r.promotionThreshold) ? r.promotionThreshold : null;
   const ct = {};
   if (r.classThresholds && typeof r.classThresholds === "object") {
     for (const id of Object.keys(r.classThresholds).sort()) {
       if (onScale(r.classThresholds[id])) ct[id] = r.classThresholds[id];
     }
   }
-  out.classThresholds = ct;
-  return out;
+  return {
+    ...PLATFORM,
+    promotionRule: r.promotionRule === "manual_only" ? "manual_only" : PLATFORM.promotionRule,
+    promotionThreshold: onScale(r.promotionThreshold) ? r.promotionThreshold : null,
+    classThresholds: ct,
+  };
 };
 
-/**
- * Only what differs from the default — what the policy snapshot records.
- * Empty when the school is on defaults, so its policy hash does not move.
- * Thresholds are recorded only where the chosen rule reads them.
- */
-const nonDefaultRules = (raw) => {
+/** What is stored on the structure: the bars, and a legacy manual_only. */
+const storedRules = (raw) => {
   const r = effectiveRules(raw);
   const out = {};
-  for (const key of RULE_KEYS) {
-    if (r[key] !== RULES[key].default) out[key] = r[key];
-  }
-  if (r.promotionRule === "annual_average_at_least") {
-    if (r.promotionThreshold !== null) out.promotionThreshold = r.promotionThreshold;
-    if (Object.keys(r.classThresholds).length > 0) out.classThresholds = r.classThresholds;
-  }
+  if (r.promotionRule === "manual_only") out.promotionRule = "manual_only";
+  if (r.promotionThreshold !== null) out.promotionThreshold = r.promotionThreshold;
+  if (Object.keys(r.classThresholds).length > 0) out.classThresholds = r.classThresholds;
   return out;
 };
 
-const isDefault = (raw) => Object.keys(nonDefaultRules(raw)).length === 0;
+/** What the policy snapshot records: the decided rule set, then the bars. */
+const snapshotRules = (raw) => ({ platform: PLATFORM_RULES, ...storedRules(raw) });
 
 /**
  * A write's body, checked strictly. Partial bodies are allowed: a field left
@@ -168,24 +108,19 @@ const validateRules = (body) => {
   if (!body || typeof body !== "object" || Array.isArray(body)) {
     return { ok: false, errors: [{ field: null, code: "INVALID_BODY", message: "rules must be an object" }] };
   }
-  const allowed = new Set([...RULE_KEYS, "promotionThreshold", "classThresholds"]);
   for (const k of Object.keys(body)) {
-    if (!allowed.has(k)) errors.push({ field: k, code: "UNKNOWN_RULE", message: `${k} is not a rule` });
+    if (FIXED_RULE_KEYS.includes(k)) {
+      errors.push({ field: k, code: "RULE_FIXED",
+                    message: `${k} is no longer a school setting; every school calculates the same way` });
+    } else if (!WRITABLE_KEYS.includes(k)) {
+      errors.push({ field: k, code: "UNKNOWN_RULE", message: `${k} is not a rule` });
+    }
   }
   const value = {};
-  for (const key of RULE_KEYS) {
-    if (body[key] === undefined) continue;
-    if (!RULES[key].values.includes(body[key])) {
-      errors.push({
-        field: key, code: "INVALID_VALUE",
-        message: `${key} must be one of ${RULES[key].values.join(", ")}`,
-      });
-    } else value[key] = body[key];
-  }
   if (body.promotionThreshold !== undefined) {
     if (body.promotionThreshold !== null && !onScale(body.promotionThreshold)) {
       errors.push({ field: "promotionThreshold", code: "INVALID_THRESHOLD",
-                    message: `promotionThreshold must be a number from 0 to ${SCALE_MAX}, or null` });
+                    message: `promotionThreshold must be a number from 0 to ${SCALE_MAX}, or null (the pass mark)` });
     } else value.promotionThreshold = body.promotionThreshold;
   }
   if (body.classThresholds !== undefined) {
@@ -196,7 +131,7 @@ const validateRules = (body) => {
     } else {
       const clean = {};
       for (const [id, v] of Object.entries(ct)) {
-        if (v === null) continue;                      // null removes a class's own bar
+        if (v === null) { clean[id] = null; continue; }   // null removes a class's own bar
         if (!onScale(v)) {
           errors.push({ field: `classThresholds.${id}`, code: "INVALID_THRESHOLD",
                         message: `a class threshold must be a number from 0 to ${SCALE_MAX}` });
@@ -209,107 +144,126 @@ const validateRules = (body) => {
 };
 
 /**
- * A complete rule set is coherent: annual_average_at_least needs a bar for
- * every class it will judge, so it needs the school-wide threshold.
+ * Current rules with a checked write applied. A class bar of null in the
+ * write removes that class's own bar; other classes keep theirs.
  */
-const coherenceErrors = (rules) => {
-  const r = effectiveRules(rules);
-  const errors = [];
-  if (r.promotionRule === "annual_average_at_least" && r.promotionThreshold === null) {
-    errors.push({ field: "promotionThreshold", code: "THRESHOLD_REQUIRED",
-                  message: "annual_average_at_least needs a promotionThreshold" });
+const mergeRules = (current, value) => {
+  const cur = effectiveRules(current);
+  const ct = { ...cur.classThresholds };
+  if (value.classThresholds) {
+    for (const [id, v] of Object.entries(value.classThresholds)) {
+      if (v === null) delete ct[id]; else ct[id] = v;
+    }
   }
-  return errors;
+  return effectiveRules({
+    ...cur,
+    ...(value.promotionThreshold !== undefined ? { promotionThreshold: value.promotionThreshold } : {}),
+    classThresholds: ct,
+  });
+};
+
+/** The calcVersion each writer stamps under the decided rules. */
+const CALC_VERSION_OF = Object.freeze({
+  examProcess: "exam-process/3",
+  term:        "term/3",
+  annual:      "annual/3",
+});
+
+const calcVersionFor = (writer) => {
+  if (!CALC_VERSION_OF[writer]) throw new Error(`calcVersionFor: unknown writer ${writer}`);
+  return CALC_VERSION_OF[writer];
 };
 
 /**
- * The calcVersion a writer stamps, from the rules it ran under.
- * "/1" whenever every rule it reads is at its default — the pre-Phase-4 code.
+ * A class's bar for the year: its own, else the school's, else the school's
+ * pass mark. Never null when a pass mark is given.
  */
-const calcVersionFor = (writer, raw) => {
-  const r = effectiveRules(raw);
-  switch (writer) {
-    case "examProcess":
-      return r.sequenceAverage === "weighted_20" ? "exam-process/2" : "exam-process/1";
-    case "term":
-      return r.gradingAuthority === "school_bands" ? "term/2" : "term/1";
-    case "annual":
-      return r.gradingAuthority === "school_bands" || r.promotionRule !== "legacy"
-        ? "annual/2" : "annual/1";
-    default:
-      throw new Error(`calcVersionFor: unknown writer ${writer}`);
-  }
-};
-
-/**
- * A class's promotion bar under annual_average_at_least: its own, else the
- * school-wide one; null when neither is set.
- */
-const promotionBarFor = (raw, classId) => {
+const promotionBarFor = (raw, classId, passMark = null) => {
   const r = effectiveRules(raw);
   const own = classId != null ? r.classThresholds[String(classId)] : undefined;
-  return own ?? r.promotionThreshold;
+  return own ?? r.promotionThreshold ?? (isFiniteNumber(passMark) ? passMark : null);
 };
 
 /**
- * The year's promotion outcome under a non-legacy rule — ONE function for the
- * annual row's promotionStatus and for the promotion run's proposal
- * (docs/39 §14: today they are two rules that can disagree, §4.4).
+ * The year's promotion outcome — ONE function for the annual row's
+ * promotionStatus and for the promotion run's proposal (docs/39 §14).
  *
- * @param {object} raw  the rules
+ * @param {object} raw  the stored rules
  * @param {object} year
  * @param {number|null} year.annualAverage   the AnnualResult average (/20)
- * @param {Array<{isComplete: boolean, passed: boolean}>} year.terms  one per term of the year
+ * @param {Array<{isComplete: boolean}>} year.terms  one per term of the year
  * @param {number} year.termsInYear          how many terms the year's structure has
  * @param {string|null} [year.classId]
+ * @param {number|null} [year.passMark]      the default bar
  * @returns {{ status: "promoted"|"repeated"|"pending", reason: string }}
- *   pending = not decidable from results (incomplete year, no bar, manual_only)
+ *   pending = not decidable from results (incomplete year, no average, manual_only)
  */
-const promotionUnderRules = (raw, { annualAverage, terms, termsInYear, classId = null }) => {
+const promotionUnderRules = (raw, { annualAverage, terms, termsInYear, classId = null, passMark = null }) => {
   const r = effectiveRules(raw);
-  if (r.promotionRule === "legacy") throw new Error("promotionUnderRules: legacy has its own rule");
   if (r.promotionRule === "manual_only") return { status: "pending", reason: "manual" };
 
   const done = (terms || []).filter((t) => t.isComplete);
   if (!(termsInYear > 0) || done.length < termsInYear) return { status: "pending", reason: "incomplete" };
 
-  if (r.promotionRule === "annual_average_at_least") {
-    const bar = promotionBarFor(raw, classId);
-    if (bar == null || annualAverage == null) return { status: "pending", reason: "no_threshold" };
-    return annualAverage >= bar
-      ? { status: "promoted", reason: "average_pass" }
-      : { status: "repeated", reason: "average_fail" };
-  }
-  // majority_of_terms_passed
-  const passed = done.filter((t) => t.passed).length;
-  return passed * 2 >= termsInYear
-    ? { status: "promoted", reason: "results_pass" }
-    : { status: "repeated", reason: "results_fail" };
+  const bar = promotionBarFor(raw, classId, passMark);
+  if (bar == null || annualAverage == null) return { status: "pending", reason: "no_threshold" };
+  return annualAverage >= bar
+    ? { status: "promoted", reason: "average_pass" }
+    : { status: "repeated", reason: "average_fail" };
 };
 
 /**
  * Is a sequence summary's `average` already on /20?
  *
- * Three writers have produced ResultSummary rows: the unrouted
- * processResults (GPA points, which cards print ×5 — docs/39 §4.1), the live
- * route under raw_mean (a raw-mark mean, which cards have also multiplied by
- * 5), and the live route under weighted_20 (a true /20 average). Only the
- * last is on /20, and its calcVersion says so.
+ * Three writers have produced ResultSummary rows: the unrouted processResults
+ * (GPA points, results-service/1), the live route before the decision
+ * (exam-process/1, a raw-mark mean on the papers' own scale) and the live
+ * route since (exam-process/2 under the Phase 4 weighted_20 rule, and
+ * exam-process/3 under the decided rules), which store a /20 average.
  */
-const sequenceAverageIsOn20 = (calcVersion) => calcVersion === "exam-process/2";
+const sequenceAverageIsOn20 = (calcVersion) =>
+  calcVersion === "exam-process/2" || calcVersion === "exam-process/3";
+
+const round2 = (n) => Math.round(n * 100) / 100;
+
+/**
+ * A sequence summary's figure on /20, for the term layer. The stored row is
+ * never changed; only how it is read.
+ *
+ *   exam-process/2, /3   the stored average
+ *   results-service/1    the stored average, as before (the unrouted path,
+ *                        reached only by tests and scripts)
+ *   exam-process/1, or   the summary's percentage ÷ 5: the raw-mark mean put
+ *   no calcVersion       on /20, from the same marks (no CA, no coefficients,
+ *                        absent counted as zero, as it was computed). Decided
+ *                        by the project owner for terms that mix old and new
+ *                        sequences (docs/39 §20.0). A row with no percentage
+ *                        is read as stored.
+ */
+const sequenceFigureOn20 = (summary) => {
+  if (!summary || summary.average == null) return null;
+  const average = Number(summary.average);
+  const v = summary.calcVersion ?? null;
+  if (sequenceAverageIsOn20(v) || v === "results-service/1") return average;
+  const pct = Number(summary.percentage);
+  return summary.percentage != null && Number.isFinite(pct) ? round2(pct / 5) : average;
+};
 
 module.exports = {
-  RULES,
-  RULE_KEYS,
-  DEFAULT_RULES,
+  PLATFORM,
+  PLATFORM_RULES,
+  FIXED_RULE_KEYS,
+  WRITABLE_KEYS,
   SCALE_MAX,
+  CALC_VERSION_OF,
   effectiveRules,
-  nonDefaultRules,
-  isDefault,
+  storedRules,
+  snapshotRules,
   validateRules,
-  coherenceErrors,
+  mergeRules,
   calcVersionFor,
   promotionBarFor,
   promotionUnderRules,
   sequenceAverageIsOn20,
+  sequenceFigureOn20,
 };

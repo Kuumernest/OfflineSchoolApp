@@ -36,9 +36,29 @@ router.param("schoolId", guardSchoolParam);
 // a document.
 // ─────────────────────────────────────────────────────────────────────────────
 
+const academicRules = require("../../../shared/academicRules");
+
 const canRead     = requirePermission("settings.view");
 const canReadYear = requireAnyPermission("settings.view", "exams.view");
 const canManage   = requirePermission("settings.manage");
+
+/**
+ * The promotion bars a new year starts with: the previous year's, copied
+ * when the new year's structure is created (decided 2026-10-16). "Previous"
+ * is the latest year before this one that has a structure; the year strings
+ * are "YYYY/YYYY", which sort as years. Nothing else is copied.
+ */
+const barsFromPreviousYear = async (schoolId, academicYear) => {
+  const prev = await AcademicStructure.findOne({
+    schoolId, academicYear: { $lt: String(academicYear) }, deletedAt: null,
+  }).sort({ academicYear: -1 }).select("rules academicYear").lean();
+  if (!prev) return null;
+  const { promotionThreshold, classThresholds } = academicRules.storedRules(prev.rules);
+  const rules = {};
+  if (promotionThreshold !== undefined) rules.promotionThreshold = promotionThreshold;
+  if (classThresholds !== undefined) rules.classThresholds = classThresholds;
+  return Object.keys(rules).length ? { rules, from: prev.academicYear } : null;
+};
 
 /** What a caller without settings.view sees of a year: its shape. */
 const SHAPE_FIELDS = ["schoolId", "academicYear", "terms", "promotionExams", "passMark", "promotionThreshold"];
@@ -67,11 +87,14 @@ router.get(
         return res.json({ success: true, structure: shapeOf(shown) });
       }
 
-      // Auto-create default structure if none exists
+      // Auto-create default structure if none exists, starting from the
+      // previous year's promotion bars.
       if (!structure) {
+        const seeded = await barsFromPreviousYear(schoolId, year);
         const doc = await AcademicStructure.create({
           schoolId,
           academicYear: year,
+          ...(seeded ? { rules: seeded.rules } : {}),
           createdBy: req.user?._id ?? null,
         });
         structure = doc.toObject();
@@ -145,9 +168,13 @@ router.put(
       }
       sets.updatedBy = req.user?._id ?? null;
 
+      // A year created by this write starts from the previous year's bars.
+      const exists = await AcademicStructure.exists({ schoolId, academicYear: year, deletedAt: null });
+      const seeded = exists ? null : await barsFromPreviousYear(schoolId, year);
+
       const structure = await AcademicStructure.findOneAndUpdate(
         { schoolId, academicYear: year, deletedAt: null },
-        { $set: sets },
+        { $set: sets, ...(seeded ? { $setOnInsert: { rules: seeded.rules } } : {}) },
         { returnDocument: 'after', upsert: true, setDefaultsOnInsert: true }
       );
 
@@ -160,26 +187,20 @@ router.put(
 );
 
 // ═════════════════════════════════════════════════════════════════════════════
-// CALCULATION RULES (docs/39 Phase 4, shared/academicRules.js)
+// CALCULATION RULES AND PROMOTION BARS (shared/academicRules.js)
 //
-// The decisions that change real results — which sequence average is
-// official (D1), where promotion reads and what rule it applies (D1b, D2),
-// whether published results may be recomputed in place (D3), and whose grade
-// bands a term/annual row stores (§12) — are the school's, per year. Every
-// default is the behaviour before rules existed, so a school that never opens
-// this computes exactly as before.
+// How results are calculated is the same for every school, decided by the
+// project owner (docs/39 §21.1, 2026-10-16), and is no longer written here: a
+// write naming one of the Phase 4 rules is refused (RULE_FIXED). What a school
+// sets, per year, is its promotion bars: a school bar for classes without
+// their own (null = the pass mark) and one per class, out of 20.
 //
-//   GET  …/:year/rules          the year's rules, their definitions, the impact
-//   POST …/:year/rules/preview  what a proposed change would change, with counts
-//   PUT  …/:year/rules          change them (validated, audited)
-//
-// Published results are never rewritten by a change here: a rule applies to
-// what is computed after it. The preview says how many results are already
-// published (they keep their figures) and how many would be recomputed the
-// next time their exam, term or year is processed.
+//   GET  …/:year/rules          the year's bars, the decided rules, the impact
+//   POST …/:year/rules/preview  what a proposed bar change would change
+//   PUT  …/:year/rules          change the bars (validated, audited with a
+//                               reason; refused while a draft run exists)
 // ═════════════════════════════════════════════════════════════════════════════
 
-const academicRules = require("../../../shared/academicRules");
 const { recordAudit } = require("../services/audit.service");
 
 const yearImpact = async (schoolId, academicYear) => {
@@ -204,20 +225,17 @@ const yearImpact = async (schoolId, academicYear) => {
   return { sequence, term, annual, draftPromotionRuns: draftRuns };
 };
 
-/** What moves from `before` to `after`, rule by rule, and what each affects. */
+/** What moves from `before` to `after`. Every bar reaches the annual status and the run. */
 const ruleChanges = (before, after) => {
-  const affects = {
-    sequenceAverage:  ["sequence", "term", "annual"],
-    gradingAuthority: ["term", "annual"],
-    promotionRule:    ["annual", "promotion"],
-    publishedResults: [],
-    promotionThreshold: ["annual", "promotion"],
-    classThresholds:    ["annual", "promotion"],
-  };
   const changes = [];
-  for (const key of [...academicRules.RULE_KEYS, "promotionThreshold", "classThresholds"]) {
-    const a = JSON.stringify(before[key]), b = JSON.stringify(after[key]);
-    if (a !== b) changes.push({ rule: key, from: before[key], to: after[key], affects: affects[key] });
+  if (before.promotionThreshold !== after.promotionThreshold) {
+    changes.push({ rule: "promotionThreshold", from: before.promotionThreshold, to: after.promotionThreshold,
+                   affects: ["annual", "promotion"] });
+  }
+  const ids = [...new Set([...Object.keys(before.classThresholds), ...Object.keys(after.classThresholds)])].sort();
+  for (const id of ids) {
+    const a = before.classThresholds[id] ?? null, b = after.classThresholds[id] ?? null;
+    if (a !== b) changes.push({ rule: `classThresholds.${id}`, from: a, to: b, affects: ["annual", "promotion"] });
   }
   return changes;
 };
@@ -228,13 +246,14 @@ const loadYear = async (req, res) => {
     res.status(400).json({ success: false, code: "SCHOOL_REQUIRED", error: "A school must be selected" });
     return null;
   }
-  const structure = await AcademicStructure.findOne({
-    schoolId, academicYear: req.params.year, deletedAt: null,
-  }).lean();
-  return { schoolId, structure };
+  const [structure, gradingConfig] = await Promise.all([
+    AcademicStructure.findOne({ schoolId, academicYear: req.params.year, deletedAt: null }).lean(),
+    require("mongoose").model("GradingConfig").findOne({ schoolId }).select("passMark").lean(),
+  ]);
+  return { schoolId, structure, passMark: gradingConfig?.passMark ?? 10 };
 };
 
-/** A proposed body merged onto the current rules, checked; or a 400 sent. */
+/** A proposed body merged onto the current bars, checked; or a 400 sent. */
 const proposedRules = (req, res, current) => {
   const body = req.body?.rules ?? req.body;
   const checked = academicRules.validateRules(body);
@@ -242,14 +261,17 @@ const proposedRules = (req, res, current) => {
     res.status(400).json({ success: false, code: "INVALID_RULES", errors: checked.errors });
     return null;
   }
-  const merged = academicRules.effectiveRules({ ...current, ...checked.value });
-  const incoherent = academicRules.coherenceErrors(merged);
-  if (incoherent.length) {
-    res.status(400).json({ success: false, code: "INVALID_RULES", errors: incoherent });
-    return null;
-  }
-  return merged;
+  return academicRules.mergeRules(current, checked.value);
 };
+
+/** The bars, and what a class without its own is judged against. */
+const barsView = (rules, passMark) => ({
+  promotionThreshold: rules.promotionThreshold,
+  classThresholds:    rules.classThresholds,
+  defaultBar:         rules.promotionThreshold ?? passMark,
+  defaultBarSource:   rules.promotionThreshold != null ? "school" : "passMark",
+  passMark,
+});
 
 router.get(
   "/:schoolId/:year/rules",
@@ -263,9 +285,8 @@ router.get(
         success: true,
         academicYear: req.params.year,
         rules,
-        isDefault: academicRules.isDefault(rules),
-        defaults: academicRules.DEFAULT_RULES,
-        definitions: academicRules.RULES,
+        bars: barsView(rules, loaded.passMark),
+        platform: academicRules.PLATFORM,
         impact: await yearImpact(loaded.schoolId, req.params.year),
       });
     } catch (err) {
@@ -292,6 +313,7 @@ router.post(
         success: true,
         changes: ruleChanges(current, next),
         rules: next,
+        bars: barsView(next, loaded.passMark),
         impact: await yearImpact(loaded.schoolId, req.params.year),
       });
     } catch (err) {
@@ -321,22 +343,27 @@ router.put(
       const changes = ruleChanges(current, next);
       if (changes.length === 0) return res.json({ success: true, changed: false, rules: current });
 
-      // A draft promotion run was proposed under the current rule; changing
-      // the rule underneath it would leave its proposals unexplained.
-      if (changes.some((c) => c.affects.includes("promotion"))) {
-        const drafts = await require("mongoose").model("PromotionRun").countDocuments({
-          schoolId: loaded.schoolId, fromYear: req.params.year, status: "draft", deletedAt: null,
-        });
-        if (drafts > 0) {
-          return res.status(409).json({
-            success: false, code: "PROMOTION_RUN_DRAFT",
-            error: "A draft promotion run exists for this year. Commit or discard it before changing the promotion rule.",
-          });
-        }
+      // Every bar decides who is promoted, so a change is the school's
+      // recorded act: it carries a reason.
+      const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() : "";
+      if (!reason) {
+        return res.status(400).json({ success: false, code: "REASON_REQUIRED",
+          error: "Give a reason for changing a promotion bar." });
       }
 
-      // Stored complete-but-minimal: only what differs from the default.
-      const stored = academicRules.nonDefaultRules(next);
+      // A draft promotion run was proposed against the current bars; moving
+      // them underneath it would leave its proposals unexplained.
+      const drafts = await require("mongoose").model("PromotionRun").countDocuments({
+        schoolId: loaded.schoolId, fromYear: req.params.year, status: "draft", deletedAt: null,
+      });
+      if (drafts > 0) {
+        return res.status(409).json({
+          success: false, code: "PROMOTION_RUN_DRAFT",
+          error: "A draft promotion run exists for this year. Commit or discard it before changing a promotion bar.",
+        });
+      }
+
+      const stored = academicRules.storedRules(next);
       await AcademicStructure.updateOne(
         { _id: loaded.structure._id },
         Object.keys(stored).length
@@ -348,13 +375,14 @@ router.put(
         action: "academic.rulesChanged",
         schoolId: loaded.schoolId,
         resource: { type: "AcademicStructure", id: loaded.structure._id, label: req.params.year },
-        before: current,
-        after: next,
-        reason: typeof req.body?.reason === "string" ? req.body.reason : null,
+        before: { promotionThreshold: current.promotionThreshold, classThresholds: current.classThresholds },
+        after:  { promotionThreshold: next.promotionThreshold,    classThresholds: next.classThresholds },
+        reason,
       });
 
       res.json({
         success: true, changed: true, rules: next, changes,
+        bars: barsView(next, loaded.passMark),
         impact: await yearImpact(loaded.schoolId, req.params.year),
       });
     } catch (err) {

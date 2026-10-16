@@ -185,7 +185,7 @@ router.post(
 
       res.json({ success: true, ...result, reason });
     } catch (err) {
-      // D3 "refuse" (shared/academicRules): published results are not
+      // D3, decided for every school (shared/academicRules): published results are not
       // recomputed in place. A conflict the caller can act on, not a fault.
       if (err.code === "PUBLISHED_RESULTS") {
         return res.status(409).json({ success: false, code: err.code, error: err.message, published: err.published });

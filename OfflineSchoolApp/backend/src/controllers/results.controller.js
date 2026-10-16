@@ -30,7 +30,7 @@ const { lookupGrade } = require("../services/grading.service");
 const { reportTypeFor, subjectRanking, periodName } =
   require("../../../shared/reportCard");
 const { legacyTermsOf } = require("../../../shared/academicPolicy");
-const { sequenceAverageIsOn20, effectiveRules } = require("../../../shared/academicRules");
+const { sequenceAverageIsOn20 } = require("../../../shared/academicRules");
 // The CA half of a sequence. A sequence card shows both assessments and the
 // mark they combine to; the pairing and the arithmetic are shared with the
 // grading engine so the card cannot print a different number from the one the
@@ -546,6 +546,11 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
     }
   }
 
+  // The decided calculation (exam-process/3, docs/39 §21.1) counts a subject
+  // only with a paper mark: a CA with no paper is printed, not counted. A card
+  // for a summary computed before it keeps the arithmetic it was printed with.
+  const agreed = !summary || summary.calcVersion === "exam-process/3";
+
   const subjectRows = [...scores, ...caOnlyRows].map((score) => {
     const es       = subjectMap.get(String(score.examSubjectId)) ||
                      subjectMap.get(String(score.subjectId)) || {};
@@ -576,7 +581,8 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
         })
       : null;
 
-    const effectiveScore = blended ? blended.score : score.score;
+    const noPaper = agreed && (score.score == null || score.isAbsent || score.isExempt);
+    const effectiveScore = noPaper ? null : (blended ? blended.score : score.score);
 
     const normalizedMark =
       effectiveScore != null && !score.isAbsent && !score.isExempt
@@ -644,7 +650,7 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       // "10.2, C, Fail" beside a summary that counted it passed (docs/39
       // §4.6l). Under raw_mean the row is unchanged: which figure that card
       // prints is the school's decision (§4.7f).
-      isPassing:     onSequenceMark
+      isPassing:     onSequenceMark || agreed
         ? (normalizedMark != null ? normalizedMark >= passMark20 : false)
         : (score.isPassing ?? null),
       normalizedMark,
@@ -706,15 +712,13 @@ const buildStudentReportCardData = async (examId, studentId, req) => {
       .find((sq) => sq.number === exam.sequenceNumber)?.name || null;
   }
 
-  // No subject counted: under weighted_20 there is no figure, and the route
-  // stores none (check:weightednomarks), so the card prints none either
-  // rather than a 0 the pupil never scored. The default rule's card is
+  // No subject counted: there is no figure, and the route stores none
+  // (check:weightednomarks), so the card prints none either rather than a 0
+  // the pupil never scored. A card for an exam-process/1 summary is
   // unchanged: it prints the 0 its stored result also holds.
-  const weightedRule = onSequenceMark
-    || effectiveRules(structure?.rules).sequenceAverage === "weighted_20";
   const weightedAverage = totalCoeff > 0
     ? Math.round((totalWeighted / totalCoeff) * 100) / 100
-    : (weightedRule ? null : 0);
+    : (agreed || onSequenceMark ? null : 0);
 
   // The facts about the period, not a sentence about it. The header names the
   // period in the reader's language ("Première Séquence"), so a string built

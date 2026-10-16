@@ -1,15 +1,16 @@
 // desktop/scripts/check-process-rules.js
 "use strict";
 /**
- * Offline exam processing follows the year's calculation rules, or leaves the
- * request to the server.
+ * Exam processing is the server's: the desk never computes a result summary.
  *
- * The local POST /api/exams/:examId/process computes the default rule
- * (raw_mean: the whole-number mean of the papers). Under weighted_20 the
- * server stores a different figure, and under publishedResults "refuse" it
- * refuses to touch a published result — so in either case the desk must not
- * answer with its own figures. It declines (null), which sends the request to
- * the server (the dispatcher's contract, src/main/api/index.js).
+ * Every school's results are the decided calculation (shared/academicRules,
+ * docs/39 §21.1): CA blended by the school's split, coefficients, a subject
+ * with no paper mark left out, a published result never recomputed. The desk
+ * used to compute the old raw-mark mean (12 for 15 and 9 on /20, where the
+ * decided calculation with Maths ×2 gives (2·15 + 9)/3 = 13), a second answer
+ * for the same marks. It now declines (null), which sends the request to the
+ * server (the dispatcher's contract, src/main/api/index.js), whatever the
+ * school's settings.
  *
  * Run by `npm run check:process-rules`, part of the desktop `check` chain.
  */
@@ -23,15 +24,15 @@ const check = (label, actual, expected) => {
 };
 
 const YEAR = "2026/2027";
-const fresh = (rules, summaries = []) => ({
+const fresh = (rules, summaries = [], gradingConfig = []) => ({
   exam:        [{ _id: "e1", schoolId: "S1", classId: "c1", academicYear: YEAR, term: 1, sequenceNumber: 1, status: "ongoing", deletedAt: null }],
-  examSubject: [{ _id: "es1", examId: "e1", schoolId: "S1", classId: "c1", subjectId: "x1", subjectName: "Mathematics", maxScore: 20, deletedAt: null },
-                { _id: "es2", examId: "e1", schoolId: "S1", classId: "c1", subjectId: "x2", subjectName: "English", maxScore: 20, deletedAt: null }],
+  examSubject: [{ _id: "es1", examId: "e1", schoolId: "S1", classId: "c1", subjectId: "x1", subjectName: "Mathematics", maxScore: 20, weight: 200, deletedAt: null },
+                { _id: "es2", examId: "e1", schoolId: "S1", classId: "c1", subjectId: "x2", subjectName: "English", maxScore: 20, weight: 100, deletedAt: null }],
   studentScore: [
     { _id: "m1", examId: "e1", schoolId: "S1", classId: "c1", studentId: "s1", subjectId: "x1", score: 15, maxScore: 20, deletedAt: null },
     { _id: "m2", examId: "e1", schoolId: "S1", classId: "c1", studentId: "s1", subjectId: "x2", score: 9,  maxScore: 20, deletedAt: null },
   ],
-  gradingConfig: [],
+  gradingConfig,
   academicStructure: rules === undefined ? [] : [{ _id: "as1", schoolId: "S1", academicYear: YEAR, rules, deletedAt: null }],
   resultSummary: summaries,
 });
@@ -50,41 +51,24 @@ const run = async (rows) => {
     queue: { add: () => { queued += 1; return { seq: 1, duplicate: false }; } },
     state: {},
   };
+  const before = JSON.stringify(rows.resultSummary);
   const r = await api.handle({ method: "POST", path: "/api/exams/e1/process", query: {}, body: { classId: "c1" } }, ctx);
-  return { r, queued, summaries: rows.resultSummary.filter((s) => !s.deletedAt) };
+  return { r, queued, unchanged: JSON.stringify(rows.resultSummary) === before };
 };
 
 (async () => {
-  console.log("\n--- the default rule is computed on the desk, as before ---");
-  for (const [label, rules] of [["no structure mirrored", undefined], ["rules unset", null], ["every rule at its default", { sequenceAverage: "raw_mean", publishedResults: "overwrite" }]]) {
-    const { r, queued, summaries } = await run(fresh(rules));
-    // round((15 + 9) / 2) = 12, 24/40 = 60 %.
-    check(`${label}: answered here, queued, s1 = 12 (60 %)`,
-      [r?.status ?? null, queued, summaries.map((s) => [s.average, s.percentage])], [200, 1, [[12, 60]]]);
-  }
-
-  console.log("\n--- weighted_20: the server's figure, not the desk's ---");
-  {
-    const { r, queued, summaries } = await run(fresh({ sequenceAverage: "weighted_20" }));
-    check("declined (sent to the server), nothing written or queued", [r, queued, summaries.length], [null, 0, 0]);
-  }
-
-  console.log("\n--- refuse: a published result is not recomputed on the desk ---");
+  console.log("\n--- the desk never answers exam processing itself ---");
   const published = [{ _id: "rs1", examId: "e1", schoolId: "S1", classId: "c1", studentId: "s1", average: 11, isPublished: true, deletedAt: null }];
-  {
-    const rows = fresh({ publishedResults: "refuse" }, published.map((s) => ({ ...s })));
-    const { r, queued, summaries } = await run(rows);
-    check("declined, nothing queued, the published 11 untouched", [r, queued, summaries.map((s) => s.average)], [null, 0, [11]]);
-  }
-  {
-    const rows = fresh({ publishedResults: "refuse" }, published.map((s) => ({ ...s, isPublished: false })));
-    const { r, queued } = await run(rows);
-    check("refuse with nothing published: computed here as usual", [r?.status ?? null, queued], [200, 1]);
-  }
-  {
-    const rows = fresh({ publishedResults: "overwrite" }, published.map((s) => ({ ...s })));
-    const { r, queued } = await run(rows);
-    check("overwrite (the default) with a published result: computed here as before", [r?.status ?? null, queued], [200, 1]);
+  const cases = [
+    ["no structure mirrored",                          fresh(undefined)],
+    ["rules unset",                                    fresh(null)],
+    ["an old Phase 4 rule still stored (raw_mean)",    fresh({ sequenceAverage: "raw_mean" })],
+    ["CA off on the school's grading config",          fresh(null, [], [{ _id: "gc1", schoolId: "S1", caEnabled: false }])],
+    ["a published summary already there",             fresh(null, published.map((s) => ({ ...s })))],
+  ];
+  for (const [label, rows] of cases) {
+    const { r, queued, unchanged } = await run(rows);
+    check(`${label}: declined (sent to the server), nothing written or queued`, [r, queued, unchanged], [null, 0, true]);
   }
 
   console.log(`\n  ${pass} passed, ${fail} failed`);

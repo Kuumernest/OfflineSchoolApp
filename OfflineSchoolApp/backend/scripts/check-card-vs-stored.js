@@ -6,38 +6,31 @@
  * every cause of a disagreement, one at a time, on synthetic schools through
  * the live POST /api/exams/:examId/process and the real card builder.
  *
- * Under the default rule (sequenceAverage "raw_mean") the stored summary and
- * the card are two calculations from the same marks:
+ * Closed by D1, decided by the project owner on 2026-10-16 (docs/39 §21.1):
+ * the stored average IS the card's figure (exam-process/3), equal for every
+ * cause once processed. What stays is the reading of rows stored before the
+ * decision (exam-process/1): they keep their figures, and their card reads
+ * them exactly as before — the card's rebuilt figure printed, the headline
+ * grade taken from the stored one. An unpublished old row follows the decided
+ * calculation the next time its exam is processed.
  *
- *   stored  ResultSummary.average   round(Σ paper marks ÷ number of subjects)
- *           (exam.routes.js /process) — paper only, no coefficients, an absent
- *           subject counted as 0, a whole number, on the papers' own scale.
- *   card    computed.weightedAverage  Σ(mark/20 × coefficient) ÷ Σ coefficients
- *           (results.controller buildStudentReportCardData), rebuilt from the
- *           CURRENT marks on every print — CA blended by the school's split,
- *           absent subjects left out, two decimals, always on /20.
- *
- * The card prints the second as its average (reportHtml resolveAverage20)
- * while its headline grade is looked up on the first (resolveAvg20), and its
- * pass/fail and position are the stored row's. Which figure a school's card
- * should print is decision D1 / "the raw_mean card", not this suite's to
- * take: what is pinned here is TODAY's behaviour, labelled, and the invariant
- * that holds under the other rule.
+ *   stored (old)  round(Σ paper marks ÷ number of subjects), paper only, no
+ *                 coefficients, an absent subject counted as 0, on the
+ *                 papers' own scale (the route before the decision)
+ *   card / now    Σ(mark/20 × coefficient) ÷ Σ coefficients, CA blended by
+ *                 the school's split, a subject with no paper mark left out,
+ *                 two decimals, on /20
  *
  * Causes, each isolated on its own school (marks /20 unless stated):
  *
- *   control      Maths 12, English 14, equal weight, no CA       stored 13  card 13
- *   rounding     Maths 12, English 13                            stored 13  card 12.5   (12.5 rounds up)
- *   coefficient  Maths 15 ×2, English 9 ×1                       stored 12  card 13     (39/3)
- *   CA           Maths 15 + CA 8/10, English 9 + CA 6/10, 40/60  stored 12  card 12.8   (15.4 and 10.2)
- *   absent       Maths absent, English 11                        stored 6   card 11     (5.5 rounds up; absent left out)
- *   stale        Maths 12, English 14; English corrected to 18
- *                after processing, not reprocessed               stored 13  card 15
- *   scale        Maths 60/100, English 70/100                    stored 65  card 13     (stored on the papers' scale)
- *
- * Under "weighted_20" the stored average IS the card's figure: equal for every
- * cause once processed (the stale one once reprocessed, which is the point of
- * staleness: nothing recomputes behind the school's back).
+ *                                                                 old row          now
+ *   control      Maths 12, English 14, equal weight, no CA       13 (65 %)  card 13      13
+ *   rounding     Maths 12, English 13                            13 (63 %)  card 12.5    12.5
+ *   coefficient  Maths 15 ×2, English 9 ×1                       12 (60 %)  card 13      (30+9)/3 = 13
+ *   CA           Maths 15 + CA 8/10, English 9 + CA 6/10, 40/60  12 (60 %)  card 12.8    (15.4+10.2)/2 = 12.8
+ *   absent       Maths absent, English 11                         6 (28 %)  card 11      11
+ *   scale        Maths 60/100, English 70/100                    65 (65 %)  card 13      13
+ *   stale        processed now, then English corrected 14 → 18:  stored 13, card 15 until reprocessed
  *
  *   node scripts/check-card-vs-stored.js
  */
@@ -125,65 +118,62 @@ const main = async () => {
       return { stored: stored?.average ?? null, card: card?.data?.computed?.weightedAverage ?? null,
         calcVersion: stored?.calcVersion ?? null, headline: card?.data?.summary?.overallGrade ?? null };
     };
-    return { school, paper, processed, read,
+    // A summary as the route stored it before the decision (exam-process/1),
+    // unpublished: what an old, not yet issued result looks like.
+    const seedOld = ({ average, percentage, maxTotalScore }) => M("ResultSummary").create({
+      _id: `old-${school}`, examId: paper, studentId: `p-${school}`, schoolId: school, classId: `c-${school}`,
+      average, percentage, maxTotalScore, subjectsTotal: subjects.length, totalScore: (percentage / 100) * maxTotalScore,
+      overallGrade: null, isPassing: average >= 10, isPublished: false, classPosition: 1, totalInClass: 1,
+      calcVersion: "exam-process/1", policyHash: "before-the-decision", subjectBreakdown: [],
+    });
+    return { school, paper, processed, read, seedOld,
       remark: (subjectId, score) => M("StudentScore").updateOne({ examId: paper, subjectId }, { $set: { score } }),
-      weighted: () => call(school, "PUT", `/academic-structure/${school}/${encodeURIComponent(YEAR)}/rules`,
-        { rules: { sequenceAverage: "weighted_20" }, reason: "check-card-vs-stored" }),
     };
   };
 
   const CASES = {
-    control:     { subjects: [{ id: "math", mark: 12 }, { id: "eng", mark: 14 }],                                   raw: [13, 13] },
-    rounding:    { subjects: [{ id: "math", mark: 12 }, { id: "eng", mark: 13 }],                                   raw: [13, 12.5] },
-    coefficient: { subjects: [{ id: "math", mark: 15, weight: 200 }, { id: "eng", mark: 9 }],                       raw: [12, 13] },
-    ca:          { ca: true, subjects: [{ id: "math", mark: 15, ca: 8 }, { id: "eng", mark: 9, ca: 6 }],            raw: [12, 12.8] },
-    absent:      { subjects: [{ id: "math", mark: null }, { id: "eng", mark: 11 }],                                 raw: [6, 11] },
-    scale:       { subjects: [{ id: "math", mark: 60, max: 100 }, { id: "eng", mark: 70, max: 100 }],               raw: [65, 13] },
+    control:     { subjects: [{ id: "math", mark: 12 }, { id: "eng", mark: 14 }],                        old: [13, 65, 40],  card: 13 },
+    rounding:    { subjects: [{ id: "math", mark: 12 }, { id: "eng", mark: 13 }],                        old: [13, 63, 40],  card: 12.5 },
+    coefficient: { subjects: [{ id: "math", mark: 15, weight: 200 }, { id: "eng", mark: 9 }],            old: [12, 60, 40],  card: 13 },
+    ca:          { ca: true, subjects: [{ id: "math", mark: 15, ca: 8 }, { id: "eng", mark: 9, ca: 6 }], old: [12, 60, 40],  card: 12.8 },
+    absent:      { subjects: [{ id: "math", mark: null }, { id: "eng", mark: 11 }],                      old: [6, 28, 40],   card: 11 },
+    scale:       { subjects: [{ id: "math", mark: 60, max: 100 }, { id: "eng", mark: 70, max: 100 }],    old: [65, 65, 200], card: 13 },
   };
 
   // ═══════════════════════════════════════════════════════════════════════
-  console.log("--- raw_mean (the default): each cause on its own ---");
+  console.log("--- an old (exam-process/1) row is read as before ---");
   const built = {};
   for (const [name, c] of Object.entries(CASES)) {
     const s = await scenario(c);
     built[name] = s;
+    const [average, percentage, maxTotalScore] = c.old;
+    await s.seedOld({ average, percentage, maxTotalScore });
+    const r = await s.read();
+    check(`${name}: [stored, card] on the old row`, [r.stored, r.card, r.calcVersion], [average, c.card, "exam-process/1"]);
+  }
+  // The headline grade is the stored figure's, read as /20 where every paper
+  // is /20 (absent: 6 → F, above a printed 11), and through its own
+  // percentage otherwise (scale: 65 % = 13 → B, not 65 read as /20, A+).
+  check("absent: the old row's headline grade is the stored 6's (F), above a printed average of 11",
+    (await built.absent.read()).headline, "F");
+  check("scale: the old row's headline grade is 65 % = 13 → B, not 65 read as /20 (A+)",
+    (await built.scale.read()).headline, "B");
+
+  // ═══════════════════════════════════════════════════════════════════════
+  console.log("--- processed now: the stored average is the card's ---");
+  for (const [name, s] of Object.entries(built)) {
     await s.processed();
     const r = await s.read();
-    check(`${name}: [stored, card] under raw_mean`, [r.stored, r.card], c.raw);
-    check(`  ${name}: stamped exam-process/1`, r.calcVersion, "exam-process/1");
+    check(`${name}: the unpublished old row follows the decided calculation; stored === card`,
+      [r.stored, r.card, r.calcVersion], [CASES[name].card, CASES[name].card, "exam-process/3"]);
   }
   const stale = await scenario(CASES.control);
   await stale.processed();
   await stale.remark("eng", 18);
-  check("stale: English corrected to 18 after processing — the card follows the marks, the stored row does not",
+  check("stale: English corrected to 18 after processing — the card follows the marks until reprocessed: stored 13, card 15",
     [(await stale.read()).stored, (await stale.read()).card], [13, 15]);
-
-  // Today's headline grade is the stored figure's, read as /20 (resolveAvg20).
-  // On /100 papers that figure is 65, so the headline is the band of 65 "/20"
-  // — the scale defect of §4.7(d), pinned so that its fix is a visible change.
-  check("absent: the headline grade is the stored 6's (F), above a printed average of 11 (C+)",
-    (await built.absent.read()).headline, "F");
-  // On /100 papers the stored 65 is 65% — 13/20, B. Read as /20 it was "A+"
-  // (docs/39 §4.7d/f); the headline now reads the stored figure through its
-  // own percentage. On /20 papers nothing changes (the absent case above).
-  check("scale: the headline grade is the stored 65's on /20 (65% = 13 → B), not 65 read as /20 (A+)",
-    (await built.scale.read()).headline, "B");
-
-  // ═══════════════════════════════════════════════════════════════════════
-  console.log("--- weighted_20: the stored average is the card's ---");
-  for (const [name, s] of Object.entries(built)) {
-    const put = await s.weighted();
-    if (put.status !== 200) throw new Error(`rules → ${put.status}`);
-    await s.processed();
-    const r = await s.read();
-    check(`${name}: stored === card under weighted_20`, [r.stored === r.card, r.card, r.calcVersion], [true, CASES[name].raw[1], "exam-process/2"]);
-  }
-  await stale.weighted();
   await stale.processed();
-  await stale.remark("eng", 10);
-  check("stale under weighted_20 too, until reprocessed: stored 15, card 11", [(await stale.read()).stored, (await stale.read()).card], [15, 11]);
-  await stale.processed();
-  check("  and equal again once reprocessed", [(await stale.read()).stored, (await stale.read()).card], [11, 11]);
+  check("  and equal again once reprocessed: (12 + 18)/2 = 15", [(await stale.read()).stored, (await stale.read()).card], [15, 15]);
 
   // ═══════════════════════════════════════════════════════════════════════
   console.log("--- §4.6l: a card row's pass flag ---");
@@ -193,10 +183,9 @@ const main = async () => {
    *   paper 9 + CA 5.75/10 → 0.4·11.5 + 5.4 = 10.00  (the boundary: passes)
    *   paper 9 + CA 5.7/10  → 0.4·11.4 + 5.4 = 9.96   (just under: fails)
    *   absent               → no mark: not passing
-   * Under raw_mean the row keeps the paper's stored flag — which figure that
-   * card prints is the school's decision (§4.7f). Under weighted_20 the rule
-   * itself says a subject passes on its sequence mark, which the row prints
-   * and the stored summary counts.
+   * On an old (exam-process/1) row the card row keeps the paper's stored
+   * flag, as it always did. Under the decided calculation a subject passes on
+   * its sequence mark, which the row prints and the stored summary counts.
    */
   const rowOf = async (sc) => {
     const card = await buildStudentReportCardData(sc.paper, `p-${sc.school}`);
@@ -205,12 +194,11 @@ const main = async () => {
   };
   const flags = await scenario({ ca: true, subjects: [
     { id: "eng", mark: 9, ca: 6 }, { id: "edge", mark: 9, ca: 5.75 }, { id: "under", mark: 9, ca: 5.7 }, { id: "abs", mark: null } ] });
-  await flags.processed();
-  check("raw_mean: every row keeps the paper's flag (9/20 fails) whatever it prints — unchanged, pinned",
+  await flags.seedOld({ average: 7, percentage: 34, maxTotalScore: 80 });
+  check("old row: every card row keeps the paper's flag (9/20 fails) whatever it prints — unchanged",
     await rowOf(flags), { abs: [null, false], edge: [10, false], eng: [10.2, false], under: [9.96, false] });
-  await flags.weighted();
   await flags.processed();
-  check("weighted_20: each row passes on the mark it prints — 10.2 and exactly 10 pass, 9.96 and absent do not",
+  check("decided: each row passes on the mark it prints — 10.2 and exactly 10 pass, 9.96 and absent do not",
     await rowOf(flags), { abs: [null, false], edge: [10, true], eng: [10.2, true], under: [9.96, false] });
   const stored = await M("ResultSummary").findOne({ examId: flags.paper }).lean();
   check("  and the rows agree with the stored summary's count: 2 passed, 1 failed (absent counted in neither)",

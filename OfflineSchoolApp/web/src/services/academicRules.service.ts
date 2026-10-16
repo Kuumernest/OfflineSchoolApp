@@ -1,39 +1,39 @@
 // web/src/services/academicRules.service.ts
 //
-// A school's calculation rules for one academic year (docs/39 Phase 4–5;
-// backend: routes/academicStructure.routes.js, shared/academicRules.js).
+// How results are calculated, and a school's promotion bars for one year
+// (backend: routes/academicStructure.routes.js, shared/academicRules.js).
 //
-// Every rule is a decision that changes real results, and every default is
-// how results were computed before rules existed. The server sends the rule
-// definitions (values, defaults, which decision each answers), so this file
-// carries no second copy of them — only the shapes.
+// The calculation is the same for every school, decided by the project owner
+// (docs/39 §21.1): the server reports it and refuses any write to it. What a
+// school sets is its promotion bars: one for classes without their own (null
+// = the pass mark) and one per class, all out of 20.
 
 import api from "@/services/api";
 
-export type SequenceAverageRule  = "raw_mean" | "weighted_20";
-export type GradingAuthorityRule = "split" | "school_bands";
-export type PromotionRule =
-  | "legacy" | "annual_average_at_least" | "majority_of_terms_passed" | "manual_only";
-export type PublishedResultsRule = "overwrite" | "refuse";
+/** The decided behaviour, as the server reports it. Not editable. */
+export interface PlatformRules {
+  sequenceAverage:  "weighted_20";
+  gradingAuthority: "school_bands";
+  promotionRule:    "annual_average_at_least";
+  publishedResults: "refuse";
+}
 
-export interface AcademicRules {
-  sequenceAverage:    SequenceAverageRule;
-  gradingAuthority:   GradingAuthorityRule;
-  promotionRule:      PromotionRule;
-  publishedResults:   PublishedResultsRule;
-  /** On /20; required by annual_average_at_least. */
+export interface AcademicRules extends Omit<PlatformRules, "promotionRule"> {
+  /** "manual_only" only where it was stored before the decision. */
+  promotionRule:      "annual_average_at_least" | "manual_only";
+  /** The school's bar on /20; null = the pass mark. */
   promotionThreshold: number | null;
-  /** A class's own bar, by classId, overriding promotionThreshold. */
+  /** A class's own bar, by classId, on /20. */
   classThresholds:    Record<string, number>;
 }
 
-export type RuleKey = "sequenceAverage" | "gradingAuthority" | "promotionRule" | "publishedResults";
-export const RULE_KEYS: RuleKey[] = ["sequenceAverage", "gradingAuthority", "promotionRule", "publishedResults"];
-
-export interface RuleDefinition {
-  decision: string;
-  default:  string;
-  values:   string[];
+export interface Bars {
+  promotionThreshold: number | null;
+  classThresholds:    Record<string, number>;
+  /** What a class without its own bar is judged against. */
+  defaultBar:         number;
+  defaultBarSource:   "school" | "passMark";
+  passMark:           number;
 }
 
 export interface ResultCounts { published: number; unpublished: number }
@@ -48,24 +48,15 @@ export interface RulesImpact {
 export interface RulesState {
   academicYear: string;
   rules:        AcademicRules;
-  isDefault:    boolean;
-  defaults:     AcademicRules;
-  definitions:  Record<RuleKey, RuleDefinition>;
+  bars:         Bars;
+  platform:     PlatformRules;
   impact:       RulesImpact;
 }
 
-export interface RuleChange {
-  rule:    keyof AcademicRules;
-  from:    unknown;
-  to:      unknown;
-  /** Which results the change reaches: sequence, term, annual, promotion. */
-  affects: string[];
-}
-
-export interface RulesPreview {
-  changes: RuleChange[];
-  rules:   AcademicRules;
-  impact:  RulesImpact;
+/** A bar write: a class bar of null removes that class's own bar. */
+export interface BarsWrite {
+  promotionThreshold?: number | null;
+  classThresholds?:    Record<string, number | null>;
 }
 
 const base = (schoolId: string, year: string) =>
@@ -76,16 +67,10 @@ export async function fetchRules(schoolId: string, year: string): Promise<RulesS
   return data as RulesState;
 }
 
-export async function previewRules(
-  schoolId: string, year: string, rules: Partial<AcademicRules>
-): Promise<RulesPreview> {
-  const { data } = await api.post(`${base(schoolId, year)}/preview`, { rules });
-  return data as RulesPreview;
-}
-
-export async function saveRules(
-  schoolId: string, year: string, rules: Partial<AcademicRules>, reason: string | null
+/** Validated, refused while a draft promotion run exists, audited with the reason. */
+export async function saveBars(
+  schoolId: string, year: string, bars: BarsWrite, reason: string
 ): Promise<{ changed: boolean; rules: AcademicRules }> {
-  const { data } = await api.put(base(schoolId, year), { rules, reason });
+  const { data } = await api.put(base(schoolId, year), { rules: bars, reason });
   return { changed: Boolean(data?.changed), rules: data?.rules as AcademicRules };
 }

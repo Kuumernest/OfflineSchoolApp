@@ -8,10 +8,36 @@ export interface ProgressionClass {
   nextClassId:  string | null;
   isFinalYear:  boolean;
   /**
-   * Minimum yearly average this class demands for promotion. Null keeps the
-   * majority-of-terms rule; a number makes the average the deciding bar.
+   * The old promotion bar, 0–100, from before bars were set per year out of
+   * 20. Read by no promotion run; shown beside the new bar until an admin
+   * confirms one for the class (docs/39 §14). Never converted.
    */
   promotionAverage: number | null;
+}
+
+/** What a run for one year would judge a class by. */
+export interface ProgressionYearClass {
+  /** The class's own bar for the year (/20), or null. */
+  bar:             number | null;
+  /** True once a bar for this year has been set (confirmed) for the class. */
+  confirmed:       boolean;
+  /** Its bar, else the school's, else the pass mark. */
+  effectiveBar:    number;
+  pupils:          number;
+  /** Pupils with a published annual result for the year. */
+  publishedAnnual: number;
+}
+
+export interface ProgressionYear {
+  academicYear:       string;
+  hasStructure:       boolean;
+  passMark:           number;
+  /** The school's bar for classes without their own; null = the pass mark. */
+  promotionThreshold: number | null;
+  defaultBar:         number;
+  /** Draft promotion runs for the year; bars cannot change while one exists. */
+  draftRuns:          number;
+  classes:            Record<string, ProgressionYearClass>;
 }
 
 export interface ProgressionResponse {
@@ -19,6 +45,7 @@ export interface ProgressionResponse {
   count:      number;
   /** Classes that are neither final-year nor pointed anywhere. */
   incomplete: number;
+  year:       ProgressionYear | null;
 }
 
 export type RunStatus = "draft" | "committed" | "reversed";
