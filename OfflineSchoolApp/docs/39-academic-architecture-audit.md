@@ -2779,6 +2779,52 @@ Checked against docs/37:
       `--ref origin/master` and with `--ref 097de9c`;
     - desktop, mobile and web: no file changed; not rerun.
 
+- **Revert cleanup (2026-10-16).** Same branch. No calculation, engine,
+  threshold, version or published row changed.
+  - **The previous code does write a year and term itself:** "Calculate &
+    save" (`POST /api/results/:examId/student/:studentId/reportcard/calculate`,
+    `results.routes.js:210`) creates a summary with them when the pupil has
+    none (`results.controller.js:1333` at `origin/master`, `:1406` at
+    `097de9c`); the previous mobile app calls it. No other routed writer
+    sets them: the process route's `$set` omits them, `processResults`
+    (which sets them) is not routed, and sync push writes only periods and
+    pupils.
+  - **New `backend/scripts/revert-cleanup-agreed-calc.js`:**
+    - `--record` before the revert (read-only) lists the ids of the
+      summaries stamped `exam-process/3`;
+    - `--manifest` after it sets `academicYear` and `term` back to null on
+      exactly those ids, where they still hold the recorded values and the
+      row is unpublished;
+    - it prints the counts first, and `--dry-run` writes nothing.
+
+    No filter on a row's contents is safe after the revert: a reprocessed
+    row is `exam-process/1` again, and an older "Calculate & save" row
+    holds a year too.
+  - **`check-revert-previous.js`, now 32 checks:**
+    - after the revert and the cleanup, reprocessed or not, the previous
+      promotion run proposes exactly what it did before this branch;
+    - only `academicYear` and `term` on the recorded rows change, and the
+      older row keeps its year.
+  - **Published under the new code:**
+    - the cleanup leaves those rows;
+    - the previous route rewrites a published row's figures in place,
+      still published;
+    - the previous run still finds those results.
+
+    Unpublishing first, then cleanup, reprocess and publish, gives the
+    previous code's own rows (the date of the first publication stays) and
+    its own proposals.
+  - docs/40 1.4: the decision's last line now points at the daily backup
+    (1.6); a revert-plus-cleanup rollback is proposed under the decision,
+    awaiting the project owner.
+  - Commands run (database URI and provider keys blanked):
+    - backend `check:all` one by one: 108 suites, 6,380 checks, 0 failed;
+    - `check-revert-previous.js`: 32 passed, 0 failed, with
+      `--ref origin/master` and with `--ref 097de9c`;
+    - `revert-cleanup-agreed-calc.js` from the command line (record, dry
+      run, cleanup, a missing argument) on an in-memory database;
+    - desktop, mobile and web: no file changed; not rerun.
+
 ### 20.1 Safest first implementation slice
 
 **Phase 2(a) + 2(b) + 2(c):** characterisation tests, the snapshot model with
@@ -2999,9 +3045,9 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, the revert-check pass after
-`bf2a737`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
-`check-revert-previous.js` 14 passed against `origin/master` and `097de9c`;
+branch `academic-agreed-calculation`, the revert-cleanup pass after
+`d823588`): backend `check:all`, 108 suites, 6,380 checks, 0 failed;
+`check-revert-previous.js` 32 passed against `origin/master` and `097de9c`;
 desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 

@@ -13,7 +13,7 @@ together on branch `academic-agreed-calculation`:
 Nothing below has been done on a real server, a real school's data, a
 browser or a device. Tests at this version (2026-10-16, database URI and
 provider keys blanked): backend `check:all`, every suite one by one, 108
-suites, 6,380 checks, 0 failed; `check-revert-previous.js` (1.4), 14 passed
+suites, 6,380 checks, 0 failed; `check-revert-previous.js` (1.4), 32 passed
 against each of `origin/master` and `097de9c`. Each step is something to do, not a result. Every step
 has an owner:
 
@@ -82,7 +82,7 @@ has an owner:
   - **Agreed calculation: decided by the project owner, 2026-10-16.** Rollback is a restore from backup. There is no code-only rollback.
     - If no result has been reprocessed under the new calculation yet: revert backend and web together. Nothing needs restoring. The previous code ignores the per-year bars and refuses format 2 cohort files.
     - If results have been reprocessed: restore the backup from 1.3, or the latest daily backup from 1.6, then revert backend and web together. Marks and changes entered after that backup are lost and must be entered again. Tell the school before restoring.
-    - This is why the release goes to one school first, with a backup every day.
+    - This is why the whole server is backed up every day of the first week (1.6).
 
     The reasons, from the code:
     - **Sequence results:** results computed after the release are stamped
@@ -111,6 +111,43 @@ has an owner:
       class is proposed "repeated". Everything else reads correctly and is
       overwritten cleanly: cards, terms, years and figures are what the
       previous code gives on its own.
+    - **The previous code can also write a year and term itself.** Its
+      "Calculate & save" (`POST /api/results/:examId/student/:studentId/reportcard/calculate`)
+      creates a sequence result with them when the pupil has none
+      (`backend/src/controllers/results.controller.js:1333` at
+      `origin/master`, `:1406` at `097de9c`). So the year on a row does not
+      say which code wrote it, and after the previous code reprocesses a row
+      its `calcVersion` is `exam-process/1` again. Only the ids recorded
+      before the revert say which rows this branch wrote.
+
+  - **Proposed, awaiting the project owner** (not decided; the decision
+    above stands until then):
+    - **Before reverting, always:** record which sequence results this
+      branch wrote (read-only):
+      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --record <manifest.json>`.
+    - **If nothing has been published under the new calculation:** revert
+      backend and web together, then run the cleanup, first with
+      `--dry-run` to read the counts:
+      `node scripts/revert-cleanup-agreed-calc.js --uri <URI> --manifest <manifest.json> [--dry-run]`.
+      It sets `academicYear` and `term` back to null on exactly the
+      recorded rows, and only where they still hold the recorded values.
+      No restore: no marks or later changes are lost. Results reprocessed
+      under the new calculation keep its figures until the school processes
+      them again under the previous code.
+    - **If anything has been published under the new calculation:** the
+      cleanup leaves published rows alone, and the previous code then
+      behaves differently in two ways. Its process route rewrites a
+      published result's figures in place, still published, with no
+      warning. And its promotion run still finds those published results
+      by their year. So either:
+      - restore the backup from 1.3, or the latest daily backup from 1.6,
+        as decided above; or
+      - after the revert, unpublish those results, run the cleanup,
+        reprocess, and publish again. The results then match the previous
+        code's own, and so do its promotion proposals (tested). Cards
+        already printed or sent from the new figures stay as they were
+        issued, and parents may hold them; the school must reissue them.
+        Tell the school before either.
   - **On the shared server, a restore affects every school.** Restoring
     the shared database puts every school back to that backup, and every
     school loses what it entered after it, not only the school whose
@@ -120,10 +157,15 @@ has an owner:
 - **Tested:** `node scripts/check-revert-previous.js --ref origin/master`
   (from `backend/`; not in `check:all`, as it checks out the previous code
   in a temporary git worktree). On a made-up school, the new code
-  reprocesses, nothing is published, then the previous code reads,
-  reprocesses and runs promotion. 14 passed, 0 failed against
-  `origin/master` (`99d59f4`) and against `097de9c` (this branch just
-  before the agreed calculation).
+  reprocesses, then the previous code reads, reprocesses and runs
+  promotion. It covers the cleanup: dry run first, then cleanup, with and
+  without the previous code reprocessing in between; an older row with a
+  year, as "Calculate & save" writes one, is left alone. It also covers
+  results published under the new code, and published then unpublished.
+  After the cleanup, the previous promotion run proposes exactly what it
+  proposed before this branch existed, and nothing else changed. 32
+  passed, 0 failed against `origin/master` (`99d59f4`) and against
+  `097de9c` (this branch just before the agreed calculation).
 - **Expected:** the rollback decision above, read and understood by the
   operator before the deploy.
 - **If it fails:** do not deploy.
@@ -199,12 +241,14 @@ has an owner:
     entering marks or processing results, so that fewer results are
     reprocessed in the first days, and a restore (1.4) loses as little as
     possible.
-- **Not included: asking schools not to publish for the first days.** It
-  would only help if a code revert alone were enough once results have been
-  reprocessed. It is not: reprocessed sequence results keep their year
-  after a revert, and the previous promotion run then reads them (1.4,
-  tested). So once anything is reprocessed, rollback is a restore whether
-  or not anything was published.
+- **Not included, pending the 1.4 proposal: asking schools not to publish
+  for the first days.** A code revert alone is not enough once results are
+  reprocessed: they keep their year, and the previous promotion run reads
+  them (1.4, tested). Under the decision as it stands, rollback after any
+  reprocessing is a restore, so the request would not help. If the project
+  owner adopts the 1.4 proposal (revert plus cleanup while nothing is
+  published), the request would keep rollback free of a restore for those
+  days. Then add it here and to §6.
 - **Expected:** every head's acceptance of their dry run, a backup for each
   day of the first week, no failed analysis runs (7), and no result
   changes a school cannot match to its dry run.

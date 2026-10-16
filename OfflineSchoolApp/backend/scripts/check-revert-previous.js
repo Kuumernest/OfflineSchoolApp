@@ -20,7 +20,18 @@
  *   B  the same → the previous code reprocesses (its own route, over HTTP),
  *      then publishes and generates a run;
  *   C  marks → the previous code alone, as if this branch never ran;
- *   E  marks → the previous code alone, then reads (its own cards, beside A).
+ *   E  marks → the previous code alone, then reads (its own cards, beside A);
+ *   F  this branch → record (revert-cleanup-agreed-calc.js) → revert → cleanup
+ *      (dry run first) → the previous promotion run;
+ *   G  this branch → record → the previous code reprocesses → cleanup → run;
+ *   P  this branch, then PUBLISHED → record → the previous code reprocesses
+ *      → cleanup → run (what publishing under the new code leaves);
+ *   Q  as P, but after the revert the school unpublishes first, then cleanup,
+ *      reprocess, publish, run.
+ *
+ * Every database also holds one older summary with a year and a term, as the
+ * previous code's "Calculate & save" creates them (cyr, exam x1, 15/20,
+ * published): the cleanup must leave it, and the previous run counts it.
  *
  * The school (synthetic). One term (weight 100) of two sequences (50/50), so
  * the year is the term. Pass mark 10, CA off. Maths coefficient 2 (weight
@@ -73,6 +84,11 @@ const phase = async ({ code, mode, uri, out }) => {
       await M("Student").create({ _id: id, userId: `usr-${id}`, schoolId: S, classId: cls, className: cls === "f1" ? "Form 1" : "Form 5",
         studentName: `Synthetic ${id}`, enrollmentNo: `E-${id}`, status: "approved", isActive: true });
     }
+    // A summary as the previous "Calculate & save" creates one (year and
+    // term from the exam, no calcVersion), published long ago.
+    await mongoose.connection.db.collection("resultsummaries").insertOne({ _id: "rs-x1-cyr", examId: "x1", studentId: "cyr",
+      schoolId: S, classId: "f2", average: 15, percentage: 75, isPassing: true, isPublished: true, academicYear: YEAR, term: "1",
+      calcVersion: null, subjectBreakdown: [], deletedAt: null });
     await M("User").create({ _id: "adm", name: "Admin", email: "adm@example.test", password: "check-only-password", role: "school_admin", schoolId: S, isActive: true });
     const MARKS = { 1: { ama: [18, 6], bih: [11, 17], cyr: [9, 13] }, 2: { ama: [12, 12], bih: [13, 12], cyr: [14, 8] } };
     // One exam per sequence for the school, as the term layer reads them.
@@ -161,7 +177,36 @@ const phase = async ({ code, mode, uri, out }) => {
     res.decisions = Object.fromEntries(decisions.map((d) => [d.studentId, [d.outcome, d.basis, d.average ?? null]]).sort());
   }
 
-  if (["newcalc", "reprocess"].includes(mode)) {
+  if (mode === "publishnew") {
+    // Published under this branch, as its publish routes set the flag.
+    await M("ResultSummary").updateMany({ schoolId: S, examId: { $in: ["s1", "s2"] } }, { $set: { isPublished: true, publishedAt: new Date() } });
+    await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: true } });
+    await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: true } });
+  }
+
+  if (mode === "unpublish") {
+    // The previous code's own unpublish.
+    const results = r("src/services/results.service");
+    for (const examId of ["s1", "s2"]) await results.unpublishResults(examId);
+    await M("TermResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
+    await M("AnnualResult").updateMany({ schoolId: S }, { $set: { isPublished: false } });
+  }
+
+  if (mode === "record" || mode === "cleanup" || mode === "cleanupdry") {
+    const tool = require("./revert-cleanup-agreed-calc");
+    const manifestFile = arg("manifest");
+    if (mode === "record") { const m = await tool.record({ uri }); fs.writeFileSync(manifestFile, JSON.stringify(m)); res.recorded = m.rows.length; }
+    else res.cleanup = await tool.cleanup({ uri, manifest: JSON.parse(fs.readFileSync(manifestFile, "utf8")), dryRun: mode === "cleanupdry" });
+  }
+
+  if (mode === "dumpall") {
+    res.all = {};
+    for (const c of (await mongoose.connection.db.listCollections().toArray()).map((x) => x.name).sort()) {
+      res.all[c] = Object.fromEntries((await mongoose.connection.db.collection(c).find({}).sort({ _id: 1 }).toArray()).map((d) => [String(d._id), JSON.stringify(d)]));
+    }
+  }
+
+  if (["newcalc", "reprocess", "rows"].includes(mode)) {
     const strip = ({ _id, createdAt, updatedAt, lastSyncedAt, __v, policyHash, subjectBreakdown, ...rest }) => ({
       ...rest,
       // The same subjects; the order they are stored in follows the marks' read order.
@@ -194,9 +239,11 @@ const main = async () => {
   const { MongoMemoryServer } = require("mongodb-memory-server");
   const mem = await MongoMemoryServer.create({ instance: { launchTimeout: 180000 } });
   // Asynchronous: a blocked event loop here stops draining mongod's output, and mongod stalls.
+  let n = 0;
   const step = (code, mode, db) => new Promise((resolve, reject) => {
-    const out = path.join(tmp, `${db}-${mode}.json`);
-    execFile(process.execPath, [__filename, "--phase", mode, "--code", code, "--uri", mem.getUri(db), "--out", out],
+    const out = path.join(tmp, `${db}-${mode}-${n++}.json`);
+    execFile(process.execPath, [__filename, "--phase", mode, "--code", code, "--uri", mem.getUri(db), "--out", out,
+      "--manifest", path.join(tmp, `${db}-manifest.json`)],
       { env: { ...process.env, ...BLANK }, maxBuffer: 1 << 26 },
       (err, _o, e) => (err ? reject(new Error(`${mode} on ${db}: ${e.split("\n").filter((l) => /fail|Error/.test(l)).slice(0, 4).join(" | ")}`))
         : resolve(JSON.parse(fs.readFileSync(out, "utf8")))));
@@ -221,7 +268,7 @@ const main = async () => {
     const fig = (rows, f) => Object.fromEntries(Object.entries(rows).map(([k, x]) => [k, x[f]]));
     console.log("--- this branch's rows (hand-worked above) ---");
     check("sequence averages", fig(NEW.rows.ResultSummary, "average"),
-      { "s1|ama": 14, "s1|bih": 13, "s1|cyr": 10.33, "s2|ama": 12, "s2|bih": 12.67, "s2|cyr": 12 });
+      { "s1|ama": 14, "s1|bih": 13, "s1|cyr": 10.33, "s2|ama": 12, "s2|bih": 12.67, "s2|cyr": 12, "x1|cyr": 15 });
     check("term and year", [fig(NEW.rows.TermResult, "termAverage"), fig(NEW.rows.AnnualResult, "annualAverage")],
       [{ "1|ama": 13, "1|bih": 12.84, "1|cyr": 11.17 }, { ama: 13, bih: 12.84, cyr: 11.17 }]);
     check("statuses", fig(NEW.rows.AnnualResult, "promotionStatus"), { ama: "promoted", bih: "repeated", cyr: "graduated" });
@@ -240,17 +287,21 @@ const main = async () => {
     check("every process call 200", B.statuses, [200, 200, 200, 200]);
     check("its own figures: S1 12, 14, 11; S2 12, 13, 11; term = year 12, 13.5, 11",
       [fig(B.rows.ResultSummary, "average"), fig(B.rows.TermResult, "termAverage"), fig(B.rows.AnnualResult, "annualAverage")],
-      [{ "s1|ama": 12, "s1|bih": 14, "s1|cyr": 11, "s2|ama": 12, "s2|bih": 13, "s2|cyr": 11 }, { "1|ama": 12, "1|bih": 13.5, "1|cyr": 11 }, { ama: 12, bih: 13.5, cyr: 11 }]);
-    const diffs = [];
-    for (const coll of Object.keys(C.rows)) {
-      const keys = new Set([...Object.keys(B.rows[coll]), ...Object.keys(C.rows[coll])]);
-      for (const k of keys) {
-        const x = B.rows[coll][k] || {}, y = C.rows[coll][k] || {};
-        for (const f of new Set([...Object.keys(x), ...Object.keys(y)])) {
-          if (JSON.stringify(x[f]) !== JSON.stringify(y[f])) diffs.push(`${coll} ${k} ${f}: ${JSON.stringify(x[f])} (never run: ${JSON.stringify(y[f])})`);
+      [{ "s1|ama": 12, "s1|bih": 14, "s1|cyr": 11, "s2|ama": 12, "s2|bih": 13, "s2|cyr": 11, "x1|cyr": 15 }, { "1|ama": 12, "1|bih": 13.5, "1|cyr": 11 }, { ama: 12, bih: 13.5, cyr: 11 }]);
+    const rowDiffs = (X, Y) => {
+      const out = [];
+      for (const coll of Object.keys(Y.rows)) {
+        const keys = new Set([...Object.keys(X.rows[coll]), ...Object.keys(Y.rows[coll])]);
+        for (const k of keys) {
+          const x = X.rows[coll][k] || {}, y = Y.rows[coll][k] || {};
+          for (const f of new Set([...Object.keys(x), ...Object.keys(y)])) {
+            if (JSON.stringify(x[f]) !== JSON.stringify(y[f])) out.push(`${coll} ${k} ${f}: ${JSON.stringify(x[f])} (never run: ${JSON.stringify(y[f])})`);
+          }
         }
       }
-    }
+      return out;
+    };
+    const diffs = rowDiffs(B, C);
     const leftover = diffs.filter((d) => /^ResultSummary \S+ (academicYear: "2026\/2027" \(never run: null\)|term: "1" \(never run: null\))$/.test(d));
     check("term and annual rows identical to the previous code never having met this branch",
       diffs.filter((d) => !d.startsWith("ResultSummary")), []);
@@ -268,6 +319,77 @@ const main = async () => {
       [Object.values(promA.decisions).map((d) => d.slice(0, 2)), Object.values(promB.decisions).map((d) => d.slice(0, 2))],
       [[["repeated", "average_fail"], ["repeated", "average_fail"], ["graduated", "final_year"]],
        [["repeated", "average_fail"], ["repeated", "average_fail"], ["graduated", "final_year"]]]);
+
+    // ── 4. The cleanup ──────────────────────────────────────────────────
+    const changedDocs = (x, y) => {
+      const out = [];
+      for (const c of new Set([...Object.keys(x.all), ...Object.keys(y.all)])) {
+        for (const id of new Set([...Object.keys(x.all[c] || {}), ...Object.keys(y.all[c] || {})])) {
+          if ((x.all[c] || {})[id] !== (y.all[c] || {})[id]) out.push(`${c}/${id}`);
+        }
+      }
+      return out.sort();
+    };
+    const fieldsChanged = (x, y, coll, id) => {
+      const a = JSON.parse(x.all[coll][id]), b = JSON.parse(y.all[coll][id]);
+      return [...new Set([...Object.keys(a), ...Object.keys(b)])].filter((f) => JSON.stringify(a[f]) !== JSON.stringify(b[f])).sort();
+    };
+    const SEQ_IDS = ["s1|ama", "s1|bih", "s1|cyr", "s2|ama", "s2|bih", "s2|cyr"];
+
+    console.log("--- 4. cleanup after the revert, nothing reprocessed (F) ---");
+    await step(HEAD, "seed", "F"); await step(HEAD, "newcalc", "F");
+    check("recorded: the six summaries this branch wrote, not the older x1", (await step(HEAD, "record", "F")).recorded, 6);
+    const f0 = await step(PREV, "dumpall", "F");
+    const dry = await step(PREV, "cleanupdry", "F");
+    check("dry run: counts, nothing to leave", dry.cleanup,
+      { dryRun: true, counts: { inManifest: 6, missing: 0, alreadyClear: 0, changedSince: 0, published: 0, toClear: 6, cleared: 0 } });
+    check("dry run writes nothing", changedDocs(f0, await step(PREV, "dumpall", "F")), []);
+    const run = await step(PREV, "cleanup", "F");
+    check("cleanup: six cleared", run.cleanup.counts.cleared, 6);
+    const f1 = await step(PREV, "dumpall", "F");
+    const touched = changedDocs(f0, f1);
+    check("only the six summaries changed", touched.length, 6);
+    check("and in each only academicYear and term", [...new Set(touched.map((t) => fieldsChanged(f0, f1, ...t.split("/")).join(",")))], ["academicYear,term"]);
+    check("the older x1 summary keeps its year", JSON.parse(f1.all.resultsummaries["rs-x1-cyr"]).academicYear, YEAR);
+    check("a second cleanup finds them already clear", (await step(PREV, "cleanupdry", "F")).cleanup.counts.alreadyClear, 6);
+    const promF = await step(PREV, "promote", "F");
+    check("the previous run proposes exactly what it did before this branch", promF.decisions, promC.decisions);
+
+    console.log("--- 5. cleanup after the previous code reprocessed (G) ---");
+    await step(HEAD, "seed", "G"); await step(HEAD, "newcalc", "G"); await step(HEAD, "record", "G");
+    await step(PREV, "reprocess", "G");
+    check("cleanup: six cleared (calcVersion is exam-process/1 again by now)", (await step(PREV, "cleanup", "G")).cleanup.counts.cleared, 6);
+    const G = await step(PREV, "rows", "G");
+    check("every sequence, term and annual row identical to the previous code never having met this branch",
+      rowDiffs(G, C).map((d) => d.slice(0, 160)), []);
+    const promG = await step(PREV, "promote", "G");
+    check("the previous run proposes exactly what it did before this branch", promG.decisions, promC.decisions);
+
+    console.log("--- 6. published under the new code before the revert (P) ---");
+    await step(HEAD, "seed", "P"); await step(HEAD, "newcalc", "P"); await step(HEAD, "publishnew", "P");
+    check("recorded six, all published", (await step(HEAD, "record", "P")).recorded, 6);
+    const repP = await step(PREV, "reprocess", "P");
+    const cleanP = await step(PREV, "cleanup", "P");
+    check("cleanup leaves the six published summaries as they are", [cleanP.cleanup.counts.published, cleanP.cleanup.counts.cleared], [6, 0]);
+    const P = await step(PREV, "rows", "P");
+    const promP = await step(PREV, "promote", "P");
+    console.log(`       previous process route on published rows: ${JSON.stringify(repP.statuses)}`);
+    console.log(`       sequence rows now: ${JSON.stringify(SEQ_IDS.map((k) => [k, P.rows.ResultSummary[k].average, P.rows.ResultSummary[k].calcVersion, P.rows.ResultSummary[k].isPublished, P.rows.ResultSummary[k].academicYear]))}`);
+    console.log(`       promotion run: ${JSON.stringify(promP.decisions)}`);
+    check("what it leaves: the previous run still finds the published results, and differs", JSON.stringify(promP.decisions) === JSON.stringify(promC.decisions), false);
+
+    console.log("--- 7. published, then unpublished after the revert (Q) ---");
+    await step(HEAD, "seed", "Q"); await step(HEAD, "newcalc", "Q"); await step(HEAD, "publishnew", "Q"); await step(HEAD, "record", "Q");
+    await step(PREV, "unpublish", "Q");
+    check("after unpublishing, cleanup clears the six", (await step(PREV, "cleanup", "Q")).cleanup.counts.cleared, 6);
+    await step(PREV, "reprocess", "Q");
+    const Q = await step(PREV, "rows", "Q");
+    // Unpublishing leaves the date it was published: the one trace of it.
+    const qd = rowDiffs(Q, C);
+    check("then every row is the previous code's own, except publishedAt on the six once published",
+      [qd.filter((d) => !/^ResultSummary s[12]\|\w+ publishedAt: "/.test(d)).map((d) => d.slice(0, 160)), qd.length], [[], 6]);
+    const promQ = await step(PREV, "promote", "Q");
+    check("and the previous run proposes what it did before this branch", promQ.decisions, promC.decisions);
   } finally {
     await mem.stop().catch(() => {});
     try { execFileSync("git", ["worktree", "remove", "--force", tree], { cwd: repo, stdio: "ignore" }); } catch { /* left for git worktree prune */ }
