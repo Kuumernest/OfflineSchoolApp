@@ -2907,7 +2907,8 @@ the audit itself* no check suite was run, because no code changed.
 *Since the audit*, every implementation pass has run the check suites with
 the database URI and provider keys blanked. Each pass lists its commands
 and results under "Commands run" in §20.0. The most recent run (2026-10-16,
-branch `academic-agreed-calculation`, follow-up pass): backend `check:all`, 107 suites, 6,352 checks, 0 failed;
+branch `academic-agreed-calculation`, the mobile "Calculate & save" pass
+at `9fe8e6c`): backend `check:all`, 107 suites, 6,352 checks, 0 failed;
 desktop `npm run check`, 271 passed; mobile `npm run check`, 679 passed; web
 build and lint, 0 errors.
 

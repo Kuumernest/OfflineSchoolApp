@@ -105,15 +105,57 @@ the moment of the request. There is no "nearly current".
 
 The fingerprint is a sha256 over:
 
-- the engine version and a digest of the analysis code by content
-  (`shared/intelligence/**`, `analyseCohort.js`, `cohortSchema.js`,
-  `isolatedEngine.js`, the worker), so a deploy that changes any of them
-  invalidates every stored report whether or not a version moved;
+- the engine version and a digest of the analysis code by content, so a
+  deploy that changes any of it invalidates every stored report whether or
+  not a version moved (see "What the code digest covers" below);
 - the school and the scope key;
 - for each collection the analysis reads, with **the same filters the load
   uses**: students (`_id`, `classId`, `updatedAt`), exams, result summaries,
   the grading config, the latest academic structure, interventions
   (`_id`, `updatedAt`), each section with its row count.
+
+**What the code digest covers** (`backend/src/services/intelligence/analysisCode.js`).
+The file set is read off the module graph, not kept by hand.
+- **Where it starts:** the worker (`analysisWorker.js`) and
+  `scripts/calibration/analyseCohort.js`.
+- **What it follows:** every relative string literal (as
+  `scripts/check-orphans.js` does), plus `path.join(__dirname, "…")` and
+  `path.join(CONST, "…")` for constants built the same way.
+- **What is hashed:** each reached project file (never `node_modules`), as
+  its project-relative path and its content, sorted by path. Computed once
+  per process.
+
+Today that set is these 11 files:
+- `backend/src/services/intelligence/analysisWorker.js`;
+- `backend/scripts/calibration/analyseCohort.js`, `cohortSchema.js`,
+  `isolatedEngine.js`;
+- `shared/intelligence/index.js`, `subjectInsights.js`, `guidance.js`,
+  `academicOrder.js`, `interventionOutcome.js`;
+- `shared/caAssessment.js`, `shared/gradeScale.js`.
+
+That is exactly the set the worker loads at runtime.
+
+The earlier hand-kept list (`shared/intelligence/**`, the three calibration
+scripts and the worker) missed the last two. A deploy that changed
+`caAssessment.js` or `gradeScale.js` would have left every fingerprint
+unchanged and served a report computed by the old code.
+
+`shared/strengths/**` and `shared/academicRules.js` are not loaded by the
+analysis, so they are not covered. A process that also loads models, as
+`reviewCases.caseFor` does, pulls them in through
+`ExplorationEvidence.js`, outside the analysis.
+
+`check:analysis` (section 11) proves the coverage:
+- it runs the real worker and requires every project file in its
+  `require.cache` to be in the set;
+- on a temporary copy of the project, changing a covered file moves the
+  digest, and changing an uncovered one does not;
+- the digest is the same in two processes;
+- after a covered file changes, the stored report is not served: a new run
+  starts, under the new digest.
+
+The change of method itself moves every digest once, so the first request
+after this deploy analyses each scope again.
 
 **Write paths inspected, not assumed.** All six models have
 `timestamps: true`. No write in `backend/src` passes `timestamps: false` to

@@ -553,6 +553,96 @@ const row = (subjectId, subjectName, normalizedMark) => ({
     check("no run left active", await Run.countDocuments({ status: { $in: ["queued", "running"] } }), 0);
   }
 
+  // ───────────────────────────────────────────────────────────────────────────
+  section("11. the code digest covers every file the analysis loads");
+  {
+    const fs = require("fs");
+    const os = require("os");
+    const { Worker } = require("worker_threads");
+    const { execFile } = require("child_process");
+    const PROJECT = path.join(ROOT, "..");
+    const rel = (f, root = PROJECT) => path.relative(root, f).split(path.sep).join("/");
+    const inProject = (k) => k.startsWith(PROJECT + path.sep) && !k.split(path.sep).includes("node_modules");
+    const { codeFiles, codeDigestOf, codeDigest } = runs._internals;
+    const WORKER = require.resolve(path.join(SRC, "services/intelligence/analysisWorker"));
+
+    // The worker, run unchanged, its one message wrapped to carry its require.cache.
+    const docs = await loadEvidence(SCHOOL);
+    const wrapper = `
+      const wt = require("worker_threads");
+      const post = wt.parentPort.postMessage.bind(wt.parentPort);
+      wt.parentPort.postMessage = (m) => post({ ok: m.ok, loaded: Object.keys(require.cache) });
+      require(${JSON.stringify(WORKER)});`;
+    const msg = await new Promise((resolve, reject) => {
+      const w = new Worker(wrapper, { eval: true, workerData: { docs, provenance: { ...PROVENANCE }, fault: null } });
+      w.once("message", resolve); w.once("error", reject);
+    });
+    const loaded = msg.loaded.filter(inProject).map((f) => rel(f)).sort();
+    const covered = typeof codeFiles === "function" ? codeFiles().map((f) => rel(f)) : [];
+    check("the worker ran and reported what it loaded", [msg.ok, loaded.includes("backend/scripts/calibration/analyseCohort.js")], [true, true]);
+    check("every project file the worker loads is in the digest's file set", loaded.filter((f) => !covered.includes(f)), []);
+    check("…including shared/caAssessment.js and shared/gradeScale.js, which the hand-kept list missed",
+      ["shared/caAssessment.js", "shared/gradeScale.js"].map((f) => covered.includes(f)), [true, true]);
+
+    // A temporary copy of the project, never the working tree.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "osa-digest-"));
+    const copy = (sub) => fs.cpSync(path.join(PROJECT, sub), path.join(tmp, sub),
+      { recursive: true, filter: (src) => !src.split(path.sep).includes("node_modules") });
+    copy("shared"); copy("backend");
+    fs.symlinkSync(path.join(PROJECT, "backend", "node_modules"), path.join(tmp, "backend", "node_modules"), "dir");
+    const d0 = codeDigestOf(tmp);
+    check("the copy's digest is the working tree's (same content, any location)", d0, codeDigest());
+    const touch = (f) => { const p = path.join(tmp, f); const orig = fs.readFileSync(p); fs.appendFileSync(p, "\n// changed\n"); return () => fs.writeFileSync(p, orig); };
+    for (const f of ["shared/caAssessment.js", "shared/gradeScale.js", "shared/intelligence/subjectInsights.js",
+                     "backend/scripts/calibration/cohortSchema.js", "backend/src/services/intelligence/analysisWorker.js"]) {
+      const undo = touch(f);
+      check(`changing ${f} changes the digest`, codeDigestOf(tmp) !== d0, true);
+      undo();
+    }
+    // Not loaded by the analysis (A1: the worker never requires them), so not
+    // covered: a change there is not a change of the analysis code.
+    for (const f of ["shared/strengths/learningIntegration.js", "shared/academicRules.js"]) {
+      const undo = touch(f);
+      check(`${f} is not loaded by the worker and does not move the digest`, [loaded.includes(f), codeDigestOf(tmp) === d0], [false, true]);
+      undo();
+    }
+    check("restored copy, same digest again", codeDigestOf(tmp), d0);
+
+    // Two processes on the same code agree.
+    const childDigest = (backendDir) => new Promise((resolve, reject) => execFile(process.execPath, ["-e",
+      `process.stdout.write(require(${JSON.stringify(path.join(backendDir, "src/services/intelligence/analysisRuns.service"))})._internals.codeDigest())`],
+      { env: { ...process.env, MONGODB_URI: "" } }, (err, out, errOut) => (err ? reject(new Error(errOut || err.message)) : resolve(out.trim()))));
+    const [p1, p2] = await Promise.all([childDigest(path.join(PROJECT, "backend")), childDigest(path.join(PROJECT, "backend"))]);
+    check("the digest is the same in two processes on the same code", [p1 === p2, p1 === codeDigest()], [true, true]);
+
+    // A deploy that changes covered code: the stored report is not served; a new run starts.
+    await runs.reportFor(SCHOOL);
+    const servedBefore = (await runs.ensure(SCHOOL)).current;
+    const undo = touch("shared/caAssessment.js");
+    const child = await new Promise((resolve, reject) => execFile(process.execPath, ["-e", `
+      const path = require("path");
+      const mongoose = require(require.resolve("mongoose", { paths: [${JSON.stringify(path.join(tmp, "backend"))}] }));
+      (async () => {
+        await mongoose.connect(${JSON.stringify(mongo.getUri())});
+        require(${JSON.stringify(path.join(tmp, "backend/src/db/models"))});
+        const runs = require(${JSON.stringify(path.join(tmp, "backend/src/services/intelligence/analysisRuns.service"))});
+        runs.configure({ waitMs: 30000, retryBackoffMs: 0, timeoutMs: 60000, heapMb: 512, fault: null, pollMs: 50, maxReportBytes: 12 * 1024 * 1024 });
+        const { run } = await runs.reportFor({ schoolId: ${JSON.stringify(A)}, classIds: null });
+        process.stdout.write(JSON.stringify({ runId: String(run._id), codeDigest: run.codeDigest, digestHere: runs._internals.codeDigest() }));
+        await runs.idle?.();
+        await mongoose.disconnect();
+      })().catch((e) => { console.error(e); process.exit(1); });`],
+      { env: { ...process.env, MONGODB_URI: "", NODE_ENV: "test" }, cwd: path.join(tmp, "backend") },
+      (err, out, errOut) => (err ? reject(new Error(errOut || err.message)) : resolve(JSON.parse(out)))));
+    undo();
+    check("after the change, the report stored under the old digest is not served: a new run, under the new digest",
+      [child.runId !== String(servedBefore._id), child.codeDigest === child.digestHere, child.codeDigest !== servedBefore.codeDigest],
+      [true, true, true]);
+    check("…and that new run is a fresh analysis, held under its own fingerprint",
+      (await Run.findById(child.runId).lean())?.fingerprint !== servedBefore.fingerprint, true);
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+
   console.log("");
   console.log(`  ${pass} passed, ${fail} failed`);
 
